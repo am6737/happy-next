@@ -80,11 +80,13 @@ description: "Complete reference for all Happy Next environment variables."
 
 ### LiveKit
 
+> **Note:** LiveKit enforces a minimum 32-character length for both `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET`.
+
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `LIVEKIT_URL` | — | LiveKit server URL (required) |
-| `LIVEKIT_API_KEY` | — | LiveKit API key (required) |
-| `LIVEKIT_API_SECRET` | — | LiveKit API secret (required) |
+| `LIVEKIT_API_KEY` | — | LiveKit API key (required, min 32 chars) |
+| `LIVEKIT_API_SECRET` | — | LiveKit API secret (required, min 32 chars) |
 | `LIVEKIT_AGENT_NAME` | `happy-voice-agent` | Agent registration name |
 | `LIVEKIT_ROOM_TTL_SECONDS` | `3600` | Room auto-cleanup timeout |
 | `LIVEKIT_TOKEN_TTL_SECONDS` | `600` | Participant token lifetime |

@@ -12,10 +12,11 @@ This guide documents the **self-hosted** path.
 ## Requirements
 
 - Docker + Docker Compose
-- A LiveKit deployment (not included in `docker-compose.yml`)
-  - Set `LIVEKIT_URL`, `LIVEKIT_WS_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` in your `.env`
 - API keys for the voice gateway (for the default providers in this repo)
   - `OPENAI_API_KEY`, `CARTESIA_API_KEY`
+- LiveKit is included in `docker-compose.yml` — no external deployment needed for local dev
+  - `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` must each be **at least 32 characters** (LiveKit enforces this)
+  - Defaults are provided in `.env.example`; override via environment if needed
 
 ## Quickstart
 
