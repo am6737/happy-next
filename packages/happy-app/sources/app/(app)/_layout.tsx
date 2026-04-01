@@ -19,11 +19,12 @@ export default function RootLayout() {
 
     return (
         <Stack
-            initialRouteName='index'
             screenOptions={{
                 header: shouldUseCustomHeader ? createHeader : undefined,
                 headerBackTitle: t('common.back'),
                 headerShadowVisible: false,
+                headerBackButtonMenuEnabled: false,
+                freezeOnBlur: true,
                 contentStyle: {
                     backgroundColor: theme.colors.surface,
                 },
@@ -42,7 +43,8 @@ export default function RootLayout() {
                 name="index"
                 options={{
                     headerShown: false,
-                    headerTitle: ''
+                    headerTitle: '',
+                    gestureEnabled: false,
                 }}
             />
             <Stack.Screen
