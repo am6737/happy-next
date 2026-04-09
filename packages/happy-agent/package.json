@@ -1,0 +1,24 @@
+{
+  "name": "happy-agent",
+  "version": "0.2.5",
+  "description": "Happy Agent - Docker containerized daemon for Auto Pilot",
+  "author": "Hitosea",
+  "license": "MIT",
+  "type": "module",
+  "repository": "hitosea/happy-next",
+  "main": "dist/index.mjs",
+  "bin": {
+    "happy-agent": "./dist/index.mjs"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.mjs"
+  },
+  "dependencies": {
+    "happy-next-cli": "0.2.5"
+  },
+  "files": [
+    "dist",
+    "src"
+  ]
+}
