@@ -925,6 +925,7 @@ export const en = {
             claude: 'Claude',
             codex: 'Codex',
             gemini: 'Gemini',
+            opencode: 'OpenCode',
         },
         model: {
             title: 'MODEL',
@@ -954,6 +955,16 @@ export const en = {
         },
         geminiPermissionMode: {
             title: 'GEMINI PERMISSION MODE',
+            default: 'Default',
+            readOnly: 'Read Only',
+            safeYolo: 'Safe YOLO',
+            yolo: 'YOLO',
+            badgeReadOnly: 'Read Only',
+            badgeSafeYolo: 'Safe YOLO',
+            badgeYolo: 'YOLO',
+        },
+        opencodePermissionMode: {
+            title: 'OPENCODE PERMISSION MODE',
             default: 'Default',
             readOnly: 'Read Only',
             safeYolo: 'Safe YOLO',
@@ -1543,6 +1554,7 @@ export const en = {
         claudeCode: 'Claude',
         codex: 'Codex',
         gemini: 'Gemini',
+        opencode: 'OpenCode',
         providerNoData: 'No data available for this provider yet',
     },
 
