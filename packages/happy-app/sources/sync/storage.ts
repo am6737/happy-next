@@ -1403,7 +1403,7 @@ export const storage = create<StorageState>()((set, get) => {
             if (!session) return;
             const flavor = session.metadata?.flavor;
             const agentType = resolveSessionModeAgentType(flavor);
-            if (flavor === 'claude' || flavor === 'gemini') {
+            if (flavor === 'claude' || flavor === 'gemini' || flavor === 'codex') {
                 void sync.changePermissionMode(sessionId, mode);
             }
             set((state) => {
