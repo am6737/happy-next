@@ -272,12 +272,6 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
         fontSize: 11,
         ...Typography.default(),
     },
-    contextWarningText: {
-        fontSize: 11,
-        marginLeft: 8,
-        ...Typography.default(),
-    },
-
     // Button styles
     actionButtonsContainer: {
         flexDirection: 'row',
