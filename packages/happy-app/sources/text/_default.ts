@@ -964,6 +964,9 @@ export const en = {
         },
         context: {
             remaining: ({ percent }: { percent: number }) => `${percent}% left`,
+            title: 'CONTEXT WINDOW',
+            used: ({ percent }: { percent: number }) => `${percent}% used`,
+            indicator: ({ percent }: { percent: number }) => `ctx ${percent}%`,
         },
         suggestion: {
             fileLabel: 'FILE',

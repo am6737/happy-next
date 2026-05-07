@@ -980,6 +980,9 @@ export const it: TranslationStructure = {
         },
         context: {
             remaining: ({ percent }: { percent: number }) => `${percent}% restante`,
+            title: 'FINESTRA DI CONTESTO',
+            used: ({ percent }: { percent: number }) => `${percent}% usato`,
+            indicator: ({ percent }: { percent: number }) => `ctx ${percent}%`,
         },
         suggestion: {
             fileLabel: 'FILE',

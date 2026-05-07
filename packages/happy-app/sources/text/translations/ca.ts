@@ -950,6 +950,9 @@ export const ca: TranslationStructure = {
         },
         context: {
             remaining: ({ percent }: { percent: number }) => `${percent}% restant`,
+            title: 'FINESTRA DE CONTEXT',
+            used: ({ percent }: { percent: number }) => `${percent}% usat`,
+            indicator: ({ percent }: { percent: number }) => `ctx ${percent}%`,
         },
         suggestion: {
             fileLabel: 'FITXER',

@@ -950,6 +950,9 @@ export const es: TranslationStructure = {
         },
         context: {
             remaining: ({ percent }: { percent: number }) => `${percent}% restante`,
+            title: 'VENTANA DE CONTEXTO',
+            used: ({ percent }: { percent: number }) => `${percent}% usado`,
+            indicator: ({ percent }: { percent: number }) => `ctx ${percent}%`,
         },
         suggestion: {
             fileLabel: 'ARCHIVO',

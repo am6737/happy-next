@@ -961,6 +961,9 @@ export const ru: TranslationStructure = {
         },
         context: {
             remaining: ({ percent }: { percent: number }) => `Осталось ${percent}%`,
+            title: 'КОНТЕКСТНОЕ ОКНО',
+            used: ({ percent }: { percent: number }) => `${percent}% использовано`,
+            indicator: ({ percent }: { percent: number }) => `ctx ${percent}%`,
         },
         suggestion: {
             fileLabel: 'ФАЙЛ',

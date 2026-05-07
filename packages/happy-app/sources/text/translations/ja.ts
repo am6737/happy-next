@@ -982,6 +982,9 @@ export const ja: TranslationStructure = {
         },
         context: {
             remaining: ({ percent }: { percent: number }) => `残り ${percent}%`,
+            title: 'コンテキストウィンドウ',
+            used: ({ percent }: { percent: number }) => `${percent}% 使用中`,
+            indicator: ({ percent }: { percent: number }) => `ctx ${percent}%`,
         },
         suggestion: {
             fileLabel: 'ファイル',

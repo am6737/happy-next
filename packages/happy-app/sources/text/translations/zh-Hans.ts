@@ -952,6 +952,9 @@ export const zhHans: TranslationStructure = {
         },
         context: {
             remaining: ({ percent }: { percent: number }) => `剩余 ${percent}%`,
+            title: '上下文窗口',
+            used: ({ percent }: { percent: number }) => `已用 ${percent}%`,
+            indicator: ({ percent }: { percent: number }) => `ctx ${percent}%`,
         },
         suggestion: {
             fileLabel: '文件',

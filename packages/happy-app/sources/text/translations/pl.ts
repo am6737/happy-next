@@ -961,6 +961,9 @@ export const pl: TranslationStructure = {
         },
         context: {
             remaining: ({ percent }: { percent: number }) => `Pozostało ${percent}%`,
+            title: 'OKNO KONTEKSTU',
+            used: ({ percent }: { percent: number }) => `${percent}% użyte`,
+            indicator: ({ percent }: { percent: number }) => `ctx ${percent}%`,
         },
         suggestion: {
             fileLabel: 'PLIK',
