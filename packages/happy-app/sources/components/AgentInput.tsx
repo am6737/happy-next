@@ -344,19 +344,28 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
     },
 }));
 
-const getContextWarning = (contextSize: number, maxContextSize: number, alwaysShow: boolean = false, theme: Theme) => {
-    const percentageUsed = (contextSize / maxContextSize) * 100;
-    const percentageRemaining = Math.max(0, Math.min(100, 100 - percentageUsed));
-
-    if (percentageRemaining <= 10) {
-        return { text: t('agentInput.context.remaining', { percent: Math.round(percentageRemaining) }), color: theme.colors.warningCritical };
-    } else if (percentageRemaining <= 30) {
-        return { text: t('agentInput.context.remaining', { percent: Math.round(percentageRemaining) }), color: theme.colors.warning };
-    } else if (alwaysShow) {
-        // Show context remaining in neutral color when not near limit
-        return { text: t('agentInput.context.remaining', { percent: Math.round(percentageRemaining) }), color: theme.colors.warning };
+const formatTokens = (tokens: number): string => {
+    if (tokens >= 1_000_000) {
+        const m = tokens / 1_000_000;
+        return m % 1 === 0 ? `${m}m` : `${m.toFixed(1)}m`;
     }
-    return null; // No display needed
+    if (tokens >= 1_000) {
+        const k = tokens / 1_000;
+        return k % 1 === 0 ? `${k}k` : `${k.toFixed(1)}k`;
+    }
+    return `${tokens}`;
+};
+
+const getContextIndicator = (contextSize: number, maxContextSize: number, theme: Theme) => {
+    const percentageUsed = Math.round(Math.min(100, (contextSize / maxContextSize) * 100));
+    const percentageRemaining = Math.max(0, 100 - percentageUsed);
+
+    if (percentageUsed > 90) {
+        return { text: t('agentInput.context.remaining', { percent: percentageRemaining }), color: theme.colors.warningCritical, percentageUsed };
+    } else if (percentageUsed > 70) {
+        return { text: t('agentInput.context.remaining', { percent: percentageRemaining }), color: theme.colors.warning, percentageUsed };
+    }
+    return { text: t('agentInput.context.indicator', { percent: percentageUsed }), color: theme.colors.textSecondary, percentageUsed };
 };
 
 export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, AgentInputProps>((props, ref) => {
@@ -476,8 +485,8 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
     // fall back to static lookup by model/agent flavor
     const agentFlavor = props.metadata?.flavor || props.agentType || null;
     const maxContextSize = props.usageData?.contextWindowSize || getMaxContextSize(props.modelMode, agentFlavor, props.metadata?.model);
-    const contextWarning = props.usageData?.contextSize
-        ? getContextWarning(props.usageData.contextSize, maxContextSize, props.alwaysShowContextSize ?? false, theme)
+    const contextIndicator = props.usageData?.contextSize
+        ? getContextIndicator(props.usageData.contextSize, maxContextSize, theme)
         : null;
 
     const agentInputEnterToSend = useSetting('agentInputEnterToSend');
@@ -660,7 +669,7 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
     }, [suggestions, inputState, props.autocompletePrefixes]);
 
     // Settings modal state: 'model' shows model picker, 'permission' shows permission picker, false = closed
-    const [showSettings, setShowSettings] = React.useState<'model' | 'permission' | false>(false);
+    const [showSettings, setShowSettings] = React.useState<'model' | 'permission' | 'context' | false>(false);
 
     // Dismiss keyboard when settings overlay opens
     React.useEffect(() => {
@@ -679,6 +688,11 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
     const handlePermissionPress = React.useCallback(() => {
         hapticsLight();
         setShowSettings(prev => prev === 'permission' ? false : 'permission');
+    }, []);
+
+    const handleContextPress = React.useCallback(() => {
+        hapticsLight();
+        setShowSettings(prev => prev === 'context' ? false : 'context');
     }, []);
 
     // Handle settings selection
@@ -841,6 +855,7 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                         ]}>
                             <FloatingOverlay maxHeight={400} keyboardShouldPersistTaps="always">
                                 {/* Tab bar - segmented control style */}
+                                {showSettings !== 'context' && (
                                 <View style={{
                                     flexDirection: 'row',
                                     borderRadius: 10,
@@ -909,6 +924,7 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                         });
                                     })()}
                                 </View>
+                                )}
 
                                 {/* Permission Mode Section */}
                                 {showSettings === 'permission' && <View style={styles.overlaySection}>
@@ -1051,13 +1067,67 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                     )}
                                 </View>}
 
+                                {showSettings === 'context' && (
+                                    <View style={{ padding: 14 }}>
+                                        <Text style={{
+                                            fontSize: 11,
+                                            color: theme.colors.textSecondary,
+                                            fontWeight: '600',
+                                            textTransform: 'uppercase',
+                                            letterSpacing: 0.5,
+                                            marginBottom: 10,
+                                            ...Typography.default('semiBold'),
+                                        }}>
+                                            {t('agentInput.context.title')}
+                                        </Text>
+                                        <View style={{
+                                            backgroundColor: theme.colors.surfaceHighest,
+                                            borderRadius: 4,
+                                            height: 6,
+                                            overflow: 'hidden',
+                                            marginBottom: 8,
+                                        }}>
+                                            <View style={{
+                                                backgroundColor: contextIndicator!.percentageUsed > 90
+                                                    ? theme.colors.warningCritical
+                                                    : contextIndicator!.percentageUsed > 70
+                                                        ? theme.colors.warning
+                                                        : theme.colors.textLink,
+                                                width: `${Math.min(100, contextIndicator!.percentageUsed)}%`,
+                                                height: '100%',
+                                                borderRadius: 4,
+                                            }} />
+                                        </View>
+                                        <View style={{
+                                            flexDirection: 'row',
+                                            justifyContent: 'space-between',
+                                            alignItems: 'center',
+                                        }}>
+                                            <Text style={{
+                                                fontSize: 12,
+                                                color: theme.colors.text,
+                                                ...Typography.default('semiBold'),
+                                            }}>
+                                                {formatTokens(props.usageData!.contextSize!)} / {formatTokens(maxContextSize)}
+                                            </Text>
+                                            <Text style={{
+                                                fontSize: 11,
+                                                color: contextIndicator!.color,
+                                                ...Typography.default(),
+                                            }}>
+                                                {t('agentInput.context.used', { percent: contextIndicator!.percentageUsed })}
+                                            </Text>
+                                        </View>
+                                    </View>
+                                )}
+
                             </FloatingOverlay>
                         </View>
                     </>
                 )}
 
-                {/* Connection status, context warning, and permission mode */}
-                {(props.connectionStatus || contextWarning || props.permissionMode) && (
+                {/* Connection status, context indicator, and permission mode */}
+                {(props.connectionStatus || contextIndicator || props.permissionMode) && (
                     <View style={{
                         flexDirection: 'row',
                         alignItems: 'center',
@@ -1163,15 +1233,21 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                     )}
                                 </>
                             )}
-                            {contextWarning && (
-                                <Text style={{
-                                    fontSize: 11,
-                                    color: contextWarning.color,
-                                    marginLeft: props.connectionStatus ? 8 : 0,
-                                    ...Typography.default()
-                                }}>
-                                    {props.connectionStatus ? '• ' : ''}{contextWarning.text}
-                                </Text>
+                            {contextIndicator && (
+                                <Pressable
+                                    hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
+                                    onPress={handleContextPress}
+                                    style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
+                                >
+                                    <Text style={{
+                                        fontSize: 11,
+                                        color: contextIndicator.color,
+                                        marginLeft: props.connectionStatus ? 8 : 0,
+                                        ...Typography.default()
+                                    }}>
+                                        {props.connectionStatus ? '• ' : ''}{contextIndicator.text}
+                                    </Text>
+                                </Pressable>
                             )}
                         </View>
                         <View style={{
