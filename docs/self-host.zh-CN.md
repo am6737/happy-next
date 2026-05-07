@@ -12,10 +12,11 @@
 ## 前提条件
 
 - Docker + Docker Compose
-- LiveKit 部署（不包含在 `docker-compose.yml` 中）
-  - 在 `.env` 中设置 `LIVEKIT_URL`、`LIVEKIT_WS_URL`、`LIVEKIT_API_KEY`、`LIVEKIT_API_SECRET`
 - 语音网关的 API 密钥（用于本仓库的默认供应商）
   - `OPENAI_API_KEY`、`CARTESIA_API_KEY`
+- LiveKit 已包含在 `docker-compose.yml` 中，本地开发无需外部部署
+  - `LIVEKIT_API_KEY` 和 `LIVEKIT_API_SECRET` 每个必须**至少 32 个字符**（LiveKit 强制要求）
+  - `.env.example` 中提供了默认值，需要时可通过环境变量覆盖
 
 ## 快速开始
 

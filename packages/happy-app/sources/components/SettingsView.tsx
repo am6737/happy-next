@@ -333,6 +333,22 @@ export const SettingsView = React.memo(function SettingsView() {
                 </ItemGroup>
             )}
 
+            {/* Lab — settings grouping (zh: 实验室); repositories entry does not require linked accounts */}
+            <ItemGroup title={t('lab.sectionTitle')}>
+                <Item
+                    title={t('lab.entryTitle')}
+                    subtitle={t('lab.entrySubtitle')}
+                    icon={<Ionicons name="git-branch-outline" size={29} color="#5AC8FA" />}
+                    onPress={() => router.push('/repos')}
+                />
+                <Item
+                    title={t('lab.machinesTab')}
+                    subtitle="Cloud machines, agents & containers"
+                    icon={<Ionicons name="hardware-chip-outline" size={29} color="#5AC8FA" />}
+                    onPress={() => router.push('/repos/machines')}
+                />
+            </ItemGroup>
+
             {/* History */}
             <ItemGroup title={t('settings.history')}>
                 <Item

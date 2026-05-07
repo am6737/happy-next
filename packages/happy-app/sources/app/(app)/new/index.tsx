@@ -1527,6 +1527,31 @@ function NewSessionWizard() {
                         </View>
                     )}
 
+                    {/* Lab — cloud repos (zh: 实验室) */}
+                    <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
+                        <View style={{ maxWidth: layout.maxWidth, width: '100%', paddingHorizontal: screenWidth > 700 ? 16 : 0, alignSelf: 'center' }}>
+                            <Pressable
+                                onPress={() => router.push('/repos')}
+                                style={{
+                                    flexDirection: 'row',
+                                    alignItems: 'center',
+                                    gap: 8,
+                                    paddingVertical: 8,
+                                    paddingHorizontal: 12,
+                                    borderRadius: 10,
+                                    borderWidth: 1,
+                                    borderColor: theme.colors.divider,
+                                    borderStyle: 'dashed',
+                                    backgroundColor: theme.colors.surface,
+                                }}
+                            >
+                                <Ionicons name="git-branch-outline" size={18} color={theme.colors.button.primary.background} />
+                                <Text style={{ flex: 1, fontSize: 13, color: theme.colors.text }}>{t('lab.newSessionShortcut')}</Text>
+                                <Ionicons name="chevron-forward" size={14} color={theme.colors.textSecondary} />
+                            </Pressable>
+                        </View>
+                    </View>
+
                     {/* Session type selector */}
                     <View style={{ paddingHorizontal: 16, marginBottom: 16 }}>
                         <View style={{ maxWidth: layout.maxWidth, width: '100%', paddingHorizontal: screenWidth > 700 ? 16 : 0, alignSelf: 'center' }}>
@@ -2136,6 +2161,31 @@ function NewSessionWizard() {
                                     }
                                 }}
                                 />
+
+                                {/* Lab — cloud repos (zh: 实验室) */}
+                                <Pressable
+                                    onPress={() => router.push('/repos')}
+                                    style={{
+                                        flexDirection: 'row',
+                                        alignItems: 'center',
+                                        gap: 10,
+                                        paddingVertical: 10,
+                                        paddingHorizontal: 12,
+                                        marginTop: 8,
+                                        borderRadius: 10,
+                                        borderWidth: 1,
+                                        borderColor: theme.colors.divider,
+                                        borderStyle: 'dashed',
+                                        backgroundColor: theme.colors.surface,
+                                    }}
+                                >
+                                    <Ionicons name="git-branch-outline" size={20} color={theme.colors.button.primary.background} />
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={{ fontSize: 14, fontWeight: '600', color: theme.colors.text }}>{t('lab.newSessionCardTitle')}</Text>
+                                        <Text style={{ fontSize: 12, color: theme.colors.textSecondary, marginTop: 1 }}>{t('lab.newSessionCardSubtitle')}</Text>
+                                    </View>
+                                    <Ionicons name="chevron-forward" size={16} color={theme.colors.textSecondary} />
+                                </Pressable>
                             </View>
 
                             {/* Section 3: Session Mode */}

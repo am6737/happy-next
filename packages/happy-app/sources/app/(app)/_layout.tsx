@@ -296,6 +296,92 @@ export default function RootLayout() {
                 }}
             />
             <Stack.Screen
+                name="repos/index"
+                options={{
+                    headerShown: true,
+                    headerTitle: t('lab.screenTitle'),
+                    headerBackTitle: t('common.back'),
+                }}
+            />
+            <Stack.Screen
+                name="repos/add"
+                options={{
+                    headerShown: true,
+                    headerTitle: t('lab.addRepositoryTitle'),
+                    headerBackTitle: t('common.back'),
+                }}
+            />
+            <Stack.Screen
+                name="repos/[owner]/[repo]"
+                options={{
+                    headerShown: true,
+                    headerTitle: '',
+                    headerBackTitle: t('common.back'),
+                }}
+            />
+            <Stack.Screen
+                name="repos/[owner]/[repo]/issues"
+                options={({ navigation }) => ({
+                    headerShown: true,
+                    headerTitle: 'Issues',
+                    headerBackTitle: t('common.back'),
+                    headerRight: () => (
+                        <TouchableOpacity
+                            onPress={() => navigation.navigate('repos/[owner]/[repo]/issue/new' as never)}
+                            style={{ paddingHorizontal: 16 }}
+                        >
+                            <Text style={{ color: theme.colors.button.primary.tint, fontSize: 16 }}>
+                                +
+                            </Text>
+                        </TouchableOpacity>
+                    ),
+                })}
+            />
+            <Stack.Screen
+                name="repos/[owner]/[repo]/pulls"
+                options={{
+                    headerShown: true,
+                    headerTitle: 'Pull Requests',
+                    headerBackTitle: t('common.back'),
+                }}
+            />
+            <Stack.Screen
+                name="repos/[owner]/[repo]/sessions"
+                options={({ navigation }) => ({
+                    headerShown: true,
+                    headerTitle: 'Sessions',
+                    headerBackTitle: t('common.back'),
+                    headerRight: () => (
+                        <TouchableOpacity
+                            onPress={() => {
+                                // TODO: Navigate to new session
+                            }}
+                            style={{ paddingHorizontal: 16 }}
+                        >
+                            <Text style={{ color: theme.colors.button.primary.tint, fontSize: 16 }}>
+                                +
+                            </Text>
+                        </TouchableOpacity>
+                    ),
+                })}
+            />
+            <Stack.Screen
+                name="repos/[owner]/[repo]/settings"
+                options={{
+                    headerShown: true,
+                    headerTitle: '',
+                    headerBackTitle: t('common.back'),
+                }}
+            />
+            <Stack.Screen
+                name="repos/[owner]/[repo]/issue/[number]"
+                options={{
+                    headerShown: true,
+                    headerTitle: '',
+                    headerBackTitle: t('common.back'),
+                }}
+            />
+            <Stack.Screen
                 name="orchestrator/index"
                 options={{
                     headerShown: true,

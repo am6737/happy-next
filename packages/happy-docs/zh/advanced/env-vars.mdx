@@ -80,11 +80,13 @@ description: "Happy Next 所有环境变量的完整参考。"
 
 ### LiveKit
 
+> **注意：** LiveKit 要求 `LIVEKIT_API_KEY` 和 `LIVEKIT_API_SECRET` 每个至少 32 个字符。
+
 | 变量 | 默认值 | 描述 |
 |----------|---------|-------------|
 | `LIVEKIT_URL` | — | LiveKit 服务器 URL（必需） |
-| `LIVEKIT_API_KEY` | — | LiveKit API 密钥（必需） |
-| `LIVEKIT_API_SECRET` | — | LiveKit API 密钥（必需） |
+| `LIVEKIT_API_KEY` | — | LiveKit API 密钥（必需，至少 32 字符） |
+| `LIVEKIT_API_SECRET` | — | LiveKit API 密钥（必需，至少 32 字符） |
 | `LIVEKIT_AGENT_NAME` | `happy-voice-agent` | 代理注册名称 |
 | `LIVEKIT_ROOM_TTL_SECONDS` | `3600` | 房间自动清理超时 |
 | `LIVEKIT_TOKEN_TTL_SECONDS` | `600` | 参与者令牌有效期 |
