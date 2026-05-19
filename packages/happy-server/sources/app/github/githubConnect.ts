@@ -22,11 +22,13 @@ import { githubDisconnect } from "./githubDisconnect";
  * @param ctx - Request context containing user ID
  * @param githubProfile - GitHub profile data from OAuth
  * @param accessToken - GitHub access token for API access
+ * @param tokenMeta - Optional refresh token and expiry from GitHub OAuth
  */
 export async function githubConnect(
     ctx: Context,
     githubProfile: GitHubProfile,
-    accessToken: string
+    accessToken: string,
+    tokenMeta?: { refreshToken?: string; expiresIn?: number }
 ): Promise<void> {
     const userId = ctx.uid;
     const githubUserId = githubProfile.id.toString();
@@ -37,6 +39,14 @@ export async function githubConnect(
         select: { githubUserId: true, username: true }
     });
     if (currentUser.githubUserId === githubUserId) {
+        // Same account — just refresh the token (may have expired/been revoked)
+        await db.githubUser.update({
+            where: { id: githubUserId },
+            data: {
+                token: encryptString(['user', userId, 'github', 'token'], accessToken),
+                ...tokenMetaFields(userId, tokenMeta),
+            }
+        });
         return;
     }
 
@@ -64,16 +74,19 @@ export async function githubConnect(
     await db.$transaction(async (tx) => {
 
         // Upsert GitHub user record with encrypted token
+        const meta = tokenMetaFields(userId, tokenMeta);
         await tx.githubUser.upsert({
             where: { id: githubUserId },
             update: {
                 profile: githubProfile,
-                token: encryptString(['user', userId, 'github', 'token'], accessToken)
+                token: encryptString(['user', userId, 'github', 'token'], accessToken),
+                ...meta,
             },
             create: {
                 id: githubUserId,
                 profile: githubProfile,
-                token: encryptString(['user', userId, 'github', 'token'], accessToken)
+                token: encryptString(['user', userId, 'github', 'token'], accessToken),
+                ...meta,
             }
         });
 
@@ -105,4 +118,16 @@ export async function githubConnect(
         payload: updatePayload,
         recipientFilter: { type: 'user-scoped-only' }
     });
+}
+
+function tokenMetaFields(userId: string, meta?: { refreshToken?: string; expiresIn?: number }) {
+    if (!meta) return {};
+    return {
+        ...(meta.refreshToken && {
+            refreshToken: encryptString(['user', userId, 'github', 'refreshToken'], meta.refreshToken),
+        }),
+        ...(meta.expiresIn && {
+            expiresAt: new Date(Date.now() + meta.expiresIn * 1000),
+        }),
+    };
 }
