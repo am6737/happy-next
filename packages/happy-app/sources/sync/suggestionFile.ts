@@ -162,20 +162,15 @@ class FileSearchCache {
             return [];
         }
 
-        const { limit = 10, threshold = 0.3 } = options;
+        const { limit, threshold = 0.3 } = options;
 
-        // If query is empty, return most recently modified files
         if (!query || query.trim().length === 0) {
-            return cache.files.slice(0, limit);
+            return limit ? cache.files.slice(0, limit) : cache.files;
         }
 
-        // Perform fuzzy search
-        const searchOptions = {
-            limit,
-            threshold
-        };
-
-        const results = cache.fuse.search(query, searchOptions);
+        const results = limit
+            ? cache.fuse.search(query, { limit })
+            : cache.fuse.search(query);
         return results.map(result => result.item);
     }
 
@@ -200,7 +195,7 @@ export const fileSearchCache = new FileSearchCache();
 export async function searchFiles(
     sessionId: string,
     query: string,
-    options: SearchOptions = {}
+    options: SearchOptions = {},
 ): Promise<FileItem[]> {
     return fileSearchCache.search(sessionId, query, options);
 }

@@ -131,17 +131,13 @@ export async function searchCommands(
     query: string,
     options: SearchOptions = {}
 ): Promise<CommandItem[]> {
-    const { limit = 10, threshold = 0.3 } = options;
-    
-    // Get commands from session metadata (no caching)
+    const { limit, threshold = 0.3 } = options;
     const commands = getCommandsFromSession(sessionId);
-    
-    // If query is empty, return all commands
+
     if (!query || query.trim().length === 0) {
-        return commands.slice(0, limit);
+        return limit ? commands.slice(0, limit) : commands;
     }
-    
-    // Setup Fuse for fuzzy search
+
     const fuseOptions = {
         keys: [
             { name: 'command', weight: 0.7 },
@@ -154,10 +150,12 @@ export async function searchCommands(
         ignoreLocation: true,
         useExtendedSearch: true
     };
-    
+
     const fuse = new Fuse(commands, fuseOptions);
-    const results = fuse.search(query, { limit });
-    
+    const results = limit
+        ? fuse.search(query, { limit })
+        : fuse.search(query);
+
     return results.map(result => result.item);
 }
 
