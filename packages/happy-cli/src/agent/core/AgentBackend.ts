@@ -149,10 +149,12 @@ export interface AgentBackend {
   
   /**
    * Cancel the current operation in a session.
-   * 
+   *
    * @param sessionId - The session to cancel
+   * @returns true if the cancel/interrupt was acknowledged (caller may keep the
+   *          backend warm), false if it failed/timed out (caller should tear down)
    */
-  cancel(sessionId: SessionId): Promise<void>;
+  cancel(sessionId: SessionId): Promise<boolean>;
   
   /**
    * Register a handler for agent messages.

@@ -1289,14 +1289,16 @@ export class AcpBackend implements AgentBackend {
     }
   }
 
-  async cancel(sessionId: SessionId): Promise<void> {
+  async cancel(sessionId: SessionId): Promise<boolean> {
     if (!this.connection || !this.acpSessionId) {
-      return;
+      return false;
     }
 
+    let acked = false;
     try {
       await this.connection.cancel({ sessionId: this.acpSessionId });
       this.emit({ type: 'status', status: 'stopped', detail: 'Cancelled by user' });
+      acked = true;
     } catch (error) {
       // Cancel RPC failure typically means the connection/process is already
       // dead, so no late updates will arrive. We still resolve the waiter below
@@ -1311,6 +1313,7 @@ export class AcpBackend implements AgentBackend {
       logger.debug('[AcpBackend] Resolving idle waiter after cancel');
       this.idleResolver();
     }
+    return acked;
   }
 
   /**

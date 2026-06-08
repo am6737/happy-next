@@ -438,7 +438,10 @@ export async function runCodex(opts: {
     // Typed as any to prevent TS narrowing issues (assigned inside createBackend())
     let backend: any = null;
 
-    async function handleAbort() {
+    // graceful: interrupt the current turn but keep the app-server process warm so
+    // the next message reuses it (stop button) instead of respawning Codex from a
+    // resume file. The hard path (default) tears the process down — for switch / exit.
+    async function handleAbort(opts?: { graceful?: boolean }) {
         logger.debug('[Codex] Abort requested - stopping current task');
         abortRequested = true;
         try {
@@ -446,13 +449,25 @@ export async function runCodex(opts: {
             // main loop while we await dispose(), so we must not blindly null it later.
             const b = backend;
             if (b?.isAlive) {
+                const convId = b.getConversationId();
+
+                // Graceful: turn/interrupt and keep the backend alive. On ack Codex
+                // emits turn/completed{interrupted}, which resolves the main loop's
+                // waitForResponseComplete(); it then reuses this warm backend for the
+                // next message. Fall through to the hard path if the interrupt fails.
+                if (opts?.graceful && convId && await b.cancel(convId) && backend === b && b.isAlive) {
+                    reasoningProcessor.abort();
+                    logger.debug('[Codex] Graceful interrupt acked, keeping backend warm');
+                    return;
+                }
+
                 const sid = b.getSessionId();
                 if (sid) storedSessionIdForResume = sid;
                 logger.debug('[Codex] Stored session for resume:', storedSessionIdForResume);
 
                 // Fire-and-forget: polite turn/interrupt (don't await — may hang)
-                if (b.getConversationId()) {
-                    b.cancel(b.getConversationId()!).catch(() => {});
+                if (convId) {
+                    b.cancel(convId).catch(() => {});
                 }
 
                 // Immediately dispose — resolves waitForResponseComplete() and
@@ -530,7 +545,7 @@ export async function runCodex(opts: {
     };
 
     // Register abort handler
-    session.rpcHandlerManager.registerHandler('abort', handleAbort);
+    session.rpcHandlerManager.registerHandler('abort', () => handleAbort({ graceful: true }));
     registerKillSessionHandler(session.rpcHandlerManager, handleKillSession);
 
     //
@@ -636,10 +651,18 @@ export async function runCodex(opts: {
                     const isAborted = msg.detail === 'aborted';
                     messageBuffer.addMessage(isAborted ? 'Turn aborted' : 'Task completed', 'status');
 
-                    if (!messageSentThisTurn) {
+                    if (isAborted) {
+                        // Always surface an interrupt marker (mirrors Claude's
+                        // "[Request interrupted by user]"), even when Codex had
+                        // already streamed text this turn.
                         session.sendAgentMessage('codex', {
                             type: 'message',
-                            message: isAborted ? '[Codex turn aborted]' : '[Codex completed without response]',
+                            message: '[Request interrupted by user]',
+                        });
+                    } else if (!messageSentThisTurn) {
+                        session.sendAgentMessage('codex', {
+                            type: 'message',
+                            message: '[Codex completed without response]',
                         });
                     }
 

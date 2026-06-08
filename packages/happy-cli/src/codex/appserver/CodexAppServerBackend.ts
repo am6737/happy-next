@@ -268,17 +268,23 @@ export class CodexAppServerBackend implements AgentBackend {
     await this.doSendMessage(prompt, options);
   }
 
-  async cancel(_sessionId: SessionId): Promise<void> {
-    if (!this.threadId || !this.peer.isAlive) return;
+  // Returns true if the turn/interrupt was acked, so callers can keep the backend
+  // warm on success and only tear it down on failure/timeout.
+  async cancel(_sessionId: SessionId): Promise<boolean> {
+    if (!this.threadId || !this.peer.isAlive) return false;
 
     try {
+      // 3s ack window over the local stdin/stdout pipe (not network), aligned with
+      // the Claude graceful-interrupt timeout.
       await this.peer.request(Methods.TURN_INTERRUPT, {
         threadId: this.threadId,
         turnId: this.currentTurnId ?? '',
-      } satisfies TurnInterruptParams, 5000);
+      } satisfies TurnInterruptParams, 3000);
+      return true;
     } catch {
       // Interrupt may fail if already completed - ignore
       logger.debug('[CodexBackend] Interrupt failed (process may have already exited)');
+      return false;
     }
   }
 
