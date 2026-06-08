@@ -1,8 +1,8 @@
 # Changelog
 
-## Version 13 - 2026-06-07
+## Version 13 - 2026-06-08
 
-Session header is reworked with a left-aligned title, a new-session button, and OpenClaw session info sheets; session loading gets a reliability sweep (longer fetch timeout, retry-loop refresh indicator, stuck-load recovery, base64 stack-overflow fix); long user messages collapse and select cleanly on web; the commits list tags the upstream tip; nginx adds a /healthz endpoint; Happy CLI updates to v0.5.3 with mid-turn permission-mode forwarding to the Claude subprocess.
+Session header is reworked with a left-aligned title, a new-session button, and OpenClaw session info sheets; session loading gets a reliability sweep (longer fetch timeout, retry-loop refresh indicator, stuck-load recovery, base64 stack-overflow fix); long user messages collapse and select cleanly on web; the commits list tags the upstream tip; nginx adds a /healthz endpoint; unrecognized tool calls now render as a generic 'other' block and agent-event messages strip ANSI escape codes; Happy CLI updates to v0.5.4 with mid-turn permission-mode forwarding and graceful Stop/ESC interrupts that keep the Claude and Codex backends warm.
 
 - Session header: unified left-aligned title across iOS / Android / web — new-session button on the header right, header title in the session info screen, and a dedicated OpenClaw session info sheet
 - Session header: left-align the title on narrow phones (was center-overflowing), and fix the invisible back icon in dark-theme landscape
@@ -13,7 +13,9 @@ Session header is reworked with a left-aligned title, a new-session button, and 
 - Session draft: rewritten as a single source of truth — fewer cases of drafts vanishing or reappearing
 - Commits view: the commit at the upstream tip is now tagged
 - Deploy: nginx serves a zero-cost `/healthz` endpoint so load balancers and uptime checks have a cheap target
-- CLI: Happy CLI updated to v0.5.3 — permission-mode switches from the app now forward synchronously to the Claude subprocess instead of waiting until the next message
+- Tools: unrecognized tool calls now render as a generic 'other' block with a dynamic title and icon, instead of an empty placeholder
+- Agent events: agent event messages strip ANSI escape codes from child-CLI stderr so subprocess banner color sequences no longer leak into the chat as raw `[90m…[0m`
+- CLI: Happy CLI updated to v0.5.4 — permission-mode switches from the app forward synchronously to the Claude subprocess; Stop/ESC interrupts now keep the Claude and Codex backends warm so the next message resumes instantly instead of cold-restarting; Gemini's interrupt feedback now matches Claude/Codex with a "[Request interrupted by user]" marker
 
 ## Version 12 - 2026-06-02
 

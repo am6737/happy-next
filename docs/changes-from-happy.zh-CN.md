@@ -270,6 +270,8 @@ Happy Next 添加了一等自托管路径。
 - **Web 文本选择**：修复 Web 端聊天消息内的文本选择
 - **Action bar 稳定性**：消息在 thinking / streaming 状态切换时不再触发 action bar 闪烁
 - **会话草稿单一数据源**：重写后消除草稿消失/重现的问题
+- **通用 'other' 工具块**：未识别的工具调用以带动态标题和图标的通用 'other' 块渲染，不再显示空占位
+- **Agent event ANSI 过滤**：Agent event 消息会用 strip-ansi 过滤子 CLI stderr 中的 ANSI 转义码，子进程启动横幅的颜色序列不再以 `[90m…[0m` 形式泄露到聊天里
 
 ## CLI 改进
 
@@ -298,6 +300,8 @@ CLI（`happy-next-cli`）收到了大量升级。
 - **统一系统提示注入**：Codex 和 Gemini 共享提示注入
 - **编排器引导**：首轮提示包含编排器使用指南
 - **`set_permission_mode` 转发**：应用端切换的权限模式通过 stream-json 的 `set_permission_mode` control request 同步转发到运行中的 Claude 子进程，不再要等到下一条用户消息才生效
+- **优雅中断**：Stop / ESC / "立即发送 pending 消息" 不再直接 SIGTERM Claude 子进程或 Codex `app-server`。优雅路径会等待 `interrupt()` / `cancel()` 被确认后保留后端进程；主循环复用 warm 进程处理下一条消息，不再每次中断都冷启动（重新加载 MCP、从磁盘恢复 session、重建系统提示）。Ack 超时或失败时仍走原来的硬终止路径，切换 / 退出场景也维持原状。配套：`AgentBackend.cancel()` 返回值改为 boolean（acked vs failed/timed-out）；Codex ACP `turn/interrupt` 的 ack 超时对齐 Claude 的 3s；Codex 中断时始终发出 `[Request interrupted by user]` 标记，即使中断发生在流式输出过程中
+- **Gemini 中断标记对齐**：Gemini 的中断反馈现在以 gemini agent 消息形式发出 `[Request interrupted by user]`，与 Claude / Codex 完全一致，取代原先居中的 "Aborted by user" 状态事件，三家 provider 的中断 UX 统一
 
 ## 服务端
 

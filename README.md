@@ -192,6 +192,8 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Mobile text selection: in-app selection page uses browser-native long-press with static syntax highlighting (Lezer) for reliable first-tap selection on Android
 - Pull-to-refresh, inset dividers, Agent tool display with robot icon
 - Tool input/output formatted as key-value pairs instead of raw JSON
+- Unrecognized tool calls render as a generic 'other' block with a dynamic title and icon, instead of an empty placeholder
+- Agent event messages strip ANSI escape codes from child-CLI stderr so subprocess banner color sequences no longer leak into the chat as raw `[90m…[0m`
 - `preview_html` tool for full-page HTML preview, colon-separated MCP tool naming
 - CLI hot-upgrade support mid-session
 - Path picker with directory autocomplete via remote machine listing (web + mobile)
@@ -204,6 +206,7 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Unified system prompt injection for Codex and Gemini
 - Message receipt tracking with legacy compatibility
 - Permission-mode switches from the app forward synchronously to the running Claude subprocess (no longer wait until the next message)
+- Stop/ESC interrupts now keep the Claude and Codex backends warm so the next message resumes instantly instead of cold-restarting; Gemini's interrupt feedback now matches Claude/Codex with a `[Request interrupted by user]` marker
 
 ### Bug Fixes & Stability
 - 250+ bug fixes: message sending reliability, session lifecycle, Markdown rendering, navigation, voice, DooTask, sharing

@@ -270,6 +270,8 @@ Extensive improvements to the chat and session management experience.
 - **Web text selection**: text selection inside chat messages on web fixed
 - **Action bar stability**: per-message action bar no longer flickers when the message flips between thinking and streaming states
 - **Session draft as single source of truth**: rewritten to eliminate drafts vanishing or reappearing
+- **Generic 'other' tool block**: unrecognized tool calls render with a dynamic title and icon instead of an empty placeholder
+- **Agent event ANSI strip**: agent event messages strip ANSI escape codes from child-CLI stderr so subprocess banner color sequences no longer leak into the chat as raw `[90m…[0m`
 
 ## CLI Improvements
 
@@ -298,6 +300,8 @@ The CLI (`happy-next-cli`) received substantial upgrades.
 - **Unified system prompt injection**: shared prompt injection for Codex and Gemini
 - **Orchestrator guidance**: first-turn prompts include orchestrator usage guidance
 - **`set_permission_mode` forwarding**: permission-mode switches from the app are forwarded synchronously to the active Claude subprocess via the stream-json `set_permission_mode` control request, instead of taking effect only on the next user message
+- **Graceful interrupts**: Stop / ESC / "send pending message" no longer SIGTERM the Claude subprocess and Codex `app-server`. The graceful path awaits `interrupt()` / `cancel()` and, when acked, keeps the backend alive; the loop reuses the warm process for the next message instead of cold-restarting (MCP reload, session resume from disk). The hard kill is kept as a fallback when the ack times out and for switch / exit. As part of this, `AgentBackend.cancel()` now returns boolean (acked vs failed/timed-out); the Codex ACP `turn/interrupt` ack timeout is aligned to Claude's 3s; and Codex always emits a `[Request interrupted by user]` marker on interrupt, even mid-stream
+- **Gemini interrupt marker alignment**: Gemini's abort feedback now sends `[Request interrupted by user]` as a gemini agent message — the same marker bubble Claude and Codex use — instead of the centered "Aborted by user" status event, so the interrupt UX is consistent across all three providers
 
 ## Server
 

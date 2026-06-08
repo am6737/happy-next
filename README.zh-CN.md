@@ -192,6 +192,8 @@ Happy Next 是原版 Happy 的重大演进，以下是亮点：
 - 移动端文本选择：选择页改用浏览器原生长按 + 静态语法高亮（Lezer），Android 首次长按即可选中
 - 下拉刷新、内嵌分隔线、Agent tool 展示（机器人图标）
 - 工具输入/输出格式化为 key-value 对（替代原始 JSON）
+- 未识别的工具调用以通用的 'other' 块渲染（带动态标题和图标），不再显示空占位
+- Agent event 消息会用 strip-ansi 过滤子 CLI stderr 中的 ANSI 转义码，子进程启动横幅的颜色序列不再以 `[90m…[0m` 形式泄露到聊天里
 - `preview_html` 工具全页面 HTML 预览，冒号分隔 MCP 工具命名
 - CLI 会话中途热升级
 - 路径选择器支持目录自动补全，通过远程机器列表实现（Web + 移动端）
@@ -204,6 +206,7 @@ Happy Next 是原版 Happy 的重大演进，以下是亮点：
 - 统一 Codex 和 Gemini 系统提示注入
 - 消息接收追踪，兼容旧版本
 - 应用端切换的权限模式现在会同步转发到运行中的 Claude 子进程（不再要等到下一条消息生效）
+- Stop/ESC 中断现在会让 Claude 与 Codex 后端保持 warm 状态，下一条消息立即续上，不再每次中断都冷启动；Gemini 的中断反馈也对齐 Claude/Codex，发送 `[Request interrupted by user]` 标记
 
 ### Bug 修复和稳定性
 - 250+ Bug 修复：消息发送可靠性、会话生命周期、Markdown 渲染、导航、语音、DooTask、共享
