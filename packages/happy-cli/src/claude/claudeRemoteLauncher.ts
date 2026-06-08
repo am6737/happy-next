@@ -76,21 +76,24 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
     let abortFuture: Future<void> | null = null;
     let currentQuery: Query | null = null;
 
-    async function abort() {
-        // Capture references locally so a new query round can't overwrite them
-        // while we're awaiting the interrupt timeout.
+    // graceful: stop the current turn but keep the subprocess warm for the next
+    // message (stop button / ESC / pending "send now"). Default hard path tears
+    // the process down — for switch / exit / interrupt fallback.
+    async function abort(opts?: { graceful?: boolean }) {
+        // Capture locally so a new query round can't overwrite mid-abort.
         const query = currentQuery;
         const controller = abortController;
         const future = abortFuture;
 
-        // Idempotent: if a previous abort already fired, just wait for completion.
+        // Idempotent: a hard abort already fired, just wait for completion.
         if (controller?.signal.aborted) {
             await future?.promise;
             return;
         }
 
-        // Step 1: Try graceful interrupt via SDK control request.
-        // This tells Claude Code to stop its current turn immediately.
+        // Interrupt the current turn. The SDK also cancels in-flight can_use_tool
+        // requests, rejecting pending permission prompts so Claude isn't blocked.
+        let interrupted = false;
         if (query) {
             try {
                 await Promise.race([
@@ -99,28 +102,31 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
                         setTimeout(() => reject(new Error('interrupt timeout')), 3000)
                     ),
                 ]);
+                interrupted = true;
                 logger.debug('[remote]: interrupt() succeeded');
             } catch (e) {
                 logger.debug('[remote]: interrupt() failed or timed out, falling back to SIGTERM', e);
             }
         }
 
-        // Step 2: Signal abort — unblocks nextMessage() and streamToStdin(), then
-        // triggers SIGTERM (escalating to SIGKILL after 3s) via cleanup in query.ts.
-        // This MUST run even after a successful interrupt: interrupt stops the current
-        // turn, but the abort signal is still needed to unblock the message queue and
-        // end stdin so that claudeRemote() can return.
+        // Graceful: leave the process running — claudeRemote() handles the result,
+        // calls onReady(), and waits on nextMessage() on the same warm process.
+        if (interrupted && opts?.graceful) {
+            return;
+        }
+
+        // Hard: SIGTERM (→ SIGKILL after 3s via query.ts cleanup) and unblock the
+        // queue/stdin so claudeRemote() can return.
         if (controller && !controller.signal.aborted) {
             controller.abort();
         }
 
-        // Step 3: Wait for claudeRemote() to finish (finally block resolves the future)
         await future?.promise;
     }
 
     async function doAbort() {
         logger.debug('[remote]: doAbort');
-        await abort();
+        await abort({ graceful: true });
     }
 
     async function doSwitch() {
@@ -255,14 +261,19 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
         if (message.type === 'result') {
             const resultMsg = message as SDKResultMessage;
             if (resultMsg.subtype === 'error_during_execution') {
-                const errors = (resultMsg as any).errors as string[] | undefined;
-                if (abortController?.signal.aborted) {
-                    // Error caused by user-initiated abort — log only, don't show in UI
-                    logger.debug('[remote]: suppressing error_during_execution caused by user abort', { errors });
-                } else if (errors && errors.length > 0) {
+                const terminalReason = (resultMsg as any).terminal_reason as string | undefined;
+                // [ede_diagnostic] lines are Claude Code's internal post-abort noise,
+                // never user-actionable. Drop them so the noise is never shown on its
+                // own, yet a real error is never masked even if an abort coincided.
+                const errors = ((resultMsg as any).errors as string[] | undefined ?? [])
+                    .filter((e) => !e.includes('[ede_diagnostic]'));
+                if (errors.length > 0) {
                     const errorText = errors.join('\n');
                     session.client.sendSessionEvent({ type: 'message', message: `Error: ${errorText}` });
                     logger.debug('[remote]: sent error_during_execution as session event', { errorCount: errors.length });
+                } else if (abortController?.signal.aborted || terminalReason?.startsWith('aborted')) {
+                    // Nothing left but abort noise — log only, don't show in UI.
+                    logger.debug('[remote]: suppressing post-abort diagnostic', { terminalReason });
                 } else {
                     session.client.sendSessionEvent({ type: 'message', message: 'An error occurred during execution' });
                 }
