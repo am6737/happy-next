@@ -14,6 +14,7 @@ import { Metadata } from "@/sync/storageTypes";
 import { layout } from "./layout";
 import { ToolView } from "./tools/ToolView";
 import { AgentEvent } from "@/sync/typesRaw";
+import stripAnsi from 'strip-ansi';
 import { Option } from './markdown/MarkdownView';
 import { OptionItem as OptionItemData } from './markdown/parseMarkdown';
 import { Modal } from "@/modal";
@@ -524,9 +525,11 @@ function AgentEventBlock(props: {
     );
   }
   if (props.event.type === 'message') {
+    // Strip ANSI escape codes so terminal color sequences (e.g. \x1b[90m…\x1b[0m
+    // from a CLI startup banner) don't leak into the bubble as raw text.
     return (
       <View style={styles.agentEventContainer}>
-        <Text style={styles.agentEventText}>{props.event.message}</Text>
+        <Text style={styles.agentEventText}>{stripAnsi(props.event.message)}</Text>
       </View>
     );
   }
