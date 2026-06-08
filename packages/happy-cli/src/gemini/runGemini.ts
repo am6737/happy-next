@@ -417,8 +417,8 @@ export async function runGemini(opts: {
     // Send visible abort feedback (like Codex)
     if (!abortFeedbackSent) {
       abortFeedbackSent = true;
-      messageBuffer.addMessage('Aborted by user', 'status');
-      session.sendSessionEvent({ type: 'message', message: 'Aborted by user' });
+      messageBuffer.addMessage('[Request interrupted by user]', 'status');
+      session.sendAgentMessage('gemini', { type: 'message', message: '[Request interrupted by user]' });
       session.sendAgentMessage('gemini', {
         type: 'turn_aborted',
         id: randomUUID(),
@@ -1391,8 +1391,8 @@ export async function runGemini(opts: {
 
         if (isUserAbort && !abortFeedbackSent) {
           abortFeedbackSent = true;
-          messageBuffer.addMessage('Aborted by user', 'status');
-          session.sendSessionEvent({ type: 'message', message: 'Aborted by user' });
+          messageBuffer.addMessage('[Request interrupted by user]', 'status');
+          session.sendAgentMessage('gemini', { type: 'message', message: '[Request interrupted by user]' });
           session.sendAgentMessage('gemini', {
             type: 'turn_aborted',
             id: randomUUID(),
@@ -1512,8 +1512,8 @@ export async function runGemini(opts: {
         // so the catch block didn't run.
         if (abortRequested && !abortFeedbackSent) {
           abortFeedbackSent = true;
-          messageBuffer.addMessage('Aborted by user', 'status');
-          session.sendSessionEvent({ type: 'message', message: 'Aborted by user' });
+          messageBuffer.addMessage('[Request interrupted by user]', 'status');
+          session.sendAgentMessage('gemini', { type: 'message', message: '[Request interrupted by user]' });
           session.sendAgentMessage('gemini', {
             type: 'turn_aborted',
             id: randomUUID(),
