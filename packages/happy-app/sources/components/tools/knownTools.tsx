@@ -775,6 +775,17 @@ export const knownTools = {
             return null;
         }
     },
+    'other': {
+        title: (opts: { tool: ToolCall }) => {
+            // Gemini sends nice title in toolCall.title
+            if (opts.tool.input?.description && typeof opts.tool.input.description === 'string') {
+                return opts.tool.input.description;
+            }
+            return 'Other';
+        },
+        icon: ICON_SKILL,
+        minimal: true,
+    },
     'CodexPatch': {
         title: t('tools.names.applyChanges'),
         icon: ICON_EDIT,
