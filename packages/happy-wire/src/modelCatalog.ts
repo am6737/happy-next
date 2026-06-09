@@ -13,6 +13,8 @@ export type CodexModelFamily =
 export type ClaudeReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 export type ClaudeModelFamily =
     | typeof MODEL_MODE_DEFAULT
+    | 'claude-fable-5'
+    | 'claude-fable-5[1m]'
     | 'claude-opus-4-8'
     | 'claude-opus-4-8[1m]'
     | 'claude-opus-4-7'
@@ -25,6 +27,8 @@ export type ClaudeModelFamily =
 
 export const MODEL_MODES = [
     MODEL_MODE_DEFAULT,
+    'claude-fable-5',
+    'claude-fable-5[1m]',
     'claude-opus-4-8',
     'claude-opus-4-8[1m]',
     'claude-opus-4-7',
@@ -34,6 +38,16 @@ export const MODEL_MODES = [
     'claude-sonnet-4-6',
     'claude-sonnet-4-6[1m]',
     'claude-haiku-4-5',
+    'claude-fable-5-low',
+    'claude-fable-5-medium',
+    'claude-fable-5-high',
+    'claude-fable-5-xhigh',
+    'claude-fable-5-max',
+    'claude-fable-5[1m]-low',
+    'claude-fable-5[1m]-medium',
+    'claude-fable-5[1m]-high',
+    'claude-fable-5[1m]-xhigh',
+    'claude-fable-5[1m]-max',
     'claude-opus-4-8-low',
     'claude-opus-4-8-medium',
     'claude-opus-4-8-high',
@@ -102,6 +116,8 @@ export type ModelMode = typeof MODEL_MODES[number];
 
 export const CLAUDE_MODEL_MODES = [
     MODEL_MODE_DEFAULT,
+    'claude-fable-5',
+    'claude-fable-5[1m]',
     'claude-opus-4-8',
     'claude-opus-4-8[1m]',
     'claude-opus-4-7',
@@ -111,6 +127,16 @@ export const CLAUDE_MODEL_MODES = [
     'claude-sonnet-4-6',
     'claude-sonnet-4-6[1m]',
     'claude-haiku-4-5',
+    'claude-fable-5-low',
+    'claude-fable-5-medium',
+    'claude-fable-5-high',
+    'claude-fable-5-xhigh',
+    'claude-fable-5-max',
+    'claude-fable-5[1m]-low',
+    'claude-fable-5[1m]-medium',
+    'claude-fable-5[1m]-high',
+    'claude-fable-5[1m]-xhigh',
+    'claude-fable-5[1m]-max',
     'claude-opus-4-8-low',
     'claude-opus-4-8-medium',
     'claude-opus-4-8-high',
@@ -207,6 +233,7 @@ export function getValidModelModesForAgent(agent: AgentFlavor): readonly ModelMo
 
 export const CLAUDE_MODEL_OPTIONS = [
     { value: MODEL_MODE_DEFAULT, label: 'Use CLI configured model', shortLabel: 'CLI', description: 'Use profile/CLI defaults' },
+    { value: 'claude-fable-5', label: 'Fable 5', shortLabel: 'Fable 5', description: 'Most powerful, most intelligent' },
     { value: 'claude-opus-4-8', label: 'Opus 4.8', shortLabel: 'Opus 4.8', description: 'Most capable' },
     { value: 'claude-opus-4-7', label: 'Opus 4.7', shortLabel: 'Opus 4.7', description: 'Previous generation Opus' },
     { value: 'claude-opus-4-6', label: 'Opus 4.6', shortLabel: 'Opus 4.6', description: 'Older Opus' },
@@ -216,6 +243,8 @@ export const CLAUDE_MODEL_OPTIONS = [
 
 export const CLAUDE_MODEL_FAMILY_OPTIONS = [
     { value: MODEL_MODE_DEFAULT, label: 'Use CLI configured model', shortLabel: 'CLI', description: 'Use profile/CLI defaults' },
+    { value: 'claude-fable-5', label: 'Fable 5', shortLabel: 'Fable 5', description: 'Most powerful, most intelligent' },
+    { value: 'claude-fable-5[1m]', label: 'Fable 5 (1M)', shortLabel: 'Fable 5', description: 'Most powerful, 1M context' },
     { value: 'claude-opus-4-8', label: 'Opus 4.8', shortLabel: 'Opus 4.8', description: 'Most capable' },
     { value: 'claude-opus-4-8[1m]', label: 'Opus 4.8 (1M)', shortLabel: 'Opus 4.8', description: 'Most capable, 1M context' },
     { value: 'claude-opus-4-7', label: 'Opus 4.7', shortLabel: 'Opus 4.7', description: 'Previous generation Opus' },
@@ -228,6 +257,16 @@ export const CLAUDE_MODEL_FAMILY_OPTIONS = [
 ] as const satisfies readonly { value: ClaudeModelFamily; label: string; shortLabel: string; description: string }[];
 
 const CLAUDE_MODE_TO_SELECTION: Partial<Record<ModelMode, { family: ClaudeModelFamily; effort: ClaudeReasoningEffort }>> = {
+    'claude-fable-5-low': { family: 'claude-fable-5', effort: 'low' },
+    'claude-fable-5-medium': { family: 'claude-fable-5', effort: 'medium' },
+    'claude-fable-5-high': { family: 'claude-fable-5', effort: 'high' },
+    'claude-fable-5-xhigh': { family: 'claude-fable-5', effort: 'xhigh' },
+    'claude-fable-5-max': { family: 'claude-fable-5', effort: 'max' },
+    'claude-fable-5[1m]-low': { family: 'claude-fable-5[1m]', effort: 'low' },
+    'claude-fable-5[1m]-medium': { family: 'claude-fable-5[1m]', effort: 'medium' },
+    'claude-fable-5[1m]-high': { family: 'claude-fable-5[1m]', effort: 'high' },
+    'claude-fable-5[1m]-xhigh': { family: 'claude-fable-5[1m]', effort: 'xhigh' },
+    'claude-fable-5[1m]-max': { family: 'claude-fable-5[1m]', effort: 'max' },
     'claude-opus-4-8-low': { family: 'claude-opus-4-8', effort: 'low' },
     'claude-opus-4-8-medium': { family: 'claude-opus-4-8', effort: 'medium' },
     'claude-opus-4-8-high': { family: 'claude-opus-4-8', effort: 'high' },
@@ -340,7 +379,8 @@ export function parseClaudeModelMode(mode: ModelMode): { family: ClaudeModelFami
 }
 
 export function getClaudeReasoningOptions(family: ClaudeModelFamily): readonly ClaudeReasoningEffort[] {
-    if (family === 'claude-opus-4-8' || family === 'claude-opus-4-8[1m]'
+    if (family === 'claude-fable-5' || family === 'claude-fable-5[1m]'
+        || family === 'claude-opus-4-8' || family === 'claude-opus-4-8[1m]'
         || family === 'claude-opus-4-7' || family === 'claude-opus-4-7[1m]') return ['max', 'xhigh', 'high', 'medium', 'low'];
     if (family === 'claude-opus-4-6' || family === 'claude-opus-4-6[1m]'
         || family === 'claude-sonnet-4-6' || family === 'claude-sonnet-4-6[1m]') return ['max', 'high', 'medium', 'low'];
@@ -392,6 +432,7 @@ const MODEL_NAME_LABELS: Record<string, string> = {
     'gpt-5.4-mini': 'GPT-5.4-Mini',
     'gpt-5.3-codex': 'GPT-5.3-Codex',
     'gpt-5.2': 'GPT-5.2',
+    'claude-fable-5': 'Claude Fable 5',
     'claude-opus-4-8': 'Claude Opus 4.8',
     'claude-opus-4-7': 'Claude Opus 4.7',
     'claude-opus-4-6': 'Claude Opus 4.6',
@@ -499,6 +540,8 @@ const AGENT_DEFAULT_CONTEXT_WINDOWS: Record<AgentFlavor, number> = {
 
 const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
     // Claude models (default 200K; 1M is opt-in via [1m] suffix in Claude Code)
+    'claude-fable-5': 1_000_000, // Fable 5 defaults to 1M; base name resolves to 1M
+    'claude-fable-5[1m]': 1_000_000,
     'claude-opus-4-8': 1_000_000, // 4.8 defaults to 1M (no opt-in needed); base name resolves to 1M
     'claude-opus-4-8[1m]': 1_000_000,
     'claude-opus-4-7': 200_000,
