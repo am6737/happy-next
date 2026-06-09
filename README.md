@@ -103,6 +103,7 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - ACP and App-Server (JSON-RPC) backends for Codex, Codex v0.130.0 with fast mode
 - AI backend profiles with presets for DeepSeek, Z.AI, OpenAI, Azure, and Google AI
 - Claude Opus 4.8 support with empty thinking block filtering for clean 4.x rendering
+- Claude Fable 5 (with 1M-context variant) in the Claude model catalog, with low / medium / high / xhigh / max reasoning effort presets
 - GPT-5.5 support for Codex with low/medium/high/xhigh reasoning levels
 - Gemini 3.1 Pro and Gemini 3 Flash (GA) in the model catalog; wizard handles flash model variants
 

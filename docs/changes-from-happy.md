@@ -67,6 +67,7 @@ The original Happy only supported Claude Code. Happy Next treats Claude Code, Co
 - **`/duplicate` slash command**: opens a message picker to fork a session from any point in the conversation — including directly from an AI reply — creating a new session with history up to the selected message
 - **Per-agent model selection** cached independently, with context window display
 - **Claude Opus 4.8** added to the model catalog
+- **Claude Fable 5** added to the model catalog, with 1M-context variant and low / medium / high / xhigh / max reasoning effort presets
 - **Cost tracking** with accurate token usage for Claude models (cache tokens, reasoning tokens)
 - **Codex reasoning effort** configuration (low / medium / high / xhigh)
 - **ACP (Agent Client Protocol) backend** for Codex, replacing the MCP client approach

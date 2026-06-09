@@ -103,6 +103,7 @@ Happy Next 是原版 Happy 的重大演进，以下是亮点：
 - Codex 支持 ACP 和 App-Server（JSON-RPC）两种后端，Codex v0.130.0 支持 fast mode
 - AI 后端配置文件，内置 DeepSeek、Z.AI、OpenAI、Azure 和 Google AI 预设
 - 新增 Claude Opus 4.8 支持，过滤 4.x 模型的空 thinking 块以保证渲染干净
+- 模型目录新增 Claude Fable 5（含 1M 上下文变体），提供 low / medium / high / xhigh / max 五档推理强度
 - 新增 GPT-5.5 Codex 支持，提供 low/medium/high/xhigh 四档推理强度
 - 新增 Gemini 3.1 Pro，Gemini 3 Flash 转 GA；Wizard 兼容 flash 模型变体
 

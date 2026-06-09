@@ -67,6 +67,7 @@ CLI 繁忙时发送的消息现在会自动排队并投递。
 - **`/duplicate` 斜杠命令**：打开消息选择器，从对话中任意位置分叉会话（包括直接从 AI 回复分叉），创建一个包含截至选定消息历史的新会话
 - **按 Agent 模型选择**，独立缓存，显示上下文窗口
 - **模型目录新增 Claude Opus 4.8**
+- **模型目录新增 Claude Fable 5**，含 1M 上下文变体，提供 low / medium / high / xhigh / max 五档推理强度
 - **费用追踪**，Claude 模型的精确 token 用量（缓存 token、推理 token）
 - **Codex 推理强度**配置（low / medium / high / xhigh）
 - **ACP（Agent Client Protocol）后端**，替代 MCP 客户端方案
