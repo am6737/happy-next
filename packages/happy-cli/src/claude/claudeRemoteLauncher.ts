@@ -19,6 +19,7 @@ import { getToolName } from "./utils/getToolName";
 import type { PermissionMode } from "@/api/types";
 import type { QueueMessageContent } from "./runClaude";
 import { buildClaudeSlashCommandMetadata } from "./utils/slashCommandMetadata";
+import { enhancedModeRestartHash } from "./utils/enhancedModeHash";
 
 interface PermissionsField {
     date: number;
@@ -472,6 +473,7 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
         let pending: {
             message: QueueMessageContent;
             mode: EnhancedMode;
+            hash: string;
         } | null = null;
 
         // Track session ID to detect when it actually changes
@@ -518,6 +520,10 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
                         if (pending) {
                             let p = pending;
                             pending = null;
+                            // The subprocess is being spawned with this mode — make it the
+                            // baseline so the next mode change is detected against it.
+                            modeHash = p.hash;
+                            mode = p.mode;
                             permissionHandler.handleModeChange(p.mode.permissionMode);
                             syncModelMetadata(p.mode);
                             return p;
@@ -527,10 +533,30 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
 
                         // Check if mode has changed
                         if (msg) {
-                            if ((modeHash && msg.hash !== modeHash) || msg.isolate) {
-                                logger.debug('[remote]: mode has changed, pending message');
-                                pending = msg;
-                                return null;
+                            const modeChanged = (modeHash !== null && msg.hash !== modeHash) || msg.isolate;
+                            if (modeChanged) {
+                                // Model and permission mode (incl. plan) changes are applied to the
+                                // warm subprocess — set_model here, set_permission_mode via
+                                // handleModeChange below — no respawn, no context reload. Any other
+                                // change (effort, system prompt, tools) or a failed/hung set_model
+                                // still goes through the restart path.
+                                const hotSwapped = !msg.isolate && mode !== null && currentQuery !== null
+                                    && enhancedModeRestartHash(mode) === enhancedModeRestartHash(msg.mode)
+                                    && (mode.model === msg.mode.model || await Promise.race([
+                                        currentQuery.setModel(msg.mode.model),
+                                        new Promise<never>((_, reject) =>
+                                            setTimeout(() => reject(new Error('set_model timeout')), 3000)
+                                        ),
+                                    ]).then(() => true, (e) => {
+                                        logger.debug('[remote]: set_model failed, falling back to restart', e);
+                                        return false;
+                                    }));
+                                if (!hotSwapped) {
+                                    logger.debug('[remote]: mode has changed, pending message');
+                                    pending = msg;
+                                    return null;
+                                }
+                                logger.debug(`[remote]: mode hot-swapped (model: ${msg.mode.model ?? 'default'}, permissionMode: ${msg.mode.permissionMode})`);
                             }
                             modeHash = msg.hash;
                             mode = msg.mode;

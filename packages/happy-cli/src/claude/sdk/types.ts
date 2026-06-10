@@ -112,6 +112,11 @@ export interface SetPermissionModeRequest extends ControlRequest {
     mode: 'default' | 'acceptEdits' | 'auto' | 'bypassPermissions' | 'plan'
 }
 
+export interface SetModelRequest extends ControlRequest {
+    subtype: 'set_model'
+    model?: string
+}
+
 export interface CanUseToolRequest extends ControlRequest {
     subtype: 'can_use_tool'
     tool_name: string

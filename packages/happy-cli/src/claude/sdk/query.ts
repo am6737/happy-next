@@ -21,6 +21,7 @@ import {
     type ControlCancelRequest,
     type PermissionResult,
     type SetPermissionModeRequest,
+    type SetModelRequest,
     AbortError
 } from './types'
 import { getDefaultClaudeCodePath, getCleanEnv, logDebug, streamToStdin } from './utils'
@@ -152,6 +153,14 @@ export class Query implements AsyncIterableIterator<SDKMessage> {
             throw new Error('setPermissionMode requires --input-format stream-json')
         }
         const req: SetPermissionModeRequest = { subtype: 'set_permission_mode', mode }
+        await this.request(req, this.childStdin)
+    }
+
+    async setModel(model?: string): Promise<void> {
+        if (!this.childStdin) {
+            throw new Error('setModel requires --input-format stream-json')
+        }
+        const req: SetModelRequest = { subtype: 'set_model', model }
         await this.request(req, this.childStdin)
     }
 

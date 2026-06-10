@@ -11,7 +11,7 @@ import packageJson from '../../package.json';
 import { Credentials, readSettings } from '@/persistence';
 import { EnhancedMode, PermissionMode } from './loop';
 import { MessageQueue2 } from '@/utils/MessageQueue2';
-import { hashObject } from '@/utils/deterministicJson';
+import { enhancedModeQueueHash } from '@/claude/utils/enhancedModeHash';
 import { startCaffeinate, stopCaffeinate } from '@/utils/caffeinate';
 import { extractSDKMetadataAsync } from '@/claude/sdk/metadataExtractor';
 import { parseSpecialCommand } from '@/parsers/specialCommands';
@@ -424,16 +424,7 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
 
     // Import MessageQueue2 and create message queue
     // The queue accepts QueueMessageContent which can be string or structured content with images
-    const messageQueue = new MessageQueue2<EnhancedMode, QueueMessageContent>(mode => hashObject({
-        isPlan: mode.permissionMode === 'plan',
-        model: mode.model,
-        reasoningEffort: mode.reasoningEffort,
-        fallbackModel: mode.fallbackModel,
-        customSystemPrompt: mode.customSystemPrompt,
-        appendSystemPrompt: mode.appendSystemPrompt,
-        allowedTools: mode.allowedTools,
-        disallowedTools: mode.disallowedTools
-    }));
+    const messageQueue = new MessageQueue2<EnhancedMode, QueueMessageContent>(enhancedModeQueueHash);
 
     // Forward messages to the queue
     // Permission modes: Use the unified 7-mode type, mapping happens at SDK boundary in claudeRemote.ts
