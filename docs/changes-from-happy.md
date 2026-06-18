@@ -19,7 +19,7 @@ This document summarizes what changed in Happy Next compared to the original Hap
 | Self-hosting | One-command `docker-compose` stack with separate origins |
 | Sync | v3 messages API, HTTP outbox, server-confirmed sends, race condition fixes |
 | Chat UX | Image attachment, pagination, blue dot, compact view, session search, pull-to-refresh |
-| Session mgmt | Active/Inactive tabs, device and agent filters, hot-upgrade, metadata caching |
+| Session mgmt | Per-machine session tabs, device and agent filters, hot-upgrade, metadata caching |
 | Bug fixes | 250+ fixes across message sending, sessions, rendering, navigation, security |
 | Performance | Payload trimming, lazy-load diffs, rendering optimization, incremental session catch-up on open |
 | CLI | Daemon auto-start, Codex fast mode, receipt tracking, self-upgrade |
@@ -253,7 +253,7 @@ Extensive improvements to the chat and session management experience.
 - **Real-time friend request updates** via socket events
 - **Swipe-to-delete** for feed notifications
 - **Friend search** with flat layout, GitHub connect prompt for users without username
-- **Active/Inactive tab filter**: replaces the old hide-inactive toggle with clear tab navigation
+- **Per-machine session tabs**: the active/inactive split is replaced by per-machine tabs that group sessions by the machine they run on, so multi-machine setups are easier to navigate
 - **Device and agent filter dropdowns**: filter session history by machine and agent type
 - **Session preview expand/collapse**: expand messages inline with increased preview limit
 - **Metadata caching**: session listing performance improved via metadata cache
@@ -303,6 +303,7 @@ The CLI (`happy-next-cli`) received substantial upgrades.
 - **`set_permission_mode` forwarding**: permission-mode switches from the app are forwarded synchronously to the active Claude subprocess via the stream-json `set_permission_mode` control request, instead of taking effect only on the next user message
 - **Graceful interrupts**: Stop / ESC / "send pending message" no longer SIGTERM the Claude subprocess and Codex `app-server`. The graceful path awaits `interrupt()` / `cancel()` and, when acked, keeps the backend alive; the loop reuses the warm process for the next message instead of cold-restarting (MCP reload, session resume from disk). The hard kill is kept as a fallback when the ack times out and for switch / exit. As part of this, `AgentBackend.cancel()` now returns boolean (acked vs failed/timed-out); the Codex ACP `turn/interrupt` ack timeout is aligned to Claude's 3s; and Codex always emits a `[Request interrupted by user]` marker on interrupt, even mid-stream
 - **Gemini interrupt marker alignment**: Gemini's abort feedback now sends `[Request interrupted by user]` as a gemini agent message — the same marker bubble Claude and Codex use — instead of the centered "Aborted by user" status event, so the interrupt UX is consistent across all three providers
+- **Hot-swap model & plan mode**: switching the model or toggling plan mode no longer cold-restarts the Claude subprocess. When only the model or permission/plan mode changes on an already-warm process, the change is applied in place via the stream-json control channel, so it takes effect instantly mid-session instead of paying a session-resume restart
 
 ## Server
 

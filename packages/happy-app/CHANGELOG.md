@@ -1,11 +1,12 @@
 # Changelog
 
-## Version 13 - 2026-06-09
+## Version 13 - 2026-06-18
 
-Session header is reworked with a left-aligned title, a new-session button, and OpenClaw session info sheets; session loading gets a reliability sweep (longer fetch timeout, retry-loop refresh indicator, stuck-load recovery, base64 stack-overflow fix); long user messages collapse and select cleanly on web; the commits list tags the upstream tip; nginx adds a /healthz endpoint; unrecognized tool calls now render as a generic 'other' block and agent-event messages strip ANSI escape codes; Happy CLI updates to v0.5.4 with mid-turn permission-mode forwarding and graceful Stop/ESC interrupts that keep the Claude and Codex backends warm; and Claude Fable 5 (with 1M-context variant) joins the Claude model catalog.
+Session header is reworked with a left-aligned title, a new-session button, and OpenClaw session info sheets; the sessions list is reorganized into per-machine tabs; session loading gets a reliability sweep (longer fetch timeout, retry-loop refresh indicator, stuck-load recovery, base64 stack-overflow fix); long user messages collapse and select cleanly on web; the commits list tags the upstream tip; nginx adds a /healthz endpoint; unrecognized tool calls now render as a generic 'other' block and agent-event messages strip ANSI escape codes; Happy CLI updates to v0.5.5 with mid-turn permission-mode forwarding, graceful Stop/ESC interrupts that keep the Claude and Codex backends warm, and hot-swappable model / plan-mode switching on a warm subprocess; and Claude Fable 5 (with 1M-context variant) joins the Claude model catalog.
 
 - Session header: unified left-aligned title across iOS / Android / web — new-session button on the header right, header title in the session info screen, and a dedicated OpenClaw session info sheet
 - Session header: left-align the title on narrow phones (was center-overflowing), and fix the invisible back icon in dark-theme landscape
+- Sessions: the active/inactive split is replaced by per-machine tabs — sessions are grouped by the machine they run on, so multi-machine setups are easier to navigate
 - Messages: long user messages (>20k chars) now collapse to a preview with a Show More toggle; web text selection inside messages is fixed
 - Messages: per-message action bar no longer flickers when the message flips between thinking and streaming states
 - Session loading reliability: message fetch timeout raised 20s → 60s; sessions stuck in permanent load failure now recover; refresh indicator stays visible across the entire retry loop and also on user-opened incremental loads
@@ -15,7 +16,7 @@ Session header is reworked with a left-aligned title, a new-session button, and 
 - Deploy: nginx serves a zero-cost `/healthz` endpoint so load balancers and uptime checks have a cheap target
 - Tools: unrecognized tool calls now render as a generic 'other' block with a dynamic title and icon, instead of an empty placeholder
 - Agent events: agent event messages strip ANSI escape codes from child-CLI stderr so subprocess banner color sequences no longer leak into the chat as raw `[90m…[0m`
-- CLI: Happy CLI updated to v0.5.4 — permission-mode switches from the app forward synchronously to the Claude subprocess; Stop/ESC interrupts now keep the Claude and Codex backends warm so the next message resumes instantly instead of cold-restarting; Gemini's interrupt feedback now matches Claude/Codex with a "[Request interrupted by user]" marker
+- CLI: Happy CLI updated to v0.5.5 — permission-mode switches from the app forward synchronously to the Claude subprocess; Stop/ESC interrupts now keep the Claude and Codex backends warm so the next message resumes instantly instead of cold-restarting; switching model or toggling plan mode now hot-swaps on the already-warm Claude subprocess instead of cold-restarting, so changes apply instantly mid-session; Gemini's interrupt feedback now matches Claude/Codex with a "[Request interrupted by user]" marker
 - Models: add Claude Fable 5 (and Fable 5 1M) to the Claude model catalog, with low / medium / high / xhigh / max reasoning effort presets
 
 ## Version 12 - 2026-06-02

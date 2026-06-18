@@ -183,7 +183,7 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - `/duplicate` command to fork a session from any message, including directly from an AI reply
 - Sending shows an optimistic "Processing…" status immediately, plus a "refreshing" indicator while the message list reloads
 - Message pagination, unread blue dot indicator, compact list view
-- Active/Inactive tab filter, session preview expand/collapse, metadata caching
+- Per-machine session tabs (sessions grouped by the machine they run on), session preview expand/collapse, metadata caching
 - Recent session history pagination for faster initial load
 - Session rename with lock (prevent AI auto-update), search in history
 - Options click-to-send / long-press-to-fill, scroll-to-bottom button
@@ -208,6 +208,7 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Message receipt tracking with legacy compatibility
 - Permission-mode switches from the app forward synchronously to the running Claude subprocess (no longer wait until the next message)
 - Stop/ESC interrupts now keep the Claude and Codex backends warm so the next message resumes instantly instead of cold-restarting; Gemini's interrupt feedback now matches Claude/Codex with a `[Request interrupted by user]` marker
+- Switching model or toggling plan mode hot-swaps on the already-warm Claude subprocess instead of cold-restarting, so changes apply instantly mid-session
 
 ### Bug Fixes & Stability
 - 250+ bug fixes: message sending reliability, session lifecycle, Markdown rendering, navigation, voice, DooTask, sharing

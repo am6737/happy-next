@@ -19,7 +19,7 @@
 | 自托管 | 一条命令 `docker-compose` 全栈部署，独立源架构 |
 | 同步 | v3 消息 API、HTTP 发件箱、服务端确认发送、竞争条件修复 |
 | 聊天体验 | 图片附件、分页、蓝点、紧凑视图、会话搜索、下拉刷新 |
-| 会话管理 | Active/Inactive 标签页、设备和 Agent 筛选、热升级、元数据缓存 |
+| 会话管理 | 按机器分会话标签页、设备和 Agent 筛选、热升级、元数据缓存 |
 | Bug 修复 | 250+ 修复，覆盖消息发送、会话、渲染、导航、安全 |
 | 性能 | 载荷精简、延迟加载 diff、渲染优化、打开会话增量追赶 |
 | CLI | 守护进程自启动、Codex fast mode、接收追踪、自更新 |
@@ -253,7 +253,7 @@ Happy Next 添加了一等自托管路径。
 - **实时好友请求更新**，通过 socket 事件
 - **滑动删除**，动态通知
 - **好友搜索**，扁平化布局，未设置用户名时提示连接 GitHub
-- **Active/Inactive 标签页过滤器**：用清晰的标签页导航替代旧的隐藏开关
+- **按机器分会话标签页**：用按机器分组的标签页替代旧的活跃/非活跃划分，会话按其运行所在的机器分组，多机器场景更易于导航
 - **设备和 Agent 筛选下拉**：按机器和 Agent 类型过滤会话历史
 - **会话预览展开/折叠**：内联展开消息，预览数量增加
 - **元数据缓存**：通过元数据缓存提升会话列表性能
@@ -303,6 +303,7 @@ CLI（`happy-next-cli`）收到了大量升级。
 - **`set_permission_mode` 转发**：应用端切换的权限模式通过 stream-json 的 `set_permission_mode` control request 同步转发到运行中的 Claude 子进程，不再要等到下一条用户消息才生效
 - **优雅中断**：Stop / ESC / "立即发送 pending 消息" 不再直接 SIGTERM Claude 子进程或 Codex `app-server`。优雅路径会等待 `interrupt()` / `cancel()` 被确认后保留后端进程；主循环复用 warm 进程处理下一条消息，不再每次中断都冷启动（重新加载 MCP、从磁盘恢复 session、重建系统提示）。Ack 超时或失败时仍走原来的硬终止路径，切换 / 退出场景也维持原状。配套：`AgentBackend.cancel()` 返回值改为 boolean（acked vs failed/timed-out）；Codex ACP `turn/interrupt` 的 ack 超时对齐 Claude 的 3s；Codex 中断时始终发出 `[Request interrupted by user]` 标记，即使中断发生在流式输出过程中
 - **Gemini 中断标记对齐**：Gemini 的中断反馈现在以 gemini agent 消息形式发出 `[Request interrupted by user]`，与 Claude / Codex 完全一致，取代原先居中的 "Aborted by user" 状态事件，三家 provider 的中断 UX 统一
+- **模型与 plan 模式热切换**：切换模型或开关 plan 模式不再冷重启 Claude 子进程。当已 warm 的进程仅变更模型或权限/plan 模式时，改动会通过 stream-json control 通道原地应用，会话中途立即生效，省去 session-resume 重启开销
 
 ## 服务端
 
