@@ -685,6 +685,7 @@ export const zhHans: TranslationStructure = {
         tabs: {
             active: '活跃',
             inactive: '非活跃',
+            all: '全部',
         },
         inputPlaceholder: '输入消息...',
         initialMessage: '想做点什么？',

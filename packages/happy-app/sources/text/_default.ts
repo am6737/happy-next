@@ -694,6 +694,7 @@ export const en = {
         tabs: {
             active: 'Active',
             inactive: 'Inactive',
+            all: 'All',
         },
         inputPlaceholder: 'Type a message ...',
         initialMessage: 'What would you like to work on?',

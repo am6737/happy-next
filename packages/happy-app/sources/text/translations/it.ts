@@ -713,6 +713,7 @@ export const it: TranslationStructure = {
         tabs: {
             active: 'Attive',
             inactive: 'Inattive',
+            all: 'Tutte',
         },
         inputPlaceholder: 'Scrivi un messaggio ...',
         initialMessage: 'Su cosa vorresti lavorare?',

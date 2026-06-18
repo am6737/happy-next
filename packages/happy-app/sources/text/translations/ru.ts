@@ -848,6 +848,7 @@ export const ru: TranslationStructure = {
         tabs: {
             active: 'Активные',
             inactive: 'Неактивные',
+            all: 'Все',
         },
         inputPlaceholder: 'Введите сообщение...',
         initialMessage: 'Над чем вы хотите поработать?',

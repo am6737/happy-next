@@ -715,6 +715,7 @@ export const ja: TranslationStructure = {
         tabs: {
             active: 'アクティブ',
             inactive: '非アクティブ',
+            all: 'すべて',
         },
         inputPlaceholder: 'メッセージを入力...',
         initialMessage: '何をしましょう？',

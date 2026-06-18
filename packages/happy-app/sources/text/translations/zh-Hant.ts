@@ -685,6 +685,7 @@ export const zhHant: TranslationStructure = {
         tabs: {
             active: '活躍',
             inactive: '非活躍',
+            all: '全部',
         },
         inputPlaceholder: '輸入訊息...',
         initialMessage: '想做些什麼？',

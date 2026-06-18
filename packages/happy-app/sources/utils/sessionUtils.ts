@@ -42,7 +42,7 @@ export interface SessionStatus {
     hasUnreadCompletion?: boolean;
 }
 
-function hasUnreadCompletion(session: Session): boolean {
+export function hasUnreadCompletion(session: Session): boolean {
     const taskCompleted = session.agentState?.taskCompleted;
     if (!taskCompleted) return false;
     // Don't show for archived sessions

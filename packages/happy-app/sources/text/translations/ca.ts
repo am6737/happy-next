@@ -683,6 +683,7 @@ export const ca: TranslationStructure = {
         tabs: {
             active: 'Actives',
             inactive: 'Inactives',
+            all: 'Totes',
         },
         inputPlaceholder: 'Escriu un missatge...',
         initialMessage: 'En què t\'agradaria treballar?',
