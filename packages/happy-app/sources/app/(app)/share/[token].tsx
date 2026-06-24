@@ -35,7 +35,7 @@ function OwnerCard({ owner, floating }: { owner: { username: string | null; firs
 export default memo(function PublicShareScreen() {
     const { token } = useLocalSearchParams<{ token: string }>();
     const { theme } = useUnistyles();
-    const { state, messages, metadata, owner, sessionId, giveConsent } = usePublicShareSession(token);
+    const { state, messages, metadata, owner, sessionId, hasMore, isLoadingMore, loadMore, giveConsent } = usePublicShareSession(token);
 
     const keyExtractor = useCallback((item: Message) => item.id, []);
     const renderItem = useCallback(({ item }: { item: Message }) => (
@@ -46,6 +46,25 @@ export default memo(function PublicShareScreen() {
             readOnly
         />
     ), [metadata, sessionId]);
+
+    // Inverted list: reaching the "end" means scrolling to the top (oldest message).
+    const onEndReached = useCallback(() => {
+        if (hasMore) {
+            loadMore();
+        }
+    }, [hasMore, loadMore]);
+
+    // Rendered at the visual top of the inverted list while older messages are loading.
+    const listFooter = useCallback(() => {
+        if (!isLoadingMore) {
+            return null;
+        }
+        return (
+            <View style={styles.loadingMore}>
+                <ActivityIndicator size="small" color={theme.colors.textSecondary} />
+            </View>
+        );
+    }, [isLoadingMore, theme.colors.textSecondary]);
 
     // Loading
     if (state === 'loading') {
@@ -121,7 +140,18 @@ export default memo(function PublicShareScreen() {
                     keyExtractor={keyExtractor}
                     renderItem={renderItem}
                     inverted
+                    // flex:1 bounds the list as its own scroll container below the OwnerCard
+                    // sibling, matching ChatList.
+                    style={styles.list}
                     contentContainerStyle={styles.listContent}
+                    // Keep the viewport anchored when older messages are prepended at the top.
+                    maintainVisibleContentPosition={{
+                        minIndexForVisible: 0,
+                        autoscrollToTopThreshold: 100,
+                    }}
+                    onEndReached={onEndReached}
+                    onEndReachedThreshold={0.5}
+                    ListFooterComponent={listFooter}
                 />
             )}
         </View>
@@ -188,7 +218,15 @@ const styles = StyleSheet.create((theme) => ({
         ...Typography.default('semiBold'),
         fontSize: 17,
     },
+    list: {
+        flex: 1,
+    },
     listContent: {
         paddingVertical: 8,
+    },
+    loadingMore: {
+        paddingVertical: 16,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
 }));
