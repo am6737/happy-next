@@ -30,6 +30,7 @@ import { detectGitWorktree } from '@/utils/gitWorktree';
 import { startOfflineReconnection, connectionState } from '@/utils/serverConnectionErrors';
 import { claudeLocal } from '@/claude/claudeLocal';
 import { cleanupStdinAfterInk } from '@/utils/terminalStdinCleanup';
+import { syncOrchestratorAssets } from '@/orchestrator/skillSync';
 import { createSessionScanner } from '@/claude/utils/sessionScanner';
 import { Session } from './session';
 import { findClaudeProjectId } from '@/claude/utils/claudeSessionIndex';
@@ -139,6 +140,10 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
 
     // Set backend for offline warnings (before any API calls)
     connectionState.setBackend('Claude');
+
+    // Install the orchestrator skill + /orchestrator:* commands for this controller session
+    // (no-op for worker sessions and idempotent across runs).
+    syncOrchestratorAssets();
 
     // Create session service
     const api = await ApiClient.create(credentials);

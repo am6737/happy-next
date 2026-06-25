@@ -20,6 +20,7 @@ import { hashObject } from '@/utils/deterministicJson';
 import { createMcpContext } from '@/agent/mcp';
 import { createSessionMetadata } from '@/utils/createSessionMetadata';
 import { discoverCodexSkills, getCodexSkillsSignature } from './utils/skillDiscovery';
+import { syncOrchestratorAssets } from '@/orchestrator/skillSync';
 import { MessageBuffer } from "@/ui/ink/messageBuffer";
 import { CodexDisplay } from "@/ui/ink/CodexDisplay";
 // trimIdent not currently used
@@ -167,6 +168,9 @@ export async function runCodex(opts: {
     // Create session
     //
 
+    // Install the orchestrator skill for this controller session before discovering skills
+    // (no-op for worker sessions and idempotent across runs).
+    syncOrchestratorAssets();
     let skills = discoverCodexSkills();
     const { state, metadata } = createSessionMetadata({
         flavor: 'codex',
