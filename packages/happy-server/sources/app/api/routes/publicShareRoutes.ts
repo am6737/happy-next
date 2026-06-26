@@ -426,12 +426,14 @@ export function publicShareRoutes(app: Fastify) {
                 token: z.string()
             }),
             querystring: z.object({
-                consent: z.coerce.boolean().optional()
-            }).optional()
+                consent: z.coerce.boolean().optional(),
+                before_seq: z.coerce.number().int().min(1).optional(),
+                limit: z.coerce.number().int().min(1).max(150).default(100)
+            })
         }
     }, async (request, reply) => {
         const { token } = request.params;
-        const { consent } = request.query || {};
+        const { consent, before_seq, limit } = request.query;
         const tokenHash = createHash('sha256').update(token, 'utf8').digest();
 
         // Try to get user ID if authenticated
@@ -499,10 +501,15 @@ export function publicShareRoutes(app: Fastify) {
             });
         }
 
+        // Paginate by seq cursor (newest-first), mirroring the authenticated v3 messages route.
+        // before_seq loads older messages; limit+1 lets us report hasMore without a second query.
         const messages = await db.sessionMessage.findMany({
-            where: { sessionId: publicShare.sessionId },
-            orderBy: { createdAt: 'desc' },
-            take: 150,
+            where: {
+                sessionId: publicShare.sessionId,
+                ...(before_seq !== undefined ? { seq: { lt: before_seq } } : {})
+            },
+            orderBy: { seq: 'desc' },
+            take: limit + 1,
             select: {
                 id: true,
                 seq: true,
@@ -513,15 +520,19 @@ export function publicShareRoutes(app: Fastify) {
             }
         });
 
+        const hasMore = messages.length > limit;
+        const page = hasMore ? messages.slice(0, limit) : messages;
+
         return reply.send({
-            messages: messages.map((v) => ({
+            messages: page.map((v) => ({
                 id: v.id,
                 seq: v.seq,
                 content: v.content,
                 localId: v.localId,
                 createdAt: v.createdAt.getTime(),
                 updatedAt: v.updatedAt.getTime()
-            }))
+            })),
+            hasMore
         });
     });
 

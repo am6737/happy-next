@@ -323,17 +323,36 @@ export async function deletePublicShare(
     }
 }
 
+export interface PublicShareMessage {
+    id: string;
+    seq: number;
+    content: { t: string; c: string };
+    localId: string | null;
+    createdAt: number;
+    updatedAt: number;
+}
+
 /**
- * Fetch messages from a public share (public endpoint, no auth required)
+ * Fetch a page of messages from a public share (public endpoint, no auth required).
+ *
+ * Pagination mirrors the authenticated v3 messages route: messages come back newest-first,
+ * `beforeSeq` loads the page of older messages preceding that seq, and `hasMore` indicates
+ * whether older messages still exist.
  */
 export async function getPublicShareMessages(
     serverUrl: string,
     token: string,
-    consent?: boolean
-): Promise<{ id: string; seq: number; content: { t: string; c: string }; localId: string | null; createdAt: number; updatedAt: number }[]> {
+    opts?: { consent?: boolean; beforeSeq?: number; limit?: number }
+): Promise<{ messages: PublicShareMessage[]; hasMore: boolean }> {
     const url = new URL(`${serverUrl}/v1/public-share/${token}/messages`);
-    if (consent) {
+    if (opts?.consent) {
         url.searchParams.set('consent', 'true');
+    }
+    if (opts?.beforeSeq !== undefined) {
+        url.searchParams.set('before_seq', String(opts.beforeSeq));
+    }
+    if (opts?.limit !== undefined) {
+        url.searchParams.set('limit', String(opts.limit));
     }
 
     const response = await fetch(url.toString(), {
@@ -354,7 +373,7 @@ export async function getPublicShareMessages(
     }
 
     const data = await response.json();
-    return data.messages;
+    return { messages: data.messages as PublicShareMessage[], hasMore: data.hasMore ?? false };
 }
 
 /**
