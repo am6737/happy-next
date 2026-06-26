@@ -498,8 +498,42 @@ function runClaudeCli(cliPath) {
             env: process.env,
             shell: process.platform === 'win32'
         });
-        child.on('exit', (code) => {
-            process.exit(code || 0);
+
+        const exitCodeForSignal = (s) => s === 'SIGTERM' ? 143 : s === 'SIGINT' ? 130 : 1;
+        const childAlive = () => child.exitCode === null && child.signalCode === null;
+
+        let exiting = false;
+        const forwardSignal = (signal) => {
+            if (exiting) return;
+            exiting = true;
+
+            try {
+                if (childAlive()) {
+                    child.kill(signal);
+                }
+            } catch (e) {
+                // Ignore forwarding failures; the child may already be gone.
+            }
+
+            // If the child does not exit promptly, force it down so an orphaned
+            // Claude process cannot keep sharing the same interactive TTY after
+            // Happy switches from local mode to remote mode.
+            setTimeout(() => {
+                try {
+                    if (childAlive()) {
+                        child.kill('SIGKILL');
+                    }
+                } catch (e) {}
+                process.exit(exitCodeForSignal(signal));
+            }, 2000).unref();
+        };
+
+        for (const sig of ['SIGTERM', 'SIGINT', 'SIGHUP']) {
+            process.once(sig, () => forwardSignal(sig));
+        }
+
+        child.on('exit', (code, signal) => {
+            process.exit(signal ? exitCodeForSignal(signal) : (code || 0));
         });
     }
 }
