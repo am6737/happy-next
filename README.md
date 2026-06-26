@@ -90,11 +90,12 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Real-time status badges, activity count, and status-colored progress bars
 - Follow up on completed tasks via session resume
 - MCP tool integration with auto-filled working directory
+- Happy CLI auto-installs the orchestrator skill and `/orchestrator` slash commands on startup — fan a task out to parallel or dependency-ordered Claude / Codex / Gemini agents straight from the CLI
 
 ### Pending Message Queue
 - Messages sent while the CLI is busy are queued server-side and auto-dispatched
 - Queue panel UI with image count badges and send-now option
-- Reconnect sync and concurrent dispatch safety
+- Reconnect sync and concurrent dispatch safety, with dispatch timing tuned to avoid dropping a queued message on a busy CLI
 
 ### Multi-Agent (Claude Code + Codex + Gemini)
 - All three agents are first-class citizens with session resume, duplicate/fork, and history
@@ -140,7 +141,7 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Real-time sync of messages, git status, and voice chat across shared users
 - Access control with view, edit, and admin permission levels
 - "All / Shared with me / Shared by me" filter tabs and share indicator in session list
-- Public share web viewer for link-based access
+- Public share web viewer for link-based access, with paginated message loading so long shared conversations open faster
 
 ### OpenClaw Gateway
 - Connect to external AI machines via relay tunnel or direct WebSocket
@@ -209,6 +210,7 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Permission-mode switches from the app forward synchronously to the running Claude subprocess (no longer wait until the next message)
 - Stop/ESC interrupts now keep the Claude and Codex backends warm so the next message resumes instantly instead of cold-restarting; Gemini's interrupt feedback now matches Claude/Codex with a `[Request interrupted by user]` marker
 - Switching model or toggling plan mode hot-swaps on the already-warm Claude subprocess instead of cold-restarting, so changes apply instantly mid-session
+- Switching a session from remote back to local cleans up terminal stdin so leftover raw-mode input no longer leaks into the terminal
 
 ### Bug Fixes & Stability
 - 250+ bug fixes: message sending reliability, session lifecycle, Markdown rendering, navigation, voice, DooTask, sharing

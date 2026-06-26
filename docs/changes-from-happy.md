@@ -45,6 +45,7 @@ A multi-agent orchestration system that lets you define task dependency graphs a
 - **MCP tool integration**: orchestrator tools registered as MCP tools with auto-filled working directory
 - **Tool description rewriting**: orchestrator rewrites tool descriptions for better agent comprehension
 - **Complete i18n**: all orchestrator UI fully internationalized
+- **CLI auto-install**: the Happy CLI installs the orchestrator skill and `/orchestrator` slash commands on startup, so you can fan a task out to parallel or dependency-ordered Claude / Codex / Gemini agents straight from the CLI
 
 ## Pending Message Queue
 
@@ -56,7 +57,7 @@ Messages sent while the CLI is busy are now queued and delivered automatically.
 - **Image count badge**: pending message preview shows image attachment count
 - **Send-now option**: bypass queue and send immediately
 - **Reconnect sync**: queue state syncs on WebSocket reconnection
-- **Concurrent safety**: hardened dispatch concurrency and cleanup semantics
+- **Concurrent safety**: hardened dispatch concurrency and cleanup semantics, with dispatch timing tuned (3s) to avoid dropping a queued message on a busy CLI
 
 ## Multi-Agent Support
 
@@ -145,7 +146,7 @@ Share AI coding sessions with others through direct invites or public links, wit
 - **"All / Shared with me / Shared by me" filter tabs** in session list
 - **Share indicator** on sessions shared with others
 - **Sharer avatar** and **sender name** display in shared sessions
-- **Public share web viewer** for link-based access without the app
+- **Public share web viewer** for link-based access without the app, with paginated message loading so long shared conversations open faster
 - **Shared sessions on user profile** page
 - **Permission-aware UI**: input bar, voice button, and session actions adapt to access level
 - **Server-side access control** module with permission validation for messages, RPC calls, and voice
@@ -304,6 +305,7 @@ The CLI (`happy-next-cli`) received substantial upgrades.
 - **Graceful interrupts**: Stop / ESC / "send pending message" no longer SIGTERM the Claude subprocess and Codex `app-server`. The graceful path awaits `interrupt()` / `cancel()` and, when acked, keeps the backend alive; the loop reuses the warm process for the next message instead of cold-restarting (MCP reload, session resume from disk). The hard kill is kept as a fallback when the ack times out and for switch / exit. As part of this, `AgentBackend.cancel()` now returns boolean (acked vs failed/timed-out); the Codex ACP `turn/interrupt` ack timeout is aligned to Claude's 3s; and Codex always emits a `[Request interrupted by user]` marker on interrupt, even mid-stream
 - **Gemini interrupt marker alignment**: Gemini's abort feedback now sends `[Request interrupted by user]` as a gemini agent message — the same marker bubble Claude and Codex use — instead of the centered "Aborted by user" status event, so the interrupt UX is consistent across all three providers
 - **Hot-swap model & plan mode**: switching the model or toggling plan mode no longer cold-restarts the Claude subprocess. When only the model or permission/plan mode changes on an already-warm process, the change is applied in place via the stream-json control channel, so it takes effect instantly mid-session instead of paying a session-resume restart
+- **Remote→local stdin cleanup**: switching a session from remote back to local now cleans up terminal stdin, so leftover raw-mode input no longer leaks into the terminal
 
 ## Server
 

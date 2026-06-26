@@ -45,6 +45,7 @@
 - **MCP 工具集成**：编排器工具注册为 MCP 工具，自动填充工作目录
 - **工具描述重写**：编排器重写工具描述以提升 Agent 理解
 - **完整 i18n**：所有编排器 UI 完全国际化
+- **CLI 自动安装**：Happy CLI 启动时安装编排器 skill 和 `/orchestrator` 斜杠命令，可直接在 CLI 里把任务并行或按依赖分发给 Claude / Codex / Gemini agent
 
 ## 待发消息队列
 
@@ -56,7 +57,7 @@ CLI 繁忙时发送的消息现在会自动排队并投递。
 - **图片数量徽章**：待发消息预览显示图片附件数量
 - **立即发送**：绕过队列立即发送
 - **重连同步**：WebSocket 重连时同步队列状态
-- **并发安全**：强化分发并发和清理语义
+- **并发安全**：强化分发并发和清理语义，分发时机经过调优（3s），避免 CLI 繁忙时丢失排队消息
 
 ## 多 Agent 支持
 
@@ -145,7 +146,7 @@ Happy Next 包含完整的语音网关栈，基于火山引擎（豆包）实时
 - **"全部/共享给我/我分享的"过滤标签**，会话列表中
 - **共享指示器**，显示在已共享的会话上
 - **分享者头像**和**发送者名称**，在共享会话中显示
-- **公开分享网页查看器**，无需安装应用即可通过链接访问
+- **公开分享网页查看器**，无需安装应用即可通过链接访问，消息分页加载，长共享会话打开更快
 - **好友个人主页显示共享会话**
 - **权限感知 UI**：输入栏、语音按钮和会话操作根据访问级别自适应
 - **服务端访问控制**模块，对消息、RPC 调用和语音进行权限验证
@@ -304,6 +305,7 @@ CLI（`happy-next-cli`）收到了大量升级。
 - **优雅中断**：Stop / ESC / "立即发送 pending 消息" 不再直接 SIGTERM Claude 子进程或 Codex `app-server`。优雅路径会等待 `interrupt()` / `cancel()` 被确认后保留后端进程；主循环复用 warm 进程处理下一条消息，不再每次中断都冷启动（重新加载 MCP、从磁盘恢复 session、重建系统提示）。Ack 超时或失败时仍走原来的硬终止路径，切换 / 退出场景也维持原状。配套：`AgentBackend.cancel()` 返回值改为 boolean（acked vs failed/timed-out）；Codex ACP `turn/interrupt` 的 ack 超时对齐 Claude 的 3s；Codex 中断时始终发出 `[Request interrupted by user]` 标记，即使中断发生在流式输出过程中
 - **Gemini 中断标记对齐**：Gemini 的中断反馈现在以 gemini agent 消息形式发出 `[Request interrupted by user]`，与 Claude / Codex 完全一致，取代原先居中的 "Aborted by user" 状态事件，三家 provider 的中断 UX 统一
 - **模型与 plan 模式热切换**：切换模型或开关 plan 模式不再冷重启 Claude 子进程。当已 warm 的进程仅变更模型或权限/plan 模式时，改动会通过 stream-json control 通道原地应用，会话中途立即生效，省去 session-resume 重启开销
+- **remote→local stdin 清理**：会话从 remote 切回 local 时清理终端 stdin，残留的 raw-mode 输入不再泄漏到终端
 
 ## 服务端
 

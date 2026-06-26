@@ -1,5 +1,15 @@
 # Changelog
 
+## Version 14 - 2026-06-26
+
+The Happy CLI gains a built-in orchestrator that fans work out to parallel Claude / Codex / Gemini agents, publicly shared sessions paginate their messages for faster loads, and reliability fixes land for the remote→local terminal handoff and pending-message delivery.
+
+- Orchestrator: the Happy CLI now auto-installs an orchestrator skill and `/orchestrator` slash commands on startup — delegate a task to multiple Claude / Codex / Gemini agents running in parallel or in dependency order
+- Public sharing: publicly shared sessions now load their messages in pages instead of all at once, so long shared conversations open faster
+- CLI reliability: switching a session from remote back to local now cleans up terminal stdin, so leftover raw-mode input no longer leaks into the terminal
+- Reliability: pending-message dispatch delay raised to 3s to avoid a race that could drop a queued message
+- CLI: Happy CLI updated to v0.5.6
+
 ## Version 13 - 2026-06-18
 
 Session header is reworked with a left-aligned title, a new-session button, and OpenClaw session info sheets; the sessions list is reorganized into per-machine tabs; session loading gets a reliability sweep (longer fetch timeout, retry-loop refresh indicator, stuck-load recovery, base64 stack-overflow fix); long user messages collapse and select cleanly on web; the commits list tags the upstream tip; nginx adds a /healthz endpoint; unrecognized tool calls now render as a generic 'other' block and agent-event messages strip ANSI escape codes; Happy CLI updates to v0.5.5 with mid-turn permission-mode forwarding, graceful Stop/ESC interrupts that keep the Claude and Codex backends warm, and hot-swappable model / plan-mode switching on a warm subprocess; and Claude Fable 5 (with 1M-context variant) joins the Claude model catalog.
