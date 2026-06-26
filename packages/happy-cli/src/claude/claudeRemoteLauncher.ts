@@ -6,6 +6,7 @@ import React from "react";
 import { claudeRemote } from "./claudeRemote";
 import { PermissionHandler } from "./utils/permissionHandler";
 import { Future } from "@/utils/future";
+import { cleanupStdinAfterInk } from "@/utils/terminalStdinCleanup";
 import { Query, SDKAssistantMessage, SDKMessage, SDKResultMessage, SDKSystemMessage, SDKUserMessage } from "./sdk";
 import { formatClaudeMessageForInk } from "@/ui/messageFormatterInk";
 import { isDebug } from "@/utils/env";
@@ -61,14 +62,6 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
             exitOnCtrlC: false,
             patchConsole: false
         });
-    }
-
-    if (hasTTY) {
-        process.stdin.resume();
-        if (process.stdin.isTTY) {
-            process.stdin.setRawMode(true);
-        }
-        process.stdin.setEncoding("utf8");
     }
 
     // Handle abort
@@ -668,14 +661,24 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
         // Clean up permission handler
         permissionHandler.reset();
 
-        // Reset Terminal
-        process.stdin.off('data', abort);
-        if (process.stdin.isTTY) {
-            process.stdin.setRawMode(false);
-        }
+        // Reset Terminal — hand stdin cleanly back to the next consumer.
+        // Unmount Ink FIRST: it restores its own stdin state (raw mode, key
+        // listeners) during teardown, so that must run before we touch stdin.
         if (inkInstance) {
             inkInstance.unmount();
         }
+        // Drain keystrokes buffered while Ink owned stdin (the extra spaces from
+        // the double-space switch, or anything typed during the switch delay) so
+        // they don't leak into the next interactive child via stdio: 'inherit'.
+        // Raw mode is kept on through the drain only when we hand off to local
+        // mode (claude re-asserts raw itself, avoiding a cooked-echo race); on a
+        // full exit we restore cooked mode so the user's shell stays usable.
+        await cleanupStdinAfterInk({
+            stdin: process.stdin,
+            drainMs: 150,
+            leaveRawMode: exitReason === 'switch',
+            onDebug: ({ bytes, chunks }) => logger.debug(`[remote] drained ${bytes}B / ${chunks} chunk(s) from stdin before handoff`),
+        });
         messageBuffer.clear();
         session.queue.setOnMessage(null);
 

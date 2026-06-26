@@ -29,6 +29,7 @@ import { resolve, join } from 'node:path';
 import { detectGitWorktree } from '@/utils/gitWorktree';
 import { startOfflineReconnection, connectionState } from '@/utils/serverConnectionErrors';
 import { claudeLocal } from '@/claude/claudeLocal';
+import { cleanupStdinAfterInk } from '@/utils/terminalStdinCleanup';
 import { createSessionScanner } from '@/claude/utils/sessionScanner';
 import { Session } from './session';
 import { findClaudeProjectId } from '@/claude/utils/claudeSessionIndex';
@@ -556,6 +557,12 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
     // Setup signal handlers for graceful shutdown
     const cleanup = async () => {
         logger.debug('[START] Received termination signal, cleaning up...');
+
+        // Restore the terminal to cooked mode BEFORE any async work or
+        // process.exit(): signal handlers bypass the remote launcher's finally
+        // block, so without this the shell is left stuck in raw mode (the
+        // classic "had to run reset" symptom) when killed during remote mode.
+        await cleanupStdinAfterInk({ stdin: process.stdin, drainMs: 0, leaveRawMode: false });
 
         try {
             // Update lifecycle state to archived before closing
