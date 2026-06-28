@@ -275,6 +275,9 @@ const stylesheet = StyleSheet.create((theme) => ({
         backgroundColor: '#007AFF',
         marginRight: 7,
     },
+    filterChipStatusDot: {
+        marginRight: 7,
+    },
     emptyContainer: {
         alignItems: 'center',
         paddingTop: 80,
@@ -292,7 +295,8 @@ const stylesheet = StyleSheet.create((theme) => ({
 // 'shared' / 'sharedByMe' = sharing tabs. Any other value is a machineId tab.
 type SessionTab = 'all' | 'shared' | 'sharedByMe' | (string & {});
 
-type TabItem = { key: string; label: string; unread: boolean; active: boolean };
+type TabDot = 'none' | 'thinking' | 'completed';
+type TabItem = { key: string; label: string; dot: TabDot; active: boolean };
 
 // Memoized so the tab bar is insulated from the session list's frequent re-renders.
 // `tabs` keeps a stable reference until its content changes (see tabItems below), so the
@@ -311,7 +315,11 @@ const SessionTabBar = React.memo(function SessionTabBar({ tabs, onSelect }: { ta
             onPress={() => onSelect(tab.key)}
         >
             <View style={styles.filterChipInner}>
-                {tab.unread && <View style={styles.filterChipDot} />}
+                {tab.dot === 'thinking' ? (
+                    <StatusDot color="#007AFF" isPulsing size={8} style={styles.filterChipStatusDot} />
+                ) : tab.dot === 'completed' ? (
+                    <View style={styles.filterChipDot} />
+                ) : null}
                 <Text
                     numberOfLines={1}
                     style={[
@@ -438,8 +446,10 @@ export function SessionsList() {
         return group ? [{ type: 'active-sessions' as const, sessions: group.sessions }] : data;
     }, [activeTab, sharedData, sharedByMeData, data, machineGroups]);
 
-    // Per-tab unread indicator: true when any session under that tab has an unread completion.
-    const tabUnread = React.useMemo(() => {
+    // Per-tab dot indicator. 'thinking' (pulsing) takes priority over 'completed' (static):
+    // a live in-progress session is the stronger, more time-sensitive signal. The 'all' tab
+    // is an aggregate and intentionally shows no dot.
+    const tabDot = React.useMemo(() => {
         const collectSessions = (items: SessionListViewItem[] | null): Session[] => {
             const out: Session[] = [];
             if (!items) return out;
@@ -449,16 +459,21 @@ export function SessionsList() {
             }
             return out;
         };
-        const map: Record<string, boolean> = {
-            all: allActiveSessions.some(hasUnreadCompletion),
-            shared: collectSessions(sharedData).some(hasUnreadCompletion),
-            sharedByMe: collectSessions(sharedByMeData).some(hasUnreadCompletion),
+        const dotFor = (sessions: Session[]): TabDot => {
+            if (sessions.some(s => s.thinking === true)) return 'thinking';
+            if (sessions.some(hasUnreadCompletion)) return 'completed';
+            return 'none';
+        };
+        const map: Record<string, TabDot> = {
+            all: 'none',
+            shared: dotFor(collectSessions(sharedData)),
+            sharedByMe: dotFor(collectSessions(sharedByMeData)),
         };
         for (const group of machineGroups) {
-            map[group.id] = group.sessions.some(hasUnreadCompletion);
+            map[group.id] = dotFor(group.sessions);
         }
         return map;
-    }, [allActiveSessions, machineGroups, sharedData, sharedByMeData]);
+    }, [machineGroups, sharedData, sharedByMeData]);
 
     const selectable = isTablet;
     const dataWithSelected = selectable ? React.useMemo(() => {
@@ -581,11 +596,11 @@ export function SessionsList() {
     // every session realtime update, so we key the memo off a content signature: tabItems
     // keeps a stable reference until the actual tab content changes. That in turn keeps
     // HeaderComponent stable, so FlatList doesn't remount (and thus re-render) the tab bar.
-    const tabsSignature = visibleTabs.map((tab) => `${tab.key}|${tab.label}|${tabUnread[tab.key] ? 1 : 0}|${activeTab === tab.key ? 1 : 0}`).join(',');
+    const tabsSignature = visibleTabs.map((tab) => `${tab.key}|${tab.label}|${tabDot[tab.key] ?? 'none'}|${activeTab === tab.key ? 1 : 0}`).join(',');
     const tabItems = React.useMemo<TabItem[]>(() => visibleTabs.map((tab) => ({
         key: tab.key,
         label: tab.label,
-        unread: !!tabUnread[tab.key],
+        dot: tabDot[tab.key] ?? 'none',
         active: activeTab === tab.key,
     // eslint-disable-next-line react-hooks/exhaustive-deps
     })), [tabsSignature]);
