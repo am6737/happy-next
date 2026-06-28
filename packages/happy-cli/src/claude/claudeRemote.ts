@@ -128,6 +128,11 @@ export async function claudeRemote(opts: {
 
     // Handle /compact command
     let isCompactCommand = false;
+    // Tracks whether the engine rejected the compaction. The trailing `result`
+    // message reports subtype 'success' even when compaction was refused (e.g.
+    // "Not enough messages to compact"), so success/failure must be read from the
+    // dedicated system/status message instead — see the message loop below.
+    let compactFailed = false;
     if (specialCommand.type === 'compact') {
         logger.debug('[claudeRemote] /compact command detected - will process as normal but with compaction behavior');
         isCompactCommand = true;
@@ -278,18 +283,31 @@ export async function claudeRemote(opts: {
                 }
             }
 
+            // Capture compaction outcome. It arrives as a system/status message
+            // carrying `compact_result`; the later `result` message is 'success'
+            // regardless, so this is the only reliable signal of a refusal.
+            if (message.type === 'system' && (message as { subtype?: string }).subtype === 'status'
+                && (message as { compact_result?: string }).compact_result === 'failed') {
+                compactFailed = true;
+            }
+
             // Handle result messages
             if (message.type === 'result') {
                 updateThinking(false);
                 logger.debug('[claudeRemote] Result received, waiting for next user message');
 
-                // Send completion messages
+                // Send completion messages. Only report success when the engine
+                // actually compacted; otherwise the engine already surfaced the
+                // reason as its own message, so we just close the started/ended
+                // pair with a truthful status instead of a misleading "completed".
                 if (isCompactCommand) {
-                    logger.debug('[claudeRemote] Compaction completed');
+                    const completionMessage = compactFailed ? 'Compaction failed' : 'Compaction completed';
+                    logger.debug(`[claudeRemote] ${completionMessage}`);
                     if (opts.onCompletionEvent) {
-                        opts.onCompletionEvent('Compaction completed');
+                        opts.onCompletionEvent(completionMessage);
                     }
                     isCompactCommand = false;
+                    compactFailed = false;
                 }
 
                 // Send ready event

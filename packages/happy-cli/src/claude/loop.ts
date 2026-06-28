@@ -51,7 +51,16 @@ export async function loop(opts: LoopOptions): Promise<number> {
         api: opts.api,
         client: opts.session,
         path: opts.path,
-        sessionId: null,
+        // For pre-forked resume sessions (duplicate/restore, spawned with
+        // HAPPY_CLAUDE_SKIP_FORK_SESSION=1), seed the Claude session id up front.
+        // Otherwise the resume target lives only in the one-time `--resume` flag,
+        // which gets consumed before the first real spawn. An isolate relaunch
+        // (e.g. `/compact` as the very first action, before any turn has run to
+        // populate sessionId via onSessionFound) would then start a brand-new
+        // empty session and report "Not enough messages to compact".
+        sessionId: process.env.HAPPY_CLAUDE_SKIP_FORK_SESSION === '1'
+            ? (process.env.HAPPY_CLAUDE_RESUME_SESSION_ID?.trim() || null)
+            : null,
         claudeEnvVars: opts.claudeEnvVars,
         claudeArgs: opts.claudeArgs,
         mcpServers: opts.mcpServers,
