@@ -295,7 +295,7 @@ const stylesheet = StyleSheet.create((theme) => ({
 // 'shared' / 'sharedByMe' = sharing tabs. Any other value is a machineId tab.
 type SessionTab = 'all' | 'shared' | 'sharedByMe' | (string & {});
 
-type TabDot = 'none' | 'thinking' | 'completed';
+type TabDot = 'none' | 'attention' | 'thinking' | 'completed';
 type TabItem = { key: string; label: string; dot: TabDot; active: boolean };
 
 // Memoized so the tab bar is insulated from the session list's frequent re-renders.
@@ -315,7 +315,9 @@ const SessionTabBar = React.memo(function SessionTabBar({ tabs, onSelect }: { ta
             onPress={() => onSelect(tab.key)}
         >
             <View style={styles.filterChipInner}>
-                {tab.dot === 'thinking' ? (
+                {tab.dot === 'attention' ? (
+                    <StatusDot color="#FF9500" isPulsing size={8} style={styles.filterChipStatusDot} />
+                ) : tab.dot === 'thinking' ? (
                     <StatusDot color="#007AFF" isPulsing size={8} style={styles.filterChipStatusDot} />
                 ) : tab.dot === 'completed' ? (
                     <View style={styles.filterChipDot} />
@@ -446,9 +448,10 @@ export function SessionsList() {
         return group ? [{ type: 'active-sessions' as const, sessions: group.sessions }] : data;
     }, [activeTab, sharedData, sharedByMeData, data, machineGroups]);
 
-    // Per-tab dot indicator. 'thinking' (pulsing) takes priority over 'completed' (static):
-    // a live in-progress session is the stronger, more time-sensitive signal. The 'all' tab
-    // is an aggregate and intentionally shows no dot.
+    // Per-tab dot indicator, mirroring useSessionStatus precedence:
+    // 'attention' (needs permission, orange pulse) > 'thinking' (blue pulse) >
+    // 'completed' (unread completion, static blue). All are online-only signals.
+    // The 'all' tab is an aggregate and intentionally shows no dot.
     const tabDot = React.useMemo(() => {
         const collectSessions = (items: SessionListViewItem[] | null): Session[] => {
             const out: Session[] = [];
@@ -459,8 +462,12 @@ export function SessionsList() {
             }
             return out;
         };
+        const needsAttention = (s: Session) => s.presence === 'online'
+            && !!s.agentState?.requests && Object.keys(s.agentState.requests).length > 0;
+        const isThinking = (s: Session) => s.presence === 'online' && s.thinking === true;
         const dotFor = (sessions: Session[]): TabDot => {
-            if (sessions.some(s => s.thinking === true)) return 'thinking';
+            if (sessions.some(needsAttention)) return 'attention';
+            if (sessions.some(isThinking)) return 'thinking';
             if (sessions.some(hasUnreadCompletion)) return 'completed';
             return 'none';
         };
