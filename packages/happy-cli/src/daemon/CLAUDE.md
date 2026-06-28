@@ -116,6 +116,12 @@ Local HTTP server (127.0.0.1 only) provides:
 - Development: matches `tsx.*src/index.ts`
 - Categorizes by command args: daemon, daemon-spawned, user-session, doctor
 
+Note: `src/index.ts` sets `process.title = 'happy-next-cli <args>'` on startup so the
+process is NOT shown as a generic `node ... dist/index.mjs ...` (which would be killed
+by tooling/agents running `pkill -f index.mjs` against unrelated `index.mjs` services).
+Discovery therefore relies on the `happy-next-cli` token plus the preserved args, not on
+`dist/index.mjs` being present in the command line.
+
 ### Clean Runaway Processes
 
 `happy doctor clean`:

@@ -31,6 +31,16 @@ import { spawnHappyCLI } from './utils/spawnHappyCLI'
 import { claudeCliPath } from './claude/claudeLocal'
 import { execFileSync } from 'node:child_process'
 
+// Give the process a distinctive title so it does not show up as a generic
+// `node ... dist/index.mjs ...` in `ps`/`pkill`. Otherwise tooling and AI agents that
+// run `pkill -f index.mjs` to kill some unrelated `index.mjs` service also kill Happy
+// (notably the long-lived daemon) by accident. On Linux, assigning `process.title`
+// overwrites the argv shown in `/proc/<pid>/cmdline`, so `index.mjs` no longer appears.
+// We keep the `happy-next-cli` token (matched by daemon process discovery in
+// `daemon/doctor.ts`, and as the truncated `comm` matched by `name.includes('happy')`)
+// and the original args (used to classify daemon / session / version-check processes).
+process.title = ['happy-next-cli', ...process.argv.slice(2)].join(' ')
+
 /** Spawn a detached daemon process and poll until it writes its state file (up to 5s). */
 async function spawnAndWaitForDaemon(): Promise<boolean> {
   const child = spawnHappyCLI(['daemon', 'start-sync'], {
