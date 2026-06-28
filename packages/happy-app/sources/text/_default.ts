@@ -763,6 +763,14 @@ export const en = {
         pin: 'Pin',
         delete: 'Delete',
         confirmSendNow: 'Send this queued message now? This will interrupt the current AI turn.',
+        detailTitle: 'Queued message',
+        copyText: 'Copy full text',
+        edit: 'Edit',
+        pause: 'Pause',
+        resume: 'Resume',
+        save: 'Save',
+        editingPausedNotice: 'Paused while editing — won\'t be sent',
+        saved: 'Saved',
     },
 
     commandPalette: {

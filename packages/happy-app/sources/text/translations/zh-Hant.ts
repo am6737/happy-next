@@ -754,6 +754,14 @@ export const zhHant: TranslationStructure = {
         pin: '置頂',
         delete: '刪除',
         confirmSendNow: '立即發送這條待發訊息？這會中斷目前 AI 輪次。',
+        detailTitle: '待發訊息',
+        copyText: '複製全文',
+        edit: '編輯',
+        pause: '暫停',
+        resume: '恢復',
+        save: '儲存',
+        editingPausedNotice: '編輯期間已暫停，不會被發送',
+        saved: '已儲存',
     },
 
     commandPalette: {

@@ -9,7 +9,9 @@ import {
     deletePendingMessage,
     enqueuePendingMessage,
     listPendingMessages,
+    pausePendingMessage,
     pinPendingMessage,
+    updatePendingMessageContent,
     type PendingMessageRecord,
 } from "@/app/session/pendingMessageService";
 import { dispatchNextPendingIfPossible } from "@/app/session/pendingMessageAutoDispatch";
@@ -112,6 +114,7 @@ function toPendingResponseMessage(message: PendingMessageRecord) {
         sentByName: message.sentByName,
         trackCliDelivery: message.trackCliDelivery,
         pinnedAt: message.pinnedAt ? message.pinnedAt.getTime() : null,
+        pausedAt: message.pausedAt ? message.pausedAt.getTime() : null,
         createdAt: message.createdAt.getTime(),
         updatedAt: message.updatedAt.getTime(),
     };
@@ -425,9 +428,13 @@ export function v3SessionRoutes(app: Fastify) {
 
         const sentByName = await getSenderName(userId);
 
+        // Only *active* (non-paused) pending messages gate new sends. Paused
+        // drafts are invisible to the queue decision: a lone draft must not
+        // force every new message into the queue while the session is idle.
         const hasPending = !!await db.sessionPendingMessage.findFirst({
             where: {
                 sessionId,
+                pausedAt: null,
             },
             select: {
                 id: true,
@@ -536,6 +543,70 @@ export function v3SessionRoutes(app: Fastify) {
         }
 
         const pending = await pinPendingMessage(sessionId, pendingId);
+        if (!pending) {
+            return reply.code(404).send({ error: "Pending message not found" });
+        }
+
+        await emitPendingUpsert(ownerId, sessionId, pending);
+
+        return reply.send({
+            message: toPendingResponseMessage(pending),
+        });
+    });
+
+    app.post("/v3/sessions/:sessionId/pending-messages/:pendingId/pause", {
+        preHandler: app.authenticate,
+        schema: {
+            params: pendingMessageParamsSchema,
+        },
+    }, async (request, reply) => {
+        const userId = request.userId;
+        const { sessionId, pendingId } = request.params;
+
+        if (!await canSendMessages(userId, sessionId)) {
+            return reply.code(404).send({ error: "Session not found" });
+        }
+
+        const ownerId = await getSessionOwnerId(sessionId);
+        if (!ownerId) {
+            return reply.code(404).send({ error: "Session not found" });
+        }
+
+        const pending = await pausePendingMessage(sessionId, pendingId);
+        if (!pending) {
+            return reply.code(404).send({ error: "Pending message not found" });
+        }
+
+        await emitPendingUpsert(ownerId, sessionId, pending);
+
+        return reply.send({
+            message: toPendingResponseMessage(pending),
+        });
+    });
+
+    app.patch("/v3/sessions/:sessionId/pending-messages/:pendingId", {
+        preHandler: app.authenticate,
+        schema: {
+            params: pendingMessageParamsSchema,
+            body: z.object({
+                content: z.string(),
+            }),
+        },
+    }, async (request, reply) => {
+        const userId = request.userId;
+        const { sessionId, pendingId } = request.params;
+        const { content } = request.body;
+
+        if (!await canSendMessages(userId, sessionId)) {
+            return reply.code(404).send({ error: "Session not found" });
+        }
+
+        const ownerId = await getSessionOwnerId(sessionId);
+        if (!ownerId) {
+            return reply.code(404).send({ error: "Session not found" });
+        }
+
+        const pending = await updatePendingMessageContent(sessionId, pendingId, content);
         if (!pending) {
             return reply.code(404).send({ error: "Pending message not found" });
         }

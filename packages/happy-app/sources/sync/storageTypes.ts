@@ -214,6 +214,7 @@ export interface PendingMessage {
     sentByName: string | null;
     trackCliDelivery: boolean;
     pinnedAt: number | null;
+    pausedAt: number | null;
     createdAt: number;
     updatedAt: number;
 }

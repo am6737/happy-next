@@ -1,23 +1,28 @@
-import { Octicons } from '@expo/vector-icons';
+import { Octicons, Ionicons } from '@expo/vector-icons';
+import { Modal } from '@/modal';
 import type { PendingMessage } from '@/sync/storageTypes';
 import { t } from '@/text';
 import * as React from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { layout } from './layout';
+import { PendingMessageDetailModal } from './PendingMessageDetailModal';
 import { getPendingPreviewText, truncatePendingPreview } from './pendingQueuePanelUtils';
 
-type PendingActionType = 'send-now' | 'pin' | 'delete';
+type PendingActionType = 'send-now' | 'pin' | 'delete' | 'resume';
 
 type PendingQueuePanelProps = {
+    sessionId: string;
     messages: PendingMessage[];
     canManage: boolean;
     onSendNow: (pendingId: string) => Promise<void> | void;
     onPin: (pendingId: string) => Promise<void> | void;
     onDelete: (pendingId: string) => Promise<void> | void;
+    onPause: (pendingId: string) => Promise<void> | void;
+    onSaveEdit: (pendingId: string, newText: string) => Promise<void> | void;
 };
 
-export const PendingQueuePanel: React.FC<PendingQueuePanelProps> = React.memo(({ messages, canManage, onSendNow, onPin, onDelete }) => {
+export const PendingQueuePanel: React.FC<PendingQueuePanelProps> = React.memo(({ sessionId, messages, canManage, onSendNow, onPin, onDelete, onPause, onSaveEdit }) => {
     const { theme } = useUnistyles();
     const [pendingAction, setPendingAction] = React.useState<{ pendingId: string; action: PendingActionType } | null>(null);
     const scrollRef = React.useRef<ScrollView>(null);
@@ -50,6 +55,22 @@ export const PendingQueuePanel: React.FC<PendingQueuePanelProps> = React.memo(({
         }
     }, [pendingAction]);
 
+    const openDetail = React.useCallback((message: PendingMessage) => {
+        Modal.show({
+            component: PendingMessageDetailModal,
+            props: {
+                sessionId,
+                message,
+                canManage,
+                onSendNow,
+                onPin,
+                onDelete,
+                onPause,
+                onSaveEdit,
+            },
+        });
+    }, [sessionId, canManage, onSendNow, onPin, onDelete, onPause, onSaveEdit]);
+
     if (messages.length === 0) {
         return null;
     }
@@ -72,11 +93,19 @@ export const PendingQueuePanel: React.FC<PendingQueuePanelProps> = React.memo(({
                     {messages.map((message) => {
                         const loadingAction = pendingAction?.pendingId === message.id ? pendingAction.action : null;
                         const isDisabled = pendingAction !== null;
+                        const isPaused = message.pausedAt !== null;
 
                         return (
                             <View key={message.id} style={styles.itemRow}>
-                                <View style={styles.itemTextColumn}>
+                                <Pressable
+                                    style={styles.itemTextColumn}
+                                    onPress={() => openDetail(message)}
+                                    accessibilityLabel={t('pendingQueue.detailTitle')}
+                                >
                                     <View style={styles.previewRow}>
+                                        {isPaused && (
+                                            <Ionicons name="pause" size={15} color={theme.colors.textSecondary} />
+                                        )}
                                         {message.imageCount > 0 && (
                                             <View style={styles.imageBadge}>
                                                 <Octicons name="image" size={13} color={theme.colors.textSecondary} />
@@ -86,43 +115,64 @@ export const PendingQueuePanel: React.FC<PendingQueuePanelProps> = React.memo(({
                                             </View>
                                         )}
                                         <Text
-                                            style={[styles.preview, message.pinnedAt !== null && styles.previewPinned, { flexShrink: 1 }]}
+                                            style={[
+                                                styles.preview,
+                                                message.pinnedAt !== null && !isPaused && styles.previewPinned,
+                                                isPaused && styles.previewPaused,
+                                                { flexShrink: 1 },
+                                            ]}
                                             numberOfLines={2}
                                         >
                                             {truncatePendingPreview(getPendingPreviewText(message.previewText, t('pendingQueue.empty')))}
                                         </Text>
                                     </View>
-                                </View>
+                                </Pressable>
 
                                 {canManage && (
                                     <View style={styles.actions}>
-                                        <Pressable
-                                            style={[styles.iconButton, isDisabled && styles.iconButtonDisabled]}
-                                            onPress={() => void runAction(message.id, 'send-now', onSendNow)}
-                                            accessibilityLabel={t('pendingQueue.sendNow')}
-                                            hitSlop={8}
-                                            disabled={isDisabled}
-                                        >
-                                            {loadingAction === 'send-now'
-                                                ? <ActivityIndicator size={14} color={theme.colors.textLink} />
-                                                : <Octicons name="paper-airplane" size={16} color={theme.colors.textLink} />}
-                                        </Pressable>
+                                        {isPaused ? (
+                                            <Pressable
+                                                style={[styles.iconButton, isDisabled && styles.iconButtonDisabled]}
+                                                onPress={() => void runAction(message.id, 'resume', onPause)}
+                                                accessibilityLabel={t('pendingQueue.resume')}
+                                                hitSlop={8}
+                                                disabled={isDisabled}
+                                            >
+                                                {loadingAction === 'resume'
+                                                    ? <ActivityIndicator size={14} color={theme.colors.textLink} />
+                                                    : <Ionicons name="play" size={16} color={theme.colors.textLink} />}
+                                            </Pressable>
+                                        ) : (
+                                            <>
+                                                <Pressable
+                                                    style={[styles.iconButton, isDisabled && styles.iconButtonDisabled]}
+                                                    onPress={() => void runAction(message.id, 'send-now', onSendNow)}
+                                                    accessibilityLabel={t('pendingQueue.sendNow')}
+                                                    hitSlop={8}
+                                                    disabled={isDisabled}
+                                                >
+                                                    {loadingAction === 'send-now'
+                                                        ? <ActivityIndicator size={14} color={theme.colors.textLink} />
+                                                        : <Octicons name="paper-airplane" size={16} color={theme.colors.textLink} />}
+                                                </Pressable>
 
-                                        <Pressable
-                                            style={[styles.iconButton, isDisabled && styles.iconButtonDisabled]}
-                                            onPress={() => void runAction(message.id, 'pin', onPin)}
-                                            accessibilityLabel={t('pendingQueue.pin')}
-                                            hitSlop={8}
-                                            disabled={isDisabled}
-                                        >
-                                            {loadingAction === 'pin'
-                                                ? <ActivityIndicator size={14} color={theme.colors.textSecondary} />
-                                                : <Octicons
-                                                    name="move-to-top"
-                                                    size={16}
-                                                    color={message.pinnedAt !== null ? theme.colors.textLink : theme.colors.textSecondary}
-                                                />}
-                                        </Pressable>
+                                                <Pressable
+                                                    style={[styles.iconButton, isDisabled && styles.iconButtonDisabled]}
+                                                    onPress={() => void runAction(message.id, 'pin', onPin)}
+                                                    accessibilityLabel={t('pendingQueue.pin')}
+                                                    hitSlop={8}
+                                                    disabled={isDisabled}
+                                                >
+                                                    {loadingAction === 'pin'
+                                                        ? <ActivityIndicator size={14} color={theme.colors.textSecondary} />
+                                                        : <Octicons
+                                                            name="move-to-top"
+                                                            size={16}
+                                                            color={message.pinnedAt !== null ? theme.colors.textLink : theme.colors.textSecondary}
+                                                        />}
+                                                </Pressable>
+                                            </>
+                                        )}
 
                                         <Pressable
                                             style={[styles.iconButton, isDisabled && styles.iconButtonDisabled]}
@@ -219,6 +269,9 @@ const styles = StyleSheet.create((theme) => ({
     },
     previewPinned: {
         fontWeight: '700',
+    },
+    previewPaused: {
+        color: theme.colors.textSecondary,
     },
     actions: {
         flexDirection: 'row',

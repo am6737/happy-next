@@ -726,6 +726,7 @@ class Sync {
             sentByName: pending.sentByName ?? null,
             trackCliDelivery: pending.trackCliDelivery,
             pinnedAt: pending.pinnedAt,
+            pausedAt: pending.pausedAt,
             createdAt: pending.createdAt,
             updatedAt: pending.updatedAt,
         };
@@ -782,6 +783,121 @@ class Sync {
                 if (response.status === 404) {
                     storage.getState().removePendingMessage(sessionId, pendingId);
                     return true;
+                }
+                return false;
+            }
+
+            const body = await response.json();
+            const pending = ApiPendingMessageSchema.safeParse(body?.message);
+            if (!pending.success) {
+                return false;
+            }
+
+            const decrypted = await this.decryptPendingMessage(sessionId, pending.data);
+            if (decrypted) {
+                storage.getState().upsertPendingMessage(sessionId, decrypted);
+            }
+            return true;
+        } catch (error) {
+            return false;
+        }
+    }
+
+    // Toggle the paused (draft) state of a pending message. A paused message
+    // stays in the session but is excluded from auto-dispatch until resumed.
+    async pausePendingMessage(sessionId: string, pendingId: string): Promise<boolean> {
+        if (!this.credentials) {
+            return false;
+        }
+
+        try {
+            const API_ENDPOINT = getServerUrl();
+            const response = await fetch(
+                `${API_ENDPOINT}/v3/sessions/${sessionId}/pending-messages/${pendingId}/pause`,
+                {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${this.credentials.token}`,
+                        'Content-Type': 'application/json'
+                    }
+                }
+            );
+
+            if (!response.ok) {
+                if (response.status === 404) {
+                    storage.getState().removePendingMessage(sessionId, pendingId);
+                    return true;
+                }
+                return false;
+            }
+
+            const body = await response.json();
+            const pending = ApiPendingMessageSchema.safeParse(body?.message);
+            if (!pending.success) {
+                return false;
+            }
+
+            const decrypted = await this.decryptPendingMessage(sessionId, pending.data);
+            if (decrypted) {
+                storage.getState().upsertPendingMessage(sessionId, decrypted);
+            }
+            return true;
+        } catch (error) {
+            return false;
+        }
+    }
+
+    // Replace the text of a queued message in place, preserving any attached
+    // images and queue position. Rebuilds the user RawRecord from the existing
+    // (decrypted) content, re-encrypts client-side, and PATCHes the ciphertext.
+    async updatePendingMessageContent(sessionId: string, pendingId: string, newText: string): Promise<boolean> {
+        if (!this.credentials) {
+            return false;
+        }
+
+        const encryption = this.encryption.getSessionEncryption(sessionId);
+        if (!encryption) {
+            return false;
+        }
+
+        const existing = storage.getState().sessionPendingMessages[sessionId]?.find((m) => m.id === pendingId);
+        if (!existing) {
+            return false;
+        }
+
+        const parsed = RawRecordSchema.safeParse(existing.content);
+        if (!parsed.success || parsed.data.role !== 'user') {
+            // Only plain user messages (text / text+images) are editable.
+            return false;
+        }
+        const raw = parsed.data;
+
+        const nextContent: RawRecord = {
+            ...raw,
+            content: { ...raw.content, text: newText },
+            meta: raw.meta?.displayText !== undefined
+                ? { ...raw.meta, displayText: newText }
+                : raw.meta,
+        };
+
+        try {
+            const encryptedRawRecord = await encryption.encryptRawRecord(nextContent);
+            const API_ENDPOINT = getServerUrl();
+            const response = await fetch(
+                `${API_ENDPOINT}/v3/sessions/${sessionId}/pending-messages/${pendingId}`,
+                {
+                    method: 'PATCH',
+                    headers: {
+                        'Authorization': `Bearer ${this.credentials.token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ content: encryptedRawRecord })
+                }
+            );
+
+            if (!response.ok) {
+                if (response.status === 404) {
+                    storage.getState().removePendingMessage(sessionId, pendingId);
                 }
                 return false;
             }

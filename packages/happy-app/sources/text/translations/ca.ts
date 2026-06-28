@@ -752,6 +752,14 @@ export const ca: TranslationStructure = {
         pin: 'Fixa',
         delete: 'Suprimeix',
         confirmSendNow: 'Vols enviar ara aquest missatge en cua? Això interromprà el torn actual de la IA.',
+        detailTitle: 'Missatge en cua',
+        copyText: 'Copia tot el text',
+        edit: 'Edita',
+        pause: 'Pausa',
+        resume: 'Reprèn',
+        save: 'Desa',
+        editingPausedNotice: 'En pausa durant l\'edició: no s\'enviarà',
+        saved: 'Desat',
     },
 
     commandPalette: {

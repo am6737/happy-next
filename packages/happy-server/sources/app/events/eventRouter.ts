@@ -274,6 +274,7 @@ export type EphemeralEvent = {
         sentByName: string | null;
         trackCliDelivery: boolean;
         pinnedAt: number | null;
+        pausedAt: number | null;
         createdAt: number;
         updatedAt: number;
     };
@@ -771,6 +772,7 @@ export function buildPendingMessageUpsertEphemeral(sessionId: string, pending: {
     sentByName: string | null;
     trackCliDelivery: boolean;
     pinnedAt: Date | null;
+    pausedAt: Date | null;
     createdAt: Date;
     updatedAt: Date;
 }): EphemeralPayload {
@@ -785,6 +787,7 @@ export function buildPendingMessageUpsertEphemeral(sessionId: string, pending: {
             sentByName: pending.sentByName,
             trackCliDelivery: pending.trackCliDelivery,
             pinnedAt: pending.pinnedAt ? pending.pinnedAt.getTime() : null,
+            pausedAt: pending.pausedAt ? pending.pausedAt.getTime() : null,
             createdAt: pending.createdAt.getTime(),
             updatedAt: pending.updatedAt.getTime(),
         },

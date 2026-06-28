@@ -752,6 +752,14 @@ export const pt: TranslationStructure = {
         pin: 'Fixar',
         delete: 'Excluir',
         confirmSendNow: 'Enviar agora esta mensagem da fila? Isso interromperá o turno atual da IA.',
+        detailTitle: 'Mensagem na fila',
+        copyText: 'Copiar todo o texto',
+        edit: 'Editar',
+        pause: 'Pausar',
+        resume: 'Retomar',
+        save: 'Salvar',
+        editingPausedNotice: 'Em pausa durante a edição — não será enviada',
+        saved: 'Salvo',
     },
 
     commandPalette: {

@@ -1,6 +1,12 @@
 import type { PendingMessage } from './storageTypes';
 
 function comparePendingQueue(a: PendingMessage, b: PendingMessage): number {
+    // Paused messages are drafts: sink them below all active messages so the
+    // list reads top-to-bottom as "what will be sent" followed by "parked".
+    if ((a.pausedAt !== null) !== (b.pausedAt !== null)) {
+        return a.pausedAt !== null ? 1 : -1;
+    }
+
     if (a.pinnedAt !== null || b.pinnedAt !== null) {
         if (a.pinnedAt === null) return 1;
         if (b.pinnedAt === null) return -1;

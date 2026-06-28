@@ -752,6 +752,14 @@ export const es: TranslationStructure = {
         pin: 'Fijar',
         delete: 'Eliminar',
         confirmSendNow: '¿Enviar ahora este mensaje en cola? Esto interrumpirá el turno actual de la IA.',
+        detailTitle: 'Mensaje en cola',
+        copyText: 'Copiar todo el texto',
+        edit: 'Editar',
+        pause: 'Pausar',
+        resume: 'Reanudar',
+        save: 'Guardar',
+        editingPausedNotice: 'En pausa durante la edición: no se enviará',
+        saved: 'Guardado',
     },
 
     commandPalette: {

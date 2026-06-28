@@ -754,6 +754,14 @@ export const zhHans: TranslationStructure = {
         pin: '置顶',
         delete: '删除',
         confirmSendNow: '立即发送该待发消息？这会中断当前 AI 轮次。',
+        detailTitle: '待发消息',
+        copyText: '复制全文',
+        edit: '编辑',
+        pause: '暂停',
+        resume: '恢复',
+        save: '保存',
+        editingPausedNotice: '编辑期间已暂停，不会被发送',
+        saved: '已保存',
     },
 
     commandPalette: {

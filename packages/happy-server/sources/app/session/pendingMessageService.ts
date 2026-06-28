@@ -15,6 +15,7 @@ export type PendingMessageRecord = {
     sentByName: string | null;
     trackCliDelivery: boolean;
     pinnedAt: Date | null;
+    pausedAt: Date | null;
     createdAt: Date;
     updatedAt: Date;
 };
@@ -28,6 +29,7 @@ const pendingMessageSelect = {
     sentByName: true,
     trackCliDelivery: true,
     pinnedAt: true,
+    pausedAt: true,
     createdAt: true,
     updatedAt: true,
 } as const;
@@ -156,6 +158,53 @@ export async function pinPendingMessage(sessionId: string, pendingId: string): P
     return updated as PendingMessageRecord;
 }
 
+// Toggle the paused state of a pending message. A paused message stays in the
+// session (and is still listed/synced) but is excluded from auto-dispatch — it
+// behaves as a draft until resumed. Mirrors pinPendingMessage's toggle shape.
+export async function pausePendingMessage(sessionId: string, pendingId: string): Promise<PendingMessageRecord | null> {
+    const message = await findPendingMessageById(sessionId, pendingId);
+    if (!message) {
+        return null;
+    }
+
+    const updated = await db.sessionPendingMessage.update({
+        where: {
+            id: pendingId,
+        },
+        data: {
+            pausedAt: message.pausedAt ? null : new Date(),
+        },
+        select: pendingMessageSelect,
+    });
+
+    return updated as PendingMessageRecord;
+}
+
+// Replace the (client-encrypted) content of a pending message. The server only
+// stores ciphertext: `content` is the already-encrypted string produced by the
+// client, wrapped the same way as enqueue.
+export async function updatePendingMessageContent(sessionId: string, pendingId: string, content: string): Promise<PendingMessageRecord | null> {
+    const message = await findPendingMessageById(sessionId, pendingId);
+    if (!message) {
+        return null;
+    }
+
+    const updated = await db.sessionPendingMessage.update({
+        where: {
+            id: pendingId,
+        },
+        data: {
+            content: {
+                t: "encrypted",
+                c: content,
+            },
+        },
+        select: pendingMessageSelect,
+    });
+
+    return updated as PendingMessageRecord;
+}
+
 export async function deletePendingMessage(sessionId: string, pendingId: string): Promise<PendingMessageRecord | null> {
     return db.$transaction(async (tx) => {
         const message = await tx.sessionPendingMessage.findUnique({
@@ -189,6 +238,9 @@ export async function takeNextPendingMessageForDispatch(sessionId: string): Prom
         const candidate = await tx.sessionPendingMessage.findFirst({
             where: {
                 sessionId,
+                // Paused messages are drafts: never auto-dispatched, never block
+                // the queue. Dispatch always picks the next non-paused message.
+                pausedAt: null,
             },
             orderBy: [
                 { pinnedAt: { sort: "desc", nulls: "last" } },

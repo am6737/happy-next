@@ -17,6 +17,7 @@ function pending(input: Partial<PendingMessage> & Pick<PendingMessage, 'id' | 'l
     sentByName: input.sentByName ?? null,
     trackCliDelivery: input.trackCliDelivery ?? false,
     pinnedAt: input.pinnedAt ?? null,
+    pausedAt: input.pausedAt ?? null,
     createdAt: input.createdAt ?? 0,
     updatedAt: input.updatedAt ?? input.createdAt ?? 0,
   };
@@ -32,6 +33,17 @@ describe('pendingQueue', () => {
     ]);
 
     expect(queue.map((item) => item.id)).toEqual(['p2', 'p1', 'n1', 'n2']);
+  });
+
+  it('sortPendingQueue sinks paused (draft) messages below all active ones, even pinned drafts', () => {
+    const queue = sortPendingQueue([
+      pending({ id: 'draftPinned', localId: 'draftPinned', pinnedAt: 500, pausedAt: 5, createdAt: 5 }),
+      pending({ id: 'active', localId: 'active', createdAt: 30 }),
+      pending({ id: 'pinned', localId: 'pinned', pinnedAt: 100, createdAt: 20 }),
+      pending({ id: 'draft', localId: 'draft', pausedAt: 10, createdAt: 10 }),
+    ]);
+
+    expect(queue.map((item) => item.id)).toEqual(['pinned', 'active', 'draftPinned', 'draft']);
   });
 
   it('upsertPendingMessageInQueue updates existing item and keeps order stable', () => {

@@ -764,6 +764,14 @@ export const pl: TranslationStructure = {
         pin: 'Przypnij',
         delete: 'Usuń',
         confirmSendNow: 'Wysłać teraz tę wiadomość z kolejki? To przerwie bieżącą turę AI.',
+        detailTitle: 'Wiadomość z kolejki',
+        copyText: 'Kopiuj cały tekst',
+        edit: 'Edytuj',
+        pause: 'Wstrzymaj',
+        resume: 'Wznów',
+        save: 'Zapisz',
+        editingPausedNotice: 'Wstrzymano podczas edycji — nie zostanie wysłane',
+        saved: 'Zapisano',
     },
 
     commandPalette: {

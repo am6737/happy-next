@@ -782,6 +782,14 @@ export const it: TranslationStructure = {
         pin: 'Metti in cima',
         delete: 'Elimina',
         confirmSendNow: 'Inviare ora questo messaggio in coda? Questo interromperà il turno AI corrente.',
+        detailTitle: 'Messaggio in coda',
+        copyText: 'Copia tutto il testo',
+        edit: 'Modifica',
+        pause: 'Pausa',
+        resume: 'Riprendi',
+        save: 'Salva',
+        editingPausedNotice: 'In pausa durante la modifica — non verrà inviato',
+        saved: 'Salvato',
     },
 
     commandPalette: {

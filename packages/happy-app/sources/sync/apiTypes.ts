@@ -49,6 +49,7 @@ export const ApiPendingMessageSchema = z.object({
     sentByName: z.string().nullable(),
     trackCliDelivery: z.boolean(),
     pinnedAt: z.number().nullable(),
+    pausedAt: z.number().nullable().default(null),
     createdAt: z.number(),
     updatedAt: z.number(),
 });

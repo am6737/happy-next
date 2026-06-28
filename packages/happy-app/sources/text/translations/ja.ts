@@ -784,6 +784,14 @@ export const ja: TranslationStructure = {
         pin: '先頭に固定',
         delete: '削除',
         confirmSendNow: 'このキュー済みメッセージを今すぐ送信しますか？現在のAIターンは中断されます。',
+        detailTitle: 'キュー内のメッセージ',
+        copyText: '全文をコピー',
+        edit: '編集',
+        pause: '一時停止',
+        resume: '再開',
+        save: '保存',
+        editingPausedNotice: '編集中は一時停止中 — 送信されません',
+        saved: '保存しました',
     },
 
     commandPalette: {

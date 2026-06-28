@@ -937,6 +937,12 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
 
     const handleSendNowPending = React.useCallback(async (pendingId: string) => {
         try {
+            // A paused (draft) message is excluded from dispatch, so resume it first —
+            // otherwise pin+abort would skip it and it could never be sent.
+            const target = pendingMessages.find((m) => m.id === pendingId);
+            if (target?.pausedAt != null) {
+                await sync.pausePendingMessage(sessionId, pendingId);
+            }
             // Pin the message so it becomes the next to dispatch (pinnedAt desc ordering),
             // then abort the current turn — the server auto-dispatches the first pending message.
             await sync.pinPendingMessage(sessionId, pendingId);
@@ -944,7 +950,7 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
         } catch {
             Modal.alert(t('common.error'), t('status.operationFailed'));
         }
-    }, [sessionId]);
+    }, [sessionId, pendingMessages]);
 
     const handlePinPending = React.useCallback(async (pendingId: string) => {
         const success = await sync.pinPendingMessage(sessionId, pendingId);
@@ -960,13 +966,30 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
         }
     }, [sessionId]);
 
+    const handlePausePending = React.useCallback(async (pendingId: string) => {
+        const success = await sync.pausePendingMessage(sessionId, pendingId);
+        if (!success) {
+            Modal.alert(t('common.error'), t('status.operationFailed'));
+        }
+    }, [sessionId]);
+
+    const handleSaveEditPending = React.useCallback(async (pendingId: string, newText: string) => {
+        const success = await sync.updatePendingMessageContent(sessionId, pendingId, newText);
+        if (!success) {
+            Modal.alert(t('common.error'), t('status.operationFailed'));
+        }
+    }, [sessionId]);
+
     const pendingQueuePanel = pendingMessages.length > 0 ? (
         <PendingQueuePanel
+            sessionId={sessionId}
             messages={pendingMessages}
             canManage={canEdit}
             onSendNow={handleSendNowPending}
             onPin={handlePinPending}
             onDelete={handleDeletePending}
+            onPause={handlePausePending}
+            onSaveEdit={handleSaveEditPending}
         />
     ) : null;
 

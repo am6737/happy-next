@@ -278,11 +278,13 @@ model SessionPendingMessage {
   sentByName       String?
   trackCliDelivery Boolean   @default(false)
   pinnedAt         DateTime?
+  pausedAt         DateTime?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
   @@unique([sessionId, localId])
   @@index([sessionId, pinnedAt, createdAt])
+  @@index([sessionId, pausedAt, pinnedAt, createdAt])
 }
 
 model SessionMessageDeliveryIssue {

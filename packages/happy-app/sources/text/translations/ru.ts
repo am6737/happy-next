@@ -917,6 +917,14 @@ export const ru: TranslationStructure = {
         pin: 'Закрепить',
         delete: 'Удалить',
         confirmSendNow: 'Отправить это сообщение из очереди сейчас? Это прервёт текущий ход ИИ.',
+        detailTitle: 'Сообщение из очереди',
+        copyText: 'Скопировать весь текст',
+        edit: 'Редактировать',
+        pause: 'Пауза',
+        resume: 'Возобновить',
+        save: 'Сохранить',
+        editingPausedNotice: 'На паузе во время редактирования — не будет отправлено',
+        saved: 'Сохранено',
     },
 
     commandPalette: {
