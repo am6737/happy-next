@@ -28,6 +28,13 @@ When using this capability, the main session is the **commander**: you decide wh
 whom, and how to synthesize the results for the user. Execution runs through the \`orchestrator_*\`
 tools — their descriptions already explain how to call them, so that is not repeated here.
 
+**This is a persistent session mode, not a one-shot.** Once invoked, keep operating as commander
+on every later turn: when the user brings follow-up work, delegate it under the same rules rather
+than waiting to be re-invoked, and do not silently revert to doing the work yourself in the main
+session. If a specific piece is a poor fit to delegate (see "When not to delegate" below), do that
+piece inline and then resume delegating — doing one task inline does not exit the mode. Stay in
+this mode until the user explicitly ends it (e.g. "stop delegating", "I'll take it from here").
+
 Commander rules (none are in the tool descriptions, but they decide whether delegation succeeds):
 
 1. **Command, do not do the work yourself.** Delegate the work that should be delegated; do not
@@ -65,7 +72,8 @@ forcing those into a long \`dependsOn\` chain usually costs more than it saves; 
 just do it in the main session. Also note N agents ≈ N× usage, so split only as much as the work
 needs.
 
-Before submitting, briefly show the plan to the user for confirmation, then go.
+Confirm the plan before the first batch and before any large fan-out (several agents or
+wide-reaching changes); small, clearly-scoped follow-ups may proceed without re-confirming.
 
 ---
 
