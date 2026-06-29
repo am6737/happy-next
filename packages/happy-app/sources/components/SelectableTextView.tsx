@@ -96,7 +96,23 @@ export function buildSelectionHtml(args: {
 </html>`;
 }
 
-export function SelectableTextView({ text, bottomPadding = 16 }: { text: string; bottomPadding?: number }) {
+// Reports the rendered content height back to the host so a modal can size its
+// text area to fit short content (instead of padding it out to a fixed height).
+const MEASURE_SCRIPT = `(function(){
+  var last = -1;
+  function report(){
+    try {
+      var h = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
+      // Ignore sub-pixel / scrollbar-induced ±1 jitter to avoid the box twitching.
+      if (Math.abs(h - last) > 1) { last = h; window.ReactNativeWebView.postMessage(String(h)); }
+    } catch (e) {}
+  }
+  report();
+  window.addEventListener('load', report);
+  if (window.ResizeObserver) { try { new ResizeObserver(report).observe(document.body); } catch (e) {} }
+})(); true;`;
+
+export function SelectableTextView({ text, bottomPadding = 16, onMeasure }: { text: string; bottomPadding?: number; onMeasure?: (height: number) => void }) {
     const { theme, rt } = useUnistyles();
     const isDark = rt.themeName === 'dark';
 
@@ -120,6 +136,10 @@ export function SelectableTextView({ text, bottomPadding = 16 }: { text: string;
                 title="selectable-text"
                 srcDoc={html}
                 sandbox="allow-same-origin"
+                onLoad={onMeasure ? (e: any) => {
+                    const h = e?.target?.contentDocument?.body?.scrollHeight;
+                    if (typeof h === 'number' && h > 0) onMeasure(h);
+                } : undefined}
                 style={{
                     display: 'block',
                     width: '100%',
@@ -140,6 +160,13 @@ export function SelectableTextView({ text, bottomPadding = 16 }: { text: string;
             domStorageEnabled
             setSupportMultipleWindows={false}
             mixedContentMode="always"
+            {...(onMeasure ? {
+                injectedJavaScript: MEASURE_SCRIPT,
+                onMessage: (e: { nativeEvent: { data: string } }) => {
+                    const h = Number(e.nativeEvent.data);
+                    if (Number.isFinite(h) && h > 0) onMeasure(h);
+                },
+            } : {})}
             {...(Platform.OS === 'ios' ? {
                 contentInsetAdjustmentBehavior: 'never' as const,
                 automaticallyAdjustContentInsets: false,

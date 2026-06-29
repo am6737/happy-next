@@ -75,6 +75,8 @@ export function PendingMessageDetailModal({
 
     const [editing, setEditing] = React.useState(false);
     const [draft, setDraft] = React.useState(m.previewText);
+    // Real content height reported by SelectableTextView; null until first measure.
+    const [measuredText, setMeasuredText] = React.useState<number | null>(null);
     // Tracks whether *we* paused on entering edit, so cancel can revert it.
     const autoPausedRef = React.useRef(false);
 
@@ -168,7 +170,13 @@ export function PendingMessageDetailModal({
     // menu scrolls — so a short (landscape) screen never clips the actions.
     const cardBudget = available - CANCEL_H - 8;
     const RESERVE_ACTIONS = 3 * ROW_H; // keep ~3 rows visible before scrolling
-    const textHeight = Math.max(80, Math.min(300, cardBudget - HEADER_H - RESERVE_ACTIONS));
+    const textMax = Math.max(80, Math.min(300, cardBudget - HEADER_H - RESERVE_ACTIONS));
+    // Start collapsed and grow to the real content height (reported by the WebView)
+    // once measured — the text area expands up to fit instead of starting tall and
+    // snapping down, which would flash a big empty gap for short messages. Capped at
+    // textMax (then the WebView scrolls internally), floored so the box never jumps.
+    const TEXT_FLOOR = 48;
+    const textHeight = measuredText !== null ? Math.max(TEXT_FLOOR, Math.min(measuredText, textMax)) : TEXT_FLOOR;
     const actionsMaxHeight = Math.max(2 * ROW_H, cardBudget - HEADER_H - textHeight);
 
     return (
@@ -192,7 +200,11 @@ export function PendingMessageDetailModal({
                 </View>
 
                 <View style={{ height: textHeight }}>
-                    <SelectableTextView text={fullText} />
+                    <SelectableTextView
+                        key={fullText}
+                        text={fullText}
+                        onMeasure={setMeasuredText}
+                    />
                 </View>
 
                 <ScrollView
