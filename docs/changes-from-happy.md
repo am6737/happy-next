@@ -9,7 +9,7 @@ This document summarizes what changed in Happy Next compared to the original Hap
 | Area | What changed |
 |---|---|
 | Orchestrator | Multi-agent DAG task scheduling with per-task model, working directory, and real-time monitoring |
-| Pending queue | Server-side message queue with auto-dispatch, queue panel UI, and send-now option |
+| Pending queue | Server-side message queue with auto-dispatch, queue panel UI, send-now, plus edit and pause/draft of queued messages |
 | Multi-agent | Claude Code, Codex, and Gemini are all first-class agents |
 | Voice | Volcano (Doubao) real-time voice gateway with streaming speech, native iOS voice calls, selectable timbre/speech rate, E2E-encrypted settings sync, plus read-aloud (TTS) of AI replies |
 | Workspaces | Multi-repo worktree creation, switching, archiving, and PR flows |
@@ -39,7 +39,7 @@ A multi-agent orchestration system that lets you define task dependency graphs a
 - **Auto-approve flags**: configure automatic approval for orchestrated tasks
 - **Session resume for follow-up**: send follow-up messages to completed tasks via session resume
 - **Available models API**: `get_context` exposes available models per provider
-- **Real-time monitoring**: activity badge with running task count, status-colored progress bars
+- **Real-time monitoring**: activity badge counting running and queued tasks, status-colored progress bars
 - **Full app UI**: run list with filter tabs and run counts, run detail page, task detail page
 - **Cancel with cascade**: cancelling a run cascades `dependency_failed` to dependent tasks
 - **MCP tool integration**: orchestrator tools registered as MCP tools with auto-filled working directory
@@ -56,6 +56,7 @@ Messages sent while the CLI is busy are now queued and delivered automatically.
 - **Queue panel UI**: view and manage pending messages from the app
 - **Image count badge**: pending message preview shows image attachment count
 - **Send-now option**: bypass queue and send immediately
+- **Edit & pause/draft**: edit a queued message before it sends, or pause it / save it as a draft instead of dispatching
 - **Reconnect sync**: queue state syncs on WebSocket reconnection
 - **Concurrent safety**: hardened dispatch concurrency and cleanup semantics, with dispatch timing tuned (3s) to avoid dropping a queued message on a busy CLI
 
@@ -254,7 +255,7 @@ Extensive improvements to the chat and session management experience.
 - **Real-time friend request updates** via socket events
 - **Swipe-to-delete** for feed notifications
 - **Friend search** with flat layout, GitHub connect prompt for users without username
-- **Per-machine session tabs**: the active/inactive split is replaced by per-machine tabs that group sessions by the machine they run on, so multi-machine setups are easier to navigate
+- **Per-machine session tabs**: the active/inactive split is replaced by per-machine tabs that group sessions by the machine they run on, so multi-machine setups are easier to navigate; each tab carries a status dot — orange when a session on that machine needs permission, reflecting the live thinking state — while the aggregate 'all' tab stays dot-free
 - **Device and agent filter dropdowns**: filter session history by machine and agent type
 - **Session preview expand/collapse**: expand messages inline with increased preview limit
 - **Metadata caching**: session listing performance improved via metadata cache

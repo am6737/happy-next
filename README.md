@@ -87,7 +87,7 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 ### Orchestrator
 - Define task dependency graphs (DAGs) with per-task model and working directory
 - Auto-schedule execution across Claude, Codex, and Gemini agents
-- Real-time status badges, activity count, and status-colored progress bars
+- Real-time status badges, an activity count that includes queued (not just running) tasks, and status-colored progress bars
 - Follow up on completed tasks via session resume
 - MCP tool integration with auto-filled working directory
 - Happy CLI auto-installs the orchestrator skill and `/orchestrator` slash commands on startup — fan a task out to parallel or dependency-ordered Claude / Codex / Gemini agents straight from the CLI
@@ -95,6 +95,7 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 ### Pending Message Queue
 - Messages sent while the CLI is busy are queued server-side and auto-dispatched
 - Queue panel UI with image count badges and send-now option
+- Edit a queued message before it sends, or pause it / save it as a draft instead of dispatching
 - Reconnect sync and concurrent dispatch safety, with dispatch timing tuned to avoid dropping a queued message on a busy CLI
 
 ### Multi-Agent (Claude Code + Codex + Gemini)
@@ -184,7 +185,7 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - `/duplicate` command to fork a session from any message, including directly from an AI reply
 - Sending shows an optimistic "Processing…" status immediately, plus a "refreshing" indicator while the message list reloads
 - Message pagination, unread blue dot indicator, compact list view
-- Per-machine session tabs (sessions grouped by the machine they run on), session preview expand/collapse, metadata caching
+- Per-machine session tabs (sessions grouped by the machine they run on), each tab showing a status dot — orange when a session on that machine needs permission, reflecting the live thinking state — while the aggregate 'all' tab stays dot-free; session preview expand/collapse, metadata caching
 - Recent session history pagination for faster initial load
 - Session rename with lock (prevent AI auto-update), search in history
 - Options click-to-send / long-press-to-fill, scroll-to-bottom button

@@ -1,5 +1,14 @@
 # Changelog
 
+## Version 15 - 2026-06-29
+
+Pending messages can now be edited and paused or saved as drafts before they send, machine tabs surface live status dots for sessions that need permission or are thinking, and the CLI orchestrator's activity count now includes queued tasks.
+
+- Pending messages: edit a queued message before it sends, or pause it / save it as a draft instead of dispatching — the pending detail sheet now sizes its text area to fit the content
+- Machine tabs: a machine's tab shows an orange dot when a session on it needs permission, and its status dot reflects the live thinking state; the aggregate 'all' tab no longer shows a dot
+- Orchestrator: the activity count now includes queued tasks, so the badge reflects work waiting to start and not just running agents
+- CLI: Happy CLI updated to v0.5.7
+
 ## Version 14 - 2026-06-26
 
 The Happy CLI gains a built-in orchestrator that fans work out to parallel Claude / Codex / Gemini agents, publicly shared sessions paginate their messages for faster loads, and reliability fixes land for the remote→local terminal handoff and pending-message delivery.

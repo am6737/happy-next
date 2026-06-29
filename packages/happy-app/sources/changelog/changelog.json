@@ -1,6 +1,18 @@
 {
   "entries": [
     {
+      "version": 15,
+      "date": "2026-06-29",
+      "summary": "Pending messages can now be edited and paused or saved as drafts before they send, machine tabs surface live status dots for sessions that need permission or are thinking, and the CLI orchestrator's activity count now includes queued tasks.",
+      "changes": [
+        "Pending messages: edit a queued message before it sends, or pause it / save it as a draft instead of dispatching — the pending detail sheet now sizes its text area to fit the content",
+        "Machine tabs: a machine's tab shows an orange dot when a session on it needs permission, and its status dot reflects the live thinking state; the aggregate 'all' tab no longer shows a dot",
+        "Orchestrator: the activity count now includes queued tasks, so the badge reflects work waiting to start and not just running agents",
+        "CLI: Happy CLI updated to v0.5.7"
+      ],
+      "rawMarkdown": "## Version 15 - 2026-06-29\n\n\nPending messages can now be edited and paused or saved as drafts before they send, machine tabs surface live status dots for sessions that need permission or are thinking, and the CLI orchestrator's activity count now includes queued tasks.\n\n- Pending messages: edit a queued message before it sends, or pause it / save it as a draft instead of dispatching — the pending detail sheet now sizes its text area to fit the content\n- Machine tabs: a machine's tab shows an orange dot when a session on it needs permission, and its status dot reflects the live thinking state; the aggregate 'all' tab no longer shows a dot\n- Orchestrator: the activity count now includes queued tasks, so the badge reflects work waiting to start and not just running agents\n- CLI: Happy CLI updated to v0.5.7"
+    },
+    {
       "version": 14,
       "date": "2026-06-26",
       "summary": "The Happy CLI gains a built-in orchestrator that fans work out to parallel Claude / Codex / Gemini agents, publicly shared sessions paginate their messages for faster loads, and reliability fixes land for the remote→local terminal handoff and pending-message delivery.",
@@ -242,5 +254,5 @@
       "rawMarkdown": "## Version 1 - 2025-05-12\n\n\nWelcome to Happy - your secure, encrypted mobile companion for Claude Code. This inaugural release establishes the foundation for private, powerful AI interactions on the go.\n\n- Implemented end-to-end encrypted session management ensuring complete privacy\n- Integrated intelligent voice assistant with natural conversation capabilities\n- Added experimental file manager with syntax highlighting and tree navigation\n- Built seamless real-time synchronization across all your devices\n- Established native support for iOS, Android, and responsive web interfaces"
     }
   ],
-  "latestVersion": 14
+  "latestVersion": 15
 }
