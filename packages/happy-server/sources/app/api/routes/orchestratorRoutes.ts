@@ -184,7 +184,7 @@ async function queryOrchestratorSessionActivity(
     const rows = await db.orchestratorTask.findMany({
         where: {
             run: { accountId: userId, controllerSessionId, status: { in: ['queued', 'running', 'canceling'] } },
-            status: { in: ['dispatching', 'running'] },
+            status: { in: ['queued', 'dispatching', 'running'] },
         },
         select: {
             id: true,
@@ -2019,7 +2019,7 @@ export function orchestratorRoutes(app: Fastify) {
                         controllerSessionId: { not: null },
                         status: { in: ['queued', 'running', 'canceling'] },
                     },
-                    status: { in: ['dispatching', 'running'] },
+                    status: { in: ['queued', 'dispatching', 'running'] },
                 },
                 select: {
                     id: true,
