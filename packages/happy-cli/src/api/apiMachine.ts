@@ -4,7 +4,6 @@
  */
 
 import { io, Socket } from 'socket.io-client';
-import { homedir } from 'node:os';
 import { logger } from '@/ui/logger';
 import { configuration } from '@/configuration';
 import { isDebug } from '@/utils/env';
@@ -194,7 +193,7 @@ export class ApiMachineClient {
             logger: (msg, data) => logger.debug(msg, data)
         });
 
-        registerCommonHandlers(this.rpcHandlerManager, homedir());
+        registerCommonHandlers(this.rpcHandlerManager, '/');
         registerOpenClawHandlers(this.rpcHandlerManager, {
             key: this.machine.encryptionKey
         });

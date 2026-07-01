@@ -186,9 +186,7 @@ export function registerCommonHandlers(rpcHandlerManager: RpcHandlerManager, wor
         logger.debug('Shell command request:', data.command);
 
         // Validate cwd if provided
-        // Special case: "/" means "use shell's default cwd" (used by CLI detection)
-        // Security: Still validate all other paths to prevent directory traversal
-        if (data.cwd && data.cwd !== '/') {
+        if (data.cwd) {
             const validation = validatePath(data.cwd, workingDirectory);
             if (!validation.valid) {
                 return { success: false, error: validation.error };
@@ -196,11 +194,8 @@ export function registerCommonHandlers(rpcHandlerManager: RpcHandlerManager, wor
         }
 
         try {
-            // Build options with shell enabled by default
-            // Note: ExecOptions doesn't support boolean for shell, but exec() uses the default shell when shell is undefined
-            // If cwd is "/", use undefined to let shell use its default (respects user's PATH)
             const options: ExecOptions = {
-                cwd: data.cwd === '/' ? undefined : data.cwd,
+                cwd: data.cwd || undefined,
                 timeout: data.timeout || 30000, // Default 30 seconds timeout
             };
 

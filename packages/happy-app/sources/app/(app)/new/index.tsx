@@ -823,7 +823,9 @@ function NewSessionWizard() {
         if (!selectedMachineId) return;
         const gitCheck = await machineBash(selectedMachineId, 'git rev-parse --git-dir', selectedPath);
         if (!gitCheck.success) {
-            Modal.alert(t('common.error'), t('newSession.worktree.notGitRepo'));
+            const stderr = gitCheck.stderr?.trim() || '';
+            const isNotRepo = !stderr || stderr.includes('not a git repository');
+            Modal.alert(t('common.error'), isNotRepo ? t('newSession.worktree.notGitRepo') : stderr);
             return;
         }
         const displayName = selectedPath.split('/').filter(Boolean).pop() || 'repo';

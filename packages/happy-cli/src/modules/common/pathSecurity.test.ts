@@ -26,4 +26,18 @@ describe('validatePath', () => {
         expect(validatePath('.', workingDir).valid).toBe(true);
         expect(validatePath(workingDir, workingDir).valid).toBe(true);
     });
+
+    describe('root working directory', () => {
+        it('should allow any absolute path when workingDirectory is /', () => {
+            expect(validatePath('/vol1', '/').valid).toBe(true);
+            expect(validatePath('/vol1/1000/project', '/').valid).toBe(true);
+            expect(validatePath('/home/user/project', '/').valid).toBe(true);
+            expect(validatePath('/etc/passwd', '/').valid).toBe(true);
+        });
+
+        it('should allow root itself', () => {
+            expect(validatePath('/', '/').valid).toBe(true);
+            expect(validatePath('.', '/').valid).toBe(true);
+        });
+    });
 });
