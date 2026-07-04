@@ -11,7 +11,7 @@ const orchestratorTaskSchema = z.object({
   provider: z.enum(['claude', 'codex', 'gemini'])
     .describe('AI agent provider to execute the task.'),
   model: z.string().min(1).max(128).optional()
-    .describe('Model mode for this provider; prefer get_context.data.modelModes[provider]. Use "default" for CLI default.'),
+    .describe('Model mode for this provider; prefer orchestrator_get_context.data.modelModes[provider]. Use "default" for CLI default.'),
   prompt: z.string().min(1).max(65536),
   workingDirectory: z.string().max(512).optional()
     .describe('Absolute path for task execution. Defaults to the controller session working directory from get_context.'),
@@ -38,7 +38,7 @@ export const ORCHESTRATOR_GET_CONTEXT_TOOL_SCHEMA = {
 } as const;
 
 export const ORCHESTRATOR_SUBMIT_TOOL_SCHEMA = {
-  description: 'Start one or more AI child tasks across claude/codex/gemini, in parallel or with dependsOn. Returns immediately; wait for <orchestrator-callback> before pend. Each task prompt must be self-contained.',
+  description: 'Delegate one or more self-contained prompts to AI child tasks across claude/codex/gemini, in parallel or with dependsOn. Returns immediately; wait for <orchestrator-callback> before calling orchestrator_pend.',
   title: 'Orchestrator Submit',
   inputSchema: {
     title: z.string().min(1).max(256).describe('Run title'),
@@ -51,7 +51,7 @@ export const ORCHESTRATOR_SUBMIT_TOOL_SCHEMA = {
 } as const;
 
 export const ORCHESTRATOR_PEND_TOOL_SCHEMA = {
-  description: 'Fetch dispatch status/results. Do not poll after submit; wait for <orchestrator-callback>, then call once with include="all_tasks" and timeoutMs=0. Use earlier only on resume, missing callback, or user-requested progress.',
+  description: 'Fetch dispatch status/results. Do not poll after submit; wait for <orchestrator-callback>, then call once with include="all_tasks" and timeoutMs=0. Call earlier only on resume, missing callback, or user-requested progress.',
   title: 'Orchestrator Pend',
   inputSchema: {
     runId: z.string().describe('Run ID'),
@@ -85,7 +85,7 @@ export const ORCHESTRATOR_CANCEL_TOOL_SCHEMA = {
 } as const;
 
 export const ORCHESTRATOR_SEND_MESSAGE_TOOL_SCHEMA = {
-  description: 'Send a follow-up to a child task session, usually for feedback/fix rounds.',
+  description: 'Send a follow-up to a child task session, usually to resume a completed/failed task for feedback or fix rounds.',
   title: 'Orchestrator Send Message',
   inputSchema: {
     taskId: z.string().describe('Task ID to resume'),
