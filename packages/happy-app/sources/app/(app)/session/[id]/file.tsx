@@ -52,7 +52,7 @@ function parsePositiveInt(value: string | string[] | undefined): number | undefi
 }
 
 // Diff display component
-const DiffDisplay: React.FC<{ diffContent: string }> = ({ diffContent }) => {
+const DiffDisplay: React.FC<{ diffContent: string; selectable?: boolean }> = ({ diffContent, selectable }) => {
     const { theme } = useUnistyles();
     const lines = diffContent.split('\n');
 
@@ -90,7 +90,7 @@ const DiffDisplay: React.FC<{ diffContent: string }> = ({ diffContent }) => {
                             borderLeftColor: line.startsWith('+') && !line.startsWith('+++') ? theme.colors.diff.addedBorder : theme.colors.diff.removedBorder
                         }}
                     >
-                        <Text style={lineStyle}>
+                        <Text style={lineStyle} selectable={selectable}>
                             {line || ' '}
                         </Text>
                     </View>
@@ -724,7 +724,7 @@ export default function FileScreen() {
                             fontSize: 14,
                             color: theme.colors.textSecondary,
                             ...Typography.mono(),
-                        }} numberOfLines={1}>
+                        }} numberOfLines={1} selectable={Platform.OS === 'web'}>
                             {displayPath}
                         </Text>
                     </Pressable>
@@ -831,7 +831,7 @@ export default function FileScreen() {
                                     <GestureDetector gesture={longPressGesture}>
                                         <View>
                                             {displayMode === 'diff' && diffContent ? (
-                                                <DiffDisplay diffContent={diffContent} />
+                                                <DiffDisplay diffContent={diffContent} selectable={false} />
                                             ) : displayMode === 'file' && fileContent?.content ? (
                                                 <SimpleSyntaxHighlighter
                                                     code={fileContent.content}
@@ -853,7 +853,7 @@ export default function FileScreen() {
                                 ) : (
                                     <>
                                         {displayMode === 'diff' && diffContent ? (
-                                            <DiffDisplay diffContent={diffContent} />
+                                            <DiffDisplay diffContent={diffContent} selectable={true} />
                                         ) : displayMode === 'file' && fileContent?.content ? (
                                             <SimpleSyntaxHighlighter
                                                 code={fileContent.content}
