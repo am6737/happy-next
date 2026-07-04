@@ -47,6 +47,7 @@ const {
     state,
     emitToSessionSubscribersMock,
     canSendMessagesMock,
+    canViewSessionMock,
     replayFirstMessageToCliWhenConnectedMock,
     dbMock,
     resetState,
@@ -537,12 +538,16 @@ const {
     const canSendMessagesMock = vi.fn(async (userId: string, sessionId: string) => {
         return state.sessions.some((session) => session.id === sessionId && session.accountId === userId);
     });
+    const canViewSessionMock = vi.fn(async (userId: string, sessionId: string) => {
+        return state.sessions.some((session) => session.id === sessionId && session.accountId === userId);
+    });
     const replayFirstMessageToCliWhenConnectedMock = vi.fn(async () => false);
 
     return {
         state,
         emitToSessionSubscribersMock,
         canSendMessagesMock,
+        canViewSessionMock,
         replayFirstMessageToCliWhenConnectedMock,
         dbMock,
         resetState,
@@ -600,7 +605,8 @@ vi.mock("@/app/events/eventRouter", () => ({
 }));
 
 vi.mock("@/app/share/accessControl", () => ({
-    canSendMessages: canSendMessagesMock
+    canSendMessages: canSendMessagesMock,
+    canViewSession: canViewSessionMock
 }));
 
 vi.mock("./firstMessageReplay", () => ({
@@ -641,6 +647,7 @@ describe("v3SessionRoutes", () => {
         resetState();
         emitToSessionSubscribersMock.mockClear();
         canSendMessagesMock.mockClear();
+        canViewSessionMock.mockClear();
         replayFirstMessageToCliWhenConnectedMock.mockClear();
     });
 
@@ -1101,6 +1108,30 @@ describe("v3SessionRoutes", () => {
             "pinned-old",
             "normal-old",
         ]);
+    });
+
+    it("lets a view-only sharee list pending messages without edit access", async () => {
+        // Session owned by user-1; user-2 has view access but no edit (can't send).
+        // GET must succeed on view access alone — gating it behind edit would 404
+        // the sharee, and the client then retries the permanent 404 forever.
+        seedSession({ id: "session-1", accountId: "user-1", seq: 0 });
+        seedPendingMessage({
+            sessionId: "session-1",
+            localId: "queued",
+            content: { t: "encrypted", c: "queued" },
+            createdAt: new Date("2026-03-12T10:00:00.000Z")
+        });
+        canViewSessionMock.mockResolvedValueOnce(true);
+
+        app = await createApp();
+        const response = await app.inject({
+            method: "GET",
+            url: "/v3/sessions/session-1/pending-messages",
+            headers: { "x-user-id": "user-2" }
+        });
+
+        expect(response.statusCode).toBe(200);
+        expect(response.json().messages.map((message: any) => message.localId)).toEqual(["queued"]);
     });
 
     it("routes /send to queued mode when pending queue is non-empty", async () => {

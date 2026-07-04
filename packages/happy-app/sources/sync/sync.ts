@@ -752,6 +752,14 @@ class Sync {
             }
         );
 
+        // A 404 is permanent here (session gone / share revoked / no access):
+        // throwing would make InvalidateSync's infinite backoff retry it forever.
+        // Treat it as "no pending queue" — clear locally and settle the loop.
+        if (response.status === 404) {
+            storage.getState().applyPendingMessages(sessionId, []);
+            return;
+        }
+
         if (!response.ok) {
             throw new Error(`Failed to fetch pending messages: ${response.status}`);
         }
