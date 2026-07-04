@@ -1,5 +1,27 @@
 import { z } from 'zod';
 
+export const VOICE_PERMISSION_MODES_BY_AGENT = {
+    claude: ['default', 'acceptEdits', 'plan', 'auto', 'bypassPermissions'],
+    codex: ['default', 'read-only', 'on-failure', 'full-auto'],
+    gemini: ['default', 'auto_edit', 'plan', 'yolo'],
+} as const;
+
+export type VoicePermissionAgent = keyof typeof VOICE_PERMISSION_MODES_BY_AGENT;
+export type VoicePermissionMode = typeof VOICE_PERMISSION_MODES_BY_AGENT[VoicePermissionAgent][number];
+
+export function resolveVoicePermissionAgent(flavor: string | null | undefined): VoicePermissionAgent {
+    if (flavor === 'codex' || flavor === 'gemini') return flavor;
+    return 'claude';
+}
+
+export function getVoicePermissionModesForAgent(agent: VoicePermissionAgent): readonly string[] {
+    return VOICE_PERMISSION_MODES_BY_AGENT[agent];
+}
+
+export function isVoicePermissionModeForAgent(agent: VoicePermissionAgent, mode: string): mode is VoicePermissionMode {
+    return getVoicePermissionModesForAgent(agent).includes(mode);
+}
+
 export const messageHappyCodeParametersSchema = z.object({
     message: z.string().min(1, 'Message cannot be empty'),
 });

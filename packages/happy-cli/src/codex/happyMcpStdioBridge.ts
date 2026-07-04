@@ -2,7 +2,8 @@
  * Happy MCP STDIO Bridge
  *
  * Minimal STDIO MCP server exposing Happy tools
- * (`change_title`, `preview_html`, `orchestrator_*`).
+ * (`change_title`, `preview_html`, `orchestrator_*`) for controller sessions.
+ * Orchestrator worker sessions expose no Happy tools to avoid recursive orchestration or UI side effects.
  * On invocation it forwards tool calls to an existing Happy HTTP MCP server
  * using the StreamableHTTPClientTransport.
  *
@@ -72,7 +73,7 @@ async function main() {
     name: 'Happy MCP Bridge',
     version: '1.0.0',
   });
-  const enableOrchestratorTools = shouldEnableOrchestratorTools();
+  const enableHappyTools = shouldEnableOrchestratorTools();
 
   // Helper to register a tool that forwards calls to the HTTP MCP server
   function registerForwardedTool(
@@ -95,24 +96,24 @@ async function main() {
     });
   }
 
-  registerForwardedTool('change_title', {
-    description: 'Change the title of the current chat session',
-    title: 'Change Chat Title',
-    inputSchema: {
-      title: z.string().describe('The new title for the chat session'),
-    },
-  });
+  if (enableHappyTools) {
+    registerForwardedTool('change_title', {
+      description: 'Change the title of the current chat session',
+      title: 'Change Chat Title',
+      inputSchema: {
+        title: z.string().describe('The new title for the chat session'),
+      },
+    });
 
-  registerForwardedTool('preview_html', {
-    description: 'Preview an HTML page in the client app. The HTML must be a complete, self-contained document with all CSS and JS inlined.',
-    title: 'Preview HTML',
-    inputSchema: {
-      html: z.string().describe('Complete self-contained HTML document string'),
-      title: z.string().optional().describe('Display title for the preview'),
-    },
-  });
+    registerForwardedTool('preview_html', {
+      description: 'Preview an HTML page in the client app. The HTML must be a complete, self-contained document with all CSS and JS inlined.',
+      title: 'Preview HTML',
+      inputSchema: {
+        html: z.string().describe('Complete self-contained HTML document string'),
+        title: z.string().optional().describe('Display title for the preview'),
+      },
+    });
 
-  if (enableOrchestratorTools) {
     registerForwardedTool('orchestrator_get_context', ORCHESTRATOR_GET_CONTEXT_TOOL_SCHEMA);
     registerForwardedTool('orchestrator_submit', ORCHESTRATOR_SUBMIT_TOOL_SCHEMA);
     registerForwardedTool('orchestrator_pend', ORCHESTRATOR_PEND_TOOL_SCHEMA);

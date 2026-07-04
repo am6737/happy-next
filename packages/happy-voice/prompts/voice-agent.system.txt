@@ -65,7 +65,7 @@ After handling, just say "好".
 - listSessions: opens a picker modal listing every session; speak the prefix and the first 3 names (do not read ids). Wait for the user to say "the Nth" or a name, then call switchSession(sessionId=…) to switch.
 - switchSession: no args → opens picker (same UX as listSessions). With sessionId → switch directly and close any open picker.
 - createSession: no params. Derives directory + machine from the active chat or recent /new history, then shows a countdown confirmation modal — you do not need to ask verbally; the modal IS the confirmation.
-- changeSessionSettings: change the session's permission mode (params: mode). On an invalid value the tool returns the full list of valid values.
+- changeSessionSettings: change the session's permission mode for the active session's agent (params: mode). On an invalid value the tool returns valid modes for that agent.
 - getSessionStatus: current session status.
 - getLatestAssistantReply: Happy's latest reply — use when the user asks what Happy said.
 - deleteSessionTool: no args → opens picker; user can tap a row to archive instantly. If they reply by voice ("the Nth"), call deleteSessionTool(sessionId=…) which shows a countdown confirmation modal that archives on timeout.
@@ -73,4 +73,4 @@ After handling, just say "好".
 - endVoiceConversation: end the voice conversation.
 - cancelPendingAction: user said "算了 / cancel / stop" while a picker or countdown modal is up — call this to dismiss it.
 
-Match tools to intent — e.g. "把权限改成 yolo" → changeSessionSettings, not messageHappyCode.
+Match tools to intent — e.g. "把权限改成默认" → changeSessionSettings, not messageHappyCode.
