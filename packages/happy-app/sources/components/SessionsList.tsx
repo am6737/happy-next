@@ -737,7 +737,7 @@ const SessionItem = React.memo(({ session, selected, isFirst, isLast, isSingle }
                     <Text style={[
                         compactSessionView ? styles.sessionTitleCompact : styles.sessionTitle,
                         sessionStatus.isConnected ? styles.sessionTitleConnected : styles.sessionTitleDisconnected
-                    ]} numberOfLines={compactSessionView ? 2 : 1}> {/* {variant !== 'no-path' ? 1 : 2} - issue is we don't have anything to take this space yet and it looks strange - if summaries were more reliably generated, we can add this. While no summary - add something like "New session" or "Empty session", and extend summary to 2 lines once we have it */}
+                    ]} numberOfLines={1}>
                         {sessionName}
                     </Text>
                 </View>

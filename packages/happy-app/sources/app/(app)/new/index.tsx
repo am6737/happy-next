@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, Platform, Pressable, useWindowDimensions, ScrollView, TextInput } from 'react-native';
 import Constants from 'expo-constants';
 import { Typography } from '@/constants/Typography';
-import { useAllMachines, storage, useSessionModeLastUsed, useSetting, useSettingMutable, useSessions } from '@/sync/storage';
+import { useAllMachines, storage, useLocalSetting, useSessionModeLastUsed, useSetting, useSettingMutable, useSessions } from '@/sync/storage';
 import { Ionicons, Octicons } from '@expo/vector-icons';
 import { ItemGroup } from '@/components/ItemGroup';
 import { Item } from '@/components/Item';
@@ -78,6 +78,11 @@ const transformProfileToEnvironmentVars = (profile: AIBackendProfile, agentType:
     // getProfileEnvironmentVariables already returns ALL env vars from profile
     // including custom environmentVariables array and provider-specific configs
     return getProfileEnvironmentVariables(profile);
+};
+
+
+const isConcreteSessionMachineTab = (tab: string | null): tab is string => {
+    return !!tab && tab !== 'all' && tab !== 'shared' && tab !== 'sharedByMe';
 };
 
 // Helper function to get the most recent path for a machine
@@ -297,6 +302,7 @@ function NewSessionWizard() {
     // Settings and state
     const recentMachinePaths = useSetting('recentMachinePaths');
     const lastUsedAgent = useSetting('lastUsedAgent');
+    const sessionListSelectedTab = useLocalSetting('sessionListSelectedTab');
 
     // A/B Test Flag - determines which wizard UI to show
     // Control A (false): Simpler AgentInput-driven layout
@@ -405,6 +411,8 @@ function NewSessionWizard() {
     }, [agentType]);
 
     // Session details state
+    const tabDefaultSelectionRef = React.useRef(false);
+    const hasManualMachineOrPathSelectionRef = React.useRef(false);
     const [selectedMachineId, setSelectedMachineId] = React.useState<string | null>(() => {
         if (tempSessionData?.machineId && machines.find(m => m.id === tempSessionData.machineId)) {
             return tempSessionData.machineId;
@@ -415,7 +423,12 @@ function NewSessionWizard() {
         if (dooTaskProjectRecentConfig?.machineId) {
             return dooTaskProjectRecentConfig.machineId;
         }
-        // First try the persisted draft (saved immediately on selection)
+        // When launching from the session list, prefer the currently selected concrete machine tab.
+        if (!tempSessionData && isConcreteSessionMachineTab(sessionListSelectedTab) && machines.find(m => m.id === sessionListSelectedTab)) {
+            tabDefaultSelectionRef.current = true;
+            return sessionListSelectedTab;
+        }
+        // Then try the persisted draft (saved immediately on selection).
         if (!tempSessionData && persistedDraft?.selectedMachineId && machines.find(m => m.id === persistedDraft.selectedMachineId)) {
             return persistedDraft.selectedMachineId;
         }
@@ -482,7 +495,12 @@ function NewSessionWizard() {
         if (dooTaskProjectRecentConfig?.path) {
             return dooTaskProjectRecentConfig.path;
         }
-        // First try the persisted draft (saved immediately on selection)
+        // If the machine comes from the selected session-list tab, mirror manual machine selection:
+        // switch the path to that machine's most recent path instead of keeping a stale draft path.
+        if (!tempSessionData && isConcreteSessionMachineTab(sessionListSelectedTab) && machines.some(m => m.id === sessionListSelectedTab)) {
+            return getRecentPathForMachine(sessionListSelectedTab, recentMachinePaths);
+        }
+        // Then try the persisted draft (saved immediately on selection)
         if (!tempSessionData && persistedDraft?.selectedPath) {
             return persistedDraft.selectedPath;
         }
@@ -498,7 +516,10 @@ function NewSessionWizard() {
     React.useEffect(() => {
         if (selectedMachineId !== null || machines.length === 0) return;
         let pick: string | null = null;
-        if (persistedDraft?.selectedMachineId && machines.some(m => m.id === persistedDraft.selectedMachineId)) {
+        if (isConcreteSessionMachineTab(sessionListSelectedTab) && machines.some(m => m.id === sessionListSelectedTab)) {
+            pick = sessionListSelectedTab;
+            tabDefaultSelectionRef.current = true;
+        } else if (persistedDraft?.selectedMachineId && machines.some(m => m.id === persistedDraft.selectedMachineId)) {
             pick = persistedDraft.selectedMachineId;
         } else {
             for (const recent of recentMachinePaths) {
@@ -510,10 +531,11 @@ function NewSessionWizard() {
             if (!pick) pick = machines[0].id;
         }
         setSelectedMachineId(pick);
-        if (!selectedPath) {
+        const shouldMirrorTabMachinePath = pick === sessionListSelectedTab && isConcreteSessionMachineTab(sessionListSelectedTab);
+        if (!selectedPath || shouldMirrorTabMachinePath) {
             setSelectedPath(getRecentPathForMachine(pick, recentMachinePaths));
         }
-    }, [machines, selectedMachineId, selectedPath, recentMachinePaths, persistedDraft]);
+    }, [machines, selectedMachineId, selectedPath, recentMachinePaths, persistedDraft, sessionListSelectedTab]);
 
     React.useEffect(() => {
         if (!tempSessionData || tempSessionData.externalContext?.source !== 'dootask') return;
@@ -627,6 +649,8 @@ function NewSessionWizard() {
             return;
         }
         if (machineIdParam !== selectedMachineId) {
+            hasManualMachineOrPathSelectionRef.current = true;
+            tabDefaultSelectionRef.current = false;
             setSelectedMachineId(machineIdParam);
             const bestPath = getRecentPathForMachine(machineIdParam, recentMachinePaths);
             setSelectedPath(bestPath);
@@ -640,6 +664,8 @@ function NewSessionWizard() {
         }
         const trimmedPath = pathParam.trim();
         if (trimmedPath && trimmedPath !== selectedPath) {
+            hasManualMachineOrPathSelectionRef.current = true;
+            tabDefaultSelectionRef.current = false;
             setSelectedPath(trimmedPath);
         }
     }, [pathParam, selectedPath]);
@@ -1529,10 +1555,11 @@ function NewSessionWizard() {
             clearTimeout(draftSaveTimerRef.current);
         }
         draftSaveTimerRef.current = setTimeout(() => {
+            const shouldKeepTabDefaultOutOfDraft = tabDefaultSelectionRef.current && !hasManualMachineOrPathSelectionRef.current;
             saveNewSessionDraft({
                 input: sessionPrompt,
-                selectedMachineId,
-                selectedPath,
+                selectedMachineId: shouldKeepTabDefaultOutOfDraft ? (persistedDraft?.selectedMachineId ?? null) : selectedMachineId,
+                selectedPath: shouldKeepTabDefaultOutOfDraft ? (persistedDraft?.selectedPath ?? null) : selectedPath,
                 agentType,
                 permissionMode,
                 sessionType,
