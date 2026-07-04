@@ -3,7 +3,7 @@ import { z } from 'zod';
 const orchestratorTargetTypeSchema = z.preprocess(
   (value) => value === 'machine' ? 'machine_id' : value,
   z.enum(['current_machine', 'machine_id']),
-).describe('Dispatch target type. Use "current_machine" for this machine, or "machine_id" for explicit machine routing. Alias "machine" is accepted and normalized to "machine_id".');
+).describe('"current_machine" or "machine_id"; alias "machine" normalizes to "machine_id".');
 
 const orchestratorTaskSchema = z.object({
   taskKey: z.string().min(1).max(128).optional(),
@@ -11,12 +11,12 @@ const orchestratorTaskSchema = z.object({
   provider: z.enum(['claude', 'codex', 'gemini'])
     .describe('AI agent provider to execute the task.'),
   model: z.string().min(1).max(128).optional()
-    .describe('Optional model mode for the selected provider. Prefer values from orchestrator_get_context.data.modelModes[provider]. Use "default" to follow CLI defaults.'),
+    .describe('Model mode for this provider; prefer get_context.data.modelModes[provider]. Use "default" for CLI default.'),
   prompt: z.string().min(1).max(65536),
   workingDirectory: z.string().max(512).optional()
     .describe('Absolute path for task execution. Defaults to the controller session working directory from get_context.'),
   dependsOn: z.array(z.string().min(1).max(128)).max(31).optional()
-    .describe('Optional list of prerequisite taskKeys (use taskKey, not taskId). This controls execution order only: the task starts after all listed tasks complete, but receives NONE of their output or context.'),
+    .describe('Prerequisite taskKeys, not taskIds. Ordering only; no output/context is passed.'),
   retry: z.object({
     maxAttempts: z.number().int().min(1).max(10).optional()
       .describe('Maximum attempts for this task (including first run).'),
@@ -38,7 +38,7 @@ export const ORCHESTRATOR_GET_CONTEXT_TOOL_SCHEMA = {
 } as const;
 
 export const ORCHESTRATOR_SUBMIT_TOOL_SCHEMA = {
-  description: 'Delegate to AI agents — dispatch one or more prompts across providers (claude/codex/gemini) to run in parallel or with dependency chains. Use this to assign, hand off, distribute, or orchestrate work across AI providers. Each submission creates a "dispatch" that can be tracked, cancelled, or resumed. Returns immediately. You will receive an <orchestrator-callback> when the run completes. The prompt for each task should be a self-contained task contract (see the orchestrator skill, rule 2).',
+  description: 'Start one or more AI child tasks across claude/codex/gemini, in parallel or with dependsOn. Returns immediately; wait for <orchestrator-callback> before pend. Each task prompt must be self-contained.',
   title: 'Orchestrator Submit',
   inputSchema: {
     title: z.string().min(1).max(256).describe('Run title'),
@@ -51,7 +51,7 @@ export const ORCHESTRATOR_SUBMIT_TOOL_SCHEMA = {
 } as const;
 
 export const ORCHESTRATOR_PEND_TOOL_SCHEMA = {
-  description: 'Block until a dispatch finishes, or report progress on demand. Usually unneeded after submit — a completed run delivers an <orchestrator-callback> automatically; on that callback, call this once with include="all_tasks" and timeoutMs=0 to fetch the terminal result. Only use it if the callback never arrives, on resume, or when the user asks for progress.',
+  description: 'Fetch dispatch status/results. Do not poll after submit; wait for <orchestrator-callback>, then call once with include="all_tasks" and timeoutMs=0. Use earlier only on resume, missing callback, or user-requested progress.',
   title: 'Orchestrator Pend',
   inputSchema: {
     runId: z.string().describe('Run ID'),
@@ -85,7 +85,7 @@ export const ORCHESTRATOR_CANCEL_TOOL_SCHEMA = {
 } as const;
 
 export const ORCHESTRATOR_SEND_MESSAGE_TOOL_SCHEMA = {
-  description: 'Resume a completed or failed dispatch by sending a follow-up message to its session.',
+  description: 'Send a follow-up to a child task session, usually for feedback/fix rounds.',
   title: 'Orchestrator Send Message',
   inputSchema: {
     taskId: z.string().describe('Task ID to resume'),

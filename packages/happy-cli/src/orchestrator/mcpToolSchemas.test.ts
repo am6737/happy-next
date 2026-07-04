@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { ORCHESTRATOR_SUBMIT_TOOL_SCHEMA } from './mcpToolSchemas';
+import {
+  ORCHESTRATOR_PEND_TOOL_SCHEMA,
+  ORCHESTRATOR_SEND_MESSAGE_TOOL_SCHEMA,
+  ORCHESTRATOR_SUBMIT_TOOL_SCHEMA,
+} from './mcpToolSchemas';
 
 describe('orchestrator mcp tool schemas', () => {
   it('accepts target.type machine alias in submit schema', () => {
@@ -23,15 +27,22 @@ describe('orchestrator mcp tool schemas', () => {
     expect(parsed.tasks[0].target?.type).toBe('machine_id');
   });
 
-  it('adds guidance descriptions for high-risk fields', () => {
+  it('keeps concise guidance descriptions for high-risk fields', () => {
     const submitSchema = ORCHESTRATOR_SUBMIT_TOOL_SCHEMA.inputSchema;
     const taskSchema = submitSchema.tasks.element;
     const targetSchema = taskSchema.shape.target.unwrap();
 
+    expect(ORCHESTRATOR_SUBMIT_TOOL_SCHEMA.description).toContain('Returns immediately');
+    expect(ORCHESTRATOR_SUBMIT_TOOL_SCHEMA.description).toContain('self-contained');
+    expect(ORCHESTRATOR_PEND_TOOL_SCHEMA.description).toContain('Do not poll after submit');
+    expect(ORCHESTRATOR_PEND_TOOL_SCHEMA.description).toContain('include="all_tasks"');
+    expect(ORCHESTRATOR_SEND_MESSAGE_TOOL_SCHEMA.description).toContain('child task session');
     expect(taskSchema.shape.provider.description).toContain('provider');
-    expect(taskSchema.shape.model.description).toContain('modelModes[provider]');
+    expect(taskSchema.shape.model.description).toContain('get_context.data.modelModes[provider]');
     expect(taskSchema.shape.model.description).toContain('"default"');
-    expect(targetSchema.shape.type.description).toContain('Alias "machine" is accepted');
+    expect(taskSchema.shape.dependsOn.description).toContain('taskKeys, not taskIds');
+    expect(taskSchema.shape.dependsOn.description).toContain('no output/context');
+    expect(targetSchema.shape.type.description).toContain('alias "machine"');
     expect(submitSchema.controllerSessionId.description).toContain('Defaults to current MCP session');
   });
 });

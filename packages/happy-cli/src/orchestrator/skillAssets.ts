@@ -56,6 +56,9 @@ Commander rules (none are in the tool descriptions, but they decide whether dele
    agent sees none of this session's history or the files you have read, so restate every boundary
    inside its own prompt. Leave how to do it to the agent — do not micromanage.
 
+   Contract template when useful: Objective; Acceptance criteria; Scope; Inputs; Do not touch;
+   Evidence; Handoff.
+
 3. **Decide how many agents by scale, with concrete anchors.** A simple, well-defined task = 1
    agent; parallel review or comparison = 2–4; only genuinely large work = 5+, each with a distinct
    assignment. Do not over-spawn on simple tasks.
@@ -95,15 +98,15 @@ Commander rules (none are in the tool descriptions, but they decide whether dele
 9. **Synthesize, do not concatenate.** Reconcile the agents' outputs into one coherent result for
    the user, resolving conflicts yourself instead of stacking them up.
 
-**When not to delegate:** multi-agent is safest for parallel read/research work — parallel review,
-multi-provider comparison, research and exploration. Coding is worth delegating only when it splits
-into genuinely independent modules (see the one-file-one-owner rule); tightly-coupled or
-decision-entangled coding, strictly sequential steps, and deep dependency chains stay in the main
-session — forcing those into a long \`dependsOn\` chain usually costs more than it saves. Also note
-N agents ≈ N× usage, so split only as much as the work needs.
+**When not to delegate:** multi-agent fits independent, clearly bounded work — parallel review,
+multi-provider comparison, research/exploration, and coding split into genuinely independent modules
+(see the one-file-one-owner rule). Keep tightly-coupled or decision-entangled coding, strictly
+sequential steps, and deep dependency chains in the main session — forcing those into a long
+\`dependsOn\` chain usually costs more than it saves. Also note N agents ≈ N× usage, so split only as
+much as the work needs.
 
 Confirm the plan before the first batch and before any large fan-out (several agents or
-wide-reaching changes); small, clearly-scoped follow-ups may proceed without re-confirming.
+wide-reaching changes). For small, clearly-scoped follow-ups, proceed without re-confirming.
 
 ---
 
