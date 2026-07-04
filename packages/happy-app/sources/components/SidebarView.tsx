@@ -58,6 +58,7 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
         fontSize: 17,
         fontWeight: '600',
         color: theme.colors.header.tint,
+        whiteSpace: Platform.select({ web: 'nowrap', default: undefined }),
         ...Typography.default('semiBold'),
     },
     statusContainer: {
@@ -130,7 +131,11 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
     },
 }));
 
-export const SidebarView = React.memo(() => {
+type SidebarViewProps = {
+    sidebarWidth?: number;
+};
+
+export const SidebarView = React.memo((props: SidebarViewProps) => {
     const styles = stylesheet;
     const { theme } = useUnistyles();
     const safeArea = useSafeAreaInsets();
@@ -186,7 +191,7 @@ export const SidebarView = React.memo(() => {
     // Calculate sidebar width and determine title positioning
     // Uses same formula as SidebarNavigator.tsx:18 for consistency
     const { width: windowWidth, height: windowHeight } = useWindowDimensions();
-    const sidebarWidth = Math.min(Math.max(Math.floor(windowWidth * 0.3), 250), 360);
+    const sidebarWidth = props.sidebarWidth ?? Math.min(Math.max(Math.floor(windowWidth * 0.3), 250), 360);
     // 3 icons (108px total), threshold 328px → left-justify below ~340px
     const shouldLeftJustify = sidebarWidth < 340 || !!dootaskProfile;
 
@@ -216,7 +221,17 @@ export const SidebarView = React.memo(() => {
     // Title content used in both centered and left-justified modes (DRY)
     const titleContent = (
         <>
-            <Text style={styles.titleText}>{t('sidebar.sessionsTitle')}</Text>
+            <Text
+                style={styles.titleText}
+                numberOfLines={1}
+                ref={(el: any) => {
+                    if (Platform.OS === 'web' && el) {
+                        el.title = t('sidebar.sessionsTitle');
+                    }
+                }}
+            >
+                {t('sidebar.sessionsTitle')}
+            </Text>
             {connectionStatus.text && (
                 <View style={styles.statusContainer}>
                     <StatusDot

@@ -465,6 +465,11 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder }: { sessi
                             sessionStatus.isConnected ? styles.sessionTitleConnected : styles.sessionTitleDisconnected
                         ]}
                         numberOfLines={1}
+                        ref={(el: any) => {
+                            if (Platform.OS === 'web' && el) {
+                                el.title = sessionName;
+                            }
+                        }}
                     >
                         {sessionName}
                     </Text>

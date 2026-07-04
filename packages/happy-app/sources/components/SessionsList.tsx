@@ -737,7 +737,11 @@ const SessionItem = React.memo(({ session, selected, isFirst, isLast, isSingle }
                     <Text style={[
                         compactSessionView ? styles.sessionTitleCompact : styles.sessionTitle,
                         sessionStatus.isConnected ? styles.sessionTitleConnected : styles.sessionTitleDisconnected
-                    ]} numberOfLines={1}>
+                    ]} numberOfLines={1} ref={(el: any) => {
+                        if (Platform.OS === 'web' && el) {
+                            el.title = sessionName;
+                        }
+                    }}>
                         {sessionName}
                     </Text>
                 </View>
