@@ -41,7 +41,9 @@ import { GeminiDiffProcessor } from '@/gemini/utils/diffProcessor';
 import type { GeminiMode, CodexMessagePayload } from '@/gemini/types';
 import type { ImageContent, PermissionMode } from '@/api/types';
 import { formatMessageForGemini } from '@/utils/formatImageMessage';
-import { GEMINI_MODEL_ENV, DEFAULT_GEMINI_MODEL, getFirstTurnInstruction } from '@/gemini/constants';
+import { GEMINI_MODEL_ENV, DEFAULT_GEMINI_MODEL } from '@/gemini/constants';
+import { getFirstTurnInstruction } from '@/orchestrator/firstTurnInstruction';
+import { buildGeminiFirstTurnPrompt } from '@/gemini/prompt';
 import {
   readGeminiLocalConfig,
   saveGeminiModelToConfig,
@@ -256,7 +258,7 @@ export async function runGemini(opts: {
 
   // Track if this is the first message to include system-level guidance once.
   let isFirstMessage = true;
-  const firstTurnInstruction = getFirstTurnInstruction(process.env, true);
+  const firstTurnInstruction = getFirstTurnInstruction(process.env, { includeOrchestrator: true });
 
   session.onUserMessage((message) => {
     // Resolve permission mode (validate) - same as Codex
@@ -320,15 +322,14 @@ export async function runGemini(opts: {
         logger.debug(`[Gemini] Received mixed message with ${images.length} image(s)`);
     }
 
-    // Build the full prompt: prepend system-level guidance on first message only
+    // Build the full prompt: put system-like guidance before the user message on first turn.
     let fullPrompt = originalUserMessage;
     if (isFirstMessage) {
-      if (message.meta?.appendSystemPrompt) {
-        fullPrompt = message.meta.appendSystemPrompt + '\n\n' + fullPrompt;
-      }
-      if (firstTurnInstruction) {
-        fullPrompt = fullPrompt + '\n\n' + firstTurnInstruction;
-      }
+      fullPrompt = buildGeminiFirstTurnPrompt({
+        appendSystemPrompt: message.meta?.appendSystemPrompt,
+        firstTurnInstruction,
+        userMessage: originalUserMessage,
+      });
       isFirstMessage = false;
     }
 

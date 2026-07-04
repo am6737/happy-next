@@ -24,7 +24,7 @@ import { syncOrchestratorAssets } from '@/orchestrator/skillSync';
 import { MessageBuffer } from "@/ui/ink/messageBuffer";
 import { CodexDisplay } from "@/ui/ink/CodexDisplay";
 // trimIdent not currently used
-import { getFirstTurnInstruction } from '@/gemini/constants';
+import { getFirstTurnInstruction } from '@/orchestrator/firstTurnInstruction';
 import { notifyDaemonSessionStarted } from "@/daemon/controlClient";
 import { registerKillSessionHandler } from "@/claude/registerKillSessionHandler";
 import { inspect } from 'node:util';

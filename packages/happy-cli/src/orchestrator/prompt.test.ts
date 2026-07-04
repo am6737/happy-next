@@ -36,7 +36,7 @@ describe('orchestrator prompt helpers', () => {
     expect(controller).toContain('# Chat title');
     expect(controller).not.toContain('# Orchestrator');
 
-    const withOrchestrator = getBaseSystemPrompt({} as NodeJS.ProcessEnv, true);
+    const withOrchestrator = getBaseSystemPrompt({} as NodeJS.ProcessEnv, { includeOrchestrator: true });
     expect(withOrchestrator).toContain('# Chat title');
     expect(withOrchestrator).toContain('# Orchestrator');
 

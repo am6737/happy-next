@@ -45,16 +45,20 @@ export function buildFirstTurnToolingInstruction(
   return `${baseInstruction}\n\n${orchestratorInstruction}`;
 }
 
+export type BaseSystemPromptOptions = {
+  includeOrchestrator?: boolean;
+};
+
 export function getBaseSystemPrompt(
   env: NodeJS.ProcessEnv = process.env,
-  includeOrchestrator: boolean = false,
+  options: BaseSystemPromptOptions = {},
 ): string | null {
   if (!shouldEnableOrchestratorTools(env)) {
     return null;
   }
   // claude/codex discover the orchestrator via the synced skill, so their system prompt stays lean
   // (chat title only). Gemini has no skill sync, so it opts in to keep orchestrator guidance here.
-  if (!includeOrchestrator) {
+  if (!options.includeOrchestrator) {
     return CHAT_TITLE_INSTRUCTION;
   }
   return buildFirstTurnToolingInstruction(CHAT_TITLE_INSTRUCTION, env);
