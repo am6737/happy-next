@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { claudeCliPath } from '@/claude/claudeLocal';
+import { CODEX_PACKAGE } from '@/codex/package';
 import { logger } from '@/ui/logger';
 import { MODEL_MODE_DEFAULT, isModelModeForAgent, parseCodexModelMode, parseClaudeModelMode } from 'happy-wire';
 import {
@@ -109,7 +110,7 @@ export function buildSpawnPlan(
       };
     }
     case 'codex': {
-      const codexArgs = ['-y', '@openai/codex@0.133.0', 'exec', '--dangerously-bypass-approvals-and-sandbox'];
+      const codexArgs = ['-y', CODEX_PACKAGE, 'exec', '--dangerously-bypass-approvals-and-sandbox'];
       if (executionType === 'resume') {
         codexArgs.push('resume', childSessionId!, prompt);
       } else {
