@@ -38,7 +38,7 @@ export const ORCHESTRATOR_GET_CONTEXT_TOOL_SCHEMA = {
 } as const;
 
 export const ORCHESTRATOR_SUBMIT_TOOL_SCHEMA = {
-  description: 'Delegate to AI agents — dispatch one or more prompts across providers (claude/codex/gemini) to run in parallel or with dependency chains. Use this to assign, hand off, distribute, or orchestrate work across AI providers. Each submission creates a "dispatch" that can be tracked, cancelled, or resumed. Returns immediately. You will receive an <orchestrator-callback> when the run completes.',
+  description: 'Delegate to AI agents — dispatch one or more prompts across providers (claude/codex/gemini) to run in parallel or with dependency chains. Use this to assign, hand off, distribute, or orchestrate work across AI providers. Each submission creates a "dispatch" that can be tracked, cancelled, or resumed. Returns immediately. You will receive an <orchestrator-callback> when the run completes. The prompt for each task should be a self-contained task contract (see the orchestrator skill, rule 2).',
   title: 'Orchestrator Submit',
   inputSchema: {
     title: z.string().min(1).max(256).describe('Run title'),
@@ -51,7 +51,7 @@ export const ORCHESTRATOR_SUBMIT_TOOL_SCHEMA = {
 } as const;
 
 export const ORCHESTRATOR_PEND_TOOL_SCHEMA = {
-  description: 'Wait for a dispatch to finish — poll for progress or block until completion.',
+  description: 'Block until a dispatch finishes, or report progress on demand. Usually unneeded after submit — a completed run delivers an <orchestrator-callback> automatically; on that callback, call this once with include="all_tasks" and timeoutMs=0 to fetch the terminal result. Only use it if the callback never arrives, on resume, or when the user asks for progress.',
   title: 'Orchestrator Pend',
   inputSchema: {
     runId: z.string().describe('Run ID'),

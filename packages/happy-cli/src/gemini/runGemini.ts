@@ -256,7 +256,7 @@ export async function runGemini(opts: {
 
   // Track if this is the first message to include system-level guidance once.
   let isFirstMessage = true;
-  const firstTurnInstruction = getFirstTurnInstruction();
+  const firstTurnInstruction = getFirstTurnInstruction(process.env, true);
 
   session.onUserMessage((message) => {
     // Resolve permission mode (validate) - same as Codex

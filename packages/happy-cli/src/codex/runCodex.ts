@@ -351,7 +351,7 @@ export async function runCodex(opts: {
 
         // Capture session-level system prompt from first message.
         // Combines appendSystemPrompt (Options, DooTask) with first-turn tooling instructions
-        // (change_title + orchestrator guidance for controller sessions).
+        // (change_title for controller sessions; codex discovers orchestrator via the synced skill).
         // Both are passed as baseInstructions to Codex (true system prompt).
         if (sessionSystemPrompt === undefined) {
             const parts: string[] = [];

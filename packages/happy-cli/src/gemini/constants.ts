@@ -20,9 +20,14 @@ export const GEMINI_MODEL_ENV = 'GEMINI_MODEL';
 export const DEFAULT_GEMINI_MODEL = 'gemini-2.5-pro';
 
 /**
- * First-turn tool guidance shared by Codex + Gemini.
- * Reuses BASE_SYSTEM_PROMPT and only enables it for controller sessions.
+ * First-turn tool guidance shared by Codex + Gemini (controller sessions only).
+ * Defaults to chat-title guidance only. Orchestrator guidance is opt-in via includeOrchestrator:
+ * claude/codex discover the orchestrator through the synced skill, but gemini has no skill sync, so
+ * gemini passes includeOrchestrator=true to keep it in the system prompt.
  */
-export function getFirstTurnInstruction(env: NodeJS.ProcessEnv = process.env): string {
-  return getBaseSystemPrompt(env) ?? '';
+export function getFirstTurnInstruction(
+  env: NodeJS.ProcessEnv = process.env,
+  includeOrchestrator: boolean = false,
+): string {
+  return getBaseSystemPrompt(env, includeOrchestrator) ?? '';
 }

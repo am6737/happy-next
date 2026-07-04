@@ -31,10 +31,14 @@ describe('orchestrator prompt helpers', () => {
     expect(worker).toBeNull();
   });
 
-  it('only returns BASE_SYSTEM_PROMPT for controller sessions', () => {
+  it('returns chat-title base for controllers; orchestrator only when requested', () => {
     const controller = getBaseSystemPrompt({} as NodeJS.ProcessEnv);
     expect(controller).toContain('# Chat title');
-    expect(controller).toContain('# Orchestrator');
+    expect(controller).not.toContain('# Orchestrator');
+
+    const withOrchestrator = getBaseSystemPrompt({} as NodeJS.ProcessEnv, true);
+    expect(withOrchestrator).toContain('# Chat title');
+    expect(withOrchestrator).toContain('# Orchestrator');
 
     const worker = getBaseSystemPrompt({ HAPPY_ORCH_ONESHOT: '1' } as NodeJS.ProcessEnv);
     expect(worker).toBeNull();
