@@ -114,7 +114,25 @@ Explicit entries: \`/orchestrator:claude\`, \`/orchestrator:codex\`, \`/orchestr
 the primary provider; you can still mix providers or add dependencies within a single run.
 `;
 
-function commandFor(provider: 'claude' | 'codex' | 'gemini'): string {
+export const ORCHESTRATOR_PROVIDERS = ['claude', 'codex', 'gemini'] as const;
+
+export type OrchestratorProvider = typeof ORCHESTRATOR_PROVIDERS[number];
+
+export function buildOrchestratorCommandPrompt(
+  provider: OrchestratorProvider,
+  task: string = '$ARGUMENTS',
+): string {
+  return `The user wants to delegate work to **${provider}** agent(s). The task:
+
+${task}
+
+Split this into one or more tasks and delegate via the \`orchestrator_*\` tools, using provider
+\`${provider}\`. Follow the commander rules in the orchestrator skill: give the objective and
+boundaries, and do not over-constrain how the agent works. (If no task is given above, use the
+current conversation context, or ask the user what to delegate.)`;
+}
+
+function commandFor(provider: OrchestratorProvider): string {
   return `---
 description: Delegate work to ${provider} agent(s) — can run in parallel
 argument-hint: [task to delegate]
@@ -122,14 +140,7 @@ argument-hint: [task to delegate]
 
 ${MANAGED_NOTE}
 
-The user wants to delegate work to **${provider}** agent(s). The task:
-
-$ARGUMENTS
-
-Split this into one or more tasks and delegate via the \`orchestrator_*\` tools, using provider
-\`${provider}\`. Follow the commander rules in the orchestrator skill: give the objective and
-boundaries, and do not over-constrain how the agent works. (If no task is given above, use the
-current conversation context, or ask the user what to delegate.)
+${buildOrchestratorCommandPrompt(provider)}
 `;
 }
 

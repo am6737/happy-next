@@ -21,6 +21,7 @@ import { createMcpContext } from '@/agent/mcp';
 import { createSessionMetadata } from '@/utils/createSessionMetadata';
 import { discoverCodexSkills, getCodexSkillsSignature } from './utils/skillDiscovery';
 import { syncOrchestratorAssets } from '@/orchestrator/skillSync';
+import { addOrchestratorSlashCommands, expandOrchestratorSlashCommand } from '@/orchestrator/slashCommands';
 import { MessageBuffer } from "@/ui/ink/messageBuffer";
 import { CodexDisplay } from "@/ui/ink/CodexDisplay";
 // trimIdent not currently used
@@ -191,7 +192,7 @@ export async function runCodex(opts: {
         onSessionSwap: (newSession) => {
             session = newSession;
             const currentSkills = skills;
-            session.updateCapabilities((currentCapabilities) => ({
+            session.updateCapabilities((currentCapabilities) => addOrchestratorSlashCommands({
                 ...currentCapabilities,
                 skills: currentSkills,
             }));
@@ -203,7 +204,7 @@ export async function runCodex(opts: {
     session = initialSession;
 
     const initialSkills = skills;
-    session.updateCapabilities((currentCapabilities) => ({
+    session.updateCapabilities((currentCapabilities) => addOrchestratorSlashCommands({
         ...currentCapabilities,
         skills: initialSkills,
     }));
@@ -219,7 +220,7 @@ export async function runCodex(opts: {
 
             skills = nextSkills;
             lastSkillsSignature = nextSignature;
-            session.updateCapabilities((currentCapabilities) => ({
+            session.updateCapabilities((currentCapabilities) => addOrchestratorSlashCommands({
                 ...currentCapabilities,
                 skills: nextSkills,
             }));
@@ -1026,6 +1027,12 @@ export async function runCodex(opts: {
                 continue;
             }
 
+            const expandedOrchestratorCommand = expandOrchestratorSlashCommand(message.message);
+            const promptText = expandedOrchestratorCommand?.prompt ?? message.message;
+            if (expandedOrchestratorCommand) {
+                logger.debug(`[Codex] Expanded /orchestrator:${expandedOrchestratorCommand.provider} command`);
+            }
+
             // If mode changed, restart with new backend
             if (wasCreated && currentModeHash && message.hash !== currentModeHash) {
                 logger.debug('[Codex] Mode changed – restarting Codex session');
@@ -1093,7 +1100,6 @@ export async function runCodex(opts: {
                     // Reset if backend was killed by abort
                     wasCreated = false;
                     // System prompt (Options, DooTask, change_title) is passed via baseInstructions
-                    const promptText = message.message;
 
                     // Determine resume file
                     let resumeFile: string | null = null;
@@ -1160,7 +1166,7 @@ export async function runCodex(opts: {
                     // Continue existing session with new prompt
                     await backend!.sendPrompt(
                         backend!.getConversationId()!,
-                        message.message,
+                        promptText,
                         promptOptions
                     );
 
