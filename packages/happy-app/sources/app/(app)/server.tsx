@@ -10,7 +10,7 @@ import { RoundButton } from '@/components/RoundButton';
 import { Modal } from '@/modal';
 import { layout } from '@/components/layout';
 import { t } from '@/text';
-import { getServerUrl, resolveServerConfig, setServerUrl, validateServerUrl, getServerInfo } from '@/sync/serverConfig';
+import { getCustomServerUrl, resolveServerConfig, setServerUrl, validateServerUrl, getServerInfo } from '@/sync/serverConfig';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { useAuth } from '@/auth/AuthContext';
 
@@ -83,7 +83,7 @@ export default function ServerConfigScreen() {
     const navigation = useNavigation();
     const { logout } = useAuth();
     const serverInfo = getServerInfo();
-    const [inputUrl, setInputUrl] = useState(serverInfo.isCustom ? getServerUrl() : '');
+    const [inputUrl, setInputUrl] = useState(getCustomServerUrl() ?? '');
     const [error, setError] = useState<string | null>(null);
     const [isValidating, setIsValidating] = useState(false);
 

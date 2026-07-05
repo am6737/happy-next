@@ -43,11 +43,11 @@ function normalizeString(value: unknown): string | undefined {
     return typeof value === 'string' && value.trim() ? value.trim() : undefined;
 }
 
-function getCustomServerUrl(): string | null {
+export function getCustomServerUrl(): string | null {
     return normalizeUrl(serverConfigStorage.getString(SERVER_KEY));
 }
 
-function getEntryServerUrl(): string {
+export function getServerEntryUrl(): string {
     return getCustomServerUrl()
         || normalizeUrl(process.env.EXPO_PUBLIC_HAPPY_SERVER_URL)
         || normalizeUrl(configRef?.serverUrl)
@@ -82,7 +82,7 @@ export async function resolveServerConfig(): Promise<void> {
     if (resolvePromise) return resolvePromise;
 
     resolvePromise = (async () => {
-        const entryServerUrl = getEntryServerUrl();
+        const entryServerUrl = getServerEntryUrl();
         const remoteConfig = await fetchRemoteAppConfig(entryServerUrl);
         const remoteApiBaseUrl = normalizeUrl(normalizeString(remoteConfig?.apiBaseUrl));
 
@@ -96,7 +96,7 @@ export async function resolveServerConfig(): Promise<void> {
 }
 
 export function getServerUrl(): string {
-    return resolvedServerUrl || getEntryServerUrl();
+    return resolvedServerUrl || getServerEntryUrl();
 }
 
 export function getDiscoveredVoiceConfig(): ResolvedVoiceConfig {
@@ -114,13 +114,17 @@ export function setServerUrl(url: string | null): void {
     resolvePromise = null;
 }
 
-export function isUsingCustomServer(): boolean {
+export function hasCustomServerUrl(): boolean {
     return getCustomServerUrl() != null;
 }
 
-export function getServerInfo(): { hostname: string; port?: number; isCustom: boolean } {
+export function isUsingCustomServer(): boolean {
+    return hasCustomServerUrl();
+}
+
+export function getServerInfo(): { hostname: string; port?: number; isCustom: boolean; entryUrl: string; resolvedUrl: string } {
     const url = getServerUrl();
-    const isCustom = isUsingCustomServer();
+    const isCustom = hasCustomServerUrl();
     
     try {
         const parsed = new URL(url);
@@ -128,14 +132,18 @@ export function getServerInfo(): { hostname: string; port?: number; isCustom: bo
         return {
             hostname: parsed.hostname,
             port,
-            isCustom
+            isCustom,
+            entryUrl: getServerEntryUrl(),
+            resolvedUrl: url,
         };
     } catch {
         // Fallback if URL parsing fails
         return {
             hostname: url,
             port: undefined,
-            isCustom
+            isCustom,
+            entryUrl: getServerEntryUrl(),
+            resolvedUrl: url,
         };
     }
 }
