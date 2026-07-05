@@ -993,6 +993,7 @@ export const ru: TranslationStructure = {
         },
         context: {
             remaining: ({ percent }: { percent: number }) => `Осталось ${percent}%`,
+            details: ({ usedPercent, remainingPercent, usedTokens, totalTokens }: { usedPercent: number; remainingPercent: number; usedTokens: string; totalTokens: string }) => `Окно контекста:\n${usedPercent}% использовано (${remainingPercent}% осталось)\nИспользовано ${usedTokens} токенов, всего ${totalTokens}`,
         },
         suggestion: {
             fileLabel: 'ФАЙЛ',

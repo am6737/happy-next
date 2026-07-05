@@ -984,6 +984,7 @@ export const zhHans: TranslationStructure = {
         },
         context: {
             remaining: ({ percent }: { percent: number }) => `剩余 ${percent}%`,
+            details: ({ usedPercent, remainingPercent, usedTokens, totalTokens }: { usedPercent: number; remainingPercent: number; usedTokens: string; totalTokens: string }) => `背景信息窗口：\n${usedPercent}% 已用（剩余 ${remainingPercent}%）\n已用 ${usedTokens} 标记，共 ${totalTokens}`,
         },
         suggestion: {
             fileLabel: '文件',

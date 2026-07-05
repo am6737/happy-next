@@ -996,6 +996,7 @@ export const en = {
         },
         context: {
             remaining: ({ percent }: { percent: number }) => `${percent}% left`,
+            details: ({ usedPercent, remainingPercent, usedTokens, totalTokens }: { usedPercent: number; remainingPercent: number; usedTokens: string; totalTokens: string }) => `Context window:\n${usedPercent}% used (${remainingPercent}% left)\n${usedTokens} tokens used, ${totalTokens} total`,
         },
         suggestion: {
             fileLabel: 'FILE',

@@ -982,6 +982,7 @@ export const pt: TranslationStructure = {
         },
         context: {
             remaining: ({ percent }: { percent: number }) => `${percent}% restante`,
+            details: ({ usedPercent, remainingPercent, usedTokens, totalTokens }: { usedPercent: number; remainingPercent: number; usedTokens: string; totalTokens: string }) => `Janela de contexto:\n${usedPercent}% usado (${remainingPercent}% restante)\n${usedTokens} tokens usados, ${totalTokens} no total`,
         },
         suggestion: {
             fileLabel: 'ARQUIVO',

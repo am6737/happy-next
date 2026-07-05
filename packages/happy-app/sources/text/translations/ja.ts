@@ -1014,6 +1014,7 @@ export const ja: TranslationStructure = {
         },
         context: {
             remaining: ({ percent }: { percent: number }) => `残り ${percent}%`,
+            details: ({ usedPercent, remainingPercent, usedTokens, totalTokens }: { usedPercent: number; remainingPercent: number; usedTokens: string; totalTokens: string }) => `コンテキストウィンドウ：\n${usedPercent}% 使用済み（残り ${remainingPercent}%）\n${usedTokens} トークン使用、合計 ${totalTokens}`,
         },
         suggestion: {
             fileLabel: 'ファイル',

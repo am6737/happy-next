@@ -1012,6 +1012,7 @@ export const it: TranslationStructure = {
         },
         context: {
             remaining: ({ percent }: { percent: number }) => `${percent}% restante`,
+            details: ({ usedPercent, remainingPercent, usedTokens, totalTokens }: { usedPercent: number; remainingPercent: number; usedTokens: string; totalTokens: string }) => `Finestra di contesto:\n${usedPercent}% usato (${remainingPercent}% rimanente)\n${usedTokens} token usati, ${totalTokens} totali`,
         },
         suggestion: {
             fileLabel: 'FILE',

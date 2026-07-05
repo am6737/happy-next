@@ -1,6 +1,6 @@
 import { Ionicons, Octicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as React from 'react';
-import { View, Platform, useWindowDimensions, ViewStyle, Text, ActivityIndicator, TouchableWithoutFeedback, Image as RNImage, Pressable, Keyboard } from 'react-native';
+import { View, Platform, useWindowDimensions, ViewStyle, Text, ActivityIndicator, TouchableWithoutFeedback, Image as RNImage, Pressable, Keyboard, Modal as RNModal } from 'react-native';
 import { Image } from 'expo-image';
 import { layout } from './layout';
 import { MultiTextInput, KeyPressEvent } from './MultiTextInput';
@@ -348,17 +348,40 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
     },
 }));
 
+const formatCompactTokenCount = (value: number) => {
+    if (value >= 1000) {
+        return `${Math.round(value / 1000)}k`;
+    }
+    return value.toLocaleString();
+};
+
+const CONTEXT_DETAILS_TOOLTIP_WIDTH = 160;
+const CONTEXT_DETAILS_TOOLTIP_HEIGHT = 76;
+const CONTEXT_DETAILS_TOOLTIP_GAP = 20;
+const CONTEXT_DETAILS_SCREEN_MARGIN = 8;
+
 const getContextWarning = (contextSize: number, maxContextSize: number, alwaysShow: boolean = false, theme: Theme) => {
+    if (!maxContextSize || maxContextSize <= 0) {
+        return null;
+    }
     const percentageUsed = (contextSize / maxContextSize) * 100;
     const percentageRemaining = Math.max(0, Math.min(100, 100 - percentageUsed));
+    const roundedUsed = Math.max(0, Math.min(100, Math.round(percentageUsed)));
+    const roundedRemaining = Math.round(percentageRemaining);
+    const details = t('agentInput.context.details', {
+        usedPercent: roundedUsed,
+        remainingPercent: roundedRemaining,
+        usedTokens: formatCompactTokenCount(contextSize),
+        totalTokens: formatCompactTokenCount(maxContextSize),
+    });
 
     if (percentageRemaining <= 10) {
-        return { text: t('agentInput.context.remaining', { percent: Math.round(percentageRemaining) }), color: theme.colors.warningCritical };
+        return { text: t('agentInput.context.remaining', { percent: roundedRemaining }), color: theme.colors.warningCritical, details };
     } else if (percentageRemaining <= 30) {
-        return { text: t('agentInput.context.remaining', { percent: Math.round(percentageRemaining) }), color: theme.colors.warning };
+        return { text: t('agentInput.context.remaining', { percent: roundedRemaining }), color: theme.colors.warning, details };
     } else if (alwaysShow) {
         // Show context remaining in neutral color when not near limit
-        return { text: t('agentInput.context.remaining', { percent: Math.round(percentageRemaining) }), color: theme.colors.warning };
+        return { text: t('agentInput.context.remaining', { percent: roundedRemaining }), color: theme.colors.warning, details };
     }
     return null; // No display needed
 };
@@ -394,7 +417,7 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
             </Pressable>
         );
     });
-    const screenWidth = useWindowDimensions().width;
+    const { width: screenWidth, height: screenHeight } = useWindowDimensions();
 
     // Check if this is a Codex or Gemini session
     // Use metadata.flavor for existing sessions, agentType prop for new sessions
@@ -516,6 +539,67 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
         : null;
 
     const agentInputEnterToSend = useSetting('agentInputEnterToSend');
+    const [isContextDetailsHovered, setIsContextDetailsHovered] = React.useState(false);
+    const [isContextDetailsPinned, setIsContextDetailsPinned] = React.useState(false);
+    const [contextDetailsAnchor, setContextDetailsAnchor] = React.useState<{ x: number; y: number; width: number; height: number } | null>(null);
+    const contextDetailsAnchorRef = React.useRef<View>(null);
+    const contextDetailsHoverTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+    const isContextDetailsVisible = isContextDetailsHovered || isContextDetailsPinned;
+    const isContextDetailsInlineVisible = isContextDetailsHovered || (Platform.OS === 'web' && isContextDetailsPinned);
+
+    React.useEffect(() => {
+        return () => {
+            if (contextDetailsHoverTimerRef.current) {
+                clearTimeout(contextDetailsHoverTimerRef.current);
+            }
+        };
+    }, []);
+
+    React.useEffect(() => {
+        if (!contextWarning) {
+            setIsContextDetailsHovered(false);
+            setIsContextDetailsPinned(false);
+            setContextDetailsAnchor(null);
+        }
+    }, [contextWarning]);
+
+    const showContextDetailsFromPress = React.useCallback(() => {
+        setIsContextDetailsHovered(false);
+        if (isContextDetailsPinned) {
+            setIsContextDetailsPinned(false);
+            return;
+        }
+        if (Platform.OS === 'web') {
+            setIsContextDetailsPinned(true);
+            return;
+        }
+        contextDetailsAnchorRef.current?.measureInWindow((x, y, width, height) => {
+            setContextDetailsAnchor({ x, y, width, height });
+            setIsContextDetailsPinned(true);
+        });
+    }, [isContextDetailsPinned]);
+
+    React.useEffect(() => {
+        if (Platform.OS !== 'web' || !isContextDetailsPinned) {
+            return;
+        }
+
+        const handlePointerDown = (event: MouseEvent | TouchEvent) => {
+            const target = event.target as Node | null;
+            const node = contextDetailsAnchorRef.current as unknown as Node | null;
+            if (node && target && node.contains(target)) {
+                return;
+            }
+            setIsContextDetailsPinned(false);
+        };
+
+        document.addEventListener('mousedown', handlePointerDown);
+        document.addEventListener('touchstart', handlePointerDown);
+        return () => {
+            document.removeEventListener('mousedown', handlePointerDown);
+            document.removeEventListener('touchstart', handlePointerDown);
+        };
+    }, [isContextDetailsPinned]);
 
 
     // Abort button state
@@ -1176,14 +1260,132 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                 </>
                             )}
                             {contextWarning && (
-                                <Text style={{
-                                    fontSize: 11,
-                                    color: contextWarning.color,
-                                    marginLeft: props.connectionStatus ? 8 : 0,
-                                    ...Typography.default()
-                                }}>
-                                    {props.connectionStatus ? '• ' : ''}{contextWarning.text}
-                                </Text>
+                                <>
+                                    <View
+                                        ref={contextDetailsAnchorRef}
+                                        style={{
+                                            position: 'relative',
+                                            marginLeft: props.connectionStatus ? 8 : 0,
+                                            zIndex: isContextDetailsVisible ? 1002 : 1,
+                                        }}
+                                    >
+                                        <Pressable
+                                            onPress={() => {
+                                                hapticsLight();
+                                                showContextDetailsFromPress();
+                                            }}
+                                            onHoverIn={() => {
+                                                if (contextDetailsHoverTimerRef.current) {
+                                                    clearTimeout(contextDetailsHoverTimerRef.current);
+                                                }
+                                                contextDetailsHoverTimerRef.current = setTimeout(() => {
+                                                    setIsContextDetailsHovered(true);
+                                                    contextDetailsHoverTimerRef.current = null;
+                                                }, 600);
+                                            }}
+                                            onHoverOut={() => {
+                                                if (contextDetailsHoverTimerRef.current) {
+                                                    clearTimeout(contextDetailsHoverTimerRef.current);
+                                                    contextDetailsHoverTimerRef.current = null;
+                                                }
+                                                setIsContextDetailsHovered(false);
+                                            }}
+                                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                        >
+                                            <Text style={{
+                                                fontSize: 11,
+                                                color: contextWarning.color,
+                                                ...Typography.default()
+                                            }}>
+                                                {props.connectionStatus ? '• ' : ''}{contextWarning.text}
+                                            </Text>
+                                        </Pressable>
+                                        {isContextDetailsInlineVisible && (
+                                            <View
+                                                style={{
+                                                    position: 'absolute',
+                                                    left: 0,
+                                                    bottom: CONTEXT_DETAILS_TOOLTIP_GAP,
+                                                    minWidth: CONTEXT_DETAILS_TOOLTIP_WIDTH,
+                                                    paddingHorizontal: 10,
+                                                    paddingVertical: 8,
+                                                    borderRadius: 10,
+                                                    backgroundColor: theme.colors.surface,
+                                                    borderWidth: 0.5,
+                                                    borderColor: theme.colors.modal.border,
+                                                    shadowColor: theme.colors.shadow.color,
+                                                    shadowOffset: { width: 0, height: 2 },
+                                                    shadowOpacity: theme.colors.shadow.opacity,
+                                                    shadowRadius: 6,
+                                                    elevation: 8,
+                                                }}
+                                            >
+                                                <Text style={{
+                                                    fontSize: 12,
+                                                    lineHeight: 20,
+                                                    color: theme.colors.text,
+                                                    ...Typography.default()
+                                                }}>
+                                                {contextWarning.details}
+                                            </Text>
+                                        </View>
+                                    )}
+                                    </View>
+                                    <RNModal
+                                        transparent
+                                        visible={Platform.OS !== 'web' && isContextDetailsPinned && !!contextDetailsAnchor}
+                                        animationType="none"
+                                        onRequestClose={() => setIsContextDetailsPinned(false)}
+                                    >
+                                        <Pressable
+                                            style={{ flex: 1, backgroundColor: 'transparent' }}
+                                            onPress={() => setIsContextDetailsPinned(false)}
+                                        >
+                                            <Pressable
+                                                onPress={(event) => event.stopPropagation()}
+                                                style={{
+                                                    position: 'absolute',
+                                                    left: contextDetailsAnchor
+                                                        ? Math.min(
+                                                            Math.max(contextDetailsAnchor.x, CONTEXT_DETAILS_SCREEN_MARGIN),
+                                                            Math.max(CONTEXT_DETAILS_SCREEN_MARGIN, screenWidth - CONTEXT_DETAILS_TOOLTIP_WIDTH - CONTEXT_DETAILS_SCREEN_MARGIN)
+                                                        )
+                                                        : CONTEXT_DETAILS_SCREEN_MARGIN,
+                                                    top: contextDetailsAnchor
+                                                        ? Math.min(
+                                                            Math.max(
+                                                                CONTEXT_DETAILS_SCREEN_MARGIN,
+                                                                contextDetailsAnchor.y + contextDetailsAnchor.height - CONTEXT_DETAILS_TOOLTIP_GAP - CONTEXT_DETAILS_TOOLTIP_HEIGHT
+                                                            ),
+                                                            Math.max(CONTEXT_DETAILS_SCREEN_MARGIN, screenHeight - CONTEXT_DETAILS_TOOLTIP_HEIGHT - CONTEXT_DETAILS_SCREEN_MARGIN)
+                                                        )
+                                                        : CONTEXT_DETAILS_SCREEN_MARGIN,
+                                                    minWidth: CONTEXT_DETAILS_TOOLTIP_WIDTH,
+                                                    paddingHorizontal: 10,
+                                                    paddingVertical: 8,
+                                                    borderRadius: 10,
+                                                    backgroundColor: theme.colors.surface,
+                                                    borderWidth: 0.5,
+                                                    borderColor: theme.colors.modal.border,
+                                                    shadowColor: theme.colors.shadow.color,
+                                                    shadowOffset: { width: 0, height: 2 },
+                                                    shadowOpacity: theme.colors.shadow.opacity,
+                                                    shadowRadius: 6,
+                                                    elevation: 8,
+                                                }}
+                                            >
+                                                <Text style={{
+                                                    fontSize: 12,
+                                                    lineHeight: 20,
+                                                    color: theme.colors.text,
+                                                    ...Typography.default()
+                                                }}>
+                                                    {contextWarning.details}
+                                                </Text>
+                                            </Pressable>
+                                        </Pressable>
+                                    </RNModal>
+                                </>
                             )}
                         </View>
                         <View style={{

@@ -993,6 +993,7 @@ export const pl: TranslationStructure = {
         },
         context: {
             remaining: ({ percent }: { percent: number }) => `Pozostało ${percent}%`,
+            details: ({ usedPercent, remainingPercent, usedTokens, totalTokens }: { usedPercent: number; remainingPercent: number; usedTokens: string; totalTokens: string }) => `Okno kontekstu:\n${usedPercent}% użyte (${remainingPercent}% pozostało)\nUżyto ${usedTokens} tokenów, łącznie ${totalTokens}`,
         },
         suggestion: {
             fileLabel: 'PLIK',
