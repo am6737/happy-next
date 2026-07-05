@@ -186,7 +186,7 @@ export interface Session {
     isShared?: boolean;
     ownerProfile?: {
         id: string;
-        username: string;
+        username: string | null;
         firstName: string;
         lastName: string | null;
         avatar: string | null;

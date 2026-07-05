@@ -3,7 +3,7 @@ import { View, TextInput, Platform, Pressable } from 'react-native';
 import { BottomSheetModal, BottomSheetBackdrop, BottomSheetFlatList, BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
-import { UserProfile, getDisplayName } from '@/sync/friendTypes';
+import { UserProfile, getDisplayName, getUsernameLabel } from '@/sync/friendTypes';
 import { ShareAccessLevel } from '@/sync/sharingTypes';
 import { Item } from '@/components/Item';
 import { ItemGroup } from '@/components/ItemGroup';
@@ -38,7 +38,7 @@ export const FriendSelector = React.memo(React.forwardRef<BottomSheetModal, Frie
             if (excluded.has(friend.id)) return false;
             if (!searchQuery) return true;
             const displayName = getDisplayName(friend).toLowerCase();
-            const username = friend.username.toLowerCase();
+            const username = friend.username?.toLowerCase() ?? '';
             const query = searchQuery.toLowerCase();
             return displayName.includes(query) || username.includes(query);
         });
@@ -70,12 +70,13 @@ export const FriendSelector = React.memo(React.forwardRef<BottomSheetModal, Frie
         const hasKeys = !!item.contentPublicKey && !!item.contentPublicKeySig;
         const avatarUrl = item.avatar?.url || item.avatar?.path;
         const isSelected = selectedUserId === item.id;
+        const usernameLabel = getUsernameLabel(item);
         return (
             <View style={styles.alignedWrapper}>
                 <View style={[styles.friendRowContainer, { backgroundColor: isSelected ? theme.colors.surfaceHigh : theme.colors.surface }]}>
                     <Item
                         title={getDisplayName(item)}
-                        subtitle={hasKeys ? `@${item.username}` : t('session.sharing.recipientMissingKeys')}
+                        subtitle={hasKeys ? usernameLabel : t('session.sharing.recipientMissingKeys')}
                         subtitleLines={1}
                         leftElement={
                             <Avatar

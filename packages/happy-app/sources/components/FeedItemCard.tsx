@@ -13,6 +13,7 @@ import { Item } from './Item';
 import { Text } from './StyledText';
 import { deleteFeedItem } from '@/sync/apiFeed';
 import { Typography } from '@/constants/Typography';
+import { getDisplayName } from '@/sync/friendTypes';
 
 const SWIPE_ACTION_WIDTH = 80;
 
@@ -74,7 +75,7 @@ export const FeedItemCard = React.memo(({ item, showDivider }: FeedItemCardProps
 
                 return (
                     <Item
-                        title={t('feed.friendRequestFrom', { name: user!.firstName || user!.username })}
+                        title={t('feed.friendRequestFrom', { name: getDisplayName(user!) })}
                         subtitle={getTimeAgo(item.createdAt)}
                         leftElement={avatarElement}
                         iconContainerStyle={{ marginRight: 20 }}
@@ -98,7 +99,7 @@ export const FeedItemCard = React.memo(({ item, showDivider }: FeedItemCardProps
 
                 return (
                     <Item
-                        title={t('feed.friendAccepted', { name: user!.firstName || user!.username })}
+                        title={t('feed.friendAccepted', { name: getDisplayName(user!) })}
                         subtitle={getTimeAgo(item.createdAt)}
                         leftElement={avatarElement}
                         iconContainerStyle={{ marginRight: 20 }}

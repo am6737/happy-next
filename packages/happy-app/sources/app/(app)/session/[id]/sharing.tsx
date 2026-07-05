@@ -11,7 +11,7 @@ import { useUnistyles } from 'react-native-unistyles';
 import { t } from '@/text';
 import { Typography } from '@/constants/Typography';
 import { FriendSelector, SessionShareDialog, PublicLinkDialog } from '@/components/sessionSharing';
-import { SessionShare, ShareAccessLevel, PublicSessionShare } from '@/sync/sharingTypes';
+import { SessionShare, ShareAccessLevel, PublicSessionShare, getShareUserDisplayName, getShareUserUsernameLabel } from '@/sync/sharingTypes';
 import { getSessionShares, createSessionShare, updateSessionShare, deleteSessionShare, getPublicShare, createPublicShare, deletePublicShare } from '@/sync/apiSharing';
 import { sync } from '@/sync/sync';
 import { HappyError } from '@/utils/errors';
@@ -190,15 +190,19 @@ function SharingManagementContent({ sessionId }: { sessionId: string }) {
                 {/* Direct Sharing */}
                 <ItemGroup title={t('session.sharing.directSharing')}>
                     {shares.length > 0 ? (
-                        shares.map(share => (
-                            <Item
-                                key={share.id}
-                                title={share.sharedWithUser.username || [share.sharedWithUser.firstName, share.sharedWithUser.lastName].filter(Boolean).join(' ') || ''}
-                                subtitle={`@${share.sharedWithUser.username} \u2022 ${t(`session.sharing.${share.accessLevel === 'view' ? 'viewOnly' : share.accessLevel === 'edit' ? 'canEdit' : 'canManage'}`)}`}
-                                icon={<Ionicons name="person-outline" size={29} color="#007AFF" />}
-                                onPress={() => shareDialogRef.current?.present()}
-                            />
-                        ))
+                        shares.map(share => {
+                            const usernameLabel = getShareUserUsernameLabel(share.sharedWithUser);
+                            const accessLabel = t(`session.sharing.${share.accessLevel === 'view' ? 'viewOnly' : share.accessLevel === 'edit' ? 'canEdit' : 'canManage'}`);
+                            return (
+                                <Item
+                                    key={share.id}
+                                    title={getShareUserDisplayName(share.sharedWithUser)}
+                                    subtitle={usernameLabel ? `${usernameLabel} • ${accessLabel}` : accessLabel}
+                                    icon={<Ionicons name="person-outline" size={29} color="#007AFF" />}
+                                    onPress={() => shareDialogRef.current?.present()}
+                                />
+                            );
+                        })
                     ) : (
                         <Item
                             title={t('session.sharing.noShares')}

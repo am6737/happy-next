@@ -33,6 +33,15 @@ export interface ShareUserProfile {
     avatar: string | null;
 }
 
+export function getShareUserDisplayName(profile: Pick<ShareUserProfile, 'firstName' | 'lastName' | 'username'>): string {
+    const fullName = [profile.firstName, profile.lastName].filter(Boolean).join(' ');
+    return fullName || profile.username || 'Unknown';
+}
+
+export function getShareUserUsernameLabel(profile: Pick<ShareUserProfile, 'username'>): string | undefined {
+    return profile.username ? `@${profile.username}` : undefined;
+}
+
 /**
  * Session share (direct user-to-user sharing)
  *

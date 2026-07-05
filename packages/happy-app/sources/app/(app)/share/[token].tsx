@@ -10,12 +10,11 @@ import { Typography } from '@/constants/Typography';
 import { MessageView } from '@/components/MessageView';
 import { usePublicShareSession } from '@/hooks/usePublicShareSession';
 import { Message } from '@/sync/typesMessage';
+import { getShareUserDisplayName } from '@/sync/sharingTypes';
 
 function OwnerCard({ owner, floating }: { owner: { username: string | null; firstName: string | null; lastName: string | null }; floating?: boolean }) {
     const { theme } = useUnistyles();
-    const name = owner.username
-        || [owner.firstName, owner.lastName].filter(Boolean).join(' ')
-        || 'Unknown';
+    const name = getShareUserDisplayName(owner) || 'Unknown';
 
     return (
         <View style={[styles.ownerCard, floating && styles.ownerCardFloating, { backgroundColor: theme.colors.groupped.background }]}>

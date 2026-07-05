@@ -206,7 +206,7 @@ const UserProfileSchema = z.object({
         height: z.number().optional(),
         thumbhash: z.string().optional()
     }).nullable(),
-    username: z.string(),
+    username: z.string().nullable(),
     bio: z.string().nullable(),
     status: RelationshipStatusSchema,
     publicKey: z.string(),

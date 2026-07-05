@@ -10,7 +10,7 @@ import { Avatar } from '@/components/Avatar';
 import { Text } from '@/components/StyledText';
 import { t } from '@/text';
 import { Typography } from '@/constants/Typography';
-import { SessionShare, ShareAccessLevel } from '@/sync/sharingTypes';
+import { SessionShare, ShareAccessLevel, getShareUserDisplayName } from '@/sync/sharingTypes';
 
 export interface SessionShareDialogProps {
     sessionId: string;
@@ -132,9 +132,7 @@ const ShareItem = React.memo(function ShareItem({
 }: ShareItemProps) {
     const { theme } = useUnistyles();
     const accessLevelLabel = getAccessLevelLabel(share.accessLevel);
-    const userName = share.sharedWithUser.username || [share.sharedWithUser.firstName, share.sharedWithUser.lastName]
-        .filter(Boolean)
-        .join(' ');
+    const userName = getShareUserDisplayName(share.sharedWithUser);
 
     return (
         <View>

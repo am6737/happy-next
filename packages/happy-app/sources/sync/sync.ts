@@ -1666,7 +1666,7 @@ class Sync {
                 owner: ss.sharedBy.id,
                 ownerProfile: {
                     id: ss.sharedBy.id,
-                    username: ss.sharedBy.username ?? '',
+                    username: ss.sharedBy.username ?? null,
                     firstName: ss.sharedBy.firstName ?? '',
                     lastName: ss.sharedBy.lastName,
                     avatar: ss.sharedBy.avatar,
@@ -3626,7 +3626,7 @@ class Sync {
                 owner: sharedBy.id,
                 ownerProfile: {
                     id: sharedBy.id,
-                    username: sharedBy.username ?? '',
+                    username: sharedBy.username ?? null,
                     firstName: sharedBy.firstName ?? '',
                     lastName: sharedBy.lastName,
                     avatar: typeof sharedBy.avatar === 'string' ? sharedBy.avatar : null,

@@ -13,6 +13,7 @@ import { initGithub } from "./modules/github";
 import { loadFiles } from "./storage/files";
 import { startMessageDeliveryTimeoutWorker } from "./app/messageDelivery/timeout";
 import { startOrchestratorScheduler } from "./app/orchestrator/scheduler";
+import { backfillGitHubDisplayNames } from "./app/github/backfillGitHubDisplayNames";
 
 async function main() {
 
@@ -31,6 +32,7 @@ async function main() {
     await initGithub();
     await loadFiles();
     await auth.init();
+    await backfillGitHubDisplayNames();
 
     //
     // Start

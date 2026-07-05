@@ -23,7 +23,7 @@ export const UserProfileSchema = z.object({
         height: z.number().optional(),
         thumbhash: z.string().optional()
     }).nullable(),
-    username: z.string(),
+    username: z.string().nullable(),
     bio: z.string().nullable(),
     status: RelationshipStatusSchema,
     publicKey: z.string(),
@@ -63,7 +63,11 @@ export type UsersSearchResponse = z.infer<typeof UsersSearchResponseSchema>;
 
 export function getDisplayName(profile: UserProfile): string {
     const fullName = [profile.firstName, profile.lastName].filter(Boolean).join(' ');
-    return fullName || profile.username;
+    return fullName || profile.username || 'Unknown';
+}
+
+export function getUsernameLabel(profile: { username?: string | null }): string | undefined {
+    return profile.username ? `@${profile.username}` : undefined;
 }
 
 export function isFriend(status: RelationshipStatus): boolean {
