@@ -31,6 +31,14 @@ import {
   type ApprovalPolicy,
   type SandboxMode,
   type ThreadTokenUsage,
+  type ReviewStartParams,
+  type ReviewTarget,
+  type ThreadCompactStartParams,
+  type ThreadGoalSetParams,
+  type ThreadGoalGetParams,
+  type ThreadGoalGetResponse,
+  type ThreadGoalClearParams,
+  type ThreadGoalStatus,
 } from './types';
 import type {
   AgentBackend,
@@ -295,6 +303,56 @@ export class CodexAppServerBackend implements AgentBackend {
   offMessage(handler: AgentMessageHandler): void {
     const idx = this.listeners.indexOf(handler);
     if (idx >= 0) this.listeners.splice(idx, 1);
+  }
+
+
+  async compactThread(): Promise<void> {
+    if (!this.threadId) {
+      throw new Error('CodexAppServerBackend: no active thread');
+    }
+    await this.peer.request(Methods.THREAD_COMPACT_START, {
+      threadId: this.threadId,
+    } satisfies ThreadCompactStartParams);
+  }
+
+  async startReview(target: ReviewTarget): Promise<void> {
+    if (!this.threadId) {
+      throw new Error('CodexAppServerBackend: no active thread');
+    }
+    this.resetTurnComplete();
+    await this.peer.request(Methods.REVIEW_START, {
+      threadId: this.threadId,
+      target,
+      delivery: 'inline',
+    } satisfies ReviewStartParams);
+  }
+
+  async getGoal(): Promise<ThreadGoalGetResponse> {
+    if (!this.threadId) {
+      throw new Error('CodexAppServerBackend: no active thread');
+    }
+    return await this.peer.request<ThreadGoalGetResponse>(Methods.THREAD_GOAL_GET, {
+      threadId: this.threadId,
+    } satisfies ThreadGoalGetParams);
+  }
+
+  async setGoal(params: { objective?: string | null; status?: ThreadGoalStatus | null; tokenBudget?: number | null }): Promise<void> {
+    if (!this.threadId) {
+      throw new Error('CodexAppServerBackend: no active thread');
+    }
+    await this.peer.request(Methods.THREAD_GOAL_SET, {
+      threadId: this.threadId,
+      ...params,
+    } satisfies ThreadGoalSetParams);
+  }
+
+  async clearGoal(): Promise<void> {
+    if (!this.threadId) {
+      throw new Error('CodexAppServerBackend: no active thread');
+    }
+    await this.peer.request(Methods.THREAD_GOAL_CLEAR, {
+      threadId: this.threadId,
+    } satisfies ThreadGoalClearParams);
   }
 
   async respondToPermission(requestId: string, approved: boolean): Promise<void> {
@@ -580,6 +638,18 @@ export class CodexAppServerBackend implements AgentBackend {
       // ── Token usage ──
       case Methods.NOTIFY_THREAD_TOKEN_USAGE:
         this.handleTokenUsage(p.tokenUsage);
+        break;
+
+      case Methods.NOTIFY_THREAD_COMPACTED:
+        this.emit({ type: 'event', name: 'context_compacted', payload: p });
+        break;
+
+      case Methods.NOTIFY_THREAD_GOAL_UPDATED:
+        this.emit({ type: 'event', name: 'goal_updated', payload: p });
+        break;
+
+      case Methods.NOTIFY_THREAD_GOAL_CLEARED:
+        this.emit({ type: 'event', name: 'goal_cleared', payload: p });
         break;
 
       // ── Errors ──

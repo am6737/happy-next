@@ -272,6 +272,59 @@ export interface FileChange {
   [key: string]: unknown;
 }
 
+
+// ─── Codex Slash Command RPC Params ───────────────────────────
+
+export type ReviewTarget =
+  | { type: 'uncommittedChanges' }
+  | { type: 'baseBranch'; branch: string }
+  | { type: 'commit'; sha: string; title: string | null }
+  | { type: 'custom'; instructions: string };
+
+export type ReviewDelivery = 'inline' | 'detached';
+
+export interface ReviewStartParams {
+  threadId: string;
+  target: ReviewTarget;
+  delivery?: ReviewDelivery | null;
+}
+
+export interface ThreadCompactStartParams {
+  threadId: string;
+}
+
+export type ThreadGoalStatus = 'active' | 'paused' | 'blocked' | 'usageLimited' | 'budgetLimited' | 'complete';
+
+export interface ThreadGoalSetParams {
+  threadId: string;
+  objective?: string | null;
+  status?: ThreadGoalStatus | null;
+  tokenBudget?: number | null;
+}
+
+export interface ThreadGoalGetParams {
+  threadId: string;
+}
+
+export interface ThreadGoalClearParams {
+  threadId: string;
+}
+
+export interface ThreadGoal {
+  threadId: string;
+  objective: string;
+  status: ThreadGoalStatus;
+  tokenBudget: number | null;
+  tokensUsed: number;
+  timeUsedSeconds: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface ThreadGoalGetResponse {
+  goal: ThreadGoal | null;
+}
+
 // ─── Token Usage ───────────────────────────────────────────────
 
 export interface TokenUsageBreakdown {
@@ -299,6 +352,11 @@ export const Methods = {
   THREAD_RESUME: 'thread/resume',
   TURN_START: 'turn/start',
   TURN_INTERRUPT: 'turn/interrupt',
+  REVIEW_START: 'review/start',
+  THREAD_COMPACT_START: 'thread/compact/start',
+  THREAD_GOAL_SET: 'thread/goal/set',
+  THREAD_GOAL_GET: 'thread/goal/get',
+  THREAD_GOAL_CLEAR: 'thread/goal/clear',
   GET_AUTH_STATUS: 'getAuthStatus',
 
   // Server → Client (legacy approval requests — deprecated but still sent)
@@ -316,6 +374,9 @@ export const Methods = {
   NOTIFY_THREAD_STATUS_CHANGED: 'thread/status/changed',
   NOTIFY_THREAD_CLOSED: 'thread/closed',
   NOTIFY_THREAD_TOKEN_USAGE: 'thread/tokenUsage/updated',
+  NOTIFY_THREAD_COMPACTED: 'thread/compacted',
+  NOTIFY_THREAD_GOAL_UPDATED: 'thread/goal/updated',
+  NOTIFY_THREAD_GOAL_CLEARED: 'thread/goal/cleared',
   NOTIFY_TURN_STARTED: 'turn/started',
   NOTIFY_TURN_COMPLETED: 'turn/completed',
   NOTIFY_TURN_DIFF: 'turn/diff/updated',

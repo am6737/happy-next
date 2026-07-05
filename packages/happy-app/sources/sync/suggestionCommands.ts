@@ -67,6 +67,28 @@ const CLAUDE_COMMANDS: CommandItem[] = [
     { command: 'compact', description: 'Compact the conversation history', scope: 'SYSTEM', kind: 'command' },
 ];
 
+// Commands implemented by Happy for Codex app-server sessions
+const CODEX_COMMANDS: CommandItem[] = [
+    { command: 'compact', description: 'Compact the conversation history', scope: 'SYSTEM', kind: 'command' },
+    { command: 'review', description: 'Review current changes', scope: 'SYSTEM', kind: 'command' },
+    { command: 'goal', description: 'Set or view the current goal', scope: 'SYSTEM', kind: 'command' },
+];
+
+const CODEX_SUBCOMMANDS: Record<string, CommandItem[]> = {
+    goal: [
+        { command: 'goal clear', description: 'Clear the current goal', scope: 'SYSTEM', kind: 'command' },
+        { command: 'goal pause', description: 'Pause the current goal', scope: 'SYSTEM', kind: 'command' },
+        { command: 'goal resume', description: 'Resume the current goal', scope: 'SYSTEM', kind: 'command' },
+        { command: 'goal complete', description: 'Mark the current goal complete', scope: 'SYSTEM', kind: 'command' },
+        { command: 'goal blocked', description: 'Mark the current goal blocked', scope: 'SYSTEM', kind: 'command' },
+    ],
+    review: [
+        { command: 'review base', description: 'Review changes against a base branch', scope: 'SYSTEM', kind: 'command' },
+        { command: 'review commit', description: 'Review a specific commit SHA', scope: 'SYSTEM', kind: 'command' },
+        { command: 'review custom', description: 'Review using custom instructions', scope: 'SYSTEM', kind: 'command' },
+    ],
+};
+
 // Commands available for sessions with forkable history (Claude, Gemini, Codex)
 const FORKABLE_COMMANDS: CommandItem[] = [
     { command: 'duplicate', description: 'Duplicate conversation from a specific point', scope: 'SYSTEM', kind: 'command' },
@@ -124,6 +146,11 @@ function getCommandsFromSession(sessionId: string): CommandItem[] {
         commands.push(...CLAUDE_COMMANDS);
     }
 
+    // Add Codex commands that Happy implements through the app-server RPC API.
+    if (session.metadata.flavor === 'codex') {
+        commands.push(...CODEX_COMMANDS);
+    }
+
     // Add forkable commands for sessions with session history (Claude, Gemini, Codex)
     if (session.metadata.claudeSessionId || session.metadata.flavor === 'gemini' || session.metadata.codexSessionId) {
         commands.push(...FORKABLE_COMMANDS);
@@ -169,7 +196,30 @@ export async function searchCommands(
     options: SearchOptions = {}
 ): Promise<CommandItem[]> {
     const { limit, threshold = 0.3 } = options;
+    const session = getSession(sessionId);
     const commands = getCommandsFromSession(sessionId);
+
+    const subcommandMatch = query.match(/^(\S+)\s+([\s\S]*)$/);
+    if (subcommandMatch) {
+        const [, command, subQuery] = subcommandMatch;
+        const subcommands = session?.metadata?.flavor === 'codex'
+            ? CODEX_SUBCOMMANDS[command]
+            : undefined;
+        if (!subcommands) {
+            return [];
+        }
+        const normalizedSubQuery = subQuery.trim().toLowerCase();
+        const normalizedQuery = query.trim().toLowerCase();
+        const queryEndsWithSpace = /\s$/.test(query);
+        const exactSubcommandMatch = subcommands.some((item) => item.command.toLowerCase() === normalizedQuery);
+        if (queryEndsWithSpace && exactSubcommandMatch) {
+            return [];
+        }
+        const filtered = normalizedSubQuery
+            ? subcommands.filter((item) => item.command.toLowerCase().startsWith(`${command} ${normalizedSubQuery}`))
+            : subcommands;
+        return limit ? filtered.slice(0, limit) : filtered;
+    }
 
     if (!query || query.trim().length === 0) {
         return limit ? commands.slice(0, limit) : commands;
