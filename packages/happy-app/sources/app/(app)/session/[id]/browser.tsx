@@ -14,6 +14,9 @@ import { layout } from '@/components/layout';
 import { FileIcon } from '@/components/FileIcon';
 import { t } from '@/text';
 import { loadBrowserLastPath, saveBrowserLastPath } from '@/sync/persistence';
+import * as Clipboard from 'expo-clipboard';
+import { hapticsLight } from '@/components/haptics';
+import { showCopiedToast } from '@/components/Toast';
 
 interface DirectoryEntry {
     name: string;
@@ -182,6 +185,14 @@ export default function BrowserScreen() {
         navigateTo(parentPath);
     }, [currentPath, rootPath, navigateTo]);
 
+    const handleCopyCurrentPath = React.useCallback(async () => {
+        if (!currentPath) return;
+        try {
+            await Clipboard.setStringAsync(currentPath);
+            hapticsLight(); showCopiedToast();
+        } catch { /* ignore */ }
+    }, [currentPath]);
+
     const toggleSearch = React.useCallback(() => {
         if (searchActive) {
             setSearchActive(false);
@@ -293,47 +304,65 @@ export default function BrowserScreen() {
 
             {/* Breadcrumb navigation - hidden during search */}
             {!searchActive && (
-                <ScrollView
-                    ref={breadcrumbRef}
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
+                <Pressable
+                    onLongPress={handleCopyCurrentPath}
                     style={{
                         borderBottomWidth: Platform.select({ ios: StyleSheet.hairlineWidth, default: 1 }),
                         borderBottomColor: theme.colors.divider,
                         backgroundColor: theme.colors.surfaceHigh,
                         flexGrow: 0,
                     }}
-                    contentContainerStyle={{
-                        paddingHorizontal: 16,
-                        paddingVertical: 12,
-                        alignItems: 'center',
-                    }}
                 >
-                    {breadcrumbs.map((segment, index) => (
-                        <React.Fragment key={segment.path}>
+                    <ScrollView
+                        ref={breadcrumbRef}
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        style={{ flexGrow: 0 }}
+                        contentContainerStyle={{
+                            paddingHorizontal: 16,
+                            paddingVertical: 12,
+                            alignItems: 'center',
+                            minWidth: '100%',
+                        }}
+                    >
+                        {breadcrumbs.map((segment, index) => (
+                            <React.Fragment key={segment.path}>
                             {index > 0 && (
-                                <Ionicons
-                                    name="chevron-forward"
-                                    size={14}
-                                    color={theme.colors.textSecondary}
-                                    style={{ marginHorizontal: 4 }}
-                                />
+                                <Text
+                                    style={{
+                                        fontSize: 14,
+                                        color: theme.colors.textSecondary,
+                                        opacity: 0.8,
+                                        marginHorizontal: 2,
+                                        ...Typography.default(),
+                                    }}
+                                    selectable={Platform.OS === 'web'}
+                                >
+                                    /
+                                </Text>
                             )}
-                            <Pressable onPress={() => navigateTo(segment.path)}>
-                                <Text style={{
-                                    fontSize: 14,
-                                    color: index === breadcrumbs.length - 1
-                                        ? theme.colors.text
-                                        : theme.colors.textLink,
-                                    fontWeight: index === breadcrumbs.length - 1 ? '600' : '400',
-                                    ...Typography.default(),
-                                }}>
+                            <Pressable
+                                onPress={() => navigateTo(segment.path)}
+                                onLongPress={handleCopyCurrentPath}
+                            >
+                                <Text
+                                    style={{
+                                        fontSize: 14,
+                                        color: index === breadcrumbs.length - 1
+                                            ? theme.colors.text
+                                            : theme.colors.textLink,
+                                        fontWeight: index === breadcrumbs.length - 1 ? '600' : '400',
+                                        ...Typography.default(),
+                                    }}
+                                    selectable={Platform.OS === 'web'}
+                                >
                                     {segment.label}
                                 </Text>
                             </Pressable>
-                        </React.Fragment>
-                    ))}
-                </ScrollView>
+                            </React.Fragment>
+                        ))}
+                    </ScrollView>
+                </Pressable>
             )}
 
             {/* Directory listing / Search results */}
