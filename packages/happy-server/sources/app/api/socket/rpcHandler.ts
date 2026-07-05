@@ -7,6 +7,39 @@ import { db } from "@/storage/db";
 import { updateThinkingState } from "@/app/presence/sessionTurnRuntime";
 import { dispatchNextPendingIfPossible } from "@/app/session/pendingMessageAutoDispatch";
 
+const VIEW_SHARED_SESSION_RPC_METHODS = new Set([
+    'readFile',
+    'listDirectory',
+    'getDirectoryTree',
+    'ripgrep',
+]);
+
+const EDIT_SHARED_SESSION_RPC_METHODS = new Set([
+    ...VIEW_SHARED_SESSION_RPC_METHODS,
+    'abort',
+    'permission',
+    'switch',
+]);
+
+const ADMIN_SHARED_SESSION_RPC_METHODS = new Set([
+    ...EDIT_SHARED_SESSION_RPC_METHODS,
+    'bash',
+    'writeFile',
+]);
+
+function canSharedUserCallSessionRpc(accessLevel: 'view' | 'edit' | 'admin', rpcMethod: string): boolean {
+    switch (accessLevel) {
+        case 'view':
+            return VIEW_SHARED_SESSION_RPC_METHODS.has(rpcMethod);
+        case 'edit':
+            return EDIT_SHARED_SESSION_RPC_METHODS.has(rpcMethod);
+        case 'admin':
+            return ADMIN_SHARED_SESSION_RPC_METHODS.has(rpcMethod);
+        default:
+            return false;
+    }
+}
+
 export function rpcHandler(userId: string, socket: Socket, rpcListeners: Map<string, Socket>) {
     
     // RPC register - Register this socket as a listener for an RPC method
@@ -90,8 +123,19 @@ export function rpcHandler(userId: string, socket: Socket, rpcListeners: Map<str
                 const colonIndex = method.indexOf(':');
                 if (colonIndex > 0) {
                     const sessionId = method.substring(0, colonIndex);
+                    const rpcMethod = method.substring(colonIndex + 1);
                     const access = await checkSessionAccess(userId, sessionId);
-                    if (access && !access.isOwner) {
+                    if (access && !access.isOwner && access.level !== 'owner') {
+                        if (!canSharedUserCallSessionRpc(access.level, rpcMethod)) {
+                            if (callback) {
+                                callback({
+                                    ok: false,
+                                    error: 'Forbidden'
+                                });
+                            }
+                            return;
+                        }
+
                         // Look up the session owner and try their RPC listeners
                         const session = await db.session.findUnique({
                             where: { id: sessionId },

@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { View, TextInput, Platform } from 'react-native';
+import { View, TextInput, Platform, Pressable } from 'react-native';
 import { BottomSheetModal, BottomSheetBackdrop, BottomSheetFlatList, BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
@@ -11,6 +11,7 @@ import { Avatar } from '@/components/Avatar';
 import { Text } from '@/components/StyledText';
 import { t } from '@/text';
 import { Typography } from '@/constants/Typography';
+import { layout } from '@/components/layout';
 
 const SheetTextInput = Platform.OS === 'web' ? TextInput : BottomSheetTextInput;
 
@@ -69,45 +70,47 @@ export const FriendSelector = React.memo(React.forwardRef<BottomSheetModal, Frie
         const hasKeys = !!item.contentPublicKey && !!item.contentPublicKeySig;
         const avatarUrl = item.avatar?.url || item.avatar?.path;
         const isSelected = selectedUserId === item.id;
-        const isLast = index === filteredFriends.length - 1;
-
         return (
-            <View style={isSelected ? { backgroundColor: theme.colors.surfaceHigh } : undefined}>
-                <Item
-                    title={getDisplayName(item)}
-                    subtitle={hasKeys ? `@${item.username}` : t('session.sharing.recipientMissingKeys')}
-                    subtitleLines={1}
-                    leftElement={
-                        <Avatar
-                            id={item.id}
-                            size={40}
-                            imageUrl={avatarUrl}
-                            thumbhash={item.avatar?.thumbhash}
-                        />
-                    }
-                    iconContainerStyle={{ marginRight: 16 }}
-                    onPress={hasKeys ? () => setSelectedUserId(item.id) : undefined}
-                    disabled={!hasKeys}
-                    showChevron={false}
-                    showDivider={!isLast}
-                />
+            <View style={styles.alignedWrapper}>
+                <View style={[styles.friendRowContainer, { backgroundColor: isSelected ? theme.colors.surfaceHigh : theme.colors.surface }]}>
+                    <Item
+                        title={getDisplayName(item)}
+                        subtitle={hasKeys ? `@${item.username}` : t('session.sharing.recipientMissingKeys')}
+                        subtitleLines={1}
+                        leftElement={
+                            <Avatar
+                                id={item.id}
+                                size={40}
+                                imageUrl={avatarUrl}
+                                thumbhash={item.avatar?.thumbhash}
+                            />
+                        }
+                        iconContainerStyle={{ marginRight: 16 }}
+                        onPress={hasKeys ? () => setSelectedUserId(item.id) : undefined}
+                        disabled={!hasKeys}
+                        showChevron={false}
+                        showDivider={false}
+                    />
+                </View>
             </View>
         );
-    }, [selectedUserId, theme, filteredFriends.length]);
+    }, [selectedUserId, theme]);
 
     const keyExtractor = React.useCallback((item: UserProfile) => item.id, []);
 
     const ListHeaderComponent = React.useMemo(() => (
-        <View style={[styles.searchContainer, { backgroundColor: theme.colors.surfaceHigh, borderColor: theme.colors.divider }]}>
-            <SheetTextInput
-                style={[styles.searchInput, { color: theme.colors.text }, Platform.OS === 'web' && { outlineStyle: 'none' } as any]}
-                placeholder={t('friends.searchPlaceholder')}
-                placeholderTextColor={theme.colors.textSecondary}
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                autoCapitalize="none"
-                autoCorrect={false}
-            />
+        <View style={styles.alignedWrapper}>
+            <View style={[styles.searchContainer, { backgroundColor: theme.colors.surfaceHigh, borderColor: theme.colors.divider }]}>
+                <SheetTextInput
+                    style={[styles.searchInput, { color: theme.colors.text }, Platform.OS === 'web' && { outlineStyle: 'none' } as any]}
+                    placeholder={t('friends.searchPlaceholder')}
+                    placeholderTextColor={theme.colors.textSecondary}
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                />
+            </View>
         </View>
     ), [searchQuery, theme]);
 
@@ -159,12 +162,14 @@ export const FriendSelector = React.memo(React.forwardRef<BottomSheetModal, Frie
                         }
                     />
                 </ItemGroup>
-                <ItemGroup>
-                    <Item
-                        title={t('session.sharing.addShare')}
+                <View style={styles.primaryButtonWrapper}>
+                    <Pressable
                         onPress={handleSelect}
-                    />
-                </ItemGroup>
+                        style={({ pressed }) => [styles.primaryButton, { opacity: pressed ? 0.85 : 1 }]}
+                    >
+                        <Text style={styles.primaryButtonText}>{t('session.sharing.addShare')}</Text>
+                    </Pressable>
+                </View>
             </View>
         );
     }, [selectedUserId, selectedAccessLevel, handleSelect]);
@@ -216,10 +221,15 @@ const styles = StyleSheet.create((theme) => ({
         textAlign: 'center',
         paddingVertical: 8,
     },
+    alignedWrapper: {
+        width: '100%',
+        maxWidth: layout.maxWidth,
+        paddingHorizontal: 16,
+        alignSelf: 'center',
+    },
     searchContainer: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginHorizontal: 16,
         marginVertical: 8,
         paddingHorizontal: 12,
         paddingVertical: 8,
@@ -233,6 +243,11 @@ const styles = StyleSheet.create((theme) => ({
         lineHeight: 20,
         padding: 0,
     },
+    friendRowContainer: {
+        borderRadius: 16,
+        marginVertical: 4,
+        overflow: 'hidden',
+    },
     emptyState: {
         padding: 32,
         alignItems: 'center',
@@ -241,6 +256,26 @@ const styles = StyleSheet.create((theme) => ({
         ...Typography.default(),
         fontSize: 16,
         textAlign: 'center',
+    },
+    primaryButtonWrapper: {
+        width: '100%',
+        maxWidth: layout.maxWidth,
+        paddingHorizontal: 16,
+        marginTop: 20,
+        alignSelf: 'center',
+    },
+    primaryButton: {
+        minHeight: 52,
+        borderRadius: 16,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: theme.colors.button.primary.background,
+    },
+    primaryButtonText: {
+        ...Typography.default('semiBold'),
+        color: theme.colors.button.primary.tint,
+        fontSize: 17,
+        lineHeight: 22,
     },
     radioSelected: {
         width: 20,

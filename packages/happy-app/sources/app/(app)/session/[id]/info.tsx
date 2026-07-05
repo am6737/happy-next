@@ -15,6 +15,7 @@ import { Modal } from '@/modal';
 import { hapticsLight } from '@/components/haptics';
 import { showCopiedToast } from '@/components/Toast';
 import { sessionKill, sessionDelete, machineForkClaudeSession, machineForkGeminiSession, machineForkCodexSession, machineSpawnNewSession, sessionUpdateSummary, sessionUpdateMetadataFields } from '@/sync/ops';
+import { leaveSharedSession } from '@/sync/apiSharing';
 import { pushWorktreeBranch, mergeWorktreeBranch, createWorktreePR, cleanupWorktree, cleanupWorkspace, getLocalBranches, getCurrentBranch } from '@/utils/worktreeOps';
 import { getWorkspaceRepos } from '@/utils/workspaceRepos';
 import { RepoSelector } from '@/components/RepoSelector';
@@ -79,6 +80,7 @@ function SessionInfoContent({ session }: { session: Session }) {
     const sessionStatus = useSessionStatus(session);
     const isOwner = !session.accessLevel;
     const isAdmin = isOwner || session.accessLevel === 'admin';
+    const isSharedSession = !isOwner;
     const localModelDisplay = React.useMemo(() => resolveLocalModelDisplay(session.modelMode), [session.modelMode]);
     const modelSubtitle = React.useMemo(() => {
         const cliModel = session.metadata?.model;
@@ -292,6 +294,32 @@ function SessionInfoContent({ session }: { session: Session }) {
             ]
         );
     }, [performDelete]);
+
+    const [leavingSharedSession, performLeaveSharedSession] = useHappyAction(async () => {
+        const credentials = sync.getCredentials();
+        if (!credentials) {
+            throw new HappyError(t('common.error'), false);
+        }
+
+        await leaveSharedSession(credentials, session.id);
+        storage.getState().removeSharedSession(session.id);
+        navigateAfterArchive();
+    });
+
+    const handleLeaveSharedSession = useCallback(() => {
+        Modal.alert(
+            t('sessionInfo.leaveSharedSession'),
+            t('sessionInfo.leaveSharedSessionConfirm'),
+            [
+                { text: t('common.cancel'), style: 'cancel' },
+                {
+                    text: t('sessionInfo.leaveSharedSession'),
+                    style: 'destructive',
+                    onPress: performLeaveSharedSession
+                }
+            ]
+        );
+    }, [performLeaveSharedSession]);
 
     const [forkingSession, setForkingSession] = React.useState(false);
     const handleForkSession = useCallback(async () => {
@@ -943,17 +971,26 @@ function SessionInfoContent({ session }: { session: Session }) {
                     </ItemGroup>
                 )}
 
-                {/* Quick Actions - only show when user has admin/owner permissions */}
-                {isAdmin && (
-                    <ItemGroup title={t('sessionInfo.quickActions')}>
-                        {isAdmin && (
-                            <Item
-                                title={t('session.sharing.manageSharing')}
-                                subtitle={t('session.sharing.manageSharingSubtitle')}
-                                icon={<Ionicons name="share-outline" size={29} color="#007AFF" />}
-                                onPress={() => router.push(`/session/${session.id}/sharing`)}
-                            />
-                        )}
+                <ItemGroup title={t('sessionInfo.quickActions')}>
+                    {isAdmin && (
+                        <Item
+                            title={t('session.sharing.manageSharing')}
+                            subtitle={t('session.sharing.manageSharingSubtitle')}
+                            icon={<Ionicons name="share-outline" size={29} color="#007AFF" />}
+                            onPress={() => router.push(`/session/${session.id}/sharing`)}
+                        />
+                    )}
+                    {isSharedSession && (
+                        <Item
+                            title={t('sessionInfo.leaveSharedSession')}
+                            subtitle={t('sessionInfo.leaveSharedSessionSubtitle')}
+                            icon={<Ionicons name="exit-outline" size={29} color="#FF3B30" />}
+                            onPress={handleLeaveSharedSession}
+                            disabled={leavingSharedSession}
+                            loading={leavingSharedSession}
+                            showChevron={!leavingSharedSession}
+                        />
+                    )}
                         {isOwner && session.metadata?.machineId && (
                             <Item
                                 title={t('sessionInfo.viewMachine')}
@@ -973,7 +1010,7 @@ function SessionInfoContent({ session }: { session: Session }) {
                                 showChevron={!forkingSession}
                             />
                         )}
-                        {isAdmin && sessionStatus.isConnected && (
+                        {isOwner && sessionStatus.isConnected && (
                             <Item
                                 title={t('sessionInfo.archiveSession')}
                                 subtitle={t('sessionInfo.archiveSessionSubtitle')}
@@ -989,8 +1026,7 @@ function SessionInfoContent({ session }: { session: Session }) {
                                 onPress={handleDeleteSession}
                             />
                         )}
-                    </ItemGroup>
-                )}
+                </ItemGroup>
 
                 {/* Worktree Info & Actions */}
                 {isMultiRepo && (
@@ -1030,7 +1066,7 @@ function SessionInfoContent({ session }: { session: Session }) {
                         )}
                     </ItemGroup>
                 )}
-                {isWorktree && worktreeMachineId && worktreeBranch && (
+                {isOwner && isWorktree && worktreeMachineId && worktreeBranch && (
                     <ItemGroup title={t('sessionInfo.worktree.actions')}>
                         <Item
                             title={t('sessionInfo.worktree.pushBranch')}

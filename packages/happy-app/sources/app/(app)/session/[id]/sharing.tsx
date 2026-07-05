@@ -174,9 +174,13 @@ function SharingManagementContent({ sessionId }: { sessionId: string }) {
         );
     }
 
-    const excludedUserIds = shares.map(share => share.sharedWithUser.id);
     const isOwner = !session.accessLevel;
     const canManage = isOwner || session.accessLevel === 'admin';
+    const ownerUserId = session.owner ?? session.ownerProfile?.id ?? null;
+    const excludedUserIds = Array.from(new Set([
+        ...shares.map(share => share.sharedWithUser.id),
+        ...(ownerUserId ? [ownerUserId] : []),
+    ]));
     const effectiveToken = publicShareToken || publicShare?.token;
     const publicShareUrl = effectiveToken ? `https://app.happy-next.com/share/${effectiveToken}` : null;
 

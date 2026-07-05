@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { View, Switch } from 'react-native';
+import { View, Switch, Pressable } from 'react-native';
 import { BottomSheetModal, BottomSheetBackdrop, BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useUnistyles } from 'react-native-unistyles';
@@ -10,6 +10,7 @@ import { ItemGroup } from '@/components/ItemGroup';
 import { Text } from '@/components/StyledText';
 import { t } from '@/text';
 import { Typography } from '@/constants/Typography';
+import { layout } from '@/components/layout';
 import { PublicSessionShare } from '@/sync/sharingTypes';
 import { hapticsLight } from '@/components/haptics';
 import { showCopiedToast } from '@/components/Toast';
@@ -224,12 +225,14 @@ export const PublicLinkDialog = React.memo(React.forwardRef<BottomSheetModal, Pu
                             />
                         </ItemGroup>
 
-                        <ItemGroup>
-                            <Item
-                                title={t('session.sharing.createPublicLink')}
+                        <View style={styles.primaryButtonWrapper}>
+                            <Pressable
                                 onPress={handleCreate}
-                            />
-                        </ItemGroup>
+                                style={({ pressed }) => [styles.primaryButton, { opacity: pressed ? 0.85 : 1 }]}
+                            >
+                                <Text style={styles.primaryButtonText}>{t('session.sharing.createPublicLink')}</Text>
+                            </Pressable>
+                        </View>
                     </>
                 )}
             </BottomSheetScrollView>
@@ -267,5 +270,25 @@ const styles = StyleSheet.create((theme) => ({
         backgroundColor: 'transparent',
         borderWidth: 2,
         borderColor: theme.colors.radio.inactive,
+    },
+    primaryButtonWrapper: {
+        width: '100%',
+        maxWidth: layout.maxWidth,
+        paddingHorizontal: 16,
+        marginTop: 20,
+        alignSelf: 'center',
+    },
+    primaryButton: {
+        minHeight: 52,
+        borderRadius: 16,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: theme.colors.button.primary.background,
+    },
+    primaryButtonText: {
+        ...Typography.default('semiBold'),
+        color: theme.colors.button.primary.tint,
+        fontSize: 17,
+        lineHeight: 22,
     },
 }));
