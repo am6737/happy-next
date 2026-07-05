@@ -13,13 +13,11 @@ interface RemoteAppConfigResponse {
     apiBaseUrl?: unknown;
     voice?: {
         baseUrl?: unknown;
-        publicKey?: unknown;
     } | null;
 }
 
 interface ResolvedVoiceConfig {
     baseUrl?: string;
-    publicKey?: string;
 }
 
 let configRef: AppConfig | undefined;
@@ -91,7 +89,6 @@ export async function resolveServerConfig(): Promise<void> {
         resolvedServerUrl = remoteApiBaseUrl || entryServerUrl;
         resolvedVoiceConfig = {
             baseUrl: normalizeUrl(normalizeString(remoteConfig?.voice?.baseUrl)) || undefined,
-            publicKey: normalizeString(remoteConfig?.voice?.publicKey),
         };
     })();
 

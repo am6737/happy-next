@@ -12,19 +12,18 @@ import { cleanForSpeech } from '../runtime/cleanForSpeech';
 import { regexCleanForSpeech } from '../runtime/textClean';
 import { renderPrompt } from '../runtime/prompts';
 import type { VoiceSessionRecord } from '../types/voice';
+import { verifyVoiceAuthToken, type VoiceAuthClaims } from '../runtime/voiceAuth';
 
-function isAuthorized(request: FastifyRequest): boolean {
-    const header = request.headers['x-voice-key'];
-    if (typeof header === 'string' && header === env.VOICE_PUBLIC_KEY) return true;
+function getAuthClaims(request: FastifyRequest): VoiceAuthClaims | null {
     const authorization = request.headers.authorization;
     if (authorization?.startsWith('Bearer ')) {
-        return authorization.slice('Bearer '.length).trim() === env.VOICE_PUBLIC_KEY;
+        return verifyVoiceAuthToken(authorization.slice('Bearer '.length).trim(), env.VOICE_AUTH_SECRET);
     }
-    return false;
+    return null;
 }
 
 function rejectUnauthorized(reply: FastifyReply) {
-    return reply.code(401).send({ error: 'unauthorized', message: 'Missing or invalid voice gateway key.' });
+    return reply.code(401).send({ error: 'unauthorized', message: 'Missing or invalid voice auth token.' });
 }
 
 const contextPayloadSchema = z.object({
@@ -79,9 +78,12 @@ export function registerRoutes(app: FastifyInstance) {
             },
         },
     }, async (request, reply) => {
-        if (!isAuthorized(request)) return rejectUnauthorized(reply);
-
+        const claims = getAuthClaims(request);
+        if (!claims) return rejectUnauthorized(reply);
         const body = startSchema.parse(request.body);
+        if (body.userId !== claims.userId || (claims.sessionId && body.sessionId !== claims.sessionId)) {
+            return rejectUnauthorized(reply);
+        }
         const gatewaySessionId = randomUUID();
         const suffix = randomBytes(6).toString('hex');
         const roomId = `happy_voice_${Date.now()}_${suffix}`;
@@ -172,7 +174,7 @@ export function registerRoutes(app: FastifyInstance) {
             },
         },
     }, async (request, reply) => {
-        if (!isAuthorized(request)) return rejectUnauthorized(reply);
+        if (!getAuthClaims(request)) return rejectUnauthorized(reply);
         const { gatewaySessionId } = stopSchema.parse(request.body);
         const record = sessionStore.get(gatewaySessionId);
         if (!record) return reply.send({ success: true });
@@ -190,7 +192,7 @@ export function registerRoutes(app: FastifyInstance) {
             },
         },
     }, async (request, reply) => {
-        if (!isAuthorized(request)) return rejectUnauthorized(reply);
+        if (!getAuthClaims(request)) return rejectUnauthorized(reply);
         const { gatewaySessionId } = z.object({ gatewaySessionId: z.string().uuid() }).parse(request.params);
         const record = sessionStore.get(gatewaySessionId);
         return reply.send({ found: !!record, session: record });
@@ -207,7 +209,7 @@ export function registerRoutes(app: FastifyInstance) {
             },
         },
     }, async (request, reply) => {
-        if (!isAuthorized(request)) return rejectUnauthorized(reply);
+        if (!getAuthClaims(request)) return rejectUnauthorized(reply);
         const { text, voiceType, speechRate } = ttsSchema.parse(request.body);
         try {
             const result = await synthesize(text, { voiceType, speechRate });
@@ -227,7 +229,7 @@ export function registerRoutes(app: FastifyInstance) {
     typed.post('/v1/voice/tts/stream', {
         schema: { body: ttsSchema },
     }, async (request, reply) => {
-        if (!isAuthorized(request)) return rejectUnauthorized(reply);
+        if (!getAuthClaims(request)) return rejectUnauthorized(reply);
         const { text, voiceType, speechRate } = ttsSchema.parse(request.body);
 
         reply.hijack();
@@ -305,7 +307,7 @@ export function registerRoutes(app: FastifyInstance) {
             },
         },
     }, async (request, reply) => {
-        if (!isAuthorized(request)) return rejectUnauthorized(reply);
+        if (!getAuthClaims(request)) return rejectUnauthorized(reply);
         const { text } = ttsSchema.parse(request.body);
         let out = '';
         const ok = await cleanForSpeech(text, (piece) => { out += piece; });

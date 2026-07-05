@@ -24,7 +24,7 @@ happy-app ──HTTP──> happy-voice (本服务)
 
 ## HTTP 接口
 
-所有 `/v1/*` 接口需带请求头 `x-voice-key: <VOICE_PUBLIC_KEY>`。
+所有 `/v1/*` 接口需带 `Authorization: Bearer <short-lived voice token>`；token 由 happy-server 的 `/v1/voice/token` 签发。
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
@@ -43,7 +43,7 @@ happy-app ──HTTP──> happy-voice (本服务)
 见 `.env.example`，分为**必填**（无默认值，缺失则启动报错）与**可调**（均有默认值）。
 
 必填 7 项：
-`VOICE_PUBLIC_KEY`、`VOLC_RTC_APP_ID`、`VOLC_RTC_APP_KEY`、`VOLC_ACCESS_KEY_ID`、`VOLC_SECRET_ACCESS_KEY`、`VOLC_TTS_APP_ID`、`VOLC_TTS_TOKEN`。
+`VOICE_AUTH_SECRET`、`VOLC_RTC_APP_ID`、`VOLC_RTC_APP_KEY`、`VOLC_ACCESS_KEY_ID`、`VOLC_SECRET_ACCESS_KEY`、`VOLC_TTS_APP_ID`、`VOLC_TTS_TOKEN`。
 
 - 火山 RTC 应用**必须是「AI 智能体」类型**。
 - `VOLC_ACCESS_KEY_ID/SECRET` 是 IAM 访问密钥，用于 OpenAPI 签名（Start/StopVoiceChat）。

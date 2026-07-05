@@ -1,4 +1,5 @@
-import { getHappyVoiceGatewayUrl, getHappyVoicePublicKey } from './voiceConfig';
+import { getHappyVoiceGatewayUrl } from './voiceConfig';
+import { TokenStorage } from '@/auth/tokenStorage';
 import { getServerUrl } from './serverConfig';
 import { storage } from './storage';
 import { cleanForSpeech } from '@/realtime/happyVoiceProtocol';
@@ -40,29 +41,47 @@ export interface HappyVoiceStartResponse {
     expiresAt: string;
 }
 
-function getVoiceGatewayUrl() {
-    const baseUrl = getHappyVoiceGatewayUrl();
+interface VoiceAuthTokenResponse {
+    voiceBaseUrl: string;
+    token: string;
+    expiresAt: string;
+}
+
+async function getVoiceAuthToken(sessionId?: string): Promise<VoiceAuthTokenResponse> {
+    const credentials = await TokenStorage.getCredentials();
+    if (!credentials) {
+        throw new Error('Not authenticated');
+    }
+
+    const response = await fetch(`${getServerUrl()}/v1/voice/token`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${credentials.token}`,
+        },
+        body: JSON.stringify(sessionId ? { sessionId } : {}),
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to get voice token: ${response.status} ${errorText}`);
+    }
+
+    return await response.json();
+}
+
+function getVoiceGatewayUrlFromAuth(auth: VoiceAuthTokenResponse) {
+    const baseUrl = auth.voiceBaseUrl || getHappyVoiceGatewayUrl();
     if (!baseUrl) {
         throw new Error('voiceBaseUrl is not configured');
-    }
-    if (baseUrl.startsWith('/')) {
-        const origin = (globalThis as { location?: { origin?: unknown } }).location?.origin;
-        if (typeof origin === 'string' && origin) {
-            return `${origin}${baseUrl}`.replace(/\/+$/, '');
-        }
     }
     return baseUrl.replace(/\/+$/, '');
 }
 
-function getVoiceGatewayHeaders() {
-    const voicePublicKey = getHappyVoicePublicKey();
-    if (!voicePublicKey) {
-        throw new Error('voicePublicKey is not configured');
-    }
-
+function getVoiceGatewayHeaders(auth: VoiceAuthTokenResponse) {
     return {
         'Content-Type': 'application/json',
-        'x-voice-key': voicePublicKey,
+        'Authorization': `Bearer ${auth.token}`,
     };
 }
 
@@ -80,9 +99,10 @@ export async function startHappyVoiceSession(
     const toolBridgeBaseUrl = process.env.EXPO_PUBLIC_VOICE_TOOL_BRIDGE_BASE_URL || getServerUrl();
     const voicePrefs = getVoicePrefs();
 
-    const response = await fetch(`${getVoiceGatewayUrl()}/v1/voice/session/start`, {
+    const voiceAuth = await getVoiceAuthToken(sessionId);
+    const response = await fetch(`${getVoiceGatewayUrlFromAuth(voiceAuth)}/v1/voice/session/start`, {
         method: 'POST',
-        headers: getVoiceGatewayHeaders(),
+        headers: getVoiceGatewayHeaders(voiceAuth),
         body: JSON.stringify({
             userId,
             sessionId,
@@ -103,9 +123,10 @@ export async function startHappyVoiceSession(
 }
 
 export async function stopHappyVoiceSession(gatewaySessionId: string): Promise<void> {
-    const response = await fetch(`${getVoiceGatewayUrl()}/v1/voice/session/stop`, {
+    const voiceAuth = await getVoiceAuthToken();
+    const response = await fetch(`${getVoiceGatewayUrlFromAuth(voiceAuth)}/v1/voice/session/stop`, {
         method: 'POST',
-        headers: getVoiceGatewayHeaders(),
+        headers: getVoiceGatewayHeaders(voiceAuth),
         body: JSON.stringify({ gatewaySessionId }),
     });
 
@@ -126,9 +147,10 @@ export interface HappyVoiceTtsResponse {
 
 export async function synthesizeSpeech(text: string): Promise<HappyVoiceTtsResponse> {
     const { voiceType, speechRate } = getVoicePrefs();
-    const response = await fetch(`${getVoiceGatewayUrl()}/v1/voice/tts`, {
+    const voiceAuth = await getVoiceAuthToken();
+    const response = await fetch(`${getVoiceGatewayUrlFromAuth(voiceAuth)}/v1/voice/tts`, {
         method: 'POST',
-        headers: getVoiceGatewayHeaders(),
+        headers: getVoiceGatewayHeaders(voiceAuth),
         body: JSON.stringify({ text, voiceType, speechRate }),
     });
 
@@ -159,9 +181,10 @@ export async function streamSpeech(
     fetchImpl: typeof fetch = fetch,
 ): Promise<void> {
     const { voiceType, speechRate } = getVoicePrefs();
-    const response = await fetchImpl(`${getVoiceGatewayUrl()}/v1/voice/tts/stream`, {
+    const voiceAuth = await getVoiceAuthToken();
+    const response = await fetchImpl(`${getVoiceGatewayUrlFromAuth(voiceAuth)}/v1/voice/tts/stream`, {
         method: 'POST',
-        headers: getVoiceGatewayHeaders(),
+        headers: getVoiceGatewayHeaders(voiceAuth),
         body: JSON.stringify({ text, voiceType, speechRate }),
         signal,
     });
@@ -201,9 +224,10 @@ export async function streamSpeech(
  */
 export async function cleanSpeechText(text: string): Promise<string> {
     try {
-        const response = await fetch(`${getVoiceGatewayUrl()}/v1/voice/clean`, {
+        const voiceAuth = await getVoiceAuthToken();
+        const response = await fetch(`${getVoiceGatewayUrlFromAuth(voiceAuth)}/v1/voice/clean`, {
             method: 'POST',
-            headers: getVoiceGatewayHeaders(),
+            headers: getVoiceGatewayHeaders(voiceAuth),
             body: JSON.stringify({ text }),
         });
         if (!response.ok) {

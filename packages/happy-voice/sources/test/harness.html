@@ -25,7 +25,7 @@
   <h1>🎙️ Happy Voice 测试台 (火山 RTC + 豆包)</h1>
   <p style="color:#666;font-size:13px">点「开始」授权麦克风后即可对豆包说话。注意：此页不连 happy-server，所以"操控 Claude Code 的工具"不会真正执行，但纯语音对话可完整验证。</p>
   <div class="row"><label>网关地址</label><input id="base" value="" placeholder="留空=同源" /></div>
-  <div class="row"><label>VOICE_PUBLIC_KEY</label><input id="key" value="dev-voice-public-key" /></div>
+  <div class="row"><label>Voice Bearer Token</label><input id="key" placeholder="paste /v1/voice/token token" /></div>
   <div class="row">
     <button id="start">开始对话</button>
     <button id="stop" disabled>结束</button>
@@ -64,7 +64,7 @@
         log('POST /v1/voice/session/start ...');
         const r = await fetch(base + '/v1/voice/session/start', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-voice-key': $('key').value },
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + $('key').value },
           body: JSON.stringify({ userId: 'web-test', sessionId: 'web-test-' + Date.now(), language: 'zh' }),
         });
         if (!r.ok) throw new Error('start failed: ' + r.status + ' ' + await r.text());
@@ -111,7 +111,7 @@
       try { await engine?.stopAudioCapture(); await engine?.leaveRoom(); VERTC.destroyEngine(engine); } catch (e) { log('leave err: ' + e); }
       engine = null;
       const base = $('base').value.replace(/\/+$/, '');
-      if (gsid) fetch(base + '/v1/voice/session/stop', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-voice-key': $('key').value }, body: JSON.stringify({ gatewaySessionId: gsid }) }).catch(() => {});
+      if (gsid) fetch(base + '/v1/voice/session/stop', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + $('key').value }, body: JSON.stringify({ gatewaySessionId: gsid }) }).catch(() => {});
       setState('idle'); $('start').disabled = false; log('stopped');
     };
   </script>

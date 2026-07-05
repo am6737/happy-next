@@ -2,6 +2,8 @@ import { z } from "zod";
 import { type Fastify } from "../types";
 import { log } from "@/utils/log";
 import { invokeUserRpc } from "../socket/rpcRegistry";
+import { getPublicVoiceBaseUrl, isVoiceConfigured, signVoiceAuthToken } from "@/app/voice/voiceAuthToken";
+import { db } from "@/storage/db";
 
 const bridgedVoiceToolNameSchema = z.enum([
     'messageHappyCode',
@@ -19,6 +21,53 @@ const bridgedVoiceToolNameSchema = z.enum([
 ] as const);
 
 export function voiceRoutes(app: Fastify) {
+    app.post('/v1/voice/token', {
+        preHandler: app.authenticate,
+        schema: {
+            body: z.object({
+                sessionId: z.string().optional(),
+            }).optional(),
+            response: {
+                200: z.object({
+                    voiceBaseUrl: z.string(),
+                    token: z.string(),
+                    expiresAt: z.string(),
+                }),
+                400: z.object({ error: z.string() }),
+                404: z.object({ error: z.string() }),
+                503: z.object({ error: z.string() }),
+            }
+        }
+    }, async (request, reply) => {
+        if (!isVoiceConfigured()) {
+            return reply.code(503).send({ error: 'Voice is not configured' });
+        }
+
+        const sessionId = request.body?.sessionId;
+        if (sessionId) {
+            const session = await db.session.findFirst({
+                where: {
+                    id: sessionId,
+                    accountId: request.userId,
+                },
+                select: { id: true },
+            });
+            if (!session) {
+                return reply.code(404).send({ error: 'Session not found' });
+            }
+        }
+
+        const signed = signVoiceAuthToken({
+            userId: request.userId,
+            sessionId,
+        });
+        return reply.send({
+            voiceBaseUrl: getPublicVoiceBaseUrl()!,
+            token: signed.token,
+            expiresAt: signed.expiresAt,
+        });
+    });
+
     app.post('/v1/voice/tool-call', {
         schema: {
             headers: z.object({

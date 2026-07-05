@@ -194,12 +194,6 @@ export default function RootLayout() {
                 }}
             />
             <Stack.Screen
-                name="settings/voice/happy-voice"
-                options={{
-                    headerTitle: t('settingsVoice.happyVoiceTitle'),
-                }}
-            />
-            <Stack.Screen
                 name="settings/voice/language"
                 options={{
                     headerTitle: t('settingsVoice.preferredLanguage'),

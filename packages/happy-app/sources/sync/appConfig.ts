@@ -4,8 +4,6 @@ import { requireOptionalNativeModule } from 'expo-modules-core';
 export interface AppConfig {
     postHogKey?: string;
     serverUrl?: string;
-    voiceBaseUrl?: string;
-    voicePublicKey?: string;
 }
 
 /**
@@ -73,14 +71,5 @@ export function loadAppConfig(): AppConfig {
         console.log('[loadAppConfig] Override serverUrl from EXPO_PUBLIC_SERVER_URL');
         config.serverUrl = process.env.EXPO_PUBLIC_SERVER_URL;
     }
-    if (process.env.EXPO_PUBLIC_VOICE_BASE_URL && config.voiceBaseUrl !== process.env.EXPO_PUBLIC_VOICE_BASE_URL) {
-        console.log('[loadAppConfig] Override voiceBaseUrl from EXPO_PUBLIC_VOICE_BASE_URL');
-        config.voiceBaseUrl = process.env.EXPO_PUBLIC_VOICE_BASE_URL;
-    }
-    if (process.env.EXPO_PUBLIC_VOICE_PUBLIC_KEY && config.voicePublicKey !== process.env.EXPO_PUBLIC_VOICE_PUBLIC_KEY) {
-        console.log('[loadAppConfig] Override voicePublicKey from EXPO_PUBLIC_VOICE_PUBLIC_KEY');
-        config.voicePublicKey = process.env.EXPO_PUBLIC_VOICE_PUBLIC_KEY;
-    }
-
     return config as AppConfig;
 }

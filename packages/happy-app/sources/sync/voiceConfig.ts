@@ -12,12 +12,6 @@ function applyVoiceSetting(delta: Partial<Settings>): void {
     sync.applySettings(delta);
 }
 
-function normalizeCustomValue(value: string | null, defaultValue: string | undefined): string | null {
-    const normalized = value?.trim();
-    if (!normalized) return null;
-    return normalized === defaultValue?.trim() ? null : normalized;
-}
-
 function settings(): Settings {
     return storage.getState().settings;
 }
@@ -25,35 +19,7 @@ function settings(): Settings {
 // ── Happy Voice ─────────────────────────────────────────────────────
 
 export function getHappyVoiceGatewayUrl(): string | undefined {
-    return settings().voiceAssistantGatewayUrl ?? getDiscoveredVoiceConfig().baseUrl;
-}
-
-export function setHappyVoiceGatewayUrl(value: string | null): void {
-    applyVoiceSetting({ voiceAssistantGatewayUrl: normalizeCustomValue(value, getDiscoveredVoiceConfig().baseUrl) });
-}
-
-export function hasCustomHappyVoiceGatewayUrl(): boolean {
-    return settings().voiceAssistantGatewayUrl != null;
-}
-
-export function getHappyVoicePublicKey(): string | undefined {
-    return settings().voiceAssistantPublicKey ?? getDiscoveredVoiceConfig().publicKey;
-}
-
-export function setHappyVoicePublicKey(value: string | null): void {
-    applyVoiceSetting({ voiceAssistantPublicKey: normalizeCustomValue(value, getDiscoveredVoiceConfig().publicKey) });
-}
-
-export function setHappyVoiceConfig(gatewayUrl: string | null, publicKey: string | null): void {
-    const discovered = getDiscoveredVoiceConfig();
-    applyVoiceSetting({
-        voiceAssistantGatewayUrl: normalizeCustomValue(gatewayUrl, discovered.baseUrl),
-        voiceAssistantPublicKey: normalizeCustomValue(publicKey, discovered.publicKey),
-    });
-}
-
-export function hasCustomHappyVoicePublicKey(): boolean {
-    return settings().voiceAssistantPublicKey != null;
+    return getDiscoveredVoiceConfig().baseUrl;
 }
 
 // ── Action Confirmation ──────────────────────────────────────────────
@@ -160,15 +126,11 @@ export function happyNeedsPermissionPhrase(): string {
 // ── Utilities ───────────────────────────────────────────────────────
 
 export function isUsingCustomVoiceConfig(): boolean {
-    return hasCustomHappyVoiceGatewayUrl()
-        || hasCustomHappyVoicePublicKey()
-        || hasCustomWelcomeMessage();
+    return hasCustomWelcomeMessage();
 }
 
 export function resetVoiceConfig(): void {
     applyVoiceSetting({
-        voiceAssistantGatewayUrl: null,
-        voiceAssistantPublicKey: null,
         voiceAssistantWelcomeMessage: null,
     });
 }

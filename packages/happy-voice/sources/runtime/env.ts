@@ -7,8 +7,8 @@ const envSchema = z.object({
     HOST: z.string().default('0.0.0.0'),
     PORT: z.coerce.number().int().positive().default(3040),
 
-    // App-facing auth (x-voice-key).
-    VOICE_PUBLIC_KEY: z.string().min(1, 'VOICE_PUBLIC_KEY is required'),
+    // App-facing auth. The API server signs short-lived bearer tokens with this secret.
+    VOICE_AUTH_SECRET: z.string().min(32, 'VOICE_AUTH_SECRET must be at least 32 characters'),
 
     // RTC (audio transport + room join token). Use the "AI agent" type RTC app.
     VOLC_RTC_APP_ID: z.string().min(1, 'VOLC_RTC_APP_ID is required'),
