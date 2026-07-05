@@ -43,6 +43,7 @@ export default function StatusScreen() {
     const [gitStatus, setGitStatus] = React.useState<GitStatusFiles | null>(null);
     const [isLoading, setIsLoading] = React.useState(true);
     const [isOperating, setIsOperating] = React.useState(false);
+    const [operatingAction, setOperatingAction] = React.useState<'stageAll' | 'unstageAll' | null>(null);
 
     const loadStatus = React.useCallback(async (silent?: boolean) => {
         if (!silent) setIsLoading(true);
@@ -71,6 +72,7 @@ export default function StatusScreen() {
     // Stage a file
     const handleStageFile = React.useCallback(async (file: GitFileStatus) => {
         setIsOperating(true);
+        setOperatingAction(null);
         try {
             await sessionBash(sessionId, {
                 command: gitCommand(`add -- ${shellEscape(file.fullPath)}`),
@@ -88,6 +90,7 @@ export default function StatusScreen() {
     // Unstage a file
     const handleUnstageFile = React.useCallback(async (file: GitFileStatus) => {
         setIsOperating(true);
+        setOperatingAction(null);
         try {
             await sessionBash(sessionId, {
                 command: gitCommand(`reset HEAD -- ${shellEscape(file.fullPath)}`),
@@ -105,6 +108,7 @@ export default function StatusScreen() {
     // Stage all files
     const handleStageAll = React.useCallback(async () => {
         setIsOperating(true);
+        setOperatingAction('stageAll');
         try {
             await sessionBash(sessionId, {
                 command: gitCommand('add -A'),
@@ -116,12 +120,14 @@ export default function StatusScreen() {
             Modal.alert(t('common.error'), t('status.operationFailed'));
         } finally {
             setIsOperating(false);
+            setOperatingAction(null);
         }
     }, [sessionId, gitCommand, commandCwd, loadStatus]);
 
     // Unstage all files
     const handleUnstageAll = React.useCallback(async () => {
         setIsOperating(true);
+        setOperatingAction('unstageAll');
         try {
             await sessionBash(sessionId, {
                 command: gitCommand('reset HEAD'),
@@ -133,6 +139,7 @@ export default function StatusScreen() {
             Modal.alert(t('common.error'), t('status.operationFailed'));
         } finally {
             setIsOperating(false);
+            setOperatingAction(null);
         }
     }, [sessionId, gitCommand, commandCwd, loadStatus]);
 
@@ -146,6 +153,7 @@ export default function StatusScreen() {
         if (!message) return;
 
         setIsOperating(true);
+        setOperatingAction(null);
         try {
             const result = await sessionBash(sessionId, {
                 command: gitCommand(`commit -m ${shellEscape(message)}`),
@@ -383,13 +391,17 @@ export default function StatusScreen() {
                                     }}>
                                         {t('files.stagedChanges', { count: gitStatus.stagedFiles.length })}
                                     </Text>
-                                    <Text style={{
-                                        fontSize: 13,
-                                        color: theme.colors.header.tint,
-                                        ...Typography.default(),
-                                    }}>
-                                        {t('status.unstageAll')}
-                                    </Text>
+                                    {operatingAction === 'unstageAll' ? (
+                                        <ActivityIndicator size="small" color={theme.colors.header.tint} />
+                                    ) : (
+                                        <Text style={{
+                                            fontSize: 13,
+                                            color: theme.colors.header.tint,
+                                            ...Typography.default(),
+                                        }}>
+                                            {t('status.unstageAll')}
+                                        </Text>
+                                    )}
                                 </Pressable>
                                 {gitStatus.stagedFiles.map((file, index) => (
                                     <Item
@@ -432,13 +444,17 @@ export default function StatusScreen() {
                                     }}>
                                         {t('files.unstagedChanges', { count: gitStatus.unstagedFiles.length })}
                                     </Text>
-                                    <Text style={{
-                                        fontSize: 13,
-                                        color: theme.colors.header.tint,
-                                        ...Typography.default(),
-                                    }}>
-                                        {t('status.stageAll')}
-                                    </Text>
+                                    {operatingAction === 'stageAll' ? (
+                                        <ActivityIndicator size="small" color={theme.colors.header.tint} />
+                                    ) : (
+                                        <Text style={{
+                                            fontSize: 13,
+                                            color: theme.colors.header.tint,
+                                            ...Typography.default(),
+                                        }}>
+                                            {t('status.stageAll')}
+                                        </Text>
+                                    )}
                                 </Pressable>
                                 {gitStatus.unstagedFiles.map((file, index) => (
                                     <Item
