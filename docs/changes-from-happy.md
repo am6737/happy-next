@@ -18,8 +18,8 @@ This document summarizes what changed in Happy Next compared to the original Hap
 | DooTask | Task list, detail, real-time chat, one-click AI session launch, globalized WebSocket |
 | Self-hosting | One-command `docker-compose` stack with separate origins |
 | Sync | v3 messages API, HTTP outbox, server-confirmed sends, race condition fixes |
-| Chat UX | Image attachment, pagination, blue dot, compact view, session search, pull-to-refresh |
-| Session mgmt | Per-machine session tabs, device and agent filters, hot-upgrade, metadata caching |
+| Chat UX | Image attachment, pagination, blue dot, compact view, session search, pull-to-refresh, minimap navigation, context usage tooltip, resizable web sidebar |
+| Session mgmt | Per-machine session tabs, device and agent filters, hot-upgrade, metadata caching, smart new-session machine defaults |
 | Bug fixes | 250+ fixes across message sending, sessions, rendering, navigation, security |
 | Performance | Payload trimming, lazy-load diffs, rendering optimization, incremental session catch-up on open |
 | CLI | Daemon auto-start, Codex fast mode, receipt tracking, self-upgrade |
@@ -90,6 +90,7 @@ The original Happy only supported Claude Code. Happy Next treats Claude Code, Co
 
 Happy Next includes a complete voice gateway stack built on the Volcano (火山引擎 / Doubao) real-time gateway, which replaced the earlier LiveKit / ElevenLabs stack.
 
+- **Short-lived token auth**: voice gateway authentication now uses short-lived tokens for improved security
 - **Volcano (Doubao) real-time gateway** (`happy-voice`) driving speech-to-text, LLM, and text-to-speech through Volcano RTC AIGC + a custom-LLM bridge
 - **Native in-call voice on iOS**: streaming text-to-speech during a live call, connection state gated on room-state changes, and the microphone guarded while the call is active
 - **Selectable voice timbre and speech rate**, with multilingual replies defaulting to the seed-tts-2.0 voice
@@ -135,6 +136,8 @@ The app now includes a full code browsing and git management experience.
 - **Base64 decoding** fixed for UTF-8 (CJK characters)
 - **Image preview** with sharing support in the file viewer
 - **Upstream-tip marker** in the commits list to highlight the commit that matches the upstream branch tip
+- **Breadcrumb path copy**: copy the current browser breadcrumb path directly from the navigation bar
+- **Bulk git action feedback**: loading indicator shown while bulk git operations run
 
 ## Session Sharing
 
@@ -202,6 +205,8 @@ Deep integration with DooTask project management, from browsing tasks to launchi
 Happy Next adds a first-class self-hosting path.
 
 - **Root `docker-compose.yml`** with all services: Web app (Nginx), API server, Voice gateway, Postgres, Redis, MinIO
+- **Custom server shortcut**: a quick-access button in desktop settings to configure a custom server
+- **Service discovery**: API and voice config endpoints are now discoverable automatically
 - **Separate origins architecture**: Web, API, and Voice each use different ports/domains (no path reverse proxy)
 - **`.env.example`** as the single source of truth for all configuration
 - **Runtime env var injection** in Dockerfile/entrypoint for Docker builds
@@ -255,6 +260,10 @@ Extensive improvements to the chat and session management experience.
 - **Real-time friend request updates** via socket events
 - **Swipe-to-delete** for feed notifications
 - **Friend search** with flat layout, GitHub connect prompt for users without username
+- **Conversation minimap**: a minimap panel for jumping to any part of a long conversation at a glance
+- **Context usage tooltip**: hover the context indicator to see a token-count breakdown
+- **Resizable web sidebar**: drag the sidebar edge to adjust its width
+- **Smart session defaults**: new session creation automatically picks the best available machine
 - **Per-machine session tabs**: the active/inactive split is replaced by per-machine tabs that group sessions by the machine they run on, so multi-machine setups are easier to navigate; each tab carries a status dot — orange when a session on that machine needs permission, reflecting the live thinking state — while the aggregate 'all' tab stays dot-free
 - **Device and agent filter dropdowns**: filter session history by machine and agent type
 - **Session preview expand/collapse**: expand messages inline with increased preview limit

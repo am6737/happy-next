@@ -1,6 +1,25 @@
 {
   "entries": [
     {
+      "version": 16,
+      "date": "2026-07-05",
+      "summary": "Conversations gain a minimap for quick navigation, a context-usage tooltip, and a resizable sidebar on web; the server settings surface a custom-server shortcut; voice auth is hardened with short-lived tokens; and the CLI updates to v0.6.0 with new Codex slash commands for compact review and goal-setting.",
+      "changes": [
+        "Minimap: tap the new minimap panel to jump to any part of a long conversation at a glance",
+        "Context usage: a tooltip on the context indicator shows token-count breakdown details",
+        "Web sidebar: the sidebar is now resizable by dragging its edge",
+        "Settings: a shortcut button to configure a custom server is now visible on desktop settings",
+        "Breadcrumb: copy the current browser breadcrumb path directly from the navigation bar",
+        "Git: bulk git actions now show loading feedback while the operation runs",
+        "Voice: voice gateway auth now uses short-lived tokens for improved security",
+        "Server: service discovery for API and voice config endpoints is now supported",
+        "Sessions: new session defaults now pick the best available machine automatically",
+        "Fixes: user display name fallbacks improved; shared session permissions corrected; diff text selection enabled in the file viewer; pending-messages 404 loop resolved for view-only sessions",
+        "CLI: Happy CLI updated to v0.6.0 with Codex slash commands for compact review and goal-setting"
+      ],
+      "rawMarkdown": "## Version 16 - 2026-07-05\n\n\nConversations gain a minimap for quick navigation, a context-usage tooltip, and a resizable sidebar on web; the server settings surface a custom-server shortcut; voice auth is hardened with short-lived tokens; and the CLI updates to v0.6.0 with new Codex slash commands for compact review and goal-setting.\n\n- Minimap: tap the new minimap panel to jump to any part of a long conversation at a glance\n- Context usage: a tooltip on the context indicator shows token-count breakdown details\n- Web sidebar: the sidebar is now resizable by dragging its edge\n- Settings: a shortcut button to configure a custom server is now visible on desktop settings\n- Breadcrumb: copy the current browser breadcrumb path directly from the navigation bar\n- Git: bulk git actions now show loading feedback while the operation runs\n- Voice: voice gateway auth now uses short-lived tokens for improved security\n- Server: service discovery for API and voice config endpoints is now supported\n- Sessions: new session defaults now pick the best available machine automatically\n- Fixes: user display name fallbacks improved; shared session permissions corrected; diff text selection enabled in the file viewer; pending-messages 404 loop resolved for view-only sessions\n- CLI: Happy CLI updated to v0.6.0 with Codex slash commands for compact review and goal-setting"
+    },
+    {
       "version": 15,
       "date": "2026-06-29",
       "summary": "Pending messages can now be edited and paused or saved as drafts before they send, machine tabs surface live status dots for sessions that need permission or are thinking, and the CLI orchestrator's activity count now includes queued tasks.",
@@ -254,5 +273,5 @@
       "rawMarkdown": "## Version 1 - 2025-05-12\n\n\nWelcome to Happy - your secure, encrypted mobile companion for Claude Code. This inaugural release establishes the foundation for private, powerful AI interactions on the go.\n\n- Implemented end-to-end encrypted session management ensuring complete privacy\n- Integrated intelligent voice assistant with natural conversation capabilities\n- Added experimental file manager with syntax highlighting and tree navigation\n- Built seamless real-time synchronization across all your devices\n- Established native support for iOS, Android, and responsive web interfaces"
     }
   ],
-  "latestVersion": 15
+  "latestVersion": 16
 }

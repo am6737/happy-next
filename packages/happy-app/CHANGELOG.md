@@ -1,5 +1,21 @@
 # Changelog
 
+## Version 16 - 2026-07-05
+
+Conversations gain a minimap for quick navigation, a context-usage tooltip, and a resizable sidebar on web; the server settings surface a custom-server shortcut; voice auth is hardened with short-lived tokens; and the CLI updates to v0.6.0 with new Codex slash commands for compact review and goal-setting.
+
+- Minimap: tap the new minimap panel to jump to any part of a long conversation at a glance
+- Context usage: a tooltip on the context indicator shows token-count breakdown details
+- Web sidebar: the sidebar is now resizable by dragging its edge
+- Settings: a shortcut button to configure a custom server is now visible on desktop settings
+- Breadcrumb: copy the current browser breadcrumb path directly from the navigation bar
+- Git: bulk git actions now show loading feedback while the operation runs
+- Voice: voice gateway auth now uses short-lived tokens for improved security
+- Server: service discovery for API and voice config endpoints is now supported
+- Sessions: new session defaults now pick the best available machine automatically
+- Fixes: user display name fallbacks improved; shared session permissions corrected; diff text selection enabled in the file viewer; pending-messages 404 loop resolved for view-only sessions
+- CLI: Happy CLI updated to v0.6.0 with Codex slash commands for compact review and goal-setting
+
 ## Version 15 - 2026-06-29
 
 Pending messages can now be edited and paused or saved as drafts before they send, machine tabs surface live status dots for sessions that need permission or are thinking, and the CLI orchestrator's activity count now includes queued tasks.
