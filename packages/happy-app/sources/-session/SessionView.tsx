@@ -316,7 +316,8 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
     const latestCliVersion = useLatestCliVersion();
     const isCliOutdated = cliVersion && latestCliVersion && !isVersionSupported(cliVersion, latestCliVersion);
     const isAcknowledged = machineId && acknowledgedCliVersions[machineId] === cliVersion;
-    const shouldShowCliWarning = isCliOutdated && !isAcknowledged;
+    const isSessionOnline = session.presence === 'online';
+    const shouldShowCliWarning = isSessionOnline && isCliOutdated && !isAcknowledged;
     // Get permission mode from session object, default to 'default'
     const permissionMode = session.permissionMode || 'default';
     // Get model mode from session object. "default" means use CLI/profile configured model.
