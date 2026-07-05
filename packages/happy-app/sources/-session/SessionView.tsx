@@ -6,6 +6,7 @@ import { MultiTextInputHandle } from '@/components/MultiTextInput';
 import { getSuggestions } from '@/components/autocomplete/suggestions';
 import { ChatHeaderTitle } from '@/components/ChatHeaderTitle';
 import { ChatList, type ForkMessageRequest } from '@/components/ChatList';
+import { ConversationMinimap, type ConversationMinimapItem } from '@/components/ConversationMinimap';
 import { Deferred } from '@/components/Deferred';
 import { DuplicateSheet } from '@/components/DuplicateSheet';
 import { ActionMenuModal } from '@/components/ActionMenuModal';
@@ -882,6 +883,17 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
     }, [canAddMore, supportsImages, addImageFromUri]);
 
     // Handle loading more older messages when scrolling to top
+    const [minimapItems, setMinimapItems] = React.useState<ConversationMinimapItem[]>([]);
+    const [minimapActiveMessageIds, setMinimapActiveMessageIds] = React.useState<Set<string>>(() => new Set());
+    const [contentAreaWidth, setContentAreaWidth] = React.useState(0);
+    const minimapJumpRef = React.useRef<((index: number) => void) | null>(null);
+    const handleRegisterMinimapJump = React.useCallback((jump: ((index: number) => void) | null) => {
+        minimapJumpRef.current = jump;
+    }, []);
+    const handleMinimapJump = React.useCallback((index: number) => {
+        minimapJumpRef.current?.(index);
+    }, []);
+
     const handleLoadMore = React.useCallback(() => {
         return sync.fetchOlderMessages(sessionId);
     }, [sessionId]);
@@ -918,7 +930,16 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
         <>
             <Deferred>
                 {messages.length > 0 && (
-                    <ChatList session={session} onFillInput={handleFillInput} onForkMessage={handleForkFromMessage} forkingMessageId={forkingMessageId} onLoadMore={handleLoadMore} />
+                    <ChatList
+                        session={session}
+                        onFillInput={handleFillInput}
+                        onForkMessage={handleForkFromMessage}
+                        forkingMessageId={forkingMessageId}
+                        onLoadMore={handleLoadMore}
+                        onMinimapItemsChange={setMinimapItems}
+                        onActiveMessageIdsChange={setMinimapActiveMessageIds}
+                        onRegisterMinimapJump={handleRegisterMinimapJump}
+                    />
                 )}
             </Deferred>
         </>
@@ -1166,7 +1187,10 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
             )}
 
             {/* Main content area - no padding since header is overlay */}
-            <View style={{ flexBasis: 0, flexGrow: 1, paddingBottom: safeArea.bottom + ((isRunningOnMac() || Platform.OS === 'web') ? 32 : 0) }}>
+            <View
+                onLayout={(event) => setContentAreaWidth(event.nativeEvent.layout.width)}
+                style={{ flexBasis: 0, flexGrow: 1, paddingBottom: safeArea.bottom + ((isRunningOnMac() || Platform.OS === 'web') ? 32 : 0) }}
+            >
                 <AgentContentView
                     content={content}
                     input={input}
@@ -1174,6 +1198,13 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
                     betweenContentAndInput={pendingQueuePanel}
                 />
             </View >
+
+            <ConversationMinimap
+                userMessages={minimapItems}
+                activeMessageIds={minimapActiveMessageIds}
+                onJumpToMessage={handleMinimapJump}
+                contentWidth={contentAreaWidth}
+            />
 
             {/* Back button for landscape phone mode when header is hidden */}
             {

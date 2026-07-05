@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useUnistyles } from 'react-native-unistyles';
 import { Ionicons } from '@expo/vector-icons';
 import { MessageView } from './MessageView';
+import { ConversationMinimapItem } from './ConversationMinimap';
 import { Metadata, Session } from '@/sync/storageTypes';
 import { ChatFooter } from './ChatFooter';
 import { Message, UserTextMessage } from '@/sync/typesMessage';
@@ -38,7 +39,7 @@ export interface ForkMessageRequest {
     skipDraft: boolean;
 }
 
-export const ChatList = React.memo((props: { session: Session; onFillInput?: (text: string, allOptions?: string[]) => void; onLoadMore?: () => void; onForkMessage?: (request: ForkMessageRequest) => void; forkingMessageId?: string | null }) => {
+export const ChatList = React.memo((props: { session: Session; onFillInput?: (text: string, allOptions?: string[]) => void; onLoadMore?: () => void; onForkMessage?: (request: ForkMessageRequest) => void; forkingMessageId?: string | null; onMinimapItemsChange?: (items: ConversationMinimapItem[]) => void; onActiveMessageIdsChange?: (ids: Set<string>) => void; onRegisterMinimapJump?: (jump: ((index: number) => void) | null) => void }) => {
     const { messages, hasMore } = useSessionMessages(props.session.id);
     const profile = useProfile();
     const isSharedSession = !!(props.session.isShared || props.session.accessLevel);
@@ -55,6 +56,9 @@ export const ChatList = React.memo((props: { session: Session; onFillInput?: (te
             onForkMessage={props.onForkMessage}
             thinking={props.session.thinking}
             forkingMessageId={props.forkingMessageId}
+            onMinimapItemsChange={props.onMinimapItemsChange}
+            onActiveMessageIdsChange={props.onActiveMessageIdsChange}
+            onRegisterMinimapJump={props.onRegisterMinimapJump}
         />
     )
 });
@@ -88,6 +92,9 @@ const ChatListInternal = React.memo((props: {
     onForkMessage?: (request: ForkMessageRequest) => void,
     thinking?: boolean,
     forkingMessageId?: string | null,
+    onMinimapItemsChange?: (items: ConversationMinimapItem[]) => void,
+    onActiveMessageIdsChange?: (ids: Set<string>) => void,
+    onRegisterMinimapJump?: (jump: ((index: number) => void) | null) => void,
 }) => {
     const { theme } = useUnistyles();
     const flatListRef = useRef<FlatList>(null);
@@ -181,6 +188,106 @@ const ChatListInternal = React.memo((props: {
     }
 
     const keyExtractor = useCallback((item: any) => item.id, []);
+    const minimapUserMessages = React.useMemo(() => {
+        return visibleMessages
+            .map((message, index) => message.kind === 'user-text'
+                ? { message, index }
+                : null)
+            .filter((item): item is ConversationMinimapItem => item !== null)
+            .reverse();
+    }, [visibleMessages]);
+    const minimapUserMessagesRef = useRef(minimapUserMessages);
+    const activeMessageIdsRef = useRef<Set<string>>(new Set());
+
+    const handleJumpToMessage = useCallback((index: number) => {
+        flatListRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.5 });
+    }, []);
+
+    const handleScrollToIndexFailed = useCallback((info: { index: number; averageItemLength: number }) => {
+        flatListRef.current?.scrollToOffset({
+            offset: Math.max(0, info.averageItemLength * info.index),
+            animated: true,
+        });
+        setTimeout(() => {
+            flatListRef.current?.scrollToIndex({ index: info.index, animated: true, viewPosition: 0.5 });
+        }, 120);
+    }, []);
+
+    React.useEffect(() => {
+        props.onRegisterMinimapJump?.(handleJumpToMessage);
+        return () => props.onRegisterMinimapJump?.(null);
+    }, [props.onRegisterMinimapJump, handleJumpToMessage]);
+
+    React.useEffect(() => {
+        props.onMinimapItemsChange?.(minimapUserMessages);
+
+        const validIds = new Set(minimapUserMessages.map((item) => item.message.id));
+        const stillValidActiveIds = Array.from(activeMessageIdsRef.current).filter((id) => validIds.has(id));
+        if (stillValidActiveIds.length > 0) {
+            const next = new Set(stillValidActiveIds);
+            activeMessageIdsRef.current = next;
+            props.onActiveMessageIdsChange?.(next);
+            return;
+        }
+
+        const fallback = minimapUserMessages[minimapUserMessages.length - 1];
+        const next = fallback ? new Set([fallback.message.id]) : new Set<string>();
+        activeMessageIdsRef.current = next;
+        props.onActiveMessageIdsChange?.(next);
+    }, [props.onMinimapItemsChange, props.onActiveMessageIdsChange, minimapUserMessages]);
+
+    const handleViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: Array<{ item?: Message; index?: number | null }> }) => {
+        const next = new Set<string>();
+        const visibleIndexes: number[] = [];
+        for (const viewable of viewableItems) {
+            if (typeof viewable.index === 'number') {
+                visibleIndexes.push(viewable.index);
+            }
+            const item = viewable.item;
+            if (item?.kind === 'user-text') {
+                next.add(item.id);
+            }
+        }
+
+        // If the viewport is between two user prompts (e.g. only assistant/tool output is
+        // visible), keep the rail useful by highlighting the nearest loaded user prompt.
+        // During very fast scrolling, RN can briefly report no viewable indexes at all; in
+        // that case keep the previous active marker instead of jumping to an endpoint.
+        if (next.size === 0) {
+            const userItems = minimapUserMessagesRef.current;
+            if (userItems.length > 0 && visibleIndexes.length > 0) {
+                const centerIndex = visibleIndexes.reduce((sum, index) => sum + index, 0) / visibleIndexes.length;
+                let nearest = userItems[0];
+                let nearestDistance = Math.abs(nearest.index - centerIndex);
+                for (const userItem of userItems) {
+                    const distance = Math.abs(userItem.index - centerIndex);
+                    if (distance < nearestDistance) {
+                        nearest = userItem;
+                        nearestDistance = distance;
+                    }
+                }
+                next.add(nearest.message.id);
+            } else {
+                const validIds = new Set(userItems.map((item) => item.message.id));
+                for (const id of activeMessageIdsRef.current) {
+                    if (validIds.has(id)) {
+                        next.add(id);
+                    }
+                }
+            }
+        }
+
+        if (next.size > 0 || minimapUserMessagesRef.current.length === 0) {
+            activeMessageIdsRef.current = next;
+            props.onActiveMessageIdsChange?.(next);
+        }
+    }).current;
+
+    const viewabilityConfig = useRef({
+        itemVisiblePercentThreshold: 10,
+        minimumViewTime: 80,
+    }).current;
+
     const renderItem = useCallback(({ item, index }: { item: Message, index: number }) => {
         // Agent turns show the action bar only on their last text segment;
         // user messages always show it.
@@ -229,6 +336,10 @@ const ChatListInternal = React.memo((props: {
     React.useEffect(() => {
         visibleMessagesRef.current = visibleMessages;
     }, [visibleMessages]);
+
+    React.useEffect(() => {
+        minimapUserMessagesRef.current = minimapUserMessages;
+    }, [minimapUserMessages]);
 
     React.useEffect(() => {
         const controller = createScrollButtonVisibilityController({
@@ -307,6 +418,9 @@ const ChatListInternal = React.memo((props: {
                 scrollEventThrottle={16}
                 onEndReached={handleEndReached}
                 onEndReachedThreshold={0.5}
+                onViewableItemsChanged={handleViewableItemsChanged}
+                viewabilityConfig={viewabilityConfig}
+                onScrollToIndexFailed={handleScrollToIndexFailed}
             />
 
             {/* Scroll to bottom button - positioned relative to content area */}
