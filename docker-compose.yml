@@ -28,6 +28,10 @@ services:
       - PORT=3031
       - HANDY_MASTER_SECRET=${HANDY_MASTER_SECRET}
       - APP_URL=${APP_URL:-http://localhost:3030}
+      # Public service discovery (/v1/app-config)
+      - PUBLIC_API_BASE_URL=${PUBLIC_API_BASE_URL}
+      - PUBLIC_VOICE_BASE_URL=${PUBLIC_VOICE_BASE_URL}
+      - PUBLIC_VOICE_PUBLIC_KEY=${PUBLIC_VOICE_PUBLIC_KEY}
       # Database
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       # Redis

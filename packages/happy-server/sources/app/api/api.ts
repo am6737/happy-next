@@ -27,6 +27,7 @@ import { v3SessionRoutes } from "./routes/v3SessionRoutes";
 import { shareRoutes } from "./routes/shareRoutes";
 import { publicShareRoutes } from "./routes/publicShareRoutes";
 import { orchestratorRoutes } from "./routes/orchestratorRoutes";
+import { appConfigRoutes } from "./routes/appConfigRoutes";
 
 export async function startApi() {
 
@@ -63,6 +64,7 @@ export async function startApi() {
     enableAuthentication(typed);
 
     // Routes
+    appConfigRoutes(typed);
     authRoutes(typed);
     pushRoutes(typed);
     sessionRoutes(typed);

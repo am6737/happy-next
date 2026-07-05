@@ -12,7 +12,7 @@ import { Modal } from '@/modal';
 import { hapticsLight } from '@/components/haptics';
 import { showToast } from '@/components/Toast';
 import { sync } from '@/sync/sync';
-import { getServerUrl, setServerUrl, validateServerUrl } from '@/sync/serverConfig';
+import { getServerUrl, resolveServerConfig, setServerUrl, validateServerUrl } from '@/sync/serverConfig';
 import { Switch } from '@/components/Switch';
 import { useUnistyles } from 'react-native-unistyles';
 import { setLastViewedVersion, getLatestVersion } from '@/changelog';
@@ -41,6 +41,7 @@ export default function DevScreen() {
             const validation = validateServerUrl(newUrl);
             if (validation.valid) {
                 setServerUrl(newUrl);
+                await resolveServerConfig();
                 hapticsLight(); showToast('Server URL updated. Please restart the app.');
             } else {
                 Modal.alert('Invalid URL', validation.error || 'Please enter a valid URL');

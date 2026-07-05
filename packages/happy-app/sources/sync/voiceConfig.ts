@@ -2,10 +2,8 @@ import type { AppConfig } from './appConfig';
 import type { Settings } from './settings';
 import { storage } from './storage';
 import { sync } from './sync';
+import { getDiscoveredVoiceConfig } from './serverConfig';
 export type ActionConfirmationSpeed = 'fast' | 'normal' | 'slow';
-
-// Reference to app config for fallback defaults (set in initVoiceConfig).
-let configRef: AppConfig | undefined;
 
 // Top-level `import { sync }` is safe here even though config.ts loads voiceConfig at
 // module-init time: `sync` is only read inside functions (never during module evaluation),
@@ -27,11 +25,11 @@ function settings(): Settings {
 // ── Happy Voice ─────────────────────────────────────────────────────
 
 export function getHappyVoiceGatewayUrl(): string | undefined {
-    return settings().voiceAssistantGatewayUrl ?? configRef?.voiceBaseUrl;
+    return settings().voiceAssistantGatewayUrl ?? getDiscoveredVoiceConfig().baseUrl;
 }
 
 export function setHappyVoiceGatewayUrl(value: string | null): void {
-    applyVoiceSetting({ voiceAssistantGatewayUrl: normalizeCustomValue(value, configRef?.voiceBaseUrl) });
+    applyVoiceSetting({ voiceAssistantGatewayUrl: normalizeCustomValue(value, getDiscoveredVoiceConfig().baseUrl) });
 }
 
 export function hasCustomHappyVoiceGatewayUrl(): boolean {
@@ -39,17 +37,18 @@ export function hasCustomHappyVoiceGatewayUrl(): boolean {
 }
 
 export function getHappyVoicePublicKey(): string | undefined {
-    return settings().voiceAssistantPublicKey ?? configRef?.voicePublicKey;
+    return settings().voiceAssistantPublicKey ?? getDiscoveredVoiceConfig().publicKey;
 }
 
 export function setHappyVoicePublicKey(value: string | null): void {
-    applyVoiceSetting({ voiceAssistantPublicKey: normalizeCustomValue(value, configRef?.voicePublicKey) });
+    applyVoiceSetting({ voiceAssistantPublicKey: normalizeCustomValue(value, getDiscoveredVoiceConfig().publicKey) });
 }
 
 export function setHappyVoiceConfig(gatewayUrl: string | null, publicKey: string | null): void {
+    const discovered = getDiscoveredVoiceConfig();
     applyVoiceSetting({
-        voiceAssistantGatewayUrl: normalizeCustomValue(gatewayUrl, configRef?.voiceBaseUrl),
-        voiceAssistantPublicKey: normalizeCustomValue(publicKey, configRef?.voicePublicKey),
+        voiceAssistantGatewayUrl: normalizeCustomValue(gatewayUrl, discovered.baseUrl),
+        voiceAssistantPublicKey: normalizeCustomValue(publicKey, discovered.publicKey),
     });
 }
 
@@ -191,7 +190,7 @@ export function validateUrl(url: string): { valid: boolean; error?: string } {
 
 // ── Init ────────────────────────────────────────────────────────────
 
-/** Called once at startup from config.ts to retain app-config fallbacks. */
-export function initVoiceConfig(config: AppConfig): void {
-    configRef = config;
+/** Called once at startup from config.ts to keep the voice config init hook. */
+export function initVoiceConfig(_config: AppConfig): void {
+    // Kept as the app-level initialization hook for voice settings.
 }

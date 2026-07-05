@@ -10,7 +10,7 @@ import { RoundButton } from '@/components/RoundButton';
 import { Modal } from '@/modal';
 import { layout } from '@/components/layout';
 import { t } from '@/text';
-import { getServerUrl, setServerUrl, validateServerUrl, getServerInfo } from '@/sync/serverConfig';
+import { getServerUrl, resolveServerConfig, setServerUrl, validateServerUrl, getServerInfo } from '@/sync/serverConfig';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { useAuth } from '@/auth/AuthContext';
 
@@ -145,6 +145,7 @@ export default function ServerConfigScreen() {
 
         if (confirmed) {
             setServerUrl(inputUrl);
+            await resolveServerConfig();
             await logout();
             navigation.dispatch(
                 CommonActions.reset({
@@ -164,6 +165,7 @@ export default function ServerConfigScreen() {
 
         if (confirmed) {
             setServerUrl(null);
+            await resolveServerConfig();
             setInputUrl('');
             await logout();
             navigation.dispatch(
