@@ -382,7 +382,6 @@ function areSessionsShallowEqual(a: Session, b: Session): boolean {
         a.awaitingResponseSince === b.awaitingResponseSince &&
         a.messageSyncing === b.messageSyncing &&
         a.presence === b.presence &&
-        a.todos === b.todos &&
         a.permissionMode === b.permissionMode &&
         a.modelMode === b.modelMode &&
         a.fastMode === b.fastMode &&
@@ -858,18 +857,17 @@ export const storage = create<StorageState>()((set, get) => {
                 const messagesArray = Object.values(mergedMessagesMap)
                     .sort((a, b) => b.createdAt - a.createdAt || (b.seq ?? 0) - (a.seq ?? 0));
 
-                // Update session with todos and latestUsage
+                // Update session with latestUsage
                 // IMPORTANT: We extract latestUsage from the mutable reducerState and copy it to the Session object
                 // This ensures latestUsage is available immediately on load, even before messages are fully loaded
                 let updatedSessions = state.sessions;
-                const needsUpdate = (reducerResult.todos !== undefined || existingSession.reducerState.latestUsage) && session;
+                const needsUpdate = existingSession.reducerState.latestUsage && session;
 
                 if (needsUpdate) {
                     updatedSessions = {
                         ...state.sessions,
                         [sessionId]: {
                             ...session,
-                            ...(reducerResult.todos !== undefined && { todos: reducerResult.todos }),
                             // Copy latestUsage from reducerState to make it immediately available
                             latestUsage: existingSession.reducerState.latestUsage ? {
                                 ...existingSession.reducerState.latestUsage

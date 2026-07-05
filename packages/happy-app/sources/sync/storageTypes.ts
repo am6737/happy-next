@@ -160,12 +160,6 @@ export interface Session {
     awaitingResponseSince?: number | null,
     messageSyncing?: boolean,
     presence: "online" | number, // "online" when active, timestamp when last seen
-    todos?: Array<{
-        content: string;
-        status: 'pending' | 'in_progress' | 'completed';
-        priority: 'high' | 'medium' | 'low';
-        id: string;
-    }>;
     permissionMode?: 'default' | 'acceptEdits' | 'auto' | 'bypassPermissions' | 'plan' | 'read-only' | 'on-failure' | 'full-auto' | 'auto_edit' | 'yolo' | null; // Session permission mode (cached locally; source of truth is UserKV)
     modelMode?: string | null; // Session model mode (cached locally; source of truth is UserKV)
     fastMode?: boolean; // Codex fast mode (service_tier: fast), local-only

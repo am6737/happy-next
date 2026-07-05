@@ -157,15 +157,6 @@ export type ReducerState = {
     messages: Map<string, ReducerMessage>;
     sidechains: Map<string, ReducerMessage[]>;
     tracerState: TracerState; // Tracer state for sidechain processing
-    latestTodos?: {
-        todos: Array<{
-            content: string;
-            status: 'pending' | 'in_progress' | 'completed';
-            priority: 'high' | 'medium' | 'low';
-            id: string;
-        }>;
-        timestamp: number;
-    };
     latestUsage?: {
         inputTokens: number;
         outputTokens: number;
@@ -194,12 +185,6 @@ const ENABLE_LOGGING = false;
 
 export type ReducerResult = {
     messages: Message[];
-    todos?: Array<{
-        content: string;
-        status: 'pending' | 'in_progress' | 'completed';
-        priority: 'high' | 'medium' | 'low';
-        id: string;
-    }>;
     usage?: {
         inputTokens: number;
         outputTokens: number;
@@ -264,11 +249,7 @@ export function reducer(state: ReducerState, messages: NormalizedMessage[], agen
 
         // Handle context reset events - reset state and let the message be shown
         if (msg.role === 'event' && msg.content.type === 'message' && msg.content.message === 'Context was reset') {
-            // Reset todos to empty array and reset usage to zero
-            state.latestTodos = {
-                todos: [],
-                timestamp: msg.createdAt  // Use message timestamp, not current time
-            };
+            // Reset usage to zero
             state.latestUsage = {
                 inputTokens: 0,
                 outputTokens: 0,
@@ -280,9 +261,9 @@ export function reducer(state: ReducerState, messages: NormalizedMessage[], agen
             // Don't continue - let the event be processed normally to create a message
         }
 
-        // Handle compaction completed events - reset context but keep todos
+        // Handle compaction completed events - reset usage/context
         if (msg.role === 'event' && msg.content.type === 'message' && msg.content.message === 'Compaction completed') {
-            // Reset usage/context to zero but keep todos unchanged
+            // Reset usage/context to zero
             state.latestUsage = {
                 inputTokens: 0,
                 outputTokens: 0,
@@ -673,17 +654,6 @@ export function reducer(state: ReducerState, messages: NormalizedMessage[], agen
                                 message.tool.result = undefined;
                             }
                             changed.add(existingMessageId);
-
-                            // Track TodoWrite tool inputs when updating existing messages
-                            if (message.tool.name === 'TodoWrite' && message.tool.state === 'running' && Array.isArray(message.tool.input?.todos)) {
-                                // Only update if this is newer than existing todos
-                                if (!state.latestTodos || message.tool.createdAt > state.latestTodos.timestamp) {
-                                    state.latestTodos = {
-                                        todos: message.tool.input.todos,
-                                        timestamp: message.tool.createdAt
-                                    };
-                                }
-                            }
                         }
                     } else {
                         if (ENABLE_LOGGING) {
@@ -744,17 +714,6 @@ export function reducer(state: ReducerState, messages: NormalizedMessage[], agen
 
                         state.toolIdToMessageId.set(c.id, mid);
                         changed.add(mid);
-
-                        // Track TodoWrite tool inputs
-                        if (toolCall.name === 'TodoWrite' && toolCall.state === 'running' && Array.isArray(toolCall.input?.todos)) {
-                            // Only update if this is newer than existing todos
-                            if (!state.latestTodos || toolCall.createdAt > state.latestTodos.timestamp) {
-                                state.latestTodos = {
-                                    todos: toolCall.input.todos,
-                                    timestamp: toolCall.createdAt
-                                };
-                            }
-                        }
                     }
                 }
             }
@@ -1118,7 +1077,6 @@ export function reducer(state: ReducerState, messages: NormalizedMessage[], agen
 
     return {
         messages: newMessages,
-        todos: state.latestTodos?.todos,
         usage: state.latestUsage ? {
             inputTokens: state.latestUsage.inputTokens,
             outputTokens: state.latestUsage.outputTokens,
