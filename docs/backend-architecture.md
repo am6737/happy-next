@@ -383,7 +383,7 @@ graph TB
 ## Integrations
 - **GitHub**: OAuth connect + webhook verification, optional if env vars are set.
 - **AI vendors**: encrypted token storage for `openai`, `anthropic`, `gemini`.
-- **Voice**: Voice tool bridge (`/v1/voice/tool-call`) for the separate `happy-voice` LiveKit gateway.
+- **Voice**: Voice tool bridge (`/v1/voice/tool-call`) for the separate `happy-voice` gateway.
 - **Push tokens**: stored for later notification delivery.
 
 ## Observability

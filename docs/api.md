@@ -114,7 +114,7 @@ Auth flows:
 
 ### Version and voice
 - `POST /v1/version`
-- `POST /v1/voice/tool-call` (voice tool bridge for the `happy-voice` LiveKit gateway)
+- `POST /v1/voice/tool-call` (voice tool bridge for the `happy-voice` gateway)
 
 ### Dev-only
 - `POST /logs-combined-from-cli-and-mobile-for-simple-ai-debugging` (only if enabled)

@@ -246,7 +246,7 @@ Happy Next 是原版 Happy 的重大演进，以下是亮点：
 - **[Happy App](packages/happy-app)** — Web UI + 移动客户端（Expo）
 - **[Happy CLI](packages/happy-cli)** — Claude Code、Codex 和 Gemini 的命令行界面
 - **[Happy Server](packages/happy-server)** — 加密同步后端服务器
-- **[Happy Voice](packages/happy-voice)** — 语音网关（基于 LiveKit）
+- **[Happy Voice](packages/happy-voice)** — 语音网关（基于火山引擎/豆包）
 - **[Happy Wire](packages/happy-wire)** — 共享线路类型和 Schema
 
 ## 自托管（Docker Compose）

@@ -16,6 +16,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.server
+    command: >
+      sh -c "yarn --cwd packages/happy-server prisma migrate deploy &&
+             yarn --cwd packages/happy-server start"
     ports:
       - "3031:3031"
     restart: unless-stopped
@@ -27,7 +30,7 @@ services:
       - APP_URL=${APP_URL:-http://localhost:3030}
       # Public service discovery (/v1/app-config)
       - PUBLIC_API_BASE_URL=${PUBLIC_API_BASE_URL}
-      - PUBLIC_VOICE_BASE_URL=${PUBLIC_VOICE_BASE_URL:-http://localhost:3040}
+      - PUBLIC_VOICE_BASE_URL=${PUBLIC_VOICE_BASE_URL}
       # Shared with happy-voice. Used to sign short-lived voice bearer tokens.
       - VOICE_AUTH_SECRET=${VOICE_AUTH_SECRET:-dev-voice-auth-secret-change-me-32-bytes}
       # Database
@@ -52,9 +55,12 @@ services:
       # Voice tool bridge
       - VOICE_TOOL_BRIDGE_KEY=${VOICE_TOOL_BRIDGE_KEY:-dev-voice-bridge-key}
     depends_on:
-      - minio
-      - postgres
-      - redis
+      minio-init:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
       
   happy-voice:
     build:
@@ -110,6 +116,20 @@ services:
     volumes:
       - minio_data:/data
 
+  minio-init:
+    image: minio/mc
+    depends_on:
+      - minio
+    environment:
+      - S3_ACCESS_KEY=${S3_ACCESS_KEY}
+      - S3_SECRET_KEY=${S3_SECRET_KEY}
+      - S3_BUCKET=${S3_BUCKET}
+    entrypoint: /bin/sh
+    command: >
+      -c "until mc alias set local http://minio:9000 \"$${S3_ACCESS_KEY}\" \"$${S3_SECRET_KEY}\"; do sleep 2; done;
+          mc mb -p \"local/$${S3_BUCKET}\" || true;
+          mc anonymous set download \"local/$${S3_BUCKET}\""
+
   postgres:
     image: postgres:15
     environment:
@@ -118,11 +138,21 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
 
   redis:
     image: redis:7-alpine
     volumes:
       - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
 
 volumes:
   postgres_data:

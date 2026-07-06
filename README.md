@@ -246,7 +246,7 @@ Full changelog: [docs/changes-from-happy.md](docs/changes-from-happy.md)
 - **[Happy App](packages/happy-app)** - Web UI + mobile client (Expo)
 - **[Happy CLI](packages/happy-cli)** - Command-line interface for Claude Code, Codex, and Gemini
 - **[Happy Server](packages/happy-server)** - Backend server for encrypted sync
-- **[Happy Voice](packages/happy-voice)** - Voice gateway (LiveKit-based)
+- **[Happy Voice](packages/happy-voice)** - Voice gateway (Volcengine/Doubao-based)
 - **[Happy Wire](packages/happy-wire)** - Shared wire types and schemas
 
 ## Self-host (Docker Compose)
