@@ -6,7 +6,7 @@ import { BottomSheetModal } from '@gorhom/bottom-sheet';
 import { Item } from '@/components/Item';
 import { ItemGroup } from '@/components/ItemGroup';
 import { ItemList } from '@/components/ItemList';
-import { useSession, useIsDataReady } from '@/sync/storage';
+import { useSession, useIsDataReady, storage } from '@/sync/storage';
 import { useUnistyles } from 'react-native-unistyles';
 import { t } from '@/text';
 import { Typography } from '@/constants/Typography';
@@ -38,25 +38,40 @@ function SharingManagementContent({ sessionId }: { sessionId: string }) {
     // Load sharing data
     const loadSharingData = useCallback(async () => {
         const credentials = sync.getCredentials();
+        let sharesData: SessionShare[] = [];
+        let publicShareData: PublicSessionShare | null = null;
+
         try {
-            const sharesData = await getSessionShares(credentials, sessionId);
-            setShares(sharesData);
+            sharesData = await getSessionShares(credentials, sessionId);
         } catch {
-            setShares([]);
+            sharesData = [];
         }
+        setShares(sharesData);
+
         const friendsData = await getFriendsList(credentials);
         setFriends(friendsData);
+
         try {
-            const publicShareData = await getPublicShare(credentials, sessionId);
-            setPublicShare(publicShareData);
+            publicShareData = await getPublicShare(credentials, sessionId);
         } catch {
-            setPublicShare(null);
+            publicShareData = null;
         }
+        setPublicShare(publicShareData);
+
+        return { shares: sharesData, publicShare: publicShareData };
     }, [sessionId]);
 
     useEffect(() => {
         loadSharingData();
     }, [loadSharingData]);
+
+    const updateLocalSharedByMe = useCallback((isShared: boolean) => {
+        const currentSession = storage.getState().sessions[sessionId];
+        if (!currentSession || currentSession.isShared === isShared) {
+            return;
+        }
+        storage.getState().applySessions([{ ...currentSession, isShared }]);
+    }, [sessionId]);
 
     // Handle adding a new share
     const handleAddShare = useCallback(async (userId: string, accessLevel: ShareAccessLevel) => {
@@ -92,11 +107,12 @@ function SharingManagementContent({ sessionId }: { sessionId: string }) {
                 encryptedDataKey,
             });
 
+            updateLocalSharedByMe(true);
             await loadSharingData();
         } catch (e) {
             Modal.alert('Error', e instanceof HappyError ? e.message : t('errors.operationFailed'), [{ text: 'OK', style: 'cancel' }]);
         }
-    }, [friends, sessionId, loadSharingData]);
+    }, [friends, sessionId, loadSharingData, updateLocalSharedByMe]);
 
     // Handle updating share access level
     const handleUpdateShare = useCallback(async (shareId: string, accessLevel: ShareAccessLevel) => {
@@ -114,11 +130,12 @@ function SharingManagementContent({ sessionId }: { sessionId: string }) {
         try {
             const credentials = sync.getCredentials();
             await deleteSessionShare(credentials, sessionId, shareId);
-            await loadSharingData();
+            const sharingData = await loadSharingData();
+            updateLocalSharedByMe(sharingData.shares.length > 0 || !!sharingData.publicShare);
         } catch (e) {
             Modal.alert('Error', e instanceof HappyError ? e.message : t('errors.operationFailed'), [{ text: 'OK', style: 'cancel' }]);
         }
-    }, [sessionId, loadSharingData]);
+    }, [sessionId, loadSharingData, updateLocalSharedByMe]);
 
     // Handle creating a public share
     const handleCreatePublicShare = useCallback(async (options: { expiresInDays?: number; maxUses?: number; isConsentRequired: boolean }) => {
@@ -135,6 +152,7 @@ function SharingManagementContent({ sessionId }: { sessionId: string }) {
             });
             setPublicShare(created);
             setPublicShareToken(token);
+            updateLocalSharedByMe(true);
             await loadSharingData();
         } catch (e) {
             console.error('createPublicShare failed:', e);
@@ -143,7 +161,7 @@ function SharingManagementContent({ sessionId }: { sessionId: string }) {
                 : t('errors.operationFailed');
             Modal.alert('Error', message, [{ text: 'OK', style: 'cancel' }]);
         }
-    }, [sessionId, loadSharingData]);
+    }, [sessionId, loadSharingData, updateLocalSharedByMe]);
 
     // Handle deleting a public share
     const handleDeletePublicShare = useCallback(async () => {
@@ -152,11 +170,12 @@ function SharingManagementContent({ sessionId }: { sessionId: string }) {
             await deletePublicShare(credentials, sessionId);
             setPublicShare(null);
             setPublicShareToken(null);
-            await loadSharingData();
+            const sharingData = await loadSharingData();
+            updateLocalSharedByMe(sharingData.shares.length > 0 || !!sharingData.publicShare);
         } catch (e) {
             Modal.alert('Error', e instanceof HappyError ? e.message : t('errors.operationFailed'), [{ text: 'OK', style: 'cancel' }]);
         }
-    }, [sessionId, loadSharingData]);
+    }, [sessionId, loadSharingData, updateLocalSharedByMe]);
 
     if (!session) {
         return (
