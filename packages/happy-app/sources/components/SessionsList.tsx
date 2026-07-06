@@ -392,7 +392,8 @@ export function SessionsList() {
         }
         return Array.from(groups.values()).sort((a, b) => a.name.localeCompare(b.name));
     }, [allActiveSessions, machineNames, machineNameCache]);
-    const showMachineTabs = machineGroups.length >= 2;
+    const hasSharedSessions = (sharedData?.length ?? 0) > 0;
+    const showMachineTabs = machineGroups.length >= 2 || hasSharedSessions;
 
     // Persist live machine names so they survive app restarts (machines sync lazily).
     React.useEffect(() => {
@@ -577,10 +578,11 @@ export function SessionsList() {
     // Remove this section as we'll use FlatList for all items now
 
 
-    const hasSharedSessions = sharedData && sharedData.length > 0;
     const hasSharedByMeSessions = sharedByMeData && sharedByMeData.length > 0;
 
-    // Tab bar: one tab per machine (only when there are 2+ machines) preceded by an
+    // Tab bar: one tab per machine when there are 2+ machines, or when shared-with-me
+    // sessions are present so users can distinguish their own machine from shared sources.
+    // The tabs are preceded by an
     // "All" tab, then the sharing tabs. The "All" tab is also added when only sharing
     // tabs exist, so the user can always get back to the main active list.
     const visibleTabs = React.useMemo(() => {
