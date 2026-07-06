@@ -99,6 +99,7 @@ export function ConversationMinimap(props: {
                 bottom: '15%',
                 left: 8,
                 width: HIT_WIDTH + PREVIEW_WIDTH + 16,
+                marginTop: -56, // offset for the top bar
                 justifyContent: 'center',
                 zIndex: 1001,
             }}
@@ -120,7 +121,7 @@ export function ConversationMinimap(props: {
                         left: 0,
                         width: 1,
                         borderRadius: 1,
-                        backgroundColor: theme.colors.divider,
+                        backgroundColor: theme.colors.transparent,
                         opacity: 0.55,
                     }}
                 />
