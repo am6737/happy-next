@@ -17,6 +17,7 @@ This document summarizes what changed in Happy Next compared to the original Hap
 | Session sharing | Direct invite and public link sharing with E2E encryption and access control |
 | DooTask | Task list, detail, real-time chat, one-click AI session launch, globalized WebSocket |
 | Self-hosting | One-command `docker-compose` stack with separate origins |
+| Server discovery | API/voice service discovery plus fastest-default endpoint racing when no custom server is configured |
 | Sync | v3 messages API, HTTP outbox, server-confirmed sends, race condition fixes |
 | Chat UX | Image attachment, pagination, blue dot, compact view, session search, pull-to-refresh, minimap navigation, context usage tooltip, resizable web sidebar |
 | Session mgmt | Per-machine session tabs, device and agent filters, hot-upgrade, metadata caching, smart new-session machine defaults |
@@ -59,6 +60,7 @@ Messages sent while the CLI is busy are now queued and delivered automatically.
 - **Edit & pause/draft**: edit a queued message before it sends, or pause it / save it as a draft instead of dispatching
 - **Reconnect sync**: queue state syncs on WebSocket reconnection
 - **Concurrent safety**: hardened dispatch concurrency and cleanup semantics, with dispatch timing tuned (3s) to avoid dropping a queued message on a busy CLI
+- **Persistent message cache**: session messages are stored locally so reopening a conversation can show existing history faster
 
 ## Multi-Agent Support
 
@@ -151,6 +153,7 @@ Share AI coding sessions with others through direct invites or public links, wit
 - **Share indicator** on sessions shared with others
 - **Sharer avatar** and **sender name** display in shared sessions
 - **Public share web viewer** for link-based access without the app, with paginated message loading so long shared conversations open faster
+- **Sharing list refresh**: the Shared by me list updates after sharing changes, and machine tabs stay visible when shared sessions are present
 - **Shared sessions on user profile** page
 - **Permission-aware UI**: input bar, voice button, and session actions adapt to access level
 - **Server-side access control** module with permission validation for messages, RPC calls, and voice
@@ -207,6 +210,7 @@ Happy Next adds a first-class self-hosting path.
 - **Root `docker-compose.yml`** with all services: Web app (Nginx), API server, Voice gateway, Postgres, Redis, MinIO
 - **Custom server shortcut**: a quick-access button in desktop settings to configure a custom server
 - **Service discovery**: API and voice config endpoints are now discoverable automatically
+- **Fast default endpoint selection**: when no custom server or env override is configured, the app races the official API config endpoints and uses the fastest successful response
 - **Separate origins architecture**: Web, API, and Voice each use different ports/domains (no path reverse proxy)
 - **`.env.example`** as the single source of truth for all configuration
 - **Runtime env var injection** in Dockerfile/entrypoint for Docker builds

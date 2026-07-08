@@ -1,18 +1,21 @@
 # Changelog
 
-## Version 16 - 2026-07-05
+## Version 16 - 2026-07-08
 
-Conversations gain a minimap for quick navigation, a context-usage tooltip, and a resizable sidebar on web; the server settings surface a custom-server shortcut; voice auth is hardened with short-lived tokens; and the CLI updates to v0.6.0 with new Codex slash commands for compact review and goal-setting.
+Conversations gain a minimap for quick navigation, a context-usage tooltip, a persistent message cache for faster reopens, and a resizable sidebar on web; server connectivity is streamlined with service discovery, fastest-default API endpoint racing, and improved self-host deployment setup; shared-session lists and machine tabs update more reliably; voice auth is hardened with short-lived tokens; and the CLI updates to v0.6.0 with new Codex slash commands for compact review and goal-setting.
 
-- Minimap: tap the new minimap panel to jump to any part of a long conversation at a glance
+- Minimap: tap the new minimap panel to jump to any part of a long conversation at a glance, with polished overlay placement for smoother navigation
 - Context usage: a tooltip on the context indicator shows token-count breakdown details
+- Message cache: session messages are persisted locally so reopening a conversation can show existing history faster with less blank loading time
 - Web sidebar: the sidebar is now resizable by dragging its edge
 - Settings: a shortcut button to configure a custom server is now visible on desktop settings
 - Breadcrumb: copy the current browser breadcrumb path directly from the navigation bar
 - Git: bulk git actions now show loading feedback while the operation runs
 - Voice: voice gateway auth now uses short-lived tokens for improved security
-- Server: service discovery for API and voice config endpoints is now supported
-- Sessions: new session defaults now pick the best available machine automatically
+- Server: service discovery for API and voice config endpoints is now supported; when no custom server or env override is configured, the app races the official default API endpoints and uses the fastest available config response
+- Self-hosting: Docker/self-host deployment setup and documentation were improved
+- Sessions: new session defaults now pick the best available machine automatically, and machine tabs remain visible when shared sessions are present
+- Sharing: the Shared by me list now updates after sharing changes
 - Fixes: user display name fallbacks improved; shared session permissions corrected; diff text selection enabled in the file viewer; pending-messages 404 loop resolved for view-only sessions
 - CLI: Happy CLI updated to v0.6.0 with Codex slash commands for compact review and goal-setting
 

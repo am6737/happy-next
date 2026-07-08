@@ -167,6 +167,7 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - One-command `docker-compose up` (Web + API + Voice + Postgres + Redis + MinIO)
 - Custom server shortcut button in desktop settings for quick server configuration
 - Service discovery for API and voice config endpoints
+- Default API endpoint racing chooses the fastest official config endpoint when no custom/self-host server is configured
 - Separate origins architecture (no path reverse proxy)
 - `.env.example` with full configuration reference
 - Runtime env var injection for Docker builds
@@ -180,6 +181,7 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Chat reducer no longer synthesizes out-of-order completed-permission messages
 - Message send hardened for flaky networks; draft restore is suppressed while a send is in flight
 - Session loading reliability: 60s message-fetch timeout, recovery from permanent load failure, refresh indicator across the entire retry loop, and chunked base64 encoding to avoid stack overflow on very large payloads
+- Persistent local message cache shows existing conversation history faster when reopening sessions
 - Session draft rewritten as a single source of truth — fewer cases of drafts vanishing or reappearing
 
 ### Chat & Session UX
@@ -191,10 +193,12 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Sending shows an optimistic "Processing…" status immediately, plus a "refreshing" indicator while the message list reloads
 - Message pagination, unread blue dot indicator, compact list view
 - Conversation minimap panel — tap to jump to any part of a long conversation at a glance
+- Minimap overlay placement is polished for smoother long-conversation navigation
 - Context usage tooltip on the context indicator showing token-count breakdown details
 - Resizable sidebar on web — drag the edge to adjust width
 - New session defaults now pick the best available machine automatically
 - Per-machine session tabs (sessions grouped by the machine they run on), each tab showing a status dot — orange when a session on that machine needs permission, reflecting the live thinking state — while the aggregate 'all' tab stays dot-free; session preview expand/collapse, metadata caching
+- Machine tabs remain visible when shared sessions are present, and the Shared by me list refreshes after sharing changes
 - Recent session history pagination for faster initial load
 - Session rename with lock (prevent AI auto-update), search in history
 - Options click-to-send / long-press-to-fill, scroll-to-bottom button
