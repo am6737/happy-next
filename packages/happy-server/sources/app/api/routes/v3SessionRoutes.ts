@@ -269,6 +269,11 @@ export function v3SessionRoutes(app: Fastify) {
                 updatedAt: true,
             },
         });
+        const oldestMessage = await db.sessionMessage.findFirst({
+            where: { sessionId },
+            orderBy: { seq: "asc" },
+            select: { seq: true },
+        });
 
         const hasMore = messages.length > limit;
         const page = hasMore ? messages.slice(0, limit) : messages;
@@ -276,6 +281,7 @@ export function v3SessionRoutes(app: Fastify) {
         return reply.send({
             messages: page.map(toResponseMessage),
             hasMore,
+            oldestSeq: oldestMessage?.seq ?? null,
         });
     });
 

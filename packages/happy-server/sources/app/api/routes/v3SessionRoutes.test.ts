@@ -286,6 +286,11 @@ const {
         });
     });
 
+    const sessionMessageFindFirst = vi.fn(async (args: any) => {
+        const rows = await sessionMessageFindMany({ ...args, take: 1 });
+        return rows[0] ?? null;
+    });
+
     const sessionMessageCreate = vi.fn(async (args: any) => {
         const createdAt = new Date(state.nowMs);
         state.nowMs += 1;
@@ -477,6 +482,7 @@ const {
         },
         sessionMessage: {
             findMany: sessionMessageFindMany,
+            findFirst: sessionMessageFindFirst,
             create: sessionMessageCreate
         },
         sessionPendingMessage: {
@@ -510,6 +516,7 @@ const {
         },
         sessionMessage: {
             findMany: sessionMessageFindMany,
+            findFirst: sessionMessageFindFirst,
             create: sessionMessageCreate
         },
         sessionPendingMessage: {
@@ -672,6 +679,7 @@ describe("v3SessionRoutes", () => {
         expect(response.statusCode).toBe(200);
         const body = response.json();
         expect(body.hasMore).toBe(false);
+        expect(body.oldestSeq).toBe(1);
         expect(body.messages.map((message: any) => message.seq)).toEqual([2, 1]);
     });
 
@@ -690,6 +698,7 @@ describe("v3SessionRoutes", () => {
         const body1 = page1.json();
         expect(body1.messages.map((message: any) => message.seq)).toEqual([1, 2]);
         expect(body1.hasMore).toBe(true);
+        expect(body1.oldestSeq).toBe(1);
 
         const page2 = await app.inject({
             method: "GET",
@@ -725,6 +734,7 @@ describe("v3SessionRoutes", () => {
         const body1 = page1.json();
         expect(body1.messages.map((message: any) => message.seq)).toEqual([4, 3]);
         expect(body1.hasMore).toBe(true);
+        expect(body1.oldestSeq).toBe(1);
 
         const page2 = await app.inject({
             method: "GET",
@@ -751,6 +761,7 @@ describe("v3SessionRoutes", () => {
         const body = emptyResponse.json();
         expect(body.messages).toEqual([]);
         expect(body.hasMore).toBe(false);
+        expect(body.oldestSeq).toBe(1);
     });
 
     it("enforces read query bounds and auth/session ownership", async () => {

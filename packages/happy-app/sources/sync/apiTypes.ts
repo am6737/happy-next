@@ -22,6 +22,7 @@ export const ApiMessageSchema = z.object({
         status: z.enum(['waiting', 'error']),
         reason: z.string().nullable(),
     }).nullish(),
+    updatedAt: z.number().optional(),
 });
 
 export type ApiMessage = z.infer<typeof ApiMessageSchema>;

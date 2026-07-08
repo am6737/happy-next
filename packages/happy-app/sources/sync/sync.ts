@@ -71,6 +71,18 @@ import {
     type SessionModeAgentType,
     type SessionModeConfigPatch,
 } from './sessionModeConfig';
+import { messageRepository } from './messagesStore/messageRepository';
+import {
+    buildCoverageStatePatch,
+    canServeCachedOlderPage,
+    clampForwardMaxSeq,
+    getCachedOlderPageUiHasMore,
+    getKnownContiguousMaxSeq,
+    getKnownContiguousMinSeq,
+    isPageInsideKnownCoverage,
+    mergeOldestLoadedSeq,
+} from './messagesStore/common';
+import type { MessagePage, SessionMessageCacheState, SessionMessageCacheStatePatch } from './messagesStore/types';
 
 type PermissionMode = NonNullable<Session['permissionMode']>;
 
@@ -104,6 +116,12 @@ type PreparedOutgoingMessage = {
     localId: string;
     encryptedRawRecord: string;
     normalizedMessage: NormalizedMessage | null;
+};
+
+type SessionMessagesResponse = {
+    messages?: ApiMessage[];
+    hasMore?: boolean;
+    oldestSeq?: number | null;
 };
 
 /**
@@ -183,6 +201,11 @@ class Sync {
     private sessionMessageDispatchLastRunAt = new Map<string, number>();
     private sessionMessageDispatchGeneration = new Map<string, number>();
     private sessionDataKeys = new Map<string, Uint8Array>(); // Store session data encryption keys internally
+    // Monotonic token guarding persistent message-cache writes. Bumped before any operation that
+    // clears/invalidates a session cache so stale fetch/websocket handlers cannot enqueue writes
+    // after the clear and resurrect obsolete messages on the next bootstrap.
+    private messageCacheGeneration = new Map<string, number>();
+    private messageCacheResetPromises = new Map<string, Promise<void>>();
     /** Per-session last-known seq for v3 incremental fetch */
     private sessionLastSeq = new Map<string, number>();
     /** Callbacks to run before applying a sent message (keyed by localId).
@@ -217,6 +240,23 @@ class Sync {
 
     // Track which session the user is currently viewing
     private viewingSessionId: string | null = null;
+
+    private getMessageAccountKey(): string | null {
+        if (!this.serverID) {
+            return null;
+        }
+        // Keep the durable message-cache namespace stable for the authenticated account.  The
+        // server URL is user-editable in self-hosted setups; including it here made a URL change
+        // orphan all previous rows and prevented normal cache reuse/cleanup.
+        return this.serverID;
+    }
+
+    private getLegacyMessageAccountKey(): string | null {
+        if (!this.serverID) {
+            return null;
+        }
+        return `${getServerUrl()}|${this.serverID}`;
+    }
 
     // Generic locking mechanism
     private recalculationLockCount = 0;
@@ -387,6 +427,13 @@ class Sync {
         log.log('🔄 #init: Invalidating all syncs');
         this.lastSessionsCursorMs = 0;
         this.sessionsBootstrapMachine.reset();
+        const legacyMessageAccountKey = this.getLegacyMessageAccountKey();
+        const messageAccountKey = this.getMessageAccountKey();
+        if (legacyMessageAccountKey && messageAccountKey && legacyMessageAccountKey !== messageAccountKey) {
+            void messageRepository.clearAccount(legacyMessageAccountKey).catch((error) => {
+                console.warn('Failed to clear legacy URL-scoped message cache:', error);
+            });
+        }
 
         const cachedSessions = loadSessionsCache(this.serverID);
         if (cachedSessions) {
@@ -480,6 +527,20 @@ class Sync {
         }
 
         await this.encryption.initializeSessions(sessionKeys);
+    }
+
+    private getMessageCacheGeneration = (sessionId: string): number => {
+        return this.messageCacheGeneration.get(sessionId) ?? 0;
+    }
+
+    private bumpMessageCacheGeneration = (sessionId: string): number => {
+        const next = this.getMessageCacheGeneration(sessionId) + 1;
+        this.messageCacheGeneration.set(sessionId, next);
+        return next;
+    }
+
+    private isMessageCacheGenerationCurrent = (sessionId: string, generation: number): boolean => {
+        return this.getMessageCacheGeneration(sessionId) === generation;
     }
 
 
@@ -1115,11 +1176,69 @@ class Sync {
 
             try {
                 const responseData = await response.json();
-                if (responseData.messages?.length > 0) {
-                    const maxSeq = Math.max(...responseData.messages.map((m: any) => m.seq));
-                    const currentSeq = this.sessionLastSeq.get(sessionId) ?? 0;
-                    if (maxSeq > currentSeq) {
-                        this.sessionLastSeq.set(sessionId, maxSeq);
+                const responseMessages = Array.isArray(responseData.messages) ? responseData.messages : [];
+                if (responseMessages.length > 0) {
+                    const apiMessages: ApiMessage[] = [];
+                    for (const m of responseMessages) {
+                        const responseLocalId = m.localId ?? null;
+                        const responseContent = m.content;
+                        const hasEncryptedContent = responseContent?.t === 'encrypted' && typeof responseContent.c === 'string';
+                        // The legacy POST response usually returns message metadata only.  Only
+                        // reuse the ciphertext we just sent for the server row that can be tied to
+                        // this local send.  Never stamp that ciphertext onto unrelated rows in a
+                        // multi-message response; those must be fetched from the server with their
+                        // own encrypted payloads.
+                        const canReuseOutgoingCiphertext = responseLocalId === localId
+                            || (responseMessages.length === 1 && responseLocalId === null && !hasEncryptedContent);
+                        const content = hasEncryptedContent
+                            ? { t: 'encrypted' as const, c: responseContent.c }
+                            : canReuseOutgoingCiphertext
+                                ? { t: 'encrypted' as const, c: encryptedRawRecord }
+                                : null;
+
+                        if (!content) {
+                            continue;
+                        }
+
+                        apiMessages.push({
+                            id: m.id,
+                            seq: m.seq,
+                            localId: responseLocalId ?? (canReuseOutgoingCiphertext ? localId : null),
+                            content,
+                            createdAt: m.createdAt,
+                            updatedAt: m.updatedAt,
+                            sentBy: m.sentBy ?? this.serverID,
+                            sentByName: m.sentByName ?? storage.getState().profile.firstName ?? null,
+                            deliveryIssue: m.deliveryIssue ?? undefined,
+                        });
+                    }
+
+                    if (apiMessages.length < responseMessages.length) {
+                        this.invalidateMessagesSync(sessionId);
+                    }
+
+                    if (apiMessages.length > 0) {
+                        const maxSeq = Math.max(...apiMessages.map((m) => m.seq));
+                        const cachedState = await this.getCachedMessageState(sessionId);
+                        const coveragePatch = buildCoverageStatePatch(cachedState, {
+                            direction: 'newer',
+                            messages: apiMessages,
+                        });
+                        if (coveragePatch) {
+                            await this.upsertMessagesInLocalCache(sessionId, apiMessages, { statePatch: coveragePatch });
+                        } else {
+                            this.invalidateMessagesSync(sessionId);
+                        }
+                        const currentSeq = this.sessionLastSeq.get(sessionId) ?? 0;
+                        if (coveragePatch && maxSeq > currentSeq) {
+                            this.sessionLastSeq.set(sessionId, maxSeq);
+                        }
+                        const serverNormalizedMessages = await this.decryptAndNormalizeMessages(sessionId, apiMessages, this.encryption.getSessionEncryption(sessionId)!);
+                        if (serverNormalizedMessages.length > 0) {
+                            void this.enqueueSessionMessageDispatch(sessionId, 'sendMessage:server-ack', async () => {
+                                this.applyMessages(sessionId, serverNormalizedMessages);
+                            });
+                        }
                     }
                 }
             } catch {
@@ -1217,8 +1336,35 @@ class Sync {
                 });
             }
 
+            const apiMessage: ApiMessage = {
+                id: responseData.message.id,
+                seq: responseData.message.seq,
+                localId: responseData.message.localId ?? localId,
+                content: { t: 'encrypted', c: encryptedRawRecord },
+                createdAt: responseData.message.createdAt,
+                updatedAt: responseData.message.updatedAt,
+                sentBy: responseData.message.sentBy ?? this.serverID,
+                sentByName: responseData.message.sentByName ?? storage.getState().profile.firstName ?? null,
+            };
+            const cachedState = await this.getCachedMessageState(sessionId);
+            const coveragePatch = buildCoverageStatePatch(cachedState, {
+                direction: 'newer',
+                messages: [apiMessage],
+            });
+            if (coveragePatch) {
+                await this.upsertMessagesInLocalCache(sessionId, [apiMessage], { statePatch: coveragePatch });
+            } else {
+                this.invalidateMessagesSync(sessionId);
+            }
+            const serverNormalizedMessages = await this.decryptAndNormalizeMessages(sessionId, [apiMessage], this.encryption.getSessionEncryption(sessionId)!);
+            if (serverNormalizedMessages.length > 0) {
+                void this.enqueueSessionMessageDispatch(sessionId, 'sendOrQueueMessage:sent-server-ack', async () => {
+                    this.applyMessages(sessionId, serverNormalizedMessages);
+                });
+            }
+
             const currentSeq = this.sessionLastSeq.get(sessionId) ?? 0;
-            if (responseData.message.seq > currentSeq) {
+            if (coveragePatch && responseData.message.seq > currentSeq) {
                 this.sessionLastSeq.set(sessionId, responseData.message.seq);
             }
 
@@ -2972,6 +3118,120 @@ class Sync {
         }
     }
 
+    private upsertMessagesInLocalCache = async (
+        sessionId: string,
+        messages: ApiMessage[],
+        options?: {
+            cacheGeneration?: number;
+            isCurrent?: () => boolean;
+            statePatch?: SessionMessageCacheStatePatch;
+        },
+    ): Promise<boolean> => {
+        if (messages.length === 0 && !options?.statePatch) {
+            return true;
+        }
+        const accountKey = this.getMessageAccountKey();
+        if (!accountKey) {
+            return false;
+        }
+        const cacheGeneration = options?.cacheGeneration ?? this.getMessageCacheGeneration(sessionId);
+        const isCurrent = () =>
+            this.isMessageCacheGenerationCurrent(sessionId, cacheGeneration)
+            && (options?.isCurrent?.() ?? true);
+
+        try {
+            if (!isCurrent()) {
+                return false;
+            }
+            // If a cache clear is already queued/running, wait for it before allowing fresh writes.
+            // Stale writers captured before the clear will fail the generation check after the wait.
+            await (this.messageCacheResetPromises.get(sessionId) ?? Promise.resolve());
+            if (!isCurrent()) {
+                return false;
+            }
+            if (options?.statePatch) {
+                await messageRepository.upsertMessagesAndUpdateState(accountKey, sessionId, messages, options.statePatch);
+            } else {
+                await messageRepository.upsertMessages(accountKey, sessionId, messages);
+            }
+            if (!isCurrent()) {
+                return false;
+            }
+            return true;
+        } catch (error) {
+            console.warn(`Failed to upsert local message cache for ${sessionId}:`, error);
+            return false;
+        }
+    }
+
+    private getCachedMessageState = async (sessionId: string): Promise<SessionMessageCacheState | null> => {
+        const accountKey = this.getMessageAccountKey();
+        if (!accountKey) {
+            return null;
+        }
+        try {
+            return await messageRepository.getSessionState(accountKey, sessionId);
+        } catch (error) {
+            console.warn(`Failed to read local message cache state for ${sessionId}:`, error);
+            return null;
+        }
+    }
+
+    private updateCachedMessageState = async (
+        sessionId: string,
+        patch: SessionMessageCacheStatePatch,
+    ): Promise<SessionMessageCacheState | null> => {
+        const accountKey = this.getMessageAccountKey();
+        if (!accountKey) {
+            return null;
+        }
+        try {
+            return await messageRepository.updateSessionState(accountKey, sessionId, patch);
+        } catch (error) {
+            console.warn(`Failed to update local message cache state for ${sessionId}:`, error);
+            return null;
+        }
+    }
+
+    private readCachedLatestMessages = async (sessionId: string, limit: number): Promise<MessagePage | null> => {
+        const accountKey = this.getMessageAccountKey();
+        if (!accountKey) {
+            return null;
+        }
+        try {
+            return await messageRepository.getLatestMessages(accountKey, sessionId, limit);
+        } catch (error) {
+            console.warn(`Failed to read latest local messages for ${sessionId}:`, error);
+            return null;
+        }
+    }
+
+    private readCachedMessagesBefore = async (sessionId: string, beforeSeq: number, limit: number): Promise<MessagePage | null> => {
+        const accountKey = this.getMessageAccountKey();
+        if (!accountKey) {
+            return null;
+        }
+        try {
+            return await messageRepository.getMessagesBefore(accountKey, sessionId, beforeSeq, limit);
+        } catch (error) {
+            console.warn(`Failed to read older local messages for ${sessionId}:`, error);
+            return null;
+        }
+    }
+
+    private readCachedMessagesAfterCursor = async (sessionId: string, afterSeq: number, limit: number): Promise<MessagePage | null> => {
+        const accountKey = this.getMessageAccountKey();
+        if (!accountKey) {
+            return null;
+        }
+        try {
+            return await messageRepository.getMessagesAfter(accountKey, sessionId, afterSeq, limit);
+        } catch (error) {
+            console.warn(`Failed to read newer local messages for ${sessionId}:`, error);
+            return null;
+        }
+    }
+
     private decryptAndNormalizeMessages = async (
         sessionId: string,
         apiMessages: ApiMessage[],
@@ -3033,7 +3293,7 @@ class Sync {
     // On timeout (MESSAGE_FETCH_TIMEOUT_MS) or external abort (resetMessagesSync) the request
     // rejects, which propagates as a normal failure so the InvalidateSync backoff retries instead
     // of hanging forever. The timer covers response.json() too, since that body read can also stall.
-    private fetchSessionMessages = async (url: string, controller: AbortController, errorLabel: string): Promise<any> => {
+    private fetchSessionMessages = async (url: string, controller: AbortController, errorLabel: string): Promise<SessionMessagesResponse> => {
         const timer = setTimeout(() => controller.abort(), Sync.MESSAGE_FETCH_TIMEOUT_MS);
         try {
             const response = await fetch(url, {
@@ -3066,15 +3326,57 @@ class Sync {
             // via isCurrent() after every awaited boundary and bail before any mutation/apply so a
             // stale run (reset while we were mid-decrypt/await) can't write over a fresh one.
             const generation = this.messagesFetchGeneration.get(sessionId) ?? 0;
+            const cacheGeneration = this.getMessageCacheGeneration(sessionId);
             const isCurrent = () => (this.messagesFetchGeneration.get(sessionId) ?? 0) === generation;
-            const currentCursor = this.sessionLastSeq.get(sessionId);
+            let currentCursor = this.sessionLastSeq.get(sessionId);
+
+            if (currentCursor === undefined) {
+                const cachedPage = await this.readCachedLatestMessages(sessionId, Sync.INITIAL_MESSAGES_LIMIT);
+                if (!isCurrent()) return;
+
+                if (cachedPage && cachedPage.messages.length > 0) {
+                    const cachedState = await this.getCachedMessageState(sessionId);
+                    if (!isCurrent()) return;
+                    if (!cachedState || !isPageInsideKnownCoverage(cachedState, cachedPage)) {
+                        log.log(`💬 fetchMessagesV3 found local messages without verified coverage for ${sessionId}; refreshing from server`);
+                    } else {
+                        const normalizedMessages = await this.decryptAndNormalizeMessages(sessionId, cachedPage.messages, encryption);
+                        if (!isCurrent()) return;
+
+                        const knownMinSeq = getKnownContiguousMinSeq(cachedState);
+                        const knownMaxSeq = getKnownContiguousMaxSeq(cachedState);
+                        const cachedForwardSeq = clampForwardMaxSeq(knownMaxSeq, cachedPage.maxSeq);
+                        const hasMoreOlder = cachedPage.hasMoreLocal || cachedState.hasMoreOlder;
+
+                        await this.enqueueSessionMessageDispatch(sessionId, 'fetchMessagesV3:local-bootstrap', async () => {
+                            if (!isCurrent()) return;
+                            if (normalizedMessages.length > 0) {
+                                this.applyMessages(sessionId, normalizedMessages);
+                            }
+                            this.sessionLastSeq.set(sessionId, cachedForwardSeq);
+                            storage.getState().applyMessagesLoaded(sessionId);
+                            storage.getState().setSessionPagination(sessionId, cachedPage.minSeq, hasMoreOlder);
+                            await this.updateCachedMessageState(sessionId, {
+                                forwardMaxSeq: cachedForwardSeq,
+                                oldestLoadedSeq: knownMinSeq,
+                                contiguousMinSeq: knownMinSeq,
+                                contiguousMaxSeq: knownMaxSeq,
+                                remoteOldestSeq: cachedState.remoteOldestSeq,
+                                hasMoreOlder: cachedState.hasMoreOlder,
+                            });
+                        });
+
+                        currentCursor = cachedForwardSeq;
+                        log.log(`💬 fetchMessagesV3 restored session ${sessionId} from local cache, lastSeq=${currentCursor}`);
+                    }
+                }
+            }
+
             if (currentCursor === undefined) {
                 // Bootstrap with latest page only to avoid loading very large histories at once.
                 // v3 with no after_seq/before_seq returns latest messages in desc order.
-                // The "refreshing" indicator (sessionMessagesFetching) is owned by
-                // kickMessagesSync, which keeps it on across the whole InvalidateSync backoff
-                // retry loop and clears it only when the cycle settles — so a failed attempt no
-                // longer flips the UI back to "online" while a background retry is still running.
+                // Remote data is persisted first, then read back from the local message cache for
+                // normalization so the durable cache remains the single source for history reads.
                 const API_ENDPOINT = getServerUrl();
                 const data = await this.fetchSessionMessages(
                     `${API_ENDPOINT}/v3/sessions/${sessionId}/messages?limit=${Sync.INITIAL_MESSAGES_LIMIT}`,
@@ -3082,23 +3384,50 @@ class Sync {
                     'Failed to fetch initial messages',
                 );
                 if (!isCurrent()) return;
-                const apiMessages = data.messages as ApiMessage[];
+                const apiMessages = (data.messages ?? []) as ApiMessage[];
                 const hasMoreOlder: boolean = data.hasMore ?? false;
-                const normalizedMessages = apiMessages.length > 0
-                    ? await this.decryptAndNormalizeMessages(sessionId, apiMessages, encryption)
-                    : [];
-                if (!isCurrent()) return;
 
-                // Compute cursor bounds now, but commit sessionLastSeq INSIDE the guarded dispatch
-                // (atomically with applyMessages). Advancing the cursor here would move it forward
-                // even if a reset cancels the apply, so the fresh run would start past — and forever
-                // skip — messages that were fetched but never applied.
                 const bootstrapMaxSeq = apiMessages.length > 0
                     ? Math.max(...apiMessages.map((m) => m.seq))
                     : null;
                 const minSeq = apiMessages.length > 0
                     ? Math.min(...apiMessages.map((m) => m.seq))
                     : null;
+
+                const existingCacheState = await this.getCachedMessageState(sessionId);
+                if (!isCurrent()) return;
+                const remoteOldestSeq = typeof data.oldestSeq === 'number'
+                    ? data.oldestSeq
+                    : (!hasMoreOlder ? minSeq : existingCacheState?.remoteOldestSeq ?? null);
+                const coveragePatch = buildCoverageStatePatch(existingCacheState, {
+                    direction: 'latest',
+                    messages: apiMessages,
+                    hasMoreOlder,
+                    remoteOldestSeq,
+                });
+                if (!coveragePatch && apiMessages.length > 0) {
+                    console.warn(`💬 fetchMessagesV3 refused to cache non-contiguous bootstrap page for ${sessionId}`);
+                    throw new Error(`Non-contiguous bootstrap message page for ${sessionId}`);
+                }
+                const cacheWriteOk = coveragePatch
+                    ? await this.upsertMessagesInLocalCache(sessionId, apiMessages, { cacheGeneration, isCurrent, statePatch: coveragePatch })
+                    : apiMessages.length === 0;
+                if (!isCurrent()) return;
+
+                const cachedPage = cacheWriteOk
+                    ? await this.readCachedLatestMessages(sessionId, Sync.INITIAL_MESSAGES_LIMIT)
+                    : null;
+                if (!isCurrent()) return;
+                const sourceMessages = cachedPage && cachedPage.messages.length > 0
+                    ? cachedPage.messages
+                    : apiMessages;
+                const normalizedMessages = sourceMessages.length > 0
+                    ? await this.decryptAndNormalizeMessages(sessionId, sourceMessages, encryption)
+                    : [];
+                if (!isCurrent()) return;
+
+                const finalMinSeq = cachedPage?.minSeq ?? minSeq;
+                const finalHasMoreOlder = (cachedPage?.hasMoreLocal ?? false) || hasMoreOlder;
 
                 await this.enqueueSessionMessageDispatch(sessionId, 'fetchMessagesV3:bootstrap', async () => {
                     // The dispatch runs later (queue + pacing); a reset may have superseded us in the
@@ -3113,7 +3442,10 @@ class Sync {
                         this.sessionLastSeq.set(sessionId, 0);
                     }
                     storage.getState().applyMessagesLoaded(sessionId);
-                    storage.getState().setSessionPagination(sessionId, minSeq, hasMoreOlder);
+                    storage.getState().setSessionPagination(sessionId, finalMinSeq, finalHasMoreOlder);
+                    if (!coveragePatch) {
+                        await this.updateCachedMessageState(sessionId, { invalidatedAt: null });
+                    }
                 });
 
                 log.log(`💬 fetchMessagesV3 bootstrap completed for session ${sessionId}, lastSeq=${this.sessionLastSeq.get(sessionId) ?? 0}`);
@@ -3126,7 +3458,7 @@ class Sync {
             // dispatch (atomically with applyMessages); afterSeq stays local for loop pagination so
             // the persistent cursor never advances past messages that a reset prevented us applying.
             let nextLastSeq = currentCursor;
-            const pendingNormalizedMessages: NormalizedMessage[] = [];
+            const pendingApiMessages: ApiMessage[] = [];
 
             while (hasMore) {
                 const API_ENDPOINT = getServerUrl();
@@ -3136,14 +3468,11 @@ class Sync {
                     'Failed to fetch v3 messages',
                 );
                 if (!isCurrent()) return;
-                const messages = data.messages as ApiMessage[];
+                const messages = (data.messages ?? []) as ApiMessage[];
                 hasMore = data.hasMore ?? false;
 
                 if (messages.length > 0) {
-                    const normalizedMessages = await this.decryptAndNormalizeMessages(sessionId, messages, encryption);
-                    if (!isCurrent()) return;
-                    pendingNormalizedMessages.push(...normalizedMessages);
-
+                    pendingApiMessages.push(...messages);
                     const maxSeq = Math.max(...messages.map((m: any) => m.seq));
                     nextLastSeq = Math.max(nextLastSeq, maxSeq);
                     afterSeq = maxSeq;
@@ -3151,6 +3480,37 @@ class Sync {
                     hasMore = false;
                 }
             }
+
+            if (!isCurrent()) return;
+            const existingCacheState = await this.getCachedMessageState(sessionId);
+            if (!isCurrent()) return;
+            const coveragePatch = pendingApiMessages.length > 0
+                ? buildCoverageStatePatch(existingCacheState, {
+                    direction: 'newer',
+                    messages: pendingApiMessages,
+                })
+                : null;
+            if (pendingApiMessages.length > 0 && !coveragePatch) {
+                console.warn(`💬 fetchMessagesV3 refused to cache non-contiguous incremental page for ${sessionId}`);
+                this.invalidateMessagesSync(sessionId);
+                return;
+            }
+            const cacheWriteOk = await this.upsertMessagesInLocalCache(
+                sessionId,
+                pendingApiMessages,
+                { cacheGeneration, isCurrent, ...(coveragePatch ? { statePatch: coveragePatch } : {}) },
+            );
+            if (!isCurrent()) return;
+            const cachedPage = cacheWriteOk && pendingApiMessages.length > 0
+                ? await this.readCachedMessagesAfterCursor(sessionId, currentCursor, Math.max(pendingApiMessages.length, 1000))
+                : null;
+            if (!isCurrent()) return;
+            const sourceMessages = cachedPage && cachedPage.messages.length > 0
+                ? cachedPage.messages
+                : pendingApiMessages;
+            const pendingNormalizedMessages = sourceMessages.length > 0
+                ? await this.decryptAndNormalizeMessages(sessionId, sourceMessages, encryption)
+                : [];
 
             if (!isCurrent()) return;
             await this.enqueueSessionMessageDispatch(sessionId, 'fetchMessagesV3:incremental', async () => {
@@ -3171,7 +3531,8 @@ class Sync {
                     this.applyMessages(sessionId, pendingNormalizedMessages);
                 }
                 // Commit the cursor atomically with the apply, under the same generation guard.
-                this.sessionLastSeq.set(sessionId, Math.max(this.sessionLastSeq.get(sessionId) ?? 0, nextLastSeq));
+                const committedSeq = Math.max(this.sessionLastSeq.get(sessionId) ?? 0, nextLastSeq);
+                this.sessionLastSeq.set(sessionId, committedSeq);
 
                 storage.getState().applyMessagesLoaded(sessionId);
 
@@ -3180,6 +3541,7 @@ class Sync {
                 const sessionState = storage.getState().sessionMessages[sessionId];
                 if (sessionState && sessionState.oldestSeq === null) {
                     storage.getState().setSessionPagination(sessionId, 1, false);
+                    await this.updateCachedMessageState(sessionId, { oldestLoadedSeq: 1, hasMoreOlder: false });
                 }
             });
 
@@ -3193,6 +3555,7 @@ class Sync {
         });
     }
 
+
     fetchOlderMessages = async (sessionId: string) => {
         const sessionState = storage.getState().sessionMessages[sessionId];
         if (!sessionState || !sessionState.hasMore || sessionState.oldestSeq === null) {
@@ -3205,33 +3568,121 @@ class Sync {
         }
 
         try {
+            const cacheGeneration = this.getMessageCacheGeneration(sessionId);
+            const isCurrent = () => this.isMessageCacheGenerationCurrent(sessionId, cacheGeneration);
             const before = sessionState.oldestSeq;
-            const API_ENDPOINT = getServerUrl();
-            const response = await fetch(
-                `${API_ENDPOINT}/v3/sessions/${sessionId}/messages?before_seq=${before}&limit=${Sync.INITIAL_MESSAGES_LIMIT}`,
-                {
-                    headers: {
-                        'Authorization': `Bearer ${this.credentials.token}`
-                    }
-                }
-            );
+            const cachedState = await this.getCachedMessageState(sessionId);
+            if (!isCurrent()) return;
+            const cachedOlder = await this.readCachedMessagesBefore(sessionId, before, Sync.INITIAL_MESSAGES_LIMIT);
+            if (!isCurrent()) return;
+            const remoteMayHaveMore = cachedState?.hasMoreOlder ?? true;
 
-            if (!response.ok) {
-                throw new Error(`Failed to fetch older messages: ${response.status}`);
+            const serveCachedOlderMessages = async (reason: string, page: MessagePage): Promise<void> => {
+                const normalizedMessages = await this.decryptAndNormalizeMessages(sessionId, page.messages, encryption);
+                if (!isCurrent()) return;
+                const hasMore = getCachedOlderPageUiHasMore(page, cachedState);
+                const nextOldestLoadedSeq = mergeOldestLoadedSeq(cachedState, page.minSeq);
+                const knownMaxSeq = getKnownContiguousMaxSeq(cachedState);
+                await this.enqueueSessionMessageDispatch(sessionId, reason, async () => {
+                    if (!isCurrent()) return;
+                    if (normalizedMessages.length > 0) {
+                        this.applyMessages(sessionId, normalizedMessages);
+                    }
+                    storage.getState().setSessionPagination(sessionId, page.minSeq, hasMore);
+                    await this.updateCachedMessageState(sessionId, {
+                        // This state tracks whether the *server* may have older messages.  It must
+                        // not be flipped back to true merely because there are older rows already
+                        // present locally; otherwise a fully cached conversation cannot display its
+                        // final short page while offline after reopening.
+                        oldestLoadedSeq: nextOldestLoadedSeq,
+                        contiguousMinSeq: nextOldestLoadedSeq,
+                        contiguousMaxSeq: knownMaxSeq,
+                        remoteOldestSeq: cachedState?.remoteOldestSeq ?? null,
+                        hasMoreOlder: remoteMayHaveMore,
+                    });
+                });
+                log.log(`💬 fetchOlderMessages restored ${normalizedMessages.length} older local messages for session ${sessionId}, hasMore=${hasMore}`);
+            };
+
+            if (cachedOlder && canServeCachedOlderPage(cachedOlder, cachedState, Sync.INITIAL_MESSAGES_LIMIT)) {
+                await serveCachedOlderMessages('fetchOlderMessages:local', cachedOlder);
+                return;
             }
 
-            const data = await response.json();
-            const apiMessages = data.messages as ApiMessage[];
-            const hasMore: boolean = data.hasMore ?? false;
+            const API_ENDPOINT = getServerUrl();
+            let data: SessionMessagesResponse;
+            try {
+                const response = await fetch(
+                    `${API_ENDPOINT}/v3/sessions/${sessionId}/messages?before_seq=${before}&limit=${Sync.INITIAL_MESSAGES_LIMIT}`,
+                    {
+                        headers: {
+                            'Authorization': `Bearer ${this.credentials.token}`
+                        }
+                    }
+                );
+
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch older messages: ${response.status}`);
+                }
+
+                data = await response.json();
+            } catch (error) {
+                // If the network is unavailable, still show any local rows we do have.  Keep
+                // hasMoreOlder unchanged so reconnecting can continue verifying/filling history.
+                if (cachedOlder && canServeCachedOlderPage(cachedOlder, cachedState, Sync.INITIAL_MESSAGES_LIMIT)) {
+                    console.warn(`Failed to fetch older messages for ${sessionId}; falling back to local cache:`, error);
+                    await serveCachedOlderMessages('fetchOlderMessages:local-fallback', cachedOlder);
+                    return;
+                }
+                throw error;
+            }
+
+            if (!isCurrent()) return;
+            const apiMessages = (data.messages ?? []) as ApiMessage[];
+            const remoteHasMore: boolean = data.hasMore ?? false;
+            const remoteOldestSeq = typeof data.oldestSeq === 'number'
+                ? data.oldestSeq
+                : (!remoteHasMore && apiMessages.length > 0
+                    ? Math.min(...apiMessages.map((message) => message.seq))
+                    : cachedState?.remoteOldestSeq ?? null);
+            const coveragePatch = buildCoverageStatePatch(cachedState, {
+                direction: 'older',
+                messages: apiMessages,
+                hasMoreOlder: remoteHasMore,
+                remoteOldestSeq,
+            });
+            if (!coveragePatch && apiMessages.length > 0) {
+                console.warn(`💬 fetchOlderMessages refused to cache non-contiguous older page for ${sessionId}`);
+                return;
+            }
+            const cacheWriteOk = await this.upsertMessagesInLocalCache(
+                sessionId,
+                apiMessages,
+                { cacheGeneration, isCurrent, ...(coveragePatch ? { statePatch: coveragePatch } : {}) },
+            );
+            if (!isCurrent()) return;
+
+            // Read the page back from local cache after upsert. If persistence failed (or is
+            // unavailable), fall back to the API page so online behavior remains intact.
+            const cachedPage = cacheWriteOk
+                ? await this.readCachedMessagesBefore(sessionId, before, Sync.INITIAL_MESSAGES_LIMIT)
+                : null;
+            if (!isCurrent()) return;
+            const sourceMessages = cachedPage && cachedPage.messages.length > 0
+                ? cachedPage.messages
+                : apiMessages;
 
             // Decrypt and normalize
-            const normalizedMessages = await this.decryptAndNormalizeMessages(sessionId, apiMessages, encryption);
+            const normalizedMessages = await this.decryptAndNormalizeMessages(sessionId, sourceMessages, encryption);
+            if (!isCurrent()) return;
 
             // Update pagination together with the queued list update
-            const minSeq = apiMessages.length > 0
-                ? Math.min(...apiMessages.map(m => m.seq))
+            const minSeq = sourceMessages.length > 0
+                ? Math.min(...sourceMessages.map(m => m.seq))
                 : sessionState.oldestSeq;
+            const hasMore = (cachedPage?.hasMoreLocal ?? false) || remoteHasMore;
             await this.enqueueSessionMessageDispatch(sessionId, 'fetchOlderMessages', async () => {
+                if (!isCurrent()) return;
                 if (normalizedMessages.length > 0) {
                     this.applyMessages(sessionId, normalizedMessages);
                 }
@@ -3243,6 +3694,7 @@ class Sync {
             console.error(`Failed to fetch older messages for session ${sessionId}:`, error);
         }
     }
+
 
     private registerPushToken = async () => {
         log.log('registerPushToken');
@@ -3336,14 +3788,32 @@ class Sync {
             const sid = updateData.body.sid;
             const incomingSeq = updateData.body.message?.seq;
             const currentLastSeq = this.sessionLastSeq.get(sid);
+            const cacheGeneration = this.getMessageCacheGeneration(sid);
 
             if (currentLastSeq !== undefined && incomingSeq !== undefined) {
                 if (incomingSeq <= currentLastSeq) {
+                    await this.upsertMessagesInLocalCache(sid, [updateData.body.message], { cacheGeneration });
+                    if (!this.isMessageCacheGenerationCurrent(sid, cacheGeneration)) {
+                        return;
+                    }
                     // Already seen this seq (e.g. echo of our own send), just apply for dedup
                     this.enqueueSessionMessageUpdate(updateData);
                 } else if (incomingSeq === currentLastSeq + 1) {
-                    // Fast path: seq is contiguous, apply directly and bump seq
-                    this.sessionLastSeq.set(sid, incomingSeq);
+                    const cachedState = await this.getCachedMessageState(sid);
+                    const coveragePatch = buildCoverageStatePatch(cachedState, {
+                        direction: 'newer',
+                        messages: [updateData.body.message],
+                    });
+                    if (coveragePatch) {
+                        await this.upsertMessagesInLocalCache(sid, [updateData.body.message], { cacheGeneration, statePatch: coveragePatch });
+                        if (!this.isMessageCacheGenerationCurrent(sid, cacheGeneration)) {
+                            return;
+                        }
+                        // Fast path: seq is contiguous, apply directly and bump seq
+                        this.sessionLastSeq.set(sid, incomingSeq);
+                    } else {
+                        this.invalidateMessagesSync(sid);
+                    }
                     this.enqueueSessionMessageUpdate(updateData);
                 } else {
                     // Gap detected: do NOT bump sessionLastSeq — keep the old
@@ -4112,6 +4582,13 @@ class Sync {
             if (updateData.body.message) {
                 const decrypted = await encryption.decryptMessage(updateData.body.message);
                 if (decrypted) {
+                    let existingMessages = this.sessionReceivedMessages.get(sessionId);
+                    if (!existingMessages) {
+                        existingMessages = new Set<string>();
+                        this.sessionReceivedMessages.set(sessionId, existingMessages);
+                    }
+                    existingMessages.add(decrypted.id);
+
                     lastMessage = normalizeRawMessage(decrypted.id, decrypted.localId, decrypted.createdAt, decrypted.content);
                     if (lastMessage) {
                         lastMessage.seq = decrypted.seq;
@@ -4302,6 +4779,20 @@ class Sync {
             this.sessionMessageUpdateQueues.delete(sessionId);
             storage.getState().clearSessionMessages(sessionId);
             this.sessionReceivedMessages.delete(sessionId);
+            this.bumpMessageCacheGeneration(sessionId);
+            const accountKey = this.getMessageAccountKey();
+            let resetPromise: Promise<void> = Promise.resolve();
+            if (accountKey) {
+                resetPromise = messageRepository.clearSession(accountKey, sessionId).catch((error) => {
+                    console.warn(`Failed to clear local message cache for ${sessionId}:`, error);
+                });
+            }
+            this.messageCacheResetPromises.set(sessionId, resetPromise);
+            void resetPromise.finally(() => {
+                if (this.messageCacheResetPromises.get(sessionId) === resetPromise) {
+                    this.messageCacheResetPromises.delete(sessionId);
+                }
+            });
             // Reset seq cursor so the subsequent re-fetch starts from seq 0
             // and retrieves all messages, not just those after the old cursor.
             this.sessionLastSeq.delete(sessionId);
@@ -4309,7 +4800,9 @@ class Sync {
             const timeout = setTimeout(() => {
                 this.messageSyncTimeouts.delete(sessionId);
                 storage.getState().setSessionMessageSyncing(sessionId, false);
-                this.invalidateMessagesSync(sessionId);
+                void (this.messageCacheResetPromises.get(sessionId) ?? Promise.resolve()).finally(() => {
+                    this.invalidateMessagesSync(sessionId);
+                });
             }, 30000);
             this.messageSyncTimeouts.set(sessionId, timeout);
         }
@@ -4322,7 +4815,9 @@ class Sync {
                 this.messageSyncTimeouts.delete(sessionId);
             }
             storage.getState().setSessionMessageSyncing(sessionId, false);
-            this.invalidateMessagesSync(sessionId);
+            void (this.messageCacheResetPromises.get(sessionId) ?? Promise.resolve()).finally(() => {
+                this.invalidateMessagesSync(sessionId);
+            });
         }
 
         if (updateData.type === 'message-errored') {
@@ -4333,7 +4828,9 @@ class Sync {
                 this.messageSyncTimeouts.delete(sessionId);
             }
             storage.getState().setSessionMessageSyncing(sessionId, false);
-            this.invalidateMessagesSync(sessionId);
+            void (this.messageCacheResetPromises.get(sessionId) ?? Promise.resolve()).finally(() => {
+                this.invalidateMessagesSync(sessionId);
+            });
         }
 
         if (updateData.type === 'message-delivery-error') {
@@ -4344,6 +4841,15 @@ class Sync {
                 this.deliveryErrorTimers.delete(key);
             }
             if (updateData.error === 'no_cli_connection') {
+                const accountKey = this.getMessageAccountKey();
+                if (accountKey) {
+                    void messageRepository.updateDeliveryIssue(
+                        accountKey,
+                        updateData.sid,
+                        { messageId: updateData.messageId, localId: updateData.localId ?? null },
+                        { status: 'error', reason: updateData.error },
+                    ).catch(() => {});
+                }
                 const timer = setTimeout(() => {
                     this.deliveryErrorTimers.delete(key);
                     storage.getState().setMessageDeliveryError(
@@ -4363,6 +4869,15 @@ class Sync {
                     updateData.localId ?? null,
                     updateData.error
                 );
+                const accountKey = this.getMessageAccountKey();
+                if (accountKey) {
+                    void messageRepository.updateDeliveryIssue(
+                        accountKey,
+                        updateData.sid,
+                        { messageId: updateData.messageId, localId: updateData.localId ?? null },
+                        { status: 'error', reason: updateData.error },
+                    ).catch(() => {});
+                }
                 storage.getState().setAwaitingResponse(updateData.sid, null);
             }
         }
@@ -4380,6 +4895,15 @@ class Sync {
                 updateData.localId ?? null,
                 null
             );
+            const accountKey = this.getMessageAccountKey();
+            if (accountKey) {
+                void messageRepository.updateDeliveryIssue(
+                    accountKey,
+                    updateData.sid,
+                    { messageId: updateData.messageId, localId: updateData.localId ?? null },
+                    null,
+                ).catch(() => {});
+            }
         }
 
         if (updateData.type === 'pending-message-upsert') {
@@ -4460,7 +4984,16 @@ class Sync {
     private applyDeletedSessions = (sessionIds: string[]) => {
         if (sessionIds.length === 0) return;
 
+        for (const sessionId of sessionIds) {
+            this.bumpMessageCacheGeneration(sessionId);
+        }
         storage.getState().deleteSessions(sessionIds);
+        const accountKey = this.getMessageAccountKey();
+        if (accountKey) {
+            void messageRepository.deleteSessions(accountKey, sessionIds).catch((error) => {
+                console.warn('Failed to delete local cached messages for sessions:', error);
+            });
+        }
         for (const sessionId of sessionIds) {
             this.encryption.removeSessionEncryption(sessionId);
             this.sessionDataKeys.delete(sessionId);
@@ -4474,6 +5007,7 @@ class Sync {
             this.messagesFetchAbort.delete(sessionId);
             this.messagesFetchingToken.delete(sessionId);
             this.sessionReceivedMessages.delete(sessionId);
+            this.messageCacheResetPromises.delete(sessionId);
             this.messagesSync.get(sessionId)?.stop();
             this.messagesSync.delete(sessionId);
             this.pendingMessagesSync.delete(sessionId);
