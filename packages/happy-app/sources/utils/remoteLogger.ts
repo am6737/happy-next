@@ -6,7 +6,7 @@
  * PRIMARILY FOR AI AUTO DEBUGGING
  */
 
-import { config } from '@/config';
+import { getServerEntryUrl } from '@/sync/serverConfig';
 
 
 let logBuffer: any[] = []
@@ -28,7 +28,7 @@ export function monkeyPatchConsoleForRemoteLoggingForFasterAiAutoDebuggingOnlyIn
     debug: console.debug,
   }
 
-  const url = config.serverUrl
+  const url = getServerEntryUrl()
   
   if (!url) {
     console.log('[RemoteLogger] No server URL provided, remote logging disabled')

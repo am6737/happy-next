@@ -3,7 +3,6 @@ import { requireOptionalNativeModule } from 'expo-modules-core';
 
 export interface AppConfig {
     postHogKey?: string;
-    serverUrl?: string;
 }
 
 /**
@@ -66,10 +65,6 @@ export function loadAppConfig(): AppConfig {
     if (process.env.EXPO_PUBLIC_POSTHOG_KEY && config.postHogKey !== process.env.EXPO_PUBLIC_POSTHOG_KEY) {
         console.log('[loadAppConfig] Override postHogKey from EXPO_PUBLIC_POSTHOG_KEY');
         config.postHogKey = process.env.EXPO_PUBLIC_POSTHOG_KEY;
-    }
-    if (process.env.EXPO_PUBLIC_SERVER_URL && config.serverUrl !== process.env.EXPO_PUBLIC_SERVER_URL) {
-        console.log('[loadAppConfig] Override serverUrl from EXPO_PUBLIC_SERVER_URL');
-        config.serverUrl = process.env.EXPO_PUBLIC_SERVER_URL;
     }
     return config as AppConfig;
 }

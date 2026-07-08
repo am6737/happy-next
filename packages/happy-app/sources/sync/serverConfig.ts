@@ -1,5 +1,4 @@
 import { MMKV } from 'react-native-mmkv';
-import type { AppConfig } from './appConfig';
 
 // Separate MMKV instance for server config that persists across logouts
 const serverConfigStorage = new MMKV({ id: 'server-config' });
@@ -20,7 +19,6 @@ interface ResolvedVoiceConfig {
     baseUrl?: string;
 }
 
-let configRef: AppConfig | undefined;
 let resolvedServerUrl: string | null = null;
 let resolvedVoiceConfig: ResolvedVoiceConfig = {};
 let resolvePromise: Promise<void> | null = null;
@@ -50,7 +48,6 @@ export function getCustomServerUrl(): string | null {
 export function getServerEntryUrl(): string {
     return getCustomServerUrl()
         || normalizeUrl(process.env.EXPO_PUBLIC_HAPPY_SERVER_URL)
-        || normalizeUrl(configRef?.serverUrl)
         || DEFAULT_SERVER_URL;
 }
 
@@ -72,10 +69,6 @@ async function fetchRemoteAppConfig(entryServerUrl: string): Promise<RemoteAppCo
     } finally {
         clearTimeout(timeout);
     }
-}
-
-export function initServerConfig(config: AppConfig): void {
-    configRef = config;
 }
 
 export async function resolveServerConfig(): Promise<void> {
