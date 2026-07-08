@@ -26,6 +26,9 @@ function stripCapabilitiesFromMetadata(metadata: Metadata): Metadata {
 /** Tools whose tool_use.input should be trimmed and saved to diffStore */
 const INPUT_TRIMMABLE_TOOLS = new Set(['Edit', 'Write', 'MultiEdit']);
 
+/** Max messages per outbox flush — must not exceed the server's v3 messages limit (200). */
+const MAX_OUTBOX_BATCH_SIZE = 200;
+
 /**
  * ACP (Agent Communication Protocol) message data types.
  * This is the unified format for all agent messages - CLI adapts each provider's format to ACP.
@@ -699,7 +702,11 @@ export class ApiSessionClient extends EventEmitter {
             return;
         }
 
-        const batch = this.pendingOutbox.slice();
+        // Cap each request at the server's per-request limit (v3 messages route
+        // rejects >200 with a 400). Sending the whole outbox unbounded would make
+        // an oversized backlog fail validation forever, since we only clear on
+        // success — the request would retry the same rejected batch indefinitely.
+        const batch = this.pendingOutbox.slice(0, MAX_OUTBOX_BATCH_SIZE);
         await axios.post(
             `${configuration.serverUrl}/v3/sessions/${encodeURIComponent(this.sessionId)}/messages`,
             {
@@ -716,6 +723,11 @@ export class ApiSessionClient extends EventEmitter {
 
         // Only clear after successful response
         this.pendingOutbox.splice(0, batch.length);
+
+        // More than one batch was queued — keep draining the remainder.
+        if (this.pendingOutbox.length > 0) {
+            this.sendSync.invalidate();
+        }
     }
 
     /**
