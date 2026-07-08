@@ -4,7 +4,10 @@ import { MMKV } from 'react-native-mmkv';
 const serverConfigStorage = new MMKV({ id: 'server-config' });
 
 const SERVER_KEY = 'custom-server-url';
-const DEFAULT_SERVER_URL = 'https://api.happy-next.com';
+const DEFAULT_SERVER_URLS = [
+    'https://api.happy-next.com',
+    'https://api-happy-next.dootask.com',
+] as const;
 const APP_CONFIG_PATH = '/v1/app-config';
 const DISCOVERY_TIMEOUT_MS = 5000;
 
@@ -45,10 +48,13 @@ export function getCustomServerUrl(): string | null {
     return normalizeUrl(serverConfigStorage.getString(SERVER_KEY));
 }
 
-export function getServerEntryUrl(): string {
+function getConfiguredServerEntryUrl(): string | null {
     return getCustomServerUrl()
-        || normalizeUrl(process.env.EXPO_PUBLIC_HAPPY_SERVER_URL)
-        || DEFAULT_SERVER_URL;
+        || normalizeUrl(process.env.EXPO_PUBLIC_HAPPY_SERVER_URL);
+}
+
+export function getServerEntryUrl(): string {
+    return getConfiguredServerEntryUrl() || DEFAULT_SERVER_URLS[0];
 }
 
 async function fetchRemoteAppConfig(entryServerUrl: string): Promise<RemoteAppConfigResponse | null> {
@@ -71,12 +77,37 @@ async function fetchRemoteAppConfig(entryServerUrl: string): Promise<RemoteAppCo
     }
 }
 
+async function fetchFastestDefaultAppConfig(): Promise<{ entryServerUrl: string; remoteConfig: RemoteAppConfigResponse | null }> {
+    return new Promise((resolve) => {
+        let pending = DEFAULT_SERVER_URLS.length;
+
+        for (const entryServerUrl of DEFAULT_SERVER_URLS) {
+            fetchRemoteAppConfig(entryServerUrl).then((remoteConfig) => {
+                if (remoteConfig) {
+                    resolve({ entryServerUrl, remoteConfig });
+                    return;
+                }
+
+                pending -= 1;
+                if (pending === 0) {
+                    resolve({ entryServerUrl: DEFAULT_SERVER_URLS[0], remoteConfig: null });
+                }
+            });
+        }
+    });
+}
+
 export async function resolveServerConfig(): Promise<void> {
     if (resolvePromise) return resolvePromise;
 
     resolvePromise = (async () => {
-        const entryServerUrl = getServerEntryUrl();
-        const remoteConfig = await fetchRemoteAppConfig(entryServerUrl);
+        const configuredEntryServerUrl = getConfiguredServerEntryUrl();
+        const { entryServerUrl, remoteConfig } = configuredEntryServerUrl
+            ? {
+                entryServerUrl: configuredEntryServerUrl,
+                remoteConfig: await fetchRemoteAppConfig(configuredEntryServerUrl),
+            }
+            : await fetchFastestDefaultAppConfig();
         const remoteApiBaseUrl = normalizeUrl(normalizeString(remoteConfig?.apiBaseUrl));
 
         resolvedServerUrl = remoteApiBaseUrl || entryServerUrl;
