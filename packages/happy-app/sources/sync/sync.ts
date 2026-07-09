@@ -3265,18 +3265,23 @@ class Sync {
             return memo.messages;
         }
 
-        // Page backwards from the newest cached message. Cap the scan so pathologically long
-        // conversations can't block/allocate unbounded; if we hit the cap the minimap simply
-        // shows the most recent slice plus whatever the list has loaded.
+        // Proactively seed the minimap with only the newest MAX_USER_MESSAGES prompts. As the user
+        // scrolls the list, older prompts are merged in unbounded (via the loaded messages), so the
+        // cap only limits what we load up front. Page backwards from the newest message and decrypt
+        // PER PAGE so we can stop as soon as we have enough — decryption is the dominant cost, and a
+        // long history would otherwise be decrypted in full just to keep the last handful of prompts.
+        // MAX_SCAN bounds pathological sparse sessions (few prompts among many tool-call messages).
+        const MAX_USER_MESSAGES = 50;
         const MAX_SCAN = 5000;
         const PAGE = Sync.INITIAL_MESSAGES_LIMIT;
-        const collected: ApiMessage[] = [];
-        let truncated = false;
+        const collectedUserMessages: UserTextMessage[] = [];
+        let scanned = 0;
+        let hitScanCap = false;
         try {
             let beforeSeq: number | null = null;
-            while (true) {
-                if (collected.length >= MAX_SCAN) {
-                    truncated = true;
+            while (collectedUserMessages.length < MAX_USER_MESSAGES) {
+                if (scanned >= MAX_SCAN) {
+                    hitScanCap = true;
                     break;
                 }
                 const page: MessagePage | null = beforeSeq === null
@@ -3285,67 +3290,59 @@ class Sync {
                 if (!page || page.messages.length === 0) {
                     break;
                 }
-                collected.push(...page.messages);
+                scanned += page.messages.length;
+
+                // Decrypt this page and pull out top-level user prompts. Build UserTextMessage objects
+                // directly from the normalized rows (no reducer): we only need user prompts, so a full
+                // reducer pass — traceMessages, sidechain separation, event conversion — would be pure
+                // overhead. The real message id also keeps ids stable across refreshes (a fresh reducer
+                // would allocate new random ids each run, remounting every marker).
+                const decrypted = await encryption.decryptMessages(page.messages);
+                for (const item of decrypted) {
+                    if (!item) {
+                        continue;
+                    }
+                    const normalized = normalizeRawMessage(item.id, item.localId, item.createdAt, item.content);
+                    // Exclude sub-agent (sidechain) prompts, matching what the list shows. `isSidechain`
+                    // is set at normalize time and is exactly what the reducer's tracer keys on.
+                    if (!normalized || normalized.role !== 'user' || normalized.isSidechain) {
+                        continue;
+                    }
+                    collectedUserMessages.push({
+                        kind: 'user-text',
+                        id: normalized.id,
+                        localId: normalized.localId,
+                        createdAt: normalized.createdAt,
+                        seq: item.seq,
+                        text: normalized.content.text,
+                        ...(normalized.meta?.displayText ? { displayText: normalized.meta.displayText } : {}),
+                        ...(normalized.content.type === 'mixed' ? { images: normalized.content.images } : {}),
+                        meta: normalized.meta,
+                        sentBy: item.sentBy,
+                        sentByName: item.sentByName,
+                    });
+                }
+
                 if (!page.hasMoreLocal || page.minSeq === null) {
                     break;
                 }
                 beforeSeq = page.minSeq;
             }
         } catch (error) {
-            console.warn(`Failed to scan cached messages for minimap ${sessionId}:`, error);
+            console.warn(`Failed to read cached messages for minimap ${sessionId}:`, error);
             return [];
         }
-        if (truncated) {
-            log.log(`💬 getCachedUserMessagesForMinimap hit MAX_SCAN=${MAX_SCAN} for ${sessionId}; oldest prompts are omitted from the minimap`);
-        }
-        if (collected.length === 0) {
-            this.minimapUserMessagesCache.set(sessionId, { signature, messages: [] });
-            return [];
+        if (hitScanCap && collectedUserMessages.length < MAX_USER_MESSAGES) {
+            log.log(`💬 getCachedUserMessagesForMinimap scanned MAX_SCAN=${MAX_SCAN} cached messages for ${sessionId} without reaching ${MAX_USER_MESSAGES} prompts; older prompts are omitted from the minimap`);
         }
 
-        // Cached pages are newest-first; normalize chronologically. Build UserTextMessage objects
-        // directly from the normalized rows (no reducer): we only need top-level user prompts, so a
-        // full reducer pass — traceMessages, sidechain separation, event conversion — would be pure
-        // overhead. Using the real message id also keeps ids stable across refreshes (a fresh
-        // reducer would allocate new random ids each run, remounting every marker).
-        const ascending = collected.slice().reverse();
-        let userMessages: UserTextMessage[];
-        try {
-            const decrypted = await encryption.decryptMessages(ascending);
-            userMessages = [];
-            for (const item of decrypted) {
-                if (!item) {
-                    continue;
-                }
-                const normalized = normalizeRawMessage(item.id, item.localId, item.createdAt, item.content);
-                // Only top-level user prompts — exclude sub-agent (sidechain) prompts, matching what
-                // the list shows. `isSidechain` is set at normalize time and is exactly what the
-                // reducer's tracer keys on.
-                if (!normalized || normalized.role !== 'user' || normalized.isSidechain) {
-                    continue;
-                }
-                userMessages.push({
-                    kind: 'user-text',
-                    id: normalized.id,
-                    localId: normalized.localId,
-                    createdAt: normalized.createdAt,
-                    seq: item.seq,
-                    text: normalized.content.text,
-                    ...(normalized.meta?.displayText ? { displayText: normalized.meta.displayText } : {}),
-                    ...(normalized.content.type === 'mixed' ? { images: normalized.content.images } : {}),
-                    meta: normalized.meta,
-                    sentBy: item.sentBy,
-                    sentByName: item.sentByName,
-                });
-            }
-        } catch (error) {
-            console.warn(`Failed to decrypt cached messages for minimap ${sessionId}:`, error);
-            return [];
-        }
-
-        userMessages.sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0) || a.createdAt - b.createdAt);
-        this.minimapUserMessagesCache.set(sessionId, { signature, messages: userMessages });
-        return userMessages;
+        // Keep only the newest MAX_USER_MESSAGES, ordered oldest→newest (matching the list order).
+        collectedUserMessages.sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0) || a.createdAt - b.createdAt);
+        const result = collectedUserMessages.length > MAX_USER_MESSAGES
+            ? collectedUserMessages.slice(collectedUserMessages.length - MAX_USER_MESSAGES)
+            : collectedUserMessages;
+        this.minimapUserMessagesCache.set(sessionId, { signature, messages: result });
+        return result;
     }
 
     private decryptAndNormalizeMessages = async (
