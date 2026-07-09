@@ -856,6 +856,7 @@ export const ru: TranslationStructure = {
         },
         inputPlaceholder: 'Введите сообщение...',
         initialMessage: 'Над чем вы хотите поработать?',
+        locatingMessage: 'Поиск сообщения…',
         takePhoto: 'Сделать фото',
         chooseFromLibrary: 'Выбрать из галереи',
         pasteFromClipboard: 'Вставить из буфера обмена',

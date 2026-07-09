@@ -717,6 +717,7 @@ export const it: TranslationStructure = {
         },
         inputPlaceholder: 'Scrivi un messaggio ...',
         initialMessage: 'Su cosa vorresti lavorare?',
+        locatingMessage: 'Individuazione del messaggio…',
         takePhoto: 'Scatta foto',
         chooseFromLibrary: 'Scegli dalla galleria',
         pasteFromClipboard: 'Incolla dagli appunti',

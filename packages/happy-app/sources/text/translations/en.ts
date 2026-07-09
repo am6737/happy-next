@@ -704,6 +704,7 @@ export const en: TranslationStructure = {
         },
         inputPlaceholder: 'Type a message ...',
         initialMessage: 'What would you like to work on?',
+        locatingMessage: 'Locating message…',
         takePhoto: 'Take Photo',
         chooseFromLibrary: 'Choose from Library',
         pasteFromClipboard: 'Paste from Clipboard',

@@ -689,6 +689,7 @@ export const zhHant: TranslationStructure = {
         },
         inputPlaceholder: '輸入訊息...',
         initialMessage: '想做些什麼？',
+        locatingMessage: '正在定位訊息…',
         takePhoto: '拍照',
         chooseFromLibrary: '從圖庫選擇',
         pasteFromClipboard: '從剪貼簿貼上',

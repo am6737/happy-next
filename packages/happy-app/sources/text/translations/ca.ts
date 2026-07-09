@@ -687,6 +687,7 @@ export const ca: TranslationStructure = {
         },
         inputPlaceholder: 'Escriu un missatge...',
         initialMessage: 'En què t\'agradaria treballar?',
+        locatingMessage: 'Localitzant el missatge…',
         takePhoto: 'Fes una foto',
         chooseFromLibrary: 'Tria de la galeria',
         pasteFromClipboard: 'Enganxa des del porta-retalls',

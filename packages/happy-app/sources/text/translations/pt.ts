@@ -687,6 +687,7 @@ export const pt: TranslationStructure = {
         },
         inputPlaceholder: 'Digite uma mensagem ...',
         initialMessage: 'No que você gostaria de trabalhar?',
+        locatingMessage: 'Localizando mensagem…',
         takePhoto: 'Tirar foto',
         chooseFromLibrary: 'Escolher da galeria',
         pasteFromClipboard: 'Colar da área de transferência',

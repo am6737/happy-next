@@ -689,6 +689,7 @@ export const zhHans: TranslationStructure = {
         },
         inputPlaceholder: '输入消息...',
         initialMessage: '想做点什么？',
+        locatingMessage: '正在定位消息…',
         takePhoto: '拍照',
         chooseFromLibrary: '从相册选择',
         pasteFromClipboard: '从剪贴板粘贴',

@@ -6,7 +6,6 @@ import { formatMessageTime } from '@/utils/messageTime';
 
 export type ConversationMinimapItem = {
     message: UserTextMessage;
-    index: number;
 };
 
 const HIT_WIDTH = 44;
@@ -44,7 +43,7 @@ function getAttachmentSummary(message: UserTextMessage) {
 export function ConversationMinimap(props: {
     userMessages: ConversationMinimapItem[];
     activeMessageIds: Set<string>;
-    onJumpToMessage: (index: number) => void;
+    onJumpToMessage: (message: UserTextMessage) => void;
     contentWidth: number;
 }) {
     const { theme } = useUnistyles();
@@ -135,7 +134,7 @@ export function ConversationMinimap(props: {
                     return (
                         <View key={item.message.id} style={{ position: 'relative', width: HIT_WIDTH, height: MARKER_SLOT_HEIGHT, alignItems: 'flex-start', justifyContent: 'center' }}>
                             <Pressable
-                                onPress={() => props.onJumpToMessage(item.index)}
+                                onPress={() => props.onJumpToMessage(item.message)}
                                 onHoverIn={() => setHoveredIndex(itemIndex)}
                                 accessibilityRole="button"
                                 accessibilityLabel="Jump to user message"

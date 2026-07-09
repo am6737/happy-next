@@ -39,7 +39,7 @@ import { gitStatusSync } from './gitStatusSync';
 import { projectManager } from './projectManager';
 import { AsyncLock } from '@/utils/lock';
 import { voiceHooks } from '@/realtime/hooks/voiceHooks';
-import { Message } from './typesMessage';
+import { Message, UserTextMessage } from './typesMessage';
 import { EncryptionCache } from './encryption/encryptionCache';
 import { systemPrompt, buildDootaskSystemPrompt } from './prompt/systemPrompt';
 import { fetchArtifact, fetchArtifacts, createArtifact, updateArtifact } from './apiArtifacts';
@@ -206,6 +206,9 @@ class Sync {
     // after the clear and resurrect obsolete messages on the next bootstrap.
     private messageCacheGeneration = new Map<string, number>();
     private messageCacheResetPromises = new Map<string, Promise<void>>();
+    /** Memoized minimap user-message lists per session, keyed by a cache-state freshness signature,
+     *  so refocusing a session doesn't re-decrypt its whole history. See getCachedUserMessagesForMinimap. */
+    private minimapUserMessagesCache = new Map<string, { signature: string; messages: UserTextMessage[] }>();
     /** Per-session last-known seq for v3 incremental fetch */
     private sessionLastSeq = new Map<string, number>();
     /** Callbacks to run before applying a sent message (keyed by localId).
@@ -536,6 +539,8 @@ class Sync {
     private bumpMessageCacheGeneration = (sessionId: string): number => {
         const next = this.getMessageCacheGeneration(sessionId) + 1;
         this.messageCacheGeneration.set(sessionId, next);
+        // Any cache clear/invalidate must drop the memoized minimap list too.
+        this.minimapUserMessagesCache.delete(sessionId);
         return next;
     }
 
@@ -3230,6 +3235,117 @@ class Sync {
             console.warn(`Failed to read newer local messages for ${sessionId}:`, error);
             return null;
         }
+    }
+
+    // Read ALL locally-cached user messages for a session, decrypted+normalized into
+    // UserTextMessage objects. Used only to populate the conversation minimap so it can show
+    // user prompts that live in the offline cache but haven't been loaded into the message list
+    // yet. This deliberately does NOT touch `sessionReceivedMessages` (the dedup set used by
+    // `decryptAndNormalizeMessages`): if it did, the real fetch paths would later treat these
+    // messages as "already received" and skip applying them to the list.
+    getCachedUserMessagesForMinimap = async (sessionId: string): Promise<UserTextMessage[]> => {
+        const accountKey = this.getMessageAccountKey();
+        if (!accountKey) {
+            return [];
+        }
+        const encryption = this.encryption.getSessionEncryption(sessionId);
+        if (!encryption) {
+            return [];
+        }
+
+        // Skip the (expensive) scan+decrypt when the cache hasn't changed since we last computed it.
+        // The cache state's updatedAt bumps on every write, so it's a cheap freshness signature —
+        // this keeps refocusing the same session from re-decrypting the whole history each time.
+        const cacheState = await this.getCachedMessageState(sessionId);
+        const signature = cacheState
+            ? `${cacheState.updatedAt}:${cacheState.contiguousMinSeq}:${cacheState.contiguousMaxSeq}:${cacheState.oldestLoadedSeq}`
+            : 'empty';
+        const memo = this.minimapUserMessagesCache.get(sessionId);
+        if (memo && memo.signature === signature) {
+            return memo.messages;
+        }
+
+        // Page backwards from the newest cached message. Cap the scan so pathologically long
+        // conversations can't block/allocate unbounded; if we hit the cap the minimap simply
+        // shows the most recent slice plus whatever the list has loaded.
+        const MAX_SCAN = 5000;
+        const PAGE = Sync.INITIAL_MESSAGES_LIMIT;
+        const collected: ApiMessage[] = [];
+        let truncated = false;
+        try {
+            let beforeSeq: number | null = null;
+            while (true) {
+                if (collected.length >= MAX_SCAN) {
+                    truncated = true;
+                    break;
+                }
+                const page: MessagePage | null = beforeSeq === null
+                    ? await this.readCachedLatestMessages(sessionId, PAGE)
+                    : await this.readCachedMessagesBefore(sessionId, beforeSeq, PAGE);
+                if (!page || page.messages.length === 0) {
+                    break;
+                }
+                collected.push(...page.messages);
+                if (!page.hasMoreLocal || page.minSeq === null) {
+                    break;
+                }
+                beforeSeq = page.minSeq;
+            }
+        } catch (error) {
+            console.warn(`Failed to scan cached messages for minimap ${sessionId}:`, error);
+            return [];
+        }
+        if (truncated) {
+            log.log(`💬 getCachedUserMessagesForMinimap hit MAX_SCAN=${MAX_SCAN} for ${sessionId}; oldest prompts are omitted from the minimap`);
+        }
+        if (collected.length === 0) {
+            this.minimapUserMessagesCache.set(sessionId, { signature, messages: [] });
+            return [];
+        }
+
+        // Cached pages are newest-first; normalize chronologically. Build UserTextMessage objects
+        // directly from the normalized rows (no reducer): we only need top-level user prompts, so a
+        // full reducer pass — traceMessages, sidechain separation, event conversion — would be pure
+        // overhead. Using the real message id also keeps ids stable across refreshes (a fresh
+        // reducer would allocate new random ids each run, remounting every marker).
+        const ascending = collected.slice().reverse();
+        let userMessages: UserTextMessage[];
+        try {
+            const decrypted = await encryption.decryptMessages(ascending);
+            userMessages = [];
+            for (const item of decrypted) {
+                if (!item) {
+                    continue;
+                }
+                const normalized = normalizeRawMessage(item.id, item.localId, item.createdAt, item.content);
+                // Only top-level user prompts — exclude sub-agent (sidechain) prompts, matching what
+                // the list shows. `isSidechain` is set at normalize time and is exactly what the
+                // reducer's tracer keys on.
+                if (!normalized || normalized.role !== 'user' || normalized.isSidechain) {
+                    continue;
+                }
+                userMessages.push({
+                    kind: 'user-text',
+                    id: normalized.id,
+                    localId: normalized.localId,
+                    createdAt: normalized.createdAt,
+                    seq: item.seq,
+                    text: normalized.content.text,
+                    ...(normalized.meta?.displayText ? { displayText: normalized.meta.displayText } : {}),
+                    ...(normalized.content.type === 'mixed' ? { images: normalized.content.images } : {}),
+                    meta: normalized.meta,
+                    sentBy: item.sentBy,
+                    sentByName: item.sentByName,
+                });
+            }
+        } catch (error) {
+            console.warn(`Failed to decrypt cached messages for minimap ${sessionId}:`, error);
+            return [];
+        }
+
+        userMessages.sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0) || a.createdAt - b.createdAt);
+        this.minimapUserMessagesCache.set(sessionId, { signature, messages: userMessages });
+        return userMessages;
     }
 
     private decryptAndNormalizeMessages = async (

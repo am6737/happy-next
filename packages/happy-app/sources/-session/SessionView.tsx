@@ -7,6 +7,7 @@ import { getSuggestions } from '@/components/autocomplete/suggestions';
 import { ChatHeaderTitle } from '@/components/ChatHeaderTitle';
 import { ChatList, type ForkMessageRequest } from '@/components/ChatList';
 import { ConversationMinimap, type ConversationMinimapItem } from '@/components/ConversationMinimap';
+import type { UserTextMessage } from '@/sync/typesMessage';
 import { Deferred } from '@/components/Deferred';
 import { DuplicateSheet } from '@/components/DuplicateSheet';
 import { ActionMenuModal } from '@/components/ActionMenuModal';
@@ -886,14 +887,44 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
     // Handle loading more older messages when scrolling to top
     const [minimapItems, setMinimapItems] = React.useState<ConversationMinimapItem[]>([]);
     const [minimapActiveMessageIds, setMinimapActiveMessageIds] = React.useState<Set<string>>(() => new Set());
+    const [minimapCachedUserMessages, setMinimapCachedUserMessages] = React.useState<UserTextMessage[]>([]);
     const [contentAreaWidth, setContentAreaWidth] = React.useState(0);
-    const minimapJumpRef = React.useRef<((index: number) => void) | null>(null);
-    const handleRegisterMinimapJump = React.useCallback((jump: ((index: number) => void) | null) => {
+    const minimapJumpRef = React.useRef<((message: UserTextMessage) => void) | null>(null);
+    const handleRegisterMinimapJump = React.useCallback((jump: ((message: UserTextMessage) => void) | null) => {
         minimapJumpRef.current = jump;
     }, []);
-    const handleMinimapJump = React.useCallback((index: number) => {
-        minimapJumpRef.current?.(index);
+    const handleMinimapJump = React.useCallback((message: UserTextMessage) => {
+        minimapJumpRef.current?.(message);
     }, []);
+
+    // Tracks which session the cached minimap list currently belongs to, so we only blank it on a
+    // real session switch (not on every refocus of the same session, which would flicker the rail).
+    const cachedMinimapSessionRef = React.useRef<string | null>(null);
+    // Load all user prompts from the persistent offline cache so the minimap can display prompts
+    // that haven't been paged into the message list yet. Refreshed on focus / session change.
+    useFocusEffect(
+        React.useCallback(() => {
+            // The minimap is web-only (see ConversationMinimap); don't pay the scan+decrypt on native.
+            if (Platform.OS !== 'web') return;
+            let cancelled = false;
+            if (cachedMinimapSessionRef.current !== sessionId) {
+                cachedMinimapSessionRef.current = sessionId;
+                setMinimapCachedUserMessages([]);
+            }
+            void sync.getCachedUserMessagesForMinimap(sessionId)
+                .then((messages) => {
+                    if (!cancelled) {
+                        setMinimapCachedUserMessages(messages);
+                    }
+                })
+                .catch(() => {
+                    // Minimap simply falls back to loaded messages; never surface an error.
+                });
+            return () => {
+                cancelled = true;
+            };
+        }, [sessionId])
+    );
 
     const handleLoadMore = React.useCallback(() => {
         return sync.fetchOlderMessages(sessionId);
@@ -937,6 +968,7 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
                         onForkMessage={handleForkFromMessage}
                         forkingMessageId={forkingMessageId}
                         onLoadMore={handleLoadMore}
+                        minimapCachedUserMessages={minimapCachedUserMessages}
                         onMinimapItemsChange={setMinimapItems}
                         onActiveMessageIdsChange={setMinimapActiveMessageIds}
                         onRegisterMinimapJump={handleRegisterMinimapJump}
