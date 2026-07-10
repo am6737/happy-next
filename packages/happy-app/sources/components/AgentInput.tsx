@@ -203,6 +203,24 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
         backgroundColor: theme.colors.divider,
         marginHorizontal: 16,
     },
+    overlayColumnDivider: {
+        width: 1,
+        backgroundColor: theme.colors.divider,
+        marginVertical: 8,
+    },
+    fastModeRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+    },
+    fastModeLabel: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: theme.colors.textSecondary,
+        ...Typography.default('semiBold'),
+    },
 
     // Selection styles
     selectionItem: {
@@ -418,6 +436,8 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
         );
     });
     const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+    // Wide layout: show the reasoning-effort column beside the model list instead of below it.
+    const isWideModelLayout = screenWidth > 700;
 
     // Check if this is a Codex or Gemini session
     // Use metadata.flavor for existing sessions, agentType prop for new sessions
@@ -501,7 +521,9 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
             return;
         }
         const validOptions = getClaudeReasoningOptions(family);
-        const effort = claudeSelection.effort && validOptions.includes(claudeSelection.effort) ? claudeSelection.effort : validOptions[0];
+        // Default to High (not the list's top-of-order Max) when nothing compatible carries over.
+        const fallbackEffort = validOptions.includes('high') ? 'high' : validOptions[0];
+        const effort = claudeSelection.effort && validOptions.includes(claudeSelection.effort) ? claudeSelection.effort : fallbackEffort;
         props.onModelModeChange(buildClaudeModelMode(family, effort));
     }, [claudeSelection.effort, props.onModelModeChange]);
     const handleClaudeReasoningChange = React.useCallback((effort: ClaudeReasoningEffort) => {
@@ -1086,71 +1108,96 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
 
                                 {/* Model Section */}
                                 {showSettings === 'model' && <View style={{ paddingVertical: 8 }}>
-                                    {isCodex ? (
-                                        <>
-                                            {renderRadioOptions(codexFamilyOptions, codexSelection.family, handleCodexFamilyChange)}
-                                            {codexSelection.family !== 'default' && (
+                                    {isCodex ? (() => {
+                                        const hasEffort = codexSelection.family !== 'default';
+                                        const reasoningColumn = (
+                                            <>
+                                                <Text style={styles.overlaySectionTitle}>
+                                                    {t('agentInput.model.reasoningEffort')}
+                                                </Text>
+                                                {renderRadioOptions(codexReasoningOptions, codexSelection.effort, handleCodexReasoningChange)}
+                                            </>
+                                        );
+                                        const fastModeRow = (
+                                            <View style={styles.fastModeRow}>
+                                                <Text style={styles.fastModeLabel}>
+                                                    {t('agentInput.model.fastMode')}
+                                                </Text>
+                                                <Switch
+                                                    value={!!props.fastMode}
+                                                    onValueChange={(value) => {
+                                                        hapticsLight();
+                                                        props.onFastModeChange?.(value);
+                                                    }}
+                                                />
+                                            </View>
+                                        );
+                                        // Wide screens with a reasoning selection: show effort beside the model list.
+                                        if (hasEffort && isWideModelLayout) {
+                                            return (
                                                 <>
-                                                    <View style={[styles.overlayDivider, { marginTop: 4, marginBottom: 6 }]} />
-                                                    <Text style={{
-                                                        fontSize: 12,
-                                                        fontWeight: '600',
-                                                        color: theme.colors.textSecondary,
-                                                        paddingHorizontal: 16,
-                                                        paddingBottom: 4,
-                                                        ...Typography.default('semiBold')
-                                                    }}>
-                                                        {t('agentInput.model.reasoningEffort')}
-                                                    </Text>
-                                                    {renderRadioOptions(codexReasoningOptions, codexSelection.effort, handleCodexReasoningChange)}
-                                                    <View style={[styles.overlayDivider, { marginTop: 4, marginBottom: 6 }]} />
-                                                    <View style={{
-                                                        flexDirection: 'row',
-                                                        alignItems: 'center',
-                                                        justifyContent: 'space-between',
-                                                        paddingHorizontal: 16,
-                                                        paddingVertical: 8,
-                                                    }}>
-                                                        <Text style={{
-                                                            fontSize: 12,
-                                                            fontWeight: '600',
-                                                            color: theme.colors.textSecondary,
-                                                            ...Typography.default('semiBold')
-                                                        }}>
-                                                            {t('agentInput.model.fastMode')}
-                                                        </Text>
-                                                        <Switch
-                                                            value={!!props.fastMode}
-                                                            onValueChange={(value) => {
-                                                                hapticsLight();
-                                                                props.onFastModeChange?.(value);
-                                                            }}
-                                                        />
+                                                    <View style={{ flexDirection: 'row' }}>
+                                                        <View style={{ flex: 1 }}>
+                                                            {renderRadioOptions(codexFamilyOptions, codexSelection.family, handleCodexFamilyChange)}
+                                                        </View>
+                                                        <View style={styles.overlayColumnDivider} />
+                                                        <View style={{ flex: 1 }}>
+                                                            {reasoningColumn}
+                                                        </View>
                                                     </View>
-                                                </>
-                                            )}
-                                        </>
-                                    ) : isClaude ? (
-                                        <>
-                                            {renderRadioOptions(claudeFamilyOptions, claudeSelection.family, handleClaudeFamilyChange)}
-                                            {claudeSelection.family !== 'default' && claudeReasoningOptions.length > 0 && (
-                                                <>
                                                     <View style={[styles.overlayDivider, { marginTop: 4, marginBottom: 6 }]} />
-                                                    <Text style={{
-                                                        fontSize: 12,
-                                                        fontWeight: '600',
-                                                        color: theme.colors.textSecondary,
-                                                        paddingHorizontal: 16,
-                                                        paddingBottom: 4,
-                                                        ...Typography.default('semiBold')
-                                                    }}>
-                                                        {t('agentInput.model.reasoningEffort')}
-                                                    </Text>
-                                                    {renderRadioOptions(claudeReasoningOptions, claudeSelection.effort, handleClaudeReasoningChange)}
+                                                    {fastModeRow}
                                                 </>
-                                            )}
-                                        </>
-                                    ) : (
+                                            );
+                                        }
+                                        return (
+                                            <>
+                                                {renderRadioOptions(codexFamilyOptions, codexSelection.family, handleCodexFamilyChange)}
+                                                {hasEffort && (
+                                                    <>
+                                                        <View style={[styles.overlayDivider, { marginTop: 4, marginBottom: 6 }]} />
+                                                        {reasoningColumn}
+                                                        <View style={[styles.overlayDivider, { marginTop: 4, marginBottom: 6 }]} />
+                                                        {fastModeRow}
+                                                    </>
+                                                )}
+                                            </>
+                                        );
+                                    })() : isClaude ? (() => {
+                                        const hasEffort = claudeSelection.family !== 'default' && claudeReasoningOptions.length > 0;
+                                        const reasoningColumn = (
+                                            <>
+                                                <Text style={styles.overlaySectionTitle}>
+                                                    {t('agentInput.model.reasoningEffort')}
+                                                </Text>
+                                                {renderRadioOptions(claudeReasoningOptions, claudeSelection.effort, handleClaudeReasoningChange)}
+                                            </>
+                                        );
+                                        if (hasEffort && isWideModelLayout) {
+                                            return (
+                                                <View style={{ flexDirection: 'row' }}>
+                                                    <View style={{ flex: 1 }}>
+                                                        {renderRadioOptions(claudeFamilyOptions, claudeSelection.family, handleClaudeFamilyChange)}
+                                                    </View>
+                                                    <View style={styles.overlayColumnDivider} />
+                                                    <View style={{ flex: 1 }}>
+                                                        {reasoningColumn}
+                                                    </View>
+                                                </View>
+                                            );
+                                        }
+                                        return (
+                                            <>
+                                                {renderRadioOptions(claudeFamilyOptions, claudeSelection.family, handleClaudeFamilyChange)}
+                                                {hasEffort && (
+                                                    <>
+                                                        <View style={[styles.overlayDivider, { marginTop: 4, marginBottom: 6 }]} />
+                                                        {reasoningColumn}
+                                                    </>
+                                                )}
+                                            </>
+                                        );
+                                    })() : (
                                         renderRadioOptions(modelOptions, selectedModelMode, (v) => props.onModelModeChange?.(v))
                                     )}
                                 </View>}
