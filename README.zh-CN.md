@@ -102,10 +102,11 @@ Happy Next 是原版 Happy 的重大演进，以下是亮点：
 - 三个 Agent 均为一等公民，支持会话恢复、复制/分叉和历史记录
 - 多 Agent 历史页面，按供应商分标签页，支持设备和 Agent 类型筛选
 - 按 Agent 选择模型、费用追踪和上下文窗口显示
-- Codex 支持 ACP 和 App-Server（JSON-RPC）两种后端，Codex v0.130.0 支持 fast mode
+- Codex 支持 ACP 和 App-Server（JSON-RPC）两种后端，Codex v0.144.1 支持 fast mode
 - AI 后端配置文件，内置 DeepSeek、Z.AI、OpenAI、Azure 和 Google AI 预设
 - 新增 Claude Opus 4.8 支持，过滤 4.x 模型的空 thinking 块以保证渲染干净
 - 模型目录新增 Claude Fable 5（含 1M 上下文变体），提供 low / medium / high / xhigh / max 五档推理强度
+- 精简模型选择器：Claude 1M 上下文变体收进单个开关（模型从 12 个减到 7 个），宽屏下推理强度并排显示，Claude 默认 High 强度
 - 新增 GPT-5.5 Codex 支持，提供 low/medium/high/xhigh 四档推理强度
 - 新增 Gemini 3.1 Pro，Gemini 3 Flash 转 GA；Wizard 兼容 flash 模型变体
 
@@ -192,8 +193,9 @@ Happy Next 是原版 Happy 的重大演进，以下是亮点：
 - `/duplicate` 命令从任意消息分叉会话，包括直接从 AI 回复分叉
 - 发送后立即显示乐观的"Processing…"状态，消息列表重载时显示"refreshing"指示器
 - 消息分页、未读蓝点指示器、紧凑列表视图
-- 对话缩略图导航面板——点击可快速跳转到长对话的任意位置
+- 对话缩略图导航面板——点击可快速跳转到长对话的任意位置，从离线消息缓存填充，消息未加载完或离线时也能看到导航概览
 - 优化 minimap 覆层位置，让长对话导航更顺手
+- Web 对话列表重写为模型驱动的虚拟化列表——跳转到某条消息时即时居中（已在目标处则给出轻微抖动反馈），历史随滚动按需加载
 - 上下文用量提示框——在上下文指示器上展示 token 用量明细
 - Web 侧边栏可调宽度——拖拽边缘调整侧边栏宽度
 - 新建会话时自动选择最佳可用机器

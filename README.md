@@ -102,10 +102,11 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - All three agents are first-class citizens with session resume, duplicate/fork, and history
 - Multi-agent history page with per-provider tabs, device and agent filter dropdowns
 - Per-agent model selection, cost tracking, and context window display
-- ACP and App-Server (JSON-RPC) backends for Codex, Codex v0.130.0 with fast mode
+- ACP and App-Server (JSON-RPC) backends for Codex, Codex v0.144.1 with fast mode
 - AI backend profiles with presets for DeepSeek, Z.AI, OpenAI, Azure, and Google AI
 - Claude Opus 4.8 support with empty thinking block filtering for clean 4.x rendering
 - Claude Fable 5 (with 1M-context variant) in the Claude model catalog, with low / medium / high / xhigh / max reasoning effort presets
+- Streamlined model picker: Claude 1M-context variants collapse into a single toggle (7 models instead of 12), reasoning-effort presets show side by side on wide screens, and Claude defaults to High effort
 - GPT-5.5 support for Codex with low/medium/high/xhigh reasoning levels
 - Gemini 3.1 Pro and Gemini 3 Flash (GA) in the model catalog; wizard handles flash model variants
 
@@ -192,8 +193,9 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - `/duplicate` command to fork a session from any message, including directly from an AI reply
 - Sending shows an optimistic "Processing…" status immediately, plus a "refreshing" indicator while the message list reloads
 - Message pagination, unread blue dot indicator, compact list view
-- Conversation minimap panel — tap to jump to any part of a long conversation at a glance
+- Conversation minimap panel — tap to jump to any part of a long conversation at a glance, populated from the offline message cache so the overview is available even before messages finish loading or while offline
 - Minimap overlay placement is polished for smoother long-conversation navigation
+- Web conversation list rebuilt as a model-driven virtualized list — jumping to a message centers instantly (with a subtle shake when you're already there) and history loads on demand as you scroll
 - Context usage tooltip on the context indicator showing token-count breakdown details
 - Resizable sidebar on web — drag the edge to adjust width
 - New session defaults now pick the best available machine automatically

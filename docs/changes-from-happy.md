@@ -19,7 +19,7 @@ This document summarizes what changed in Happy Next compared to the original Hap
 | Self-hosting | One-command `docker-compose` stack with separate origins |
 | Server discovery | API/voice service discovery plus fastest-default endpoint racing when no custom server is configured |
 | Sync | v3 messages API, HTTP outbox, server-confirmed sends, race condition fixes |
-| Chat UX | Image attachment, pagination, blue dot, compact view, session search, pull-to-refresh, minimap navigation, context usage tooltip, resizable web sidebar |
+| Chat UX | Image attachment, pagination, blue dot, compact view, session search, pull-to-refresh, offline-cache minimap navigation, virtualized web conversation list with instant centered jumps, context usage tooltip, resizable web sidebar |
 | Session mgmt | Per-machine session tabs, device and agent filters, hot-upgrade, metadata caching, smart new-session machine defaults |
 | Bug fixes | 250+ fixes across message sending, sessions, rendering, navigation, security |
 | Performance | Payload trimming, lazy-load diffs, rendering optimization, incremental session catch-up on open |
@@ -72,6 +72,8 @@ The original Happy only supported Claude Code. Happy Next treats Claude Code, Co
 - **Per-agent model selection** cached independently, with context window display
 - **Claude Opus 4.8** added to the model catalog
 - **Claude Fable 5** added to the model catalog, with 1M-context variant and low / medium / high / xhigh / max reasoning effort presets
+- **Streamlined model picker**: Claude 1M-context variants collapse into a single toggle (7 models instead of 12); reasoning-effort presets show side by side on wide screens and Claude defaults to High effort
+- **Codex v0.144.1**: bundled Codex CLI updated with a refreshed model catalog
 - **Cost tracking** with accurate token usage for Claude models (cache tokens, reasoning tokens)
 - **Codex reasoning effort** configuration (low / medium / high / xhigh)
 - **ACP (Agent Client Protocol) backend** for Codex, replacing the MCP client approach
@@ -264,7 +266,8 @@ Extensive improvements to the chat and session management experience.
 - **Real-time friend request updates** via socket events
 - **Swipe-to-delete** for feed notifications
 - **Friend search** with flat layout, GitHub connect prompt for users without username
-- **Conversation minimap**: a minimap panel for jumping to any part of a long conversation at a glance
+- **Conversation minimap**: a minimap panel for jumping to any part of a long conversation at a glance, now populated from the offline message cache so the overview is available even before messages finish loading or while offline
+- **Virtualized web conversation list**: the web chat list is rebuilt as a model-driven virtualized list — jumping to a message centers instantly (with a subtle shake when you're already there) and history loads on demand as you scroll
 - **Context usage tooltip**: hover the context indicator to see a token-count breakdown
 - **Resizable web sidebar**: drag the sidebar edge to adjust its width
 - **Smart session defaults**: new session creation automatically picks the best available machine

@@ -1,5 +1,17 @@
 # Changelog
 
+## Version 17 - 2026-07-10
+
+The web conversation list is rebuilt as a model-driven virtualized list with instant centered jumps, the minimap now fills in from the offline message cache, the model picker is streamlined to seven entries with side-by-side reasoning-effort presets, and the CLI updates to v0.6.1 with Codex 0.144.1.
+
+- Web conversation list: rebuilt as a model-driven virtualized list — jumping to a message centers instantly, with a subtle shake when you're already there; history now loads on demand as you scroll
+- Minimap: the conversation minimap now populates from the offline message cache, so the navigation overview is available even before messages finish loading or while offline
+- Models: the model picker is streamlined from 12 to 7 entries — Claude 1M-context variants collapse into a single toggle instead of separate rows
+- Models: on wide screens the reasoning-effort presets show side by side, and Claude now defaults to High effort
+- Codex: updated to Codex 0.144.1 with a refreshed model catalog
+- Fixes: sub-agent token usage no longer overwrites the main session's context-window indicator; the message outbox no longer overflows on large batches, and noisy 4xx server logs are reduced
+- CLI: Happy CLI updated to v0.6.1
+
 ## Version 16 - 2026-07-08
 
 Conversations gain a minimap for quick navigation, a context-usage tooltip, a persistent message cache for faster reopens, and a resizable sidebar on web; server connectivity is streamlined with service discovery, fastest-default API endpoint racing, and improved self-host deployment setup; shared-session lists and machine tabs update more reliably; voice auth is hardened with short-lived tokens; and the CLI updates to v0.6.0 with new Codex slash commands for compact review and goal-setting.
