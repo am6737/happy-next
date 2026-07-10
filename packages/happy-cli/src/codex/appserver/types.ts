@@ -5,7 +5,8 @@
  * a JSON-RPC protocol over stdin/stdout with a thread/turn lifecycle.
  *
  * References:
- * - docs/codex-app-server-0.112.0/ (generated JSON schemas)
+ * - docs/codex-app-server-0.144.1/ (generated JSON schemas, local-only; regenerate via
+ *   `npx -y @openai/codex@<ver> app-server generate-json-schema [--experimental] --out <dir>`)
  */
 
 // ─── Wire Format ───────────────────────────────────────────────
