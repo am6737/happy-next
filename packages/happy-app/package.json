@@ -195,6 +195,7 @@
     "@material/material-color-utilities": "^0.3.0",
     "@stablelib/hex": "^2.0.1",
     "@types/react": "~19.1.10",
+    "@types/react-dom": "~19.1.0",
     "babel-plugin-transform-remove-console": "^6.9.4",
     "cross-env": "^10.1.0",
     "esbuild": "^0.28.0",

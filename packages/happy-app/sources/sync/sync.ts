@@ -548,6 +548,26 @@ class Sync {
         return this.getMessageCacheGeneration(sessionId) === generation;
     }
 
+    // Drop a session's persisted message cache (rows + coverage state) so the next fetch
+    // re-initializes coverage from scratch. Used to self-heal when the cached coverage no longer
+    // connects to what the server returns — retrying against the stale state would fail forever.
+    private clearSessionMessageCacheForRepair = async (sessionId: string): Promise<void> => {
+        this.bumpMessageCacheGeneration(sessionId);
+        const accountKey = this.getMessageAccountKey();
+        if (!accountKey) return;
+        const resetPromise = messageRepository.clearSession(accountKey, sessionId).catch((error) => {
+            console.warn(`Failed to clear local message cache for ${sessionId}:`, error);
+        });
+        this.messageCacheResetPromises.set(sessionId, resetPromise);
+        try {
+            await resetPromise;
+        } finally {
+            if (this.messageCacheResetPromises.get(sessionId) === resetPromise) {
+                this.messageCacheResetPromises.delete(sessionId);
+            }
+        }
+    }
+
 
     // Hard-reset a session's message sync. invalidate() on a *running* InvalidateSync is a no-op
     // (it only sets the double-flag), so if the current cycle is stuck awaiting a hung request it
@@ -3519,7 +3539,12 @@ class Sync {
                     remoteOldestSeq,
                 });
                 if (!coveragePatch && apiMessages.length > 0) {
-                    console.warn(`💬 fetchMessagesV3 refused to cache non-contiguous bootstrap page for ${sessionId}`);
+                    // The cached coverage no longer connects to the server's latest page (e.g. the
+                    // session advanced past a hole while unopened). Retrying with the same stale
+                    // coverage would refuse forever, so drop the cached state and let the backoff
+                    // retry re-initialize coverage cleanly from this page.
+                    console.warn(`💬 fetchMessagesV3 refused to cache non-contiguous bootstrap page for ${sessionId}; clearing stale message cache`);
+                    await this.clearSessionMessageCacheForRepair(sessionId);
                     throw new Error(`Non-contiguous bootstrap message page for ${sessionId}`);
                 }
                 const cacheWriteOk = coveragePatch
@@ -3601,6 +3626,9 @@ class Sync {
                 ? buildCoverageStatePatch(existingCacheState, {
                     direction: 'newer',
                     messages: pendingApiMessages,
+                    // Proves the pages are the next existing rows above the
+                    // cursor — seq holes (deleted messages) are not gaps.
+                    cursorSeq: currentCursor,
                 })
                 : null;
             if (pendingApiMessages.length > 0 && !coveragePatch) {
@@ -3763,6 +3791,9 @@ class Sync {
                 messages: apiMessages,
                 hasMoreOlder: remoteHasMore,
                 remoteOldestSeq,
+                // Proves the page is the next existing rows below `before`, so
+                // seq holes (deleted messages) can't be mistaken for gaps.
+                cursorSeq: before,
             });
             if (!coveragePatch && apiMessages.length > 0) {
                 console.warn(`💬 fetchOlderMessages refused to cache non-contiguous older page for ${sessionId}`);

@@ -19,6 +19,13 @@ export type CoverageUpdateInput = {
     messages: ApiMessage[];
     hasMoreOlder?: boolean;
     remoteOldestSeq?: number | null;
+    // The pagination cursor the page was fetched with (before_seq for 'older',
+    // after_seq for 'newer'). A cursor proves the page is a consecutive slice
+    // of the rows that EXIST on the server, so seq holes inside the page or
+    // between the page and the cursor are deleted messages, not missing data
+    // (seqs are not dense: server-side batch replaces delete rows while the
+    // session seq counter only grows).
+    cursorSeq?: number | null;
 };
 
 export function toMessagePage(messages: ApiMessage[], hasMoreLocal: boolean): MessagePage {
@@ -132,19 +139,27 @@ export function areMessagesSeqContinuous(messages: ApiMessage[]): boolean {
         && range.maxSeq - range.minSeq + 1 === messages.length;
 }
 
+export function areMessageSeqsUnique(messages: ApiMessage[]): boolean {
+    const uniqueSeqs = new Set(messages.map((message) => message.seq));
+    return uniqueSeqs.size === messages.length;
+}
+
 export function isPageInsideKnownCoverage(
     state: SessionMessageCacheState | null,
     page: MessagePage,
 ): boolean {
     const minSeq = getKnownContiguousMinSeq(state);
     const maxSeq = getKnownContiguousMaxSeq(state);
+    // Seq holes inside known coverage are deleted messages (the coverage
+    // invariant says every EXISTING row in the span is cached), so no density
+    // requirement here — only span containment and per-row uniqueness.
     return minSeq !== null
         && maxSeq !== null
         && page.minSeq !== null
         && page.maxSeq !== null
         && page.minSeq >= minSeq
         && page.maxSeq <= maxSeq
-        && areMessagesSeqContinuous(page.messages);
+        && areMessageSeqsUnique(page.messages);
 }
 
 export function buildCoverageStatePatch(
@@ -157,7 +172,12 @@ export function buildCoverageStatePatch(
     let nextMax = existingMax;
     let remoteOldestSeq = input.remoteOldestSeq ?? existing?.remoteOldestSeq ?? null;
 
-    if (!areMessagesSeqContinuous(input.messages)) {
+    // A server-slice page (latest bootstrap, or a cursor-paginated fetch) is a
+    // consecutive run of the rows that exist on the server; seq holes inside it
+    // are deleted messages, not missing data. Density is only required when
+    // neither proof applies (e.g. acked messages applied without a cursor).
+    const isServerSlice = input.direction === 'latest' || input.cursorSeq != null;
+    if (isServerSlice ? !areMessageSeqsUnique(input.messages) : !areMessagesSeqContinuous(input.messages)) {
         return null;
     }
 
@@ -191,7 +211,14 @@ export function buildCoverageStatePatch(
         nextMin = range.minSeq;
         nextMax = range.maxSeq;
     } else if (input.direction === 'older') {
-        if (range.maxSeq < existingMin - 1) {
+        // With a cursor at/above the coverage floor, the page is exactly the
+        // next existing rows below the cursor: any seqs between the page's top
+        // and the floor are deleted rows, so the page connects regardless of
+        // numeric adjacency. Without a cursor, fall back to strict adjacency.
+        const connects = input.cursorSeq != null
+            ? input.cursorSeq >= existingMin
+            : range.maxSeq >= existingMin - 1;
+        if (!connects) {
             return null;
         }
         if (range.minSeq > existingMax + 1) {
@@ -200,7 +227,12 @@ export function buildCoverageStatePatch(
         nextMin = Math.min(existingMin, range.minSeq);
         nextMax = Math.max(existingMax, range.maxSeq);
     } else if (input.direction === 'newer') {
-        if (range.minSeq > existingMax + 1 || range.maxSeq < existingMin - 1) {
+        // Mirror of 'older': a cursor at/below the coverage ceiling proves the
+        // page continues the covered span upward across any seq holes.
+        const connects = input.cursorSeq != null
+            ? input.cursorSeq <= existingMax
+            : (range.minSeq <= existingMax + 1 && range.maxSeq >= existingMin - 1);
+        if (!connects) {
             return null;
         }
         nextMin = Math.min(existingMin, range.minSeq);
@@ -208,6 +240,8 @@ export function buildCoverageStatePatch(
     } else {
         // Latest-page bootstrap can initialize coverage or extend/overlap either edge, but it must
         // not bridge an actual gap between the known contiguous range and the returned page.
+        // (With sparse seqs this can false-positive on a hole right above the coverage ceiling;
+        // the bootstrap path repairs that case by clearing the stale cache and retrying clean.)
         if (range.minSeq > existingMax + 1 || range.maxSeq < existingMin - 1) {
             return null;
         }
