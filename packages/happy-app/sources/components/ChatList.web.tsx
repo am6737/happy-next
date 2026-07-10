@@ -19,7 +19,6 @@ import {
     buildLayoutModel,
     compensatedDistanceFromBottom,
     computeVisibleRange,
-    distanceToAlignEntryTop,
     distanceToCenterEntry,
     nextViewportState,
     pickCompensationAnchor,
@@ -158,8 +157,6 @@ const USER_SCROLL_GRACE_MS = 400;
 const ROW_ESTIMATE_PX = 100;
 // Rows kept mounted beyond the visible ones, per side.
 const OVERSCAN_ROWS = 10;
-// Gap between the viewport top inset and a jump target's top edge.
-const JUMP_TOP_MARGIN_PX = 10;
 // Codex-style animated "scroll to bottom" (cubic ease-out).
 const SCROLL_TO_BOTTOM_ANIMATION_MS = 260;
 // Viewport height guess used before the scroller is measured.
@@ -169,8 +166,22 @@ const RESTORE_TOLERANCE_PX = 24;
 // Start loading the next older page when the viewport gets this close to the
 // visual top of the loaded content.
 const LOAD_MORE_DISTANCE_PX = 800;
-// Post-jump row highlight (Codex flash).
-const HIGHLIGHT_DURATION_MS = 1400;
+// Post-jump feedback: horizontal shake on the target row.
+const SHAKE_DURATION_MS = 600;
+const SHAKE_DELAY_MS = 200;
+const SHAKE_KEYFRAMES: Keyframe[] = [
+    { transform: 'translate3d(0, 0, 0)', offset: 0 },
+    { transform: 'translate3d(-1px, 0, 0)', offset: 0.1 },
+    { transform: 'translate3d(2px, 0, 0)', offset: 0.2 },
+    { transform: 'translate3d(-4px, 0, 0)', offset: 0.3 },
+    { transform: 'translate3d(4px, 0, 0)', offset: 0.4 },
+    { transform: 'translate3d(-4px, 0, 0)', offset: 0.5 },
+    { transform: 'translate3d(4px, 0, 0)', offset: 0.6 },
+    { transform: 'translate3d(-4px, 0, 0)', offset: 0.7 },
+    { transform: 'translate3d(2px, 0, 0)', offset: 0.8 },
+    { transform: 'translate3d(-1px, 0, 0)', offset: 0.9 },
+    { transform: 'translate3d(0, 0, 0)', offset: 1 },
+];
 
 // Per-session state restored on remount (before first paint) so revisiting a
 // conversation shows the final frame immediately: raw scroll offset, height
@@ -195,6 +206,27 @@ function rememberSessionRestoreState(sessionId: string, state: SessionRestoreSta
         }
     }
 }
+
+const scrollerStyle = {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    overflowY: 'auto',
+    // Clips the shake feedback's ±4px horizontal excursion (with overflow-y
+    // auto, a visible x-axis would compute to auto and flash a scrollbar).
+    overflowX: 'hidden',
+    display: 'flex',
+    flexDirection: 'column-reverse',
+    // The viewport-stability math here is bottom-anchored and self-contained;
+    // browser scroll anchoring (partially implemented for reverse flex) would
+    // only fight it.
+    overflowAnchor: 'none',
+    // Programmatic scrolls must stay instant even if a global stylesheet turns
+    // on smooth scrolling.
+    scrollBehavior: 'auto',
+} as React.CSSProperties;
 
 const contentColumnStyle = {
     display: 'flex',
@@ -316,7 +348,8 @@ const ChatListInternal = React.memo((props: {
     const { theme } = useUnistyles();
     const headerHeight = useHeaderHeight();
     const safeArea = useSafeAreaInsets();
-    // The floating header overlays the scroller top; jumps align targets below it.
+    // The floating header overlays the scroller top; the top spacer keeps the
+    // oldest content readable beneath it.
     const headerInsetPx = headerHeight + safeArea.top + 32;
     const scrollerElRef = useRef<HTMLDivElement | null>(null);
     const sessionIdRef = useRef(props.sessionId);
@@ -937,36 +970,31 @@ const ChatListInternal = React.memo((props: {
 
     // ---- Jump to a minimap prompt ----
 
-    const flashRowHighlight = (key: string) => {
+    // Post-jump feedback: shake the landed row. transform doesn't change the
+    // row's box, so the ResizeObserver/compensation pipeline never notices it
+    // (the scroller clips the ±4px horizontal excursion via overflow-x).
+    const shakeAnimationRef = useRef<Animation | null>(null);
+    const shakeRow = (key: string) => {
         const el = rowElsByKeyRef.current.get(key);
         if (!el || typeof el.animate !== 'function') return;
-        const reducedMotion = typeof window.matchMedia === 'function'
-            && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        el.animate(
-            [
-                { backgroundColor: theme.colors.surfaceHighest },
-                { backgroundColor: theme.colors.surfaceHighest, offset: 0.35 },
-                { backgroundColor: 'transparent' },
-            ],
-            { duration: reducedMotion ? 0 : HIGHLIGHT_DURATION_MS, easing: 'cubic-bezier(0.23, 1, 0.32, 1)' },
-        );
+        if (typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+        shakeAnimationRef.current?.cancel();
+        shakeAnimationRef.current = el.animate(SHAKE_KEYFRAMES, {
+            duration: SHAKE_DURATION_MS,
+            delay: SHAKE_DELAY_MS,
+            easing: 'ease-in-out',
+        });
     };
 
     const jumpNonceRef = useRef(0);
-    // Start a jump for a target that is in memory. Mounted target → Codex-style
-    // smooth scroll (scroll-padding-top keeps it below the floating header);
-    // unmounted → teleport the window and position instantly from the model.
+    // Start a jump for a target that is in memory: teleport the window to the
+    // target and position it instantly from the model — the same single path
+    // whether or not the row happens to be mounted. No animation, ever.
     const startJump = (target: UserTextMessage): boolean => {
         const message = visibleMessagesRef.current.find((m) => messageMatchesTarget(m, target));
         if (!message) return false;
         cancelScrollAnimation();
         pendingRestoreRef.current = null;
-        const el = rowElsByKeyRef.current.get(message.id);
-        if (el && pendingJumpRef.current == null) {
-            el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            flashRowHighlight(message.id);
-            return true;
-        }
         const jump: PendingJump = { key: message.id, nonce: ++jumpNonceRef.current };
         pendingJumpRef.current = jump;
         setPendingJump(jump);
@@ -1173,11 +1201,10 @@ const ChatListInternal = React.memo((props: {
         // If measuring staged a commit, wait for it — this effect re-runs with
         // the rebuilt layout (deps) and positions against exact heights.
         if (applyMeasuredHeightsRef.current(batch, false) || pendingOpsRef.current) return;
-        const modelDistance = distanceToAlignEntryTop({
+        const modelDistance = distanceToCenterEntry({
             layout,
             key: jump.key,
             viewportHeightPx: scroller.clientHeight,
-            topInsetPx: headerInsetPx + JUMP_TOP_MARGIN_PX,
         });
         const clearJump = () => queueMicrotask(() => {
             if (pendingJumpRef.current === jump) pendingJumpRef.current = null;
@@ -1190,7 +1217,7 @@ const ChatListInternal = React.memo((props: {
         const raw = modelDistance === 0 ? 0 : modelDistance + footerHeightRef.current;
         setRawDistance(raw);
         updateViewportRef.current(Math.abs(scroller.scrollTop), scroller.clientHeight);
-        flashRowHighlight(jump.key);
+        shakeRow(jump.key);
         if (__DEV__) {
             console.log('[ChatList] jump landed', { key: jump.key, raw: Math.round(raw) });
         }
@@ -1313,26 +1340,6 @@ const ChatListInternal = React.memo((props: {
     }, []);
 
     // ---- Render ----
-
-    const scrollerStyle = React.useMemo(() => ({
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        overflowY: 'auto',
-        display: 'flex',
-        flexDirection: 'column-reverse',
-        // The viewport-stability math here is bottom-anchored and self-contained;
-        // browser scroll anchoring (partially implemented for reverse flex) would
-        // only fight it.
-        overflowAnchor: 'none',
-        // Programmatic scrolls must stay instant even if a global stylesheet turns
-        // on smooth scrolling.
-        scrollBehavior: 'auto',
-        // Smooth scrollIntoView (mounted jump targets) lands below the floating header.
-        scrollPaddingTop: headerInsetPx + JUMP_TOP_MARGIN_PX,
-    } as React.CSSProperties), [headerInsetPx]);
 
     const rows: React.ReactNode[] = [];
     for (let entryIndex = renderedRange.startIndex; entryIndex < renderedRange.endIndex; entryIndex++) {
