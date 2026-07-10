@@ -14,11 +14,12 @@ import {
 
 describe('modelCatalog', () => {
     it('validates model mode and flavor-specific mode', () => {
-        expect(isModelMode('gpt-5.3-codex-xhigh')).toBe(true);
+        expect(isModelMode('gpt-5.6-sol-ultra')).toBe(true);
+        expect(isModelMode('gpt-5.5-xhigh')).toBe(true);
         expect(isModelMode('unknown-model')).toBe(false);
 
-        expect(isModelModeForAgent('codex', 'gpt-5.3-codex-xhigh')).toBe(true);
-        expect(isModelModeForAgent('gemini', 'gpt-5.3-codex-xhigh')).toBe(false);
+        expect(isModelModeForAgent('codex', 'gpt-5.6-sol-ultra')).toBe(true);
+        expect(isModelModeForAgent('gemini', 'gpt-5.6-sol-ultra')).toBe(false);
         expect(isModelModeForAgent('claude', 'claude-opus-4-6')).toBe(true);
         expect(isModelModeForAgent('claude', 'claude-opus-4-8')).toBe(true);
         expect(isModelModeForAgent('claude', 'claude-opus-4-8[1m]-xhigh')).toBe(true);
@@ -39,13 +40,16 @@ describe('modelCatalog', () => {
     it('builds codex model mode and default', () => {
         expect(buildCodexModelMode('gpt-5.4-mini', 'low')).toBe('gpt-5.4-mini-low');
         expect(buildCodexModelMode('gpt-5.4-mini', 'xhigh')).toBe('gpt-5.4-mini-xhigh');
-        expect(buildCodexModelMode('gpt-5.3-codex', 'xhigh')).toBe('gpt-5.3-codex-xhigh');
+        expect(buildCodexModelMode('gpt-5.6-sol', 'ultra')).toBe('gpt-5.6-sol-ultra');
+        expect(buildCodexModelMode('gpt-5.6-luna', 'max')).toBe('gpt-5.6-luna-max');
         expect(buildCodexModelMode(MODEL_MODE_DEFAULT, 'high')).toBe(MODEL_MODE_DEFAULT);
     });
 
     it('returns valid reasoning options per codex family', () => {
         expect(getCodexReasoningOptions('gpt-5.4-mini')).toEqual(['xhigh', 'high', 'medium', 'low']);
-        expect(getCodexReasoningOptions('gpt-5.3-codex')).toEqual(['xhigh', 'high', 'medium', 'low']);
+        expect(getCodexReasoningOptions('gpt-5.6-sol')).toEqual(['ultra', 'max', 'xhigh', 'high', 'medium', 'low']);
+        expect(getCodexReasoningOptions('gpt-5.6-terra')).toEqual(['ultra', 'max', 'xhigh', 'high', 'medium', 'low']);
+        expect(getCodexReasoningOptions('gpt-5.6-luna')).toEqual(['max', 'xhigh', 'high', 'medium', 'low']);
         expect(getCodexReasoningOptions(MODEL_MODE_DEFAULT)).toEqual(['high', 'medium', 'low']);
     });
 
@@ -104,7 +108,8 @@ describe('modelCatalog', () => {
         // -fast suffix
         expect(getMaxContextSize('default', 'claude', 'claude-sonnet-4-6-fast')).toBe(200_000);
         // Codex actual model
-        expect(getMaxContextSize('default', 'codex', 'gpt-5.2')).toBe(258_400);
+        expect(getMaxContextSize('default', 'codex', 'gpt-5.2')).toBe(272_000);
+        expect(getMaxContextSize('default', 'codex', 'gpt-5.6-sol')).toBe(372_000);
         // Gemini actual model
         expect(getMaxContextSize('default', 'gemini', 'gemini-2.5-flash-lite')).toBe(1_000_000);
         // Unknown model falls back to agent default

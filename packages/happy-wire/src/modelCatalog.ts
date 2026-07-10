@@ -2,13 +2,15 @@ export type AgentFlavor = 'claude' | 'codex' | 'gemini';
 
 export const MODEL_MODE_DEFAULT = 'default' as const;
 
-export type CodexReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh';
+export type CodexReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
 export type CodexModelFamily =
     | typeof MODEL_MODE_DEFAULT
+    | 'gpt-5.6-sol'
+    | 'gpt-5.6-terra'
+    | 'gpt-5.6-luna'
     | 'gpt-5.5'
     | 'gpt-5.4'
     | 'gpt-5.4-mini'
-    | 'gpt-5.3-codex'
     | 'gpt-5.2';
 export type ClaudeReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 export type ClaudeModelFamily =
@@ -84,6 +86,23 @@ export const MODEL_MODES = [
     'claude-sonnet-4-6[1m]-medium',
     'claude-sonnet-4-6[1m]-high',
     'claude-sonnet-4-6[1m]-max',
+    'gpt-5.6-sol-low',
+    'gpt-5.6-sol-medium',
+    'gpt-5.6-sol-high',
+    'gpt-5.6-sol-xhigh',
+    'gpt-5.6-sol-max',
+    'gpt-5.6-sol-ultra',
+    'gpt-5.6-terra-low',
+    'gpt-5.6-terra-medium',
+    'gpt-5.6-terra-high',
+    'gpt-5.6-terra-xhigh',
+    'gpt-5.6-terra-max',
+    'gpt-5.6-terra-ultra',
+    'gpt-5.6-luna-low',
+    'gpt-5.6-luna-medium',
+    'gpt-5.6-luna-high',
+    'gpt-5.6-luna-xhigh',
+    'gpt-5.6-luna-max',
     'gpt-5.5-low',
     'gpt-5.5-medium',
     'gpt-5.5-high',
@@ -96,10 +115,6 @@ export const MODEL_MODES = [
     'gpt-5.4-mini-medium',
     'gpt-5.4-mini-high',
     'gpt-5.4-mini-xhigh',
-    'gpt-5.3-codex-low',
-    'gpt-5.3-codex-medium',
-    'gpt-5.3-codex-high',
-    'gpt-5.3-codex-xhigh',
     'gpt-5.2-low',
     'gpt-5.2-medium',
     'gpt-5.2-high',
@@ -187,6 +202,23 @@ export const GEMINI_MODEL_MODES = [
 
 export const CODEX_MODEL_MODES = [
     MODEL_MODE_DEFAULT,
+    'gpt-5.6-sol-low',
+    'gpt-5.6-sol-medium',
+    'gpt-5.6-sol-high',
+    'gpt-5.6-sol-xhigh',
+    'gpt-5.6-sol-max',
+    'gpt-5.6-sol-ultra',
+    'gpt-5.6-terra-low',
+    'gpt-5.6-terra-medium',
+    'gpt-5.6-terra-high',
+    'gpt-5.6-terra-xhigh',
+    'gpt-5.6-terra-max',
+    'gpt-5.6-terra-ultra',
+    'gpt-5.6-luna-low',
+    'gpt-5.6-luna-medium',
+    'gpt-5.6-luna-high',
+    'gpt-5.6-luna-xhigh',
+    'gpt-5.6-luna-max',
     'gpt-5.5-low',
     'gpt-5.5-medium',
     'gpt-5.5-high',
@@ -199,10 +231,6 @@ export const CODEX_MODEL_MODES = [
     'gpt-5.4-mini-medium',
     'gpt-5.4-mini-high',
     'gpt-5.4-mini-xhigh',
-    'gpt-5.3-codex-low',
-    'gpt-5.3-codex-medium',
-    'gpt-5.3-codex-high',
-    'gpt-5.3-codex-xhigh',
     'gpt-5.2-low',
     'gpt-5.2-medium',
     'gpt-5.2-high',
@@ -317,15 +345,34 @@ export const GEMINI_MODEL_OPTIONS = [
 
 export const CODEX_MODEL_FAMILY_OPTIONS = [
     { value: MODEL_MODE_DEFAULT, label: 'Use CLI configured model', shortLabel: 'CLI', description: 'Use profile/CLI defaults' },
-    { value: 'gpt-5.5', label: 'GPT-5.5', shortLabel: '5.5', description: 'Latest, most capable' },
-    { value: 'gpt-5.4', label: 'GPT-5.4', shortLabel: '5.4', description: 'General-purpose model' },
-    { value: 'gpt-5.4-mini', label: 'GPT-5.4-Mini', shortLabel: '5.4-Mini', description: 'Fast lightweight model' },
-    { value: 'gpt-5.3-codex', label: 'GPT-5.3-Codex', shortLabel: '5.3-Codex', description: 'Code-optimized model' },
-    { value: 'gpt-5.2', label: 'GPT-5.2', shortLabel: '5.2', description: 'General-purpose model' },
+    { value: 'gpt-5.6-sol', label: 'GPT-5.6-Sol', shortLabel: '5.6-Sol', description: 'Latest frontier agentic coding model' },
+    { value: 'gpt-5.6-terra', label: 'GPT-5.6-Terra', shortLabel: '5.6-Terra', description: 'Balanced agentic coding model for everyday work' },
+    { value: 'gpt-5.6-luna', label: 'GPT-5.6-Luna', shortLabel: '5.6-Luna', description: 'Fast and affordable agentic coding model' },
+    { value: 'gpt-5.5', label: 'GPT-5.5', shortLabel: '5.5', description: 'Frontier model for complex coding and research' },
+    { value: 'gpt-5.4', label: 'GPT-5.4', shortLabel: '5.4', description: 'Strong model for everyday coding' },
+    { value: 'gpt-5.4-mini', label: 'GPT-5.4-Mini', shortLabel: '5.4-Mini', description: 'Small, fast, cost-efficient model' },
+    { value: 'gpt-5.2', label: 'GPT-5.2', shortLabel: '5.2', description: 'Optimized for professional, long-running agents' },
 ] as const satisfies readonly { value: CodexModelFamily; label: string; shortLabel: string; description: string }[];
 
 export const CODEX_MODEL_OPTIONS = [
     { value: MODEL_MODE_DEFAULT, label: 'Default', description: 'Use CLI default model' },
+    { value: 'gpt-5.6-sol-low', label: 'GPT-5.6-Sol (Low)', description: 'Fast responses' },
+    { value: 'gpt-5.6-sol-medium', label: 'GPT-5.6-Sol (Medium)', description: 'Balanced responses' },
+    { value: 'gpt-5.6-sol-high', label: 'GPT-5.6-Sol (High)', description: 'Strong quality' },
+    { value: 'gpt-5.6-sol-xhigh', label: 'GPT-5.6-Sol (XHigh)', description: 'Extra reasoning depth' },
+    { value: 'gpt-5.6-sol-max', label: 'GPT-5.6-Sol (Max)', description: 'Maximum reasoning depth' },
+    { value: 'gpt-5.6-sol-ultra', label: 'GPT-5.6-Sol (Ultra)', description: 'Maximum reasoning with automatic task delegation' },
+    { value: 'gpt-5.6-terra-low', label: 'GPT-5.6-Terra (Low)', description: 'Fast responses' },
+    { value: 'gpt-5.6-terra-medium', label: 'GPT-5.6-Terra (Medium)', description: 'Balanced responses' },
+    { value: 'gpt-5.6-terra-high', label: 'GPT-5.6-Terra (High)', description: 'Strong quality' },
+    { value: 'gpt-5.6-terra-xhigh', label: 'GPT-5.6-Terra (XHigh)', description: 'Extra reasoning depth' },
+    { value: 'gpt-5.6-terra-max', label: 'GPT-5.6-Terra (Max)', description: 'Maximum reasoning depth' },
+    { value: 'gpt-5.6-terra-ultra', label: 'GPT-5.6-Terra (Ultra)', description: 'Maximum reasoning with automatic task delegation' },
+    { value: 'gpt-5.6-luna-low', label: 'GPT-5.6-Luna (Low)', description: 'Fastest responses' },
+    { value: 'gpt-5.6-luna-medium', label: 'GPT-5.6-Luna (Medium)', description: 'Balanced speed and quality' },
+    { value: 'gpt-5.6-luna-high', label: 'GPT-5.6-Luna (High)', description: 'Higher quality with good speed' },
+    { value: 'gpt-5.6-luna-xhigh', label: 'GPT-5.6-Luna (XHigh)', description: 'Extra reasoning depth' },
+    { value: 'gpt-5.6-luna-max', label: 'GPT-5.6-Luna (Max)', description: 'Maximum reasoning depth' },
     { value: 'gpt-5.5-low', label: 'GPT-5.5 (Low)', description: 'Fast responses' },
     { value: 'gpt-5.5-medium', label: 'GPT-5.5 (Medium)', description: 'Balanced responses' },
     { value: 'gpt-5.5-high', label: 'GPT-5.5 (High)', description: 'Strong quality' },
@@ -338,10 +385,6 @@ export const CODEX_MODEL_OPTIONS = [
     { value: 'gpt-5.4-mini-medium', label: 'GPT-5.4-Mini (Medium)', description: 'Balanced speed and quality' },
     { value: 'gpt-5.4-mini-high', label: 'GPT-5.4-Mini (High)', description: 'Higher quality with good speed' },
     { value: 'gpt-5.4-mini-xhigh', label: 'GPT-5.4-Mini (XHigh)', description: 'Best quality' },
-    { value: 'gpt-5.3-codex-low', label: 'GPT-5.3-Codex (Low)', description: 'Fastest coding responses' },
-    { value: 'gpt-5.3-codex-medium', label: 'GPT-5.3-Codex (Medium)', description: 'Balanced coding quality' },
-    { value: 'gpt-5.3-codex-high', label: 'GPT-5.3-Codex (High)', description: 'Strong coding quality' },
-    { value: 'gpt-5.3-codex-xhigh', label: 'GPT-5.3-Codex (XHigh)', description: 'Best coding quality' },
     { value: 'gpt-5.2-low', label: 'GPT-5.2 (Low)', description: 'Fast responses' },
     { value: 'gpt-5.2-medium', label: 'GPT-5.2 (Medium)', description: 'Balanced responses' },
     { value: 'gpt-5.2-high', label: 'GPT-5.2 (High)', description: 'Strong quality' },
@@ -349,6 +392,23 @@ export const CODEX_MODEL_OPTIONS = [
 ] as const satisfies readonly { value: ModelMode; label: string; description: string }[];
 
 const CODEX_MODE_TO_SELECTION: Partial<Record<ModelMode, { family: CodexModelFamily; effort: CodexReasoningEffort }>> = {
+    'gpt-5.6-sol-low': { family: 'gpt-5.6-sol', effort: 'low' },
+    'gpt-5.6-sol-medium': { family: 'gpt-5.6-sol', effort: 'medium' },
+    'gpt-5.6-sol-high': { family: 'gpt-5.6-sol', effort: 'high' },
+    'gpt-5.6-sol-xhigh': { family: 'gpt-5.6-sol', effort: 'xhigh' },
+    'gpt-5.6-sol-max': { family: 'gpt-5.6-sol', effort: 'max' },
+    'gpt-5.6-sol-ultra': { family: 'gpt-5.6-sol', effort: 'ultra' },
+    'gpt-5.6-terra-low': { family: 'gpt-5.6-terra', effort: 'low' },
+    'gpt-5.6-terra-medium': { family: 'gpt-5.6-terra', effort: 'medium' },
+    'gpt-5.6-terra-high': { family: 'gpt-5.6-terra', effort: 'high' },
+    'gpt-5.6-terra-xhigh': { family: 'gpt-5.6-terra', effort: 'xhigh' },
+    'gpt-5.6-terra-max': { family: 'gpt-5.6-terra', effort: 'max' },
+    'gpt-5.6-terra-ultra': { family: 'gpt-5.6-terra', effort: 'ultra' },
+    'gpt-5.6-luna-low': { family: 'gpt-5.6-luna', effort: 'low' },
+    'gpt-5.6-luna-medium': { family: 'gpt-5.6-luna', effort: 'medium' },
+    'gpt-5.6-luna-high': { family: 'gpt-5.6-luna', effort: 'high' },
+    'gpt-5.6-luna-xhigh': { family: 'gpt-5.6-luna', effort: 'xhigh' },
+    'gpt-5.6-luna-max': { family: 'gpt-5.6-luna', effort: 'max' },
     'gpt-5.5-low': { family: 'gpt-5.5', effort: 'low' },
     'gpt-5.5-medium': { family: 'gpt-5.5', effort: 'medium' },
     'gpt-5.5-high': { family: 'gpt-5.5', effort: 'high' },
@@ -361,10 +421,6 @@ const CODEX_MODE_TO_SELECTION: Partial<Record<ModelMode, { family: CodexModelFam
     'gpt-5.4-mini-medium': { family: 'gpt-5.4-mini', effort: 'medium' },
     'gpt-5.4-mini-high': { family: 'gpt-5.4-mini', effort: 'high' },
     'gpt-5.4-mini-xhigh': { family: 'gpt-5.4-mini', effort: 'xhigh' },
-    'gpt-5.3-codex-low': { family: 'gpt-5.3-codex', effort: 'low' },
-    'gpt-5.3-codex-medium': { family: 'gpt-5.3-codex', effort: 'medium' },
-    'gpt-5.3-codex-high': { family: 'gpt-5.3-codex', effort: 'high' },
-    'gpt-5.3-codex-xhigh': { family: 'gpt-5.3-codex', effort: 'xhigh' },
     'gpt-5.2-low': { family: 'gpt-5.2', effort: 'low' },
     'gpt-5.2-medium': { family: 'gpt-5.2', effort: 'medium' },
     'gpt-5.2-high': { family: 'gpt-5.2', effort: 'high' },
@@ -410,6 +466,10 @@ export function parseCodexModelMode(mode: ModelMode): { family: CodexModelFamily
 
 export function getCodexReasoningOptions(family: CodexModelFamily): readonly CodexReasoningEffort[] {
     if (family === MODEL_MODE_DEFAULT) return ['high', 'medium', 'low'];
+    // GPT-5.6 Sol/Terra add the top-tier `max` and `ultra` (auto multi-agent delegation) efforts.
+    if (family === 'gpt-5.6-sol' || family === 'gpt-5.6-terra') return ['ultra', 'max', 'xhigh', 'high', 'medium', 'low'];
+    // GPT-5.6 Luna adds `max` but not `ultra`.
+    if (family === 'gpt-5.6-luna') return ['max', 'xhigh', 'high', 'medium', 'low'];
     return ['xhigh', 'high', 'medium', 'low'];
 }
 
@@ -427,10 +487,12 @@ export type ModelSelection = {
 };
 
 const MODEL_NAME_LABELS: Record<string, string> = {
+    'gpt-5.6-sol': 'GPT-5.6-Sol',
+    'gpt-5.6-terra': 'GPT-5.6-Terra',
+    'gpt-5.6-luna': 'GPT-5.6-Luna',
     'gpt-5.5': 'GPT-5.5',
     'gpt-5.4': 'GPT-5.4',
     'gpt-5.4-mini': 'GPT-5.4-Mini',
-    'gpt-5.3-codex': 'GPT-5.3-Codex',
     'gpt-5.2': 'GPT-5.2',
     'claude-fable-5': 'Claude Fable 5',
     'claude-opus-4-8': 'Claude Opus 4.8',
@@ -452,6 +514,7 @@ const REASONING_EFFORT_LABELS: Record<string, string> = {
     high: 'High',
     max: 'Max',
     xhigh: 'XHigh',
+    ultra: 'Ultra',
 };
 
 export function resolveModelSelectionForFlavor(flavor: string | null | undefined, modelMode: string): ModelSelection {
@@ -534,7 +597,7 @@ const EXTENDED_CONTEXT_WINDOW = 1_000_000;
 
 const AGENT_DEFAULT_CONTEXT_WINDOWS: Record<AgentFlavor, number> = {
     claude: 200_000,
-    codex: 258_400,
+    codex: 272_000,
     gemini: 1_000_000,
 };
 
@@ -552,11 +615,13 @@ const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
     'claude-sonnet-4-6[1m]': 1_000_000,
     'claude-haiku-4-5': 200_000,
     // Codex models (fallback; actual value comes from CLI via context_window_size)
-    'gpt-5.5': 258_400,
-    'gpt-5.4': 258_400,
-    'gpt-5.4-mini': 258_400,
-    'gpt-5.3-codex': 258_400,
-    'gpt-5.2': 258_400,
+    'gpt-5.6-sol': 372_000,
+    'gpt-5.6-terra': 372_000,
+    'gpt-5.6-luna': 372_000,
+    'gpt-5.5': 272_000,
+    'gpt-5.4': 272_000,
+    'gpt-5.4-mini': 272_000,
+    'gpt-5.2': 272_000,
     // Gemini models
     'gemini-3.5-pro-preview': 1_000_000,
     'gemini-3.1-pro-preview': 1_000_000,
@@ -610,7 +675,7 @@ function computeMaxContextSize(modelMode: string | null | undefined, agentFlavor
         const stripped = modelMode.replace(/-fast$/, '');
         if (stripped !== modelMode && MODEL_CONTEXT_WINDOWS[stripped]) return MODEL_CONTEXT_WINDOWS[stripped];
 
-        // For codex composite modes like "gpt-5.3-codex-high", extract family
+        // For codex composite modes like "gpt-5.6-sol-high", extract family
         if (isModelMode(modelMode)) {
             const parsed = parseCodexModelMode(modelMode);
             if (parsed.family !== MODEL_MODE_DEFAULT && MODEL_CONTEXT_WINDOWS[parsed.family]) {

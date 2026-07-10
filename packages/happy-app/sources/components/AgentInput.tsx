@@ -469,7 +469,15 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
     }, [codexSelection.family]);
     const handleCodexFamilyChange = React.useCallback((family: CodexModelFamily) => {
         if (!props.onModelModeChange) return;
-        props.onModelModeChange(buildCodexModelMode(family, codexSelection.effort || 'medium'));
+        if (family === MODEL_MODE_DEFAULT) {
+            props.onModelModeChange(MODEL_MODE_DEFAULT);
+            return;
+        }
+        // Clamp the carried-over effort to what the new family supports (e.g. switching
+        // from a Sol `ultra` selection to a family that only goes up to `xhigh`).
+        const validOptions = getCodexReasoningOptions(family);
+        const effort = codexSelection.effort && validOptions.includes(codexSelection.effort) ? codexSelection.effort : validOptions[0];
+        props.onModelModeChange(buildCodexModelMode(family, effort));
     }, [codexSelection.effort, props.onModelModeChange]);
     const handleCodexReasoningChange = React.useCallback((effort: CodexReasoningEffort) => {
         if (!props.onModelModeChange || codexSelection.family === MODEL_MODE_DEFAULT) return;
