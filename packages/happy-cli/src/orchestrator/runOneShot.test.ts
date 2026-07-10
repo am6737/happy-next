@@ -28,14 +28,14 @@ describe('runOneShot spawn plan', () => {
   });
 
   it('decomposes codex model mode into --model and -c model_reasoning_effort', () => {
-    const plan = buildSpawnPlan('codex', 'hello', '/tmp/workdir', 'gpt-5.3-codex-high', 'initial');
+    const plan = buildSpawnPlan('codex', 'hello', '/tmp/workdir', 'gpt-5.5-high', 'initial');
     expect(plan.command).toBe('npx');
     expect(plan.args).toContain('-y');
-    expect(plan.args).toContain('@openai/codex@0.142.5');
+    expect(plan.args).toContain('@openai/codex@0.144.1');
     expect(plan.args).toContain('--dangerously-bypass-approvals-and-sandbox');
     expect(plan.args).toContain('hello');
     expect(plan.args).toContain('--model');
-    expect(plan.args).toContain('gpt-5.3-codex');
+    expect(plan.args).toContain('gpt-5.5');
     expect(plan.args).toContain('-c');
     expect(plan.args).toContain('model_reasoning_effort=high');
   });
