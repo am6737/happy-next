@@ -54,11 +54,13 @@ import {
 //    viewport. All corrections happen before paint (ResizeObserver callbacks
 //    and layout effects both run pre-paint).
 //
-// 3. Codex-style history model: the full session history is drained into
-//    memory in the background (page after page); the minimap only appears
-//    once everything is loaded, so a minimap jump never triggers paging —
-//    it either smooth-scrolls to a mounted row or teleports the window to
-//    the target and positions it instantly from the model.
+// 3. On-demand history loading (FlatList-era policy): opening a session loads
+//    only the latest page; older pages load when the viewport nears the
+//    visual top of loaded content. The minimap appears immediately, merging
+//    loaded prompts with the offline prompt cache; jumping to a not-yet-loaded
+//    prompt pages older history in (with a "locating" hint) before the jump
+//    resolves. Prepends land above the viewport — bottom-anchored coordinates
+//    don't move, so paging is invisible.
 //
 // 4. Per-session restore: measured heights, the rendered window anchor and
 //    the scroll offset are remembered per session and re-applied before first
@@ -127,6 +129,7 @@ export const ChatList = React.memo((props: { session: Session; onFillInput?: (te
             onForkMessage={props.onForkMessage}
             thinking={props.session.thinking}
             forkingMessageId={props.forkingMessageId}
+            minimapCachedUserMessages={props.minimapCachedUserMessages}
             onMinimapItemsChange={props.onMinimapItemsChange}
             onActiveMessageIdsChange={props.onActiveMessageIdsChange}
             onRegisterMinimapJump={props.onRegisterMinimapJump}
@@ -163,12 +166,11 @@ const SCROLL_TO_BOTTOM_ANIMATION_MS = 260;
 const INITIAL_VIEWPORT_GUESS_PX = 800;
 // A pending scroll restore is considered landed within this tolerance.
 const RESTORE_TOLERANCE_PX = 24;
-// Consecutive no-progress background-drain retries before pausing.
-const DRAIN_MAX_NO_PROGRESS_RETRIES = 3;
+// Start loading the next older page when the viewport gets this close to the
+// visual top of the loaded content.
+const LOAD_MORE_DISTANCE_PX = 800;
 // Post-jump row highlight (Codex flash).
 const HIGHLIGHT_DURATION_MS = 1400;
-
-const EMPTY_MINIMAP_ITEMS: ConversationMinimapItem[] = [];
 
 // Per-session state restored on remount (before first paint) so revisiting a
 // conversation shows the final frame immediately: raw scroll offset, height
@@ -306,6 +308,7 @@ const ChatListInternal = React.memo((props: {
     onForkMessage?: (request: ForkMessageRequest) => void,
     thinking?: boolean,
     forkingMessageId?: string | null,
+    minimapCachedUserMessages?: UserTextMessage[],
     onMinimapItemsChange?: (items: ConversationMinimapItem[]) => void,
     onActiveMessageIdsChange?: (ids: Set<string>) => void,
     onRegisterMinimapJump?: (jump: ((message: UserTextMessage) => void) | null) => void,
@@ -420,16 +423,36 @@ const ChatListInternal = React.memo((props: {
     const loadedUserMessagesRef = useRef(loadedUserMessages);
     loadedUserMessagesRef.current = loadedUserMessages;
 
-    // Codex history model: the minimap appears only once the FULL history is
-    // in memory (the background drain below loads it), so every minimap target
-    // is a loaded message and a jump can never trigger paging. Until then the
-    // minimap stays hidden (ConversationMinimap renders nothing for < 2 items).
-    // The offline prompt cache (minimapCachedUserMessages) is intentionally
-    // unused here — loaded data is the only source.
+    // Merge offline-cached user messages with the loaded ones so the minimap can show prompts that
+    // live in the persistent cache but haven't been paged into the list yet. Loaded messages win on
+    // id (they carry an accurate scroll position); compaction markers are hidden to match the list.
     const minimapItems = React.useMemo<ConversationMinimapItem[]>(() => {
-        if (props.hasMore) return EMPTY_MINIMAP_ITEMS;
-        return loadedUserMessages.map((item) => ({ message: item.message }));
-    }, [props.hasMore, loadedUserMessages]);
+        // Loaded messages always win (they carry the store's id → accurate scroll position + active
+        // highlight). A cached entry is dropped if a loaded message matches it by EITHER seq OR
+        // localId: the same message can be represented differently on each side (e.g. loaded is the
+        // just-sent optimistic copy with a localId and no seq, cache has the acked copy with a seq),
+        // so a single-key match would leak duplicates.
+        const loadedBySeq = new Set<number>();
+        const loadedByLocalId = new Set<string>();
+        const merged: UserTextMessage[] = [];
+        for (const loaded of loadedUserMessages) {
+            merged.push(loaded.message);
+            if (loaded.message.seq != null) loadedBySeq.add(loaded.message.seq);
+            if (loaded.message.localId) loadedByLocalId.add(loaded.message.localId);
+        }
+        for (const cached of props.minimapCachedUserMessages ?? []) {
+            if (shouldHideMessageInChatList(cached)) continue;
+            if (cached.seq != null && loadedBySeq.has(cached.seq)) continue;
+            if (cached.localId && loadedByLocalId.has(cached.localId)) continue;
+            merged.push(cached);
+        }
+        // Order oldest→newest to match the list (which sorts by createdAt, seq as tiebreaker).
+        // createdAt must be primary: just-sent messages have no seq yet, so keying on seq would
+        // sort them as seq 0 and shove them to the very top instead of the bottom.
+        return merged
+            .sort((a, b) => a.createdAt - b.createdAt || (a.seq ?? 0) - (b.seq ?? 0))
+            .map((message) => ({ message }));
+    }, [props.minimapCachedUserMessages, loadedUserMessages]);
     const activeMessageIdsRef = useRef<Set<string>>(new Set());
 
     // ---- Virtualizer model ----
@@ -815,6 +838,7 @@ const ChatListInternal = React.memo((props: {
             renderedWindow: sessionRestoreStates.get(props.sessionId)?.renderedWindow ?? null,
         });
         updateViewportRef.current(raw, scroller.clientHeight);
+        maybeLoadMoreRef.current();
     };
 
     const detachScrollerListenersRef = useRef<(() => void) | null>(null);
@@ -887,49 +911,29 @@ const ChatListInternal = React.memo((props: {
         footerResizeObserverRef.current = observer;
     }, []);
 
-    // ---- Background history drain (Codex: loadRemainingConversationTurns) ----
-    // Pages the entire history into memory, one page per commit (each page's
-    // commit re-triggers the effect, which naturally yields to the UI between
-    // pages). Prepends land above the viewport — bottom-anchored coordinates
-    // don't move, so this is invisible. A page that resolves without moving
-    // oldestSeq (transient failure) is retried after a short delay, but only a
-    // few times — a persistent stall must degrade (minimap stays hidden), not
-    // hammer the backend forever. Any later store change re-arms the drain.
-    const [drainRetryNonce, setDrainRetryNonce] = useState(0);
-    const drainRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const drainNoProgressCountRef = useRef(0);
-    React.useEffect(() => {
-        if (!props.hasMore || !props.onLoadMore || isLoadingMoreRef.current) return;
-        const oldestBefore = storage.getState().sessionMessages[sessionIdRef.current]?.oldestSeq ?? null;
+    // ---- On-demand history paging (FlatList-era policy) ----
+    // Load an older page only when the viewport nears the visual top of the
+    // loaded content (plus a fill pass so short first pages keep loading until
+    // the threshold is out of reach). Prepends land above the viewport —
+    // bottom-anchored coordinates don't move, so paging is invisible.
+    // Guards against a jump-triggered load racing with the scroll-driven one.
+    const isJumpingRef = useRef(false);
+    const maybeLoadMore = () => {
+        const scroller = scrollerElRef.current;
+        if (!scroller || isJumpingRef.current || isLoadingMoreRef.current) return;
+        if (!props.hasMore || !props.onLoadMore) return;
+        const distanceToTop = scroller.scrollHeight - scroller.clientHeight - Math.abs(scroller.scrollTop);
+        if (distanceToTop > LOAD_MORE_DISTANCE_PX) return;
         isLoadingMoreRef.current = true;
         Promise.resolve(props.onLoadMore()).finally(() => {
             isLoadingMoreRef.current = false;
-            const stateAfter = storage.getState().sessionMessages[sessionIdRef.current];
-            const madeProgress = !stateAfter || stateAfter.hasMore === false
-                || (stateAfter.oldestSeq ?? null) !== oldestBefore;
-            if (madeProgress) {
-                drainNoProgressCountRef.current = 0;
-            } else {
-                drainNoProgressCountRef.current += 1;
-                if (drainNoProgressCountRef.current > DRAIN_MAX_NO_PROGRESS_RETRIES) {
-                    if (__DEV__) {
-                        console.warn('[ChatList] history drain made no progress; pausing until data changes');
-                    }
-                    return;
-                }
-            }
-            if (drainRetryTimerRef.current != null) clearTimeout(drainRetryTimerRef.current);
-            drainRetryTimerRef.current = setTimeout(() => {
-                drainRetryTimerRef.current = null;
-                if (storage.getState().sessionMessages[sessionIdRef.current]?.hasMore) {
-                    setDrainRetryNonce((n) => n + 1);
-                }
-            }, 1000);
         });
-    }, [props.hasMore, props.onLoadMore, props.messages, drainRetryNonce]);
-    React.useEffect(() => () => {
-        if (drainRetryTimerRef.current != null) clearTimeout(drainRetryTimerRef.current);
-    }, []);
+    };
+    const maybeLoadMoreRef = useRef(maybeLoadMore);
+    maybeLoadMoreRef.current = maybeLoadMore;
+    React.useEffect(() => {
+        maybeLoadMoreRef.current();
+    }, [visibleMessages]);
 
     // ---- Jump to a minimap prompt ----
 
@@ -971,38 +975,56 @@ const ChatListInternal = React.memo((props: {
     const startJumpRef = useRef(startJump);
     startJumpRef.current = startJump;
 
-    // The target of the in-flight jump. A second minimap click updates this so
-    // a waiting jump retargets instead of the click being silently dropped.
+    // The target of the in-flight jump. A second minimap click updates this so the running paging
+    // loop retargets instead of the click being silently dropped.
     const activeJumpTargetRef = useRef<UserTextMessage | null>(null);
-    const isJumpWaitLoopRunningRef = useRef(false);
     const handleJumpToMessage = useCallback(async (target: UserTextMessage) => {
         activeJumpTargetRef.current = target;
-        if (isJumpWaitLoopRunningRef.current) return;
+        // A paging jump is already running — it will pick up the new target above. Keep the hint.
+        if (isJumpingRef.current) return;
+        // Already loaded → jump straight away.
         if (startJumpRef.current(target)) return;
-        // Not in memory yet — the minimap is normally gated on the full history
-        // being loaded, so this only happens for jumps arriving mid-drain. The
-        // background drain is already paging; just wait for the target.
-        isJumpWaitLoopRunningRef.current = true;
+        isJumpingRef.current = true;
         setIsLocating(true);
         try {
-            const MAX_WAIT_MS = 30_000;
-            const startedAt = performance.now();
-            while (performance.now() - startedAt < MAX_WAIT_MS) {
-                await new Promise<void>((resolve) => setTimeout(resolve, 100));
+            // Page older messages until the (possibly retargeted) message enters the list, there's
+            // nothing older left, or a load can't make progress.
+            const MAX_PAGES = 200;
+            for (let i = 0; i < MAX_PAGES; i++) {
                 const current = activeJumpTargetRef.current;
-                if (!current) return;
-                if (startJumpRef.current(current)) return;
+                if (!current) break;
                 const state = storage.getState().sessionMessages[sessionIdRef.current];
-                if (!state || !state.hasMore) {
-                    startJumpRef.current(current);
-                    return;
+                if (!state || !state.hasMore) break;
+                if (state.messages.some((m) => messageMatchesTarget(m, current))) break;
+                const beforeOldestSeq = state.oldestSeq;
+                await props.onLoadMore?.();
+                // Let the store subscription flush into visibleMessagesRef before re-checking.
+                await new Promise<void>((resolve) => setTimeout(resolve, 0));
+                const loaded = storage.getState().sessionMessages[sessionIdRef.current];
+                if (!loaded) break;
+                const retargeted = activeJumpTargetRef.current ?? current;
+                if (loaded.messages.some((m) => messageMatchesTarget(m, retargeted))) break;
+                // Safety: if we've paged at/past the target's seq without finding it, stop.
+                if (retargeted.seq != null && loaded.oldestSeq != null && loaded.oldestSeq <= retargeted.seq) break;
+                // No progress (e.g. encryption briefly unavailable, or oldestSeq null) — stop instead
+                // of spinning through all MAX_PAGES iterations.
+                if (loaded.oldestSeq === beforeOldestSeq) break;
+            }
+            const finalTarget = activeJumpTargetRef.current;
+            if (finalTarget) {
+                // The store commit must reach visibleMessagesRef (a React render) before the jump
+                // can resolve the row — retry on a bounded schedule instead of a single tick.
+                const MAX_ATTEMPTS = 20; // ~1s at 50ms
+                for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+                    if (startJumpRef.current(finalTarget)) break;
+                    await new Promise<void>((resolve) => setTimeout(resolve, 50));
                 }
             }
         } finally {
-            isJumpWaitLoopRunningRef.current = false;
+            isJumpingRef.current = false;
             setIsLocating(false);
         }
-    }, []);
+    }, [props.onLoadMore]);
 
     // ---- Render-phase window overrides ----
     // A pending jump mounts its target in the SAME commit that requested it;
@@ -1391,7 +1413,7 @@ const ChatListInternal = React.memo((props: {
                 </div>
             )}
 
-            {/* Bottom-centered hint shown while a jump waits for history to drain in */}
+            {/* Bottom-centered hint shown while a minimap jump is paging in older messages */}
             {isLocating && (
                 <View
                     pointerEvents="none"
