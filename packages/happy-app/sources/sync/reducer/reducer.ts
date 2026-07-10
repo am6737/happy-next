@@ -594,8 +594,11 @@ export function reducer(state: ReducerState, messages: NormalizedMessage[], agen
             // Mark this message as seen
             state.messageIds.set(msg.id, msg.id);
 
-            // Process usage data if present
-            if (msg.usage) {
+            // Process usage data if present.
+            // Guard on the raw isSidechain flag (not the tracer-derived sidechainId):
+            // subagent messages the tracer fails to link still carry isSidechain=true,
+            // and their usage must not override the main session's context window.
+            if (msg.usage && !msg.isSidechain) {
                 processUsageData(state, msg.usage, msg.createdAt, msg.contextWindowSize);
             }
 
