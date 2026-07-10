@@ -269,18 +269,15 @@ export const CLAUDE_MODEL_OPTIONS = [
     { value: 'claude-haiku-4-5', label: 'Haiku 4.5', shortLabel: 'Haiku 4.5', description: 'Fastest' },
 ] as const;
 
+// Base families only — the 1M context opt-in is a separate toggle in the UI,
+// combined back into the `family[1m]` wire value via claudeFamilyWith1M.
 export const CLAUDE_MODEL_FAMILY_OPTIONS = [
     { value: MODEL_MODE_DEFAULT, label: 'Use CLI configured model', shortLabel: 'CLI', description: 'Use profile/CLI defaults' },
     { value: 'claude-fable-5', label: 'Fable 5', shortLabel: 'Fable 5', description: 'Most powerful, most intelligent' },
-    { value: 'claude-fable-5[1m]', label: 'Fable 5 (1M)', shortLabel: 'Fable 5', description: 'Most powerful, 1M context' },
     { value: 'claude-opus-4-8', label: 'Opus 4.8', shortLabel: 'Opus 4.8', description: 'Most capable' },
-    { value: 'claude-opus-4-8[1m]', label: 'Opus 4.8 (1M)', shortLabel: 'Opus 4.8', description: 'Most capable, 1M context' },
     { value: 'claude-opus-4-7', label: 'Opus 4.7', shortLabel: 'Opus 4.7', description: 'Previous generation Opus' },
-    { value: 'claude-opus-4-7[1m]', label: 'Opus 4.7 (1M)', shortLabel: 'Opus 4.7', description: 'Previous Opus, 1M context' },
     { value: 'claude-opus-4-6', label: 'Opus 4.6', shortLabel: 'Opus 4.6', description: 'Older Opus' },
-    { value: 'claude-opus-4-6[1m]', label: 'Opus 4.6 (1M)', shortLabel: 'Opus 4.6', description: 'Older Opus, 1M context' },
     { value: 'claude-sonnet-4-6', label: 'Sonnet 4.6', shortLabel: 'Sonnet 4.6', description: 'Balanced speed and quality' },
-    { value: 'claude-sonnet-4-6[1m]', label: 'Sonnet 4.6 (1M)', shortLabel: 'Sonnet 4.6', description: 'Balanced, 1M context' },
     { value: 'claude-haiku-4-5', label: 'Haiku 4.5', shortLabel: 'Haiku 4.5', description: 'Fastest' },
 ] as const satisfies readonly { value: ClaudeModelFamily; label: string; shortLabel: string; description: string }[];
 
@@ -450,6 +447,33 @@ export function claudeSupportsFastMode(family: ClaudeModelFamily): boolean {
         || family === 'claude-opus-4-6' || family === 'claude-opus-4-6[1m]';
 }
 
+/** Strip the [1m] suffix to get the base family ("default" passes through). */
+export function claudeBaseFamily(family: ClaudeModelFamily): ClaudeModelFamily {
+    return family.replace('[1m]', '') as ClaudeModelFamily;
+}
+
+/**
+ * Families where 1M context is an explicit opt-in via the [1m] suffix.
+ * Fable 5 / Opus 4.8 are always-1M (see claudeAlways1M); Haiku has no 1M variant.
+ */
+export function claudeHas1MOptIn(family: ClaudeModelFamily): boolean {
+    const base = claudeBaseFamily(family);
+    return base === 'claude-opus-4-7' || base === 'claude-opus-4-6' || base === 'claude-sonnet-4-6';
+}
+
+/** Families whose context window is 1M by default with no 200K tier — the [1m] suffix is a no-op. */
+export function claudeAlways1M(family: ClaudeModelFamily): boolean {
+    const base = claudeBaseFamily(family);
+    return base === 'claude-fable-5' || base === 'claude-opus-4-8';
+}
+
+/** Combine a base family with the 1M toggle into the wire family value. */
+export function claudeFamilyWith1M(family: ClaudeModelFamily, enable1M: boolean): ClaudeModelFamily {
+    const base = claudeBaseFamily(family);
+    if (!enable1M || !claudeHas1MOptIn(base)) return base;
+    return `${base}[1m]` as ClaudeModelFamily;
+}
+
 export function buildClaudeModelMode(
     family: ClaudeModelFamily,
     effort: ClaudeReasoningEffort,
@@ -583,10 +607,14 @@ export function isModelFast(model: string | null | undefined): boolean {
 
 export function formatModelDisplay(model: string | null | undefined, reasoningEffort: string | null | undefined): string | null {
     const is1m = typeof model === 'string' && model.includes('[1m]');
-    const modelLabel = formatModelNameLabel(is1m ? model!.replace(/\[1m\]/g, '') : model);
+    const stripped = is1m ? model!.replace(/\[1m\]/g, '') : model;
+    const modelLabel = formatModelNameLabel(stripped);
     if (!modelLabel) return null;
     const effortLabel = formatReasoningEffortLabel(reasoningEffort);
-    const parts = [is1m ? '1M' : '', effortLabel ?? ''].filter(Boolean);
+    // Always-1M families have no 200K tier — the "1M" chip distinguishes nothing and
+    // would make equivalent CLI/local model strings render as a false mismatch.
+    const show1m = is1m && !claudeAlways1M(stripped as ClaudeModelFamily);
+    const parts = [show1m ? '1M' : '', effortLabel ?? ''].filter(Boolean);
     return parts.length > 0 ? `${modelLabel} (${parts.join(', ')})` : modelLabel;
 }
 

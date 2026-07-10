@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
     buildCodexModelMode,
+    claudeAlways1M,
+    claudeBaseFamily,
+    claudeFamilyWith1M,
+    claudeHas1MOptIn,
+    formatModelDisplay,
     CODEX_MODEL_MODES,
     GEMINI_MODEL_MODES,
     getCodexReasoningOptions,
@@ -74,6 +79,41 @@ describe('modelCatalog', () => {
             model: 'custom-model-id',
             reasoningEffort: null,
         });
+    });
+
+    it('maps claude base families and the 1M opt-in toggle', () => {
+        expect(claudeBaseFamily('claude-sonnet-4-6[1m]')).toBe('claude-sonnet-4-6');
+        expect(claudeBaseFamily('claude-fable-5')).toBe('claude-fable-5');
+        expect(claudeHas1MOptIn('claude-opus-4-7')).toBe(true);
+        expect(claudeHas1MOptIn('claude-opus-4-6[1m]')).toBe(true);
+        // Fable 5 / Opus 4.8 are always 1M (no 200K tier); Haiku has no 1M variant.
+        expect(claudeHas1MOptIn('claude-fable-5')).toBe(false);
+        expect(claudeHas1MOptIn('claude-opus-4-8')).toBe(false);
+        expect(claudeHas1MOptIn('claude-haiku-4-5')).toBe(false);
+        expect(claudeAlways1M('claude-fable-5')).toBe(true);
+        expect(claudeAlways1M('claude-opus-4-8[1m]')).toBe(true);
+        expect(claudeAlways1M('claude-opus-4-7')).toBe(false);
+        expect(claudeAlways1M('claude-haiku-4-5')).toBe(false);
+        expect(claudeFamilyWith1M('claude-opus-4-7', true)).toBe('claude-opus-4-7[1m]');
+        expect(claudeFamilyWith1M('claude-opus-4-7[1m]', false)).toBe('claude-opus-4-7');
+        // Always-1M families canonicalize to the base name — the suffix would be a no-op.
+        expect(claudeFamilyWith1M('claude-fable-5', true)).toBe('claude-fable-5');
+        expect(claudeFamilyWith1M('claude-haiku-4-5', true)).toBe('claude-haiku-4-5');
+    });
+
+    it('renders both [1m] and base model name formats consistently', () => {
+        // Opt-in families: the 1M chip is meaningful.
+        expect(formatModelDisplay('claude-opus-4-7[1m]', 'high')).toBe('Claude Opus 4.7 (1M, High)');
+        expect(formatModelDisplay('claude-opus-4-7', 'high')).toBe('Claude Opus 4.7 (High)');
+        // Always-1M families: both formats render identically (no false CLI→local mismatch).
+        expect(formatModelDisplay('claude-fable-5[1m]', 'high')).toBe('Claude Fable 5 (High)');
+        expect(formatModelDisplay('claude-fable-5', 'high')).toBe('Claude Fable 5 (High)');
+        expect(formatModelDisplay('claude-opus-4-8[1m]', null)).toBe('Claude Opus 4.8');
+        // Both formats resolve the same context window.
+        expect(getMaxContextSize('claude-fable-5[1m]-high', 'claude')).toBe(1_000_000);
+        expect(getMaxContextSize('claude-fable-5-high', 'claude')).toBe(1_000_000);
+        expect(getMaxContextSize('default', 'claude', 'claude-fable-5[1m]')).toBe(1_000_000);
+        expect(getMaxContextSize('default', 'claude', 'claude-fable-5')).toBe(1_000_000);
     });
 
     it('keeps codex model list in catalog shape', () => {

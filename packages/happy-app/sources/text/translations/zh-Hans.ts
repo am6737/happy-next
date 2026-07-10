@@ -952,6 +952,8 @@ export const zhHans: TranslationStructure = {
             configureInCli: '在 CLI 设置中配置模型',
             reasoningEffort: '推理强度',
             fastMode: '快速模式',
+            context1m: '1M 上下文',
+            context1mAlways: '始终开启',
         },
         codexPermissionMode: {
             title: 'CODEX 权限模式',

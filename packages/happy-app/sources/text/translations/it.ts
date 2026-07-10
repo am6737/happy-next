@@ -980,6 +980,8 @@ export const it: TranslationStructure = {
             configureInCli: 'Configura i modelli nelle impostazioni CLI',
             reasoningEffort: 'Reasoning Effort',
             fastMode: 'Fast Mode',
+            context1m: '1M Context',
+            context1mAlways: 'Always on',
         },
         codexPermissionMode: {
             title: 'CODEX PERMISSION MODE',

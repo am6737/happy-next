@@ -961,6 +961,8 @@ export const ru: TranslationStructure = {
             configureInCli: 'Настройте модели в настройках CLI',
             reasoningEffort: 'Reasoning Effort',
             fastMode: 'Fast Mode',
+            context1m: '1M Context',
+            context1mAlways: 'Always on',
         },
         codexPermissionMode: {
             title: 'CODEX PERMISSION MODE',

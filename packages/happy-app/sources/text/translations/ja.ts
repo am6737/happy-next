@@ -982,6 +982,8 @@ export const ja: TranslationStructure = {
             configureInCli: 'CLIの設定でモデルを構成',
             reasoningEffort: 'Reasoning Effort',
             fastMode: 'Fast Mode',
+            context1m: '1M Context',
+            context1mAlways: 'Always on',
         },
         codexPermissionMode: {
             title: 'CODEX PERMISSION MODE',
