@@ -23,6 +23,7 @@ import { HappyError } from '@/utils/errors';
 import { getWorktreeInfo, cleanupWorktree } from '@/utils/worktreeOps';
 import { ActionMenuModal } from '@/components/ActionMenuModal';
 import { ActionMenuItem } from '@/components/ActionMenu';
+import { sync } from '@/sync/sync';
 
 const stylesheet = StyleSheet.create((theme, runtime) => ({
     container: {
@@ -378,6 +379,7 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder }: { sessi
         const errorMessage = result.message || t('sessionInfo.failedToArchiveSession');
 
         if (!result.success && /RPC method not available/i.test(errorMessage)) {
+            await sync.clearSessionMessageCache(session.id);
             return;
         }
 
@@ -385,6 +387,8 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder }: { sessi
             storage.getState().updateSessionActivity(session.id, previousActive);
             throw new HappyError(errorMessage, false);
         }
+
+        await sync.clearSessionMessageCache(session.id);
     });
 
     const [archiveMenuVisible, setArchiveMenuVisible] = React.useState(false);

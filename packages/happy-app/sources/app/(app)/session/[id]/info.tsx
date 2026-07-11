@@ -199,6 +199,7 @@ function SessionInfoContent({ session }: { session: Session }) {
 
         // Archiving is idempotent: if RPC target is gone, session is effectively already archived.
         if (!result.success && /RPC method not available/i.test(errorMessage)) {
+            await sync.clearSessionMessageCache(session.id);
             navigateAfterArchive();
             return;
         }
@@ -207,6 +208,8 @@ function SessionInfoContent({ session }: { session: Session }) {
             storage.getState().updateSessionActivity(session.id, previousActive);
             throw new HappyError(errorMessage, false);
         }
+
+        await sync.clearSessionMessageCache(session.id);
 
         // Success - navigate back
         navigateAfterArchive();

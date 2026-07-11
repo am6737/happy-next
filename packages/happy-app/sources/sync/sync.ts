@@ -548,10 +548,9 @@ class Sync {
         return this.getMessageCacheGeneration(sessionId) === generation;
     }
 
-    // Drop a session's persisted message cache (rows + coverage state) so the next fetch
-    // re-initializes coverage from scratch. Used to self-heal when the cached coverage no longer
-    // connects to what the server returns — retrying against the stale state would fail forever.
-    private clearSessionMessageCacheForRepair = async (sessionId: string): Promise<void> => {
+    // Drop a session's persisted message cache (rows + coverage state). This is public so archive
+    // flows can release local storage after the server has confirmed the session is inactive.
+    clearSessionMessageCache = async (sessionId: string): Promise<void> => {
         this.bumpMessageCacheGeneration(sessionId);
         const accountKey = this.getMessageAccountKey();
         if (!accountKey) return;
@@ -3544,7 +3543,7 @@ class Sync {
                     // coverage would refuse forever, so drop the cached state and let the backoff
                     // retry re-initialize coverage cleanly from this page.
                     console.warn(`💬 fetchMessagesV3 refused to cache non-contiguous bootstrap page for ${sessionId}; clearing stale message cache`);
-                    await this.clearSessionMessageCacheForRepair(sessionId);
+                    await this.clearSessionMessageCache(sessionId);
                     throw new Error(`Non-contiguous bootstrap message page for ${sessionId}`);
                 }
                 const cacheWriteOk = coveragePatch
