@@ -19,7 +19,6 @@ import { StatusDot } from './StatusDot';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { useIsTablet } from '@/utils/responsive';
 import { requestReview } from '@/utils/requestReview';
-import { UpdateBanner } from './UpdateBanner';
 import { layout } from './layout';
 import { useNavigateToSession } from '@/hooks/useNavigateToSession';
 import { t } from '@/text';
@@ -616,7 +615,6 @@ export function SessionsList() {
 
     const HeaderComponent = React.useCallback(() => (
         <>
-            <UpdateBanner />
             {tabItems.length > 1 && (
                 <SessionTabBar tabs={tabItems} onSelect={setActiveTab} />
             )}
