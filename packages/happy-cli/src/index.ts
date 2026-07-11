@@ -16,7 +16,7 @@ import { authAndSetupMachineIfNeeded } from './ui/auth'
 import packageJson from '../package.json'
 import { z } from 'zod'
 import { startDaemon } from './daemon/run'
-import { checkIfDaemonRunningAndCleanupStaleState, isDaemonRunningCurrentlyInstalledHappyVersion, stopDaemon } from './daemon/controlClient'
+import { isDaemonRunningCurrentlyInstalledHappyVersion, startDaemonDetached, startDaemonDetachedAndAwaitReady, stopDaemon } from './daemon/controlClient'
 import { getLatestDaemonLog } from './ui/logger'
 import { killRunawayHappyProcesses } from './daemon/doctor'
 import { install } from './daemon/install'
@@ -27,7 +27,6 @@ import { listDaemonSessions, stopDaemonSession } from './daemon/controlClient'
 import { handleAuthCommand } from './commands/auth'
 import { handleConnectCommand } from './commands/connect'
 import { handleUpdateCommand } from './commands/update'
-import { spawnHappyCLI } from './utils/spawnHappyCLI'
 import { claudeCliPath } from './claude/claudeLocal'
 import { execFileSync } from 'node:child_process'
 
@@ -39,24 +38,7 @@ import { execFileSync } from 'node:child_process'
 // We keep the `happy-next-cli` token (matched by daemon process discovery in
 // `daemon/doctor.ts`, and as the truncated `comm` matched by `name.includes('happy')`)
 // and the original args (used to classify daemon / session / version-check processes).
-process.title = ['happy-next-cli', ...process.argv.slice(2)].join(' ')
-
-/** Spawn a detached daemon process and poll until it writes its state file (up to 5s). */
-async function spawnAndWaitForDaemon(): Promise<boolean> {
-  const child = spawnHappyCLI(['daemon', 'start-sync'], {
-    detached: true,
-    stdio: 'ignore',
-  });
-  child.unref();
-
-  for (let i = 0; i < 50; i++) {
-    if (await checkIfDaemonRunningAndCleanupStaleState()) {
-      return true;
-    }
-    await new Promise(resolve => setTimeout(resolve, 100));
-  }
-  return false;
-}
+process.title = ['happy-next-cli', ...process.argv.slice(2)].join(' ');
 
 (async () => {
   const args = process.argv.slice(2)
@@ -143,12 +125,8 @@ async function spawnAndWaitForDaemon(): Promise<boolean> {
       logger.debug('Ensuring Happy background service is running & matches our version...');
       if (!(await isDaemonRunningCurrentlyInstalledHappyVersion())) {
         logger.debug('Starting Happy background service...');
-        const daemonProcess = spawnHappyCLI(['daemon', 'start-sync'], {
-          detached: true,
-          stdio: 'ignore',
-          env: process.env
-        });
-        daemonProcess.unref();
+        startDaemonDetached();
+        // Give daemon a moment to write PID & port file
         await new Promise(resolve => setTimeout(resolve, 200));
       }
 
@@ -362,12 +340,8 @@ async function spawnAndWaitForDaemon(): Promise<boolean> {
       logger.debug('Ensuring Happy background service is running & matches our version...');
       if (!(await isDaemonRunningCurrentlyInstalledHappyVersion())) {
         logger.debug('Starting Happy background service...');
-        const daemonProcess = spawnHappyCLI(['daemon', 'start-sync'], {
-          detached: true,
-          stdio: 'ignore',
-          env: process.env
-        });
-        daemonProcess.unref();
+        startDaemonDetached();
+        // Give daemon a moment to write PID & port file
         await new Promise(resolve => setTimeout(resolve, 200));
       }
 
@@ -451,7 +425,7 @@ async function spawnAndWaitForDaemon(): Promise<boolean> {
       return
 
     } else if (daemonSubcommand === 'start') {
-      const started = await spawnAndWaitForDaemon();
+      const started = await startDaemonDetachedAndAwaitReady(packageJson.version);
       console.log(started ? 'Daemon started successfully' : 'Failed to start daemon');
       process.exit(started ? 0 : 1);
     } else if (daemonSubcommand === 'start-sync') {
@@ -462,7 +436,7 @@ async function spawnAndWaitForDaemon(): Promise<boolean> {
       process.exit(0)
     } else if (daemonSubcommand === 'restart') {
       await stopDaemon()
-      const started = await spawnAndWaitForDaemon();
+      const started = await startDaemonDetachedAndAwaitReady(packageJson.version);
       console.log(started ? 'Daemon restarted successfully' : 'Failed to restart daemon');
       process.exit(started ? 0 : 1)
     } else if (daemonSubcommand === 'status') {
@@ -691,15 +665,7 @@ ${chalk.bold.cyan('Claude Code Options (from `claude --help`):')}
 
     if (!(await isDaemonRunningCurrentlyInstalledHappyVersion())) {
       logger.debug('Starting Happy background service...');
-
-      // Use the built binary to spawn daemon
-      const daemonProcess = spawnHappyCLI(['daemon', 'start-sync'], {
-        detached: true,
-        stdio: 'ignore',
-        env: process.env
-      })
-      daemonProcess.unref();
-
+      startDaemonDetached();
       // Give daemon a moment to write PID & port file
       await new Promise(resolve => setTimeout(resolve, 200));
     }

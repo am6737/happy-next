@@ -2,8 +2,8 @@ import chalk from 'chalk';
 import { execSync, execFileSync } from 'node:child_process';
 import { realpathSync } from 'node:fs';
 import packageJson from '../../package.json';
-import { stopDaemon, checkIfDaemonRunningAndCleanupStaleState } from '@/daemon/controlClient';
-import { spawnHappyCLI } from '@/utils/spawnHappyCLI';
+import { isDaemonRunningCurrentlyInstalledHappyVersion, startDaemonDetachedAndAwaitReady } from '@/daemon/controlClient';
+import { readCredentials } from '@/persistence';
 
 const PACKAGE_NAME = 'happy-next-cli';
 
@@ -45,6 +45,28 @@ function getLatestVersion(): string | null {
     }
 }
 
+async function startDaemonWithFeedback(version: string): Promise<void> {
+    // A detached daemon has no terminal to complete interactive auth,
+    // so starting it requires prior login.
+    const credentials = await readCredentials();
+    if (!credentials) {
+        console.log(chalk.gray('ℹ Not logged in — daemon not started. It will start automatically after you log in (run "happy" or "happy auth login").'));
+        return;
+    }
+
+    console.log(`Starting daemon v${version}...`);
+    try {
+        const started = await startDaemonDetachedAndAwaitReady(version);
+        if (started) {
+            console.log(chalk.green(`✓ Daemon running (v${version})`));
+        } else {
+            console.log(chalk.yellow('⚠ Daemon did not confirm startup. Check "happy daemon status" or run "happy daemon start".'));
+        }
+    } catch (error) {
+        console.log(chalk.yellow(`⚠ Failed to start daemon: ${error instanceof Error ? error.message : 'unknown error'}. Run "happy daemon start" manually.`));
+    }
+}
+
 export async function handleUpdateCommand(): Promise<void> {
     const currentVersion = packageJson.version;
 
@@ -63,6 +85,12 @@ export async function handleUpdateCommand(): Promise<void> {
 
     if (currentVersion === latestVersion) {
         console.log(chalk.green('✓ Already up to date'));
+
+        // No upgrade happened, but still make sure the daemon is up and
+        // running this version. Silent when it already is.
+        if (!(await isDaemonRunningCurrentlyInstalledHappyVersion())) {
+            await startDaemonWithFeedback(latestVersion);
+        }
         process.exit(0);
     }
 
@@ -81,39 +109,9 @@ export async function handleUpdateCommand(): Promise<void> {
 
     console.log(chalk.green(`\n✓ Upgraded to ${latestVersion}`));
 
-    // Restart daemon if running
-    try {
-        const daemonRunning = await checkIfDaemonRunningAndCleanupStaleState();
-        if (daemonRunning) {
-            console.log('Restarting daemon...');
-            await stopDaemon();
-
-            const child = spawnHappyCLI(['daemon', 'start-sync'], {
-                detached: true,
-                stdio: 'ignore',
-                env: process.env,
-            });
-            child.unref();
-
-            // Wait for daemon to come up
-            let started = false;
-            for (let i = 0; i < 50; i++) {
-                if (await checkIfDaemonRunningAndCleanupStaleState()) {
-                    started = true;
-                    break;
-                }
-                await new Promise(resolve => setTimeout(resolve, 100));
-            }
-
-            if (started) {
-                console.log(chalk.green('✓ Daemon restarted'));
-            } else {
-                console.log(chalk.yellow('⚠ Daemon restart timed out. Run "happy daemon start" manually.'));
-            }
-        }
-    } catch {
-        // Daemon wasn't running or restart failed - not critical
-    }
+    // Start the daemon on the new version. start-sync is idempotent and
+    // takes over an old-version daemon by itself, so no pre-checks needed.
+    await startDaemonWithFeedback(latestVersion);
 
     process.exit(0);
 }

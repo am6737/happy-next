@@ -10,6 +10,8 @@ import { projectPath } from '@/projectPath';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { configuration } from '@/configuration';
+import { spawnHappyCLI } from '@/utils/spawnHappyCLI';
+import { delay } from '@/utils/time';
 
 async function daemonPost(path: string, body?: any): Promise<{ error?: string } | any> {
   const state = await readDaemonState();
@@ -225,6 +227,41 @@ export async function stopDaemon() {
   } catch (error) {
     logger.debug('Error stopping daemon', error);
   }
+}
+
+/**
+ * Spawn a detached daemon process. `daemon start-sync` is idempotent:
+ * a same-version daemon keeps running, an old-version daemon gets killed
+ * and taken over, and no daemon means a fresh start. Requires prior login —
+ * a detached daemon has no terminal to complete interactive auth.
+ */
+export function startDaemonDetached(): void {
+  const child = spawnHappyCLI(['daemon', 'start-sync'], {
+    detached: true,
+    stdio: 'ignore',
+    env: process.env,
+  });
+  child.unref();
+}
+
+/**
+ * Spawn a detached daemon and poll until a daemon running `expectedVersion`
+ * is confirmed alive, or ~10s timeout. The version is passed explicitly
+ * (instead of reading package.json from our own install dir) so that
+ * `happy update` can verify the handover to the freshly installed version
+ * regardless of package manager install layout.
+ */
+export async function startDaemonDetachedAndAwaitReady(expectedVersion: string): Promise<boolean> {
+  startDaemonDetached();
+  for (let i = 0; i < 100; i++) {
+    const running = await checkIfDaemonRunningAndCleanupStaleState();
+    const state = await readDaemonState();
+    if (running && state?.startedWithCliVersion === expectedVersion) {
+      return true;
+    }
+    await delay(100);
+  }
+  return false;
 }
 
 async function waitForProcessDeath(pid: number, timeout: number): Promise<void> {
