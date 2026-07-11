@@ -555,6 +555,7 @@ function SessionInfoContent({ session }: { session: Session }) {
             }
 
             await copySessionMetadata(session, result.sessionId).catch(e => console.warn('copySessionMetadata failed:', e));
+            copySessionModeSettings(session, result.sessionId);
 
             // Navigate to the new session: go back to root then push new session
             try { router.dismissAll(); } catch (_) { /* stack may already be at root */ }
