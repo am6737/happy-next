@@ -7,7 +7,7 @@ Free. Open source. Code anywhere.
 ## Installation
 
 ```bash
-npm install -g happy-next-cli
+npm i -g happy-next-cli
 ```
 
 ## Usage

@@ -872,7 +872,7 @@ export const it: TranslationStructure = {
         cliVersionOutdated: 'Aggiornamento CLI richiesto',
         cliVersionOutdatedMessage: ({ currentVersion, requiredVersion }: { currentVersion: string; requiredVersion: string }) =>
             `Versione ${currentVersion} installata. Aggiorna a ${requiredVersion} o successiva`,
-        updateCliInstructions: 'Esegui npm install -g happy-next-cli@latest',
+        updateCliInstructions: 'Esegui happy update',
         cliUpgradeAvailable: 'Nuova versione CLI disponibile',
         cliUpgradeAvailableSubtitle: 'Tocca per riavviare la sessione con l\'ultima versione del CLI',
         cliUpgradeInProgress: 'Aggiornamento in corso...',
@@ -1402,7 +1402,7 @@ export const it: TranslationStructure = {
     machine: {
         launchNewSessionInDirectory: 'Avvia nuova sessione nella directory',
         offlineUnableToSpawn: 'Avvio disabilitato quando la macchina è offline',
-        offlineHelp: '• Assicurati che il tuo computer sia online\n• Esegui `happy daemon status` per diagnosticare\n• Stai usando l\'ultima versione della CLI? Aggiorna con `npm install -g happy-next-cli@latest`',
+        offlineHelp: '• Assicurati che il tuo computer sia online\n• Esegui `happy daemon status` per diagnosticare\n• Stai usando l\'ultima versione della CLI? Aggiorna con `happy update`',
         daemon: 'Daemon',
         status: 'Stato',
         stopDaemon: 'Arresta daemon',

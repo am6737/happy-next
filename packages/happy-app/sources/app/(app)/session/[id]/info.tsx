@@ -467,7 +467,7 @@ function SessionInfoContent({ session }: { session: Session }) {
                 {
                     text: t('common.copy'),
                     onPress: async () => {
-                        const updateCommand = 'npm install -g happy-next-cli@latest';
+                        const updateCommand = 'happy update';
                         await Clipboard.setStringAsync(updateCommand);
                         hapticsLight();
                         showCopiedToast();

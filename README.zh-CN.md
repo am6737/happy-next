@@ -31,7 +31,7 @@
 </h3>
 
 ```bash
-npm install -g happy-next-cli
+npm i -g happy-next-cli
 ```
 
 <h3 align="center">
