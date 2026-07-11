@@ -46,11 +46,22 @@ export function mergeSessionState(
     const contiguousMinSeq = Object.prototype.hasOwnProperty.call(patch, 'contiguousMinSeq')
         ? patch.contiguousMinSeq ?? null
         : existing?.contiguousMinSeq ?? MESSAGE_CACHE_INITIAL_STATE.contiguousMinSeq;
-    const contiguousMaxSeq = Object.prototype.hasOwnProperty.call(patch, 'contiguousMaxSeq')
+    let contiguousMaxSeq = Object.prototype.hasOwnProperty.call(patch, 'contiguousMaxSeq')
         ? patch.contiguousMaxSeq ?? null
         : existing?.contiguousMaxSeq ?? MESSAGE_CACHE_INITIAL_STATE.contiguousMaxSeq;
+    // Coverage max is monotonic under merge. Patches are computed from pre-await snapshots
+    // (e.g. an older-history fetch racing an incremental advance), so a numerically lower max
+    // is always a stale snapshot, never an intentional shrink — resets delete the state row
+    // entirely instead of patching it down. Letting a stale patch regress the max leaves the
+    // in-memory cursor ahead of persisted coverage, which the incremental sync then refuses.
+    if (typeof contiguousMaxSeq === 'number' && typeof existing?.contiguousMaxSeq === 'number') {
+        contiguousMaxSeq = Math.max(contiguousMaxSeq, existing.contiguousMaxSeq);
+    }
     return {
-        forwardMaxSeq: patch.forwardMaxSeq ?? existing?.forwardMaxSeq ?? MESSAGE_CACHE_INITIAL_STATE.forwardMaxSeq,
+        forwardMaxSeq: Math.max(
+            patch.forwardMaxSeq ?? 0,
+            existing?.forwardMaxSeq ?? MESSAGE_CACHE_INITIAL_STATE.forwardMaxSeq,
+        ),
         oldestLoadedSeq: Object.prototype.hasOwnProperty.call(patch, 'oldestLoadedSeq')
             ? patch.oldestLoadedSeq ?? null
             : existing?.oldestLoadedSeq ?? MESSAGE_CACHE_INITIAL_STATE.oldestLoadedSeq,
@@ -265,6 +276,34 @@ export function buildCoverageStatePatch(
         remoteOldestSeq,
         hasMoreOlder,
     };
+}
+
+export type NewerCoverageResolution =
+    | { action: 'apply'; patch: SessionMessageCacheStatePatch }
+    | { action: 'none' }
+    | { action: 'reset-stale-coverage' };
+
+// Decide how to persist a cursor-proven incremental ('newer') page. A non-empty page fetched
+// with after_seq=cursorSeq is a consecutive slice of the rows that exist on the server, so if
+// it still fails the coverage check the *persisted state* is stale relative to the cursor
+// (e.g. the cursor advanced past a cache write that was lost). Both the cursor and the state
+// are inputs to this same check, so retrying with them unchanged would refuse the same page
+// forever — the caller must drop the stale cached coverage and retry, letting the next
+// attempt re-initialize coverage from this cursor (existing === null always applies).
+export function resolveNewerCoveragePatch(
+    existing: SessionMessageCacheState | null,
+    messages: ApiMessage[],
+    cursorSeq: number,
+): NewerCoverageResolution {
+    if (messages.length === 0) {
+        return { action: 'none' };
+    }
+    const patch = buildCoverageStatePatch(existing, {
+        direction: 'newer',
+        messages,
+        cursorSeq,
+    });
+    return patch ? { action: 'apply', patch } : { action: 'reset-stale-coverage' };
 }
 
 export function mergeOldestLoadedSeq(

@@ -81,6 +81,7 @@ import {
     getKnownContiguousMinSeq,
     isPageInsideKnownCoverage,
     mergeOldestLoadedSeq,
+    resolveNewerCoveragePatch,
 } from './messagesStore/common';
 import type { MessagePage, SessionMessageCacheState, SessionMessageCacheStatePatch } from './messagesStore/types';
 
@@ -1248,13 +1249,16 @@ class Sync {
                             direction: 'newer',
                             messages: apiMessages,
                         });
-                        if (coveragePatch) {
-                            await this.upsertMessagesInLocalCache(sessionId, apiMessages, { statePatch: coveragePatch });
-                        } else {
+                        const wrote = coveragePatch
+                            ? await this.upsertMessagesInLocalCache(sessionId, apiMessages, { statePatch: coveragePatch })
+                            : false;
+                        if (!wrote) {
+                            // Coverage refused or the write failed — don't bump the cursor past
+                            // coverage that never persisted; the paced fetch catches up instead.
                             this.invalidateMessagesSync(sessionId);
                         }
                         const currentSeq = this.sessionLastSeq.get(sessionId) ?? 0;
-                        if (coveragePatch && maxSeq > currentSeq) {
+                        if (wrote && maxSeq > currentSeq) {
                             this.sessionLastSeq.set(sessionId, maxSeq);
                         }
                         const serverNormalizedMessages = await this.decryptAndNormalizeMessages(sessionId, apiMessages, this.encryption.getSessionEncryption(sessionId)!);
@@ -1375,9 +1379,12 @@ class Sync {
                 direction: 'newer',
                 messages: [apiMessage],
             });
-            if (coveragePatch) {
-                await this.upsertMessagesInLocalCache(sessionId, [apiMessage], { statePatch: coveragePatch });
-            } else {
+            const wrote = coveragePatch
+                ? await this.upsertMessagesInLocalCache(sessionId, [apiMessage], { statePatch: coveragePatch })
+                : false;
+            if (!wrote) {
+                // Coverage refused or the write failed — don't bump the cursor past coverage
+                // that never persisted; the paced fetch catches up instead.
                 this.invalidateMessagesSync(sessionId);
             }
             const serverNormalizedMessages = await this.decryptAndNormalizeMessages(sessionId, [apiMessage], this.encryption.getSessionEncryption(sessionId)!);
@@ -1388,7 +1395,7 @@ class Sync {
             }
 
             const currentSeq = this.sessionLastSeq.get(sessionId) ?? 0;
-            if (coveragePatch && responseData.message.seq > currentSeq) {
+            if (wrote && responseData.message.seq > currentSeq) {
                 this.sessionLastSeq.set(sessionId, responseData.message.seq);
             }
 
@@ -3621,20 +3628,21 @@ class Sync {
             if (!isCurrent()) return;
             const existingCacheState = await this.getCachedMessageState(sessionId);
             if (!isCurrent()) return;
-            const coveragePatch = pendingApiMessages.length > 0
-                ? buildCoverageStatePatch(existingCacheState, {
-                    direction: 'newer',
-                    messages: pendingApiMessages,
-                    // Proves the pages are the next existing rows above the
-                    // cursor — seq holes (deleted messages) are not gaps.
-                    cursorSeq: currentCursor,
-                })
-                : null;
-            if (pendingApiMessages.length > 0 && !coveragePatch) {
-                console.warn(`💬 fetchMessagesV3 refused to cache non-contiguous incremental page for ${sessionId}`);
-                this.invalidateMessagesSync(sessionId);
-                return;
+            // cursorSeq proves the pages are the next existing rows above the cursor — seq
+            // holes (deleted messages) are not gaps.
+            const coverageResolution = resolveNewerCoveragePatch(existingCacheState, pendingApiMessages, currentCursor);
+            if (coverageResolution.action === 'reset-stale-coverage') {
+                // The persisted coverage no longer connects to the cursor (e.g. the cursor
+                // advanced past a lost cache write). Self-invalidating here would re-run
+                // immediately with the same cursor and the same state and refuse the same
+                // page forever — a zero-delay same-after_seq request loop. Heal like the
+                // bootstrap path instead: drop the stale cache and throw, so the backoff-paced
+                // retry re-initializes coverage cleanly from this cursor.
+                console.warn(`💬 fetchMessagesV3 refused to cache non-contiguous incremental page for ${sessionId}; clearing stale message cache`);
+                await this.clearSessionMessageCache(sessionId);
+                throw new Error(`Non-contiguous incremental message page for ${sessionId}`);
             }
+            const coveragePatch = coverageResolution.action === 'apply' ? coverageResolution.patch : null;
             const cacheWriteOk = await this.upsertMessagesInLocalCache(
                 sessionId,
                 pendingApiMessages,
@@ -3947,14 +3955,20 @@ class Sync {
                         direction: 'newer',
                         messages: [updateData.body.message],
                     });
-                    if (coveragePatch) {
-                        await this.upsertMessagesInLocalCache(sid, [updateData.body.message], { cacheGeneration, statePatch: coveragePatch });
-                        if (!this.isMessageCacheGenerationCurrent(sid, cacheGeneration)) {
-                            return;
-                        }
+                    const wrote = coveragePatch
+                        ? await this.upsertMessagesInLocalCache(sid, [updateData.body.message], { cacheGeneration, statePatch: coveragePatch })
+                        : false;
+                    if (coveragePatch && !this.isMessageCacheGenerationCurrent(sid, cacheGeneration)) {
+                        return;
+                    }
+                    if (wrote) {
                         // Fast path: seq is contiguous, apply directly and bump seq
                         this.sessionLastSeq.set(sid, incomingSeq);
                     } else {
+                        // Coverage refused the page, or persistence failed. Bumping the cursor
+                        // anyway would let it outrun the persisted coverage max — the stale
+                        // state the incremental coverage check then refuses. Keep the cursor
+                        // and let the paced fetch deliver and persist this message instead.
                         this.invalidateMessagesSync(sid);
                     }
                     this.enqueueSessionMessageUpdate(updateData);

@@ -6,6 +6,8 @@ import {
     canServeCachedOlderPage,
     getCachedOlderPageUiHasMore,
     mergeOldestLoadedSeq,
+    mergeSessionState,
+    resolveNewerCoveragePatch,
 } from './common';
 
 function state(overrides: Partial<SessionMessageCacheState> = {}): SessionMessageCacheState {
@@ -215,5 +217,89 @@ describe('sparse seq coverage', () => {
             hasMoreOlder: true,
             cursorSeq: 101,
         })).toBeNull();
+    });
+});
+
+describe('coverage state merge monotonicity', () => {
+    it('does not let a stale older-history patch regress forwardMaxSeq/contiguousMaxSeq', () => {
+        // An incremental sync advanced coverage to 250 while an older-history fetch was in
+        // flight with a pre-await snapshot that still ended at 234.
+        const fresh = state({ contiguousMinSeq: 150, contiguousMaxSeq: 250, forwardMaxSeq: 250, oldestLoadedSeq: 150 });
+        const merged = mergeSessionState(fresh, {
+            forwardMaxSeq: 234,
+            oldestLoadedSeq: 100,
+            contiguousMinSeq: 100,
+            contiguousMaxSeq: 234,
+            remoteOldestSeq: null,
+            hasMoreOlder: true,
+        }, 2000);
+        // Both writers persisted their rows, so the union span is correct — but the coverage
+        // max must never shrink below what the concurrent writer already advanced it to.
+        expect(merged.contiguousMaxSeq).toBe(250);
+        expect(merged.forwardMaxSeq).toBe(250);
+        expect(merged.contiguousMinSeq).toBe(100);
+    });
+
+    it('still lets patches advance coverage and initialize cleared state', () => {
+        const advanced = mergeSessionState(state({ contiguousMaxSeq: 250, forwardMaxSeq: 250 }), {
+            forwardMaxSeq: 260,
+            contiguousMaxSeq: 260,
+        }, 2000);
+        expect(advanced.contiguousMaxSeq).toBe(260);
+        expect(advanced.forwardMaxSeq).toBe(260);
+
+        const initialized = mergeSessionState(null, {
+            forwardMaxSeq: 240,
+            oldestLoadedSeq: 235,
+            contiguousMinSeq: 235,
+            contiguousMaxSeq: 240,
+            remoteOldestSeq: null,
+            hasMoreOlder: true,
+        }, 2000);
+        expect(initialized.contiguousMinSeq).toBe(235);
+        expect(initialized.contiguousMaxSeq).toBe(240);
+        expect(initialized.forwardMaxSeq).toBe(240);
+    });
+});
+
+describe('incremental (newer) coverage recovery decision', () => {
+    function messagesForSeqs(seqs: number[]) {
+        return seqs.map((seq) => ({
+            id: `m${seq}`,
+            seq,
+            localId: null,
+            content: { t: 'encrypted' as const, c: `cipher-${seq}` },
+            createdAt: 1000 + seq,
+            updatedAt: 1000 + seq,
+            sentBy: null,
+            sentByName: null,
+        }));
+    }
+
+    it('applies a cursor-proven page that connects to persisted coverage', () => {
+        const cached = state({ contiguousMinSeq: 1, contiguousMaxSeq: 234, forwardMaxSeq: 234, oldestLoadedSeq: 1, remoteOldestSeq: 1, hasMoreOlder: false });
+        expect(resolveNewerCoveragePatch(cached, messagesForSeqs([235, 236, 240]), 234)).toMatchObject({
+            action: 'apply',
+            patch: { contiguousMinSeq: 1, contiguousMaxSeq: 240, forwardMaxSeq: 240 },
+        });
+    });
+
+    it('requests a stale-coverage reset when persisted coverage lags the in-memory cursor', () => {
+        // The reproduced loop state: in-memory cursor 234, persisted coverage max 200. A plain
+        // retry keeps both inputs unchanged and refuses the same page forever; the resolution
+        // must demand a reset instead.
+        const stale = state({ contiguousMinSeq: 1, contiguousMaxSeq: 200, forwardMaxSeq: 200, oldestLoadedSeq: 1, remoteOldestSeq: 1, hasMoreOlder: false });
+        expect(resolveNewerCoveragePatch(stale, messagesForSeqs([235, 236]), 234)).toEqual({ action: 'reset-stale-coverage' });
+    });
+
+    it('converges after the reset: the same page initializes coverage on cleared state', () => {
+        expect(resolveNewerCoveragePatch(null, messagesForSeqs([235, 236]), 234)).toMatchObject({
+            action: 'apply',
+            patch: { contiguousMinSeq: 235, contiguousMaxSeq: 236, forwardMaxSeq: 236 },
+        });
+    });
+
+    it('does nothing for an empty page', () => {
+        expect(resolveNewerCoveragePatch(state(), [], 234)).toEqual({ action: 'none' });
     });
 });
