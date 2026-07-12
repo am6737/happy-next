@@ -22,6 +22,7 @@ import { createSessionMetadata } from '@/utils/createSessionMetadata';
 import { discoverCodexSkills, getCodexSkillsSignature } from './utils/skillDiscovery';
 import { syncOrchestratorAssets } from '@/orchestrator/skillSync';
 import { addOrchestratorSlashCommands, expandOrchestratorSlashCommand } from '@/orchestrator/slashCommands';
+import { addBuiltinSlashCommands, expandBuiltinSlashCommand, syncBuiltinCommands } from '@/commands/builtinCommands';
 import { parseCodexSlashCommand, type CodexSlashCommand } from './slashCommands';
 import { MessageBuffer } from "@/ui/ink/messageBuffer";
 import { CodexDisplay } from "@/ui/ink/CodexDisplay";
@@ -173,6 +174,7 @@ export async function runCodex(opts: {
     // Install the orchestrator skill for this controller session before discovering skills
     // (no-op for worker sessions and idempotent across runs).
     syncOrchestratorAssets();
+    syncBuiltinCommands();
     let skills = discoverCodexSkills();
     const { state, metadata } = createSessionMetadata({
         flavor: 'codex',
@@ -193,10 +195,10 @@ export async function runCodex(opts: {
         onSessionSwap: (newSession) => {
             session = newSession;
             const currentSkills = skills;
-            session.updateCapabilities((currentCapabilities) => addOrchestratorSlashCommands({
+            session.updateCapabilities((currentCapabilities) => addBuiltinSlashCommands(addOrchestratorSlashCommands({
                 ...currentCapabilities,
                 skills: currentSkills,
-            }));
+            })));
             if (permissionHandler) {
                 permissionHandler.updateSession(newSession);
             }
@@ -205,10 +207,10 @@ export async function runCodex(opts: {
     session = initialSession;
 
     const initialSkills = skills;
-    session.updateCapabilities((currentCapabilities) => addOrchestratorSlashCommands({
+    session.updateCapabilities((currentCapabilities) => addBuiltinSlashCommands(addOrchestratorSlashCommands({
         ...currentCapabilities,
         skills: initialSkills,
-    }));
+    })));
 
     let lastSkillsSignature = getCodexSkillsSignature(skills);
     const skillRefreshInterval = setInterval(() => {
@@ -221,10 +223,10 @@ export async function runCodex(opts: {
 
             skills = nextSkills;
             lastSkillsSignature = nextSignature;
-            session.updateCapabilities((currentCapabilities) => addOrchestratorSlashCommands({
+            session.updateCapabilities((currentCapabilities) => addBuiltinSlashCommands(addOrchestratorSlashCommands({
                 ...currentCapabilities,
                 skills: nextSkills,
-            }));
+            })));
         } catch (error) {
             logger.debug('[codex] Failed to refresh skills capabilities:', error);
         }
@@ -1202,9 +1204,12 @@ Tokens used: ${goal.tokensUsed}${goal.tokenBudget ? ` / ${goal.tokenBudget}` : '
             }
 
             const expandedOrchestratorCommand = expandOrchestratorSlashCommand(message.message);
-            const promptText = expandedOrchestratorCommand?.prompt ?? message.message;
+            const expandedBuiltinCommand = expandedOrchestratorCommand ? null : expandBuiltinSlashCommand(message.message);
+            const promptText = expandedOrchestratorCommand?.prompt ?? expandedBuiltinCommand?.prompt ?? message.message;
             if (expandedOrchestratorCommand) {
                 logger.debug(`[Codex] Expanded /orchestrator:${expandedOrchestratorCommand.provider} command`);
+            } else if (expandedBuiltinCommand) {
+                logger.debug(`[Codex] Expanded /${expandedBuiltinCommand.name} command`);
             }
 
             messageBuffer.addMessage(message.message, 'user');

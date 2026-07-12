@@ -41,6 +41,7 @@
                   "app/sessions",
                   "app/sharing",
                   "cli/orchestrator",
+                  "cli/preview-html",
                   "app/artifacts",
                   "app/workspaces"
                 ]
@@ -127,6 +128,7 @@
                   "zh/app/sessions",
                   "zh/app/sharing",
                   "zh/cli/orchestrator",
+                  "zh/cli/preview-html",
                   "zh/app/artifacts",
                   "zh/app/workspaces"
                 ]

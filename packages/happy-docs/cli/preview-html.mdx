@@ -1,0 +1,49 @@
+---
+title: "Preview HTML"
+description: "Generate a self-contained HTML page and preview it in the app with /preview-html."
+---
+
+`/preview-html` is a built-in slash command that asks the agent to produce a complete, self-contained
+HTML document and render it inside the Happy client app. It is a shortcut for the always-available
+`preview_html` tool — it makes the capability discoverable and reliably triggers a rendered preview
+instead of the agent just printing HTML as text.
+
+## Usage
+
+```
+/preview-html <description or path to an .html file>
+```
+
+- **Description** — describe the page you want. The agent generates a complete HTML document (all
+  CSS and JS inlined, no external network resources) and previews it.
+- **File path** — point at an existing `.html` file. The agent reads it and previews its contents.
+- **No argument** — the agent uses the current conversation context, or asks what to preview.
+
+The command is model-mediated: it expands into a prompt that instructs the agent to build the
+document and call the `preview_html` tool. What you typed (`/preview-html ...`) is what stays in the
+conversation; the generated HTML is rendered in the app's preview surface.
+
+## Examples
+
+```
+/preview-html a pricing table with three tiers and a highlighted middle plan
+```
+
+```
+/preview-html an SVG line chart of weekly active users, dark theme
+```
+
+```
+/preview-html ./reports/summary.html
+```
+
+## Availability
+
+- Works in **Claude**, **Codex**, and **Gemini** sessions.
+- Available in every session — it does not require orchestrator or controller mode.
+- Requires a Happy client capable of rendering HTML previews.
+
+<Note>
+The HTML must be a single self-contained document. Ask for inlined CSS/JS if you plan to save or
+share the result — external stylesheets, scripts, or images will not load in the preview.
+</Note>
