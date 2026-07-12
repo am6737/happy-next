@@ -267,7 +267,7 @@ Extensive improvements to the chat and session management experience.
 - **Swipe-to-delete** for feed notifications
 - **Friend search** with flat layout, GitHub connect prompt for users without username
 - **Conversation minimap**: a minimap panel for jumping to any part of a long conversation at a glance, now populated from the offline message cache so the overview is available even before messages finish loading or while offline
-- **Virtualized web conversation list**: the web chat list is rebuilt as a model-driven virtualized list — jumping to a message centers instantly (with a subtle shake when you're already there) and history loads on demand as you scroll
+- **Virtualized web conversation list**: the web chat list is rebuilt as a model-driven virtualized list — jumping to a message centers instantly (with a subtle shake when you're already there) and history loads on demand as you scroll; scrolling is stabilized so gestures don't jump, scroll-to-bottom lands on the true bottom, and a proxy scrollbar replaces the distorted native one for an honest scroll position
 - **Context usage tooltip**: hover the context indicator to see a token-count breakdown
 - **Resizable web sidebar**: drag the sidebar edge to adjust its width
 - **Smart session defaults**: new session creation automatically picks the best available machine

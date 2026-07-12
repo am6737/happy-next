@@ -1,16 +1,18 @@
 # Changelog
 
-## Version 17 - 2026-07-10
+## Version 17 - 2026-07-12
 
-The web conversation list is rebuilt as a model-driven virtualized list with instant centered jumps, the minimap now fills in from the offline message cache, the model picker is streamlined to seven entries with side-by-side reasoning-effort presets, and the CLI updates to v0.6.1 with Codex 0.144.1.
+The web conversation list is rebuilt as a model-driven virtualized list with instant centered jumps and refined, stable scrolling, the minimap now fills in from the offline message cache, the model picker is streamlined to seven entries with side-by-side reasoning-effort presets, and the CLI updates to v0.6.2 with Codex 0.144.1.
 
 - Web conversation list: rebuilt as a model-driven virtualized list — jumping to a message centers instantly, with a subtle shake when you're already there; history now loads on demand as you scroll
+- Web scrolling: scroll geometry is frozen during gestures to stop scroll jumps, scroll-to-bottom now lands on the true bottom, jumps from far away teleport into place, and a proxy scrollbar replaces the distorted native one for an honest scroll position
 - Minimap: the conversation minimap now populates from the offline message cache, so the navigation overview is available even before messages finish loading or while offline
 - Models: the model picker is streamlined from 12 to 7 entries — Claude 1M-context variants collapse into a single toggle instead of separate rows
 - Models: on wide screens the reasoning-effort presets show side by side, and Claude now defaults to High effort
 - Codex: updated to Codex 0.144.1 with a refreshed model catalog
-- Fixes: sub-agent token usage no longer overwrites the main session's context-window indicator; the message outbox no longer overflows on large batches, and noisy 4xx server logs are reduced
-- CLI: Happy CLI updated to v0.6.1
+- Sessions: mode settings now carry over when a session is restarted with the latest CLI, and the message cache is cleared after archiving a session
+- Fixes: sub-agent token usage no longer overwrites the main session's context-window indicator; the message outbox no longer overflows on large batches, and noisy 4xx server logs are reduced; a stale message-coverage retry loop that could leave sessions stuck loading is resolved; the iOS tab notification dot now renders correctly and is smaller; the update banner is removed from the sessions list
+- CLI: Happy CLI updated to v0.6.2 — the daemon now starts reliably after update and login
 
 ## Version 16 - 2026-07-08
 

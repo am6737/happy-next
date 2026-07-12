@@ -195,7 +195,7 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Message pagination, unread blue dot indicator, compact list view
 - Conversation minimap panel — tap to jump to any part of a long conversation at a glance, populated from the offline message cache so the overview is available even before messages finish loading or while offline
 - Minimap overlay placement is polished for smoother long-conversation navigation
-- Web conversation list rebuilt as a model-driven virtualized list — jumping to a message centers instantly (with a subtle shake when you're already there) and history loads on demand as you scroll
+- Web conversation list rebuilt as a model-driven virtualized list — jumping to a message centers instantly (with a subtle shake when you're already there) and history loads on demand as you scroll; scrolling is stabilized so gestures don't jump, scroll-to-bottom lands on the true bottom, and a proxy scrollbar replaces the distorted native one for an honest scroll position
 - Context usage tooltip on the context indicator showing token-count breakdown details
 - Resizable sidebar on web — drag the edge to adjust width
 - New session defaults now pick the best available machine automatically
