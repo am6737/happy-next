@@ -132,6 +132,13 @@ export function rangeAroundAnchor(args: {
     return { startIndex: index, endIndex: Math.min(args.layout.keys.length, index + size) };
 }
 
+// Distance from the content bottom to the entry's TOP edge.
+export function entryTopFromBottom(layout: LayoutModel, key: string): number | null {
+    const index = layout.indexByKey.get(key);
+    if (index == null) return null;
+    return (layout.bottomOffsetsPx[index] ?? 0) + (layout.heightsPx[index] ?? 0);
+}
+
 // The scroll distance that keeps the anchor entry's TOP edge at the same
 // viewport position across a layout change.
 export function compensatedDistanceFromBottom(args: {
@@ -140,14 +147,31 @@ export function compensatedDistanceFromBottom(args: {
     previousLayout: LayoutModel;
     nextLayout: LayoutModel;
 }): number | null {
-    const prevIndex = args.previousLayout.indexByKey.get(args.anchorKey);
-    const nextIndex = args.nextLayout.indexByKey.get(args.anchorKey);
-    if (prevIndex == null || nextIndex == null) return null;
-    const prevTopFromBottom = (args.previousLayout.bottomOffsetsPx[prevIndex] ?? 0)
-        + (args.previousLayout.heightsPx[prevIndex] ?? 0);
-    const nextTopFromBottom = (args.nextLayout.bottomOffsetsPx[nextIndex] ?? 0)
-        + (args.nextLayout.heightsPx[nextIndex] ?? 0);
+    const prevTopFromBottom = entryTopFromBottom(args.previousLayout, args.anchorKey);
+    const nextTopFromBottom = entryTopFromBottom(args.nextLayout, args.anchorKey);
+    if (prevTopFromBottom == null || nextTopFromBottom == null) return null;
     return Math.max(0, args.distanceFromBottomPx + nextTopFromBottom - prevTopFromBottom);
+}
+
+// Extra empty canvas above the content top. It is the physical headroom that
+// lets the window absorb content growth (page prepends, measurement
+// corrections of rows entering from the top) WITHOUT resizing the canvas —
+// scrollHeight changes mid-gesture are what desktop engines answer with an
+// asynchronous scroll adjustment (the visible jump). When the whole history is
+// loaded and the viewport is reading near the content top, the slack would be
+// scrollable blank above the oldest message, so it collapses (with hysteresis
+// so renormalizations don't flap around the boundary).
+export function desiredTopSlackPx(args: {
+    hasMore: boolean;
+    totalHeightPx: number;
+    viewportTopModelPx: number;
+    currentSlackPx: number;
+    maxSlackPx: number;
+}): number {
+    if (args.hasMore) return args.maxSlackPx;
+    const collapseBandPx = args.currentSlackPx <= 0 ? 2400 : 1200;
+    if (args.viewportTopModelPx > args.totalHeightPx - collapseBandPx) return 0;
+    return args.maxSlackPx;
 }
 
 // First measured entry inside the strict viewport (no overscan) present in

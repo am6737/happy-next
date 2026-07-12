@@ -17,9 +17,11 @@ import { createScrollButtonVisibilityController } from './scrollButtonVisibility
 import { t } from '@/text';
 import {
     buildLayoutModel,
-    compensatedDistanceFromBottom,
     computeVisibleRange,
+    desiredTopSlackPx,
+    distanceToAlignEntryTop,
     distanceToCenterEntry,
+    entryTopFromBottom,
     nextViewportState,
     pickCompensationAnchor,
     rangeAroundAnchor,
@@ -37,23 +39,47 @@ import {
 // 1. column-reverse scroll container with a SINGLE normal-order child.
 //    column-reverse contributes no visual ordering here — only its coordinate
 //    semantics: scrollTop 0 is the bottom (negative when scrolled up, per
-//    CSSOM), so first-paint-at-bottom and stick-to-bottom are structural, and
-//    content growth above the viewport can never move it. All code below works
-//    in distance-from-bottom pixels (= |scrollTop|).
+//    CSSOM), so first-paint-at-bottom and stick-to-bottom are structural. All
+//    code below works in distance-from-bottom pixels (= |scrollTop|).
 //
 // 2. A windowed virtualizer driven by a pure layout model
 //    (chatListVirtualModel.ts): per-message measured/estimated heights →
 //    prefix sums → binary-searched render range. Only the visible window
-//    (± overscan) is mounted; the window sits inside a fixed-height container
+//    (± overscan) is mounted; the window sits inside an explicit-height CANVAS
 //    positioned by a single marginTop spacer, so rows stay in real document
 //    flow. Freshly mounted, never-measured rows are height-CONSTRAINED to
 //    their model height (overflow hidden) so mounting cannot shift layout;
-//    a pre-paint measurement pass then feeds real sizes back into the model
-//    and compensates the scroll position for any size change below the
-//    viewport. All corrections happen before paint (ResizeObserver callbacks
-//    and layout effects both run pre-paint).
+//    a pre-paint measurement pass then feeds real sizes back into the model.
+//    All corrections happen before paint (ResizeObserver callbacks and layout
+//    effects both run pre-paint).
 //
-// 3. On-demand history loading (FlatList-era policy): opening a session loads
+// 3. FROZEN scroll geometry while the user is scrolling. Engines disagree on
+//    which offset to preserve when scrollHeight changes mid-gesture: some keep
+//    the distance-from-bottom (column-reverse's promise), others keep the
+//    distance-from-top and deliver the difference 1-2 frames later as a
+//    spontaneous scroll event — a visible jump that no after-the-fact
+//    compensation can reliably cancel (it races the user's own input; Codex
+//    desktop suffers the same jump). So while a wheel / key / momentum gesture
+//    is in flight this component never mutates the scroller's geometry:
+//      - the canvas keeps TOP SLACK (empty px above the content top), so
+//        growth above the viewport — page prepends, corrections of estimated
+//        rows entering from the top — moves the window's marginTop inside the
+//        constant-height canvas instead of resizing it;
+//      - growth below the viewport is absorbed by canvasBottomOffsetPx, the
+//        model coordinate of the canvas's bottom edge (content that grows
+//        "below the canvas" stays virtual until it could become visible);
+//      - `overflow: clip` on the canvas guarantees transient window overflow
+//        can never leak into scrollHeight.
+//    When scrolling goes quiet (scrollend / input+scroll silence) one
+//    renormalization re-syncs the canvas height, zeroes the bottom offset and
+//    rewrites scrollTop equivalently (screen-invariant), then re-asserts the
+//    write once if the engine moves it asynchronously — safe at idle, where
+//    there is no in-flight input to swallow. Forced renormalizations happen
+//    only when the viewport approaches a region the frozen canvas cannot
+//    represent (its clipped bottom, its top edge, or slack blank above a
+//    fully-loaded top).
+//
+// 4. On-demand history loading (FlatList-era policy): opening a session loads
 //    only the latest page; older pages load when the viewport nears the
 //    visual top of loaded content. The minimap appears immediately, merging
 //    loaded prompts with the offline prompt cache; jumping to a not-yet-loaded
@@ -61,7 +87,7 @@ import {
 //    resolves. Prepends land above the viewport — bottom-anchored coordinates
 //    don't move, so paging is invisible.
 //
-// 4. Per-session restore: measured heights, the rendered window anchor and
+// 5. Per-session restore: measured heights, the rendered window anchor and
 //    the scroll offset are remembered per session and re-applied before first
 //    paint on revisit — the first frame IS the final frame.
 //
@@ -159,6 +185,11 @@ const ROW_ESTIMATE_PX = 100;
 const OVERSCAN_ROWS = 10;
 // Codex-style animated "scroll to bottom" (cubic ease-out).
 const SCROLL_TO_BOTTOM_ANIMATION_MS = 260;
+// Animate scroll-to-bottom only within this many viewports of the bottom.
+// Farther away the fixed-duration animation is a meaningless whoosh (hundreds
+// of px per frame, each frame a window slide); teleport instantly instead,
+// like a minimap jump.
+const SCROLL_TO_BOTTOM_ANIMATE_MAX_VIEWPORTS = 3;
 // Viewport height guess used before the scroller is measured.
 const INITIAL_VIEWPORT_GUESS_PX = 800;
 // A pending scroll restore is considered landed within this tolerance.
@@ -166,6 +197,35 @@ const RESTORE_TOLERANCE_PX = 24;
 // Start loading the next older page when the viewport gets this close to the
 // visual top of the loaded content.
 const LOAD_MORE_DISTANCE_PX = 800;
+// ---- Frozen-geometry parameters (architecture note 3) ----
+// Empty canvas px kept above the content top as growth headroom. Must cover a
+// whole prepended page at estimate size (~page × estimate) plus the
+// measurement corrections of one scroll burst, or fast upward scrolling forces
+// mid-gesture renormalizations at every page boundary.
+const TOP_SLACK_PX = 12_000;
+// Scrolling counts as in-flight until both input and scroll events have been
+// quiet this long; renormalization waits it out (or a scrollend event).
+const GESTURE_QUIET_MS = 160;
+const RENORM_TICK_MS = 90;
+// Our own scrollTop writes are re-asserted once if the engine asynchronously
+// re-derives them within this window — dropped as soon as newer user input
+// exists, so the re-assert can never swallow scrolling.
+const WRITE_VERIFY_WINDOW_MS = 120;
+const WRITE_VERIFY_TOLERANCE_PX = 4;
+// A scroll event this close (time and px) to our own last write is the echo
+// of that write, not user scrolling.
+const SELF_ECHO_WINDOW_MS = 120;
+// Re-check the load-more trigger this often after a load completes — a load
+// with no (or not-yet-visible) progress otherwise strands a motionless
+// viewport with nothing left to re-fire the trigger.
+const LOAD_MORE_RETRY_MS = 300;
+// A gesture that ends with the viewport more than this far above the loaded
+// content top (inside the blank slack band) snaps to the content top…
+const BAND_SNAP_THRESHOLD_PX = 100;
+// …leaving this much band visible so the paging spinner shows.
+const BAND_PEEK_PX = 72;
+// Keys the browser turns into native scrolling of the hovered/focused scroller.
+const SCROLL_KEYS = new Set(['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' ']);
 // Post-jump feedback: horizontal shake on the target row.
 const SHAKE_DURATION_MS = 600;
 const SHAKE_DELAY_MS = 200;
@@ -226,6 +286,42 @@ const scrollerStyle = {
     // Programmatic scrolls must stay instant even if a global stylesheet turns
     // on smooth scrolling.
     scrollBehavior: 'auto',
+    // The native bar would render the canvas's top slack as phantom scroll
+    // range; the PROXY scrollbar next to the scroller shows the honest loaded
+    // height instead (see the proxy-scrollbar section).
+    scrollbarWidth: 'none',
+} as React.CSSProperties;
+
+// ::-webkit-scrollbar has no inline-style equivalent (needed for WebKit
+// engines that ignore scrollbar-width).
+const SCROLLBAR_HIDE_CLASS = 'chatlist-hide-native-scrollbar';
+let scrollbarHideStyleInjected = false;
+function ensureScrollbarHideStyle() {
+    if (scrollbarHideStyleInjected || typeof document === 'undefined') return;
+    scrollbarHideStyleInjected = true;
+    const style = document.createElement('style');
+    style.textContent = `.${SCROLLBAR_HIDE_CLASS}::-webkit-scrollbar{display:none;}`;
+    document.head.appendChild(style);
+}
+
+// The proxy scrollbar: a narrow native scroller overlaying the right edge
+// whose only child is an invisible ghost sized to the HONEST loaded content
+// height (header inset + model total + footer — no canvas slack). Its native
+// scrollbar is the one the user sees; positions sync both ways in
+// content-space, so canvas slack and the frozen bottom offset never distort
+// the thumb. Proxy drags also route through our coordinate math instead of
+// letting the engine steer a scroller whose range includes phantom space.
+const proxyScrollerStyle = {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    width: 14,
+    overflowY: 'auto',
+    overflowX: 'hidden',
+    overscrollBehavior: 'contain',
+    scrollBehavior: 'auto',
+    zIndex: 1,
 } as React.CSSProperties;
 
 const contentColumnStyle = {
@@ -317,13 +413,21 @@ const ChatRow = React.memo((props: {
     );
 });
 
-type PendingJump = { key: string; nonce: number };
+type PendingJump = {
+    key: string;
+    nonce: number;
+    // 'center': minimap jump. 'top': internal band snap (viewport top lands
+    // at the entry's top edge plus the spinner peek).
+    align: 'center' | 'top';
+    // Internal repositions skip the shake feedback and logging.
+    silent: boolean;
+};
 type PendingMeasureOps = {
     // While a session restore is pending, measurement batches re-assert the
     // saved offset instead of compensating (the saved offset IS the truth).
     restore: boolean;
-    // Raw scroll distance to apply after the commit (null = leave as is).
-    scrollDistancePx: number | null;
+    // Glue the viewport back to the bottom after the commit (streaming follow).
+    pinToBottom: boolean;
     // Identity token: the drain effect only consumes ops for ITS commit.
     heights: Record<string, number>;
 };
@@ -348,6 +452,7 @@ const ChatListInternal = React.memo((props: {
     const { theme } = useUnistyles();
     const headerHeight = useHeaderHeight();
     const safeArea = useSafeAreaInsets();
+    ensureScrollbarHideStyle();
     // The floating header overlays the scroller top; the top spacer keeps the
     // oldest content readable beneath it.
     const headerInsetPx = headerHeight + safeArea.top + 32;
@@ -512,6 +617,21 @@ const ChatListInternal = React.memo((props: {
     const layoutRef = useRef(layout);
     layoutRef.current = layout;
 
+    // ---- Frozen scroll geometry (architecture note 3) ----
+    // The canvas height is decoupled from the model total: it only changes at
+    // renormalization points, never mid-gesture. canvasBottomOffsetPx is the
+    // model coordinate at the canvas's bottom edge — 0 when normalized,
+    // positive when content below the viewport grew while frozen (that growth
+    // lives "below the canvas"), negative when it shrank. Both have ref
+    // mirrors kept in sync AT THE SET SITE so event handlers running before
+    // the re-render read fresh values.
+    const [canvasHeightPx, setCanvasHeightPx] = useState(() => layout.totalHeightPx + (props.hasMore ? TOP_SLACK_PX : 0));
+    const canvasHeightRef = useRef(canvasHeightPx);
+    const [canvasBottomOffsetPx, setCanvasBottomOffsetPx] = useState(0);
+    const canvasBottomOffsetRef = useRef(canvasBottomOffsetPx);
+    const hasMoreRef = useRef(props.hasMore);
+    hasMoreRef.current = props.hasMore;
+
     const [viewport, setViewport] = useState<ViewportState>(() => {
         const distance = restored && !restored.atBottom ? restored.scrollDistancePx : 0;
         const base = computeVisibleRange({ layout, distanceFromBottomPx: distance, viewportHeightPx: INITIAL_VIEWPORT_GUESS_PX, overscanCount: OVERSCAN_ROWS });
@@ -570,11 +690,16 @@ const ChatListInternal = React.memo((props: {
         const scroller = scrollerElRef.current;
         return scroller ? Math.abs(scroller.scrollTop) : 0;
     };
-    const toModelDistance = (raw: number) => Math.max(0, raw - footerHeightRef.current);
+    const toModelDistance = (raw: number) => Math.max(0, raw - footerHeightRef.current + canvasBottomOffsetRef.current);
+    // Content-space distance (raw + canvas bottom offset): stable across
+    // renormalizations — what session restore stores and re-asserts.
+    const toContentDistance = (raw: number) => raw + canvasBottomOffsetRef.current;
+    const fromModelDistance = (model: number) => Math.max(0, model + footerHeightRef.current - canvasBottomOffsetRef.current);
     const setRawDistance = (raw: number) => {
         const scroller = scrollerElRef.current;
         if (!scroller) return;
         scroller.scrollTop = raw === 0 ? 0 : -raw;
+        lastSelfWriteRef.current = { rawPx: Math.abs(scroller.scrollTop), atMs: performance.now() };
         atBottomRef.current = Math.abs(scroller.scrollTop) <= SCROLL_THRESHOLD;
     };
 
@@ -585,6 +710,287 @@ const ChatListInternal = React.memo((props: {
         }
         isAnimatingScrollRef.current = false;
     };
+
+    // ---- Renormalization of the frozen geometry ----
+
+    const lastExternalScrollAtRef = useRef(-1e9);
+    const lastSelfWriteRef = useRef<{ rawPx: number; atMs: number } | null>(null);
+    const userInputTokenRef = useRef(0);
+    const writeVerifierRef = useRef<{ expectedRawPx: number; untilMs: number; inputToken: number } | null>(null);
+    const renormTimerRef = useRef<number | null>(null);
+    const renormCountRef = useRef(0);
+    const forcedRenormCountRef = useRef(0);
+    const verifierRewriteCountRef = useRef(0);
+
+    const isGestureActive = () =>
+        performance.now() - Math.max(lastUserInputAtRef.current, lastExternalScrollAtRef.current) < GESTURE_QUIET_MS;
+    const isRepositioning = () =>
+        pendingJumpRef.current != null || pendingRestoreRef.current != null
+        || isAnimatingScrollRef.current || pendingOpsRef.current != null;
+
+    // One-shot guard over our own scrollTop writes: re-assert once if the
+    // engine re-derives the offset asynchronously after a scrollHeight change.
+    // Any newer user input disarms it, so it can never swallow scrolling.
+    const checkWriteVerifier = () => {
+        const verifier = writeVerifierRef.current;
+        if (!verifier) return;
+        if (performance.now() > verifier.untilMs || userInputTokenRef.current !== verifier.inputToken) {
+            writeVerifierRef.current = null;
+            return;
+        }
+        if (Math.abs(getRawDistance() - verifier.expectedRawPx) > WRITE_VERIFY_TOLERANCE_PX) {
+            writeVerifierRef.current = null;
+            verifierRewriteCountRef.current += 1;
+            setRawDistance(verifier.expectedRawPx);
+        }
+    };
+    const armWriteVerifier = (expectedRawPx: number) => {
+        writeVerifierRef.current = {
+            expectedRawPx,
+            untilMs: performance.now() + WRITE_VERIFY_WINDOW_MS,
+            inputToken: userInputTokenRef.current,
+        };
+        const step = () => {
+            checkWriteVerifier();
+            if (writeVerifierRef.current) window.requestAnimationFrame(step);
+        };
+        window.requestAnimationFrame(step);
+    };
+
+    const desiredCanvasHeightPx = () => {
+        const scroller = scrollerElRef.current;
+        const layoutNow = layoutRef.current;
+        const viewportTopModelPx = scroller
+            ? toModelDistance(getRawDistance()) + scroller.clientHeight
+            : layoutNow.totalHeightPx;
+        return layoutNow.totalHeightPx + desiredTopSlackPx({
+            hasMore: hasMoreRef.current,
+            totalHeightPx: layoutNow.totalHeightPx,
+            viewportTopModelPx,
+            currentSlackPx: canvasHeightRef.current - layoutNow.totalHeightPx,
+            maxSlackPx: TOP_SLACK_PX,
+        });
+    };
+    // A pressed pointer inside the scroller (scrollbar drag, text selection)
+    // owns the scroll position; idle renormalization waits for release so it
+    // never fights a held scrollbar thumb.
+    const isPointerDownRef = useRef(false);
+
+    // A gesture can strand the viewport in the blank slack band above the
+    // loaded content top (scrollbar flung to the edge).
+    const isViewportInBand = (): boolean => {
+        const scroller = scrollerElRef.current;
+        if (!scroller) return false;
+        const layoutNow = layoutRef.current;
+        if (layoutNow.keys.length === 0) return false;
+        return toModelDistance(getRawDistance()) + scroller.clientHeight
+            > layoutNow.totalHeightPx + BAND_SNAP_THRESHOLD_PX;
+    };
+    const isRenormDirty = () =>
+        canvasBottomOffsetRef.current !== 0
+        || canvasHeightRef.current !== desiredCanvasHeightPx()
+        || isViewportInBand();
+
+    // Re-sync the canvas to the model and rewrite scrollTop equivalently.
+    // Screen positions are invariant: a row sits (topFromBottom − offset)
+    // above the canvas bottom and the viewport sits (raw − footer) above it,
+    // so raw += offset while the offset returns to 0 keeps every visible
+    // pixel in place. MUST NOT run from inside a React commit (flushSync).
+    const performRenorm = () => {
+        const scroller = scrollerElRef.current;
+        if (!scroller || isRepositioning()) return;
+        const cboPrev = canvasBottomOffsetRef.current;
+        const nextCanvasHeight = desiredCanvasHeightPx();
+        if (cboPrev === 0 && nextCanvasHeight === canvasHeightRef.current) return;
+        const rawTarget = Math.max(0, getRawDistance() + cboPrev);
+        renormCountRef.current += 1;
+        canvasBottomOffsetRef.current = 0;
+        canvasHeightRef.current = nextCanvasHeight;
+        flushSync(() => {
+            setCanvasBottomOffsetPx(0);
+            setCanvasHeightPx(nextCanvasHeight);
+        });
+        // Reading scrollHeight forces layout on the committed styles, so the
+        // write below lands against the new geometry — all before paint.
+        const clamped = Math.min(rawTarget, Math.max(0, scroller.scrollHeight - scroller.clientHeight));
+        if (clamped !== getRawDistance()) setRawDistance(clamped);
+        armWriteVerifier(clamped);
+        updateViewportRef.current(Math.abs(scroller.scrollTop), scroller.clientHeight);
+    };
+
+    // Land exactly at the content bottom. performRenorm preserves the current
+    // screen; this variant SEEKS the bottom — the explicit intent of
+    // scroll-to-bottom — so an offset accumulated meanwhile (streaming during
+    // the animation) can never leave the newest content clipped below the
+    // canvas as a false bottom.
+    const renormToBottom = () => {
+        const scroller = scrollerElRef.current;
+        if (!scroller) return;
+        const nextCanvasHeight = desiredCanvasHeightPx();
+        if (canvasBottomOffsetRef.current !== 0 || nextCanvasHeight !== canvasHeightRef.current) {
+            renormCountRef.current += 1;
+            canvasBottomOffsetRef.current = 0;
+            canvasHeightRef.current = nextCanvasHeight;
+            flushSync(() => {
+                setCanvasBottomOffsetPx(0);
+                setCanvasHeightPx(nextCanvasHeight);
+            });
+        }
+        setRawDistance(0);
+        armWriteVerifier(0);
+        updateViewportRef.current(0, scroller.clientHeight);
+    };
+
+    const ensureRenormLoop = () => {
+        if (renormTimerRef.current != null) return;
+        renormTimerRef.current = window.setTimeout(() => {
+            renormTimerRef.current = null;
+            if (!isRenormDirty()) return;
+            if (!isGestureActive() && !isRepositioning() && !isPointerDownRef.current) {
+                if (!maybeBandSnapToTopRef.current()) performRenorm();
+            }
+            if (isRenormDirty()) ensureRenormLoop();
+        }, RENORM_TICK_MS);
+    };
+
+    // The frozen canvas cannot represent: (a) content below its bottom edge
+    // once the viewport gets there (it is clipped), (b) content above its top
+    // edge (prepends/corrections that outgrew the slack are clipped there, and
+    // the canvas top is also a hard scroll wall), (c) slack blank above a
+    // fully-loaded content top. Approaching any of those forces an immediate
+    // renormalization, gesture or not — rare by construction. Runs on scroll
+    // AND on raw input events: at the canvas-top wall the browser clamps
+    // scrollTop, scroll events stop, and only input events can still unstick.
+    const maybeForceRenorm = (raw: number) => {
+        const scroller = scrollerElRef.current;
+        if (!scroller || isRepositioning()) return;
+        const cbo = canvasBottomOffsetRef.current;
+        const layoutNow = layoutRef.current;
+        const slackTop = canvasHeightRef.current + cbo - layoutNow.totalHeightPx;
+        let force = false;
+        if (cbo !== 0 && raw < footerHeightRef.current + 300) {
+            force = true;
+        } else if (raw - footerHeightRef.current + 2 * scroller.clientHeight > canvasHeightRef.current) {
+            // Within a viewport of the canvas top: re-base while scroll events
+            // still flow (a fresh renorm extends the canvas over any content
+            // grown since the freeze). No-op when already normalized.
+            force = true;
+        } else if (!hasMoreRef.current && slackTop > 0
+            && toModelDistance(raw) + scroller.clientHeight > layoutNow.totalHeightPx + 50) {
+            force = true;
+        }
+        if (force) {
+            forcedRenormCountRef.current += 1;
+            performRenorm();
+        }
+    };
+
+    // ---- Proxy scrollbar (see proxyScrollerStyle) ----
+
+    const headerInsetRef = useRef(headerInsetPx);
+    headerInsetRef.current = headerInsetPx;
+    const proxyElRef = useRef<HTMLDivElement | null>(null);
+    const proxyGhostElRef = useRef<HTMLDivElement | null>(null);
+    const proxyGhostHeightRef = useRef(-1);
+    // While the user holds the proxy (thumb drag), the proxy owns the
+    // position and its ghost height is frozen — release resyncs.
+    const proxyDraggingRef = useRef(false);
+    const proxySelfWriteRef = useRef<{ topPx: number; atMs: number } | null>(null);
+
+    // Real → proxy: mirror the content-space position onto the proxy's
+    // native scrollbar. Proxy scrollTop 0 = content top, max = content bottom.
+    const syncProxyFromReal = () => {
+        const proxy = proxyElRef.current;
+        const ghost = proxyGhostElRef.current;
+        const scroller = scrollerElRef.current;
+        if (!proxy || !ghost || !scroller || proxyDraggingRef.current) return;
+        const honestHeight = Math.max(0, Math.round(
+            headerInsetRef.current + layoutRef.current.totalHeightPx + footerHeightRef.current,
+        ));
+        if (proxyGhostHeightRef.current !== honestHeight) {
+            proxyGhostHeightRef.current = honestHeight;
+            ghost.style.height = `${honestHeight}px`;
+        }
+        const maxTop = Math.max(0, honestHeight - proxy.clientHeight);
+        const target = Math.max(0, Math.min(maxTop, maxTop - toContentDistance(getRawDistance())));
+        if (Math.abs(proxy.scrollTop - target) > 1) {
+            proxy.scrollTop = target;
+            proxySelfWriteRef.current = { topPx: proxy.scrollTop, atMs: performance.now() };
+        }
+    };
+    const syncProxyFromRealRef = useRef(syncProxyFromReal);
+    syncProxyFromRealRef.current = syncProxyFromReal;
+
+    // Proxy → real: the user drags the proxy thumb, clicks its track or
+    // wheels over the strip. Positions route through content-space, so the
+    // frozen bottom offset and canvas slack are handled by construction.
+    const handleProxyScroll = () => {
+        const proxy = proxyElRef.current;
+        const scroller = scrollerElRef.current;
+        if (!proxy || !scroller) return;
+        const top = proxy.scrollTop;
+        const selfWrite = proxySelfWriteRef.current;
+        if (selfWrite != null
+            && performance.now() - selfWrite.atMs < SELF_ECHO_WINDOW_MS
+            && Math.abs(top - selfWrite.topPx) <= 1) {
+            return;
+        }
+        lastUserInputAtRef.current = performance.now();
+        userInputTokenRef.current += 1;
+        pendingRestoreRef.current = null;
+        cancelScrollAnimation();
+        const maxTop = Math.max(0, proxyGhostHeightRef.current - proxy.clientHeight);
+        const content = Math.max(0, maxTop - top);
+        setRawDistance(Math.max(0, content - canvasBottomOffsetRef.current));
+        updateViewportRef.current(Math.abs(scroller.scrollTop), scroller.clientHeight);
+        maybeLoadMoreRef.current();
+    };
+    const handleProxyScrollRef = useRef(handleProxyScroll);
+    handleProxyScrollRef.current = handleProxyScroll;
+
+    const detachProxyListenersRef = useRef<(() => void) | null>(null);
+    const handleProxyEl = useCallback((el: HTMLDivElement | null) => {
+        if (proxyElRef.current === el) return;
+        detachProxyListenersRef.current?.();
+        detachProxyListenersRef.current = null;
+        proxyElRef.current = el;
+        if (!el) return;
+        const onScroll = () => handleProxyScrollRef.current();
+        // Grabbing the proxy's scrollbar fires pointerdown with the proxy
+        // itself as the target (scrollbars belong to the element).
+        const onPointerDown = () => {
+            proxyDraggingRef.current = true;
+            isPointerDownRef.current = true;
+            lastUserInputAtRef.current = performance.now();
+            userInputTokenRef.current += 1;
+            pendingRestoreRef.current = null;
+            cancelScrollAnimation();
+        };
+        const onPointerUp = () => {
+            if (!proxyDraggingRef.current) return;
+            proxyDraggingRef.current = false;
+            isPointerDownRef.current = false;
+            syncProxyFromRealRef.current();
+            if (isRenormDirty()) ensureRenormLoop();
+        };
+        el.addEventListener('scroll', onScroll, { passive: true });
+        el.addEventListener('pointerdown', onPointerDown, { passive: true });
+        window.addEventListener('pointerup', onPointerUp, { passive: true });
+        window.addEventListener('pointercancel', onPointerUp, { passive: true });
+        detachProxyListenersRef.current = () => {
+            el.removeEventListener('scroll', onScroll);
+            el.removeEventListener('pointerdown', onPointerDown);
+            window.removeEventListener('pointerup', onPointerUp);
+            window.removeEventListener('pointercancel', onPointerUp);
+        };
+    }, []);
+    const handleProxyGhostEl = useCallback((el: HTMLDivElement | null) => {
+        proxyGhostElRef.current = el;
+        if (el) {
+            proxyGhostHeightRef.current = -1;
+            syncProxyFromRealRef.current();
+        }
+    }, []);
 
     // ---- Measurement pipeline (the heart of the virtualizer) ----
 
@@ -600,20 +1006,17 @@ const ChatListInternal = React.memo((props: {
     const committedLayoutRef = useRef<LayoutModel>(layout);
 
     // Apply a batch of measured row heights: update the height cache, rebuild
-    // the model, and stage a single scroll adjustment for any size change
-    // BELOW the viewport (bottom-anchored coordinates shift only from below).
-    // At the bottom, pin to 0 instead. Runs pre-paint in every path.
+    // the model, and fold any size change BELOW the viewport into the canvas
+    // bottom offset (bottom-anchored coordinates shift only from below; the
+    // offset replaces the scrollTop write of the pre-freeze design, so the
+    // scroller's geometry stays untouched mid-gesture). At the bottom, stage a
+    // pin back to 0 instead. Runs pre-paint in every path.
     const applyMeasuredHeights = (batch: Map<string, { element: HTMLElement; heightPx: number }>, useFlushSyncCommit: boolean): boolean => {
-        const staged = pendingOpsRef.current;
         const current = measuredHeightsRef.current;
         const layoutNow = layoutRef.current;
         let next = current;
         const rawNow = getRawDistance();
-        // Reference for "below the viewport": once ops are staged, the staged
-        // target (not the not-yet-applied DOM value) is the truth.
-        const referenceModel = staged?.scrollDistancePx != null
-            ? toModelDistance(staged.scrollDistancePx)
-            : toModelDistance(rawNow);
+        const referenceModel = toModelDistance(rawNow);
         let deltaBelow = 0;
         for (const [key, { element, heightPx }] of batch) {
             if (rowElsByKeyRef.current.get(key) !== element) continue;
@@ -632,24 +1035,20 @@ const ChatListInternal = React.memo((props: {
 
         const restoreMode = pendingRestoreRef.current != null;
         const withinGrace = performance.now() - lastUserInputAtRef.current < USER_SCROLL_GRACE_MS;
-        const pinToBottom = atBottomRef.current && (!withinGrace || rawNow === 0);
-        let scrollDistancePx: number | null;
-        if (restoreMode) {
-            scrollDistancePx = null;
-        } else if (pinToBottom) {
-            scrollDistancePx = 0;
-        } else if (deltaBelow !== 0) {
-            scrollDistancePx = Math.max(0, (staged?.scrollDistancePx ?? rawNow) + deltaBelow);
-        } else {
-            scrollDistancePx = staged?.scrollDistancePx ?? null;
+        const pinToBottom = !restoreMode && atBottomRef.current && (!withinGrace || rawNow === 0);
+        let nextCbo = canvasBottomOffsetRef.current;
+        if (!restoreMode && !pinToBottom && deltaBelow !== 0) {
+            nextCbo += deltaBelow;
         }
 
         measuredHeightsRef.current = next;
         preMeasureLayoutRef.current ??= layoutNow;
         const nextLayout = buildLayoutModel({ keys: layoutNow.keys, measuredHeightsByKey: next, estimateHeightPx: ROW_ESTIMATE_PX });
         const targetModel = restoreMode
-            ? toModelDistance(pendingRestoreRef.current ?? 0)
-            : toModelDistance(scrollDistancePx ?? rawNow);
+            ? Math.max(0, (pendingRestoreRef.current ?? 0) - footerHeightRef.current)
+            : pinToBottom
+                ? Math.max(0, nextCbo - footerHeightRef.current)
+                : Math.max(0, rawNow - footerHeightRef.current + nextCbo);
         const nextViewport = nextViewportState({
             current: viewportRef.current,
             layout: nextLayout,
@@ -657,9 +1056,11 @@ const ChatListInternal = React.memo((props: {
             viewportHeightPx: viewportRef.current.viewportHeightPx,
             overscanCount: OVERSCAN_ROWS,
         });
-        pendingOpsRef.current = { restore: restoreMode, scrollDistancePx, heights: next };
+        pendingOpsRef.current = { restore: restoreMode, pinToBottom, heights: next };
+        canvasBottomOffsetRef.current = nextCbo;
         const commit = () => {
             setMeasuredHeights(next);
+            setCanvasBottomOffsetPx(nextCbo);
             if (nextViewport !== viewportRef.current) {
                 viewportRef.current = nextViewport;
                 setViewport(nextViewport);
@@ -694,18 +1095,20 @@ const ChatListInternal = React.memo((props: {
     const updateViewportRef = useRef(updateViewport);
     updateViewportRef.current = updateViewport;
 
-    // Re-assert a pending session restore. Consumed once it lands within
-    // tolerance, or once it's clear it can never land (content exhausted).
+    // Re-assert a pending session restore (a content-space distance).
+    // Consumed once it lands within tolerance, or once it's clear it can never
+    // land (content exhausted).
     const reassertPendingRestore = () => {
         const target = pendingRestoreRef.current;
         if (target == null) return;
         const scroller = scrollerElRef.current;
         if (!scroller) return;
-        setRawDistance(target);
-        const actual = Math.abs(scroller.scrollTop);
+        setRawDistance(Math.max(0, target - canvasBottomOffsetRef.current));
+        const actual = toContentDistance(Math.abs(scroller.scrollTop));
         if (Math.abs(actual - target) <= RESTORE_TOLERANCE_PX) {
             pendingRestoreRef.current = null;
-        } else if (!props.hasMore && scroller.scrollHeight - scroller.clientHeight < target - RESTORE_TOLERANCE_PX) {
+        } else if (!props.hasMore
+            && scroller.scrollHeight - scroller.clientHeight + canvasBottomOffsetRef.current < target - RESTORE_TOLERANCE_PX) {
             // All content is loaded and it simply isn't tall enough anymore.
             pendingRestoreRef.current = null;
         }
@@ -858,20 +1261,31 @@ const ChatListInternal = React.memo((props: {
     handleScrollRef.current = () => {
         const scroller = scrollerElRef.current;
         if (!scroller) return;
+        checkWriteVerifier();
         const raw = Math.abs(scroller.scrollTop);
+        // Echoes of our own writes must not count as user scrolling, or every
+        // renormalization would extend the frozen state it just resolved.
+        const selfWrite = lastSelfWriteRef.current;
+        const isSelfEcho = selfWrite != null
+            && performance.now() - selfWrite.atMs < SELF_ECHO_WINDOW_MS
+            && Math.abs(raw - selfWrite.rawPx) <= 1;
+        if (!isSelfEcho) lastExternalScrollAtRef.current = performance.now();
         const atBottom = raw <= SCROLL_THRESHOLD;
         atBottomRef.current = atBottom;
         visibilityControllerRef.current?.update(!atBottom);
         rememberSessionRestoreState(props.sessionId, {
-            scrollDistancePx: raw,
+            scrollDistancePx: toContentDistance(raw),
             atBottom,
             // Heights/window are captured on unmount; scroll events only keep
             // the cheap fields fresh.
             heightsByKey: sessionRestoreStates.get(props.sessionId)?.heightsByKey ?? {},
             renderedWindow: sessionRestoreStates.get(props.sessionId)?.renderedWindow ?? null,
         });
-        updateViewportRef.current(raw, scroller.clientHeight);
+        maybeForceRenorm(raw);
+        updateViewportRef.current(Math.abs(scroller.scrollTop), scroller.clientHeight);
         maybeLoadMoreRef.current();
+        syncProxyFromRealRef.current();
+        if (isRenormDirty()) ensureRenormLoop();
     };
 
     const detachScrollerListenersRef = useRef<(() => void) | null>(null);
@@ -887,24 +1301,59 @@ const ChatListInternal = React.memo((props: {
             const onScroll = () => handleScrollRef.current();
             const onUserInput = () => {
                 lastUserInputAtRef.current = performance.now();
+                userInputTokenRef.current += 1;
                 // The user takes over: any pending restore or animation yields.
                 pendingRestoreRef.current = null;
                 cancelScrollAnimation();
             };
+            // Wheel input keeps arriving even when scrollTop is clamped at the
+            // frozen canvas's top wall (where scroll events go silent) — it
+            // must be able to unstick the geometry and keep paging.
+            const onWheel = () => {
+                onUserInput();
+                maybeForceRenorm(getRawDistance());
+                maybeLoadMoreRef.current();
+            };
+            // Gesture finished (momentum included): renormalize right away if
+            // input is quiet too, otherwise let the timer loop catch up.
+            const onScrollEnd = () => {
+                if (performance.now() - lastUserInputAtRef.current >= 80 && !isRepositioning() && !isPointerDownRef.current) {
+                    if (!maybeBandSnapToTopRef.current()) performRenorm();
+                }
+                if (isRenormDirty()) ensureRenormLoop();
+            };
+            const onPointerDown = () => {
+                isPointerDownRef.current = true;
+                onUserInput();
+            };
+            const onPointerUp = () => {
+                if (!isPointerDownRef.current) return;
+                isPointerDownRef.current = false;
+                if (isRenormDirty()) ensureRenormLoop();
+            };
             el.addEventListener('scroll', onScroll, { passive: true });
-            el.addEventListener('wheel', onUserInput, { passive: true });
+            el.addEventListener('scrollend', onScrollEnd, { passive: true });
+            el.addEventListener('wheel', onWheel, { passive: true });
             el.addEventListener('touchstart', onUserInput, { passive: true });
-            el.addEventListener('pointerdown', onUserInput, { passive: true });
+            el.addEventListener('pointerdown', onPointerDown, { passive: true });
+            // Release can land outside the scroller (thumb dragged past the
+            // edge) — track it at the window.
+            window.addEventListener('pointerup', onPointerUp, { passive: true });
+            window.addEventListener('pointercancel', onPointerUp, { passive: true });
             detachScrollerListenersRef.current = () => {
                 el.removeEventListener('scroll', onScroll);
-                el.removeEventListener('wheel', onUserInput);
+                el.removeEventListener('scrollend', onScrollEnd);
+                el.removeEventListener('wheel', onWheel);
                 el.removeEventListener('touchstart', onUserInput);
-                el.removeEventListener('pointerdown', onUserInput);
+                el.removeEventListener('pointerdown', onPointerDown);
+                window.removeEventListener('pointerup', onPointerUp);
+                window.removeEventListener('pointercancel', onPointerUp);
             };
             if (typeof ResizeObserver !== 'undefined') {
                 const observer = new ResizeObserver(() => {
                     updateViewportRef.current(Math.abs(el.scrollTop), el.clientHeight);
                     reassertPendingRestoreRef.current();
+                    syncProxyFromRealRef.current();
                 });
                 observer.observe(el);
                 scrollerResizeObserverRef.current = observer;
@@ -935,10 +1384,15 @@ const ChatListInternal = React.memo((props: {
             const prev = footerHeightRef.current;
             footerHeightRef.current = height;
             const delta = height - prev;
+            syncProxyFromRealRef.current();
             if (delta === 0 || isAnimatingScrollRef.current) return;
             const scroller = scrollerElRef.current;
             if (!scroller || atBottomRef.current || pendingRestoreRef.current != null) return;
+            // The footer lives outside the canvas, so its resize is a real
+            // scrollHeight change the freeze cannot absorb — write, then guard
+            // the write against an asynchronous engine re-derivation.
             setRawDistance(Math.abs(scroller.scrollTop) + delta);
+            armWriteVerifier(Math.abs(scroller.scrollTop));
         });
         observer.observe(el);
         footerResizeObserverRef.current = observer;
@@ -955,12 +1409,23 @@ const ChatListInternal = React.memo((props: {
         const scroller = scrollerElRef.current;
         if (!scroller || isJumpingRef.current || isLoadingMoreRef.current) return;
         if (!props.hasMore || !props.onLoadMore) return;
-        const distanceToTop = scroller.scrollHeight - scroller.clientHeight - Math.abs(scroller.scrollTop);
+        // Model-space distance to the top of loaded content (scrollHeight
+        // would count the canvas top slack as content).
+        const distanceToTop = layoutRef.current.totalHeightPx
+            - (toModelDistance(Math.abs(scroller.scrollTop)) + scroller.clientHeight);
         if (distanceToTop > LOAD_MORE_DISTANCE_PX) return;
         isLoadingMoreRef.current = true;
-        Promise.resolve(props.onLoadMore()).finally(() => {
-            isLoadingMoreRef.current = false;
-        });
+        Promise.resolve(props.onLoadMore())
+            .catch(() => { /* a failed page must not end the polling below */ })
+            .finally(() => {
+                isLoadingMoreRef.current = false;
+                // Without this, a load that made no (or not-yet-visible)
+                // progress strands a motionless viewport in the blank band:
+                // no scroll or entry event is left to re-fire the trigger.
+                // The retry re-checks every guard, so it self-terminates once
+                // out of range or history is exhausted.
+                window.setTimeout(() => maybeLoadMoreRef.current(), LOAD_MORE_RETRY_MS);
+            });
     };
     const maybeLoadMoreRef = useRef(maybeLoadMore);
     maybeLoadMoreRef.current = maybeLoadMore;
@@ -995,13 +1460,32 @@ const ChatListInternal = React.memo((props: {
         if (!message) return false;
         cancelScrollAnimation();
         pendingRestoreRef.current = null;
-        const jump: PendingJump = { key: message.id, nonce: ++jumpNonceRef.current };
+        const jump: PendingJump = { key: message.id, nonce: ++jumpNonceRef.current, align: 'center', silent: false };
         pendingJumpRef.current = jump;
         setPendingJump(jump);
         return true;
     };
     const startJumpRef = useRef(startJump);
     startJumpRef.current = startJump;
+
+    // Idle band snap: a gesture stranded the viewport in the blank band above
+    // the loaded content top. Land it on the OLDEST LOADED ROW via the jump
+    // machinery — the jump landing re-measures the mounted rows before
+    // positioning, so estimate inflation at the top cannot drag the landing
+    // away (a px-target write sinks thousands of px below the top while the
+    // freshly mounted estimates correct themselves).
+    const maybeBandSnapToTop = (): boolean => {
+        if (isRepositioning() || !isViewportInBand()) return false;
+        const oldestKey = layoutRef.current.keys[0];
+        if (oldestKey == null) return false;
+        cancelScrollAnimation();
+        const jump: PendingJump = { key: oldestKey, nonce: ++jumpNonceRef.current, align: 'top', silent: true };
+        pendingJumpRef.current = jump;
+        setPendingJump(jump);
+        return true;
+    };
+    const maybeBandSnapToTopRef = useRef(maybeBandSnapToTop);
+    maybeBandSnapToTopRef.current = maybeBandSnapToTop;
 
     // The target of the in-flight jump. A second minimap click updates this so the running paging
     // loop retargets instead of the click being silently dropped.
@@ -1060,11 +1544,13 @@ const ChatListInternal = React.memo((props: {
     // shift on prepends).
     let renderedRange: RenderRange = viewport.renderedRange;
     if (pendingJump != null) {
-        const centerDistance = distanceToCenterEntry({ layout, key: pendingJump.key, viewportHeightPx: viewport.viewportHeightPx });
-        if (centerDistance != null) {
+        const jumpDistance = pendingJump.align === 'top'
+            ? distanceToAlignEntryTop({ layout, key: pendingJump.key, viewportHeightPx: viewport.viewportHeightPx, topInsetPx: BAND_PEEK_PX })
+            : distanceToCenterEntry({ layout, key: pendingJump.key, viewportHeightPx: viewport.viewportHeightPx });
+        if (jumpDistance != null) {
             renderedRange = computeVisibleRange({
                 layout,
-                distanceFromBottomPx: centerDistance,
+                distanceFromBottomPx: jumpDistance,
                 viewportHeightPx: viewport.viewportHeightPx,
                 overscanCount: OVERSCAN_ROWS,
             });
@@ -1095,6 +1581,8 @@ const ChatListInternal = React.memo((props: {
         const next = preMeasureLayoutRef.current ?? layout;
         preMeasureLayoutRef.current = null;
         committedLayoutRef.current = layout;
+        syncProxyFromRealRef.current();
+        if (isRenormDirty()) ensureRenormLoop();
         if (pendingOpsRef.current || pendingJumpRef.current || previous === next) return;
         const scroller = scrollerElRef.current;
         if (!scroller || pendingRestoreRef.current != null || isAnimatingScrollRef.current) return;
@@ -1113,15 +1601,18 @@ const ChatListInternal = React.memo((props: {
             measuredHeightsByKey: measuredHeightsRef.current,
         });
         if (!anchorKey) return;
-        const compensatedModel = compensatedDistanceFromBottom({
-            anchorKey,
-            distanceFromBottomPx: model,
-            previousLayout: previous,
-            nextLayout: next,
-        });
-        if (compensatedModel == null || compensatedModel === model) return;
-        setRawDistance(Math.max(0, raw + (compensatedModel - model)));
+        const prevTop = entryTopFromBottom(previous, anchorKey);
+        const nextTop = entryTopFromBottom(next, anchorKey);
+        if (prevTop == null || nextTop == null || nextTop === prevTop) return;
+        // The anchor's distance-from-bottom moved (appends/removals below the
+        // viewport; prepends are delta 0 by construction). Fold the shift into
+        // the canvas bottom offset — the window margin re-renders pre-paint
+        // and the scroller's geometry stays frozen.
+        const nextCbo = canvasBottomOffsetRef.current + (nextTop - prevTop);
+        canvasBottomOffsetRef.current = nextCbo;
+        setCanvasBottomOffsetPx(nextCbo);
         updateViewportRef.current(Math.abs(scroller.scrollTop), scroller.clientHeight);
+        ensureRenormLoop();
     }, [layout]);
 
     // 2. Synchronous first measurement of rows mounted this commit. Reading
@@ -1148,17 +1639,19 @@ const ChatListInternal = React.memo((props: {
         }
     });
 
-    // 3. Drain staged measurement ops: apply the scroll correction (or
-    // re-assert a pending restore) right after the commit, before paint.
+    // 3. Drain staged measurement ops right after the commit, before paint:
+    // re-assert a pending restore or pin back to the bottom. Everything else
+    // was absorbed into the canvas bottom offset — no scroll write needed.
     React.useLayoutEffect(() => {
         const ops = pendingOpsRef.current;
         if (!ops || ops.heights !== measuredHeights) return;
         pendingOpsRef.current = null;
         if (ops.restore) {
             reassertPendingRestoreRef.current();
-        } else if (ops.scrollDistancePx != null && !isAnimatingScrollRef.current) {
-            setRawDistance(ops.scrollDistancePx);
+        } else if (ops.pinToBottom && !isAnimatingScrollRef.current) {
+            setRawDistance(0);
         }
+        if (isRenormDirty()) ensureRenormLoop();
     }, [measuredHeights]);
 
     // 4. Commit the render-phase window remap after entry-set changes and
@@ -1201,11 +1694,18 @@ const ChatListInternal = React.memo((props: {
         // If measuring staged a commit, wait for it — this effect re-runs with
         // the rebuilt layout (deps) and positions against exact heights.
         if (applyMeasuredHeightsRef.current(batch, false) || pendingOpsRef.current) return;
-        const modelDistance = distanceToCenterEntry({
-            layout,
-            key: jump.key,
-            viewportHeightPx: scroller.clientHeight,
-        });
+        const modelDistance = jump.align === 'top'
+            ? distanceToAlignEntryTop({
+                layout,
+                key: jump.key,
+                viewportHeightPx: scroller.clientHeight,
+                topInsetPx: BAND_PEEK_PX,
+            })
+            : distanceToCenterEntry({
+                layout,
+                key: jump.key,
+                viewportHeightPx: scroller.clientHeight,
+            });
         const clearJump = () => queueMicrotask(() => {
             if (pendingJumpRef.current === jump) pendingJumpRef.current = null;
             setPendingJump((current) => (current === jump ? null : current));
@@ -1214,14 +1714,17 @@ const ChatListInternal = React.memo((props: {
             clearJump();
             return;
         }
-        const raw = modelDistance === 0 ? 0 : modelDistance + footerHeightRef.current;
+        const raw = modelDistance === 0 ? 0 : fromModelDistance(modelDistance);
         setRawDistance(raw);
         updateViewportRef.current(Math.abs(scroller.scrollTop), scroller.clientHeight);
-        shakeRow(jump.key);
-        if (__DEV__) {
-            console.log('[ChatList] jump landed', { key: jump.key, raw: Math.round(raw) });
+        if (!jump.silent) {
+            shakeRow(jump.key);
+            if (__DEV__) {
+                console.log('[ChatList] jump landed', { key: jump.key, raw: Math.round(raw) });
+            }
         }
         clearJump();
+        if (isRenormDirty()) ensureRenormLoop();
     });
 
     // ---- Plumbing effects ----
@@ -1230,6 +1733,46 @@ const ChatListInternal = React.memo((props: {
         props.onRegisterMinimapJump?.(handleJumpToMessage);
         return () => props.onRegisterMinimapJump?.(null);
     }, [props.onRegisterMinimapJump, handleJumpToMessage]);
+
+    // Keyboard scrolling (arrows / paging keys) drives the same native scroll
+    // animation as the wheel, so it must count as user input for the geometry
+    // freeze, restore-yield and grace logic. Typing in the composer is not
+    // scrolling — editable targets are skipped.
+    React.useEffect(() => {
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (!SCROLL_KEYS.has(event.key)) return;
+            const target = event.target as HTMLElement | null;
+            if (target && (target.isContentEditable || target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
+            lastUserInputAtRef.current = performance.now();
+            userInputTokenRef.current += 1;
+            pendingRestoreRef.current = null;
+            cancelScrollAnimation();
+            // Same unstick duty as the wheel listener: at the canvas-top wall
+            // scroll events go silent, key events must keep things moving.
+            maybeForceRenorm(getRawDistance());
+            maybeLoadMoreRef.current();
+        };
+        window.addEventListener('keydown', onKeyDown, { capture: true });
+        return () => window.removeEventListener('keydown', onKeyDown, { capture: true });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    // Dev-only diagnostics: window.__chatListFreeze() dumps the frozen-
+    // geometry state and counters.
+    React.useEffect(() => {
+        if (!__DEV__) return;
+        const host = window as unknown as Record<string, unknown>;
+        host.__chatListFreeze = () => ({
+            totalHeightPx: layoutRef.current.totalHeightPx,
+            canvasHeightPx: canvasHeightRef.current,
+            canvasBottomOffsetPx: canvasBottomOffsetRef.current,
+            renorms: renormCountRef.current,
+            forcedRenorms: forcedRenormCountRef.current,
+            verifierRewrites: verifierRewriteCountRef.current,
+        });
+        return () => { delete host.__chatListFreeze; };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     React.useEffect(() => {
         props.onMinimapItemsChange?.(minimapItems);
@@ -1287,13 +1830,20 @@ const ChatListInternal = React.memo((props: {
             if (keySet.has(key)) heightsByKey[key] = height;
         }
         rememberSessionRestoreState(sessionIdRef.current, {
-            scrollDistancePx: scroller ? Math.abs(scroller.scrollTop) : vp.distanceFromBottomPx + footerHeightRef.current,
+            scrollDistancePx: scroller
+                ? toContentDistance(Math.abs(scroller.scrollTop))
+                : vp.distanceFromBottomPx + footerHeightRef.current,
             atBottom: atBottomRef.current,
             heightsByKey,
             renderedWindow: anchorKey
                 ? { anchorKey, count: vp.renderedRange.endIndex - vp.renderedRange.startIndex }
                 : null,
         });
+        if (renormTimerRef.current != null) {
+            window.clearTimeout(renormTimerRef.current);
+            renormTimerRef.current = null;
+        }
+        writeVerifierRef.current = null;
         intersectionObserverRef.current?.disconnect();
         intersectionObserverRef.current = null;
         rowResizeObserverRef.current?.disconnect();
@@ -1312,9 +1862,17 @@ const ChatListInternal = React.memo((props: {
         if (!scroller) return;
         pendingRestoreRef.current = null;
         cancelScrollAnimation();
+        // Fold any frozen bottom offset back in so the animation start (and
+        // its raw-0 destination) are measured against the true content bottom.
+        performRenorm();
         const start = Math.abs(scroller.scrollTop);
-        if (start <= RESTORE_TOLERANCE_PX) {
-            setRawDistance(0);
+        if (start <= RESTORE_TOLERANCE_PX
+            || start > SCROLL_TO_BOTTOM_ANIMATE_MAX_VIEWPORTS * scroller.clientHeight) {
+            // Already there (covers the stuck case: raw ~0 with the content
+            // bottom below the canvas) — or too far for the animation to read
+            // as motion: land instantly. Distance 0 is estimate-free in
+            // bottom-anchored coordinates, so the teleport is always exact.
+            renormToBottom();
             return;
         }
         isAnimatingScrollRef.current = true;
@@ -1331,9 +1889,12 @@ const ChatListInternal = React.memo((props: {
             if (progress < 1 && Math.abs(el.scrollTop) > 1) {
                 scrollAnimationFrameRef.current = window.requestAnimationFrame(step);
             } else {
-                el.scrollTop = 0;
                 atBottomRef.current = true;
                 cancelScrollAnimation();
+                // Offsets accumulate DURING the animation when content below
+                // the viewport streams in; raw 0 alone would land on a false
+                // bottom with the newest content clipped below the canvas.
+                renormToBottom();
             }
         };
         scrollAnimationFrameRef.current = window.requestAnimationFrame(step);
@@ -1383,6 +1944,13 @@ const ChatListInternal = React.memo((props: {
         );
     }
 
+    // Window position inside the canvas: the model's top offset shifted by the
+    // slack above the content (canvas taller than the content) and the frozen
+    // bottom offset. Both are 0 in normalized idle state, where this reduces
+    // to the plain model top offset.
+    const slackTopPx = canvasHeightPx + canvasBottomOffsetPx - layout.totalHeightPx;
+    const windowMarginTopPx = (layout.topOffsetsPx[renderedRange.startIndex] ?? layout.totalHeightPx) + slackTopPx;
+
     return (
         <View style={{ flex: 1 }}>
             {visibleMessages.length === 0 ? (
@@ -1400,16 +1968,24 @@ const ChatListInternal = React.memo((props: {
                 // column-reverse scroller with a SINGLE normal-order child:
                 // header spacer, older-pages spinner, the virtualized window
                 // inside a fixed-height container, footer (visual bottom).
-                <div ref={handleScrollerEl} style={scrollerStyle}>
+                <div ref={handleScrollerEl} className={SCROLLBAR_HIDE_CLASS} style={scrollerStyle}>
                     <div style={contentColumnStyle}>
                         <div style={{ height: headerInsetPx, flexShrink: 0 }} />
-                        {props.hasMore && (
-                            <View style={{ paddingVertical: 16, alignItems: 'center' }}>
-                                <ActivityIndicator size="small" color={theme.colors.textSecondary} />
-                            </View>
-                        )}
-                        <div style={{ height: layout.totalHeightPx, flexShrink: 0 }}>
-                            <div style={{ ...windowColumnStyle, marginTop: layout.topOffsetsPx[renderedRange.startIndex] ?? 0 }}>
+                        {/* The canvas: explicit height (model total + top slack),
+                            frozen while the user scrolls. overflow:clip keeps any
+                            transient window overflow out of scrollHeight; the
+                            paging spinner is position:absolute just above the
+                            content top so its mount/unmount can't resize the
+                            scroller either. */}
+                        <div style={{ height: canvasHeightPx, position: 'relative', overflow: 'clip', flexShrink: 0 }}>
+                            {props.hasMore && (
+                                <div style={{ position: 'absolute', top: Math.max(0, slackTopPx - 64), left: 0, right: 0 }}>
+                                    <View style={{ paddingVertical: 16, alignItems: 'center' }}>
+                                        <ActivityIndicator size="small" color={theme.colors.textSecondary} />
+                                    </View>
+                                </div>
+                            )}
+                            <div style={{ ...windowColumnStyle, marginTop: windowMarginTopPx }}>
                                 {rows}
                             </div>
                         </div>
@@ -1417,6 +1993,14 @@ const ChatListInternal = React.memo((props: {
                             <ListFooter sessionId={props.sessionId} />
                         </div>
                     </div>
+                </div>
+            )}
+
+            {/* Proxy scrollbar: shows the honest loaded height (no canvas
+                slack); the real scroller's native bar is hidden. */}
+            {visibleMessages.length > 0 && (
+                <div ref={handleProxyEl} style={proxyScrollerStyle}>
+                    <div ref={handleProxyGhostEl} style={{ width: 1 }} />
                 </div>
             )}
 

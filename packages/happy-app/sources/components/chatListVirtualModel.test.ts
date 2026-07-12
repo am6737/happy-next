@@ -3,8 +3,10 @@ import {
     buildLayoutModel,
     compensatedDistanceFromBottom,
     computeVisibleRange,
+    desiredTopSlackPx,
     distanceToAlignEntryTop,
     distanceToCenterEntry,
+    entryTopFromBottom,
     nextViewportState,
     pickCompensationAnchor,
     rangeAroundAnchor,
@@ -284,5 +286,52 @@ describe('helpers', () => {
     it('sameKeys', () => {
         expect(sameKeys(KEYS, [...KEYS])).toBe(true);
         expect(sameKeys(KEYS, KEYS.slice(0, 4))).toBe(false);
+    });
+});
+
+describe('entryTopFromBottom', () => {
+    it('returns the distance from the content bottom to the entry top', () => {
+        const layout = uniformLayout({ D: 150 });
+        // E: bottom 0 + height 100; D: bottom 100 + height 150.
+        expect(entryTopFromBottom(layout, 'E')).toBe(100);
+        expect(entryTopFromBottom(layout, 'D')).toBe(250);
+        expect(entryTopFromBottom(layout, 'A')).toBe(550);
+    });
+
+    it('returns null for unknown keys', () => {
+        expect(entryTopFromBottom(uniformLayout(), 'nope')).toBeNull();
+    });
+
+    it('is invariant under prepends and shifts by appends (the canvas-offset delta)', () => {
+        const before = uniformLayout();
+        const prepended = buildLayoutModel({ keys: ['P', ...KEYS], measuredHeightsByKey: {}, estimateHeightPx: 100 });
+        expect(entryTopFromBottom(prepended, 'C')).toBe(entryTopFromBottom(before, 'C'));
+        const appended = buildLayoutModel({ keys: [...KEYS, 'Z'], measuredHeightsByKey: { Z: 40 }, estimateHeightPx: 100 });
+        expect(entryTopFromBottom(appended, 'C')! - entryTopFromBottom(before, 'C')!).toBe(40);
+    });
+});
+
+describe('desiredTopSlackPx', () => {
+    it('keeps full slack while more history can load', () => {
+        expect(desiredTopSlackPx({ hasMore: true, totalHeightPx: 10_000, viewportTopModelPx: 9_900, currentSlackPx: 0, maxSlackPx: 3000 }))
+            .toBe(3000);
+    });
+
+    it('collapses near a fully-loaded top and keeps slack mid-history', () => {
+        expect(desiredTopSlackPx({ hasMore: false, totalHeightPx: 10_000, viewportTopModelPx: 9_500, currentSlackPx: 3000, maxSlackPx: 3000 }))
+            .toBe(0);
+        expect(desiredTopSlackPx({ hasMore: false, totalHeightPx: 10_000, viewportTopModelPx: 5_000, currentSlackPx: 3000, maxSlackPx: 3000 }))
+            .toBe(3000);
+    });
+
+    it('collapses for short conversations and is hysteretic around the boundary', () => {
+        // Shorter than the viewport: viewport top is above the content top.
+        expect(desiredTopSlackPx({ hasMore: false, totalHeightPx: 600, viewportTopModelPx: 800, currentSlackPx: 0, maxSlackPx: 3000 }))
+            .toBe(0);
+        // Between the collapse band (1200px) and the re-expand band (2400px):
+        // the current state wins, in both directions.
+        const between = { hasMore: false, totalHeightPx: 10_000, viewportTopModelPx: 10_000 - 2000, maxSlackPx: 3000 };
+        expect(desiredTopSlackPx({ ...between, currentSlackPx: 3000 })).toBe(3000);
+        expect(desiredTopSlackPx({ ...between, currentSlackPx: 0 })).toBe(0);
     });
 });
