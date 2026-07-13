@@ -56,7 +56,9 @@ export function enableErrorHandlers(app: Fastify) {
         const method = request.method;
         const url = request.url;
         const duration = (Date.now() - (request.startTime || Date.now())) / 1000;
-        const statusCode = reply.statusCode || error.statusCode || 500;
+        // Prefer error.statusCode: when this hook fires for validation errors the
+        // reply code hasn't been set yet, so reply.statusCode is still the default 200.
+        const statusCode = error.statusCode || reply.statusCode || 500;
         const isClientError = statusCode >= 400 && statusCode < 500;
 
         log({
