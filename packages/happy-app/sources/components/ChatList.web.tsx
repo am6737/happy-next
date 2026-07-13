@@ -316,13 +316,29 @@ const proxyScrollerStyle = {
     top: 0,
     right: 0,
     bottom: 0,
-    width: 14,
     overflowY: 'auto',
     overflowX: 'hidden',
     overscrollBehavior: 'contain',
     scrollBehavior: 'auto',
     zIndex: 1,
 } as React.CSSProperties;
+
+// Native scrollbar width varies (Windows classic ~17px, Linux ~15px, overlay
+// engines 0): a fixed strip would clip a wider classic bar. Probe it once;
+// overlay bars measure 0 and fall back to a hover-friendly minimum.
+const PROXY_MIN_WIDTH_PX = 14;
+let measuredScrollbarWidthPx: number | null = null;
+function proxyStripWidthPx(): number {
+    if (measuredScrollbarWidthPx == null) {
+        if (typeof document === 'undefined' || !document.body) return PROXY_MIN_WIDTH_PX;
+        const probe = document.createElement('div');
+        probe.style.cssText = 'position:absolute;top:-9999px;width:100px;height:100px;overflow:scroll;';
+        document.body.appendChild(probe);
+        measuredScrollbarWidthPx = probe.offsetWidth - probe.clientWidth;
+        probe.remove();
+    }
+    return Math.max(measuredScrollbarWidthPx, PROXY_MIN_WIDTH_PX);
+}
 
 const contentColumnStyle = {
     display: 'flex',
@@ -1999,7 +2015,7 @@ const ChatListInternal = React.memo((props: {
             {/* Proxy scrollbar: shows the honest loaded height (no canvas
                 slack); the real scroller's native bar is hidden. */}
             {visibleMessages.length > 0 && (
-                <div ref={handleProxyEl} style={proxyScrollerStyle}>
+                <div ref={handleProxyEl} style={{ ...proxyScrollerStyle, width: proxyStripWidthPx() }}>
                     <div ref={handleProxyGhostEl} style={{ width: 1 }} />
                 </div>
             )}
