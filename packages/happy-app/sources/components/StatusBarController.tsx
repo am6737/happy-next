@@ -141,6 +141,19 @@ export function StatusBarControllerProvider({ children }: { children?: React.Rea
         return () => subscription.remove();
     }, [applySnapshot]);
 
+    // iOS 26 can reset the native status bar style mid keyboard animation, so we
+    // re-apply the current snapshot once the show/hide animation has completed.
+    React.useEffect(() => {
+        if (Platform.OS !== 'ios') {
+            return;
+        }
+        const subscriptions = [
+            Keyboard.addListener('keyboardDidShow', () => applySnapshot(false)),
+            Keyboard.addListener('keyboardDidHide', () => applySnapshot(false)),
+        ];
+        return () => subscriptions.forEach((subscription) => subscription.remove());
+    }, [applySnapshot]);
+
     const contextValue = React.useMemo<StatusBarControllerValue>(() => ({
         pushIntent,
     }), [pushIntent]);
