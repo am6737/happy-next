@@ -676,6 +676,14 @@ const ChatListInternal = React.memo((props: {
     // Raw |scrollTop| target of a pending session restore; re-asserted after
     // every measurement batch until it lands (or the user takes over).
     const pendingRestoreRef = useRef<number | null>(restored && !restored.atBottom ? restored.scrollDistancePx : null);
+    // A screen pushed on top keeps this one mounted under display:none
+    // (react-navigation web). That destroys the scroller's CSS box:
+    // scrollTop/clientHeight read 0 and writes are dropped, so hidden geometry
+    // is treated as FROZEN — observers ignore it, and re-display re-asserts
+    // the last position seen while visible. Raw is the hidden-time invariant:
+    // content changes while covered fold into the canvas bottom offset.
+    const lastVisibleRawRef = useRef(restored && !restored.atBottom ? restored.scrollDistancePx : 0);
+    const scrollerWasHiddenRef = useRef(false);
     // Height of the footer block at the content bottom — the offset between
     // raw scroll distance (content space) and model distance (list space).
     const footerHeightRef = useRef(0);
@@ -706,6 +714,11 @@ const ChatListInternal = React.memo((props: {
         const scroller = scrollerElRef.current;
         return scroller ? Math.abs(scroller.scrollTop) : 0;
     };
+    // See lastVisibleRawRef: a hidden (covered-screen) scroller has no box.
+    const isScrollerHidden = () => {
+        const scroller = scrollerElRef.current;
+        return !scroller || scroller.clientHeight === 0;
+    };
     const toModelDistance = (raw: number) => Math.max(0, raw - footerHeightRef.current + canvasBottomOffsetRef.current);
     // Content-space distance (raw + canvas bottom offset): stable across
     // renormalizations — what session restore stores and re-asserts.
@@ -713,10 +726,13 @@ const ChatListInternal = React.memo((props: {
     const fromModelDistance = (model: number) => Math.max(0, model + footerHeightRef.current - canvasBottomOffsetRef.current);
     const setRawDistance = (raw: number) => {
         const scroller = scrollerElRef.current;
-        if (!scroller) return;
+        // Hidden: the write would be dropped and the 0 read-back would corrupt
+        // atBottom (a boxless scroller always reads "at bottom").
+        if (!scroller || scroller.clientHeight === 0) return;
         scroller.scrollTop = raw === 0 ? 0 : -raw;
         lastSelfWriteRef.current = { rawPx: Math.abs(scroller.scrollTop), atMs: performance.now() };
         atBottomRef.current = Math.abs(scroller.scrollTop) <= SCROLL_THRESHOLD;
+        lastVisibleRawRef.current = Math.abs(scroller.scrollTop);
     };
 
     const cancelScrollAnimation = () => {
@@ -814,7 +830,10 @@ const ChatListInternal = React.memo((props: {
     // pixel in place. MUST NOT run from inside a React commit (flushSync).
     const performRenorm = () => {
         const scroller = scrollerElRef.current;
-        if (!scroller || isRepositioning()) return;
+        // Hidden: the equivalent scrollTop rewrite would be dropped, silently
+        // shifting the position by the folded offset. Just re-displayed: the
+        // offset is not trustworthy until the re-show routine restores it.
+        if (!scroller || scroller.clientHeight === 0 || scrollerWasHiddenRef.current || isRepositioning()) return;
         const cboPrev = canvasBottomOffsetRef.current;
         const nextCanvasHeight = desiredCanvasHeightPx();
         if (cboPrev === 0 && nextCanvasHeight === canvasHeightRef.current) return;
@@ -841,7 +860,7 @@ const ChatListInternal = React.memo((props: {
     // canvas as a false bottom.
     const renormToBottom = () => {
         const scroller = scrollerElRef.current;
-        if (!scroller) return;
+        if (!scroller || scroller.clientHeight === 0) return;
         const nextCanvasHeight = desiredCanvasHeightPx();
         if (canvasBottomOffsetRef.current !== 0 || nextCanvasHeight !== canvasHeightRef.current) {
             renormCountRef.current += 1;
@@ -861,6 +880,9 @@ const ChatListInternal = React.memo((props: {
         if (renormTimerRef.current != null) return;
         renormTimerRef.current = window.setTimeout(() => {
             renormTimerRef.current = null;
+            // Hidden (or re-displayed with the restore not yet run): stop
+            // polling; the re-show routine re-arms the loop.
+            if (isScrollerHidden() || scrollerWasHiddenRef.current) return;
             if (!isRenormDirty()) return;
             if (!isGestureActive() && !isRepositioning() && !isPointerDownRef.current) {
                 if (!maybeBandSnapToTopRef.current()) performRenorm();
@@ -920,6 +942,8 @@ const ChatListInternal = React.memo((props: {
         const ghost = proxyGhostElRef.current;
         const scroller = scrollerElRef.current;
         if (!proxy || !ghost || !scroller || proxyDraggingRef.current) return;
+        // Hidden (covered screen): both boxes read 0 — resynced on re-display.
+        if (proxy.clientHeight === 0) return;
         const honestHeight = Math.max(0, Math.round(
             headerInsetRef.current + layoutRef.current.totalHeightPx + footerHeightRef.current,
         ));
@@ -944,6 +968,11 @@ const ChatListInternal = React.memo((props: {
         const proxy = proxyElRef.current;
         const scroller = scrollerElRef.current;
         if (!proxy || !scroller) return;
+        // Hidden: a zeroed offset is box destruction, not a user drag. Just
+        // re-displayed: the proxy hasn't been resynced yet — its offset is
+        // engine noise until the re-show routine runs.
+        if (proxy.clientHeight === 0 || scroller.clientHeight === 0) return;
+        if (scrollerWasHiddenRef.current) return;
         const top = proxy.scrollTop;
         const selfWrite = proxySelfWriteRef.current;
         if (selfWrite != null
@@ -1096,6 +1125,9 @@ const ChatListInternal = React.memo((props: {
         // A staged measurement commit already computed the next viewport
         // against the new layout; don't overwrite it from the stale one.
         if (pendingOpsRef.current) return;
+        // A hidden scroller reads 0/0 — teleporting the window to the bottom
+        // on those coordinates would unmount the rows the user was reading.
+        if (viewportHeightPx <= 0) return;
         const next = nextViewportState({
             current: viewportRef.current,
             layout: layoutRef.current,
@@ -1119,6 +1151,8 @@ const ChatListInternal = React.memo((props: {
         if (target == null) return;
         const scroller = scrollerElRef.current;
         if (!scroller) return;
+        // Hidden: keep the restore armed; re-display re-asserts it.
+        if (scroller.clientHeight === 0) return;
         setRawDistance(Math.max(0, target - canvasBottomOffsetRef.current));
         const actual = toContentDistance(Math.abs(scroller.scrollTop));
         if (Math.abs(actual - target) <= RESTORE_TOLERANCE_PX) {
@@ -1132,6 +1166,37 @@ const ChatListInternal = React.memo((props: {
     };
     const reassertPendingRestoreRef = useRef(reassertPendingRestore);
     reassertPendingRestoreRef.current = reassertPendingRestore;
+
+    // First sight of the scroller after a covered period. Runs from WHICHEVER
+    // entry point the engine reaches first — a scroll/scrollend/wheel/key
+    // event or the ResizeObserver callback (scroll events are delivered
+    // before RO callbacks within a frame, so the RO alone would let a
+    // spontaneous post-re-display event be misread as user scrolling and
+    // clobber the saved position). Chromium restores the pre-hide offset with
+    // the box; engines that don't leave it at 0 — either way, re-assert the
+    // last position seen while visible (raw is the hidden-time invariant:
+    // content changes while covered folded into the canvas bottom offset).
+    const maybeHandleReshow = (): boolean => {
+        if (!scrollerWasHiddenRef.current) return false;
+        const scroller = scrollerElRef.current;
+        if (!scroller || scroller.clientHeight === 0) return false;
+        scrollerWasHiddenRef.current = false;
+        if (pendingRestoreRef.current == null && !atBottomRef.current) {
+            pendingRestoreRef.current = lastVisibleRawRef.current + canvasBottomOffsetRef.current;
+        }
+        reassertPendingRestoreRef.current();
+        if (pendingRestoreRef.current == null && !atBottomRef.current) {
+            // Guard the landing against an asynchronous engine restoration of
+            // the stale pre-hide offset.
+            armWriteVerifier(getRawDistance());
+        }
+        updateViewportRef.current(Math.abs(scroller.scrollTop), scroller.clientHeight);
+        syncProxyFromRealRef.current();
+        if (isRenormDirty()) ensureRenormLoop();
+        return true;
+    };
+    const maybeHandleReshowRef = useRef(maybeHandleReshow);
+    maybeHandleReshowRef.current = maybeHandleReshow;
 
     // Shared ResizeObserver over the INNER (natural-size) row elements.
     const rowResizeObserverRef = useRef<ResizeObserver | null>(null);
@@ -1277,8 +1342,18 @@ const ChatListInternal = React.memo((props: {
     handleScrollRef.current = () => {
         const scroller = scrollerElRef.current;
         if (!scroller) return;
+        // Covered screen (display:none): a zeroed offset is box destruction,
+        // not scrolling — recording it would corrupt atBottom and the session
+        // restore cache.
+        if (scroller.clientHeight === 0) {
+            scrollerWasHiddenRef.current = true;
+            return;
+        }
+        // First visible event after a covered period: restore, don't record.
+        if (maybeHandleReshowRef.current()) return;
         checkWriteVerifier();
         const raw = Math.abs(scroller.scrollTop);
+        lastVisibleRawRef.current = raw;
         // Echoes of our own writes must not count as user scrolling, or every
         // renormalization would extend the frozen state it just resolved.
         const selfWrite = lastSelfWriteRef.current;
@@ -1326,6 +1401,7 @@ const ChatListInternal = React.memo((props: {
             // frozen canvas's top wall (where scroll events go silent) — it
             // must be able to unstick the geometry and keep paging.
             const onWheel = () => {
+                maybeHandleReshowRef.current();
                 onUserInput();
                 maybeForceRenorm(getRawDistance());
                 maybeLoadMoreRef.current();
@@ -1333,6 +1409,9 @@ const ChatListInternal = React.memo((props: {
             // Gesture finished (momentum included): renormalize right away if
             // input is quiet too, otherwise let the timer loop catch up.
             const onScrollEnd = () => {
+                // Covered / just re-displayed: the offset is not trustworthy
+                // yet — the re-show routine (scroll/RO path) restores first.
+                if (isScrollerHidden() || scrollerWasHiddenRef.current) return;
                 if (performance.now() - lastUserInputAtRef.current >= 80 && !isRepositioning() && !isPointerDownRef.current) {
                     if (!maybeBandSnapToTopRef.current()) performRenorm();
                 }
@@ -1367,6 +1446,13 @@ const ChatListInternal = React.memo((props: {
             };
             if (typeof ResizeObserver !== 'undefined') {
                 const observer = new ResizeObserver(() => {
+                    // Covered by another screen (display:none): geometry reads
+                    // 0/0 and writes are dropped — freeze until re-display.
+                    if (el.clientHeight === 0) {
+                        scrollerWasHiddenRef.current = true;
+                        return;
+                    }
+                    if (maybeHandleReshowRef.current()) return;
                     updateViewportRef.current(Math.abs(el.scrollTop), el.clientHeight);
                     reassertPendingRestoreRef.current();
                     syncProxyFromRealRef.current();
@@ -1396,6 +1482,11 @@ const ChatListInternal = React.memo((props: {
         const observer = new ResizeObserver((entries) => {
             const entry = entries[entries.length - 1];
             if (!entry) return;
+            // Covered screen: the whole subtree reads 0 — box destruction,
+            // not a real footer resize. Keeping the pre-hide height means the
+            // re-display resize computes its delta against it (usually 0).
+            const scrollerNow = scrollerElRef.current;
+            if (!scrollerNow || scrollerNow.clientHeight === 0) return;
             const height = entry.borderBoxSize?.[0]?.blockSize ?? el.offsetHeight;
             const prev = footerHeightRef.current;
             footerHeightRef.current = height;
@@ -1757,6 +1848,9 @@ const ChatListInternal = React.memo((props: {
     React.useEffect(() => {
         const onKeyDown = (event: KeyboardEvent) => {
             if (!SCROLL_KEYS.has(event.key)) return;
+            // Covered by another screen: those keys scroll that screen.
+            if (isScrollerHidden()) return;
+            maybeHandleReshowRef.current();
             const target = event.target as HTMLElement | null;
             if (target && (target.isContentEditable || target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
             lastUserInputAtRef.current = performance.now();
@@ -1846,9 +1940,11 @@ const ChatListInternal = React.memo((props: {
             if (keySet.has(key)) heightsByKey[key] = height;
         }
         rememberSessionRestoreState(sessionIdRef.current, {
-            scrollDistancePx: scroller
+            // Unmounting while covered (display:none) reads a zeroed offset —
+            // fall back to the last position seen while visible.
+            scrollDistancePx: scroller && scroller.clientHeight > 0
                 ? toContentDistance(Math.abs(scroller.scrollTop))
-                : vp.distanceFromBottomPx + footerHeightRef.current,
+                : lastVisibleRawRef.current + canvasBottomOffsetRef.current,
             atBottom: atBottomRef.current,
             heightsByKey,
             renderedWindow: anchorKey
