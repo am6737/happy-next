@@ -1,6 +1,19 @@
 {
   "entries": [
     {
+      "version": 18,
+      "date": "2026-07-13",
+      "summary": "A new /preview-html CLI command renders self-contained HTML previews right inside the app, web conversation-list scrolling gets more polish, and the iOS status bar stays correct after the keyboard animates.",
+      "changes": [
+        "Preview HTML: the CLI adds a built-in /preview-html slash command that generates a self-contained HTML document and previews it directly in the app",
+        "Web conversation list: scroll position is now preserved when returning from a covered screen, and the proxy scrollbar strip is sized to match the platform's native scrollbar width",
+        "iOS: the status bar is reapplied after keyboard animations so it no longer gets left in the wrong state",
+        "Docs: the documentation site is synced with the last five weeks of shipped features",
+        "CLI: Happy CLI updated to v0.6.3 — unknown commands are now rejected before launching Claude"
+      ],
+      "rawMarkdown": "## Version 18 - 2026-07-13\n\n\nA new /preview-html CLI command renders self-contained HTML previews right inside the app, web conversation-list scrolling gets more polish, and the iOS status bar stays correct after the keyboard animates.\n\n- Preview HTML: the CLI adds a built-in /preview-html slash command that generates a self-contained HTML document and previews it directly in the app\n- Web conversation list: scroll position is now preserved when returning from a covered screen, and the proxy scrollbar strip is sized to match the platform's native scrollbar width\n- iOS: the status bar is reapplied after keyboard animations so it no longer gets left in the wrong state\n- Docs: the documentation site is synced with the last five weeks of shipped features\n- CLI: Happy CLI updated to v0.6.3 — unknown commands are now rejected before launching Claude"
+    },
+    {
       "version": 17,
       "date": "2026-07-12",
       "summary": "The web conversation list is rebuilt as a model-driven virtualized list with instant centered jumps and refined, stable scrolling, the minimap now fills in from the offline message cache, the model picker is streamlined to seven entries with side-by-side reasoning-effort presets, and the CLI updates to v0.6.2 with Codex 0.144.1.",
@@ -293,5 +306,5 @@
       "rawMarkdown": "## Version 1 - 2025-05-12\n\n\nWelcome to Happy - your secure, encrypted mobile companion for Claude Code. This inaugural release establishes the foundation for private, powerful AI interactions on the go.\n\n- Implemented end-to-end encrypted session management ensuring complete privacy\n- Integrated intelligent voice assistant with natural conversation capabilities\n- Added experimental file manager with syntax highlighting and tree navigation\n- Built seamless real-time synchronization across all your devices\n- Established native support for iOS, Android, and responsive web interfaces"
     }
   ],
-  "latestVersion": 17
+  "latestVersion": 18
 }

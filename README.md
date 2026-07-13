@@ -91,6 +91,7 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Follow up on completed tasks via session resume
 - MCP tool integration with auto-filled working directory
 - Happy CLI auto-installs the orchestrator skill and `/orchestrator` slash commands on startup — fan a task out to parallel or dependency-ordered Claude / Codex / Gemini agents straight from the CLI
+- Built-in `/preview-html` slash command — generate a self-contained HTML document from the CLI and preview it directly in the app
 
 ### Pending Message Queue
 - Messages sent while the CLI is busy are queued server-side and auto-dispatched

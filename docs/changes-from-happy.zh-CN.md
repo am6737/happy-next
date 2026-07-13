@@ -47,6 +47,7 @@
 - **工具描述重写**：编排器重写工具描述以提升 Agent 理解
 - **完整 i18n**：所有编排器 UI 完全国际化
 - **CLI 自动安装**：Happy CLI 启动时安装编排器 skill 和 `/orchestrator` 斜杠命令，可直接在 CLI 里把任务并行或按依赖分发给 Claude / Codex / Gemini agent
+- **`/preview-html` 内置命令**：内置 CLI 斜杠命令,生成自包含 HTML 文档并直接在 app 内预览
 
 ## 待发消息队列
 

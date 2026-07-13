@@ -47,6 +47,7 @@ A multi-agent orchestration system that lets you define task dependency graphs a
 - **Tool description rewriting**: orchestrator rewrites tool descriptions for better agent comprehension
 - **Complete i18n**: all orchestrator UI fully internationalized
 - **CLI auto-install**: the Happy CLI installs the orchestrator skill and `/orchestrator` slash commands on startup, so you can fan a task out to parallel or dependency-ordered Claude / Codex / Gemini agents straight from the CLI
+- **`/preview-html` built-in command**: a built-in CLI slash command that generates a self-contained HTML document and previews it directly in the app
 
 ## Pending Message Queue
 

@@ -91,6 +91,7 @@ Happy Next 是原版 Happy 的重大演进，以下是亮点：
 - 通过会话恢复跟进已完成任务
 - MCP 工具集成，自动填充工作目录
 - Happy CLI 启动时自动安装编排器 skill 和 `/orchestrator` 斜杠命令——直接在 CLI 里把任务并行或按依赖分发给 Claude / Codex / Gemini agent
+- 内置 `/preview-html` 斜杠命令——在 CLI 里生成自包含 HTML 文档并直接在 app 内预览
 
 ### 待发消息队列
 - CLI 繁忙时消息在服务端排队，就绪后自动分发

@@ -1,5 +1,15 @@
 # Changelog
 
+## Version 18 - 2026-07-13
+
+A new /preview-html CLI command renders self-contained HTML previews right inside the app, web conversation-list scrolling gets more polish, and the iOS status bar stays correct after the keyboard animates.
+
+- Preview HTML: the CLI adds a built-in /preview-html slash command that generates a self-contained HTML document and previews it directly in the app
+- Web conversation list: scroll position is now preserved when returning from a covered screen, and the proxy scrollbar strip is sized to match the platform's native scrollbar width
+- iOS: the status bar is reapplied after keyboard animations so it no longer gets left in the wrong state
+- Docs: the documentation site is synced with the last five weeks of shipped features
+- CLI: Happy CLI updated to v0.6.3 — unknown commands are now rejected before launching Claude
+
 ## Version 17 - 2026-07-12
 
 The web conversation list is rebuilt as a model-driven virtualized list with instant centered jumps and refined, stable scrolling, the minimap now fills in from the offline message cache, the model picker is streamlined to seven entries with side-by-side reasoning-effort presets, and the CLI updates to v0.6.2 with Codex 0.144.1.
