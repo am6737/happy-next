@@ -99,7 +99,7 @@ Auth flows:
 - `GET /v1/feed`
 
 ### Sessions (v3)
-- `GET /v3/sessions/:sessionId/messages` (seq-based cursor pagination with `after` and `limit`)
+- `GET /v3/sessions/:sessionId/messages` (seq-based cursor pagination with `after_seq`, `before_seq` for reverse paging, and `limit`)
 - `POST /v3/sessions/:sessionId/messages` (batch write with server-allocated seq numbers)
 
 ### OpenClaw machines

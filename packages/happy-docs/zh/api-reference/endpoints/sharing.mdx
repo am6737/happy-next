@@ -25,12 +25,12 @@ POST /v1/sessions/:sessionId/shares
 |-------|------|-------------|
 | `userId` | string | 目标用户 ID |
 | `accessLevel` | string | `view`、`edit` 或 `admin` |
-| `encryptedKey` | string | 为接收者加密的会话密钥 |
+| `encryptedDataKey` | string | 为接收者加密的会话密钥 |
 
 ### 更新访问级别
 
 ```
-PATCH /v1/sessions/:sessionId/shares/:userId
+PATCH /v1/sessions/:sessionId/shares/:shareId
 ```
 
 更改用户的访问级别。
@@ -38,7 +38,7 @@ PATCH /v1/sessions/:sessionId/shares/:userId
 ### 撤销共享
 
 ```
-DELETE /v1/sessions/:sessionId/shares/:userId
+DELETE /v1/sessions/:sessionId/shares/:shareId
 ```
 
 移除用户对共享会话的访问权限。
@@ -55,22 +55,30 @@ POST /v1/sessions/:sessionId/public-share
 
 | 字段 | 类型 | 说明 |
 |-------|------|-------------|
-| `expiresAt` | string | 可选的过期时间（ISO 8601） |
-| `maxUses` | number | 可选的最大使用次数 |
+| `expiresAt` | number | 可选的过期时间戳（自纪元起的毫秒数） |
+| `maxUses` | number | 可选的最大使用次数（正整数） |
 
 **响应：**
 
 ```json
 {
-  "token": "abc123...",
-  "url": "https://app.happy-next.com/share/abc123..."
+  "publicShare": {
+    "id": "...",
+    "token": "abc123...",
+    "expiresAt": 1710000000000,
+    "maxUses": 10,
+    "useCount": 0,
+    "isConsentRequired": false,
+    "createdAt": 1709000000000,
+    "updatedAt": 1709000000000
+  }
 }
 ```
 
 ### 访问公开会话
 
 ```
-GET /v1/public-sessions/:token
+GET /v1/public-share/:token
 ```
 
 通过令牌访问公开共享的会话。

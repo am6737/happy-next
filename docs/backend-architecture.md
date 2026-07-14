@@ -339,7 +339,7 @@ The server uses S3-compatible storage for user assets (e.g., avatars):
 - Public URLs are derived from `S3_PUBLIC_URL`.
 
 ### Redis
-A Redis client is initialized in `main.ts` and pinged at startup. Redis is used by the event bus module for pub/sub across processes.
+A Redis client is initialized in `main.ts` and pinged at startup, but it is not yet used for pub/sub. The event router routes updates via in-memory per-user connection sets (single-process); there is no cross-process event bus wired up.
 
 ## Data confidentiality model
 

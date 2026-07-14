@@ -15,8 +15,12 @@ POST /v1/machines
 
 | 字段 | 类型 | 说明 |
 |-------|------|-------------|
+| `id` | string | 机器 ID（必填） |
 | `metadata` | string | 加密的机器元数据（主机名、操作系统等） |
-| `encryptionKey` | string | 加密的机器密钥 |
+| `daemonState` | string | 加密的守护进程状态（可选） |
+| `dataEncryptionKey` | string \| null | 加密的机器密钥（可选） |
+
+该接口是幂等的：如果已存在具有该 `id` 的机器，则原样返回该机器，而不会重新创建。
 
 ## 列出机器
 
@@ -26,18 +30,14 @@ GET /v1/machines
 
 列出已认证用户的所有机器。
 
-## 更新机器
+## 获取机器
 
 ```
-PATCH /v1/machines/:id
+GET /v1/machines/:id
 ```
 
-更新机器元数据或守护进程状态。
+按 ID 获取单台机器。如果该机器在已认证用户下不存在，则返回 `404`。
 
-**请求体：**
-
-| 字段 | 类型 | 说明 |
-|-------|------|-------------|
-| `metadata` | string | 加密的机器元数据 |
-| `daemonState` | string | 加密的守护进程状态 |
-| `activity` | object | 活动跟踪数据 |
+<Note>
+没有用于更新机器的 REST 接口。`POST /v1/machines` 仅用于注册机器——如果已存在相同 `id` 的机器，则原样返回该机器(请求体会被忽略),因此它永远不会更新已有记录。机器元数据和守护进程状态只能通过 socket 的 `update-machine` 事件更新。
+</Note>

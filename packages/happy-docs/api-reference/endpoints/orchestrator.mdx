@@ -6,7 +6,7 @@ description: "Create and manage multi-agent task runs."
 ## Create run
 
 ```
-POST /v1/orchestrator/runs
+POST /v1/orchestrator/submit
 ```
 
 Create a new orchestrator run with tasks.
@@ -15,12 +15,20 @@ Create a new orchestrator run with tasks.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `tasks` | array | Array of task definitions |
-| `tasks[].prompt` | string | Task prompt/instruction |
+| `title` | string | Run title (required) |
+| `tasks` | array | Array of task definitions (1–32) |
+| `tasks[].taskKey` | string | Stable key used to reference this task from other tasks' `dependsOn` |
+| `tasks[].title` | string | Task title |
 | `tasks[].provider` | string | `claude`, `codex`, or `gemini` |
 | `tasks[].model` | string | Model identifier |
+| `tasks[].prompt` | string | Task prompt/instruction (required) |
 | `tasks[].workingDirectory` | string | Working directory path |
-| `tasks[].dependsOn` | array | Task IDs this task depends on |
+| `tasks[].dependsOn` | array | `taskKey` values of prerequisite tasks |
+| `tasks[].retry` | object | `{ maxAttempts, backoffMs }` retry policy |
+| `tasks[].target` | object | `{ type: "current_machine" \| "machine_id", machineId }` |
+| `maxConcurrency` | number | Max tasks to run in parallel (1–8) |
+| `mode` | string | `blocking` or `async` |
+| `idempotencyKey` | string | Deduplicates repeated submissions |
 
 ## List runs
 
@@ -49,7 +57,7 @@ Get details of a specific run, including all tasks and their status.
       "id": "clx...",
       "prompt": "Set up database schema",
       "provider": "claude",
-      "model": "sonnet-4-6",
+      "model": "claude-sonnet-4-6",
       "status": "completed",
       "dependsOn": []
     },
@@ -57,9 +65,9 @@ Get details of a specific run, including all tasks and their status.
       "id": "clx...",
       "prompt": "Write API endpoints",
       "provider": "claude",
-      "model": "sonnet-4-6",
+      "model": "claude-sonnet-4-6",
       "status": "running",
-      "dependsOn": ["clx..."]
+      "dependsOn": ["setup-db"]
     }
   ]
 }
@@ -76,7 +84,16 @@ Cancel a running orchestrator run.
 ## Poll for completion
 
 ```
-POST /v1/orchestrator/runs/:id/pend
+GET /v1/orchestrator/runs/:runId/pend
 ```
 
 Long-poll for run completion or status changes.
+
+**Query parameters:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `cursor` | string | Cursor from a previous response; returns once state changes past it |
+| `waitFor` | string | `change` (default) or `terminal` |
+| `timeoutMs` | number | Long-poll timeout, 0–120000 (default 30000) |
+| `include` | string | `summary` (default) or `all_tasks` |

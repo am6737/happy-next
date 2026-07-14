@@ -77,8 +77,8 @@ CLI 繁忙时发送的消息现在会自动排队并投递。
 - **Codex v0.144.1**：内置 Codex CLI 升级，刷新模型目录
 - **费用追踪**，Claude 模型的精确 token 用量（缓存 token、推理 token）
 - **Codex 推理强度**配置（low / medium / high / xhigh）
-- **ACP（Agent Client Protocol）后端**，替代 MCP 客户端方案
-- **Codex App-Server 后端**：替代方案，使用 `codex app-server` JSON-RPC 协议，通过 stdin/stdout 通信，改进会话管理和可靠性
+- **ACP（Agent Client Protocol）后端**：JSON-RPC Agent 协议（最初为 Codex 引入以替代 MCP 客户端方案，现用于 Gemini）
+- **Codex App-Server 后端**：Codex 的主要后端,使用 `codex app-server` JSON-RPC 协议,通过 stdin/stdout 通信,改进会话管理和可靠性
 - **Gemini 会话持久化**，JSONL 存储
 - **按供应商斜杠命令**：`/clear` 全部 Agent 可用，`/compact` 仅 Claude
 - **模型/模式切换**，按会话，实时元数据同步
@@ -93,7 +93,7 @@ CLI 繁忙时发送的消息现在会自动排队并投递。
 
 ## 语音助手（Happy Voice）
 
-Happy Next 包含完整的语音网关栈，基于火山引擎（豆包）实时网关构建，替代此前的 LiveKit / ElevenLabs 方案。
+Happy Next 包含完整的语音网关栈，基于火山引擎（豆包）实时网关构建，替代此前的 LiveKit / Cartesia 方案。
 
 - **短效 token 认证**：语音网关认证改用短效 token，安全性提升
 - **火山引擎（豆包）实时网关**（`happy-voice`），通过火山 RTC AIGC + 自定义 LLM 桥统一驱动语音识别、LLM 与语音合成
@@ -106,11 +106,11 @@ Happy Next 包含完整的语音网关栈，基于火山引擎（豆包）实时
 - **语音消息发送确认**，可配置倒计时
 - **"思考中"指示器**，显示在语音状态栏
 - **上下文感知语音**：完整应用状态（会话、git 状态等）作为结构化上下文注入
-- **Silero VAD 灵敏度**，通过环境变量调节
+- **火山 ASR 静音/VAD 调节**，通过 `VOLC_ASR_SILENCE_MS` 环境变量调节
 - **语音片段合并**，处理被中断的用户话语
 - **可配置欢迎消息**，从应用设置中配置
 - **系统提示工程**：英文提示、语义 XML 分隔、内联 LLM 提示
-- **朗读 AI 回复**：新增一次性 `POST /v1/voice/tts` 接口,合成消息文本(复用已配置的 `AGENT_TTS` 供应商),应用从消息底部的语音按钮播放,同一时刻仅播放一条
+- **朗读 AI 回复**：新增一次性 `POST /v1/voice/tts` 接口,合成消息文本(使用消息播放专用的火山 TTS,`VOLC_TTS_*`),应用从消息底部的语音按钮播放,同一时刻仅播放一条
 
 ## 多仓库工作树工作区
 
@@ -297,7 +297,7 @@ Happy Next 添加了一等自托管路径。
 
 CLI（`happy-next-cli`）收到了大量升级。
 
-- **多 Agent 支持**：Claude Code、Codex（通过 ACP 后端）和 Gemini 作为一等公民
+- **多 Agent 支持**：Claude Code、Codex（通过 App-Server 后端）和 Gemini 作为一等公民
 - **会话恢复/复制**，所有 Agent 支持正确的消息回填
 - **多仓库工作树**，通过守护进程 RPC 创建/清理工作区
 - **Diff 处理**：所有 Agent 的按文件 +N/-N 统计
@@ -315,7 +315,7 @@ CLI（`happy-next-cli`）收到了大量升级。
 - **最新 CLI 版本**，从 npm 获取而非硬编码最低版本
 - **守护进程开机自启动**：`happy daemon enable` / `happy daemon disable`
 - **守护进程重启命令**：无需手动 kill 即可重启守护进程
-- **Codex v0.116.0 + fast mode**：升级 Codex 并支持快速模式
+- **Codex v0.144.1 + fast mode**：升级 Codex 并支持快速模式
 - **归因设置**：新设置控制提交归因，默认关闭
 - **统一系统提示注入**：Codex 和 Gemini 共享提示注入
 - **编排器引导**：首轮提示包含编排器使用指南

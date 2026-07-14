@@ -15,8 +15,12 @@ Register a new machine (computer running the CLI).
 
 | Field | Type | Description |
 |-------|------|-------------|
+| `id` | string | Machine ID (required) |
 | `metadata` | string | Encrypted machine metadata (hostname, OS, etc.) |
-| `encryptionKey` | string | Encrypted machine key |
+| `daemonState` | string | Encrypted daemon state (optional) |
+| `dataEncryptionKey` | string \| null | Encrypted machine key (optional) |
+
+This endpoint is idempotent: if a machine with the given `id` already exists, it is returned unchanged instead of being recreated.
 
 ## List machines
 
@@ -26,18 +30,14 @@ GET /v1/machines
 
 List all machines for the authenticated user.
 
-## Update machine
+## Get machine
 
 ```
-PATCH /v1/machines/:id
+GET /v1/machines/:id
 ```
 
-Update machine metadata or daemon state.
+Get a single machine by ID. Returns `404` if the machine does not exist for the authenticated user.
 
-**Request body:**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `metadata` | string | Encrypted machine metadata |
-| `daemonState` | string | Encrypted daemon state |
-| `activity` | object | Activity tracking data |
+<Note>
+There is no REST endpoint to update a machine. `POST /v1/machines` only registers a machine — if one with the same `id` already exists it is returned unchanged (the request body is ignored), so it never updates an existing record. Machine metadata and daemon state are updated only through socket `update-machine` events.
+</Note>

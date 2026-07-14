@@ -73,21 +73,24 @@ description: "Happy Next 所有环境变量的完整参考。"
 
 | 变量 | 默认值 | 描述 |
 |----------|---------|-------------|
-| `AGENT_STT` | `openai/gpt-4o-mini-transcribe:zh` | 语音转文字模型 |
-| `AGENT_LLM` | `openai/gpt-4.1-mini` | 语音代理 LLM |
-| `AGENT_TTS` | `cartesia/sonic-3:...` | 文字转语音模型 |
+| `VOLC_ASR_RESOURCE_ID` | `volc.seedasr.sauc.duration` | 语音转文字（ASR）资源 ID |
+| `VOLC_ASR_STREAM_MODE` | `2` | ASR 流式模式 |
+| `DOUBAO_MODEL` | `doubao-seed-2-0-lite-260428` | 语音代理 LLM（豆包） |
+| `VOLC_TTS_VOICE` | `zh_female_vv_uranus_bigtts` | TTS 音色/发音人 |
+| `VOLC_AGENT_TTS_RESOURCE_ID` | `seed-tts-2.0` | 实时代理 TTS 资源 ID |
 | `AGENT_WELCOME_MESSAGE` | — | 自定义欢迎消息 |
 
-### LiveKit
+### RTC（火山引擎）
 
 | 变量 | 默认值 | 描述 |
 |----------|---------|-------------|
-| `LIVEKIT_URL` | — | LiveKit 服务器 URL（必需） |
-| `LIVEKIT_API_KEY` | — | LiveKit API 密钥（必需） |
-| `LIVEKIT_API_SECRET` | — | LiveKit API 密钥（必需） |
-| `LIVEKIT_AGENT_NAME` | `happy-voice-agent` | 代理注册名称 |
-| `LIVEKIT_ROOM_TTL_SECONDS` | `3600` | 房间自动清理超时 |
-| `LIVEKIT_TOKEN_TTL_SECONDS` | `600` | 参与者令牌有效期 |
+| `VOLC_RTC_APP_ID` | — | 火山引擎 RTC 应用 ID（必需） |
+| `VOLC_RTC_APP_KEY` | — | 火山引擎 RTC 应用密钥（必需） |
+| `VOLC_ACCESS_KEY_ID` | — | 火山引擎 IAM 访问密钥 ID（必需） |
+| `VOLC_SECRET_ACCESS_KEY` | — | 火山引擎 IAM 秘密访问密钥（必需） |
+| `VOLC_RTC_REGION` | `cn-north-1` | RTC 区域 |
+| `VOLC_RTC_API_VERSION` | `2025-06-01` | RTC OpenAPI 版本 |
+| `RTC_TOKEN_TTL_SECONDS` | `86400` | 房间加入令牌有效期 |
 
 ### 服务器
 
@@ -95,21 +98,22 @@ description: "Happy Next 所有环境变量的完整参考。"
 |----------|---------|-------------|
 | `HOST` | `0.0.0.0` | API 服务器主机 |
 | `PORT` | `3040` | API 服务器端口 |
-| `VOICE_PUBLIC_KEY` | — | API 授权密钥（必需） |
+| `VOICE_AUTH_SECRET` | — | API 授权密钥（32 个字符以上，必需） |
 
 ### 语音调优
 
 | 变量 | 默认值 | 描述 |
 |----------|---------|-------------|
-| `AGENT_MIN_ENDPOINTING_DELAY_MS` | `1600` | 语音结束前的最小静默时间 |
-| `AGENT_MAX_ENDPOINTING_DELAY_MS` | `7000` | 最大静默容忍时间 |
-| `AGENT_VAD_ACTIVATION_THRESHOLD` | `0.5` | 语音活动检测阈值（0-1） |
+| `VOLC_ASR_SILENCE_MS` | `600` | 语音结束前的静默时间（VAD） |
+| `LLM_HISTORY_LENGTH` | `10` | 保留的对话历史轮数 |
+| `LLM_TEMPERATURE` | `0.1` | LLM 采样温度 |
+| `LLM_TOP_P` | `0.3` | LLM 核采样 |
+| `LLM_MAX_TOKENS` | `512` | LLM 最大响应 token 数 |
 
 ## 应用
 
 | 变量 | 默认值 | 描述 |
 |----------|---------|-------------|
 | `APP_ENV` | — | `development`、`preview` 或 `production` |
-| `EXPO_PUBLIC_POSTHOG_API_KEY` | — | PostHog 分析密钥 |
-| `EXPO_PUBLIC_VOICE_BASE_URL` | — | 语音网关 URL |
-| `EXPO_PUBLIC_VOICE_PUBLIC_KEY` | — | 语音网关公钥 |
+| `EXPO_PUBLIC_POSTHOG_KEY` | — | PostHog 分析密钥 |
+| `EXPO_PUBLIC_VOICE_TOOL_BRIDGE_BASE_URL` | — | 语音工具桥接基础 URL（默认使用服务器 URL） |

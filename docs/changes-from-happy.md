@@ -77,8 +77,8 @@ The original Happy only supported Claude Code. Happy Next treats Claude Code, Co
 - **Codex v0.144.1**: bundled Codex CLI updated with a refreshed model catalog
 - **Cost tracking** with accurate token usage for Claude models (cache tokens, reasoning tokens)
 - **Codex reasoning effort** configuration (low / medium / high / xhigh)
-- **ACP (Agent Client Protocol) backend** for Codex, replacing the MCP client approach
-- **Codex App-Server backend**: alternative `codex app-server` JSON-RPC protocol over stdin/stdout for improved session management and reliability
+- **ACP (Agent Client Protocol) backend**: JSON-RPC agent protocol (originally introduced for Codex to replace the MCP client approach, now used for Gemini)
+- **Codex App-Server backend**: Codex's primary backend, using the `codex app-server` JSON-RPC protocol over stdin/stdout for improved session management and reliability
 - **Gemini session persistence** with JSONL storage
 - **Per-provider slash commands**: `/clear` for all agents, `/compact` Claude-only
 - **Model/mode switching** per session with live metadata sync
@@ -93,7 +93,7 @@ The original Happy only supported Claude Code. Happy Next treats Claude Code, Co
 
 ## Voice Assistant (Happy Voice)
 
-Happy Next includes a complete voice gateway stack built on the Volcano (火山引擎 / Doubao) real-time gateway, which replaced the earlier LiveKit / ElevenLabs stack.
+Happy Next includes a complete voice gateway stack built on the Volcano (火山引擎 / Doubao) real-time gateway, which replaced the earlier LiveKit / Cartesia stack.
 
 - **Short-lived token auth**: voice gateway authentication now uses short-lived tokens for improved security
 - **Volcano (Doubao) real-time gateway** (`happy-voice`) driving speech-to-text, LLM, and text-to-speech through Volcano RTC AIGC + a custom-LLM bridge
@@ -106,11 +106,11 @@ Happy Next includes a complete voice gateway stack built on the Volcano (火山�
 - **Voice message send confirmation** with configurable countdown
 - **"Thinking" indicator** in voice status bar
 - **Context-aware voice**: full app state (sessions, git status, etc.) injected as structured context
-- **Silero VAD sensitivity** tuning via environment variables
+- **Volcano ASR silence/VAD tuning** via the `VOLC_ASR_SILENCE_MS` environment variable
 - **Speech fragment merging** for interrupted user turns
 - **Configurable welcome message** from app settings
 - **System prompt engineering**: English prompts, semantic XML separation, inline LLM hints
-- **Read-aloud for AI replies**: a one-shot `POST /v1/voice/tts` endpoint synthesizes a message's text (reusing the configured `AGENT_TTS` provider) and the app plays it from a voice button in the message footer, with single-message-at-a-time playback
+- **Read-aloud for AI replies**: a one-shot `POST /v1/voice/tts` endpoint synthesizes a message's text (using the message-playback Volcano TTS, `VOLC_TTS_*`) and the app plays it from a voice button in the message footer, with single-message-at-a-time playback
 
 ## Multi-Repo Worktree Workspaces
 
@@ -297,7 +297,7 @@ Extensive improvements to the chat and session management experience.
 
 The CLI (`happy-next-cli`) received substantial upgrades.
 
-- **Multi-agent support**: Claude Code, Codex (via ACP backend), and Gemini as first-class agents
+- **Multi-agent support**: Claude Code, Codex (via App-Server backend), and Gemini as first-class agents
 - **Session resume/duplicate** for all agents with proper message backfill
 - **Multi-repo worktree** workspace creation/cleanup via daemon RPC
 - **Diff processing**: per-file +N/-N statistics for all agents
@@ -315,7 +315,7 @@ The CLI (`happy-next-cli`) received substantial upgrades.
 - **Latest CLI version** fetched from npm instead of hardcoded minimum
 - **Daemon auto-start on boot**: `happy daemon enable` / `happy daemon disable`
 - **Daemon restart command**: restart the daemon without manual kill
-- **Codex v0.116.0 with fast mode**: upgraded Codex with fast mode support
+- **Codex v0.144.1 with fast mode**: upgraded Codex with fast mode support
 - **Attribution setting**: new setting to control commit attribution, default off
 - **Unified system prompt injection**: shared prompt injection for Codex and Gemini
 - **Orchestrator guidance**: first-turn prompts include orchestrator usage guidance

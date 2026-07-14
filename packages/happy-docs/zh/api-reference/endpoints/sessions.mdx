@@ -29,25 +29,10 @@ POST /v1/sessions
 
 | 字段 | 类型 | 说明 |
 |-------|------|-------------|
-| `machineId` | string | 目标机器 ID |
+| `tag` | string | 客户端生成的会话标签（用于创建或加载会话） |
 | `metadata` | string | 加密的会话元数据 |
-| `encryptionKey` | string | 加密的会话密钥 |
-
-## 获取会话
-
-```
-GET /v1/sessions/:id
-```
-
-根据 ID 获取会话。
-
-## 更新会话
-
-```
-PATCH /v1/sessions/:id
-```
-
-更新会话元数据或状态。
+| `agentState` | string | 加密的 agent 状态（可选） |
+| `dataEncryptionKey` | string | 加密的数据加密密钥（可选） |
 
 ## 删除会话
 
@@ -63,22 +48,44 @@ DELETE /v1/sessions/:id
 POST /v3/sessions/:id/messages
 ```
 
+在单次请求中发送一条或多条消息。
+
 **请求体：**
+
+```json
+{
+  "messages": [
+    {
+      "content": "encrypted-ciphertext-string...",
+      "localId": "local-123",
+      "trackCliDelivery": false
+    }
+  ]
+}
+```
 
 | 字段 | 类型 | 说明 |
 |-------|------|-------------|
-| `content` | string | 加密的消息内容（密文字符串） |
-| `localId` | string | 客户端生成的 ID，用于去重 |
+| `messages` | array | 1-200 个消息对象 |
+| `messages[].content` | string | 加密的消息内容（密文字符串） |
+| `messages[].localId` | string | 客户端生成的 ID，用于去重 |
+| `messages[].trackCliDelivery` | boolean | 跟踪 CLI 投递状态（可选，默认 `false`） |
 
 **响应：**
 
 ```json
 {
-  "id": "clx...",
-  "seq": 42,
-  "localId": "local-123",
-  "content": "encrypted-ciphertext-string...",
-  "createdAt": "2026-03-26T00:00:00.000Z"
+  "messages": [
+    {
+      "id": "clx...",
+      "seq": 42,
+      "localId": "local-123",
+      "sentBy": "user",
+      "sentByName": "Alice",
+      "createdAt": 1774483200000,
+      "updatedAt": 1774483200000
+    }
+  ]
 }
 ```
 
@@ -94,6 +101,6 @@ GET /v3/sessions/:id/messages
 
 | 参数 | 类型 | 说明 |
 |-------|------|-------------|
-| `before` | number | 获取此序列号之前的消息 |
-| `after` | number | 获取此序列号之后的消息 |
-| `limit` | number | 返回消息的最大数量（默认：50） |
+| `before_seq` | number | 获取此序列号之前的消息 |
+| `after_seq` | number | 获取此序列号之后的消息 |
+| `limit` | number | 返回消息的最大数量（默认：100，最大：500） |

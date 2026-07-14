@@ -9,7 +9,7 @@ Voice is configured in the Happy mobile app under **Settings > Voice**.
 
 Happy Voice is built into the app and works out of the box — no additional setup or registration required. Just tap the microphone icon in any session to start a voice conversation.
 
-Happy Voice uses a voice gateway based on [LiveKit](https://livekit.io/) with a STT → LLM → TTS pipeline. The hosted gateway is provided for all users by default.
+Happy Voice uses a voice gateway based on Volcengine (ByteDance Volcano Engine) RTC, with a Volc ASR → Doubao LLM → Volcano TTS pipeline. The hosted gateway is provided for all users by default.
 
 ### Voice and speech rate
 
@@ -31,20 +31,12 @@ Your voice preferences — language, voice, speech rate, action confirmation, we
 If you want full control over the voice pipeline — choosing your own STT, LLM, and TTS models, or keeping voice data on your own infrastructure — you can deploy your own Happy Voice gateway.
 
 Requirements:
-- A LiveKit server instance
-- API keys for your chosen providers (e.g., OpenAI for STT/LLM, Cartesia for TTS)
+- A Volcengine (ByteDance Volcano Engine) RTC "AI agent" app — `VOLC_RTC_APP_ID` / `VOLC_RTC_APP_KEY` — plus IAM access keys (`VOLC_ACCESS_KEY_ID` / `VOLC_SECRET_ACCESS_KEY`) for the RTC OpenAPI
+- Volcano big-model TTS credentials — `VOLC_TTS_APP_ID` / `VOLC_TTS_TOKEN`
+- A `VOICE_AUTH_SECRET` shared with your Happy server, used to sign the short-lived bearer tokens the app exchanges for gateway access
 
-In the Happy app, go to **Settings > Voice** and configure:
+The gateway runs a Volc seed ASR → Doubao LLM (via Ark) → Volcano big-model TTS pipeline; these providers are configured through the gateway's environment variables.
 
-- **Provider** — Select "Happy Voice"
-- **Gateway URL** — Your self-hosted Happy Voice endpoint
-- **Public Key** — The authorization key for your voice server
-
-Or set via environment variables:
-
-```bash
-EXPO_PUBLIC_VOICE_BASE_URL=https://your-voice-server.com
-EXPO_PUBLIC_VOICE_PUBLIC_KEY=your-public-key
-```
+The Happy app discovers your gateway URL automatically from your Happy server's `/v1/app-config` — there is no Provider, Gateway URL, or Public Key to set in the app. Point your server at your deployed gateway and the app picks it up.
 
 See [Self-Hosting](/advanced/self-hosting) for deployment instructions.

@@ -11,15 +11,16 @@ The orchestrator lets AI agents submit and manage multi-task runs. Tasks run in 
 
 ## MCP Tools
 
-Agents interact with the orchestrator through 5 MCP tools:
+Agents interact with the orchestrator through 6 MCP tools:
 
 | Tool | Purpose |
 |------|---------|
-| `orchestrator_submit` | Submit a run (blocking or async) |
+| `orchestrator_submit` | Submit a run (always async; returns immediately) |
 | `orchestrator_pend` | Wait for run status changes |
 | `orchestrator_list` | List runs with status filter |
 | `orchestrator_cancel` | Cancel a running run |
 | `orchestrator_get_context` | Get available machines and providers |
+| `orchestrator_send_message` | Send a follow-up / resume a child task session |
 
 ## Usage Scenarios
 
@@ -30,7 +31,6 @@ Review multiple modules simultaneously — each task reviews one module with its
 ```
 orchestrator_submit({
   title: "Code review: auth + api + db",
-  blocking: true,
   maxConcurrency: 3,
   tasks: [
     {
@@ -59,7 +59,6 @@ Rename an internal API — update the library first, then update all consumers, 
 ```
 orchestrator_submit({
   title: "Rename getUserById → findUserById",
-  blocking: true,
   maxConcurrency: 2,
   tasks: [
     {
@@ -102,7 +101,6 @@ Investigate a topic from multiple angles, then synthesize.
 ```
 orchestrator_submit({
   title: "Research: WebSocket vs SSE for real-time updates",
-  blocking: true,
   maxConcurrency: 3,
   tasks: [
     {
@@ -132,11 +130,10 @@ Dispatch tasks to specific machines — useful when different environments are n
 ```
 // First, check available machines
 orchestrator_get_context()
-// Returns: { machines: [{ id: "m1", name: "dev-box", dispatchReady: true }, { id: "m2", name: "staging", dispatchReady: true }] }
+// Returns: { data: { machines: [{ machineId: "m1", name: "dev-box", dispatchReady: true }, { machineId: "m2", name: "staging", dispatchReady: true }] } }
 
 orchestrator_submit({
   title: "Cross-environment smoke test",
-  blocking: true,
   maxConcurrency: 2,
   tasks: [
     {
@@ -144,14 +141,14 @@ orchestrator_submit({
       provider: "codex",
       prompt: "Run the integration test suite and report results.",
       workingDirectory: "/home/user/project",
-      target: { machineId: "m1" }
+      target: { type: "machine_id", machineId: "m1" }
     },
     {
       taskKey: "test-staging",
       provider: "codex",
       prompt: "Run the integration test suite and report results.",
       workingDirectory: "/home/user/project",
-      target: { machineId: "m2" }
+      target: { type: "machine_id", machineId: "m2" }
     }
   ]
 })
@@ -164,7 +161,6 @@ Configure retry for tasks that may fail transiently (e.g., network calls, extern
 ```
 orchestrator_submit({
   title: "Fetch and process external data",
-  blocking: true,
   tasks: [
     {
       taskKey: "fetch-data",
@@ -194,7 +190,6 @@ Lint, test, and build in dependency order — like a mini CI.
 ```
 orchestrator_submit({
   title: "Pre-commit checks",
-  blocking: true,
   maxConcurrency: 2,
   tasks: [
     {
@@ -236,7 +231,6 @@ Send the same task to different providers and compare outputs.
 ```
 orchestrator_submit({
   title: "Compare provider outputs: API design",
-  blocking: true,
   maxConcurrency: 3,
   tasks: [
     {
@@ -277,20 +271,22 @@ orchestrator_cancel({ runId: "run_abc123" })
 | `prompt` | string | required | The task prompt (max 65KB) |
 | `title` | string | optional | Human-readable task title |
 | `workingDirectory` | string | optional | Working directory for the agent process |
-| `timeoutMs` | number | 900000 (15m) | Max execution time per attempt |
+| `timeoutMs` | number | 86400000 (24h) | Max execution time per attempt |
 | `dependsOn` | string[] | [] | Task keys that must complete before this task starts |
 | `retry.maxAttempts` | number | 1 | Total attempts (1 = no retry, max 10) |
 | `retry.backoffMs` | number | 0 | Delay between retry attempts (max 86400000 / 24h) |
-| `target.machineId` | string | current machine | Dispatch to a specific machine |
+| `target.type` | string | `current_machine` | Dispatch routing: `current_machine` or `machine_id` (alias `machine` normalizes to `machine_id`) |
+| `target.machineId` | string | optional | Target machine ID; required when `target.type` is `machine_id` |
 
 ## Run Configuration Reference
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `title` | string | required | Human-readable run title |
-| `blocking` | boolean | false | If true, the submit call waits until all tasks finish |
 | `maxConcurrency` | number | 2 | Max tasks running simultaneously (1-8) |
 | `idempotencyKey` | string | optional | Prevents duplicate submissions |
+
+`orchestrator_submit` is always asynchronous: it returns immediately with a `runId`. Wait for the `<orchestrator-callback>`, then fetch results with `orchestrator_pend`.
 
 ## Status Lifecycle
 

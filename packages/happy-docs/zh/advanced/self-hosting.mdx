@@ -12,10 +12,10 @@ Happy 支持两种模式：
 ## 环境要求
 
 - **Docker + Docker Compose**
-- **LiveKit 部署**（未包含在 `docker-compose.yml` 中）— 用于语音功能
-  - 你需要 `LIVEKIT_URL`、`LIVEKIT_WS_URL`、`LIVEKIT_API_KEY`、`LIVEKIT_API_SECRET`
-- 语音提供商的 **API 密钥**（如果使用语音功能）
-  - `OPENAI_API_KEY`、`CARTESIA_API_KEY`
+- **火山引擎 RTC 应用**（"AI 智能体"类型）— 用于语音功能
+  - 你需要 `VOLC_RTC_APP_ID`、`VOLC_RTC_APP_KEY`，以及 IAM 密钥 `VOLC_ACCESS_KEY_ID`、`VOLC_SECRET_ACCESS_KEY`
+- 语音所需的 **火山 / 豆包凭据**（如果使用语音功能）
+  - 消息播报 TTS 使用 `VOLC_TTS_APP_ID`、`VOLC_TTS_TOKEN`；可选的 TTS 前文本清洗使用 `ARK_API_KEY`（完整清单参见 `.env.example`）
 
 ## 快速开始
 
@@ -36,7 +36,7 @@ cp .env.example .env
    - `HANDY_MASTER_SECRET` — 生成一个 64 个字符以上的随机字符串
    - `POSTGRES_*` — 数据库凭据
    - `S3_*` — 或使用 MinIO 默认配置
-   - `LIVEKIT_*` + 语音 API 密钥 — 如果使用语音功能
+   - `VOLC_RTC_*`、`VOLC_ACCESS_KEY_ID`/`VOLC_SECRET_ACCESS_KEY`、`VOICE_AUTH_SECRET` 和 `PUBLIC_VOICE_BASE_URL` — 如果使用语音功能
 
 4. 启动服务栈：
 
@@ -44,21 +44,23 @@ cp .env.example .env
 docker-compose up -d
 ```
 
-5. 应用数据库迁移（仅首次运行需要）：
+   首次启动时，`happy-server` 会自动运行 `prisma migrate deploy`，`minio-init` 服务会自动创建存储桶并开启匿名下载——无需手动进行数据库或存储桶的初始化。
+
+5. 在 `http://localhost:3030` 打开 Web 应用。
+
+### 手动维护（可选）
+
+数据库迁移和存储桶会自动完成，但你也可以在需要时手动重新执行：
 
 ```bash
+# 重新应用数据库迁移
 docker-compose exec happy-server yarn --cwd packages/happy-server prisma migrate deploy
-```
 
-6. 创建 MinIO 存储桶并设置为公开访问（仅首次运行需要）：
-
-```bash
-docker-compose exec minio mc alias set local http://localhost:9000 minioadmin minioadmin
+# 重新创建 MinIO 存储桶（使用你的 S3_ACCESS_KEY / S3_SECRET_KEY 值）
+docker-compose exec minio mc alias set local http://localhost:9000 "$S3_ACCESS_KEY" "$S3_SECRET_KEY"
 docker-compose exec minio mc mb local/happy-server
 docker-compose exec minio mc anonymous set download local/happy-server
 ```
-
-7. 在 `http://localhost:3030` 打开 Web 应用。
 
 ## 服务
 
@@ -102,7 +104,8 @@ HAPPY_SERVER_URL=http://localhost:3031 HAPPY_WEBAPP_URL=http://localhost:3030 ha
 如果从其他设备（局域网或互联网）访问，请避免硬编码 `localhost` URL：
 
 - 将 Web 应用、API 和语音网关放在带 TLS 的域名后面
-- 将 `EXPO_PUBLIC_HAPPY_SERVER_URL` 和 `EXPO_PUBLIC_VOICE_BASE_URL` 设置为这些公共来源
+- 将 `EXPO_PUBLIC_HAPPY_SERVER_URL` 设置为公网 Web/API 来源
+- 在服务器上设置 `PUBLIC_API_BASE_URL` 和 `PUBLIC_VOICE_BASE_URL`，让 `/v1/app-config` 返回正确的公网 API / 语音端点（对于 docker-compose，还需设置 `EXPO_PUBLIC_VOICE_TOOL_BRIDGE_BASE_URL`，以便网关能访问 `happy-server`）
 - 将 `APP_URL` 设置为你的 Web 来源
 
 ## 故障排除

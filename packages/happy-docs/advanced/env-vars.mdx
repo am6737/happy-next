@@ -73,21 +73,24 @@ description: "Complete reference for all Happy Next environment variables."
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `AGENT_STT` | `openai/gpt-4o-mini-transcribe:zh` | Speech-to-text model |
-| `AGENT_LLM` | `openai/gpt-4.1-mini` | Voice agent LLM |
-| `AGENT_TTS` | `cartesia/sonic-3:...` | Text-to-speech model |
+| `VOLC_ASR_RESOURCE_ID` | `volc.seedasr.sauc.duration` | Speech-to-text (ASR) resource ID |
+| `VOLC_ASR_STREAM_MODE` | `2` | ASR streaming mode |
+| `DOUBAO_MODEL` | `doubao-seed-2-0-lite-260428` | Voice agent LLM (Doubao) |
+| `VOLC_TTS_VOICE` | `zh_female_vv_uranus_bigtts` | TTS voice/speaker |
+| `VOLC_AGENT_TTS_RESOURCE_ID` | `seed-tts-2.0` | Live-agent TTS resource ID |
 | `AGENT_WELCOME_MESSAGE` | — | Custom greeting message |
 
-### LiveKit
+### RTC (Volcengine)
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `LIVEKIT_URL` | — | LiveKit server URL (required) |
-| `LIVEKIT_API_KEY` | — | LiveKit API key (required) |
-| `LIVEKIT_API_SECRET` | — | LiveKit API secret (required) |
-| `LIVEKIT_AGENT_NAME` | `happy-voice-agent` | Agent registration name |
-| `LIVEKIT_ROOM_TTL_SECONDS` | `3600` | Room auto-cleanup timeout |
-| `LIVEKIT_TOKEN_TTL_SECONDS` | `600` | Participant token lifetime |
+| `VOLC_RTC_APP_ID` | — | Volcengine RTC app ID (required) |
+| `VOLC_RTC_APP_KEY` | — | Volcengine RTC app key (required) |
+| `VOLC_ACCESS_KEY_ID` | — | Volcengine IAM access key ID (required) |
+| `VOLC_SECRET_ACCESS_KEY` | — | Volcengine IAM secret access key (required) |
+| `VOLC_RTC_REGION` | `cn-north-1` | RTC region |
+| `VOLC_RTC_API_VERSION` | `2025-06-01` | RTC OpenAPI version |
+| `RTC_TOKEN_TTL_SECONDS` | `86400` | Room join token lifetime |
 
 ### Server
 
@@ -95,21 +98,22 @@ description: "Complete reference for all Happy Next environment variables."
 |----------|---------|-------------|
 | `HOST` | `0.0.0.0` | API server host |
 | `PORT` | `3040` | API server port |
-| `VOICE_PUBLIC_KEY` | — | API authorization key (required) |
+| `VOICE_AUTH_SECRET` | — | API authorization secret (32+ characters, required) |
 
 ### Speech Tuning
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `AGENT_MIN_ENDPOINTING_DELAY_MS` | `1600` | Min silence before end-of-utterance |
-| `AGENT_MAX_ENDPOINTING_DELAY_MS` | `7000` | Max silence tolerance |
-| `AGENT_VAD_ACTIVATION_THRESHOLD` | `0.5` | Voice activity detection threshold (0-1) |
+| `VOLC_ASR_SILENCE_MS` | `600` | Silence before end-of-utterance (VAD) |
+| `LLM_HISTORY_LENGTH` | `10` | Conversation history turns kept |
+| `LLM_TEMPERATURE` | `0.1` | LLM sampling temperature |
+| `LLM_TOP_P` | `0.3` | LLM nucleus sampling |
+| `LLM_MAX_TOKENS` | `512` | LLM max response tokens |
 
 ## App
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `APP_ENV` | — | `development`, `preview`, or `production` |
-| `EXPO_PUBLIC_POSTHOG_API_KEY` | — | PostHog analytics key |
-| `EXPO_PUBLIC_VOICE_BASE_URL` | — | Voice gateway URL |
-| `EXPO_PUBLIC_VOICE_PUBLIC_KEY` | — | Voice gateway public key |
+| `EXPO_PUBLIC_POSTHOG_KEY` | — | PostHog analytics key |
+| `EXPO_PUBLIC_VOICE_TOOL_BRIDGE_BASE_URL` | — | Voice tool-bridge base URL (defaults to the server URL) |

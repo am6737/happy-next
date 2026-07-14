@@ -3,7 +3,7 @@ title: "语音"
 description: "通过 Happy Voice 网关管理语音会话。"
 ---
 
-这些端点由 **Happy Voice 网关**提供服务（非主 Happy 服务端）。需要在请求头中携带 `X-Voice-Key` 或使用语音公钥的 `Authorization: Bearer`。
+这些端点由 **Happy Voice 网关**提供服务（非主 Happy 服务端）。需要携带 `Authorization: Bearer <token>`，其中 token 是使用 `VOICE_AUTH_SECRET` 签名的 JWT。
 
 ## 开始会话
 
@@ -30,10 +30,12 @@ POST /v1/voice/session/start
 {
   "allowed": true,
   "gatewaySessionId": "uuid",
-  "roomName": "happy_voice_...",
-  "roomUrl": "wss://livekit.example.com",
-  "participantIdentity": "human_...",
-  "participantToken": "jwt-token...",
+  "provider": "volc-rtc",
+  "appId": "volc-rtc-app-id",
+  "roomId": "happy_voice_...",
+  "uid": "human_...",
+  "agentUid": "bot_...",
+  "rtcToken": "rtc-token...",
   "expiresAt": "2026-03-26T01:00:00.000Z"
 }
 ```
@@ -59,33 +61,3 @@ GET /v1/voice/session/:gatewaySessionId/status
 ```
 
 查询语音会话的当前状态。
-
-## 发送文本
-
-```
-POST /v1/voice/session/text
-```
-
-向语音会话中注入文本消息。
-
-**请求体：**
-
-| 字段 | 类型 | 说明 |
-|-------|------|-------------|
-| `gatewaySessionId` | string | 会话 ID |
-| `text` | string | 要注入的文本 |
-
-## 发送上下文
-
-```
-POST /v1/voice/session/context
-```
-
-向语音代理发送应用上下文。
-
-**请求体：**
-
-| 字段 | 类型 | 说明 |
-|-------|------|-------------|
-| `gatewaySessionId` | string | 会话 ID |
-| `payload` | object | 上下文载荷（会话状态、消息等） |
