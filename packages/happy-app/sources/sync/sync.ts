@@ -31,7 +31,7 @@ import { Profile, profileParse } from './profile';
 import { loadPendingSettings, savePendingSettings, loadSessionLastViewedAt, saveSessionLastViewedAt, loadSessionsCache, saveSessionsCache } from './persistence';
 import { initializeTracking, tracking } from '@/track';
 import { parseToken } from '@/utils/parseToken';
-import { getServerUrl } from './serverConfig';
+import { getServerUrl, onServerUrlChanged } from './serverConfig';
 import { log } from '@/log';
 import { signContentPublicKey } from './directShareEncryption';
 import { uploadContentPublicKey, fetchSharedSessions as apiFetchSharedSessions } from './apiSharing';
@@ -5252,6 +5252,9 @@ async function syncInit(credentials: AuthCredentials, restore: boolean) {
     // Initialize socket connection
     const API_ENDPOINT = getServerUrl();
     apiSocket.initialize({ endpoint: API_ENDPOINT, token: credentials.token }, encryption);
+    onServerUrlChanged((serverUrl) => {
+        apiSocket.updateEndpoint(serverUrl);
+    });
 
     // Wire socket status to storage
     apiSocket.onStatusChange((status) => {

@@ -9,7 +9,9 @@ const DEFAULT_SERVER_URLS = [
     'https://api-happy-next.dootask.com',
 ] as const;
 const APP_CONFIG_PATH = '/v1/app-config';
-const DISCOVERY_TIMEOUT_MS = 5000;
+const STARTUP_DISCOVERY_WAIT_MS = 5000;
+const DISCOVERY_REQUEST_TIMEOUT_MS = 30_000;
+const DISCOVERY_RETRY_DELAY_MS = 15_000;
 
 interface RemoteAppConfigResponse {
     apiBaseUrl?: unknown;
@@ -25,6 +27,10 @@ interface ResolvedVoiceConfig {
 let resolvedServerUrl: string | null = null;
 let resolvedVoiceConfig: ResolvedVoiceConfig = {};
 let resolvePromise: Promise<void> | null = null;
+let discoveryPromise: Promise<void> | null = null;
+let discoveryGeneration = 0;
+const activeDiscoveryControllers = new Set<AbortController>();
+const serverUrlListeners = new Set<(serverUrl: string) => void>();
 
 function normalizeUrl(url: string | null | undefined): string | null {
     const trimmed = url?.trim();
@@ -57,9 +63,16 @@ export function getServerEntryUrl(): string {
     return getConfiguredServerEntryUrl() || DEFAULT_SERVER_URLS[0];
 }
 
-async function fetchRemoteAppConfig(entryServerUrl: string): Promise<RemoteAppConfigResponse | null> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), DISCOVERY_TIMEOUT_MS);
+function delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchRemoteAppConfig(
+    entryServerUrl: string,
+    controller: AbortController = new AbortController(),
+): Promise<RemoteAppConfigResponse | null> {
+    activeDiscoveryControllers.add(controller);
+    const timeout = setTimeout(() => controller.abort(), DISCOVERY_REQUEST_TIMEOUT_MS);
     try {
         const response = await fetch(`${entryServerUrl}${APP_CONFIG_PATH}`, {
             method: 'GET',
@@ -70,50 +83,99 @@ async function fetchRemoteAppConfig(entryServerUrl: string): Promise<RemoteAppCo
         const data = await response.json();
         return data && typeof data === 'object' ? data as RemoteAppConfigResponse : null;
     } catch (error) {
-        console.warn('[serverConfig] Failed to fetch remote app config:', error);
+        if (!(error instanceof Error && error.name === 'AbortError')) {
+            console.warn('[serverConfig] Failed to fetch remote app config:', error);
+        }
         return null;
     } finally {
         clearTimeout(timeout);
+        activeDiscoveryControllers.delete(controller);
     }
 }
 
-async function fetchFastestDefaultAppConfig(): Promise<{ entryServerUrl: string; remoteConfig: RemoteAppConfigResponse | null }> {
+async function fetchDefaultAppConfig(): Promise<{ entryServerUrl: string; remoteConfig: RemoteAppConfigResponse } | null> {
     return new Promise((resolve) => {
         let pending = DEFAULT_SERVER_URLS.length;
+        let settled = false;
+        const controllers = DEFAULT_SERVER_URLS.map(() => new AbortController());
 
-        for (const entryServerUrl of DEFAULT_SERVER_URLS) {
-            fetchRemoteAppConfig(entryServerUrl).then((remoteConfig) => {
+        DEFAULT_SERVER_URLS.forEach((entryServerUrl, index) => {
+            fetchRemoteAppConfig(entryServerUrl, controllers[index]).then((remoteConfig) => {
+                if (settled) return;
                 if (remoteConfig) {
+                    settled = true;
+                    controllers.forEach((controller, controllerIndex) => {
+                        if (controllerIndex !== index) controller.abort();
+                    });
                     resolve({ entryServerUrl, remoteConfig });
                     return;
                 }
 
                 pending -= 1;
                 if (pending === 0) {
-                    resolve({ entryServerUrl: DEFAULT_SERVER_URLS[0], remoteConfig: null });
+                    settled = true;
+                    resolve(null);
                 }
             });
-        }
+        });
     });
+}
+
+async function discoverServerConfig(): Promise<{ entryServerUrl: string; remoteConfig: RemoteAppConfigResponse } | null> {
+    const configuredEntryServerUrl = getConfiguredServerEntryUrl();
+    if (!configuredEntryServerUrl) {
+        return fetchDefaultAppConfig();
+    }
+
+    const remoteConfig = await fetchRemoteAppConfig(configuredEntryServerUrl);
+    return remoteConfig ? { entryServerUrl: configuredEntryServerUrl, remoteConfig } : null;
+}
+
+function applyRemoteConfig(entryServerUrl: string, remoteConfig: RemoteAppConfigResponse): void {
+    const previousServerUrl = getServerUrl();
+    const remoteApiBaseUrl = normalizeUrl(normalizeString(remoteConfig.apiBaseUrl));
+    resolvedServerUrl = remoteApiBaseUrl || entryServerUrl;
+    resolvedVoiceConfig = {
+        baseUrl: normalizeUrl(normalizeString(remoteConfig.voice?.baseUrl)) || undefined,
+    };
+
+    if (resolvedServerUrl !== previousServerUrl) {
+        serverUrlListeners.forEach((listener) => listener(resolvedServerUrl!));
+    }
+}
+
+function startServerDiscovery(generation: number): Promise<void> {
+    if (discoveryPromise) return discoveryPromise;
+
+    discoveryPromise = (async () => {
+        while (generation === discoveryGeneration) {
+            const result = await discoverServerConfig();
+            if (generation !== discoveryGeneration) return;
+            if (result) {
+                applyRemoteConfig(result.entryServerUrl, result.remoteConfig);
+                return;
+            }
+
+            await delay(DISCOVERY_RETRY_DELAY_MS);
+        }
+    })();
+
+    return discoveryPromise;
 }
 
 export async function resolveServerConfig(): Promise<void> {
     if (resolvePromise) return resolvePromise;
 
     resolvePromise = (async () => {
-        const configuredEntryServerUrl = getConfiguredServerEntryUrl();
-        const { entryServerUrl, remoteConfig } = configuredEntryServerUrl
-            ? {
-                entryServerUrl: configuredEntryServerUrl,
-                remoteConfig: await fetchRemoteAppConfig(configuredEntryServerUrl),
-            }
-            : await fetchFastestDefaultAppConfig();
-        const remoteApiBaseUrl = normalizeUrl(normalizeString(remoteConfig?.apiBaseUrl));
+        const generation = discoveryGeneration;
+        const discovery = startServerDiscovery(generation);
+        await Promise.race([
+            discovery,
+            delay(STARTUP_DISCOVERY_WAIT_MS),
+        ]);
 
-        resolvedServerUrl = remoteApiBaseUrl || entryServerUrl;
-        resolvedVoiceConfig = {
-            baseUrl: normalizeUrl(normalizeString(remoteConfig?.voice?.baseUrl)) || undefined,
-        };
+        // getServerUrl() already falls back to the configured entry or first default
+        // while discovery continues in the background.
     })();
 
     return resolvePromise;
@@ -127,6 +189,11 @@ export function getDiscoveredVoiceConfig(): ResolvedVoiceConfig {
     return resolvedVoiceConfig;
 }
 
+export function onServerUrlChanged(listener: (serverUrl: string) => void): () => void {
+    serverUrlListeners.add(listener);
+    return () => serverUrlListeners.delete(listener);
+}
+
 export function setServerUrl(url: string | null): void {
     if (url && url.trim()) {
         serverConfigStorage.set(SERVER_KEY, url.trim());
@@ -135,7 +202,11 @@ export function setServerUrl(url: string | null): void {
     }
     resolvedServerUrl = null;
     resolvedVoiceConfig = {};
+    discoveryGeneration += 1;
+    activeDiscoveryControllers.forEach((controller) => controller.abort());
+    activeDiscoveryControllers.clear();
     resolvePromise = null;
+    discoveryPromise = null;
 }
 
 export function hasCustomServerUrl(): boolean {
