@@ -11,7 +11,9 @@ import { needsLlmClean, regexCleanForSpeech } from './textClean';
  *   regex-only / fallback path.
  * - `externalSignal` aborts the LLM call when the consumer goes away (e.g. the SSE
  *   client disconnects). An internal idle timer (TTS_CLEAN_TIMEOUT_MS) aborts a stalled
- *   LLM independently; a timeout with nothing emitted yet still falls back to regex.
+ *   LLM independently; it only measures time spent waiting for the next Ark delta —
+ *   the clock stops while `onText` runs (downstream TTS synthesis can take longer than
+ *   the timeout). A timeout with nothing emitted yet still falls back to regex.
  * - Returns `true` when a complete, usable result was delivered via `onText`; returns
  *   `false` when the LLM failed after already emitting partial deltas (or was aborted
  *   with no usable output). Streaming callers can ignore the return value (their audio
@@ -45,9 +47,10 @@ export async function cleanForSpeech(
     try {
         resetIdle();
         await streamCleanForSpeech(text, async (piece) => {
-            resetIdle();
+            if (idle) clearTimeout(idle);
             sentAny = true;
             await onText(piece);
+            resetIdle();
         }, controller.signal);
         return true;
     } catch (error) {

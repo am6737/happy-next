@@ -283,11 +283,18 @@ export function registerRoutes(app: FastifyInstance) {
         };
 
         try {
-            await cleanForSpeech(text, async (piece) => {
+            const complete = await cleanForSpeech(text, async (piece) => {
                 buf += piece;
                 await drain(false);
             }, controller.signal);
             await drain(true);
+            // The LLM clean died after partial output: the tail of the message
+            // was never synthesized, and the rewritten prefix can't be aligned
+            // back to the source to resume. Report it instead of pretending a
+            // clean finish, so the client knows playback is truncated.
+            if (!complete && !controller.signal.aborted && !reply.raw.writableEnded) {
+                reply.raw.write(`data: ${JSON.stringify({ error: 'clean_interrupted' })}\n\n`);
+            }
         } finally {
             if (!reply.raw.writableEnded) {
                 reply.raw.write('data: [DONE]\n\n');

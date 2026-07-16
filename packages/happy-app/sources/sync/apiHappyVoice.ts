@@ -206,12 +206,17 @@ export async function streamSpeech(
                 if (!line.startsWith('data:')) continue;
                 const data = line.slice(5).trim();
                 if (data === '[DONE]') return;
+                let obj: (TtsStreamChunk & { error?: string }) | null = null;
                 try {
-                    const obj = JSON.parse(data) as TtsStreamChunk;
-                    if (obj.audioBase64) onChunk(obj);
+                    obj = JSON.parse(data);
                 } catch {
-                    // ignore
+                    // ignore keep-alive / partial lines
                 }
+                // The gateway reports a mid-stream cleaning failure explicitly
+                // (the tail of the text was never synthesized) instead of a
+                // clean [DONE]; surface it so callers stop waiting for more.
+                if (obj?.error) throw new Error(`TTS stream interrupted: ${obj.error}`);
+                if (obj?.audioBase64) onChunk(obj);
             }
         }
     }

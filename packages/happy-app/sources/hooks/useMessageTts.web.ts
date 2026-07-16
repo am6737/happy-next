@@ -120,6 +120,10 @@ export function useMessageTts(messageId: string, text: string | null | undefined
                 if (currentPlayingId === messageId) { currentPlayingId = null; }
                 setState('idle');
                 notifyAll();
+            } else {
+                // Mid-stream failure after playback started: if the queue has
+                // already drained, no onended will fire again — finish now.
+                finishIfDrained();
             }
         }
     }, [text, messageId]);

@@ -1,4 +1,5 @@
-import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
+import { useAudioPlayer, useAudioPlayerStatus, setIsAudioActiveAsync } from 'expo-audio';
+import { Platform } from 'react-native';
 import { File, Paths } from 'expo-file-system';
 import * as React from 'react';
 import { fetch as expoFetch } from 'expo/fetch';
@@ -16,6 +17,26 @@ function notifyAll() { listeners.forEach(fn => fn()); }
 /** Swallow NativeSharedObjectNotFoundException when expo-audio released the player under us. */
 function safePlayerCall(fn: () => void) {
     try { fn(); } catch { /* player released; nothing to do */ }
+}
+
+/**
+ * Release the shared audio session once playback truly ends, so other apps'
+ * audio can resume. Needed because the players are created with
+ * keepAudioSessionActive (see below), which disables expo-audio's own
+ * deactivation. iOS only: the deactivation being compensated is an
+ * AVAudioSession behavior, and on Android setIsAudioActiveAsync(false) sets a
+ * module-wide audioEnabled=false that makes every later play() a no-op (iOS
+ * play() re-activates the session; Android play() never re-enables). Never
+ * touch the session during a voice call — the RTC engine owns it there.
+ */
+function releaseAudioSession() {
+    if (Platform.OS !== 'ios') return;
+    if (isVoiceSessionStarted()) return;
+    // Playback changed hands since the caller decided to release — keep the
+    // session for the new owner. (The native call is async; a release landing
+    // after another message's play() would pause it globally.)
+    if (currentPlayingId !== null) return;
+    setIsAudioActiveAsync(false).catch(() => { /* session busy; harmless */ });
 }
 
 /** Write one sentence's mp3 to a cache file and return its uri. */
@@ -36,7 +57,12 @@ function writeChunkFile(messageId: string, seq: number, audioBase64: string): st
 export function useMessageTts(messageId: string, text: string | null | undefined) {
     const [uri, setUri] = React.useState<string | null>(null);
     const [internalState, setInternalState] = React.useState<MessageTtsState>('idle');
-    const player = useAudioPlayer(uri || undefined);
+    // keepAudioSessionActive: without it, expo-audio deactivates the shared iOS
+    // audio session ~100ms after each sentence finishes unless another player is
+    // already audibly playing — which races the next sentence's startup and kills
+    // it silently, ending the advance chain mid-message. We release the session
+    // ourselves via releaseAudioSession() when playback truly ends.
+    const player = useAudioPlayer(uri || undefined, { keepAudioSessionActive: true });
     const status = useAudioPlayerStatus(player);
     const [, force] = React.useReducer((x: number) => x + 1, 0);
 
@@ -68,7 +94,11 @@ export function useMessageTts(messageId: string, text: string | null | undefined
 
     // Reset when the message text changes (streamed/edited messages).
     React.useEffect(() => {
-        if (currentPlayingId === messageId) { currentPlayingId = null; notifyAll(); }
+        if (currentPlayingId === messageId) {
+            currentPlayingId = null;
+            notifyAll();
+            releaseAudioSession();
+        }
         reset();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [text]);
@@ -80,22 +110,23 @@ export function useMessageTts(messageId: string, text: string | null | undefined
         }
     }, [messageId, status.playing, player]);
 
-    // Start playback once a newly-set source has loaded.
-    // Keyed on `uri` as well as `status.isLoaded`: each sentence's setUri makes
-    // useAudioPlayer recreate the native player, and a freshly-created player for
-    // a local file can already report isLoaded=true, so the status would go
-    // true→true with no transition. Without the `uri` dep the effect would never
-    // re-fire and only the first sentence would play. The pendingPlayRef gate
-    // keeps this to one play() per source.
+    // Start playback for a newly-set source. Deliberately NOT gated on
+    // status.isLoaded: useAudioPlayerStatus keeps reporting the PREVIOUS
+    // player's last event until the new player emits, so any status-based gate
+    // either fires on stale data or (if gated on the new player's own event)
+    // deadlocks when that event slips in before the subscription. play() before
+    // the local file is ready is safe — the player latches the rate and starts
+    // as soon as the item loads. The pendingPlayRef gate keeps this to one
+    // play() per source; each source is a fresh player starting at 0.
     React.useEffect(() => {
-        if (pendingPlayRef.current && status.isLoaded && currentPlayingId === messageId) {
+        if (pendingPlayRef.current && uri && currentPlayingId === messageId) {
             pendingPlayRef.current = false;
-            safePlayerCall(() => { player.seekTo(0); player.play(); });
+            safePlayerCall(() => player.play());
             setInternalState('playing');
             notifyAll();
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [status.isLoaded, uri, messageId]);
+    }, [uri, messageId]);
 
     // Advance to the next sentence when the current one finishes.
     React.useEffect(() => {
@@ -108,6 +139,7 @@ export function useMessageTts(messageId: string, text: string | null | undefined
             currentPlayingId = null;
             setInternalState('idle');
             notifyAll();
+            releaseAudioSession();
         } else {
             // caught up; waiting for the next sentence to arrive.
             setInternalState('loading');
@@ -119,7 +151,11 @@ export function useMessageTts(messageId: string, text: string | null | undefined
     // Clear the global singleton on unmount if this message owned playback.
     React.useEffect(() => {
         return () => {
-            if (currentPlayingId === messageId) { currentPlayingId = null; notifyAll(); }
+            if (currentPlayingId === messageId) {
+                currentPlayingId = null;
+                notifyAll();
+                releaseAudioSession();
+            }
         };
     }, [messageId]);
 
@@ -134,6 +170,7 @@ export function useMessageTts(messageId: string, text: string | null | undefined
             currentPlayingId = null;
             reset();
             notifyAll();
+            releaseAudioSession();
             return;
         }
         if (startingRef.current) return;
@@ -143,6 +180,11 @@ export function useMessageTts(messageId: string, text: string | null | undefined
         doneRef.current = false;
         queueRef.current = [];
         idxRef.current = 0;
+        pendingPlayRef.current = false;
+        // Clear any source left from a previous run of this message: replaying
+        // regenerates the same chunk file paths, and setUri with an identical
+        // string would bail out of the re-render that starts playback.
+        setUri(null);
         currentPlayingId = messageId;
         setInternalState('loading');
         notifyAll();
@@ -169,18 +211,23 @@ export function useMessageTts(messageId: string, text: string | null | undefined
                 }
             }, ac.signal, expoFetch as unknown as typeof fetch);
             doneRef.current = true;
-            // Stream ended with nothing to play (empty / already drained, never started).
-            if (currentPlayingId === messageId && queueRef.current.length === 0) {
+            // Stream ended and playback already drained the queue (or nothing
+            // arrived at all) — finish here; the advance effect only runs on
+            // didJustFinish, which won't fire again. If a sentence is still
+            // playing, the advance effect finishes via doneRef instead.
+            if (currentPlayingId === messageId && idxRef.current >= queueRef.current.length) {
                 currentPlayingId = null;
                 setInternalState('idle');
                 notifyAll();
+                releaseAudioSession();
             }
         } catch {
             doneRef.current = true;
-            if (currentPlayingId === messageId && queueRef.current.length === 0) {
+            if (currentPlayingId === messageId && idxRef.current >= queueRef.current.length) {
                 currentPlayingId = null;
                 setInternalState('idle');
                 notifyAll();
+                releaseAudioSession();
             }
         } finally {
             startingRef.current = false;
