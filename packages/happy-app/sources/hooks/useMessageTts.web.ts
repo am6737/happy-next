@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { streamSpeech } from '@/sync/apiHappyVoice';
+import { prepareSpeechStream } from '@/sync/apiHappyVoice';
 
 export type MessageTtsState = 'idle' | 'loading' | 'playing';
 
@@ -10,10 +10,14 @@ function notifyAll() { listeners.forEach((fn) => fn()); }
 
 interface Controller { stop: () => void; }
 
+// ~1ms of silence, used to prime the element inside the tap gesture: Safari
+// needs a play() that actually starts to mark the element user-activated.
+const SILENT_WAV = 'data:audio/wav;base64,UklGRjQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YRAAAAAAAAAAAAAAAAAAAAAAAAAA';
+
 /**
- * Web "read message aloud" with progressive playback. The gateway streams
- * sentence-by-sentence audio (LLM-cleaned); we queue HTMLAudioElements and play
- * them in order, starting as soon as the first sentence arrives.
+ * Web "read message aloud": a single HTMLAudioElement streams one
+ * gateway-prepared chunked mp3 URL. (Per-sentence element chains got cut off
+ * by Safari's autoplay policy after the first sentence.)
  */
 export function useMessageTts(messageId: string, text: string | null | undefined) {
     const [state, setState] = React.useState<MessageTtsState>('idle');
@@ -67,64 +71,50 @@ export function useMessageTts(messageId: string, text: string | null | undefined
         notifyAll();
         setState('loading');
 
-        const audios: HTMLAudioElement[] = [];
-        const ac = new AbortController();
-        let idx = 0;
-        let done = false;
         let stopped = false;
-        let started = false;
+        const ac = new AbortController();
+        // Safari grants play() permission per element and only within user
+        // activation (gone by the time prepare's round-trips resolve), so the
+        // element is created and play()ed in the synchronous part of the tap;
+        // the silent clip makes that play() actually succeed (src-less play()
+        // just rejects) and the real src is swapped in after prepare.
+        const audio = new Audio(SILENT_WAV);
+        audio.play().catch(() => { /* priming is best-effort */ });
 
-        const finishIfDrained = () => {
-            if (done && idx >= audios.length) {
-                if (currentPlayingId === messageId) { currentPlayingId = null; }
-                ctrlRef.current = null;
-                setState('idle');
-                notifyAll();
-            }
-        };
-
-        const playNext = () => {
+        const finish = () => {
             if (stopped) return;
-            if (idx >= audios.length) { finishIfDrained(); return; }
-            const a = audios[idx];
-            a.onended = () => { idx++; playNext(); };
-            a.play().catch(() => {});
-            if (!started) { started = true; setState('playing'); notifyAll(); }
+            stopped = true;
+            if (currentPlayingId === messageId) { currentPlayingId = null; }
+            ctrlRef.current = null;
+            setState('idle');
+            notifyAll();
         };
 
         ctrlRef.current = {
             stop: () => {
                 stopped = true;
                 ac.abort();
-                for (const a of audios) { try { a.pause(); a.src = ''; } catch {} }
+                // Clearing src aborts the download; its error event is ignored via stopped.
+                try { audio.pause(); audio.src = ''; } catch { /* already torn down */ }
             },
         };
 
         try {
-            await streamSpeech(text, (chunk) => {
-                if (stopped) return;
-                const a = new Audio(`data:${chunk.mimeType};base64,${chunk.audioBase64}`);
-                audios.push(a);
-                // Start the first chunk immediately; otherwise, if playback had
-                // caught up and was waiting, this newly-arrived chunk resumes it.
-                if (audios.length === 1 || idx === audios.length - 1) {
-                    playNext();
-                }
-            }, ac.signal);
-            done = true;
-            finishIfDrained();
+            const { url } = await prepareSpeechStream(text, ac.signal);
+            if (stopped) return;
+            // 'playing' fires once audio is audibly out; stay loading until then.
+            audio.onplaying = () => {
+                if (!stopped && currentPlayingId === messageId) { setState('playing'); notifyAll(); }
+            };
+            // Server closes the stream at end of synthesis (natural end) and
+            // destroys the socket on mid-stream failure (error); never surfaced.
+            audio.onended = finish;
+            audio.onerror = finish;
+            audio.src = url;
+            audio.play().catch(finish);
         } catch {
-            done = true;
-            if (!started) {
-                ctrlRef.current = null;
-                if (currentPlayingId === messageId) { currentPlayingId = null; }
-                setState('idle');
-                notifyAll();
-            } else {
-                // Mid-stream failure after playback started: if the queue has
-                // already drained, no onended will fire again — finish now.
-                finishIfDrained();
-            }
+            // Prepare failed or was aborted — never surfaced; drop back to idle.
+            finish();
         }
     }, [text, messageId]);
 

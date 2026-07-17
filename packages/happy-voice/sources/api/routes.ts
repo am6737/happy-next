@@ -9,6 +9,7 @@ import { buildRtcToken } from '../runtime/rtcToken';
 import { startVoiceChat, stopVoiceChat } from '../runtime/rtcOpenApi';
 import { synthesize } from '../runtime/tts';
 import { cleanForSpeech } from '../runtime/cleanForSpeech';
+import { ttsStreamSessionStore } from '../runtime/ttsStreamSession';
 import { regexCleanForSpeech } from '../runtime/textClean';
 import { renderPrompt } from '../runtime/prompts';
 import type { VoiceSessionRecord } from '../types/voice';
@@ -52,6 +53,25 @@ const ttsSchema = z.object({
     voiceType: z.string().optional(),
     speechRate: z.number().min(-50).max(100).optional(),
 });
+const ttsStreamPrepareSchema = z.object({
+    text: z.string().min(1).max(20000),
+    voiceType: z.string().optional(),
+    speechRate: z.number().min(-50).max(100).optional(),
+});
+
+function firstForwardedHeader(value: string | string[] | undefined): string | undefined {
+    const first = Array.isArray(value) ? value[0] : value?.split(',')[0];
+    return first?.trim() || undefined;
+}
+
+function getPublicBaseUrl(request: FastifyRequest): string {
+    if (env.PUBLIC_VOICE_BASE_URL) return env.PUBLIC_VOICE_BASE_URL.replace(/\/+$/, '');
+    const protocol = firstForwardedHeader(request.headers['x-forwarded-proto']) || request.protocol;
+    const host = firstForwardedHeader(request.headers['x-forwarded-host'])
+        || request.headers.host
+        || `localhost:${env.PORT}`;
+    return `${protocol}://${host}`;
+}
 
 export function registerRoutes(app: FastifyInstance) {
     const typed = app.withTypeProvider<ZodTypeProvider>();
@@ -92,7 +112,6 @@ export function registerRoutes(app: FastifyInstance) {
         const now = Date.now();
         const expiresAt = new Date(now + env.RTC_TOKEN_TTL_SECONDS * 1000).toISOString();
         const language = body.language || env.DEFAULT_LANGUAGE;
-        // Welcome message may hold several '|'-separated options; pick one at random.
         const welcomeRaw = body.welcomeMessage || env.AGENT_WELCOME_MESSAGE;
         const welcomeOptions = welcomeRaw.split('|').map((s) => s.trim()).filter(Boolean);
         const welcomeMessage = welcomeOptions.length > 1
@@ -198,7 +217,6 @@ export function registerRoutes(app: FastifyInstance) {
         return reply.send({ found: !!record, session: record });
     });
 
-    // One-shot TTS for the app's "read message aloud" feature (useMessageTts).
     typed.post('/v1/voice/tts', {
         schema: {
             body: ttsSchema,
@@ -223,9 +241,81 @@ export function registerRoutes(app: FastifyInstance) {
         }
     });
 
-    // Streaming "read message aloud": LLM-clean (streamed) → split into sentences →
-    // synthesize each sentence → push as SSE audio chunks so the client can play
-    // progressively ("process while playing"). Falls back to regex clean.
+    typed.post('/v1/voice/tts/stream/prepare', {
+        schema: {
+            body: ttsStreamPrepareSchema,
+            response: {
+                200: z.object({
+                    streamId: z.string(),
+                    url: z.string().url(),
+                    expiresAt: z.string(),
+                }),
+                401: z.object({ error: z.string(), message: z.string() }),
+                429: z.object({ error: z.string(), message: z.string() }),
+            },
+        },
+    }, async (request, reply) => {
+        const claims = getAuthClaims(request);
+        if (!claims) return rejectUnauthorized(reply);
+        const input = ttsStreamPrepareSchema.parse(request.body);
+        const prepared = ttsStreamSessionStore.prepare(input, claims.userId);
+        if (!prepared) {
+            return reply.code(429).send({
+                error: 'tts_stream_capacity',
+                message: 'Too many active TTS streams.',
+            });
+        }
+        const url = `${getPublicBaseUrl(request)}/v1/voice/tts/stream/${prepared.streamId}/audio.mp3`;
+        return reply.send({ ...prepared, url });
+    });
+
+    typed.get('/v1/voice/tts/stream/:streamId/audio.mp3', {
+        schema: {
+            params: z.object({ streamId: z.string().min(1) }),
+        },
+    }, async (request, reply) => {
+        const { streamId } = z.object({ streamId: z.string().min(1) }).parse(request.params);
+        const subscriber = {
+            write: (chunk: Buffer) => reply.raw.write(chunk),
+            end: () => {
+                if (!reply.raw.writableEnded) reply.raw.end();
+            },
+            destroy: () => {
+                if (!reply.raw.destroyed) reply.raw.destroy();
+            },
+            once: (event: 'drain', listener: () => void) => reply.raw.once(event, listener),
+            off: (event: 'drain', listener: () => void) => reply.raw.off(event, listener),
+            get bufferedBytes() {
+                return reply.raw.writableLength;
+            },
+        };
+        const subscription = ttsStreamSessionStore.subscribe(streamId, subscriber);
+        if (subscription.status === 'not_found') {
+            return reply.code(404).send({ error: 'not_found', message: 'TTS stream not found.' });
+        }
+        if (subscription.status === 'gone') {
+            return reply.code(410).send({ error: 'gone', message: 'TTS stream audio is no longer replayable.' });
+        }
+        if (subscription.status === 'capacity') {
+            return reply.code(429).send({ error: 'too_many_subscribers', message: 'Too many subscribers for this TTS stream.' });
+        }
+
+        reply.hijack();
+        reply.raw.writeHead(200, {
+            'Content-Type': 'audio/mpeg',
+            'Cache-Control': 'no-store',
+            'Accept-Ranges': 'none',
+            'Transfer-Encoding': 'chunked',
+        });
+
+        if (reply.raw.destroyed) {
+            subscription.unsubscribe();
+            return;
+        }
+        reply.raw.once('close', subscription.unsubscribe);
+    });
+
+    // Legacy SSE endpoint: keep sentence-splitting behavior for old clients.
     typed.post('/v1/voice/tts/stream', {
         schema: { body: ttsSchema },
     }, async (request, reply) => {
@@ -288,10 +378,7 @@ export function registerRoutes(app: FastifyInstance) {
                 await drain(false);
             }, controller.signal);
             await drain(true);
-            // The LLM clean died after partial output: the tail of the message
-            // was never synthesized, and the rewritten prefix can't be aligned
-            // back to the source to resume. Report it instead of pretending a
-            // clean finish, so the client knows playback is truncated.
+            // Partial cleaning means truncated audio; signal it instead of a clean EOF.
             if (!complete && !controller.signal.aborted && !reply.raw.writableEnded) {
                 reply.raw.write(`data: ${JSON.stringify({ error: 'clean_interrupted' })}\n\n`);
             }
@@ -303,8 +390,7 @@ export function registerRoutes(app: FastifyInstance) {
         }
     });
 
-    // Clean-only (non-streaming): LLM-clean text for speech, regex fallback.
-    // Used by the in-call "announce Happy's reply" path before ExternalTextToSpeech.
+    // Clean-only path used before ExternalTextToSpeech.
     typed.post('/v1/voice/clean', {
         schema: {
             body: ttsSchema,

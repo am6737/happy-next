@@ -73,6 +73,9 @@ services:
       - NODE_ENV=production
       - HOST=0.0.0.0
       - PORT=3040
+      # Same value as happy-server's PUBLIC_VOICE_BASE_URL (voiceBaseUrl for the app).
+      # Empty → the gateway derives it per-request from forwarded headers.
+      - PUBLIC_VOICE_BASE_URL=${PUBLIC_VOICE_BASE_URL}
       # App-facing auth: API-signed short-lived bearer tokens.
       - VOICE_AUTH_SECRET=${VOICE_AUTH_SECRET:-dev-voice-auth-secret-change-me-32-bytes}
       # 火山 RTC — MUST be an "AI agent" type RTC app

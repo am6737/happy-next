@@ -10,24 +10,18 @@ interface VolcTtsResponse {
 }
 
 export interface SynthesizeOptions {
-    /** User-selected voice (VoiceType). Falls back to env default when omitted. */
     voiceType?: string;
-    /** Speech rate, -50..100 (0 = normal). Mapped to speed_ratio for this REST API. */
     speechRate?: number;
+    signal?: AbortSignal;
 }
 
-/**
- * Map the unified speechRate scale (-50..100, 0 = normal) to the one-shot REST
- * TTS `speed_ratio` (1.0 = normal). Linear: rate/100 + 1, clamped to [0.5, 2.0].
- * e.g. -50 → 0.5, 0 → 1.0, 100 → 2.0.
- */
+/** REST TTS uses speed_ratio; app speechRate -50..100 maps linearly to 0.5..2.0. */
 export function speechRateToSpeedRatio(rate: number | undefined): number {
     if (!rate) return 1.0;
     const ratio = 1 + rate / 100;
     return Math.min(2.0, Math.max(0.5, ratio));
 }
 
-/** Synthesize speech via Volcano big-model TTS. Returns base64 mp3. */
 export async function synthesize(
     text: string,
     opts: SynthesizeOptions = {},
@@ -53,6 +47,7 @@ export async function synthesize(
 
     const res = await fetch(TTS_URL, {
         method: 'POST',
+        signal: opts.signal,
         headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer;${env.VOLC_TTS_TOKEN}`,

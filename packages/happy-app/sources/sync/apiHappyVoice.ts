@@ -162,64 +162,27 @@ export async function synthesizeSpeech(text: string): Promise<HappyVoiceTtsRespo
     return await response.json();
 }
 
-export interface TtsStreamChunk {
-    seq: number;
-    text: string;
-    audioBase64: string;
-    mimeType: string;
-}
-
 /**
- * Streamed "read message aloud" (web): the gateway LLM-cleans + splits into
- * sentences and pushes audio chunks over SSE; onChunk fires per sentence so the
- * client can play progressively. Uses fetch ReadableStream (web only).
+ * Prepare "read message aloud": the gateway LLM-cleans the text and returns a
+ * short-lived capability URL serving one chunked audio/mpeg stream (no
+ * duration, not seekable, closed at end of synthesis). The URL embeds its own
+ * token — players GET it directly with no extra headers.
  */
-export async function streamSpeech(
-    text: string,
-    onChunk: (chunk: TtsStreamChunk) => void,
-    signal?: AbortSignal,
-    fetchImpl: typeof fetch = fetch,
-): Promise<void> {
+export async function prepareSpeechStream(text: string, signal?: AbortSignal): Promise<{ url: string }> {
     const { voiceType, speechRate } = getVoicePrefs();
     const voiceAuth = await getVoiceAuthToken();
-    const response = await fetchImpl(`${getVoiceGatewayUrlFromAuth(voiceAuth)}/v1/voice/tts/stream`, {
+    const response = await fetch(`${getVoiceGatewayUrlFromAuth(voiceAuth)}/v1/voice/tts/stream/prepare`, {
         method: 'POST',
         headers: getVoiceGatewayHeaders(voiceAuth),
         body: JSON.stringify({ text, voiceType, speechRate }),
         signal,
     });
-    if (!response.ok || !response.body) {
-        throw new Error(`Failed to stream speech: ${response.status}`);
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to prepare speech stream: ${response.status} ${errorText}`);
     }
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buf = '';
-    for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buf += decoder.decode(value, { stream: true });
-        let idx: number;
-        while ((idx = buf.indexOf('\n\n')) !== -1) {
-            const evt = buf.slice(0, idx);
-            buf = buf.slice(idx + 2);
-            for (const line of evt.split('\n')) {
-                if (!line.startsWith('data:')) continue;
-                const data = line.slice(5).trim();
-                if (data === '[DONE]') return;
-                let obj: (TtsStreamChunk & { error?: string }) | null = null;
-                try {
-                    obj = JSON.parse(data);
-                } catch {
-                    // ignore keep-alive / partial lines
-                }
-                // The gateway reports a mid-stream cleaning failure explicitly
-                // (the tail of the text was never synthesized) instead of a
-                // clean [DONE]; surface it so callers stop waiting for more.
-                if (obj?.error) throw new Error(`TTS stream interrupted: ${obj.error}`);
-                if (obj?.audioBase64) onChunk(obj);
-            }
-        }
-    }
+    const data = (await response.json()) as { streamId: string; url: string; expiresAt: string };
+    return { url: data.url };
 }
 
 /**
