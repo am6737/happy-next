@@ -1447,7 +1447,15 @@ export const zhHans: TranslationStructure = {
         forkFromHere: '从这里分叉',
         playVoice: '朗读',
         stopVoice: '停止朗读',
+        queuedVoice: '已加入朗读队列，点按移除',
         tooLongPlaceholder: ({ chars }: { chars: number }) => `消息过长（${chars} 字符），点击查看`,
+    },
+
+    tts: {
+        queueTitle: '朗读队列',
+        stopCurrent: '停止当前消息',
+        removeFromQueue: '移出队列',
+        showQueue: '展开朗读队列',
     },
 
     codex: {

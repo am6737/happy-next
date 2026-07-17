@@ -1445,7 +1445,15 @@ export const ca: TranslationStructure = {
         forkFromHere: 'Bifurca des d\'aquí',
         playVoice: 'Reprodueix la veu',
         stopVoice: 'Atura la veu',
+        queuedVoice: 'A la cua de lectura — toca per treure',
         tooLongPlaceholder: ({ chars }: { chars: number }) => `Missatge llarg (${chars} caràcters). Toca per veure'l.`,
+    },
+
+    tts: {
+        queueTitle: 'Cua de lectura',
+        stopCurrent: 'Atura aquest missatge',
+        removeFromQueue: 'Treu de la cua',
+        showQueue: 'Mostra la cua de lectura',
     },
 
     codex: {

@@ -71,15 +71,15 @@ function MessageActionBar(props: {
   onFork?: () => void;
   forkLoading?: boolean;
   onSpeak?: () => void | Promise<void>;
-  ttsState?: 'idle' | 'loading' | 'playing';
+  ttsState?: 'idle' | 'loading' | 'playing' | 'queued';
 }) {
   const { theme } = useUnistyles();
   const ttsState = props.ttsState ?? 'idle';
   // Web: visible only on hover (but the row always occupies layout space).
-  // Native: always visible. While a fork is in progress, or TTS is loading/playing,
-  // force the bar visible on web so the spinner / play state stays shown even if
-  // the cursor moved away.
-  const ttsActive = ttsState === 'loading' || ttsState === 'playing';
+  // Native: always visible. While a fork is in progress, or TTS is
+  // loading/playing/queued, force the bar visible on web so the spinner /
+  // play state stays shown even if the cursor moved away.
+  const ttsActive = ttsState !== 'idle';
   const contentVisible = Platform.OS !== 'web' || props.hovered || !!props.forkLoading || ttsActive;
   return (
     <View
@@ -105,11 +105,17 @@ function MessageActionBar(props: {
           style={styles.actionButton}
           onPress={ttsState === 'loading' ? undefined : () => { hapticsLight(); props.onSpeak?.(); }}
           disabled={ttsState === 'loading'}
-          accessibilityLabel={ttsState === 'playing' ? t('message.stopVoice') : t('message.playVoice')}
+          accessibilityLabel={
+            ttsState === 'playing' ? t('message.stopVoice')
+              : ttsState === 'queued' ? t('message.queuedVoice')
+                : t('message.playVoice')
+          }
           hitSlop={6}
         >
           {ttsState === 'loading' ? (
             <ActivityIndicator size="small" color={theme.colors.textSecondary} style={styles.actionSpinner} />
+          ) : ttsState === 'queued' ? (
+            <Ionicons name="time-outline" size={15} color={theme.colors.textSecondary} />
           ) : (
             <SimpleLineIcons
               name={ttsState === 'playing' ? 'control-pause' : 'volume-2'}
@@ -474,7 +480,7 @@ function AgentTextBlock(props: {
   const handleCopy = React.useCallback(() => {
     copyMessageText(messageText);
   }, [messageText]);
-  const { state: ttsState, toggle: handleSpeak } = useMessageTts(props.message.id, messageText);
+  const { state: ttsState, toggle: handleSpeak } = useMessageTts(props.message.id, props.sessionId, messageText);
 
   // Hide thinking messages if setting is disabled. Must run AFTER all hooks so
   // the hook count stays constant across renders (Rules of Hooks).

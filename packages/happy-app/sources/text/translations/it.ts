@@ -1475,7 +1475,15 @@ export const it: TranslationStructure = {
         forkFromHere: 'Dirama da qui',
         playVoice: 'Riproduci voce',
         stopVoice: 'Ferma voce',
+        queuedVoice: 'In coda di lettura — tocca per rimuovere',
         tooLongPlaceholder: ({ chars }: { chars: number }) => `Messaggio lungo (${chars} caratteri). Tocca per aprire.`,
+    },
+
+    tts: {
+        queueTitle: 'Coda di lettura',
+        stopCurrent: 'Interrompi questo messaggio',
+        removeFromQueue: 'Rimuovi dalla coda',
+        showQueue: 'Mostra la coda di lettura',
     },
 
     codex: {

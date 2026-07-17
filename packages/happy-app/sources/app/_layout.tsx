@@ -28,6 +28,7 @@ import { FaviconPermissionIndicator } from '@/components/web/FaviconPermissionIn
 import { CommandPaletteProvider } from '@/components/CommandPalette/CommandPaletteProvider';
 import { StatusBarProvider } from '@/components/StatusBarProvider';
 import { ToastHost } from '@/components/Toast';
+import { TtsFloatingPlayer } from '@/components/TtsFloatingPlayer';
 // import * as SystemUI from 'expo-system-ui';
 import { monkeyPatchConsoleForRemoteLoggingForFasterAiAutoDebuggingOnlyInLocalBuilds } from '@/utils/remoteLogger';
 import { useUnistyles } from 'react-native-unistyles';
@@ -328,6 +329,7 @@ export default function RootLayout() {
                                             </RealtimeProvider>
                                         </CommandPaletteProvider>
                                     </ModalProvider>
+                                    <TtsFloatingPlayer />
                                     <ToastHost />
                                 </StatusBarProvider>
                             </ThemeProvider>

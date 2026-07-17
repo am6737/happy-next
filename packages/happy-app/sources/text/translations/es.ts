@@ -1445,7 +1445,15 @@ export const es: TranslationStructure = {
         forkFromHere: 'Bifurcar desde aquí',
         playVoice: 'Reproducir voz',
         stopVoice: 'Detener voz',
+        queuedVoice: 'En cola de lectura — toca para quitar',
         tooLongPlaceholder: ({ chars }: { chars: number }) => `Mensaje largo (${chars} caracteres). Toca para ver.`,
+    },
+
+    tts: {
+        queueTitle: 'Cola de lectura',
+        stopCurrent: 'Detener este mensaje',
+        removeFromQueue: 'Quitar de la cola',
+        showQueue: 'Mostrar cola de lectura',
     },
 
     codex: {

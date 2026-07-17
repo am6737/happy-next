@@ -1444,7 +1444,15 @@ export const ru: TranslationStructure = {
         forkFromHere: 'Форкнуть отсюда',
         playVoice: 'Озвучить',
         stopVoice: 'Остановить',
+        queuedVoice: 'В очереди на озвучку — нажмите, чтобы убрать',
         tooLongPlaceholder: ({ chars }: { chars: number }) => `Длинное сообщение (${chars} симв.). Нажмите, чтобы открыть.`,
+    },
+
+    tts: {
+        queueTitle: 'Очередь озвучки',
+        stopCurrent: 'Остановить это сообщение',
+        removeFromQueue: 'Убрать из очереди',
+        showQueue: 'Показать очередь озвучки',
     },
 
     codex: {

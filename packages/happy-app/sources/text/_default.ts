@@ -1462,7 +1462,15 @@ export const en = {
         forkFromHere: 'Fork from here',
         playVoice: 'Play voice',
         stopVoice: 'Stop voice',
+        queuedVoice: 'Queued — tap to remove',
         tooLongPlaceholder: ({ chars }: { chars: number }) => `Long message (${chars} characters). Tap to view.`,
+    },
+
+    tts: {
+        queueTitle: 'Reading queue',
+        stopCurrent: 'Stop this message',
+        removeFromQueue: 'Remove from queue',
+        showQueue: 'Show reading queue',
     },
 
     codex: {

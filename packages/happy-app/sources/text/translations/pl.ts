@@ -1456,7 +1456,15 @@ export const pl: TranslationStructure = {
         forkFromHere: 'Rozgałęź stąd',
         playVoice: 'Odtwórz głos',
         stopVoice: 'Zatrzymaj',
+        queuedVoice: 'W kolejce odczytu — stuknij, aby usunąć',
         tooLongPlaceholder: ({ chars }: { chars: number }) => `Długa wiadomość (${chars} znaków). Stuknij, aby otworzyć.`,
+    },
+
+    tts: {
+        queueTitle: 'Kolejka odczytu',
+        stopCurrent: 'Zatrzymaj tę wiadomość',
+        removeFromQueue: 'Usuń z kolejki',
+        showQueue: 'Pokaż kolejkę odczytu',
     },
 
     codex: {
