@@ -1,6 +1,6 @@
 import { env } from './env';
 import { logError } from './log';
-import { streamCleanForSpeech } from './ark';
+import { streamCleanForSpeech, type CleanMode } from './ark';
 import { needsLlmClean, regexCleanForSpeech } from './textClean';
 
 /**
@@ -43,6 +43,14 @@ export async function cleanForSpeech(
         idle = setTimeout(() => controller.abort(), env.TTS_CLEAN_TIMEOUT_MS);
     };
 
+    // Mode is decided here, never by the model; `cleaned.length` proxies speech
+    // length. The 12000 clamp keeps lengths that full mode's 16384 max_tokens
+    // cannot honestly cover out of full mode, regardless of ops overrides.
+    // Deliberate (product decision 2026-07): digest failing before its first
+    // delta still falls back to the FULL regex text — content over brevity.
+    const digestAt = Math.min(env.TTS_CLEAN_DIGEST_MIN_CHARS, 12000);
+    const mode: CleanMode = cleaned.length > digestAt ? 'digest' : 'full';
+
     let sentAny = false;
     try {
         resetIdle();
@@ -51,7 +59,7 @@ export async function cleanForSpeech(
             sentAny = true;
             await onText(piece);
             resetIdle();
-        }, controller.signal);
+        }, controller.signal, mode);
         return true;
     } catch (error) {
         // A client-disconnect abort is expected, not a failure — don't log it as one.
