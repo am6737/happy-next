@@ -1,12 +1,16 @@
 # Changelog
 
-## Version 18 - 2026-07-13
+## Version 18 - 2026-07-17
 
-A new /preview-html CLI command renders self-contained HTML previews right inside the app, web conversation-list scrolling gets more polish, and the iOS status bar stays correct after the keyboard animates.
+Message read-aloud is rebuilt around true streaming TTS with a global playback queue and a draggable floating player, a new /preview-html CLI command renders self-contained HTML previews right inside the app, web conversation-list scrolling gets more polish, and the iOS status bar stays correct after the keyboard animates.
 
+- Voice: message read-aloud now streams audio as it's synthesized, so playback starts sooner and no longer dies mid-message or silently drops the tail
+- Voice: a global read-aloud queue with a draggable floating player lets you line up messages and control playback from anywhere
+- Voice: an improved text-cleanup prompt (v2) with a digest mode condenses long messages for smoother, more natural narration
 - Preview HTML: the CLI adds a built-in /preview-html slash command that generates a self-contained HTML document and previews it directly in the app
 - Web conversation list: scroll position is now preserved when returning from a covered screen, and the proxy scrollbar strip is sized to match the platform's native scrollbar width
 - iOS: the status bar is reapplied after keyboard animations so it no longer gets left in the wrong state
+- Server: background service-discovery retries are fixed so connection setup recovers more reliably
 - Docs: the documentation site is synced with the last five weeks of shipped features
 - CLI: Happy CLI updated to v0.6.3 — unknown commands are now rejected before launching Claude
 

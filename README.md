@@ -120,7 +120,7 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Voice assistant configuration syncs across devices via end-to-end-encrypted user settings
 - Microphone mute, voice message send confirmation, "thinking" indicator
 - Context-aware voice: app state is injected into the voice LLM automatically
-- Read any AI reply aloud with a one-tap voice button in the message footer (one-shot text-to-speech via the voice gateway)
+- Read any AI reply aloud with a one-tap voice button in the message footer — true streaming text-to-speech starts playback as audio is synthesized, backed by a global read-aloud queue and a draggable floating player so you can line up messages and control playback from anywhere; a v2 text-cleanup prompt with a digest mode condenses long messages for smoother narration
 - Manage sessions by voice — start, switch, and message a session through dedicated voice tools with a single session-settings mode parameter, clearer titles, and an auto-close countdown on the session-picker cancel button
 
 ### Multi-Repo Worktree Workspaces

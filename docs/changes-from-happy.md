@@ -11,7 +11,7 @@ This document summarizes what changed in Happy Next compared to the original Hap
 | Orchestrator | Multi-agent DAG task scheduling with per-task model, working directory, and real-time monitoring |
 | Pending queue | Server-side message queue with auto-dispatch, queue panel UI, send-now, plus edit and pause/draft of queued messages |
 | Multi-agent | Claude Code, Codex, and Gemini are all first-class agents |
-| Voice | Volcano (Doubao) real-time voice gateway with streaming speech, native iOS voice calls, selectable timbre/speech rate, E2E-encrypted settings sync, plus read-aloud (TTS) of AI replies |
+| Voice | Volcano (Doubao) real-time voice gateway with streaming speech, native iOS voice calls, selectable timbre/speech rate, E2E-encrypted settings sync, plus streaming read-aloud (TTS) of AI replies with a global playback queue and floating player |
 | Workspaces | Multi-repo worktree creation, switching, archiving, and PR flows |
 | Code browser | File browser, Monaco editor, commit history, git stage/commit/discard, image preview |
 | Session sharing | Direct invite and public link sharing with E2E encryption and access control |
@@ -110,7 +110,7 @@ Happy Next includes a complete voice gateway stack built on the Volcano (火山�
 - **Speech fragment merging** for interrupted user turns
 - **Configurable welcome message** from app settings
 - **System prompt engineering**: English prompts, semantic XML separation, inline LLM hints
-- **Read-aloud for AI replies**: a one-shot `POST /v1/voice/tts` endpoint synthesizes a message's text (using the message-playback Volcano TTS, `VOLC_TTS_*`) and the app plays it from a voice button in the message footer, with single-message-at-a-time playback
+- **Read-aloud for AI replies**: a voice button in the message footer synthesizes a message's text (using the message-playback Volcano TTS, `VOLC_TTS_*`) with **true streaming TTS** — audio is played as it is synthesized, so playback starts sooner and no longer dies mid-message or silently drops the tail. A **global read-aloud queue** with a **draggable floating player** lets you line up messages and control playback from anywhere, and a **v2 text-cleanup prompt with a digest mode** condenses long messages for smoother narration
 
 ## Multi-Repo Worktree Workspaces
 
