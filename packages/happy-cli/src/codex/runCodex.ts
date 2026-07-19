@@ -400,7 +400,7 @@ export async function runCodex(opts: {
     const sendReady = () => {
         session.sendSessionEvent({ type: 'ready' });
         try {
-            api.push().sendToAllDevices(
+            api.push().sendCompletionToAllDevices(
                 "It's ready!",
                 'Codex is waiting for your command',
                 { sessionId: session.sessionId }

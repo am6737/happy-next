@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { logger } from '@/ui/logger'
 import { Expo, ExpoPushMessage } from 'expo-server-sdk'
+import { isOrchestratorWorkerSession } from '@/orchestrator/prompt'
 
 export interface PushToken {
     id: string
@@ -9,11 +10,15 @@ export interface PushToken {
     updatedAt: number
 }
 
+const COMPLETION_CHECK_RETRY_DELAYS_MS = [1_000, 3_000] as const
+const COMPLETION_CHECK_TIMEOUT_MS = 10_000
+
 
 export class PushNotificationClient {
     private readonly token: string
     private readonly baseUrl: string
     private readonly expo: Expo
+    private readonly completionChecks = new Map<string, Promise<void>>()
 
     constructor(token: string, baseUrl: string = 'https://api.happy-next.com') {
         this.token = token
@@ -196,5 +201,93 @@ export class PushNotificationClient {
                 logger.debug('[PUSH] Error sending to all devices:', error)
             }
         })()
+    }
+
+    /**
+     * Send the normal ready notification after confirming that this controller
+     * has no active delegated runs/tasks. A worker one-shot never sends a
+     * completion notification itself; its controller receives the terminal
+     * callback and performs the normal ready flow.
+     *
+     * Activity lookup is fail-closed. A bounded retry gives a transient server
+     * failure a chance to recover without leaving an unbounded timer/request
+     * alive or permanently suppressing later, independent controller turns.
+     */
+    sendCompletionToAllDevices(title: string, body: string, data?: Record<string, any>): void {
+        if (isOrchestratorWorkerSession()) {
+            logger.debug('[PUSH] Suppressing worker completion notification')
+            return
+        }
+
+        const controllerSessionId = typeof data?.sessionId === 'string' ? data.sessionId : null
+        if (!controllerSessionId) {
+            this.sendToAllDevices(title, body, data)
+            return
+        }
+
+        const previous = this.completionChecks.get(controllerSessionId) ?? Promise.resolve()
+        const check = previous
+            .catch(() => undefined)
+            .then(() => this.checkCompletionAndSend(
+                controllerSessionId,
+                title,
+                body,
+                data,
+            ))
+            .finally(() => {
+                if (this.completionChecks.get(controllerSessionId) === check) {
+                    this.completionChecks.delete(controllerSessionId)
+                }
+            })
+        this.completionChecks.set(controllerSessionId, check)
+    }
+
+    private async checkCompletionAndSend(
+        controllerSessionId: string,
+        title: string,
+        body: string,
+        data?: Record<string, any>,
+    ): Promise<void> {
+        for (let attempt = 0; attempt <= COMPLETION_CHECK_RETRY_DELAYS_MS.length; attempt++) {
+            try {
+                const response = await axios.get<{
+                    ok?: boolean
+                    data?: { activity?: unknown }
+                }>(
+                    `${this.baseUrl}/v1/orchestrator/activity`,
+                    {
+                        params: { controllerSessionId },
+                        headers: {
+                            'Authorization': `Bearer ${this.token}`,
+                            'Content-Type': 'application/json',
+                        },
+                        timeout: COMPLETION_CHECK_TIMEOUT_MS,
+                    },
+                )
+
+                const activity = response.data?.data?.activity
+                if (response.data?.ok !== true || !activity || typeof activity !== 'object' || Array.isArray(activity)) {
+                    throw new Error('Invalid orchestrator activity response')
+                }
+
+                if (Object.keys(activity).length > 0) {
+                    logger.debug('[PUSH] Suppressing completion notification while delegated work is active')
+                    return
+                }
+
+                // Do not use totalRunCount here: completed delegated history
+                // must not suppress a later ordinary controller turn.
+                this.sendToAllDevices(title, body, data)
+                return
+            } catch (error) {
+                if (attempt >= COMPLETION_CHECK_RETRY_DELAYS_MS.length) {
+                    logger.debug('[PUSH] Activity lookup failed; suppressing completion notification', error)
+                    return
+                }
+                const delayMs = COMPLETION_CHECK_RETRY_DELAYS_MS[attempt]
+                logger.debug(`[PUSH] Activity lookup failed; retrying in ${delayMs}ms`, error)
+                await new Promise<void>((resolve) => setTimeout(resolve, delayMs))
+            }
+        }
     }
 }
