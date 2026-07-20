@@ -135,11 +135,13 @@ const stylesheet = StyleSheet.create((theme) => ({
 export default function OrchestratorRunDetailScreen() {
     const { theme } = useUnistyles();
     const styles = stylesheet;
-    const { runId } = useLocalSearchParams<{ runId: string; }>();
+    const { runId, initialTitle } = useLocalSearchParams<{ runId: string; initialTitle?: string | string[]; }>();
     const router = useRouter();
     const auth = useAuth();
     const credentials = auth.credentials;
     const machineNameMap = useMachineNameMap();
+    const routeTitle = Array.isArray(initialTitle) ? initialTitle[0] : initialTitle;
+    const defaultHeaderTitle = routeTitle || t('settings.orchestratorRunDetails');
 
     const [run, setRun] = React.useState<OrchestratorRunDetail | null>(null);
     const [loading, setLoading] = React.useState(true);
@@ -281,7 +283,7 @@ export default function OrchestratorRunDetailScreen() {
     if (loading && !run) {
         return (
             <View style={styles.center}>
-                <Stack.Screen options={{ headerTitle: t('settings.orchestratorRunDetails') }} />
+                <Stack.Screen options={{ headerTitle: defaultHeaderTitle }} />
                 <ActivityIndicator size="large" />
                 <Text style={styles.metaText}>{t('settings.orchestratorLoadingRun')}</Text>
             </View>
@@ -291,7 +293,7 @@ export default function OrchestratorRunDetailScreen() {
     if (!run) {
         return (
             <View style={styles.center}>
-                <Stack.Screen options={{ headerTitle: t('settings.orchestratorRunDetails') }} />
+                <Stack.Screen options={{ headerTitle: defaultHeaderTitle }} />
                 <Text style={styles.sectionTitle}>{t('settings.orchestratorRunNotFound')}</Text>
                 {!!error && <Text style={styles.error}>{error}</Text>}
             </View>
