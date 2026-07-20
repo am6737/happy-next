@@ -8,7 +8,7 @@ import { Item } from '@/components/Item';
 import { ItemGroup } from '@/components/ItemGroup';
 import { ItemList } from '@/components/ItemList';
 import { Avatar } from '@/components/Avatar';
-import { useSession, useIsDataReady, useMachine, storage } from '@/sync/storage';
+import { useSession, useIsDataReady, useMachine, useOrchestratorHasRuns, storage } from '@/sync/storage';
 import { generateCopyTitle, getSessionName, useSessionStatus, formatOSPlatform, formatPathRelativeToHome, getSessionAvatarId, copySessionMetadata, copySessionModeSettings } from '@/utils/sessionUtils';
 import * as Clipboard from 'expo-clipboard';
 import { Modal } from '@/modal';
@@ -78,6 +78,7 @@ function SessionInfoContent({ session }: { session: Session }) {
     const devModeEnabled = __DEV__;
     const sessionName = getSessionName(session);
     const sessionStatus = useSessionStatus(session);
+    const hasOrchestratorRuns = useOrchestratorHasRuns(session.id);
     const isOwner = !session.accessLevel;
     const isAdmin = isOwner || session.accessLevel === 'admin';
     const isSharedSession = !isOwner;
@@ -121,6 +122,20 @@ function SessionInfoContent({ session }: { session: Session }) {
         await Clipboard.setStringAsync(value);
         hapticsLight(); showCopiedToast();
     }, []);
+
+    const handleNewSession = useCallback(() => {
+        const params = new URLSearchParams();
+        const machineId = session.metadata?.machineId;
+        const path = session.metadata?.path;
+        if (machineId) params.set('machineId', machineId);
+        if (path) params.set('path', path);
+        const query = params.toString();
+        router.push(query ? `/new?${query}` : '/new');
+    }, [router, session.metadata?.machineId, session.metadata?.path]);
+
+    const handleOpenOrchestratorRuns = useCallback(() => {
+        router.push(`/orchestrator?controllerSessionId=${encodeURIComponent(session.id)}`);
+    }, [router, session.id]);
 
     const handleCopySessionId = useCallback(async () => {
         if (!session) return;
@@ -976,6 +991,20 @@ function SessionInfoContent({ session }: { session: Session }) {
                 )}
 
                 <ItemGroup title={t('sessionInfo.quickActions')}>
+                    <Item
+                        title={t('sessionInfo.newSession')}
+                        subtitle={t('sessionInfo.newSessionSubtitle')}
+                        icon={<Ionicons name="add-circle-outline" size={29} color="#007AFF" />}
+                        onPress={handleNewSession}
+                    />
+                    {hasOrchestratorRuns && (
+                        <Item
+                            title={t('sessionInfo.delegationHistory')}
+                            subtitle={t('sessionInfo.delegationHistorySubtitle')}
+                            icon={<Ionicons name="layers-outline" size={29} color="#007AFF" />}
+                            onPress={handleOpenOrchestratorRuns}
+                        />
+                    )}
                     {isAdmin && (
                         <Item
                             title={t('session.sharing.manageSharing')}
