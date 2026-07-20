@@ -1,17 +1,19 @@
 import * as React from 'react';
-import { View, ScrollView, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, SectionList, ActivityIndicator, Pressable, RefreshControl } from 'react-native';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@/components/StyledText';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { layout } from '@/components/layout';
 import { useAuth } from '@/auth/AuthContext';
-import { getOrchestratorTask, type OrchestratorTaskDetail, type OrchestratorTaskRecord } from '@/sync/apiOrchestrator';
+import { getOrchestratorTask, type OrchestratorExecutionRecord, type OrchestratorTaskDetail, type OrchestratorTaskRecord } from '@/sync/apiOrchestrator';
 import { OrchestratorStatusBadge } from '@/components/orchestrator/OrchestratorStatusBadge';
 import {
     formatOrchestratorProviderLabel,
     resolveTaskMachineId,
     resolveMachineName,
+    resolveOrchestratorExecutionPrompt,
     sanitizeOrchestratorOutputSummary,
     sortOrchestratorExecutionsByAttemptDesc,
 } from '@/components/orchestrator/display';
@@ -27,7 +29,6 @@ const stylesheet = StyleSheet.create((theme) => ({
     contentContainer: {
         padding: 16,
         paddingBottom: 24,
-        gap: 12,
     },
     card: {
         backgroundColor: theme.colors.surface,
@@ -60,12 +61,6 @@ const stylesheet = StyleSheet.create((theme) => ({
         fontSize: 13,
         color: theme.colors.textSecondary,
     },
-    bodyText: {
-        marginTop: 8,
-        fontSize: 14,
-        color: theme.colors.text,
-        lineHeight: 20,
-    },
     monoText: {
         fontSize: 12,
         color: theme.colors.text,
@@ -76,7 +71,8 @@ const stylesheet = StyleSheet.create((theme) => ({
         fontSize: 16,
         fontWeight: '700',
         color: theme.colors.text,
-        marginTop: 4,
+        marginTop: 16,
+        marginBottom: 12,
         paddingLeft: 4,
     },
     executionHeader: {
@@ -85,11 +81,49 @@ const stylesheet = StyleSheet.create((theme) => ({
         justifyContent: 'space-between',
         gap: 8,
     },
+    executionHeaderStatus: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+    },
+    executionStickyHeader: {
+        backgroundColor: theme.colors.groupped.background,
+        zIndex: 1,
+    },
+    executionSectionGap: {
+        height: 12,
+        backgroundColor: theme.colors.groupped.background,
+    },
+    executionHeaderCardExpanded: {
+        borderBottomLeftRadius: 0,
+        borderBottomRightRadius: 0,
+        borderBottomWidth: 0,
+    },
+    executionDetailsCard: {
+        borderTopLeftRadius: 0,
+        borderTopRightRadius: 0,
+    },
     executionTitle: {
         flex: 1,
         fontSize: 14,
         fontWeight: '600',
         color: theme.colors.text,
+    },
+    executionDetails: {
+        paddingTop: 2,
+    },
+    detailLabel: {
+        marginTop: 12,
+        marginBottom: 6,
+        fontSize: 13,
+        fontWeight: '600',
+        color: theme.colors.textSecondary,
+    },
+    summaryPreview: {
+        marginTop: 8,
+        fontSize: 13,
+        lineHeight: 18,
+        color: theme.colors.textSecondary,
     },
     center: {
         flex: 1,
@@ -126,6 +160,7 @@ export default function OrchestratorTaskDetailScreen() {
     const [loading, setLoading] = React.useState(true);
     const [refreshing, setRefreshing] = React.useState(false);
     const [error, setError] = React.useState<string | null>(null);
+    const [expandedExecutionIds, setExpandedExecutionIds] = React.useState<Set<string>>(() => new Set());
 
     const loadTask = React.useCallback(async (opts?: { silent?: boolean; }) => {
         if (!credentials || !runId || !taskId) {
@@ -168,6 +203,11 @@ export default function OrchestratorTaskDetailScreen() {
         };
     }, [credentials, runId, taskId, loadTask]));
 
+    const sortedExecutions = React.useMemo(
+        () => sortOrchestratorExecutionsByAttemptDesc(task?.executions ?? []),
+        [task?.executions],
+    );
+
     if (loading && !task) {
         return (
             <View style={styles.center}>
@@ -188,14 +228,38 @@ export default function OrchestratorTaskDetailScreen() {
         );
     }
 
-    const sortedExecutions = sortOrchestratorExecutionsByAttemptDesc(task.executions ?? []);
     const providerLabel = formatOrchestratorProviderLabel(task);
-    const taskOutputSummary = sanitizeOrchestratorOutputSummary(task.outputSummary);
+    const executionSections: Array<{
+        key: string;
+        execution: OrchestratorExecutionRecord | null;
+        data: string[];
+    }> = sortedExecutions.length > 0
+        ? sortedExecutions.map((execution) => ({
+            key: execution.executionId,
+            execution,
+            data: [execution.executionId],
+        }))
+        : [{ key: 'pending', execution: null, data: ['pending'] }];
+
+    const toggleExecution = (executionId: string) => {
+        setExpandedExecutionIds((current) => {
+            const next = new Set(current);
+            if (next.has(executionId)) {
+                next.delete(executionId);
+            } else {
+                next.add(executionId);
+            }
+            return next;
+        });
+    };
 
     return (
         <View style={styles.container}>
             <Stack.Screen options={{ headerTitle: t('settings.orchestratorTaskSeq', { seq: task.seq }) }} />
-            <ScrollView
+            <SectionList
+                sections={executionSections}
+                keyExtractor={(item) => item}
+                stickySectionHeadersEnabled
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => {
                     setRefreshing(true);
                     void loadTask({ silent: true });
@@ -204,66 +268,124 @@ export default function OrchestratorTaskDetailScreen() {
                     styles.contentContainer,
                     { maxWidth: layout.maxWidth, alignSelf: 'center', width: '100%' },
                 ]}
-            >
-                <View style={styles.card}>
-                    <View style={styles.header}>
-                        <Text style={styles.title} numberOfLines={1}>{buildTaskTitle(task)}</Text>
-                        <OrchestratorStatusBadge status={task.status} />
-                    </View>
-                    <Text style={styles.row}>{t('settings.orchestratorLabelRun')}: {run?.title || run?.runId || runId}</Text>
-                    <Text style={styles.row}>{t('settings.orchestratorLabelProvider')}: {providerLabel}</Text>
-                    <Text style={styles.row}>{t('settings.orchestratorLabelMachine')}: {(() => {
-                        const machineId = resolveTaskMachineId(task);
-                        return machineId ? resolveMachineName(machineId, machineNameMap) : '-';
-                    })()}</Text>
-                    {!!task.taskKey && <Text style={styles.row}>{t('settings.orchestratorLabelTaskKey')}: {task.taskKey}</Text>}
-                    <Text style={styles.row}>{t('settings.orchestratorLabelWorkingDir')}: {task.workingDirectory || '-'}</Text>
-                    {task.dependsOn.length > 0 && <Text style={styles.row}>{t('settings.orchestratorLabelDependsOn')}: {task.dependsOn.join(', ')}</Text>}
-                    {(task.retry.maxAttempts > 1 || task.retry.backoffMs > 0) && <Text style={styles.row}>{t('settings.orchestratorLabelRetryPolicy')}: {t('settings.orchestratorRetryPolicyValue', { maxAttempts: task.retry.maxAttempts, backoffMs: task.retry.backoffMs })}</Text>}
-                    {!!task.nextAttemptAt && <Text style={styles.row}>{t('settings.orchestratorLabelNextAttempt')}: {formatDate(task.nextAttemptAt)}</Text>}
-                </View>
-
-                {!!task.prompt && (
+                ListHeaderComponent={(
                     <>
-                        <Text style={styles.sectionLabel}>{t('settings.orchestratorLabelPrompt')}</Text>
                         <View style={styles.card}>
-                            <Text style={styles.monoText} selectable>{task.prompt}</Text>
+                            <View style={styles.header}>
+                                <Text style={styles.title} numberOfLines={1}>{buildTaskTitle(task)}</Text>
+                                <OrchestratorStatusBadge status={task.status} />
+                            </View>
+                            <Text style={styles.row}>{t('settings.orchestratorLabelRun')}: {run?.title || run?.runId || runId}</Text>
+                            <Text style={styles.row}>{t('settings.orchestratorLabelProvider')}: {providerLabel}</Text>
+                            <Text style={styles.row}>{t('settings.orchestratorLabelMachine')}: {(() => {
+                                const machineId = resolveTaskMachineId(task);
+                                return machineId ? resolveMachineName(machineId, machineNameMap) : '-';
+                            })()}</Text>
+                            {!!task.taskKey && <Text style={styles.row}>{t('settings.orchestratorLabelTaskKey')}: {task.taskKey}</Text>}
+                            <Text style={styles.row}>{t('settings.orchestratorLabelWorkingDir')}: {task.workingDirectory || '-'}</Text>
+                            {task.dependsOn.length > 0 && <Text style={styles.row}>{t('settings.orchestratorLabelDependsOn')}: {task.dependsOn.join(', ')}</Text>}
+                            {(task.retry.maxAttempts > 1 || task.retry.backoffMs > 0) && <Text style={styles.row}>{t('settings.orchestratorLabelRetryPolicy')}: {t('settings.orchestratorRetryPolicyValue', { maxAttempts: task.retry.maxAttempts, backoffMs: task.retry.backoffMs })}</Text>}
+                            {!!task.nextAttemptAt && <Text style={styles.row}>{t('settings.orchestratorLabelNextAttempt')}: {formatDate(task.nextAttemptAt)}</Text>}
                         </View>
+                        <Text style={styles.sectionLabel}>{t('settings.orchestratorExecutionHistoryTitle')}</Text>
                     </>
                 )}
+                renderSectionHeader={({ section }) => {
+                    const execution = section.execution;
+                    const executionId = section.key;
+                    const isExpanded = expandedExecutionIds.has(executionId);
+                    if (!isExpanded) {
+                        return null;
+                    }
+                    const attempt = execution?.attempt ?? 1;
+                    const machineId = execution ? resolveMachineName(execution.machineId, machineNameMap) : '-';
+                    const status = execution?.status ?? task.status;
 
-                <Text style={styles.sectionLabel}>{t('settings.orchestratorResultTitle')}</Text>
-                <View style={styles.card}>
-                    {!!task.errorCode && <Text style={styles.row}>{t('settings.orchestratorLabelErrorCode')}: {task.errorCode}</Text>}
-                    {!!task.errorMessage && <Text style={styles.row}>{t('settings.orchestratorLabelErrorMessage')}: {task.errorMessage}</Text>}
-                    <Text style={styles.monoText} selectable>{task.outputText || taskOutputSummary || '-'}</Text>
-                </View>
-
-                <Text style={styles.sectionLabel}>{t('settings.orchestratorExecutionHistoryTitle')}</Text>
-                {sortedExecutions.length === 0 ? (
-                    <Text style={styles.hint}>{t('settings.orchestratorNoExecutions')}</Text>
-                ) : sortedExecutions.map((execution) => {
-                    const executionOutputSummary = sanitizeOrchestratorOutputSummary(execution.outputSummary);
                     return (
-                        <View key={execution.executionId} style={styles.card}>
-                            <View style={styles.executionHeader}>
-                                <Text style={styles.executionTitle}>
-                                    {t('settings.orchestratorAttemptTitle', { attempt: execution.attempt, machineId: resolveMachineName(execution.machineId, machineNameMap) })}
-                                </Text>
-                                <OrchestratorStatusBadge status={execution.status} />
-                            </View>
-                            <Text style={styles.row}>{t('settings.orchestratorLabelStarted')}: {formatDate(execution.startedAt)}</Text>
-                            <Text style={styles.row}>{t('settings.orchestratorLabelFinished')}: {formatDate(execution.finishedAt)}</Text>
-                            <Text style={styles.row}>{t('settings.orchestratorLabelExitCode')}: {execution.exitCode ?? '-'}</Text>
-                            {!!execution.signal && <Text style={styles.row}>{t('settings.orchestratorLabelSignal')}: {execution.signal}</Text>}
-                            {(!!execution.errorCode || !!execution.errorMessage) && <Text style={styles.row}>{t('settings.orchestratorLabelError')}: {execution.errorCode || ''}{execution.errorMessage ? ` · ${execution.errorMessage}` : ''}</Text>}
-                            {executionOutputSummary ? <Text style={styles.bodyText}>{executionOutputSummary}</Text> : null}
+                        <View style={styles.executionStickyHeader}>
+                            <Pressable
+                                style={[styles.card, styles.executionHeaderCardExpanded]}
+                                onPress={() => toggleExecution(executionId)}
+                            >
+                                <View style={styles.executionHeader}>
+                                    <Text style={styles.executionTitle}>
+                                        {t('settings.orchestratorAttemptTitle', { attempt, machineId })}
+                                    </Text>
+                                    <View style={styles.executionHeaderStatus}>
+                                        <OrchestratorStatusBadge status={status} />
+                                        <Ionicons
+                                            name="chevron-up"
+                                            size={18}
+                                            color={theme.colors.textSecondary}
+                                        />
+                                    </View>
+                                </View>
+                            </Pressable>
                         </View>
                     );
-                })}
+                }}
+                renderItem={({ section }) => {
+                    const execution = section.execution;
+                    if (!expandedExecutionIds.has(section.key)) {
+                        const attempt = execution?.attempt ?? 1;
+                        const machineId = execution ? resolveMachineName(execution.machineId, machineNameMap) : '-';
+                        const status = execution?.status ?? task.status;
+                        const summary = execution ? sanitizeOrchestratorOutputSummary(execution.outputSummary) : null;
+                        return (
+                            <Pressable style={styles.card} onPress={() => toggleExecution(section.key)}>
+                                <View style={styles.executionHeader}>
+                                    <Text style={styles.executionTitle}>
+                                        {t('settings.orchestratorAttemptTitle', { attempt, machineId })}
+                                    </Text>
+                                    <View style={styles.executionHeaderStatus}>
+                                        <OrchestratorStatusBadge status={status} />
+                                        <Ionicons
+                                            name="chevron-down"
+                                            size={18}
+                                            color={theme.colors.textSecondary}
+                                        />
+                                    </View>
+                                </View>
+                                {summary ? <Text style={styles.summaryPreview} numberOfLines={2}>{summary}</Text> : null}
+                            </Pressable>
+                        );
+                    }
 
-                {!!error && <Text style={styles.errorText}>{error}</Text>}
-            </ScrollView>
+                    if (!execution) {
+                        return (
+                            <View style={[styles.card, styles.executionDetailsCard]}>
+                                <View style={styles.executionDetails}>
+                                    <Text style={[styles.detailLabel, { marginTop: 0 }]}>{t('settings.orchestratorLabelPrompt')}</Text>
+                                    <Text style={styles.monoText} selectable>{task.prompt || '-'}</Text>
+                                </View>
+                            </View>
+                        );
+                    }
+
+                    const executionOutputSummary = sanitizeOrchestratorOutputSummary(execution.outputSummary);
+                    const executionPrompt = resolveOrchestratorExecutionPrompt(task.prompt, execution);
+                    return (
+                        <View style={[styles.card, styles.executionDetailsCard]}>
+                            <View style={styles.executionDetails}>
+                                <Text style={styles.row}>{t('settings.orchestratorLabelStarted')}: {formatDate(execution.startedAt)}</Text>
+                                <Text style={styles.row}>{t('settings.orchestratorLabelFinished')}: {formatDate(execution.finishedAt)}</Text>
+                                <Text style={styles.row}>{t('settings.orchestratorLabelExitCode')}: {execution.exitCode ?? '-'}</Text>
+                                {!!execution.signal && <Text style={styles.row}>{t('settings.orchestratorLabelSignal')}: {execution.signal}</Text>}
+
+                                <Text style={styles.detailLabel}>{t('settings.orchestratorLabelPrompt')}</Text>
+                                <Text style={styles.monoText} selectable>{executionPrompt || '-'}</Text>
+
+                                <Text style={styles.detailLabel}>{t('settings.orchestratorResultTitle')}</Text>
+                                {!!execution.errorCode && <Text style={styles.row}>{t('settings.orchestratorLabelErrorCode')}: {execution.errorCode}</Text>}
+                                {!!execution.errorMessage && <Text style={styles.row}>{t('settings.orchestratorLabelErrorMessage')}: {execution.errorMessage}</Text>}
+                                <Text style={styles.monoText} selectable>{execution.outputText || executionOutputSummary || '-'}</Text>
+                            </View>
+                        </View>
+                    );
+                }}
+                renderSectionFooter={() => <View style={styles.executionSectionGap} />}
+                ListFooterComponent={error ? <Text style={styles.errorText}>{error}</Text> : null}
+            />
         </View>
     );
 }

@@ -21,6 +21,11 @@ export type OrchestratorExecutionRecord = {
     attempt: number;
     status: OrchestratorExecutionStatus;
     machineId: string;
+    provider: 'claude' | 'codex' | 'gemini';
+    model: string | null;
+    childSessionId: string | null;
+    executionType: 'initial' | 'resume';
+    resumeMessage: string | null;
     startedAt: string | null;
     finishedAt: string | null;
     exitCode: number | null;
