@@ -2058,7 +2058,7 @@ describe('reducer', () => {
             expect(message?.tool?.permission?.id).toBe('tool-1');
         });
 
-        it('should close stale running tools when taskCompleted is set and no tool_result arrives', () => {
+        it('should close stale running tools without inventing an error when taskCompleted arrives first', () => {
             const state = createReducer();
 
             const toolMessage: NormalizedMessage = {
@@ -2104,8 +2104,58 @@ describe('reducer', () => {
             if (result.messages[0].kind === 'tool-call') {
                 expect(result.messages[0].tool.state).toBe('completed');
                 expect(result.messages[0].tool.completedAt).toBe(2000);
+                expect(result.messages[0].tool.result).toBeUndefined();
+            }
+        });
+
+        it('should apply a tool result that arrives after taskCompleted recovery', () => {
+            const state = createReducer();
+
+            const toolMessage: NormalizedMessage = {
+                id: 'msg-1',
+                localId: null,
+                createdAt: 1000,
+                role: 'agent',
+                content: [{
+                    type: 'tool-call',
+                    id: 'tool-1',
+                    name: 'orchestrator_submit',
+                    input: { title: 'Review', tasks: [] },
+                    description: null,
+                    uuid: 'tool-uuid-1',
+                    parentUUID: null
+                }],
+                isSidechain: false
+            };
+
+            reducer(state, [toolMessage], undefined);
+            reducer(state, [], { taskCompleted: 2000 });
+
+            const lateResult: NormalizedMessage = {
+                id: 'msg-2',
+                localId: null,
+                createdAt: 2100,
+                role: 'agent',
+                content: [{
+                    type: 'tool-result',
+                    tool_use_id: 'tool-1',
+                    content: { ok: true, data: { runId: 'run-1' } },
+                    is_error: false,
+                    uuid: 'result-uuid-1',
+                    parentUUID: null
+                }],
+                isSidechain: false
+            };
+
+            const result = reducer(state, [lateResult], { taskCompleted: 2000 });
+            expect(result.messages).toHaveLength(1);
+            expect(result.messages[0].kind).toBe('tool-call');
+            if (result.messages[0].kind === 'tool-call') {
+                expect(result.messages[0].tool.state).toBe('completed');
+                expect(result.messages[0].tool.completedAt).toBe(2100);
                 expect(result.messages[0].tool.result).toEqual({
-                    error: 'Tool execution ended without a result.'
+                    ok: true,
+                    data: { runId: 'run-1' }
                 });
             }
         });

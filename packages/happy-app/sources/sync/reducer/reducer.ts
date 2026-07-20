@@ -148,6 +148,10 @@ type StoredPermission = {
     answers?: Record<string, string>;
 };
 
+function canApplyToolResult(tool: ToolCall): boolean {
+    return tool.state === 'running' || (tool.state === 'completed' && tool.result === undefined);
+}
+
 export type ReducerState = {
     toolIdToMessageId: Map<string, string>; // toolId/permissionId -> messageId (since they're the same now)
     sidechainToolIdToMessageId: Map<string, string>; // toolId -> sidechain messageId (for dual tracking)
@@ -763,7 +767,10 @@ export function reducer(state: ReducerState, messages: NormalizedMessage[], agen
                         continue;
                     }
 
-                    if (message.tool.state !== 'running') {
+                    // taskCompleted can arrive before the tool-result message. In that case
+                    // recovery marks the tool completed without a result; still accept the
+                    // late result instead of dropping it permanently.
+                    if (!canApplyToolResult(message.tool)) {
                         continue;
                     }
 
@@ -914,7 +921,7 @@ export function reducer(state: ReducerState, messages: NormalizedMessage[], agen
                     let sidechainMessageId = state.sidechainToolIdToMessageId.get(c.tool_use_id);
                     if (sidechainMessageId) {
                         let sidechainMessage = state.messages.get(sidechainMessageId);
-                        if (sidechainMessage && sidechainMessage.tool && sidechainMessage.tool.state === 'running') {
+                        if (sidechainMessage?.tool && canApplyToolResult(sidechainMessage.tool)) {
                             sidechainMessage.tool.state = c.is_error ? 'error' : 'completed';
                             sidechainMessage.tool.result = c.content;
                             sidechainMessage.tool.completedAt = msg.createdAt;
@@ -951,7 +958,7 @@ export function reducer(state: ReducerState, messages: NormalizedMessage[], agen
                     let permissionMessageId = state.toolIdToMessageId.get(c.tool_use_id);
                     if (permissionMessageId) {
                         let permissionMessage = state.messages.get(permissionMessageId);
-                        if (permissionMessage && permissionMessage.tool && permissionMessage.tool.state === 'running') {
+                        if (permissionMessage?.tool && canApplyToolResult(permissionMessage.tool)) {
                             permissionMessage.tool.state = c.is_error ? 'error' : 'completed';
                             permissionMessage.tool.result = c.content;
                             permissionMessage.tool.completedAt = msg.createdAt;
@@ -1048,9 +1055,6 @@ export function reducer(state: ReducerState, messages: NormalizedMessage[], agen
 
             message.tool.state = 'completed';
             message.tool.completedAt = taskCompletedAt;
-            if (!message.tool.result) {
-                message.tool.result = { error: 'Tool execution ended without a result.' };
-            }
             changed.add(messageId);
         }
     }
