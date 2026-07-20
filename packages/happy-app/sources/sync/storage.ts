@@ -1343,7 +1343,10 @@ export const storage = create<StorageState>()((set, get) => {
         })),
         setOrchestratorActivityBatch: (activity: Record<string, Record<string, string[]>>, totalRunCounts?: Record<string, number>) => set((state) => ({
             ...state,
-            orchestratorActivity: { ...state.orchestratorActivity, ...activity },
+            // The batch endpoint returns the complete active-activity snapshot.
+            // Replace instead of merge so sessions omitted after their runs finish
+            // do not retain stale running-task badges after a foreground refresh.
+            orchestratorActivity: activity,
             ...(totalRunCounts && {
                 orchestratorTotalRunCount: { ...state.orchestratorTotalRunCount, ...totalRunCounts },
             }),
