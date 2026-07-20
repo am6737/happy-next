@@ -149,7 +149,9 @@ describe('modelCatalog', () => {
         expect(getMaxContextSize('default', 'claude', 'claude-sonnet-4-6-fast')).toBe(200_000);
         // Codex actual model
         expect(getMaxContextSize('default', 'codex', 'gpt-5.2')).toBe(272_000);
-        expect(getMaxContextSize('default', 'codex', 'gpt-5.6-sol')).toBe(372_000);
+        expect(getMaxContextSize('default', 'codex', 'gpt-5.6-sol')).toBe(272_000);
+        expect(getMaxContextSize('default', 'codex', 'gpt-5.6-terra')).toBe(272_000);
+        expect(getMaxContextSize('default', 'codex', 'gpt-5.6-luna')).toBe(272_000);
         // Gemini actual model
         expect(getMaxContextSize('default', 'gemini', 'gemini-2.5-flash-lite')).toBe(1_000_000);
         // Unknown model falls back to agent default

@@ -643,9 +643,9 @@ const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
     'claude-sonnet-4-6[1m]': 1_000_000,
     'claude-haiku-4-5': 200_000,
     // Codex models (fallback; actual value comes from CLI via context_window_size)
-    'gpt-5.6-sol': 372_000,
-    'gpt-5.6-terra': 372_000,
-    'gpt-5.6-luna': 372_000,
+    'gpt-5.6-sol': 272_000,
+    'gpt-5.6-terra': 272_000,
+    'gpt-5.6-luna': 272_000,
     'gpt-5.5': 272_000,
     'gpt-5.4': 272_000,
     'gpt-5.4-mini': 272_000,
