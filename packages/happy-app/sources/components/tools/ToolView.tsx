@@ -17,7 +17,7 @@ import { formatMCPTitle, useMCPSubtitle, formatMCPIcon } from './views/MCPToolVi
 import { t } from '@/text';
 import { useOrchestratorActiveRunIds } from '@/sync/storage';
 import { shouldShowOrchestratorSubmitActivityIndicator } from './toolStatusIconRules';
-import { extractOrchestratorSubmitRunId } from './orchestratorRunId';
+import { extractOrchestratorSubmitRunId, getOrchestratorToolNavigationTarget } from './orchestratorRunId';
 
 interface ToolViewProps {
     metadata: Metadata | null;
@@ -48,18 +48,45 @@ export const ToolView = React.memo<ToolViewProps>((props) => {
             return String(tool.result);
         }
     }, [tool.result]);
+    const orchestratorNavigationTarget = React.useMemo(
+        () => getOrchestratorToolNavigationTarget(tool),
+        [tool],
+    );
+
+    const openMessageDetail = React.useCallback(() => {
+        if (sessionId && messageId) {
+            router.push(`/session/${sessionId}/message/${messageId}`);
+        }
+    }, [sessionId, messageId, router]);
 
     // Create default onPress handler for navigation
     const handlePress = React.useCallback(() => {
         if (onPress) {
             onPress();
-        } else if (sessionId && messageId) {
-            router.push(`/session/${sessionId}/message/${messageId}`);
+            return;
         }
-    }, [onPress, sessionId, messageId, router]);
+        if (orchestratorNavigationTarget?.type === 'list') {
+            router.push('/orchestrator');
+            return;
+        }
+        if (orchestratorNavigationTarget?.type === 'run') {
+            router.push({
+                pathname: '/orchestrator/[runId]',
+                params: {
+                    runId: orchestratorNavigationTarget.runId,
+                    ...(orchestratorNavigationTarget.title
+                        ? { initialTitle: orchestratorNavigationTarget.title }
+                        : {}),
+                },
+            });
+            return;
+        }
+        openMessageDetail();
+    }, [onPress, openMessageDetail, orchestratorNavigationTarget, router]);
 
     // Enable pressable if either onPress is provided or we have navigation params
-    const isPressable = !!(onPress || (sessionId && messageId));
+    const isPressable = !!(onPress || orchestratorNavigationTarget || (sessionId && messageId));
+    const showMessageDetailButton = !!(orchestratorNavigationTarget && sessionId && messageId);
 
     let knownTool = knownTools[tool.name as keyof typeof knownTools] as any;
 
@@ -184,53 +211,53 @@ export const ToolView = React.memo<ToolViewProps>((props) => {
         }
     }
 
-    return (
-        <View style={styles.container}>
-            {isPressable ? (
-                <TouchableOpacity style={styles.header} onPress={handlePress} activeOpacity={0.8}>
-                    <View style={styles.headerLeft}>
-                        <View style={styles.iconContainer}>
-                            {icon}
-                        </View>
-                        <View style={styles.titleContainer}>
-                            <Text style={styles.toolName} numberOfLines={1}>{toolTitle}{status ? <Text style={styles.status}>{` ${status}`}</Text> : null}</Text>
-                            {!!description && (
-                                <Text style={styles.toolDescription} numberOfLines={1}>
-                                    {description}
-                                </Text>
-                            )}
-                        </View>
-                        {shouldShowRunningElapsed && (
-                            <View style={styles.elapsedContainer}>
-                                <ElapsedView from={tool.startedAt ?? tool.createdAt} />
-                            </View>
-                        )}
-                        {statusIcon}
-                    </View>
-                </TouchableOpacity>
-            ) : (
-                <View style={styles.header}>
-                    <View style={styles.headerLeft}>
-                        <View style={styles.iconContainer}>
-                            {icon}
-                        </View>
-                        <View style={styles.titleContainer}>
-                            <Text style={styles.toolName} numberOfLines={1}>{toolTitle}{status ? <Text style={styles.status}>{` ${status}`}</Text> : null}</Text>
-                            {!!description && (
-                                <Text style={styles.toolDescription} numberOfLines={1}>
-                                    {description}
-                                </Text>
-                            )}
-                        </View>
-                        {shouldShowRunningElapsed && (
-                            <View style={styles.elapsedContainer}>
-                                <ElapsedView from={tool.startedAt ?? tool.createdAt} />
-                            </View>
-                        )}
-                        {statusIcon}
-                    </View>
+    const headerContent = (
+        <View style={styles.headerLeft}>
+            <View style={styles.iconContainer}>
+                {icon}
+            </View>
+            <View style={styles.titleContainer}>
+                <Text style={styles.toolName} numberOfLines={1}>{toolTitle}{status ? <Text style={styles.status}>{` ${status}`}</Text> : null}</Text>
+                {!!description && (
+                    <Text style={styles.toolDescription} numberOfLines={1}>
+                        {description}
+                    </Text>
+                )}
+            </View>
+            {shouldShowRunningElapsed && (
+                <View style={styles.elapsedContainer}>
+                    <ElapsedView from={tool.startedAt ?? tool.createdAt} />
                 </View>
             )}
+            {statusIcon}
+        </View>
+    );
+
+    return (
+        <View style={styles.container}>
+            <View style={styles.header}>
+                {isPressable ? (
+                    <TouchableOpacity style={styles.headerMain} onPress={handlePress} activeOpacity={0.8}>
+                        {headerContent}
+                    </TouchableOpacity>
+                ) : (
+                    <View style={styles.headerMain}>
+                        {headerContent}
+                    </View>
+                )}
+                {showMessageDetailButton && (
+                    <TouchableOpacity
+                        style={styles.detailButton}
+                        onPress={openMessageDetail}
+                        activeOpacity={0.7}
+                        hitSlop={8}
+                        accessibilityRole="button"
+                        accessibilityLabel={t('profile.details')}
+                    >
+                        <Ionicons name="reader-outline" size={21} color={theme.colors.textSecondary} />
+                    </TouchableOpacity>
+                )}
+            </View>
 
             {/* Content area - either custom children or tool-specific view */}
             {(() => {
@@ -312,8 +339,12 @@ const styles = StyleSheet.create((theme) => ({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: 12,
+        paddingHorizontal: 12,
         backgroundColor: theme.colors.surfaceHighest,
+    },
+    headerMain: {
+        flex: 1,
+        paddingVertical: 12,
     },
     headerLeft: {
         flexDirection: 'row',
@@ -332,6 +363,13 @@ const styles = StyleSheet.create((theme) => ({
     },
     elapsedContainer: {
         marginLeft: 8,
+    },
+    detailButton: {
+        alignSelf: 'stretch',
+        width: 24,
+        marginLeft: 8,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     elapsedText: {
         fontSize: 13,
