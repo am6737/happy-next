@@ -27,7 +27,7 @@ describe('orchestrator slash commands', () => {
     const expanded = expandOrchestratorSlashCommand('/orchestrator:codex fix the failing test');
 
     expect(expanded?.provider).toBe('codex');
-    expect(expanded?.prompt).toContain('delegate work to **codex** agent');
+    expect(expanded?.prompt).toContain('delegate work with **codex** as the primary provider');
     expect(expanded?.prompt).toContain('fix the failing test');
     expect(expanded?.prompt).toContain('orchestrator_*');
   });

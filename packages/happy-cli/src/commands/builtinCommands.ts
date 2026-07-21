@@ -20,9 +20,6 @@ import { dirname, join } from 'node:path';
 import type { SessionCapabilities } from '@/api/types';
 import { logger } from '@/ui/logger';
 
-const MANAGED_NOTE =
-  '<!-- Managed by Happy CLI — regenerated on update; edit the source in happy-cli, not this file. -->';
-
 export const PREVIEW_HTML_COMMAND_NAME = 'preview-html';
 
 const PREVIEW_HTML_DESCRIPTION = 'Generate a self-contained HTML document and preview it in the app';
@@ -49,7 +46,6 @@ description: ${PREVIEW_HTML_DESCRIPTION}
 argument-hint: [description or path to an .html file]
 ---
 
-${MANAGED_NOTE}
 
 ${buildPreviewHtmlPrompt()}
 `;

@@ -37,6 +37,10 @@ describe('orchestrator mcp tool schemas', () => {
     expect(ORCHESTRATOR_PEND_TOOL_SCHEMA.description).toContain('Do not poll after submit');
     expect(ORCHESTRATOR_PEND_TOOL_SCHEMA.description).toContain('include="all_tasks"');
     expect(ORCHESTRATOR_SEND_MESSAGE_TOOL_SCHEMA.description).toContain('child task session');
+    expect(ORCHESTRATOR_SEND_MESSAGE_TOOL_SCHEMA.description).toContain('completed/failed');
+    expect(ORCHESTRATOR_SEND_MESSAGE_TOOL_SCHEMA.description).toContain('childSessionId');
+    expect(ORCHESTRATOR_SEND_MESSAGE_TOOL_SCHEMA.description).toContain('<orchestrator-callback>');
+    expect(ORCHESTRATOR_SEND_MESSAGE_TOOL_SCHEMA.inputSchema.taskId.description).toContain('not taskKey');
     expect(taskSchema.shape.provider.description).toContain('provider');
     expect(taskSchema.shape.model.description).toContain('get_context.data.modelModes[provider]');
     expect(taskSchema.shape.model.description).toContain('"default"');

@@ -85,10 +85,10 @@ export const ORCHESTRATOR_CANCEL_TOOL_SCHEMA = {
 } as const;
 
 export const ORCHESTRATOR_SEND_MESSAGE_TOOL_SCHEMA = {
-  description: 'Send a follow-up to a child task session, usually to resume a completed/failed task for feedback or fix rounds.',
+  description: 'Resume an existing child task session by sending a follow-up to a completed/failed task. Requires a captured childSessionId, requeues the task, and returns immediately; wait for <orchestrator-callback>.',
   title: 'Orchestrator Send Message',
   inputSchema: {
-    taskId: z.string().describe('Task ID to resume'),
+    taskId: z.string().describe('Completed/failed task ID to resume; use taskId, not taskKey.'),
     message: z.string().min(1).max(65_536).describe('Message to send to the existing child session'),
   },
 } as const;

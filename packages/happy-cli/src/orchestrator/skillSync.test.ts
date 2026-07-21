@@ -7,6 +7,7 @@ import {
   ORCHESTRATOR_COMMAND_CODEX,
   ORCHESTRATOR_COMMAND_GEMINI,
   ORCHESTRATOR_SKILL_MD,
+  buildOrchestratorCommandPrompt,
 } from './skillAssets';
 
 // Redirect homedir() to a per-test temp dir so the sync never touches the real ~/.claude / ~/.codex.
@@ -17,7 +18,7 @@ vi.mock('node:os', async (importOriginal) => {
 });
 
 // Env keys that influence the sync — cleared per test for determinism, restored afterward.
-const ENV_KEYS = ['CLAUDE_CONFIG_DIR', 'HAPPY_ORCH_ONESHOT', 'HAPPY_ORCH_EXECUTION_ID'] as const;
+const ENV_KEYS = ['CLAUDE_CONFIG_DIR', 'CODEX_HOME', 'HAPPY_ORCH_ONESHOT', 'HAPPY_ORCH_EXECUTION_ID'] as const;
 
 describe('syncOrchestratorAssets', () => {
   let home: string;
@@ -92,6 +93,15 @@ describe('syncOrchestratorAssets', () => {
     expect(existsSync(codexSkill())).toBe(false);
   });
 
+  it('honors CODEX_HOME for the codex target', async () => {
+    const customDir = join(home, 'custom-codex');
+    mkdirSync(customDir, { recursive: true });
+    process.env.CODEX_HOME = customDir;
+    await runSync();
+    expect(existsSync(join(customDir, 'skills', 'orchestrator', 'SKILL.md'))).toBe(true);
+    expect(existsSync(join(home, '.codex'))).toBe(false);
+  });
+
   it('honors CLAUDE_CONFIG_DIR for the claude target', async () => {
     const customDir = join(home, 'custom-claude');
     mkdirSync(customDir, { recursive: true });
@@ -106,14 +116,54 @@ describe('orchestrator skill frontmatter', () => {
   // Happy's frontmatter parser does not understand YAML block scalars; a folded `description: >-`
   // value is rendered literally as ">-" in the skill list. The description must stay a single-line
   // plain scalar so both Claude Code and Happy show it correctly.
-  const descriptionLine = ORCHESTRATOR_SKILL_MD.split('\n').find((line) => line.startsWith('description:'));
+  const frontmatter = ORCHESTRATOR_SKILL_MD.match(/^---\n([\s\S]*?)\n---/)?.[1] ?? '';
+  const descriptionLine = frontmatter.split('\n').find((line) => line.startsWith('description:'));
 
-  it('declares the skill description inline (no YAML block scalar that Happy cannot parse)', () => {
-    expect(descriptionLine).toBeDefined();
+  it('keeps the public skill name and inline description stable', () => {
+    expect(frontmatter).toContain('name: orchestrator');
+    expect(descriptionLine).toBe(
+      "description: Act as the commander and delegate work to one or more AI agents (claude/codex/gemini) that run in parallel or in dependency order via Happy's orchestrator. Use when the user wants to run several tasks at once, fan work out to multiple AIs, compare providers, build a dependency pipeline, or when invoking /orchestrator:claude|codex|gemini.",
+    );
     expect(descriptionLine).not.toMatch(/^description:\s*[>|]/);
   });
 
-  it('carries non-empty description text on the same line', () => {
-    expect(descriptionLine!.replace(/^description:\s*/, '').trim().length).toBeGreaterThan(0);
+  it('keeps the public skill available for implicit invocation', () => {
+    expect(frontmatter).not.toContain('disable-model-invocation: true');
+    expect(ORCHESTRATOR_SKILL_MD).toContain('If this skill is selected implicitly');
+    expect(ORCHESTRATOR_SKILL_MD).toContain('do not carry the mode into unrelated topics');
+    expect(ORCHESTRATOR_SKILL_MD).toContain('until the user explicitly exits');
+  });
+});
+
+describe('orchestrator provider command behavior', () => {
+  const commands = [
+    ['claude', ORCHESTRATOR_COMMAND_CLAUDE],
+    ['codex', ORCHESTRATOR_COMMAND_CODEX],
+    ['gemini', ORCHESTRATOR_COMMAND_GEMINI],
+  ] as const;
+
+  it.each(commands)('marks the %s provider command as user-invocable only', (_provider, command) => {
+    const frontmatter = command.match(/^---\n([\s\S]*?)\n---/)?.[1] ?? '';
+    expect(frontmatter).toContain('disable-model-invocation: true');
+  });
+
+  it.each(commands)('includes the explicit lifecycle and critical constraints for %s', (provider, command) => {
+    expect(command).toContain(`with **${provider}** as the primary provider`);
+    expect(command).toContain('explicitly entered Orchestrator mode');
+    expect(command).toContain('Use only the `orchestrator_*` tools');
+    expect(command).toContain('call `orchestrator_get_context`');
+    expect(command).toContain('Parallel tasks that write must not have overlapping file ownership');
+    expect(command).toContain('Use `orchestrator_send_message` when a completed or failed task');
+    expect(command).toContain('Pass its `taskId`, not its `taskKey`');
+    expect(command).toContain('Wait for the next');
+    expect(command).toContain('`<orchestrator-callback>`');
+    expect(command).not.toContain('If this skill is selected implicitly');
+  });
+
+  it('generates equivalent command behavior apart from the selected provider', () => {
+    const normalized = commands.map(([provider]) =>
+      buildOrchestratorCommandPrompt(provider).replaceAll(provider, '<provider>'),
+    );
+    expect(new Set(normalized).size).toBe(1);
   });
 });

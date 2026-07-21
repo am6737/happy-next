@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { readdirSync, readFileSync, realpathSync } from 'node:fs';
 import os from 'node:os';
 import { dirname, join, resolve } from 'node:path';
+import { getCodexHomeDir } from './codexHome';
 
 export type CodexSkillScope = 'REPO' | 'USER' | 'ADMIN' | 'SYSTEM';
 
@@ -151,9 +152,9 @@ function normalizePath(path: string): string {
     }
 }
 
-function readDisabledSkillPaths(homeDir: string): Set<string> {
+function readDisabledSkillPaths(codexHomeDir: string): Set<string> {
     const disabled = new Set<string>();
-    const configPath = join(homeDir, '.codex', 'config.toml');
+    const configPath = join(codexHomeDir, 'config.toml');
 
     try {
         const config = readFileSync(configPath, 'utf8');
@@ -181,9 +182,14 @@ function pushUniqueRoot(roots: string[], root: string): void {
     }
 }
 
-export function discoverCodexSkills(cwd = process.cwd(), homeDir = os.homedir()): CodexSkillMetadata[] {
+export function discoverCodexSkills(
+    cwd = process.cwd(),
+    homeDir = os.homedir(),
+    env: NodeJS.ProcessEnv = process.env,
+): CodexSkillMetadata[] {
     const skills: CodexSkillMetadata[] = [];
-    const disabledSkillPaths = readDisabledSkillPaths(homeDir);
+    const codexHomeDir = getCodexHomeDir(homeDir, env);
+    const disabledSkillPaths = readDisabledSkillPaths(codexHomeDir);
 
     const repoRoot = findGitRoot(cwd);
     const repoSkillRoots: string[] = [];
@@ -196,10 +202,14 @@ export function discoverCodexSkills(cwd = process.cwd(), homeDir = os.homedir())
     }
 
     skills.push(...scanSkillRoot(join(homeDir, '.agents', 'skills'), 'USER'));
-    skills.push(...scanSkillRoot(join(homeDir, '.codex', 'skills'), 'USER', false));
+    skills.push(...scanSkillRoot(join(codexHomeDir, 'skills'), 'USER', false));
 
     skills.push(...scanSkillRoot('/etc/codex/skills', 'ADMIN'));
-    skills.push(...scanSkillRoot(join(homeDir, '.codex', 'skills', '.system'), 'SYSTEM'));
+    skills.push(...scanSkillRoot(join(codexHomeDir, 'skills', '.system'), 'SYSTEM'));
 
-    return skills.filter(skill => !disabledSkillPaths.has(normalizePath(dirname(skill.path))));
+    return skills.filter(skill => {
+        const skillPath = normalizePath(skill.path);
+        const skillDir = normalizePath(dirname(skill.path));
+        return !disabledSkillPaths.has(skillPath) && !disabledSkillPaths.has(skillDir);
+    });
 }
