@@ -333,7 +333,7 @@ export default function StatusScreen() {
                         <Pressable
                             onPress={handleCommit}
                             disabled={!hasStagedFiles || isOperating}
-                            style={{ paddingHorizontal: 8, paddingVertical: 4 }}
+                            style={{ width: 38, height: 38, alignItems: 'center', justifyContent: 'center' }}
                         >
                             <Octicons
                                 name="git-commit"

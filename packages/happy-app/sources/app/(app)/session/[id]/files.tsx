@@ -429,7 +429,7 @@ export default function FilesScreen() {
                     headerRight: () => (
                         <Pressable
                             onPress={() => router.push(`/session/${sessionId}/commits`)}
-                            style={{ paddingHorizontal: 8, paddingVertical: 4 }}
+                            style={{ width: 38, height: 38, alignItems: 'center', justifyContent: 'center' }}
                         >
                             <Octicons name="git-commit" size={20} color={theme.colors.header.tint} />
                         </Pressable>

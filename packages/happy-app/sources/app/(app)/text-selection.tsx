@@ -88,7 +88,13 @@ export default function TextSelectionScreen() {
                         <Pressable
                             onPress={handleCopyAll}
                             style={({ pressed }) => [
-                                { opacity: pressed ? 0.7 : 1 }
+                                {
+                                    width: 38,
+                                    height: 38,
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    opacity: pressed ? 0.7 : 1,
+                                }
                             ]}
                             disabled={loading || !fullText}
                         >

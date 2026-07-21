@@ -1384,10 +1384,10 @@ const ChatHeaderRight = React.memo((props: {
                     onPress={props.onAvatarPress}
                     hitSlop={15}
                     style={{
-                        width: 36,
-                        height: 36,
-                        borderRadius: 18,
-                        overflow: 'hidden',
+                        width: 38,
+                        height: 38,
+                        alignItems: 'center',
+                        justifyContent: 'center',
                     }}
                 >
                     <Avatar

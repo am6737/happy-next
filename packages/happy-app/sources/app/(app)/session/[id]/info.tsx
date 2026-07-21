@@ -842,7 +842,11 @@ function SessionInfoContent({ session }: { session: Session }) {
             <Stack.Screen
                 options={{
                     headerRight: () => (
-                        <Pressable onPress={handleRenameSession} hitSlop={10}>
+                        <Pressable
+                            onPress={handleRenameSession}
+                            hitSlop={10}
+                            style={{ width: 38, height: 38, alignItems: 'center', justifyContent: 'center' }}
+                        >
                             <AntDesign name="edit" size={22} color={theme.colors.text} />
                         </Pressable>
                     ),

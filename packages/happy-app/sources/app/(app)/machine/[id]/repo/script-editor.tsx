@@ -195,7 +195,7 @@ export default React.memo(function ScriptEditorScreen() {
                         <Pressable
                             onPress={handleSave}
                             disabled={!hasChanges || isSaving}
-                            style={{ width: 32, height: 32, alignItems: 'center', justifyContent: 'center' }}
+                            style={{ width: 38, height: 38, alignItems: 'center', justifyContent: 'center' }}
                         >
                             {isSaving ? (
                                 <ActivityIndicator size="small" color={theme.colors.header.tint} />

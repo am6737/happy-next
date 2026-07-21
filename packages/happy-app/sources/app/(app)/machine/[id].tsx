@@ -659,6 +659,10 @@ export default function MachineDetailScreen() {
                             onPress={handleRenameMachine}
                             hitSlop={10}
                             style={{
+                                width: 38,
+                                height: 38,
+                                alignItems: 'center',
+                                justifyContent: 'center',
                                 opacity: isRenamingMachine ? 0.5 : 1
                             }}
                             disabled={isRenamingMachine}
