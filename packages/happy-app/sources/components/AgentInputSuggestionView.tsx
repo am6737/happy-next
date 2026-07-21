@@ -21,14 +21,21 @@ interface CommandSuggestionProps {
     kind?: 'command' | 'skill';
 }
 
-export const CommandSuggestion = React.memo(({ command, description, scope }: CommandSuggestionProps) => {
+export const CommandSuggestion = React.memo(({ command, description, scope, kind }: CommandSuggestionProps) => {
     return (
         <View style={styles.suggestionContainer}>
+            <View style={styles.iconContainer}>
+                <Ionicons
+                    name={kind === 'skill' ? 'cube-outline' : 'code-slash-outline'}
+                    size={16}
+                    color={styles.iconColor.color}
+                />
+            </View>
             <Text 
                 style={[styles.commandText, { marginRight: (description || scope) ? 12 : 0 }]}
                 numberOfLines={1}
             >
-                /{command}
+                {command}
             </Text>
             {description ? (
                 <Text
@@ -54,17 +61,20 @@ interface SkillSuggestionProps {
     description?: string;
     scope: 'REPO' | 'USER' | 'ADMIN' | 'SYSTEM';
     displayName?: string;
+    showSkillCategory?: boolean;
 }
 
-export const SkillSuggestion = React.memo(({ name, description, scope, displayName }: SkillSuggestionProps) => {
+export const SkillSuggestion = React.memo(({ name, description, scope, displayName, showSkillCategory }: SkillSuggestionProps) => {
     const scopeLabel = getScopeLabel(scope === 'ADMIN' ? 'SYSTEM' : scope);
+    const label = showSkillCategory ? t('agentInput.suggestion.skillLabel') : scopeLabel;
+    const title = displayName || name;
 
     return (
         <View style={styles.suggestionContainer}>
             <View style={styles.iconContainer}>
                 <Ionicons
                     name="cube-outline"
-                    size={18}
+                    size={16}
                     color={styles.iconColor.color}
                 />
             </View>
@@ -72,7 +82,7 @@ export const SkillSuggestion = React.memo(({ name, description, scope, displayNa
                 style={[styles.commandText, { marginRight: description ? 12 : 0 }]}
                 numberOfLines={1}
             >
-                {displayName || name}
+                {title}
             </Text>
             {description ? (
                 <Text
@@ -85,7 +95,7 @@ export const SkillSuggestion = React.memo(({ name, description, scope, displayNa
                 <View style={styles.descriptionSpacer} />
             )}
             <Text style={styles.labelText}>
-                {scopeLabel}
+                {label}
             </Text>
         </View>
     );
@@ -103,7 +113,7 @@ export const FileMentionSuggestion = React.memo(({ fileName, filePath, fileType 
             <View style={styles.iconContainer}>
                 <Ionicons
                     name={fileType === 'folder' ? 'folder' : 'document-text'}
-                    size={18}
+                    size={16}
                     color={styles.iconColor.color}
                 />
             </View>
@@ -120,7 +130,7 @@ export const FileMentionSuggestion = React.memo(({ fileName, filePath, fileType 
     );
 });
 
-const styles = StyleSheet.create((theme) => ({
+const styles = StyleSheet.create((theme, runtime) => ({
     suggestionContainer: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -148,7 +158,9 @@ const styles = StyleSheet.create((theme) => ({
         width: 32,
         height: 32,
         borderRadius: 16,
-        backgroundColor: theme.colors.surfaceHigh,
+        backgroundColor: runtime.themeName === 'dark'
+            ? theme.colors.surfaceHighest
+            : theme.colors.surfaceHigh,
         alignItems: 'center',
         justifyContent: 'center',
         marginRight: 12,

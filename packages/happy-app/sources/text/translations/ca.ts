@@ -994,6 +994,7 @@ export const ca: TranslationStructure = {
         suggestion: {
             fileLabel: 'FITXER',
             folderLabel: 'CARPETA',
+            skillLabel: 'HABILITAT',
             skillScopeRepo: 'REPO',
             skillScopePersonal: 'USUARI',
             skillScopePlugin: 'PLUGIN',

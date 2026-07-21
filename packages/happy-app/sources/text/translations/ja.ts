@@ -1026,6 +1026,7 @@ export const ja: TranslationStructure = {
         suggestion: {
             fileLabel: 'ファイル',
             folderLabel: 'フォルダ',
+            skillLabel: 'スキル',
             skillScopeRepo: 'リポジトリ',
             skillScopePersonal: '個人',
             skillScopePlugin: 'プラグイン',

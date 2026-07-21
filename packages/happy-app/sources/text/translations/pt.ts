@@ -994,6 +994,7 @@ export const pt: TranslationStructure = {
         suggestion: {
             fileLabel: 'ARQUIVO',
             folderLabel: 'PASTA',
+            skillLabel: 'HABILIDADE',
             skillScopeRepo: 'REPO',
             skillScopePersonal: 'USUÁRIO',
             skillScopePlugin: 'PLUGIN',

@@ -35,6 +35,17 @@ describe('applySuggestion', () => {
                 cursorPosition: 11
             });
         });
+
+        it('should replace a slash query with a selected skill invocation', () => {
+            const content = '/image';
+            const selection = { start: 6, end: 6 };
+            const result = applySuggestion(content, selection, '$imagegen', ['@', '/', '$']);
+
+            expect(result).toEqual({
+                text: '$imagegen ',
+                cursorPosition: 10,
+            });
+        });
     });
     
     describe('cursor in middle of word', () => {

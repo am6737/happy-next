@@ -1005,6 +1005,7 @@ export const ru: TranslationStructure = {
         suggestion: {
             fileLabel: 'ФАЙЛ',
             folderLabel: 'ПАПКА',
+            skillLabel: 'НАВЫК',
             skillScopeRepo: 'РЕПО',
             skillScopePersonal: 'ПОЛЬЗ',
             skillScopePlugin: 'ПЛАГИН',

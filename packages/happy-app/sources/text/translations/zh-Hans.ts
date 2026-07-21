@@ -996,6 +996,7 @@ export const zhHans: TranslationStructure = {
         suggestion: {
             fileLabel: '文件',
             folderLabel: '文件夹',
+            skillLabel: '技能',
             skillScopeRepo: '项目',
             skillScopePersonal: '个人',
             skillScopePlugin: '插件',
