@@ -7,6 +7,7 @@ import { layout } from '../layout';
 import { useHeaderHeight, useIsTablet } from '@/utils/responsive';
 import { Typography } from '@/constants/Typography';
 import { StyleSheet } from 'react-native-unistyles';
+import { t } from '@/text';
 
 interface HeaderProps {
     title?: React.ReactNode;
@@ -93,18 +94,28 @@ interface ExtendedNavigationOptions extends Partial<NativeStackHeaderProps['opti
     headerSubtitleStyle?: any;
 }
 
-// Default back button component
-const DefaultBackButton: React.FC<{ tintColor?: string; onPress: () => void }> = ({ tintColor = '#000', onPress }) => {
+export const HeaderBackButton = React.memo((props: { tintColor?: string; onPress: () => void }) => {
     return (
-        <Pressable onPress={onPress} hitSlop={15}>
+        <Pressable
+            onPress={props.onPress}
+            hitSlop={15}
+            accessibilityRole="button"
+            accessibilityLabel={t('common.back')}
+            style={{
+                width: 38,
+                height: 38,
+                alignItems: 'center',
+                justifyContent: 'center',
+            }}
+        >
             <Ionicons
                 name={Platform.OS === 'ios' ? 'chevron-back' : 'arrow-back'}
-                size={24}
-                color={tintColor}
+                size={Platform.OS === 'ios' ? 28 : 24}
+                color={props.tintColor ?? '#000'}
             />
         </Pressable>
     );
-};
+});
 
 // Component wrapper for navigation header
 const NavigationHeaderComponent: React.FC<NativeStackHeaderProps> = React.memo((props) => {
@@ -163,7 +174,7 @@ const NavigationHeaderComponent: React.FC<NativeStackHeaderProps> = React.memo((
         // Show default back button if can go back and not explicitly hidden
         // Also hide on tablet when at first or second screen
         headerLeftContent = () => (
-            <DefaultBackButton
+            <HeaderBackButton
                 tintColor={options.headerTintColor}
                 onPress={() => navigation.goBack()}
             />

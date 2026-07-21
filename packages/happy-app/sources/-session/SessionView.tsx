@@ -5,6 +5,7 @@ import { Avatar } from '@/components/Avatar';
 import { MultiTextInputHandle } from '@/components/MultiTextInput';
 import { getSuggestions } from '@/components/autocomplete/suggestions';
 import { ChatHeaderTitle } from '@/components/ChatHeaderTitle';
+import { HeaderBackButton } from '@/components/navigation/Header';
 import { ChatList, type ForkMessageRequest } from '@/components/ChatList';
 import { ConversationMinimap, type ConversationMinimapItem } from '@/components/ConversationMinimap';
 import type { UserTextMessage } from '@/sync/typesMessage';
@@ -239,7 +240,10 @@ export const SessionView = React.memo((props: { id: string }) => {
                         />
                     ),
                     headerLeft: Platform.OS === 'web' ? () => (
-                        <SessionHeaderBackButton onPress={handleBackPress} />
+                        <HeaderBackButton
+                            tintColor={theme.colors.header.tint}
+                            onPress={handleBackPress}
+                        />
                     ) : undefined,
                     headerRight: session ? () => (
                         <ChatHeaderRight
@@ -1299,30 +1303,6 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
     )
 }
 
-
-const SessionHeaderBackButton = React.memo((props: { onPress: () => void }) => {
-    const { theme } = useUnistyles();
-    return (
-        <Pressable
-            onPress={props.onPress}
-            hitSlop={15}
-            accessibilityRole="button"
-            accessibilityLabel={t('common.back')}
-            style={{
-                width: 38,
-                height: 38,
-                alignItems: 'center',
-                justifyContent: 'center',
-            }}
-        >
-            <Ionicons
-                name={Platform.OS === 'ios' ? 'chevron-back' : 'arrow-back'}
-                size={Platform.OS === 'ios' ? 28 : 24}
-                color={theme.colors.header.tint}
-            />
-        </Pressable>
-    );
-});
 
 const ChatHeaderRight = React.memo((props: {
     avatarId?: string;
