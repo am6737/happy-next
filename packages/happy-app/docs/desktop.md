@@ -29,6 +29,8 @@ Production uses `src-tauri/tauri.conf.json`. Development and preview merge their
 
 The production desktop app uses the same server model as the web app: it starts with the built-in Happy server entry points and still lets the user select a custom Happy server. Production WebView connections therefore allow HTTPS/WSS endpoints but reject plain HTTP/WS. Preview may connect to configurable HTTP/WS test servers, while development disables CSP for the Expo development server. The application uses the Web platform `fetch` implementation, so the unused Tauri HTTP plugin is not bundled or exposed through capabilities.
 
+React Native Web and Unistyles create style rules dynamically at runtime. Tauri's build-time CSP rewriting is therefore disabled only for `style-src`; the explicit `style-src 'self' 'unsafe-inline'` policy remains in force. Script CSP rewriting remains enabled.
+
 Generated bundles are written below `src-tauri/target/release/bundle/`. The `dist` and `target` directories are generated and must not be committed.
 
 ## Local verification
