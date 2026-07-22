@@ -27,7 +27,7 @@ Each command sets `APP_ENV` explicitly before Tauri starts Expo. This is importa
 
 Production uses `src-tauri/tauri.conf.json`. Development and preview merge their partial configuration from `tauri.dev.conf.json` and `tauri.preview.conf.json`.
 
-The production desktop app uses the same server model as the web app: it starts with the built-in Happy server entry points and still lets the user select a custom Happy server. Production WebView connections therefore allow HTTPS/WSS endpoints but reject plain HTTP/WS. Preview may connect to configurable HTTP/WS test servers, while development disables CSP for the Expo development server. The Tauri HTTP plugin is not exposed through capabilities because the application currently uses the Web platform `fetch` implementation rather than the plugin API.
+The production desktop app uses the same server model as the web app: it starts with the built-in Happy server entry points and still lets the user select a custom Happy server. Production WebView connections therefore allow HTTPS/WSS endpoints but reject plain HTTP/WS. Preview may connect to configurable HTTP/WS test servers, while development disables CSP for the Expo development server. The application uses the Web platform `fetch` implementation, so the unused Tauri HTTP plugin is not bundled or exposed through capabilities.
 
 Generated bundles are written below `src-tauri/target/release/bundle/`. The `dist` and `target` directories are generated and must not be committed.
 

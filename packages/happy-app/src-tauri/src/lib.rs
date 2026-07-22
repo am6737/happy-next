@@ -12,7 +12,6 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_http::init())
         .menu(Menu::default)
         .setup(|app| {
             if cfg!(debug_assertions) {
