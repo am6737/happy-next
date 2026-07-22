@@ -174,6 +174,18 @@ export function desiredTopSlackPx(args: {
     return args.maxSlackPx;
 }
 
+// The canvas sits between the list's header spacer and footer inside the
+// scroller. Keeping it at least as tall as the remaining viewport prevents a
+// short, newly-mounted conversation from being clipped by the canvas while
+// its estimated row heights are replaced with real measurements.
+export function minimumCanvasHeightPx(args: {
+    viewportHeightPx: number;
+    headerInsetPx: number;
+    footerHeightPx: number;
+}): number {
+    return Math.max(0, args.viewportHeightPx - args.headerInsetPx - args.footerHeightPx);
+}
+
 // First measured entry inside the strict viewport (no overscan) present in
 // both layouts — the compensation anchor for an entry-set change. Measured
 // only: an estimated height would make the compensation itself a guess.

@@ -22,6 +22,7 @@ import {
     distanceToAlignEntryTop,
     distanceToCenterEntry,
     entryTopFromBottom,
+    minimumCanvasHeightPx,
     nextViewportState,
     pickCompensationAnchor,
     rangeAroundAnchor,
@@ -795,13 +796,19 @@ const ChatListInternal = React.memo((props: {
         const viewportTopModelPx = scroller
             ? toModelDistance(getRawDistance()) + scroller.clientHeight
             : layoutNow.totalHeightPx;
-        return layoutNow.totalHeightPx + desiredTopSlackPx({
+        const contentHeightPx = layoutNow.totalHeightPx + desiredTopSlackPx({
             hasMore: hasMoreRef.current,
             totalHeightPx: layoutNow.totalHeightPx,
             viewportTopModelPx,
             currentSlackPx: canvasHeightRef.current - layoutNow.totalHeightPx,
             maxSlackPx: TOP_SLACK_PX,
         });
+        const viewportFillHeightPx = minimumCanvasHeightPx({
+            viewportHeightPx: scroller?.clientHeight ?? 0,
+            headerInsetPx: headerInsetRef.current,
+            footerHeightPx: footerHeightRef.current,
+        });
+        return Math.max(contentHeightPx, viewportFillHeightPx);
     };
     // A pressed pointer inside the scroller (scrollbar drag, text selection)
     // owns the scroll position; idle renormalization waits for release so it
@@ -815,7 +822,11 @@ const ChatListInternal = React.memo((props: {
         if (!scroller) return false;
         const layoutNow = layoutRef.current;
         if (layoutNow.keys.length === 0) return false;
-        return toModelDistance(getRawDistance()) + scroller.clientHeight
+        const raw = getRawDistance();
+        // A short conversation naturally leaves the viewport top above the
+        // oldest row while sitting at raw 0; that is viewport fill, not a user
+        // stranded in the scrollable top-slack band.
+        return raw > 1 && toModelDistance(raw) + scroller.clientHeight
             > layoutNow.totalHeightPx + BAND_SNAP_THRESHOLD_PX;
     };
     const isRenormDirty = () =>
@@ -1456,6 +1467,7 @@ const ChatListInternal = React.memo((props: {
                     updateViewportRef.current(Math.abs(el.scrollTop), el.clientHeight);
                     reassertPendingRestoreRef.current();
                     syncProxyFromRealRef.current();
+                    if (isRenormDirty()) ensureRenormLoop();
                 });
                 observer.observe(el);
                 scrollerResizeObserverRef.current = observer;
@@ -1492,6 +1504,7 @@ const ChatListInternal = React.memo((props: {
             footerHeightRef.current = height;
             const delta = height - prev;
             syncProxyFromRealRef.current();
+            if (isRenormDirty()) ensureRenormLoop();
             if (delta === 0 || isAnimatingScrollRef.current) return;
             const scroller = scrollerElRef.current;
             if (!scroller || atBottomRef.current || pendingRestoreRef.current != null) return;
@@ -1678,6 +1691,25 @@ const ChatListInternal = React.memo((props: {
     // measurement sweep. When one commit both appends entries and mounts them,
     // the append shift (at estimated size) is compensated first; the
     // measurement pass then refines real−estimate on the corrected scroll.
+
+    // 0. Keep short conversations' canvas at least as tall as the actual list
+    // viewport (minus the header/footer that are its siblings). At the bottom
+    // this resize is safe to commit directly before paint; away from the
+    // bottom, use the normal renormalization path so the visible anchor stays
+    // fixed. `viewportHeightPx` is updated by the scroller ResizeObserver, so
+    // browser/window and input-area resizes automatically re-run this step.
+    React.useLayoutEffect(() => {
+        const scroller = scrollerElRef.current;
+        if (!scroller || scroller.clientHeight <= 0) return;
+        const nextCanvasHeight = desiredCanvasHeightPx();
+        if (nextCanvasHeight === canvasHeightRef.current) return;
+        if (getRawDistance() <= 1 && canvasBottomOffsetRef.current === 0 && !isRepositioning()) {
+            canvasHeightRef.current = nextCanvasHeight;
+            setCanvasHeightPx(nextCanvasHeight);
+            return;
+        }
+        ensureRenormLoop();
+    }, [viewport.viewportHeightPx, headerInsetPx, layout.totalHeightPx, props.hasMore]);
 
     // 1. Entry-set changes (new message, page prepend): keep the first
     // measured on-screen row's top edge still. Prepends are naturally free in

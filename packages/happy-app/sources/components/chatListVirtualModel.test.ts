@@ -7,6 +7,7 @@ import {
     distanceToAlignEntryTop,
     distanceToCenterEntry,
     entryTopFromBottom,
+    minimumCanvasHeightPx,
     nextViewportState,
     pickCompensationAnchor,
     rangeAroundAnchor,
@@ -333,5 +334,17 @@ describe('desiredTopSlackPx', () => {
         const between = { hasMore: false, totalHeightPx: 10_000, viewportTopModelPx: 10_000 - 2000, maxSlackPx: 3000 };
         expect(desiredTopSlackPx({ ...between, currentSlackPx: 3000 })).toBe(3000);
         expect(desiredTopSlackPx({ ...between, currentSlackPx: 0 })).toBe(0);
+    });
+});
+
+describe('minimumCanvasHeightPx', () => {
+    it('uses the viewport space left after the header and footer', () => {
+        expect(minimumCanvasHeightPx({ viewportHeightPx: 800, headerInsetPx: 120, footerHeightPx: 20 }))
+            .toBe(660);
+    });
+
+    it('clamps to zero when fixed regions exceed the viewport', () => {
+        expect(minimumCanvasHeightPx({ viewportHeightPx: 100, headerInsetPx: 80, footerHeightPx: 40 }))
+            .toBe(0);
     });
 });
