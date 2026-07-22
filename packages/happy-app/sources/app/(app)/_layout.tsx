@@ -407,6 +407,12 @@ export default function RootLayout() {
                 }}
             />
             <Stack.Screen
+                name="dev/legend-chat-header"
+                options={{
+                    headerTitle: 'Legend Chat Header',
+                }}
+            />
+            <Stack.Screen
                 name="session/recent"
                 options={{
                     headerShown: true,

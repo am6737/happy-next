@@ -207,6 +207,12 @@ export default function DevScreen() {
                     onPress={() => router.push('/dev/inverted-list')}
                 />
                 <Item
+                    title="Legend Chat Header"
+                    subtitle="Test non-inverted chat with iOS native scroll edge effect"
+                    icon={<Ionicons name="layers-outline" size={28} color="#007AFF" />}
+                    onPress={() => router.push('/dev/legend-chat-header')}
+                />
+                <Item
                     title="Tool Views"
                     subtitle="Tool call visualization components"
                     icon={<Ionicons name="construct-outline" size={28} color="#007AFF" />}

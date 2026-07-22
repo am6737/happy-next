@@ -5,7 +5,7 @@ import { Stack } from 'expo-router';
 import { useKeyboardHandler, useKeyboardState, useReanimatedKeyboardAnimation } from 'react-native-keyboard-controller';
 import Animated, { runOnJS, useSharedValue } from 'react-native-reanimated';
 import { FlashList } from '@shopify/flash-list';
-import { LegendList } from '@legendapp/list';
+import { LegendList } from '@legendapp/list/react-native';
 
 type ListType = 'flash' | 'flat' | 'legend';
 type PaddingType = 'animated' | 'non-animated' | 'header-footer';
