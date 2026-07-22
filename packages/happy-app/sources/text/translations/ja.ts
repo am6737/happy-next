@@ -558,6 +558,18 @@ export const ja: TranslationStructure = {
         enhancedSessionWizardDisabled: '標準セッションランチャーを使用',
     },
 
+    settingsDesktop: {
+        title: 'デスクトップ',
+        footer: 'Happy Next のデスクトップ動作を設定します。',
+        nativeNotificationsTitle: 'デスクトップ通知',
+        nativeNotificationsSubtitle: '新着メッセージをシステム通知で表示',
+        closeToTrayTitle: '閉じたときにトレイへ格納',
+        closeToTraySubtitle: 'ウィンドウを閉じても接続を維持',
+        autostartTitle: 'ログイン時に起動',
+        autostartSubtitle: 'ログイン後、トレイで非表示のまま起動',
+        shortcutTitle: 'グローバル表示/非表示ショートカット',
+        shortcutSubtitle: 'どこでも Cmd/Ctrl+Shift+H を使用',
+    },
     settingsNotifications: {
         title: 'Notifications',
         footer: 'These settings only affect notifications while the app is active.',

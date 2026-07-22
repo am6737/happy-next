@@ -4291,6 +4291,27 @@
     "@tauri-apps/cli-win32-ia32-msvc" "2.9.6"
     "@tauri-apps/cli-win32-x64-msvc" "2.9.6"
 
+"@tauri-apps/plugin-autostart@2.5.1":
+  version "2.5.1"
+  resolved "https://registry.yarnpkg.com/@tauri-apps/plugin-autostart/-/plugin-autostart-2.5.1.tgz#e9e0bdfd721838eff620430889325c641a853a54"
+  integrity sha512-zS/xx7yzveCcotkA+8TqkI2lysmG2wvQXv2HGAVExITmnFfHAdj1arGsbbfs3o6EktRHf6l34pJxc3YGG2mg7w==
+  dependencies:
+    "@tauri-apps/api" "^2.8.0"
+
+"@tauri-apps/plugin-global-shortcut@2.3.1":
+  version "2.3.1"
+  resolved "https://registry.yarnpkg.com/@tauri-apps/plugin-global-shortcut/-/plugin-global-shortcut-2.3.1.tgz#c9c7a3db688eaaac2e1a9e22a37beb60004f2ed5"
+  integrity sha512-vr40W2N6G63dmBPaha1TsBQLLURXG538RQbH5vAm0G/ovVZyXJrmZR1HF1W+WneNloQvwn4dm8xzwpEXRW560g==
+  dependencies:
+    "@tauri-apps/api" "^2.8.0"
+
+"@tauri-apps/plugin-notification@2.3.3":
+  version "2.3.3"
+  resolved "https://registry.yarnpkg.com/@tauri-apps/plugin-notification/-/plugin-notification-2.3.3.tgz#01581e3abd3bd18200121b213d3e6ebff2967fe2"
+  integrity sha512-Zw+ZH18RJb41G4NrfHgIuofJiymusqN+q8fGUIIV7vyCH+5sSn5coqRv/MWB9qETsUs97vmU045q7OyseCV3Qg==
+  dependencies:
+    "@tauri-apps/api" "^2.8.0"
+
 "@tootallnate/quickjs-emscripten@^0.23.0":
   version "0.23.0"
   resolved "https://registry.yarnpkg.com/@tootallnate/quickjs-emscripten/-/quickjs-emscripten-0.23.0.tgz#db4ecfd499a9765ab24002c3b696d02e6d32a12c"

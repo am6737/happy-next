@@ -526,6 +526,18 @@ export const es: TranslationStructure = {
         enhancedSessionWizardDisabled: 'Usando el lanzador de sesión estándar',
     },
 
+    settingsDesktop: {
+        title: 'Escritorio',
+        footer: 'Controla el comportamiento de Happy Next como aplicación de escritorio.',
+        nativeNotificationsTitle: 'Notificaciones de escritorio',
+        nativeNotificationsSubtitle: 'Mostrar notificaciones del sistema para mensajes nuevos',
+        closeToTrayTitle: 'Cerrar a la bandeja',
+        closeToTraySubtitle: 'Mantener la conexión al cerrar la ventana',
+        autostartTitle: 'Iniciar al abrir sesión',
+        autostartSubtitle: 'Iniciar oculto en la bandeja al abrir sesión',
+        shortcutTitle: 'Atajo global para mostrar u ocultar',
+        shortcutSubtitle: 'Usar Cmd/Ctrl+Shift+H desde cualquier lugar',
+    },
     settingsNotifications: {
         title: 'Notifications',
         footer: 'These settings only affect notifications while the app is active.',

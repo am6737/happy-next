@@ -528,6 +528,18 @@ export const zhHans: TranslationStructure = {
         enhancedSessionWizardDisabled: '使用标准会话启动器',
     },
 
+    settingsDesktop: {
+        title: '桌面端',
+        footer: '控制 Happy Next 作为桌面应用时的行为。',
+        nativeNotificationsTitle: '桌面通知',
+        nativeNotificationsSubtitle: '通过系统通知提醒新消息',
+        closeToTrayTitle: '关闭到系统托盘',
+        closeToTraySubtitle: '关闭窗口后继续保持消息连接',
+        autostartTitle: '登录时自动启动',
+        autostartSubtitle: '登录系统后在托盘中静默启动',
+        shortcutTitle: '全局显示/隐藏快捷键',
+        shortcutSubtitle: '可在任意位置使用 Cmd/Ctrl+Shift+H',
+    },
     settingsNotifications: {
         title: '通知',
         footer: '这些设置仅影响应用处于前台时的通知。',

@@ -526,6 +526,18 @@ export const ca: TranslationStructure = {
         enhancedSessionWizardDisabled: 'Usant el llançador de sessió estàndard',
     },
 
+    settingsDesktop: {
+        title: 'Escriptori',
+        footer: 'Controla el comportament de Happy Next com a aplicació d’escriptori.',
+        nativeNotificationsTitle: 'Notificacions d’escriptori',
+        nativeNotificationsSubtitle: 'Mostra notificacions del sistema per als missatges nous',
+        closeToTrayTitle: 'Tanca a la safata',
+        closeToTraySubtitle: 'Mantén la connexió quan es tanqui la finestra',
+        autostartTitle: 'Inicia en entrar',
+        autostartSubtitle: 'Inicia ocult a la safata després d’entrar',
+        shortcutTitle: 'Drecera global per mostrar o amagar',
+        shortcutSubtitle: 'Utilitza Cmd/Ctrl+Shift+H des de qualsevol lloc',
+    },
     settingsNotifications: {
         title: 'Notifications',
         footer: 'These settings only affect notifications while the app is active.',

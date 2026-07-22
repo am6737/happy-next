@@ -491,6 +491,18 @@ export const ru: TranslationStructure = {
         enhancedSessionWizardDisabled: 'Используется стандартный лаунчер',
     },
 
+    settingsDesktop: {
+        title: 'Рабочий стол',
+        footer: 'Настройка поведения Happy Next как настольного приложения.',
+        nativeNotificationsTitle: 'Системные уведомления',
+        nativeNotificationsSubtitle: 'Показывать системные уведомления о новых сообщениях',
+        closeToTrayTitle: 'Сворачивать в трей при закрытии',
+        closeToTraySubtitle: 'Сохранять подключение после закрытия окна',
+        autostartTitle: 'Запускать при входе',
+        autostartSubtitle: 'Запускать скрыто в трее после входа',
+        shortcutTitle: 'Глобальная горячая клавиша',
+        shortcutSubtitle: 'Cmd/Ctrl+Shift+H показывает или скрывает окно',
+    },
     settingsNotifications: {
         title: 'Notifications',
         footer: 'These settings only affect notifications while the app is active.',

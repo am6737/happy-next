@@ -37,6 +37,7 @@ import { storage } from '@/sync/storage';
 import { usePathname } from 'expo-router';
 import { useDootaskGlobalWebSocket } from '@/hooks/useDootaskGlobalWebSocket';
 import { isTauriDesktop } from '@/utils/tauri';
+import { DesktopBridge } from '@/desktop/DesktopBridge';
 
 let currentAppState: string = AppState.currentState;
 let currentSessionId: string | null = null;
@@ -349,6 +350,7 @@ export default function RootLayout() {
     return (
         <>
             <FaviconPermissionIndicator />
+            <DesktopBridge />
             {providers}
         </>
     );

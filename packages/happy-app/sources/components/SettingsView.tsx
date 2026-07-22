@@ -7,6 +7,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 import { useAuth } from '@/auth/AuthContext';
+import { isTauriDesktop } from '@/utils/tauri';
 import { Item } from '@/components/Item';
 import { ItemGroup } from '@/components/ItemGroup';
 import { ItemList } from '@/components/ItemList';
@@ -368,7 +369,7 @@ export const SettingsView = React.memo(function SettingsView() {
                     icon={<Ionicons name="mic-outline" size={29} color="#34C759" />}
                     onPress={() => router.push('/settings/voice')}
                 />
-                {Platform.OS !== 'web' && (
+                {(Platform.OS !== 'web' || isTauriDesktop()) && (
                     <Item
                         title={t('settings.notifications')}
                         subtitle={t('settings.notificationsSubtitle')}

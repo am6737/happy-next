@@ -84,6 +84,7 @@ import {
     resolveNewerCoveragePatch,
 } from './messagesStore/common';
 import type { MessagePage, SessionMessageCacheState, SessionMessageCacheStatePatch } from './messagesStore/types';
+import { emitDesktopMessages } from '@/desktop/desktopEvents';
 
 type PermissionMode = NonNullable<Session['permissionMode']>;
 
@@ -4839,6 +4840,7 @@ class Sync {
                     if (messagesToApply.length > 0) {
                         console.log(`🔄 Sync: Applying websocket batch (${messagesToApply.length} messages) for session ${sessionId}`);
                         this.applyMessages(sessionId, messagesToApply);
+                        emitDesktopMessages({ sessionId, messages: messagesToApply });
 
                         let hasMutableTool = false;
                         for (const message of messagesToApply) {

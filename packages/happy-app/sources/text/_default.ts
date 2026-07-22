@@ -536,6 +536,18 @@ export const en = {
         enhancedSessionWizardDisabled: 'Using standard session launcher',
     },
 
+    settingsDesktop: {
+        title: 'Desktop',
+        footer: 'Controls how Happy Next behaves as a desktop app.',
+        nativeNotificationsTitle: 'Desktop notifications',
+        nativeNotificationsSubtitle: 'Show new-message notifications from the system',
+        closeToTrayTitle: 'Close to system tray',
+        closeToTraySubtitle: 'Keep messages connected when the window is closed',
+        autostartTitle: 'Launch at sign-in',
+        autostartSubtitle: 'Start hidden in the tray after you sign in',
+        shortcutTitle: 'Global show/hide shortcut',
+        shortcutSubtitle: 'Use Cmd/Ctrl+Shift+H anywhere',
+    },
     settingsNotifications: {
         title: 'Notifications',
         footer: 'These settings only affect notifications while the app is active.',

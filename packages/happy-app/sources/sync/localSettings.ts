@@ -12,6 +12,10 @@ export const LocalSettingsSchema = z.object({
     themePreference: z.enum(['light', 'dark', 'adaptive']).describe('Theme preference: light, dark, or adaptive (follows system)'),
     hideNotificationsWhenActive: z.boolean().describe('Hide all notifications while the app is active'),
     hideSessionNotificationsWhenActive: z.boolean().describe('Hide notifications for the currently open session while the app is active'),
+    desktopCloseToTray: z.boolean().describe('Hide the desktop window to the system tray when it is closed'),
+    desktopNotificationsEnabled: z.boolean().describe('Show native desktop notifications for new messages'),
+    desktopAutostartEnabled: z.boolean().describe('Launch the desktop app when the user signs in'),
+    desktopGlobalShortcutEnabled: z.boolean().describe('Enable the global show/hide desktop shortcut'),
     // CLI version acknowledgments - keyed by machineId
     acknowledgedCliVersions: z.record(z.string(), z.string()).describe('Acknowledged CLI versions per machine'),
     // Session list UI state (device-specific)
@@ -40,6 +44,10 @@ export const localSettingsDefaults: LocalSettings = {
     themePreference: 'adaptive',
     hideNotificationsWhenActive: false,
     hideSessionNotificationsWhenActive: false,
+    desktopCloseToTray: true,
+    desktopNotificationsEnabled: true,
+    desktopAutostartEnabled: false,
+    desktopGlobalShortcutEnabled: true,
     acknowledgedCliVersions: {},
     sessionListSelectedTab: null,
     machineNameCache: {},

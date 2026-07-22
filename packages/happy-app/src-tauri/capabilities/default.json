@@ -8,6 +8,16 @@
   "permissions": [
     "core:default",
     "opener:allow-open-url",
-    "opener:allow-default-urls"
+    "opener:allow-default-urls",
+    "notification:allow-is-permission-granted",
+    "notification:allow-request-permission",
+    "notification:allow-notify",
+    "notification:allow-register-listener",
+    "autostart:allow-enable",
+    "autostart:allow-disable",
+    "autostart:allow-is-enabled",
+    "global-shortcut:allow-register",
+    "global-shortcut:allow-unregister",
+    "global-shortcut:allow-is-registered"
   ]
 }

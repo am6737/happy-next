@@ -538,6 +538,18 @@ export const pl: TranslationStructure = {
         enhancedSessionWizardDisabled: 'Używanie standardowego launchera sesji',
     },
 
+    settingsDesktop: {
+        title: 'Aplikacja komputerowa',
+        footer: 'Steruje zachowaniem Happy Next jako aplikacji komputerowej.',
+        nativeNotificationsTitle: 'Powiadomienia systemowe',
+        nativeNotificationsSubtitle: 'Pokazuj systemowe powiadomienia o nowych wiadomościach',
+        closeToTrayTitle: 'Zamykaj do zasobnika',
+        closeToTraySubtitle: 'Utrzymuj połączenie po zamknięciu okna',
+        autostartTitle: 'Uruchamiaj po zalogowaniu',
+        autostartSubtitle: 'Uruchamiaj ukryte w zasobniku po zalogowaniu',
+        shortcutTitle: 'Globalny skrót pokaż/ukryj',
+        shortcutSubtitle: 'Użyj Cmd/Ctrl+Shift+H w dowolnym miejscu',
+    },
     settingsNotifications: {
         title: 'Notifications',
         footer: 'These settings only affect notifications while the app is active.',

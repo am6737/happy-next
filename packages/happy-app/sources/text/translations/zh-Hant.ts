@@ -528,6 +528,18 @@ export const zhHant: TranslationStructure = {
         enhancedSessionWizardDisabled: '使用標準工作階段啟動器',
     },
 
+    settingsDesktop: {
+        title: '桌面端',
+        footer: '控制 Happy Next 作為桌面應用程式時的行為。',
+        nativeNotificationsTitle: '桌面通知',
+        nativeNotificationsSubtitle: '透過系統通知提醒新訊息',
+        closeToTrayTitle: '關閉到系統匣',
+        closeToTraySubtitle: '關閉視窗後繼續保持訊息連線',
+        autostartTitle: '登入時自動啟動',
+        autostartSubtitle: '登入系統後在系統匣中靜默啟動',
+        shortcutTitle: '全域顯示/隱藏快速鍵',
+        shortcutSubtitle: '可在任何位置使用 Cmd/Ctrl+Shift+H',
+    },
     settingsNotifications: {
         title: '通知',
         footer: '這些設定僅在應用程式啟用時影響通知。',

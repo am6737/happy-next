@@ -31,6 +31,38 @@ The production desktop app uses the same server model as the web app: it starts 
 
 React Native Web and Unistyles create style rules dynamically at runtime. Tauri's build-time CSP rewriting is therefore disabled only for `style-src`; the explicit `style-src 'self' 'unsafe-inline'` policy remains in force. Script CSP rewriting remains enabled.
 
+## Desktop product behavior
+
+The desktop shell intentionally behaves like a resident messaging client rather than a browser tab:
+
+- Closing the main window hides it to the system tray by default and keeps Socket.IO connected.
+- The tray menu can show, hide, or explicitly quit Happy Next and displays the current unread count.
+- Clicking the tray icon toggles the main window. Clicking the macOS Dock icon reopens a hidden window.
+- `Cmd+Q` on macOS and **Quit Happy Next** in the tray menu exit the process instead of hiding it.
+- A second launch activates the existing window instead of creating another instance.
+- Background WebView throttling is disabled so hidden-window message delivery is not intentionally suspended.
+- Native notifications are emitted for new agent replies and messages from another user when the relevant Session is not focused. Own messages, tool-only updates, events, and the currently visible Session are not notified.
+- Notification clicks request that the app show the main window and navigate to the associated Session. This still requires real-machine verification on each operating system.
+- macOS uses the Dock badge; Windows uses a taskbar overlay indicator; the tray menu provides a numeric count on both platforms.
+- The global show/hide shortcut is `Cmd+Shift+H` on macOS and `Ctrl+Shift+H` on Windows.
+- Launch-at-sign-in is disabled by default. When enabled, Happy Next starts hidden in the tray.
+
+Users can change close-to-tray, desktop notifications, launch-at-sign-in, and the global shortcut under **Settings → Notifications**. Close-to-tray, desktop notifications, and the shortcut are enabled by default; launch-at-sign-in is opt-in.
+
+Desktop-specific Tauri permissions are deliberately limited to notification permission/send/listener calls, autostart enable/disable/status calls, and global shortcut register/unregister/status calls.
+
+## Local data behavior
+
+The existing Web storage model is retained for this milestone:
+
+- authentication credentials use WebView `localStorage` on the desktop because Tauri renders through the Web platform path;
+- device-local settings and drafts use the React Native MMKV Web adapter, which also persists through `localStorage`;
+- encrypted message cache rows and coverage state use IndexedDB (`happy-message-cache-v1`).
+
+Image files can already be dragged into the composer on Web/Tauri, and clipboard image paste is handled by the existing Web paste path. Text copy/paste uses the existing Expo/Web clipboard implementation. These paths were kept instead of adding redundant broad native clipboard or filesystem capabilities.
+
+Migrating authentication credentials to macOS Keychain / Windows Credential Manager changes the authentication storage model and is intentionally not part of this change without explicit approval and a migration/rollback design.
+
 Generated bundles are written below `src-tauri/target/release/bundle/`. The `dist` and `target` directories are generated and must not be committed.
 
 ## Local verification
@@ -57,6 +89,20 @@ yarn tauri:build:production --bundles app,dmg
 ```
 
 An unsigned or ad-hoc-signed local bundle is only a development artifact. It does not replace Developer ID signing, notarization, stapling, Gatekeeper verification, or installation tests on a clean Mac.
+
+Desktop interaction checks should include:
+
+1. close the window and confirm the process remains in the tray;
+2. restore it from the tray and, on macOS, from the Dock;
+3. launch a second instance and confirm the existing window is focused;
+4. toggle the global shortcut setting and exercise `Cmd/Ctrl+Shift+H`;
+5. enable launch-at-sign-in and verify a hidden launch after a real OS sign-out/sign-in cycle;
+6. receive a message while another Session is visible and while the window is hidden;
+7. click a notification and confirm the correct Session opens;
+8. drag and paste an image into the composer;
+9. quit and relaunch, then confirm login, settings, drafts, and cached messages persist.
+
+Tests that require actual OS notification centers, login startup, taskbar/Dock state, or shell interaction are **未验证** until performed on a real machine; compilation alone is not sufficient.
 
 ## Signing and release safety
 
