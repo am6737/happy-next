@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text } from 'react-native';
+import { View, Text, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Typography } from '@/constants/Typography';
 import { Session } from '@/sync/storageTypes';
@@ -52,6 +52,8 @@ interface EmptyMessagesProps {
     session: Session;
 }
 
+const COMPACT_HEIGHT_THRESHOLD = 480;
+
 function getOSIcon(os?: string): keyof typeof Ionicons.glyphMap {
     if (!os) return 'hardware-chip-outline';
     
@@ -86,7 +88,9 @@ function formatRelativeTime(timestamp: number): string {
 
 export function EmptyMessages({ session }: EmptyMessagesProps) {
     const { theme } = useUnistyles();
+    const { height: windowHeight } = useWindowDimensions();
     const styles = stylesheet;
+    const isCompactHeight = windowHeight < COMPACT_HEIGHT_THRESHOLD;
     const osIcon = getOSIcon(session.metadata?.os);
     const sessionStatus = useSessionStatus(session);
     const startedTime = formatRelativeTime(session.createdAt);
@@ -95,32 +99,38 @@ export function EmptyMessages({ session }: EmptyMessagesProps) {
 
     return (
         <View style={styles.container}>
-            <Ionicons
-                name={osIcon}
-                size={72}
-                color={theme.colors.textSecondary}
-                style={styles.iconContainer}
-            />
+            {!isCompactHeight && (
+                <>
+                    <Ionicons
+                        name={osIcon}
+                        size={72}
+                        color={theme.colors.textSecondary}
+                        style={styles.iconContainer}
+                    />
 
-            {hostDisplayName && (
-                <Text style={styles.hostText}>
-                    {hostDisplayName}
-                </Text>
-            )}
-            
-            {session.metadata?.path && (
-                <Text style={styles.pathText}>
-                    {formatPathRelativeToHome(session.metadata.path, session.metadata.homeDir)}
-                </Text>
+                    {hostDisplayName && (
+                        <Text style={styles.hostText}>
+                            {hostDisplayName}
+                        </Text>
+                    )}
+
+                    {session.metadata?.path && (
+                        <Text style={styles.pathText}>
+                            {formatPathRelativeToHome(session.metadata.path, session.metadata.homeDir)}
+                        </Text>
+                    )}
+                </>
             )}
             
             <Text style={styles.noMessagesText}>
                 No messages yet
             </Text>
-            
-            <Text style={styles.createdText}>
-                Created {startedTime}
-            </Text>
+
+            {!isCompactHeight && (
+                <Text style={styles.createdText}>
+                    Created {startedTime}
+                </Text>
+            )}
         </View>
     );
 }
