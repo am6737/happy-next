@@ -7,6 +7,9 @@
       {
         "title": "Happy Next (dev)"
       }
-    ]
+    ],
+    "security": {
+      "csp": null
+    }
   }
 }

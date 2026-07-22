@@ -27,6 +27,8 @@ Each command sets `APP_ENV` explicitly before Tauri starts Expo. This is importa
 
 Production uses `src-tauri/tauri.conf.json`. Development and preview merge their partial configuration from `tauri.dev.conf.json` and `tauri.preview.conf.json`.
 
+The production desktop app uses the same server model as the web app: it starts with the built-in Happy server entry points and still lets the user select a custom Happy server. Production WebView connections therefore allow HTTPS/WSS endpoints but reject plain HTTP/WS. Preview may connect to configurable HTTP/WS test servers, while development disables CSP for the Expo development server. The Tauri HTTP plugin is not exposed through capabilities because the application currently uses the Web platform `fetch` implementation rather than the plugin API.
+
 Generated bundles are written below `src-tauri/target/release/bundle/`. The `dist` and `target` directories are generated and must not be committed.
 
 ## Local verification
@@ -77,7 +79,7 @@ The following items must be finalized before public desktop releases:
 
 - macOS 12+ Universal packaging and real-device coverage on both Apple Silicon and Intel;
 - Windows x64 packaging and real-device installation coverage;
-- production, preview, and development network allowlists;
+- validation of production HTTPS/WSS custom servers and preview HTTP/WS test servers;
 - production version synchronization between the Git tag, Expo config, Cargo, Tauri, installer names, and updater metadata;
 - Developer ID signing, notarization, stapling, and Gatekeeper checks;
 - GitHub Release desktop jobs and updater metadata/signatures;
