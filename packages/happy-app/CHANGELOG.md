@@ -1,5 +1,17 @@
 # Changelog
 
+## Version 19 - 2026-07-22
+
+Sessions gain convenient quick actions, Orchestrator runs become easier to inspect and navigate, Codex skills join slash-command autocomplete, navigation headers are more consistent, and chat reliability improves across web and smaller screens.
+
+- Sessions: quick actions in session info make common session tasks easier to access
+- Orchestrator: task pages now present execution history more clearly, run navigation is streamlined, and Orchestrator messages link directly to their corresponding runs
+- Codex skills: installed Codex skills now appear in slash-command autocomplete
+- Navigation: back buttons and header actions are aligned consistently across session and machine screens
+- Chat: the empty state adapts better to short screens, and the initial message is no longer clipped on web
+- Reliability: late tool results are retained after task completion, and stale Orchestrator activity badges are cleared correctly
+- CLI: Happy CLI updated to v0.6.4 with Codex 0.145.0, refined Orchestrator skill behavior, cleaner file-search results, and more accurate delegated-activity completion notifications
+
 ## Version 18 - 2026-07-17
 
 Message read-aloud is rebuilt around true streaming TTS with a global playback queue and a draggable floating player, a new /preview-html CLI command renders self-contained HTML previews right inside the app, web conversation-list scrolling gets more polish, and the iOS status bar stays correct after the keyboard animates.

@@ -65,7 +65,7 @@ Running `happy` prints a QR code for device pairing.
 ## 🔥 Why Happy Next?
 
 - 🎛️ **Remote control for Claude, Codex & Gemini** - All three agents as first-class citizens
-- 🤖 **Orchestrator** - Define multi-agent task DAGs and auto-schedule execution
+- 🤖 **Orchestrator** - Define multi-agent task DAGs, auto-schedule execution, and inspect linked run history
 - ⚡ **Instant device handoff** - Take back control with a single keypress
 - 🔔 **Push notifications** - Know when your agent needs attention
 - 🔐 **E2EE + self-host option** - Encrypted by default, one-command Docker deployment
@@ -88,6 +88,7 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Define task dependency graphs (DAGs) with per-task model and working directory
 - Auto-schedule execution across Claude, Codex, and Gemini agents
 - Real-time status badges, an activity count that includes queued (not just running) tasks, and status-colored progress bars
+- Clear task execution history, streamlined run navigation, and direct links from Orchestrator messages to their runs
 - Follow up on completed tasks via session resume
 - MCP tool integration with auto-filled working directory
 - Happy CLI auto-installs the orchestrator skill and `/orchestrator` slash commands on startup — fan a task out to parallel or dependency-ordered Claude / Codex / Gemini agents straight from the CLI
@@ -204,6 +205,7 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Machine tabs remain visible when shared sessions are present, and the Shared by me list refreshes after sharing changes
 - Recent session history pagination for faster initial load
 - Session rename with lock (prevent AI auto-update), search in history
+- Session-info quick actions for common session tasks
 - Options click-to-send / long-press-to-fill, scroll-to-bottom button
 - "Always show context size" defaults to on so usage is visible without opening session details
 - Per-message action bar with copy, fork-from-here (with progress spinner), read-aloud, and full timestamp on web hover / native tap
@@ -217,7 +219,9 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - CLI hot-upgrade support mid-session
 - Path picker with directory autocomplete via remote machine listing (web + mobile)
 - Session header unified across iOS / Android / web with left-aligned title, new-session button on the header right, and a header title in the session info screen
+- Consistent back-button and header-action alignment across session and machine screens
 - Long user messages (>20k characters) collapse to a preview with a Show More toggle; text selection inside messages on web is fixed
+- Installed Codex skills appear in slash-command autocomplete; short-screen empty states and initial web-message layout are more reliable
 
 ### CLI
 - `happy update` self-upgrade, `happy --version` with all agent versions
@@ -230,7 +234,7 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Switching a session from remote back to local cleans up terminal stdin so leftover raw-mode input no longer leaks into the terminal
 
 ### Bug Fixes & Stability
-- 250+ bug fixes: message sending reliability, session lifecycle, Markdown rendering, navigation, voice, DooTask, sharing
+- 255+ bug fixes: message sending reliability, session lifecycle, Markdown rendering, navigation, voice, DooTask, sharing
 - Security: shell command injection fix, plan mode permission handling
 - Performance: payload trimming for mobile, lazy-load diffs, rendering optimization, incremental session catch-up on open
 

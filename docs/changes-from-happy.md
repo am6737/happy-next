@@ -8,7 +8,7 @@ This document summarizes what changed in Happy Next compared to the original Hap
 
 | Area | What changed |
 |---|---|
-| Orchestrator | Multi-agent DAG task scheduling with per-task model, working directory, and real-time monitoring |
+| Orchestrator | Multi-agent DAG task scheduling with per-task model, working directory, real-time monitoring, execution history, and linked run navigation |
 | Pending queue | Server-side message queue with auto-dispatch, queue panel UI, send-now, plus edit and pause/draft of queued messages |
 | Multi-agent | Claude Code, Codex, and Gemini are all first-class agents |
 | Voice | Volcano (Doubao) real-time voice gateway with streaming speech, native iOS voice calls, selectable timbre/speech rate, E2E-encrypted settings sync, plus streaming read-aloud (TTS) of AI replies with a global playback queue and floating player |
@@ -19,9 +19,9 @@ This document summarizes what changed in Happy Next compared to the original Hap
 | Self-hosting | One-command `docker-compose` stack with separate origins |
 | Server discovery | API/voice service discovery plus fastest-default endpoint racing when no custom server is configured |
 | Sync | v3 messages API, HTTP outbox, server-confirmed sends, race condition fixes |
-| Chat UX | Image attachment, pagination, blue dot, compact view, session search, pull-to-refresh, offline-cache minimap navigation, virtualized web conversation list with instant centered jumps, context usage tooltip, resizable web sidebar |
-| Session mgmt | Per-machine session tabs, device and agent filters, hot-upgrade, metadata caching, smart new-session machine defaults |
-| Bug fixes | 250+ fixes across message sending, sessions, rendering, navigation, security |
+| Chat UX | Image attachment, pagination, blue dot, compact view, session search, quick actions, Codex-skill autocomplete, pull-to-refresh, offline-cache minimap navigation, virtualized web conversation list with instant centered jumps, context usage tooltip, resizable web sidebar |
+| Session mgmt | Per-machine session tabs, device and agent filters, hot-upgrade, metadata caching, smart new-session machine defaults, consistent header navigation |
+| Bug fixes | 255+ fixes across message sending, sessions, rendering, navigation, security |
 | Performance | Payload trimming, lazy-load diffs, rendering optimization, incremental session catch-up on open |
 | CLI | Daemon auto-start, Codex fast mode, receipt tracking, self-upgrade |
 | MCP tools | `preview_html`, colon-separated tool naming, dual-mode long-press copy |
@@ -41,7 +41,8 @@ A multi-agent orchestration system that lets you define task dependency graphs a
 - **Session resume for follow-up**: send follow-up messages to completed tasks via session resume
 - **Available models API**: `get_context` exposes available models per provider
 - **Real-time monitoring**: activity badge counting running and queued tasks, status-colored progress bars
-- **Full app UI**: run list with filter tabs and run counts, run detail page, task detail page
+- **Full app UI**: run list with filter tabs and run counts, run detail page, and task detail page with clearer execution history
+- **Linked run navigation**: streamlined movement between run screens, with Orchestrator messages linking directly to their corresponding runs
 - **Cancel with cascade**: cancelling a run cascades `dependency_failed` to dependent tasks
 - **MCP tool integration**: orchestrator tools registered as MCP tools with auto-filled working directory
 - **Tool description rewriting**: orchestrator rewrites tool descriptions for better agent comprehension
@@ -74,7 +75,7 @@ The original Happy only supported Claude Code. Happy Next treats Claude Code, Co
 - **Claude Opus 4.8** added to the model catalog
 - **Claude Fable 5** added to the model catalog, with 1M-context variant and low / medium / high / xhigh / max reasoning effort presets
 - **Streamlined model picker**: Claude 1M-context variants collapse into a single toggle (7 models instead of 12); reasoning-effort presets show side by side on wide screens and Claude defaults to High effort
-- **Codex v0.144.1**: bundled Codex CLI updated with a refreshed model catalog
+- **Codex v0.145.0**: bundled Codex CLI updated with a refreshed model catalog
 - **Cost tracking** with accurate token usage for Claude models (cache tokens, reasoning tokens)
 - **Codex reasoning effort** configuration (low / medium / high / xhigh)
 - **ACP (Agent Client Protocol) backend**: JSON-RPC agent protocol (originally introduced for Codex to replace the MCP client approach, now used for Gemini)
@@ -246,10 +247,11 @@ Extensive improvements to the chat and session management experience.
 - **Compact session list view**
 - **Session search** in history page
 - **Session rename** with lock to prevent AI auto-update
+- **Session quick actions** in session info for common session tasks
 - **Session preview** on history page
 - **`/duplicate` command** in chat input to fork a session from any message, including directly from an AI reply (with DuplicateSheet picker)
 - **Optimistic send status**: an immediate "Processing…" status after sending, plus a "refreshing" indicator while the message list reloads
-- **Slash-command autocomplete** shows each command's source scope (repo / user / plugin / system) and kind; session capabilities are stored separately from metadata and sync live (atomic CAS write + socket broadcast) so command and skill lists stay fresh
+- **Slash-command autocomplete** shows each command's source scope (repo / user / plugin / system) and kind, including installed Codex skills; session capabilities are stored separately from metadata and sync live (atomic CAS write + socket broadcast) so command and skill lists stay fresh
 - **Per-message action bar**: copy, fork-from-here (with progress spinner), read-aloud (TTS), and full timestamp on web hover / native tap
 - **Options**: click-to-send and long-press-to-fill
 - **Context menu** improvements (web backdrop blur, mobile action sheets)
@@ -285,7 +287,10 @@ Extensive improvements to the chat and session management experience.
 - **Colon-separated tool naming**: support MCP tool names with colons (`server:tool`)
 - **Tool input as display name**: use tool input title for MCP tool display name
 - **Unified session header**: left-aligned title across iOS / Android / web, new-session button on the header right, header title in the session info screen, and a dedicated OpenClaw session info sheet
+- **Consistent header navigation**: back buttons and header actions align consistently across session and machine screens
 - **Narrow-phone header**: title left-aligns instead of center-overflowing on narrow phones; back icon fixed in dark-theme landscape
+- **Short-screen empty state**: simplified layout keeps the empty conversation state usable on short displays
+- **Initial web message layout**: the first chat message no longer gets clipped when the virtualized list opens
 - **Long user messages**: messages over ~20k characters collapse to a preview with a Show More toggle
 - **Web text selection**: text selection inside chat messages on web fixed
 - **Action bar stability**: per-message action bar no longer flickers when the message flips between thinking and streaming states
@@ -315,10 +320,13 @@ The CLI (`happy-next-cli`) received substantial upgrades.
 - **Latest CLI version** fetched from npm instead of hardcoded minimum
 - **Daemon auto-start on boot**: `happy daemon enable` / `happy daemon disable`
 - **Daemon restart command**: restart the daemon without manual kill
-- **Codex v0.144.1 with fast mode**: upgraded Codex with fast mode support
+- **Codex v0.145.0 with fast mode**: upgraded Codex with fast mode support
 - **Attribution setting**: new setting to control commit attribution, default off
 - **Unified system prompt injection**: shared prompt injection for Codex and Gemini
 - **Orchestrator guidance**: first-turn prompts include orchestrator usage guidance
+- **Refined Orchestrator skill discovery**: skill installation and discovery behave consistently across Codex homes and sessions
+- **Cleaner file search results**: ripgrep diagnostics stay out of returned file matches
+- **Delegated completion notifications**: completion pushes are gated on delegated activity so notifications reflect the actual run state
 - **`set_permission_mode` forwarding**: permission-mode switches from the app are forwarded synchronously to the active Claude subprocess via the stream-json `set_permission_mode` control request, instead of taking effect only on the next user message
 - **Graceful interrupts**: Stop / ESC / "send pending message" no longer SIGTERM the Claude subprocess and Codex `app-server`. The graceful path awaits `interrupt()` / `cancel()` and, when acked, keeps the backend alive; the loop reuses the warm process for the next message instead of cold-restarting (MCP reload, session resume from disk). The hard kill is kept as a fallback when the ack times out and for switch / exit. As part of this, `AgentBackend.cancel()` now returns boolean (acked vs failed/timed-out); the Codex ACP `turn/interrupt` ack timeout is aligned to Claude's 3s; and Codex always emits a `[Request interrupted by user]` marker on interrupt, even mid-stream
 - **Gemini interrupt marker alignment**: Gemini's abort feedback now sends `[Request interrupted by user]` as a gemini agent message — the same marker bubble Claude and Codex use — instead of the centered "Aborted by user" status event, so the interrupt UX is consistent across all three providers
@@ -345,12 +353,13 @@ The CLI (`happy-next-cli`) received substantial upgrades.
 - **Keyboard handling**: content follows keyboard smoothly, no jitter
 - **Loading states**: skeleton screens, inline indicators, timeout feedback
 - **Navigation**: static route fix for dynamic `[id]` matching, reset on login/logout
+- **Header alignment**: unified back buttons and aligned header actions across session and machine screens
 - **Image handling**: compression, MIME preservation, gallery viewer with zoom/gestures
 - **Status bar**: expanded model/permission display, auto-collapse timeout, mobile mic button
 
 ## Bug Fixes & Stability
 
-Over 250 bug fixes landed. The following are grouped by area.
+Over 255 bug fixes landed. The following are grouped by area.
 
 ### Message Sending
 - Fix stale text state causing double-tap send and ghost resend (use ref-based text snapshot)
@@ -381,6 +390,11 @@ Over 250 bug fixes landed. The following are grouped by area.
 - Fix newly created session briefly showing "deleted" status
 - Fix copy/resume navigation causing detail page to freeze
 - Open sessions via incremental catch-up instead of a full re-bootstrap (faster open on large sessions)
+- Preserve late tool results that arrive after a task is marked complete
+
+### Orchestrator
+- Clear stale activity badges when stored run state is refreshed
+- Keep completion notifications tied to real delegated activity
 
 ### Codex & Gemini Agents
 - Correct Codex token usage field mapping for accurate statistics
@@ -432,6 +446,8 @@ Over 250 bug fixes landed. The following are grouped by area.
 - Fix double title bar after session resume
 - Reset navigation stack on login/logout
 - Fix keyboard content jitter on new session page
+- Unify navigation back buttons and align header actions across session and machine screens
+- Prevent the initial web chat message from being clipped
 
 ### Security
 - Fix shell command injection in CLI command assembly (unified escaping)
