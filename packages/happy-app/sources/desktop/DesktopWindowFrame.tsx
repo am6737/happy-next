@@ -6,10 +6,9 @@ import { useUnistyles } from 'react-native-unistyles';
 
 import { getDesktopPlatform } from './desktopWindowUtils';
 
-const MACOS_TITLE_BAR_HEIGHT = 40;
 const WINDOWS_TITLE_BAR_HEIGHT = 40;
-const MACOS_TRAFFIC_LIGHT_SAFE_WIDTH = 88;
 const WINDOWS_CONTROL_WIDTH = 46;
+const MACOS_RIGHT_DRAG_STRIP_LEFT = 360;
 
 type WindowControlProps = {
     accessibilityLabel: string;
@@ -90,19 +89,37 @@ export function DesktopWindowFrame({ children }: { children: React.ReactNode }) 
 
     const window = getCurrentWindow();
     const isMacOS = desktopPlatform === 'macos';
-    const titleBarHeight = isMacOS ? MACOS_TITLE_BAR_HEIGHT : WINDOWS_TITLE_BAR_HEIGHT;
+
+    if (isMacOS) {
+        return (
+            <View style={{ flex: 1, backgroundColor: theme.colors.groupped.background }}>
+                {children}
+                <View
+                    {...({ 'data-tauri-drag-region': true } as any)}
+                    style={{
+                        height: 8,
+                        left: MACOS_RIGHT_DRAG_STRIP_LEFT,
+                        position: 'absolute',
+                        right: 0,
+                        top: 0,
+                        zIndex: 1000,
+                    }}
+                />
+            </View>
+        );
+    }
+
+    const titleBarHeight = WINDOWS_TITLE_BAR_HEIGHT;
 
     return (
         <View style={{ flex: 1, backgroundColor: theme.colors.groupped.background }}>
             <View
                 {...({
-                    'data-tauri-drag-region': true,
                     onDoubleClick: () => {
-                        if (!isMacOS) {
-                            void window.toggleMaximize();
-                        }
+                        void window.toggleMaximize();
                     },
                 } as any)}
+                {...({ 'data-tauri-drag-region': true } as any)}
                 style={{
                     alignItems: 'center',
                     backgroundColor: theme.colors.header.background,
@@ -114,36 +131,28 @@ export function DesktopWindowFrame({ children }: { children: React.ReactNode }) 
                     zIndex: 1000,
                 } as any}
             >
-                {isMacOS ? (
-                    <View
-                        {...({ 'data-tauri-drag-region': true } as any)}
-                        style={{ height: titleBarHeight, width: MACOS_TRAFFIC_LIGHT_SAFE_WIDTH }}
-                    />
-                ) : null}
                 <View
                     {...({ 'data-tauri-drag-region': true } as any)}
                     style={{ flex: 1, height: titleBarHeight }}
                 />
-                {!isMacOS ? (
-                    <View style={{ flexDirection: 'row', height: titleBarHeight }}>
-                        <WindowControl
-                            accessibilityLabel="Minimize window"
-                            icon="window-minimize"
-                            onPress={() => void window.minimize()}
-                        />
-                        <WindowControl
-                            accessibilityLabel={maximized ? 'Restore window' : 'Maximize window'}
-                            icon={maximized ? 'window-restore' : 'window-maximize'}
-                            onPress={() => void window.toggleMaximize()}
-                        />
-                        <WindowControl
-                            accessibilityLabel="Close window"
-                            destructive
-                            icon="window-close"
-                            onPress={() => void window.close()}
-                        />
-                    </View>
-                ) : null}
+                <View style={{ flexDirection: 'row', height: titleBarHeight }}>
+                    <WindowControl
+                        accessibilityLabel="Minimize window"
+                        icon="window-minimize"
+                        onPress={() => void window.minimize()}
+                    />
+                    <WindowControl
+                        accessibilityLabel={maximized ? 'Restore window' : 'Maximize window'}
+                        icon={maximized ? 'window-restore' : 'window-maximize'}
+                        onPress={() => void window.toggleMaximize()}
+                    />
+                    <WindowControl
+                        accessibilityLabel="Close window"
+                        destructive
+                        icon="window-close"
+                        onPress={() => void window.close()}
+                    />
+                </View>
             </View>
             <View style={{ flex: 1 }}>
                 {children}

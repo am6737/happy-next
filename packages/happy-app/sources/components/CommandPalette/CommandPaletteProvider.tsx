@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo } from 'react';
 import { Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Modal } from '@/modal';
@@ -9,6 +9,7 @@ import { useAuth } from '@/auth/AuthContext';
 import { storage } from '@/sync/storage';
 import { useShallow } from 'zustand/react/shallow';
 import { useNavigateToSession } from '@/hooks/useNavigateToSession';
+import { OPEN_COMMAND_PALETTE_EVENT } from './events';
 
 export function CommandPaletteProvider({ children }: { children: React.ReactNode }) {
     const router = useRouter();
@@ -123,16 +124,27 @@ export function CommandPaletteProvider({ children }: { children: React.ReactNode
         return cmds;
     }, [router, logout, sessions]);
 
-    const showCommandPalette = useCallback(() => {
-        if (Platform.OS !== 'web' || !commandPaletteEnabled) return;
-        
+    const openCommandPalette = useCallback(() => {
+        if (Platform.OS !== 'web') return;
+
         Modal.show({
             component: CommandPalette,
             props: {
                 commands,
             }
         } as any);
-    }, [commands, commandPaletteEnabled]);
+    }, [commands]);
+
+    const showCommandPalette = useCallback(() => {
+        if (!commandPaletteEnabled) return;
+        openCommandPalette();
+    }, [commandPaletteEnabled, openCommandPalette]);
+
+    useEffect(() => {
+        if (Platform.OS !== 'web') return;
+        window.addEventListener(OPEN_COMMAND_PALETTE_EVENT, openCommandPalette);
+        return () => window.removeEventListener(OPEN_COMMAND_PALETTE_EVENT, openCommandPalette);
+    }, [openCommandPalette]);
 
     // Set up global keyboard handler only if feature is enabled
     useGlobalKeyboard(commandPaletteEnabled ? showCommandPalette : () => {});

@@ -16,6 +16,9 @@ import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { t } from '@/text';
 import { useInboxHasContent } from '@/hooks/useInboxHasContent';
 import { useDootaskProfile } from '@/sync/storage';
+import { Ionicons } from '@expo/vector-icons';
+import { requestCommandPalette } from './CommandPalette/events';
+import { getDesktopPlatform } from '@/desktop/desktopWindowUtils';
 
 const stylesheet = StyleSheet.create((theme, runtime) => ({
     container: {
@@ -31,6 +34,33 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
         paddingHorizontal: 16,
         backgroundColor: theme.colors.groupped.background,
         position: 'relative',
+    },
+    desktopTitleBar: {
+        alignItems: 'center',
+        backgroundColor: theme.colors.groupped.background,
+        flexDirection: 'row',
+        height: 48,
+        paddingRight: 12,
+    },
+    desktopTrafficLightSpacer: {
+        height: 48,
+        width: 100,
+    },
+    desktopTitleBarControls: {
+        alignItems: 'center',
+        flexDirection: 'row',
+        gap: 6,
+    },
+    desktopTitleBarSpacer: {
+        flex: 1,
+        height: 48,
+    },
+    desktopNavigationButton: {
+        alignItems: 'center',
+        borderRadius: 7,
+        height: 32,
+        justifyContent: 'center',
+        width: 32,
     },
     logoContainer: {
         width: 32,
@@ -146,6 +176,7 @@ export const SidebarView = React.memo((props: SidebarViewProps) => {
     const friendRequests = useFriendRequests();
     const inboxHasContent = useInboxHasContent();
     const dootaskProfile = useDootaskProfile();
+    const isDesktopMacOS = getDesktopPlatform() === 'macos';
     // Compute connection status once per render (theme-reactive, no stale memoization)
     const connectionStatus = (() => {
         const { status } = socketStatus;
@@ -248,10 +279,95 @@ export const SidebarView = React.memo((props: SidebarViewProps) => {
         </>
     );
 
+    const navigationButtons = (
+        <>
+            <Pressable
+                accessibilityLabel={t('tabs.inbox')}
+                onPress={() => router.navigate('/(app)/inbox')}
+                hitSlop={10}
+                style={[
+                    styles.notificationButton,
+                    isDesktopMacOS && styles.desktopNavigationButton,
+                ]}
+            >
+                <Image
+                    source={require('@/assets/images/navigation/inbox.png')}
+                    contentFit="contain"
+                    style={{ width: 24, height: 24, margin: 4 }}
+                    tintColor={theme.colors.header.tint}
+                />
+                {friendRequests.length > 0 && (
+                    <View style={styles.badge}>
+                        <Text style={styles.badgeText}>
+                            {friendRequests.length > 99 ? '99+' : friendRequests.length}
+                        </Text>
+                    </View>
+                )}
+                {inboxHasContent && friendRequests.length === 0 && (
+                    <View style={styles.indicatorDot} />
+                )}
+            </Pressable>
+            {!!dootaskProfile && (
+                <Pressable
+                    accessibilityLabel={t('tabs.dootask')}
+                    onPress={() => router.navigate('/(app)/dootask')}
+                    hitSlop={10}
+                    style={isDesktopMacOS ? styles.desktopNavigationButton : undefined}
+                >
+                    <Image
+                        source={require('@/assets/images/navigation/todo.png')}
+                        contentFit="contain"
+                        style={{ width: 24, height: 24, margin: 4 }}
+                        tintColor={theme.colors.header.tint}
+                    />
+                </Pressable>
+            )}
+            <Pressable
+                accessibilityLabel={t('tabs.settings')}
+                onPress={() => router.navigate('/settings')}
+                hitSlop={10}
+                style={isDesktopMacOS ? styles.desktopNavigationButton : undefined}
+            >
+                <Image
+                    source={require('@/assets/images/navigation/setting.png')}
+                    contentFit="contain"
+                    style={{ width: 24, height: 24, margin: 4 }}
+                    tintColor={theme.colors.header.tint}
+                />
+            </Pressable>
+        </>
+    );
+
     return (
         <>
             <View style={[styles.container, { paddingTop: safeArea.top }]}>
-                <View style={[styles.header, { height: headerHeight, paddingLeft: Math.max(safeArea.left, windowControlsInset) + 16 }]}>
+                {isDesktopMacOS && (
+                    <View style={styles.desktopTitleBar}>
+                        <View
+                            {...({ 'data-tauri-drag-region': true } as any)}
+                            style={styles.desktopTrafficLightSpacer}
+                        />
+                        <View style={styles.desktopTitleBarControls}>
+                            {navigationButtons}
+                        </View>
+                        <View
+                            {...({ 'data-tauri-drag-region': true } as any)}
+                            style={styles.desktopTitleBarSpacer}
+                        />
+                    </View>
+                )}
+                <View
+                    {...(isDesktopMacOS ? { 'data-tauri-drag-region': true } as any : {})}
+                    style={[
+                        styles.header,
+                        {
+                            height: headerHeight,
+                            paddingLeft: isDesktopMacOS
+                                ? Math.max(safeArea.left, 0) + 16
+                                : Math.max(safeArea.left, windowControlsInset) + 16,
+                        },
+                    ]}
+                >
                     {/* Logo - always first */}
                     <Pressable style={styles.logoContainer} onPress={handleGoHome}>
                         <Image
@@ -270,52 +386,16 @@ export const SidebarView = React.memo((props: SidebarViewProps) => {
 
                     {/* Navigation icons */}
                     <View style={styles.rightContainer}>
-                        <Pressable
-                            onPress={() => router.navigate('/(app)/inbox')}
-                            hitSlop={15}
-                            style={styles.notificationButton}
-                        >
-                            <Image
-                                source={require('@/assets/images/navigation/inbox.png')}
-                                contentFit="contain"
-                                style={[{ width: 24, height: 24, margin: 4 }]}
-                                tintColor={theme.colors.header.tint}
-                            />
-                            {friendRequests.length > 0 && (
-                                <View style={styles.badge}>
-                                    <Text style={styles.badgeText}>
-                                        {friendRequests.length > 99 ? '99+' : friendRequests.length}
-                                    </Text>
-                                </View>
-                            )}
-                            {inboxHasContent && friendRequests.length === 0 && (
-                                <View style={styles.indicatorDot} />
-                            )}
-                        </Pressable>
-                        {!!dootaskProfile && (
+                        {isDesktopMacOS ? (
                             <Pressable
-                                onPress={() => router.navigate('/(app)/dootask')}
-                                hitSlop={15}
+                                accessibilityLabel={t('commandPalette.placeholder')}
+                                onPress={requestCommandPalette}
+                                hitSlop={10}
+                                style={styles.desktopNavigationButton}
                             >
-                                <Image
-                                    source={require('@/assets/images/navigation/todo.png')}
-                                    contentFit="contain"
-                                    style={[{ width: 24, height: 24, margin: 4 }]}
-                                    tintColor={theme.colors.header.tint}
-                                />
+                                <Ionicons name="search" size={22} color={theme.colors.header.tint} />
                             </Pressable>
-                        )}
-                        <Pressable
-                            onPress={() => router.navigate('/settings')}
-                            hitSlop={15}
-                        >
-                            <Image
-                                source={require('@/assets/images/navigation/setting.png')}
-                                contentFit="contain"
-                                style={[{ width: 24, height: 24, margin: 4 }]}
-                                tintColor={theme.colors.header.tint}
-                            />
-                        </Pressable>
+                        ) : navigationButtons}
                     </View>
 
                     {/* Centered title - absolute positioned over full header */}
