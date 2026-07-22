@@ -30,6 +30,22 @@ export function DesktopBridge() {
     const notificationPayloadRef = React.useRef(new Map<string, { title: string; body: string }>());
 
     React.useEffect(() => {
+        if (!isTauriDesktop()) {
+            return;
+        }
+
+        void invoke<boolean>('desktop_should_start_hidden')
+            .then((hiddenLaunch) => {
+                if (!hiddenLaunch) {
+                    return invoke('show_desktop_window');
+                }
+            })
+            .catch((error) => {
+                console.warn('Failed to apply the desktop launch visibility:', error);
+            });
+    }, []);
+
+    React.useEffect(() => {
         currentSessionIdRef.current = currentSessionId;
         if (currentSessionId && windowFocusedRef.current) {
             unreadBySessionRef.current.delete(currentSessionId);

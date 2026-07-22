@@ -2,12 +2,14 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
     Mutex,
 };
+use std::{fs, path::PathBuf};
 
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Manager, Runtime, State, Window,
+    AppHandle, LogicalSize, Manager, Runtime, State, Window,
 };
+use tauri_plugin_window_state::WindowExt;
 
 const TRAY_ID: &str = "main-tray";
 const TRAY_SHOW_ID: &str = "tray-show";
@@ -16,6 +18,11 @@ const TRAY_UNREAD_ID: &str = "tray-unread";
 const TRAY_QUIT_ID: &str = "tray-quit";
 const CREDENTIAL_SERVICE: &str = "com.hitosea.happy";
 const CREDENTIAL_ACCOUNT: &str = "happy-next-auth";
+const WINDOW_LAYOUT_MIGRATION: &str = ".window-layout-v2";
+const PREFERRED_WINDOW_WIDTH: f64 = 1200.0;
+const PREFERRED_WINDOW_HEIGHT: f64 = 780.0;
+const LEGACY_WINDOW_WIDTH_THRESHOLD: f64 = 1100.0;
+const LEGACY_WINDOW_HEIGHT_THRESHOLD: f64 = 700.0;
 
 #[derive(serde::Deserialize, serde::Serialize)]
 struct DesktopCredentials {
@@ -40,6 +47,9 @@ impl Default for DesktopState {
 }
 
 fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
+    #[cfg(target_os = "macos")]
+    let _ = app.show();
+
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.unminimize();
         let _ = window.show();
@@ -141,6 +151,11 @@ fn set_close_to_tray(state: State<'_, DesktopState>, enabled: bool) {
 #[tauri::command]
 fn show_desktop_window(app: AppHandle) {
     show_main_window(&app);
+}
+
+#[tauri::command]
+fn desktop_should_start_hidden() -> bool {
+    should_start_hidden()
 }
 
 #[tauri::command]
@@ -249,6 +264,56 @@ fn should_start_hidden() -> bool {
     std::env::args().any(|arg| arg == "--hidden")
 }
 
+fn window_state_flags() -> tauri_plugin_window_state::StateFlags {
+    tauri_plugin_window_state::StateFlags::SIZE
+        | tauri_plugin_window_state::StateFlags::POSITION
+        | tauri_plugin_window_state::StateFlags::MAXIMIZED
+}
+
+fn window_layout_migration_path(app: &AppHandle) -> Option<PathBuf> {
+    app.path()
+        .app_data_dir()
+        .ok()
+        .map(|path| path.join(WINDOW_LAYOUT_MIGRATION))
+}
+
+fn migrate_legacy_window_layout(app: &AppHandle) {
+    let Some(marker_path) = window_layout_migration_path(app) else {
+        return;
+    };
+    if marker_path.exists() {
+        return;
+    }
+
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+    let scale_factor = window.scale_factor().unwrap_or(1.0);
+    if let Ok(size) = window.inner_size() {
+        let logical_size = size.to_logical::<f64>(scale_factor);
+        if logical_size.width < LEGACY_WINDOW_WIDTH_THRESHOLD
+            || logical_size.height < LEGACY_WINDOW_HEIGHT_THRESHOLD
+        {
+            let mut target_width = PREFERRED_WINDOW_WIDTH;
+            let mut target_height = PREFERRED_WINDOW_HEIGHT;
+
+            if let Ok(Some(monitor)) = window.current_monitor() {
+                let monitor_size = monitor.size().to_logical::<f64>(monitor.scale_factor());
+                target_width = target_width.min((monitor_size.width - 80.0).max(900.0));
+                target_height = target_height.min((monitor_size.height - 120.0).max(600.0));
+            }
+
+            let _ = window.set_size(LogicalSize::new(target_width, target_height));
+            let _ = window.center();
+        }
+    }
+
+    if let Some(parent) = marker_path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    let _ = fs::write(marker_path, b"2");
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -256,7 +321,12 @@ pub fn run() {
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             show_main_window(app);
         }))
-        .plugin(tauri_plugin_window_state::Builder::default().build())
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                .with_state_flags(window_state_flags())
+                .skip_initial_state("main")
+                .build(),
+        )
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(
@@ -272,6 +342,7 @@ pub fn run() {
             desktop_remove_credentials,
             set_close_to_tray,
             show_desktop_window,
+            desktop_should_start_hidden,
             toggle_desktop_window,
             set_desktop_unread_count
         ])
@@ -285,8 +356,20 @@ pub fn run() {
             }
 
             build_tray(app.handle())?;
+            if let Some(window) = app.get_webview_window("main") {
+                window.restore_state(window_state_flags())?;
+            }
+            migrate_legacy_window_layout(app.handle());
+
+            #[cfg(target_os = "windows")]
+            if let Some(window) = app.get_webview_window("main") {
+                window.set_decorations(false)?;
+            }
+
             if should_start_hidden() {
                 hide_main_window(app.handle());
+            } else {
+                show_main_window(app.handle());
             }
             Ok(())
         })

@@ -35,6 +35,8 @@ React Native Web and Unistyles create style rules dynamically at runtime. Tauri'
 
 The desktop shell intentionally behaves like a resident messaging client rather than a browser tab:
 
+- New windows start at `1200 × 780`, remain resizable down to `900 × 600`, and are kept within the active display. The first launch after the desktop layout upgrade expands legacy small-window state once, while later launches continue to respect the user's saved size and position.
+- macOS uses an overlay title bar with native traffic-light controls and a dedicated content-safe drag region. Windows uses a compact frameless drag region with accessible minimize, maximize/restore, and close controls.
 - Closing the main window hides it to the system tray by default and keeps Socket.IO connected.
 - The tray menu can show, hide, or explicitly quit Happy Next and displays the current unread count.
 - Clicking the tray icon toggles the main window. Clicking the macOS Dock icon reopens a hidden window.
@@ -90,16 +92,19 @@ An unsigned or ad-hoc-signed local bundle is only a development artifact. It doe
 
 Desktop interaction checks should include:
 
-1. close the window and confirm the process remains in the tray;
-2. restore it from the tray and, on macOS, from the Dock;
-3. launch a second instance and confirm the existing window is focused;
-4. toggle the global shortcut setting and exercise `Cmd/Ctrl+Shift+H`;
-5. enable launch-at-sign-in and verify a hidden launch after a real OS sign-out/sign-in cycle;
-6. receive a message while another Session is visible and while the window is hidden;
-7. click a notification and confirm the correct Session opens;
-8. drag and paste an image into the composer;
-9. upgrade from a build that used WebView credentials and confirm it requires one new sign-in;
-10. quit and relaunch, then confirm the Keychain/Credential Manager login, settings, drafts, and cached messages persist.
+1. confirm a legacy small window is enlarged once and later manual resizing persists;
+2. drag the window from its custom top region and verify macOS traffic lights do not cover content;
+3. on Windows, exercise minimize, maximize/restore, close-to-tray, and keyboard/Snap window management;
+4. close the window and confirm the process remains in the tray;
+5. restore it from the tray and, on macOS, from the Dock;
+6. launch a second instance and confirm the existing window is focused;
+7. toggle the global shortcut setting and exercise `Cmd/Ctrl+Shift+H`;
+8. enable launch-at-sign-in and verify a hidden launch after a real OS sign-out/sign-in cycle;
+9. receive a message while another Session is visible and while the window is hidden;
+10. click a notification and confirm the correct Session opens;
+11. drag and paste an image into the composer;
+12. upgrade from a build that used WebView credentials and confirm it requires one new sign-in;
+13. quit and relaunch, then confirm the Keychain/Credential Manager login, settings, drafts, and cached messages persist.
 
 Tests that require actual OS notification centers, login startup, taskbar/Dock state, credential-store persistence, or shell interaction are **未验证** until performed on a real machine; compilation alone is not sufficient.
 
