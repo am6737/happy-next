@@ -18,11 +18,13 @@ const TRAY_UNREAD_ID: &str = "tray-unread";
 const TRAY_QUIT_ID: &str = "tray-quit";
 const CREDENTIAL_SERVICE: &str = "com.hitosea.happy";
 const CREDENTIAL_ACCOUNT: &str = "happy-next-auth";
-const WINDOW_LAYOUT_MIGRATION: &str = ".window-layout-v2";
-const PREFERRED_WINDOW_WIDTH: f64 = 1200.0;
-const PREFERRED_WINDOW_HEIGHT: f64 = 780.0;
-const LEGACY_WINDOW_WIDTH_THRESHOLD: f64 = 1100.0;
-const LEGACY_WINDOW_HEIGHT_THRESHOLD: f64 = 700.0;
+const WINDOW_LAYOUT_MIGRATION: &str = ".window-layout-v4";
+const PREFERRED_WINDOW_WIDTH: f64 = 1280.0;
+const PREFERRED_WINDOW_HEIGHT: f64 = 820.0;
+const LEGACY_WINDOW_WIDTH_THRESHOLD: f64 = 1180.0;
+const LEGACY_WINDOW_HEIGHT_THRESHOLD: f64 = 720.0;
+const MINIMUM_WINDOW_WIDTH: f64 = 1024.0;
+const MINIMUM_WINDOW_HEIGHT: f64 = 680.0;
 
 #[derive(serde::Deserialize, serde::Serialize)]
 struct DesktopCredentials {
@@ -299,8 +301,10 @@ fn migrate_legacy_window_layout(app: &AppHandle) {
 
             if let Ok(Some(monitor)) = window.current_monitor() {
                 let monitor_size = monitor.size().to_logical::<f64>(monitor.scale_factor());
-                target_width = target_width.min((monitor_size.width - 80.0).max(900.0));
-                target_height = target_height.min((monitor_size.height - 120.0).max(600.0));
+                target_width =
+                    target_width.min((monitor_size.width - 80.0).max(MINIMUM_WINDOW_WIDTH));
+                target_height =
+                    target_height.min((monitor_size.height - 120.0).max(MINIMUM_WINDOW_HEIGHT));
             }
 
             let _ = window.set_size(LogicalSize::new(target_width, target_height));
@@ -311,7 +315,28 @@ fn migrate_legacy_window_layout(app: &AppHandle) {
     if let Some(parent) = marker_path.parent() {
         let _ = fs::create_dir_all(parent);
     }
-    let _ = fs::write(marker_path, b"2");
+    let _ = fs::write(marker_path, b"4");
+}
+
+fn enforce_minimum_window_layout(app: &AppHandle) {
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+
+    let minimum_size = LogicalSize::new(MINIMUM_WINDOW_WIDTH, MINIMUM_WINDOW_HEIGHT);
+    let _ = window.set_min_size(Some(minimum_size));
+
+    let scale_factor = window.scale_factor().unwrap_or(1.0);
+    if let Ok(size) = window.inner_size() {
+        let logical_size = size.to_logical::<f64>(scale_factor);
+        if logical_size.width < MINIMUM_WINDOW_WIDTH || logical_size.height < MINIMUM_WINDOW_HEIGHT
+        {
+            let _ = window.set_size(LogicalSize::new(
+                logical_size.width.max(MINIMUM_WINDOW_WIDTH),
+                logical_size.height.max(MINIMUM_WINDOW_HEIGHT),
+            ));
+        }
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -360,6 +385,7 @@ pub fn run() {
                 window.restore_state(window_state_flags())?;
             }
             migrate_legacy_window_layout(app.handle());
+            enforce_minimum_window_layout(app.handle());
 
             #[cfg(target_os = "windows")]
             if let Some(window) = app.get_webview_window("main") {

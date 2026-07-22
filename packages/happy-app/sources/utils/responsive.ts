@@ -3,6 +3,7 @@ import { useWindowDimensions } from 'react-native';
 import { useMemo } from 'react';
 import { calculateDeviceDimensions, determineDeviceType, calculateHeaderHeight } from './deviceCalculations';
 import { isRunningOnMac } from './platform';
+import { isTauriDesktop } from './tauri';
 
 // Re-export calculation functions for use in other components
 export { calculateDeviceDimensions, determineDeviceType, calculateHeaderHeight };
@@ -60,7 +61,9 @@ export function useDeviceType(): 'phone' | 'tablet' {
 // Hook to detect if device is tablet
 export function useIsTablet(): boolean {
     const deviceType = useDeviceType();
-    return deviceType === 'tablet';
+    // The desktop shell must keep the permanent sidebar/detail layout even
+    // when the window's physical dimensions resemble a small tablet.
+    return isTauriDesktop() || deviceType === 'tablet';
 }
 
 // Hook to detect landscape orientation
