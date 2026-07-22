@@ -1,5 +1,8 @@
 import * as SecureStore from 'expo-secure-store';
+import { invoke } from '@tauri-apps/api/core';
 import { Platform } from 'react-native';
+
+import { isTauriDesktop } from '@/utils/tauri';
 
 const AUTH_KEY = 'auth_credentials';
 
@@ -11,8 +14,21 @@ export interface AuthCredentials {
     secret: string;
 }
 
+function clearLegacyDesktopCredentials(): void {
+    localStorage.removeItem(AUTH_KEY);
+}
+
 export const TokenStorage = {
     async getCredentials(): Promise<AuthCredentials | null> {
+        if (isTauriDesktop()) {
+            try {
+                clearLegacyDesktopCredentials();
+                return await invoke<AuthCredentials | null>('desktop_get_credentials');
+            } catch (error) {
+                console.error('Error getting desktop credentials:', error);
+                return null;
+            }
+        }
         if (Platform.OS === 'web') {
             return localStorage.getItem(AUTH_KEY) ? JSON.parse(localStorage.getItem(AUTH_KEY)!) as AuthCredentials : null;
         }
@@ -28,6 +44,16 @@ export const TokenStorage = {
     },
 
     async setCredentials(credentials: AuthCredentials): Promise<boolean> {
+        if (isTauriDesktop()) {
+            try {
+                clearLegacyDesktopCredentials();
+                await invoke('desktop_set_credentials', { credentials });
+                return true;
+            } catch (error) {
+                console.error('Error setting desktop credentials:', error);
+                return false;
+            }
+        }
         if (Platform.OS === 'web') {
             localStorage.setItem(AUTH_KEY, JSON.stringify(credentials));
             return true;
@@ -44,6 +70,16 @@ export const TokenStorage = {
     },
 
     async removeCredentials(): Promise<boolean> {
+        if (isTauriDesktop()) {
+            try {
+                clearLegacyDesktopCredentials();
+                await invoke('desktop_remove_credentials');
+                return true;
+            } catch (error) {
+                console.error('Error removing desktop credentials:', error);
+                return false;
+            }
+        }
         if (Platform.OS === 'web') {    
             localStorage.removeItem(AUTH_KEY);
             return true;

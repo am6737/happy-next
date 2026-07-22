@@ -53,15 +53,13 @@ Desktop-specific Tauri permissions are deliberately limited to notification perm
 
 ## Local data behavior
 
-The existing Web storage model is retained for this milestone:
-
-- authentication credentials use WebView `localStorage` on the desktop because Tauri renders through the Web platform path;
+- authentication credentials use macOS Keychain or Windows Credential Manager through native Tauri commands and are never intentionally logged;
 - device-local settings and drafts use the React Native MMKV Web adapter, which also persists through `localStorage`;
 - encrypted message cache rows and coverage state use IndexedDB (`happy-message-cache-v1`).
 
-Image files can already be dragged into the composer on Web/Tauri, and clipboard image paste is handled by the existing Web paste path. Text copy/paste uses the existing Expo/Web clipboard implementation. These paths were kept instead of adding redundant broad native clipboard or filesystem capabilities.
+The first desktop version with system credential storage deletes the legacy `auth_credentials` value from WebView `localStorage` without migrating it. Existing desktop users must sign in once again. There is intentionally no legacy credential migration or rollback path; credentials created after that sign-in are written only to the operating system credential store.
 
-Migrating authentication credentials to macOS Keychain / Windows Credential Manager changes the authentication storage model and is intentionally not part of this change without explicit approval and a migration/rollback design.
+Image files can already be dragged into the composer on Web/Tauri, and clipboard image paste is handled by the existing Web paste path. Text copy/paste uses the existing Expo/Web clipboard implementation. These paths were kept instead of adding redundant broad native clipboard or filesystem capabilities.
 
 Generated bundles are written below `src-tauri/target/release/bundle/`. The `dist` and `target` directories are generated and must not be committed.
 
@@ -100,9 +98,10 @@ Desktop interaction checks should include:
 6. receive a message while another Session is visible and while the window is hidden;
 7. click a notification and confirm the correct Session opens;
 8. drag and paste an image into the composer;
-9. quit and relaunch, then confirm login, settings, drafts, and cached messages persist.
+9. upgrade from a build that used WebView credentials and confirm it requires one new sign-in;
+10. quit and relaunch, then confirm the Keychain/Credential Manager login, settings, drafts, and cached messages persist.
 
-Tests that require actual OS notification centers, login startup, taskbar/Dock state, or shell interaction are **未验证** until performed on a real machine; compilation alone is not sufficient.
+Tests that require actual OS notification centers, login startup, taskbar/Dock state, credential-store persistence, or shell interaction are **未验证** until performed on a real machine; compilation alone is not sufficient.
 
 ## Signing and release safety
 

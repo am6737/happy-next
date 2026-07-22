@@ -14,6 +14,14 @@ const TRAY_SHOW_ID: &str = "tray-show";
 const TRAY_HIDE_ID: &str = "tray-hide";
 const TRAY_UNREAD_ID: &str = "tray-unread";
 const TRAY_QUIT_ID: &str = "tray-quit";
+const CREDENTIAL_SERVICE: &str = "com.hitosea.happy";
+const CREDENTIAL_ACCOUNT: &str = "happy-next-auth";
+
+#[derive(serde::Deserialize, serde::Serialize)]
+struct DesktopCredentials {
+    token: String,
+    secret: String,
+}
 
 struct DesktopState {
     close_to_tray: AtomicBool,
@@ -64,6 +72,65 @@ fn quit_app<R: Runtime>(app: &AppHandle<R>) {
         .explicit_quit
         .store(true, Ordering::SeqCst);
     app.exit(0);
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+fn credential_entry() -> Result<keyring::Entry, String> {
+    keyring::Entry::new(CREDENTIAL_SERVICE, CREDENTIAL_ACCOUNT)
+        .map_err(|_| "Unable to access the system credential store".to_string())
+}
+
+#[tauri::command]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+fn desktop_get_credentials() -> Result<Option<DesktopCredentials>, String> {
+    let entry = credential_entry()?;
+    let stored = match entry.get_password() {
+        Ok(value) => value,
+        Err(keyring::Error::NoEntry) => return Ok(None),
+        Err(_) => return Err("Unable to read credentials from the system credential store".into()),
+    };
+
+    serde_json::from_str(&stored)
+        .map(Some)
+        .map_err(|_| "Stored desktop credentials are invalid".to_string())
+}
+
+#[tauri::command]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+fn desktop_set_credentials(credentials: DesktopCredentials) -> Result<(), String> {
+    let stored = serde_json::to_string(&credentials)
+        .map_err(|_| "Unable to prepare credentials for secure storage".to_string())?;
+
+    credential_entry()?
+        .set_password(&stored)
+        .map_err(|_| "Unable to save credentials to the system credential store".to_string())
+}
+
+#[tauri::command]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+fn desktop_remove_credentials() -> Result<(), String> {
+    match credential_entry()?.delete_password() {
+        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+        Err(_) => Err("Unable to remove credentials from the system credential store".into()),
+    }
+}
+
+#[tauri::command]
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+fn desktop_get_credentials() -> Result<Option<DesktopCredentials>, String> {
+    Err("System credential storage is only available on macOS and Windows".into())
+}
+
+#[tauri::command]
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+fn desktop_set_credentials(_credentials: DesktopCredentials) -> Result<(), String> {
+    Err("System credential storage is only available on macOS and Windows".into())
+}
+
+#[tauri::command]
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+fn desktop_remove_credentials() -> Result<(), String> {
+    Err("System credential storage is only available on macOS and Windows".into())
 }
 
 #[tauri::command]
@@ -200,6 +267,9 @@ pub fn run() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .menu(Menu::default)
         .invoke_handler(tauri::generate_handler![
+            desktop_get_credentials,
+            desktop_set_credentials,
+            desktop_remove_credentials,
             set_close_to_tray,
             show_desktop_window,
             toggle_desktop_window,
