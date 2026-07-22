@@ -98,6 +98,38 @@ describe('CodexAppServerBackend.startSession resume routing', () => {
     expect(request).toHaveBeenCalledWith(Methods.THREAD_START, expect.anything());
     expect(request).not.toHaveBeenCalledWith(Methods.THREAD_RESUME, expect.anything());
   });
+
+  it('detects the structured legacy denial format from Codex 0.145.0', async () => {
+    const backend = createBackend();
+    const anyBackend = backend as any;
+
+    anyBackend.peer = {
+      spawn: vi.fn(async () => undefined),
+      onNotification: vi.fn(),
+      onServerRequest: vi.fn(),
+      onClose: vi.fn(),
+      request: vi.fn(async (method: string) => {
+        if (method === Methods.INITIALIZE) {
+          return {
+            userAgent: 'happy-codex-backend/0.145.0 (Linux; x86_64) test',
+          };
+        }
+        if (method === Methods.THREAD_START) {
+          return {
+            thread: { id: 'thread-new' },
+            model: 'codex-mini',
+            reasoningEffort: null,
+          };
+        }
+        throw new Error(`Unexpected method: ${method}`);
+      }),
+      notify: vi.fn(),
+    };
+
+    await backend.startSession();
+
+    expect(anyBackend.structuredLegacyDenials).toBe(true);
+  });
 });
 
 describe('CodexAppServerBackend.waitForResponseComplete', () => {
@@ -521,6 +553,41 @@ describe('CodexAppServerBackend approval request parsing', () => {
     warnSpy.mockRestore();
   });
 
+  it('uses the Codex 0.145 structured denial response for legacy approvals', async () => {
+    const permissionHandler = {
+      handleToolCall: vi.fn().mockResolvedValue({
+        decision: 'denied',
+        reason: 'User rejected the destructive command.',
+      }),
+    };
+    const backend = new CodexAppServerBackend({
+      cwd: process.cwd(),
+      command: 'codex',
+      permissionHandler,
+    });
+    const anyBackend = backend as any;
+    const respond = vi.fn();
+    anyBackend.peer = { respond };
+    anyBackend.structuredLegacyDenials = true;
+
+    anyBackend.handleExecApproval({
+      call_id: 'exec-call-denied',
+      command: ['rm', '-rf', '/tmp/test'],
+      cwd: '/tmp',
+    }, 457);
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(respond).toHaveBeenCalledWith(457, {
+      decision: {
+        denied: {
+          rejection: 'User rejected the destructive command.',
+        },
+      },
+    });
+  });
+
   it('handles v2 command execution approval', async () => {
     const permissionHandler = {
       handleToolCall: vi.fn().mockResolvedValue({ decision: 'approved' }),
@@ -576,6 +643,29 @@ describe('CodexAppServerBackend approval request parsing', () => {
       expect.objectContaining({ reason: 'write outside workspace' })
     );
     expect(respond).toHaveBeenCalledWith(200, { decision: 'accept' });
+  });
+
+  it('respondToPermission preserves the v2 decision format', async () => {
+    const permissionHandler = {
+      handleToolCall: vi.fn().mockImplementation(() => new Promise(() => {})),
+    };
+    const backend = new CodexAppServerBackend({
+      cwd: process.cwd(),
+      command: 'codex',
+      permissionHandler,
+    });
+    const anyBackend = backend as any;
+    const respond = vi.fn();
+    anyBackend.peer = { respond };
+
+    anyBackend.handleServerRequest(Methods.COMMAND_EXECUTION_APPROVAL, {
+      threadId: 't1', turnId: 'turn-1', itemId: 'cmd-pending',
+      command: 'rm -rf /tmp/test', cwd: '/home',
+    }, 201);
+
+    await backend.respondToPermission('cmd-pending', false);
+
+    expect(respond).toHaveBeenCalledWith(201, { decision: 'decline' });
   });
 
   // Elicitation payloads: Codex 0.121 puts `_meta` at top level; older shapes nest it in `request`.

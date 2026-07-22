@@ -1,1 +1,1 @@
-export const CODEX_PACKAGE = process.env.HAPPY_CODEX_PACKAGE ?? '@openai/codex@0.144.6';
+export const CODEX_PACKAGE = process.env.HAPPY_CODEX_PACKAGE ?? '@openai/codex@0.145.0';
