@@ -65,6 +65,8 @@ An unsigned or ad-hoc-signed local bundle is only a development artifact. It doe
 - Do not overwrite an existing GitHub Release without explicit approval.
 - Windows artifacts are intentionally unsigned for the first release and will show SmartScreen/unknown-publisher warnings.
 
+Tag releases build Windows x64 MSI and NSIS installers in `.github/workflows/release.yml`. The tag version is stripped of its leading `v` and passed to both Expo (`APP_VERSION`) and Tauri (`TAURI_CONFIG`) so the installer metadata matches the GitHub Release version. These artifacts remain **未验证** until installed and uninstalled on a real Windows x64 machine.
+
 ## Verification status terminology
 
 - **Build verified**: compilation or packaging completed on the named runner/host.
