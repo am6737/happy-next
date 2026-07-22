@@ -20,13 +20,13 @@ import { useNavigateToSession } from '@/hooks/useNavigateToSession';
 import { getSessionName, getSessionAvatarId } from '@/utils/sessionUtils';
 import { Avatar } from '@/components/Avatar';
 import { Ionicons } from '@expo/vector-icons';
-import * as WebBrowser from 'expo-web-browser';
 import * as Clipboard from 'expo-clipboard';
 import { hapticsLight } from '@/components/haptics';
 import { showCopiedToast } from '@/components/Toast';
 import { layout } from '@/components/layout';
 import { parseFlowItem, getFlowColor, FLOW_STATUS_COLORS } from '@/sync/dootask/types';
 import type { DooTaskItem, DooTaskFile } from '@/sync/dootask/types';
+import { openExternalUrl } from '@/utils/tauri';
 
 function formatFileSize(bytes: number): string {
     if (bytes < 1024) return `${bytes} B`;
@@ -743,7 +743,7 @@ export default function DooTaskDetail() {
                         };
                         const fileUrl = resolveUrl(file.path);
                         return (
-                            <Pressable key={file.id} style={styles.fileRow} onPress={() => WebBrowser.openBrowserAsync(fileUrl)}>
+                            <Pressable key={file.id} style={styles.fileRow} onPress={() => openExternalUrl(fileUrl, { nativeBrowser: 'in-app' })}>
                                 {isImage && file.thumb ? (
                                     <Image source={{ uri: resolveUrl(file.thumb) }} style={styles.fileThumbnail} />
                                 ) : (

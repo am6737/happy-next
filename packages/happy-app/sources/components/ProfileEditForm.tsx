@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, Pressable, ScrollView, TextInput, ViewStyle, Linking, Platform } from 'react-native';
+import { View, Text, Pressable, ScrollView, TextInput, ViewStyle, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet } from 'react-native-unistyles';
 import { useUnistyles } from 'react-native-unistyles';
@@ -13,6 +13,7 @@ import { Item } from '@/components/Item';
 import { getBuiltInProfileDocumentation } from '@/sync/profileUtils';
 import { useEnvironmentVariables, extractEnvVarReferences } from '@/hooks/useEnvironmentVariables';
 import { EnvironmentVariablesList } from '@/components/EnvironmentVariablesList';
+import { openExternalUrl } from '@/utils/tauri';
 
 export interface ProfileEditFormProps {
     profile: AIBackendProfile;
@@ -179,13 +180,7 @@ export function ProfileEditForm({
                                     onPress={async () => {
                                         try {
                                             const url = profileDocs.setupGuideUrl!;
-                                            // On web/Tauri desktop, use window.open
-                                            if (Platform.OS === 'web') {
-                                                window.open(url, '_blank');
-                                            } else {
-                                                // On native (iOS/Android), use Linking API
-                                                await Linking.openURL(url);
-                                            }
+                                            await openExternalUrl(url);
                                         } catch (error) {
                                             console.error('Failed to open URL:', error);
                                         }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, ActivityIndicator, Linking, Pressable, Platform, ActionSheetIOS, RefreshControl } from 'react-native';
+import { View, ActivityIndicator, Pressable, Platform, ActionSheetIOS, RefreshControl } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Text } from '@/components/StyledText';
 import { useAuth } from '@/auth/AuthContext';
@@ -27,6 +27,7 @@ import { Session } from '@/sync/storageTypes';
 import { ActionMenuModal } from '@/components/ActionMenuModal';
 import type { ActionMenuItem } from '@/components/ActionMenu';
 import { loadSharedByMeCache, saveSharedByMeCache } from '@/sync/persistence';
+import { openExternalUrl } from '@/utils/tauri';
 
 function getAccessLevelLabel(accessLevel?: 'view' | 'edit' | 'admin') {
     switch (accessLevel) {
@@ -307,7 +308,7 @@ export default function UserProfileScreen() {
                     {userProfile.username && (
                         <Pressable
                             style={styles.githubIconButton}
-                            onPress={() => Linking.openURL(`https://github.com/${userProfile.username}`)}
+                            onPress={() => openExternalUrl(`https://github.com/${userProfile.username}`)}
                         >
                             <Ionicons name="logo-github" size={24} color={theme.colors.text} />
                         </Pressable>

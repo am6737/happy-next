@@ -7,8 +7,9 @@ import { useUpdates } from '@/hooks/useUpdates';
 import { useChangelog } from '@/hooks/useChangelog';
 import { useNativeUpdate } from '@/hooks/useNativeUpdate';
 import { useRouter } from 'expo-router';
-import { Linking, Platform } from 'react-native';
+import { Platform } from 'react-native';
 import { t } from '@/text';
+import { openExternalUrl } from '@/utils/tauri';
 
 export const UpdateBanner = React.memo(() => {
     const { theme } = useUnistyles();
@@ -21,10 +22,7 @@ export const UpdateBanner = React.memo(() => {
     if (updateUrl) {
         const handleOpenStore = async () => {
             try {
-                const supported = await Linking.canOpenURL(updateUrl);
-                if (supported) {
-                    await Linking.openURL(updateUrl);
-                }
+                await openExternalUrl(updateUrl);
             } catch (error) {
                 console.error('Error opening app store:', error);
             }

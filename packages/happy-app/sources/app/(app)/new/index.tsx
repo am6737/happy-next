@@ -50,6 +50,7 @@ import { FolderPickerSheet } from '@/components/FolderPickerSheet';
 import { BottomSheetModal } from '@gorhom/bottom-sheet';
 import { handleImagePasteEvent } from '@/utils/imagePaste';
 import { getDooTaskProjectId, getRecentDooTaskProjectConfig } from '@/utils/dootaskSessionDefaults';
+import { openExternalUrl } from '@/utils/tauri';
 
 // Simple temporary state for passing selections back from picker screens
 let onMachineSelected: (machineId: string) => void = () => { };
@@ -1864,11 +1865,7 @@ function NewSessionWizard() {
                                         <Text style={{ fontSize: 11, color: theme.colors.textSecondary, ...Typography.default() }}>
                                             {t('wizard.installClaude')} •
                                         </Text>
-                                        <Pressable onPress={() => {
-                                            if (Platform.OS === 'web') {
-                                                window.open('https://docs.anthropic.com/en/docs/claude-code/installation', '_blank');
-                                            }
-                                        }}>
+                                        <Pressable onPress={() => openExternalUrl('https://docs.anthropic.com/en/docs/claude-code/installation')}>
                                             <Text style={{ fontSize: 11, color: theme.colors.textLink, ...Typography.default() }}>
                                                 {t('wizard.viewInstallGuide')}
                                             </Text>
@@ -1936,11 +1933,7 @@ function NewSessionWizard() {
                                         <Text style={{ fontSize: 11, color: theme.colors.textSecondary, ...Typography.default() }}>
                                             {t('wizard.installCodex')} •
                                         </Text>
-                                        <Pressable onPress={() => {
-                                            if (Platform.OS === 'web') {
-                                                window.open('https://github.com/openai/openai-codex', '_blank');
-                                            }
-                                        }}>
+                                        <Pressable onPress={() => openExternalUrl('https://github.com/openai/openai-codex')}>
                                             <Text style={{ fontSize: 11, color: theme.colors.textLink, ...Typography.default() }}>
                                                 {t('wizard.viewInstallGuide')}
                                             </Text>
@@ -2008,11 +2001,7 @@ function NewSessionWizard() {
                                         <Text style={{ fontSize: 11, color: theme.colors.textSecondary, ...Typography.default() }}>
                                             {t('wizard.installGemini')} •
                                         </Text>
-                                        <Pressable onPress={() => {
-                                            if (Platform.OS === 'web') {
-                                                window.open('https://ai.google.dev/gemini-api/docs/get-started', '_blank');
-                                            }
-                                        }}>
+                                        <Pressable onPress={() => openExternalUrl('https://ai.google.dev/gemini-api/docs/get-started')}>
                                             <Text style={{ fontSize: 11, color: theme.colors.textLink, ...Typography.default() }}>
                                                 {t('wizard.viewGeminiDocs')}
                                             </Text>

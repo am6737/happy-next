@@ -1,5 +1,4 @@
 import * as React from 'react';
-import { Linking } from 'react-native';
 import { useAuth } from '@/auth/AuthContext';
 import { decodeBase64 } from '@/encryption/base64';
 import { encryptBox } from '@/encryption/libsodium';
@@ -11,6 +10,7 @@ import { t } from '@/text';
 import { hapticsLight } from '@/components/haptics';
 import { showToast } from '@/components/Toast';
 import { sync } from '@/sync/sync';
+import { openExternalUrl } from '@/utils/tauri';
 
 const URL_REGEX = /^https?:\/\//i;
 
@@ -64,7 +64,7 @@ export function useUnifiedScanner() {
                 setIsLoading(false);
             }
         } else if (URL_REGEX.test(url)) {
-            Linking.openURL(url);
+            await openExternalUrl(url);
             return true;
         } else {
             Modal.alert(t('common.error'), t('modals.unrecognizedQrCode', { content: url }), [{ text: t('common.ok') }]);

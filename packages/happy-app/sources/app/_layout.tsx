@@ -36,6 +36,7 @@ import { AsyncLock } from '@/utils/lock';
 import { storage } from '@/sync/storage';
 import { usePathname } from 'expo-router';
 import { useDootaskGlobalWebSocket } from '@/hooks/useDootaskGlobalWebSocket';
+import { isTauriDesktop } from '@/utils/tauri';
 
 let currentAppState: string = AppState.currentState;
 let currentSessionId: string | null = null;
@@ -196,9 +197,7 @@ async function loadFonts() {
         }
         loaded = true;
         // Check if running in Tauri
-        const isTauri = Platform.OS === 'web' &&
-            typeof window !== 'undefined' &&
-            (window as any).__TAURI_INTERNALS__ !== undefined;
+        const isTauri = isTauriDesktop();
 
         if (!isTauri) {
             // Handle slow networks where FontFaceObserver's 6s timeout may fire

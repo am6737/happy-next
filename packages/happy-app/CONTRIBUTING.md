@@ -47,6 +47,8 @@ npm run android:production
 
 ### macOS Desktop (Tauri)
 
+See [`docs/desktop.md`](docs/desktop.md) for prerequisites, verification commands, release safety, and the current desktop release checklist.
+
 ```bash
 # Development variant - run with hot reload
 npm run tauri:dev

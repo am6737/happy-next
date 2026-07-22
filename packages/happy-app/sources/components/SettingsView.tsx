@@ -27,6 +27,7 @@ import { getDisplayName, getAvatarUrl, getBio } from '@/sync/profile';
 import { Avatar } from '@/components/Avatar';
 import { t } from '@/text';
 import { useMainTabBottomPadding } from '@/hooks/useMainTabBottomPadding';
+import { openExternalUrl } from '@/utils/tauri';
 
 export const SettingsView = React.memo(function SettingsView() {
     const { theme } = useUnistyles();
@@ -45,19 +46,11 @@ export const SettingsView = React.memo(function SettingsView() {
     const { launchScanner, connectWithUrl, isLoading } = useUnifiedScanner();
 
     const handleGitHub = async () => {
-        const url = 'https://github.com/hitosea/happy-next';
-        const supported = await Linking.canOpenURL(url);
-        if (supported) {
-            await Linking.openURL(url);
-        }
+        await openExternalUrl('https://github.com/hitosea/happy-next');
     };
 
     const handleReportIssue = async () => {
-        const url = 'https://github.com/hitosea/happy-next/issues';
-        const supported = await Linking.canOpenURL(url);
-        if (supported) {
-            await Linking.openURL(url);
-        }
+        await openExternalUrl('https://github.com/hitosea/happy-next/issues');
     };
 
     // Use the multi-click hook for version clicks
@@ -454,36 +447,18 @@ export const SettingsView = React.memo(function SettingsView() {
                 <Item
                     title={t('settings.privacyPolicy')}
                     icon={<Ionicons name="shield-checkmark-outline" size={29} color="#007AFF" />}
-                    onPress={async () => {
-                        const url = 'https://github.com/hitosea/happy-next/blob/next/packages/happy-app/PRIVACY.md';
-                        const supported = await Linking.canOpenURL(url);
-                        if (supported) {
-                            await Linking.openURL(url);
-                        }
-                    }}
+                    onPress={() => openExternalUrl('https://github.com/hitosea/happy-next/blob/main/packages/happy-app/PRIVACY.md')}
                 />
                 <Item
                     title={t('settings.termsOfService')}
                     icon={<Ionicons name="document-text-outline" size={29} color="#007AFF" />}
-                    onPress={async () => {
-                        const url = 'https://github.com/hitosea/happy-next/blob/next/packages/happy-app/TERMS.md';
-                        const supported = await Linking.canOpenURL(url);
-                        if (supported) {
-                            await Linking.openURL(url);
-                        }
-                    }}
+                    onPress={() => openExternalUrl('https://github.com/hitosea/happy-next/blob/main/packages/happy-app/TERMS.md')}
                 />
                 {Platform.OS === 'ios' && (
                     <Item
                         title={t('settings.eula')}
                         icon={<Ionicons name="document-text-outline" size={29} color="#007AFF" />}
-                        onPress={async () => {
-                            const url = 'https://www.apple.com/legal/internet-services/itunes/dev/stdeula/';
-                            const supported = await Linking.canOpenURL(url);
-                            if (supported) {
-                                await Linking.openURL(url);
-                            }
-                        }}
+                        onPress={() => openExternalUrl('https://www.apple.com/legal/internet-services/itunes/dev/stdeula/')}
                     />
                 )}
                 <Item
