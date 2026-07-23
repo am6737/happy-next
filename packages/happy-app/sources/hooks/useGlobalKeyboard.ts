@@ -7,7 +7,6 @@ import { isTauriDesktop } from '@/utils/tauri';
 
 type KeyboardShortcutHandlers = {
     enabled: boolean;
-    enableBrowserSearch: boolean;
     onSearch: () => void;
     onNewSession: () => void;
     onSettings: () => void;
@@ -33,10 +32,10 @@ export function useGlobalKeyboard(handlers: KeyboardShortcutHandlers) {
             const desktop = isTauriDesktop();
             const key = event.key.toLowerCase();
 
-            // Preserve the existing optional command-palette shortcut in regular
-            // browsers. The remaining shortcuts are desktop-app only.
+            // Keep the command-palette shortcut available in regular browsers.
+            // The remaining shortcuts are desktop-app only.
             if (!desktop) {
-                if (handlers.enableBrowserSearch && (event.metaKey || event.ctrlKey) && key === 'k') {
+                if ((event.metaKey || event.ctrlKey) && key === 'k') {
                     event.preventDefault();
                     event.stopPropagation();
                     handlers.onSearch();

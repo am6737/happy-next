@@ -8,7 +8,6 @@ export const LocalSettingsSchema = z.object({
     // Developer settings (device-specific)
     debugMode: z.boolean().describe('Enable debug logging'),
     devModeEnabled: z.boolean().describe('Enable developer menu in settings'),
-    commandPaletteEnabled: z.boolean().describe('Enable CMD+K command palette (web only)'),
     themePreference: z.enum(['light', 'dark', 'adaptive']).describe('Theme preference: light, dark, or adaptive (follows system)'),
     hideNotificationsWhenActive: z.boolean().describe('Hide all notifications while the app is active'),
     hideSessionNotificationsWhenActive: z.boolean().describe('Hide notifications for the currently open session while the app is active'),
@@ -40,7 +39,6 @@ export type LocalSettings = z.infer<typeof LocalSettingsSchema>;
 export const localSettingsDefaults: LocalSettings = {
     debugMode: false,
     devModeEnabled: false,
-    commandPaletteEnabled: false,
     themePreference: 'adaptive',
     hideNotificationsWhenActive: false,
     hideSessionNotificationsWhenActive: false,

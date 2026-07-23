@@ -10,14 +10,12 @@ import { storage } from '@/sync/storage';
 import { useShallow } from 'zustand/react/shallow';
 import { useNavigateToSession } from '@/hooks/useNavigateToSession';
 import { OPEN_COMMAND_PALETTE_EVENT } from './events';
-import { isTauriDesktop } from '@/utils/tauri';
 import { useModal } from '@/modal';
 
 export function CommandPaletteProvider({ children }: { children: React.ReactNode }) {
     const router = useRouter();
     const { logout, isAuthenticated } = useAuth();
     const sessions = storage(useShallow((state) => state.sessions));
-    const commandPaletteEnabled = storage(useShallow((state) => state.localSettings.commandPaletteEnabled));
     const navigateToSession = useNavigateToSession();
     const { state: modalState, hideModal } = useModal();
     const currentModal = modalState.modals[modalState.modals.length - 1];
@@ -139,11 +137,6 @@ export function CommandPaletteProvider({ children }: { children: React.ReactNode
         } as any);
     }, [commands]);
 
-    const showCommandPalette = useCallback(() => {
-        if (!isTauriDesktop() && !commandPaletteEnabled) return;
-        openCommandPalette();
-    }, [commandPaletteEnabled, openCommandPalette]);
-
     useEffect(() => {
         if (Platform.OS !== 'web') return;
         window.addEventListener(OPEN_COMMAND_PALETTE_EVENT, openCommandPalette);
@@ -162,8 +155,7 @@ export function CommandPaletteProvider({ children }: { children: React.ReactNode
 
     const shortcutHandlers = useMemo(() => ({
         enabled: isAuthenticated,
-        enableBrowserSearch: commandPaletteEnabled,
-        onSearch: showCommandPalette,
+        onSearch: openCommandPalette,
         onNewSession: () => router.push('/new'),
         onSettings: () => router.navigate('/settings'),
         onSessions: () => router.navigate('/'),
@@ -172,7 +164,7 @@ export function CommandPaletteProvider({ children }: { children: React.ReactNode
         onBack: () => window.history.back(),
         onForward: () => window.history.forward(),
         onEscape: currentModal ? closeTopModal : undefined,
-    }), [commandPaletteEnabled, currentModal, closeTopModal, isAuthenticated, router, showCommandPalette]);
+    }), [currentModal, closeTopModal, isAuthenticated, openCommandPalette, router]);
 
     useGlobalKeyboard(shortcutHandlers);
 
