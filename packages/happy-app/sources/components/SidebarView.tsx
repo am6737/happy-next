@@ -19,7 +19,7 @@ import { useDootaskProfile } from '@/sync/storage';
 import { Ionicons } from '@expo/vector-icons';
 import { requestCommandPalette } from './CommandPalette/events';
 import { getDesktopPlatform } from '@/desktop/desktopWindowUtils';
-import { getCurrentWindow } from '@tauri-apps/api/window';
+import { invoke } from '@tauri-apps/api/core';
 
 const stylesheet = StyleSheet.create((theme, runtime) => ({
     container: {
@@ -181,10 +181,10 @@ export const SidebarView = React.memo((props: SidebarViewProps) => {
     const isDesktopMacOS = getDesktopPlatform() === 'macos';
     const desktopDragProps = isDesktopMacOS ? {
         'data-tauri-drag-region': true,
-        onPointerDown: (event: any) => {
-            if ((event.nativeEvent?.button ?? event.button) === 0) {
+        onMouseDown: (event: any) => {
+            if (event.button === 0) {
                 event.preventDefault?.();
-                void getCurrentWindow().startDragging();
+                void invoke('start_desktop_window_dragging');
             }
         },
     } as any : {};

@@ -40,7 +40,7 @@ const stylesheet = StyleSheet.create((theme) => ({
         lineHeight: 25,
         color: theme.colors.textSecondary,
         marginBottom: 20,
-        marginTop: 16,
+        marginTop: 12,
         alignSelf: 'stretch',
         ...Typography.default(),
     },
@@ -164,7 +164,7 @@ export default function Restore() {
                         backgroundColor={'white'}
                     />
                 )}
-                <View style={{ width: '100%', maxWidth: 280, paddingTop: 20, paddingBottom: 12 }}>
+                <View style={{ width: '100%', maxWidth: 280, paddingTop: 28, paddingBottom: 16 }}>
                     <RoundButton title={t('connect.restoreWithSecretKey')} onPress={() => {
                         router.push('/restore/manual');
                     }} />

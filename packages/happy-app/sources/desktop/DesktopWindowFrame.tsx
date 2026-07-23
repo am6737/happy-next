@@ -1,4 +1,5 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import * as React from 'react';
 import { Pressable, View } from 'react-native';
@@ -97,10 +98,10 @@ export function DesktopWindowFrame({ children }: { children: React.ReactNode }) 
                 <View
                     {...({
                         'data-tauri-drag-region': true,
-                        onPointerDown: (event: any) => {
-                            if ((event.nativeEvent?.button ?? event.button) === 0) {
+                        onMouseDown: (event: any) => {
+                            if (event.button === 0) {
                                 event.preventDefault?.();
-                                void window.startDragging();
+                                void invoke('start_desktop_window_dragging');
                             }
                         },
                     } as any)}

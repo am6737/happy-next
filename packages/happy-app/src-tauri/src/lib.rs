@@ -258,6 +258,11 @@ fn set_desktop_authenticated_window(app: AppHandle, authenticated: bool) {
     configure_desktop_window(&app, authenticated);
 }
 
+#[tauri::command]
+fn start_desktop_window_dragging(window: tauri::WebviewWindow) -> Result<(), String> {
+    window.start_dragging().map_err(|error| error.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -283,6 +288,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             set_close_to_tray,
             set_desktop_authenticated_window,
+            start_desktop_window_dragging,
             show_desktop_window,
             desktop_should_start_hidden,
             toggle_desktop_window,
@@ -295,6 +301,13 @@ pub fn run() {
                         .level(log::LevelFilter::Info)
                         .build(),
                 )?;
+            }
+
+            #[cfg(debug_assertions)]
+            if std::env::var_os("HAPPY_OPEN_DEVTOOLS").is_some() {
+                if let Some(window) = app.get_webview_window("main") {
+                    window.open_devtools();
+                }
             }
 
             build_tray(app.handle())?;

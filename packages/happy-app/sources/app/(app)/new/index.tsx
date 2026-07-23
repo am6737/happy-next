@@ -1653,7 +1653,7 @@ function NewSessionWizard() {
                     )}
 
                     {/* AgentInput with inline chips - sticky at bottom */}
-                    <View style={{ paddingHorizontal: screenWidth > 700 ? 16 : 8, paddingBottom: safeArea.bottom }}>
+                    <View style={{ paddingHorizontal: screenWidth > 700 ? 16 : 8, paddingBottom: safeArea.bottom + (Platform.OS === 'web' ? 8 : 0) }}>
                         <View style={{ maxWidth: layout.maxWidth, width: '100%', alignSelf: 'center' }}>
                             <AgentInput
                                 value={sessionPrompt}
@@ -2417,7 +2417,7 @@ function NewSessionWizard() {
                 </ScrollView>
 
                 {/* Section 5: AgentInput - Sticky at bottom */}
-                <View style={{ paddingHorizontal: screenWidth > 700 ? 16 : 8, paddingBottom: safeArea.bottom }}>
+                <View style={{ paddingHorizontal: screenWidth > 700 ? 16 : 8, paddingBottom: safeArea.bottom + (Platform.OS === 'web' ? 8 : 0) }}>
                     <View style={{ maxWidth: layout.maxWidth, width: '100%', alignSelf: 'center' }}>
                         <AgentInput
                             value={sessionPrompt}

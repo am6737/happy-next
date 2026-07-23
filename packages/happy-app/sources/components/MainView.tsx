@@ -24,6 +24,8 @@ import { t } from '@/text';
 import { isUsingCustomServer } from '@/sync/serverConfig';
 import { trackFriendsSearch } from '@/track';
 import { DooTaskCreateSheet } from './dootask/DooTaskCreateSheet';
+import { getDesktopPlatform } from '@/desktop/desktopWindowUtils';
+import { invoke } from '@tauri-apps/api/core';
 
 interface MainViewProps {
     variant: 'phone' | 'sidebar';
@@ -71,6 +73,14 @@ const styles = StyleSheet.create((theme) => ({
         flex: 1,
         flexBasis: 0,
         flexGrow: 1,
+    },
+    emptyDetailDragRegion: {
+        height: 48,
+        left: 0,
+        position: 'absolute',
+        right: 0,
+        top: 0,
+        zIndex: 1,
     },
     titleContainer: {
         alignItems: 'center',
@@ -246,6 +256,7 @@ export const MainView = React.memo(({ variant }: MainViewProps) => {
     const inboxHasContent = useInboxHasContent();
     const showDootaskTab = !!dootaskProfile;
     const isCustomServer = isUsingCustomServer();
+    const isDesktopMacOS = getDesktopPlatform() === 'macos';
 
     // Tab state management
     const [activeTab, setActiveTab] = React.useState<TabType>('sessions');
@@ -389,7 +400,22 @@ export const MainView = React.memo(({ variant }: MainViewProps) => {
         return (
             <>
                 <Stack.Screen options={{ headerShown: false }} />
-                <View style={styles.emptyStateContentContainer} />
+                <View style={styles.emptyStateContentContainer}>
+                    {isDesktopMacOS && (
+                        <View
+                            {...({
+                                'data-tauri-drag-region': true,
+                                onMouseDown: (event: any) => {
+                                    if (event.button === 0) {
+                                        event.preventDefault?.();
+                                        void invoke('start_desktop_window_dragging');
+                                    }
+                                },
+                            } as any)}
+                            style={styles.emptyDetailDragRegion}
+                        />
+                    )}
+                </View>
             </>
         );
     }

@@ -11,7 +11,7 @@ import { t } from '@/text';
 import { isTauriDesktop } from '@/utils/tauri';
 import { useAuth } from '@/auth/AuthContext';
 import { getDesktopPlatform } from '@/desktop/desktopWindowUtils';
-import { getCurrentWindow } from '@tauri-apps/api/window';
+import { invoke } from '@tauri-apps/api/core';
 
 interface HeaderProps {
     title?: React.ReactNode;
@@ -32,7 +32,23 @@ interface HeaderProps {
 export const Header = React.memo((props: HeaderProps) => {
     const styles = stylesheet;
     const { isAuthenticated } = useAuth();
-    const needsMacOSWindowControlsInset = getDesktopPlatform() === 'macos' && !isAuthenticated;
+    const desktopPlatform = getDesktopPlatform();
+    const needsMacOSWindowControlsInset = desktopPlatform === 'macos' && !isAuthenticated;
+    const desktopDragProps = desktopPlatform ? {
+        onMouseDown: (event: any) => {
+            if (event.button !== 0) {
+                return;
+            }
+
+            const target = event.target as HTMLElement | null;
+            if (target?.closest?.('[data-desktop-no-drag], button, [role="button"], [tabindex], a, input, textarea, select')) {
+                return;
+            }
+
+            event.preventDefault?.();
+            void invoke('start_desktop_window_dragging');
+        },
+    } as any : {};
 
     const {
         title,
@@ -74,7 +90,7 @@ export const Header = React.memo((props: HeaderProps) => {
 
     return (
         <View style={[containerStyle]}>
-            <View style={styles.contentWrapper}>
+            <View {...desktopDragProps} style={styles.contentWrapper}>
                 <View style={[styles.content, { height: headerHeight }]}>
                     <View style={[
                         styles.leftContainer,
@@ -84,20 +100,19 @@ export const Header = React.memo((props: HeaderProps) => {
                         {headerLeft && headerLeft()}
                     </View>
 
-                    <View
-                        {...(getDesktopPlatform() ? {
-                            'data-tauri-drag-region': true,
-                            onPointerDown: (event: any) => {
-                                if ((event.nativeEvent?.button ?? event.button) === 0) {
-                                    event.preventDefault?.();
-                                    void getCurrentWindow().startDragging();
-                                }
-                            },
-                        } as any : {})}
-                        style={[styles.centerContainer, leftAligned && styles.centerContainerLeft]}
-                    >
-                        {title}
-                        {subtitle && <Text style={subtitleStyle} numberOfLines={1}>{subtitle}</Text>}
+                    <View style={[styles.centerContainer, leftAligned && styles.centerContainerLeft]}>
+                        <View
+                            {...(desktopPlatform ? {
+                                'data-desktop-no-drag': true,
+                                onMouseDown: (event: any) => {
+                                    event.stopPropagation?.();
+                                },
+                            } as any : {})}
+                            style={[styles.selectableTitle, leftAligned && styles.selectableTitleLeft]}
+                        >
+                            {title}
+                            {subtitle && <Text style={subtitleStyle} numberOfLines={1}>{subtitle}</Text>}
+                        </View>
                     </View>
 
                     <View style={[styles.rightContainer, leftAligned && styles.sideContainerHug]}>
@@ -280,6 +295,16 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
         justifyContent: 'center',
         paddingHorizontal: 12,
         overflow: 'hidden',
+    },
+    selectableTitle: {
+        alignItems: 'center',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        maxWidth: '100%',
+        userSelect: Platform.select({ web: 'text', default: undefined }),
+    },
+    selectableTitleLeft: {
+        alignItems: 'flex-start',
     },
     rightContainer: {
         flexGrow: 1,
