@@ -215,10 +215,11 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
 interface ActiveSessionsGroupProps {
     sessions: Session[];
     selectedSessionId?: string;
+    registerSessionRowRef?: (sessionId: string, ref: View | null) => void;
 }
 
 
-export function ActiveSessionsGroup({ sessions, selectedSessionId }: ActiveSessionsGroupProps) {
+export function ActiveSessionsGroup({ sessions, selectedSessionId, registerSessionRowRef }: ActiveSessionsGroupProps) {
     const styles = stylesheet;
     const machines = useAllMachines();
     const machinesMap = React.useMemo(() => {
@@ -347,6 +348,7 @@ export function ActiveSessionsGroup({ sessions, selectedSessionId }: ActiveSessi
                                                 key={session.id}
                                                 session={session}
                                                 selected={selectedSessionId === session.id}
+                                                registerSessionRowRef={registerSessionRowRef}
                                                 showBorder={index < machineGroup.sessions.length - 1 ||
                                                     Array.from(projectGroup.machines.keys()).indexOf(machineId) < projectGroup.machines.size - 1}
                                             />
@@ -362,7 +364,12 @@ export function ActiveSessionsGroup({ sessions, selectedSessionId }: ActiveSessi
 }
 
 // Compact session row component with status line
-const CompactSessionRow = React.memo(({ session, selected, showBorder }: { session: Session; selected?: boolean; showBorder?: boolean }) => {
+const CompactSessionRow = React.memo(({ session, selected, showBorder, registerSessionRowRef }: {
+    session: Session;
+    selected?: boolean;
+    showBorder?: boolean;
+    registerSessionRowRef?: (sessionId: string, ref: View | null) => void;
+}) => {
     const styles = stylesheet;
     const sessionStatus = useSessionStatus(session);
     const hasDraft = useSessionHasDraft(session.id);
@@ -371,6 +378,9 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder }: { sessi
     const navigateToSession = useNavigateToSession();
     const swipeableRef = React.useRef<Swipeable | null>(null);
     const swipeEnabled = Platform.OS !== 'web';
+    const setRowRef = React.useCallback((ref: View | null) => {
+        registerSessionRowRef?.(session.id, ref);
+    }, [registerSessionRowRef, session.id]);
 
     const [archivingSession, performArchive] = useHappyAction(async () => {
         const previousActive = storage.getState().sessions[session.id]?.active ?? session.active;
@@ -554,11 +564,11 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder }: { sessi
 
     if (!swipeEnabled) {
         return (
-            <>
+            <View ref={setRowRef}>
                 {itemContent}
                 {showBorder && <View style={styles.sessionDivider} />}
                 {archiveModal}
-            </>
+            </View>
         );
     }
 
@@ -576,7 +586,7 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder }: { sessi
     );
 
     return (
-        <>
+        <View ref={setRowRef}>
             <Swipeable
                 ref={swipeableRef}
                 renderRightActions={renderRightActions}
@@ -587,6 +597,6 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder }: { sessi
             </Swipeable>
             {showBorder && <View style={styles.sessionDivider} />}
             {archiveModal}
-        </>
+        </View>
     );
 });
