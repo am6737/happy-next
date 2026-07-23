@@ -309,7 +309,7 @@ jobs:
   build-desktop-macos:
     name: Build signed and notarized macOS Universal bundle
     needs: preflight
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
@@ -324,6 +324,13 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Verify macOS 26 SDK
+        run: |
+          set -euo pipefail
+          SDK_VERSION="$(xcrun --sdk macosx --show-sdk-version)"
+          echo "Using macOS SDK ${SDK_VERSION}"
+          test "${SDK_VERSION%%.*}" = '26'
 
       - uses: Swatinem/rust-cache@v2
         with:
