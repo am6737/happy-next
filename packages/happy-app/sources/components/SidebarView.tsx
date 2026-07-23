@@ -88,7 +88,7 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
     },
     titleText: {
         fontSize: 17,
-        fontWeight: '600',
+        fontWeight: '500',
         color: theme.colors.header.tint,
         whiteSpace: Platform.select({ web: 'nowrap', default: undefined }),
         ...Typography.default('semiBold'),
@@ -178,6 +178,7 @@ export const SidebarView = React.memo((props: SidebarViewProps) => {
     const friendRequests = useFriendRequests();
     const inboxHasContent = useInboxHasContent();
     const dootaskProfile = useDootaskProfile();
+    const [isSearchHovered, setIsSearchHovered] = React.useState(false);
     const isDesktopMacOS = getDesktopPlatform() === 'macos';
     const desktopDragProps = isDesktopMacOS ? {
         'data-tauri-drag-region': true,
@@ -401,10 +402,17 @@ export const SidebarView = React.memo((props: SidebarViewProps) => {
                             <Pressable
                                 accessibilityLabel={t('commandPalette.placeholder')}
                                 onPress={requestCommandPalette}
+                                onHoverIn={() => setIsSearchHovered(true)}
+                                onHoverOut={() => setIsSearchHovered(false)}
                                 hitSlop={10}
                                 style={styles.desktopNavigationButton}
                             >
-                                <Ionicons name="search" size={22} color={theme.colors.header.tint} />
+                                <Ionicons
+                                    name="search-outline"
+                                    size={20}
+                                    color={theme.colors.header.tint}
+                                    style={{ opacity: isSearchHovered ? 1 : 0.6 }}
+                                />
                             </Pressable>
                         ) : navigationButtons}
                     </View>
