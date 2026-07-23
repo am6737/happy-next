@@ -5,6 +5,7 @@ export interface DesktopNativeDiagnostics {
     operatingSystem: string;
     architecture: string;
     buildProfile: string;
+    updaterTestMode: boolean;
     logDirectory: string;
 }
 

@@ -3,7 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import type { DownloadEvent, Update } from '@tauri-apps/plugin-updater';
 
 import { isTauriDesktop } from '@/utils/tauri';
-import { isProductionDesktopBuild } from './desktopUpdaterUtils';
+import { isDesktopUpdaterBuild } from './desktopUpdaterUtils';
 
 const UPDATE_CHECK_TIMEOUT_MS = 15_000;
 const UPDATE_DOWNLOAD_TIMEOUT_MS = 10 * 60_000;
@@ -33,6 +33,7 @@ export type DesktopUpdateSnapshot = {
 type DesktopDiagnostics = {
     identifier: string;
     buildProfile: string;
+    updaterTestMode?: boolean;
 };
 
 const initialSnapshot: DesktopUpdateSnapshot = {
@@ -71,7 +72,7 @@ async function updaterIsSupported(): Promise<boolean> {
         return false;
     }
     const diagnostics = await invoke<DesktopDiagnostics>('get_desktop_diagnostics');
-    return isProductionDesktopBuild(diagnostics);
+    return isDesktopUpdaterBuild(diagnostics);
 }
 
 async function closeActiveUpdate(): Promise<void> {

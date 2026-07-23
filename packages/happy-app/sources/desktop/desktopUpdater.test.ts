@@ -1,12 +1,25 @@
 import { describe, expect, it } from 'vitest';
 
-import { desktopUpdateProgress, isProductionDesktopBuild } from './desktopUpdaterUtils';
+import { desktopUpdateProgress, isDesktopUpdaterBuild } from './desktopUpdaterUtils';
 
 describe('desktop updater helpers', () => {
     it('only enables updates for production desktop releases', () => {
-        expect(isProductionDesktopBuild({ identifier: 'com.hitosea.happy', buildProfile: 'release' })).toBe(true);
-        expect(isProductionDesktopBuild({ identifier: 'com.hitosea.happy.dev', buildProfile: 'release' })).toBe(false);
-        expect(isProductionDesktopBuild({ identifier: 'com.hitosea.happy', buildProfile: 'debug' })).toBe(false);
+        expect(isDesktopUpdaterBuild({ identifier: 'com.hitosea.happy', buildProfile: 'release' })).toBe(true);
+        expect(isDesktopUpdaterBuild({ identifier: 'com.hitosea.happy.dev', buildProfile: 'release' })).toBe(false);
+        expect(isDesktopUpdaterBuild({ identifier: 'com.hitosea.happy', buildProfile: 'debug' })).toBe(false);
+    });
+
+    it('only enables the isolated updater test app with an explicit native build flag', () => {
+        expect(isDesktopUpdaterBuild({
+            identifier: 'com.hitosea.happy.updatetest',
+            buildProfile: 'release',
+            updaterTestMode: true,
+        })).toBe(true);
+        expect(isDesktopUpdaterBuild({
+            identifier: 'com.hitosea.happy.updatetest',
+            buildProfile: 'release',
+            updaterTestMode: false,
+        })).toBe(false);
     });
 
     it('calculates bounded download progress', () => {

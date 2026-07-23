@@ -32,6 +32,7 @@
     "tauri:build:dev": "cross-env APP_ENV=development tauri build --config src-tauri/tauri.dev.conf.json",
     "tauri:build:preview": "cross-env APP_ENV=preview tauri build --config src-tauri/tauri.preview.conf.json",
     "tauri:build:production": "cross-env APP_ENV=production tauri build",
+    "tauri:build:updater-test": "cross-env HAPPY_UPDATER_TEST_MODE=1 APP_ENV=production tauri build --config src-tauri/tauri.updater-test.conf.json",
     "tauri:build:macos:universal": "cross-env APP_ENV=production tauri build --target universal-apple-darwin --bundles app,dmg",
     "tauri:build:windows:x64": "cross-env APP_ENV=production tauri build --target x86_64-pc-windows-msvc --bundles msi,nsis",
     "desktop:updater:manifest": "node sources/scripts/generateDesktopUpdateManifest.cjs"

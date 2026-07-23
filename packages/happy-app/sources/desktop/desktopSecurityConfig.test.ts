@@ -72,6 +72,18 @@ describe('desktop security configuration', () => {
         expect(config.plugins.updater.pubkey.length).toBeGreaterThan(100);
         expect(config.plugins.updater.pubkey).not.toContain('PRIVATE');
         expect(config.plugins.updater.windows.installMode).toBe('passive');
+        expect(config.plugins.updater.dangerousInsecureTransportProtocol).not.toBe(true);
+    });
+
+    it('isolates the insecure loopback updater endpoint to the explicit test app', () => {
+        const config = readJson('src-tauri/tauri.updater-test.conf.json');
+
+        expect(config.productName).toBe('Happy Next Update Test');
+        expect(config.identifier).toBe('com.hitosea.happy.updatetest');
+        expect(config.plugins.updater.endpoints).toEqual([
+            'http://127.0.0.1:18765/latest.json',
+        ]);
+        expect(config.plugins.updater.dangerousInsecureTransportProtocol).toBe(true);
     });
 
     it('keeps credential-free desktop CI and guarded release automation in place', () => {

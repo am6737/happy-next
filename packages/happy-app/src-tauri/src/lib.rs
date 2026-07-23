@@ -76,6 +76,7 @@ struct DesktopDiagnostics {
     operating_system: &'static str,
     architecture: &'static str,
     build_profile: &'static str,
+    updater_test_mode: bool,
     log_directory: String,
 }
 
@@ -1085,6 +1086,7 @@ fn get_desktop_diagnostics(app: AppHandle) -> Result<DesktopDiagnostics, String>
         } else {
             "release"
         },
+        updater_test_mode: option_env!("HAPPY_UPDATER_TEST_MODE") == Some("1"),
         log_directory: log_directory.to_string_lossy().into_owned(),
     })
 }

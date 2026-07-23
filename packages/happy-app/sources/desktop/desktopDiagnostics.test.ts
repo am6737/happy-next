@@ -17,6 +17,7 @@ describe('desktop diagnostics', () => {
                 operatingSystem: 'macos',
                 architecture: 'aarch64',
                 buildProfile: 'release',
+                updaterTestMode: false,
                 logDirectory: '/tmp/happy-logs',
             },
             server: {
