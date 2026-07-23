@@ -35,11 +35,11 @@ const stylesheet = StyleSheet.create((theme) => ({
         ...Typography.default(),
     },
     secondInstructionText: {
-        fontSize: 16,
-        lineHeight: 30,
+        fontSize: 14,
+        lineHeight: 22,
         color: theme.colors.textSecondary,
-        marginBottom: 32,
-        marginTop: 24,
+        marginBottom: 16,
+        marginTop: 12,
         alignSelf: 'stretch',
         ...Typography.default(),
     },
@@ -146,19 +146,19 @@ export default function Restore() {
                     </Text>
                 </View>
                 {!authReady && (
-                    <View style={{ width: 200, height: 200, backgroundColor: theme.colors.surface, alignItems: 'center', justifyContent: 'center' }}>
+                    <View style={{ width: 220, height: 220, backgroundColor: theme.colors.surface, alignItems: 'center', justifyContent: 'center' }}>
                         <ActivityIndicator size="small" color={theme.colors.text} />
                     </View>
                 )}
                 {authReady && (
                     <QRCode
                         data={'happy:///account?' + encodeBase64(keypair.publicKey, 'base64url')}
-                        size={300}
+                        size={220}
                         foregroundColor={'black'}
                         backgroundColor={'white'}
                     />
                 )}
-                <View style={{ width: '100%', maxWidth: 280, paddingTop: 40, paddingBottom: 24 }}>
+                <View style={{ width: '100%', maxWidth: 280, paddingTop: 16, paddingBottom: 16 }}>
                     <RoundButton title={t('connect.restoreWithSecretKey')} onPress={() => {
                         router.push('/restore/manual');
                     }} />

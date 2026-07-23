@@ -8,6 +8,7 @@ import { useHeaderHeight, useIsTablet } from '@/utils/responsive';
 import { Typography } from '@/constants/Typography';
 import { StyleSheet } from 'react-native-unistyles';
 import { t } from '@/text';
+import { isTauriDesktop } from '@/utils/tauri';
 
 interface HeaderProps {
     title?: React.ReactNode;
@@ -125,7 +126,7 @@ const NavigationHeaderComponent: React.FC<NativeStackHeaderProps> = React.memo((
 
     // Check if we should hide back button on tablet
     const shouldHideBackButton = React.useMemo(() => {
-        if (!isTablet) return false;
+        if (!isTablet || isTauriDesktop()) return false;
 
         // Get navigation state to check stack depth
         const state = navigation.getState();

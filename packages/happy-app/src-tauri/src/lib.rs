@@ -2,27 +2,24 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
     Mutex,
 };
-use std::{fs, path::PathBuf};
-
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, LogicalSize, Manager, Runtime, State, Window,
 };
-use tauri_plugin_window_state::{AppHandleExt, WindowExt};
+use tauri_plugin_window_state::AppHandleExt;
 
 const TRAY_ID: &str = "main-tray";
 const TRAY_SHOW_ID: &str = "tray-show";
 const TRAY_HIDE_ID: &str = "tray-hide";
 const TRAY_UNREAD_ID: &str = "tray-unread";
 const TRAY_QUIT_ID: &str = "tray-quit";
-const WINDOW_LAYOUT_MIGRATION: &str = ".window-layout-v5";
-const PREFERRED_WINDOW_WIDTH: f64 = 1440.0;
-const PREFERRED_WINDOW_HEIGHT: f64 = 900.0;
-const LEGACY_WINDOW_WIDTH_THRESHOLD: f64 = 1320.0;
-const LEGACY_WINDOW_HEIGHT_THRESHOLD: f64 = 780.0;
-const MINIMUM_WINDOW_WIDTH: f64 = 1100.0;
-const MINIMUM_WINDOW_HEIGHT: f64 = 700.0;
+const UNAUTHENTICATED_WINDOW_WIDTH: f64 = 800.0;
+const UNAUTHENTICATED_WINDOW_HEIGHT: f64 = 600.0;
+const AUTHENTICATED_WINDOW_WIDTH: f64 = 1440.0;
+const AUTHENTICATED_WINDOW_HEIGHT: f64 = 900.0;
+const AUTHENTICATED_MINIMUM_WIDTH: f64 = 1100.0;
+const AUTHENTICATED_MINIMUM_HEIGHT: f64 = 700.0;
 
 struct DesktopState {
     close_to_tray: AtomicBool,
@@ -205,71 +202,46 @@ fn window_state_flags() -> tauri_plugin_window_state::StateFlags {
         | tauri_plugin_window_state::StateFlags::MAXIMIZED
 }
 
-fn window_layout_migration_path(app: &AppHandle) -> Option<PathBuf> {
-    app.path()
-        .app_data_dir()
-        .ok()
-        .map(|path| path.join(WINDOW_LAYOUT_MIGRATION))
-}
-
-fn migrate_legacy_window_layout(app: &AppHandle) {
-    let Some(marker_path) = window_layout_migration_path(app) else {
-        return;
-    };
-    if marker_path.exists() {
-        return;
-    }
-
-    let Some(window) = app.get_webview_window("main") else {
-        return;
-    };
-    let scale_factor = window.scale_factor().unwrap_or(1.0);
-    if let Ok(size) = window.inner_size() {
-        let logical_size = size.to_logical::<f64>(scale_factor);
-        if logical_size.width < LEGACY_WINDOW_WIDTH_THRESHOLD
-            || logical_size.height < LEGACY_WINDOW_HEIGHT_THRESHOLD
-        {
-            let mut target_width = PREFERRED_WINDOW_WIDTH;
-            let mut target_height = PREFERRED_WINDOW_HEIGHT;
-
-            if let Ok(Some(monitor)) = window.current_monitor() {
-                let monitor_size = monitor.size().to_logical::<f64>(monitor.scale_factor());
-                target_width =
-                    target_width.min((monitor_size.width - 80.0).max(MINIMUM_WINDOW_WIDTH));
-                target_height =
-                    target_height.min((monitor_size.height - 100.0).max(MINIMUM_WINDOW_HEIGHT));
-            }
-
-            let _ = window.set_size(LogicalSize::new(target_width, target_height));
-            let _ = window.center();
-        }
-    }
-
-    if let Some(parent) = marker_path.parent() {
-        let _ = fs::create_dir_all(parent);
-    }
-    let _ = fs::write(marker_path, b"5");
-}
-
-fn enforce_minimum_window_layout(app: &AppHandle) {
+fn configure_desktop_window(app: &AppHandle, authenticated: bool) {
     let Some(window) = app.get_webview_window("main") else {
         return;
     };
 
-    let minimum_size = LogicalSize::new(MINIMUM_WINDOW_WIDTH, MINIMUM_WINDOW_HEIGHT);
-    let _ = window.set_min_size(Some(minimum_size));
+    let (desired_width, desired_height) = if authenticated {
+        (AUTHENTICATED_WINDOW_WIDTH, AUTHENTICATED_WINDOW_HEIGHT)
+    } else {
+        (UNAUTHENTICATED_WINDOW_WIDTH, UNAUTHENTICATED_WINDOW_HEIGHT)
+    };
+    let mut target_width = desired_width;
+    let mut target_height = desired_height;
 
-    let scale_factor = window.scale_factor().unwrap_or(1.0);
-    if let Ok(size) = window.inner_size() {
-        let logical_size = size.to_logical::<f64>(scale_factor);
-        if logical_size.width < MINIMUM_WINDOW_WIDTH || logical_size.height < MINIMUM_WINDOW_HEIGHT
-        {
-            let _ = window.set_size(LogicalSize::new(
-                logical_size.width.max(MINIMUM_WINDOW_WIDTH),
-                logical_size.height.max(MINIMUM_WINDOW_HEIGHT),
-            ));
-        }
+    if let Ok(Some(monitor)) = window.current_monitor() {
+        let monitor_size = monitor.size().to_logical::<f64>(monitor.scale_factor());
+        target_width = target_width.min((monitor_size.width - 40.0).max(480.0));
+        target_height = target_height.min((monitor_size.height - 80.0).max(480.0));
     }
+
+    let _ = window.unmaximize();
+    let _ = window.set_resizable(true);
+
+    if authenticated {
+        let _ = window.set_min_size(Some(LogicalSize::new(
+            AUTHENTICATED_MINIMUM_WIDTH.min(target_width),
+            AUTHENTICATED_MINIMUM_HEIGHT.min(target_height),
+        )));
+    } else {
+        let _ = window.set_min_size(None::<LogicalSize<f64>>);
+    }
+
+    let _ = window.set_size(LogicalSize::new(target_width, target_height));
+    let _ = window.center();
+    let _ = window.set_resizable(authenticated);
+    let _ = app.save_window_state(window_state_flags());
+}
+
+#[tauri::command]
+fn set_desktop_authenticated_window(app: AppHandle, authenticated: bool) {
+    configure_desktop_window(&app, authenticated);
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -296,6 +268,7 @@ pub fn run() {
         .menu(Menu::default)
         .invoke_handler(tauri::generate_handler![
             set_close_to_tray,
+            set_desktop_authenticated_window,
             show_desktop_window,
             desktop_should_start_hidden,
             toggle_desktop_window,
@@ -311,9 +284,6 @@ pub fn run() {
             }
 
             build_tray(app.handle())?;
-            if let Some(window) = app.get_webview_window("main") {
-                window.restore_state(window_state_flags())?;
-            }
             #[cfg(target_os = "windows")]
             if let Some(window) = app.get_webview_window("main") {
                 window.set_decorations(false)?;
@@ -340,9 +310,7 @@ pub fn run() {
         .expect("error while building tauri application")
         .run(|app, event| match event {
             tauri::RunEvent::Ready => {
-                migrate_legacy_window_layout(app);
-                enforce_minimum_window_layout(app);
-                let _ = app.save_window_state(window_state_flags());
+                configure_desktop_window(app, false);
 
                 if should_start_hidden() {
                     hide_main_window(app);

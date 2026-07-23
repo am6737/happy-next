@@ -33,6 +33,7 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
     titleContainer: {
         flex: 1,
         alignItems: 'center',
+        justifyContent: 'center',
     },
     titleText: {
         fontSize: 17,
