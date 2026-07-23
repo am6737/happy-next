@@ -8,10 +8,9 @@ import { ItemGroup } from '@/components/ItemGroup';
 import { ItemList } from '@/components/ItemList';
 import { Text } from '@/components/StyledText';
 import {
-    checkForDesktopUpdate,
-    downloadDesktopUpdate,
     getDesktopUpdateSnapshot,
     installDesktopUpdateAndRelaunch,
+    prepareDesktopUpdate,
     subscribeToDesktopUpdate,
 } from '@/desktop/desktopUpdater';
 import { desktopUpdateProgress } from '@/desktop/desktopUpdaterUtils';
@@ -29,7 +28,7 @@ export default function SoftwareUpdateScreen() {
 
     React.useEffect(() => {
         if (update.phase === 'idle') {
-            void checkForDesktopUpdate();
+            void prepareDesktopUpdate();
         }
     }, [update.phase]);
 
@@ -47,31 +46,18 @@ export default function SoftwareUpdateScreen() {
                         ? t('desktopUpdate.ready')
                         : update.phase === 'installing'
                             ? t('desktopUpdate.installing')
-                            : update.phase === 'unsupported'
-                                ? t('desktopUpdate.productionOnly')
-                                : update.phase === 'error'
-                                    ? t('desktopUpdate.failed')
-                                    : t('desktopUpdate.notChecked');
+                            : update.phase === 'installError'
+                                ? t('desktopUpdate.failed')
+                                : update.phase === 'unsupported'
+                                    ? t('desktopUpdate.productionOnly')
+                                    : update.phase === 'error'
+                                        ? t('desktopUpdate.failed')
+                                        : t('desktopUpdate.notChecked');
 
-    const download = async () => {
-        const result = await downloadDesktopUpdate();
+    const prepare = async () => {
+        const result = await prepareDesktopUpdate();
         if (result.phase === 'error') {
             Modal.alert(t('desktopUpdate.failed'), t('desktopUpdate.tryAgain'));
-            return;
-        }
-        if (result.phase !== 'downloaded') {
-            return;
-        }
-        const restart = await Modal.confirm(
-            t('desktopUpdate.readyTitle'),
-            t('desktopUpdate.readyMessage'),
-            {
-                confirmText: t('desktopUpdate.restartNow'),
-                cancelText: t('desktopUpdate.restartLater'),
-            },
-        );
-        if (restart) {
-            await installDesktopUpdateAndRelaunch();
         }
     };
 
@@ -85,7 +71,7 @@ export default function SoftwareUpdateScreen() {
                 />
                 <Item
                     title={t('desktopUpdate.status')}
-                    subtitle={update.phase === 'error' ? update.error : undefined}
+                    subtitle={update.phase === 'error' || update.phase === 'installError' ? update.error : undefined}
                     detail={status}
                     showChevron={false}
                 />
@@ -126,7 +112,7 @@ export default function SoftwareUpdateScreen() {
                 <Item
                     title={t('desktopUpdate.checkNow')}
                     icon={<Ionicons name="refresh-outline" size={29} color="#007AFF" />}
-                    onPress={() => void checkForDesktopUpdate()}
+                    onPress={() => void prepare()}
                     loading={update.phase === 'checking'}
                     disabled={update.phase === 'downloading' || update.phase === 'downloaded' || update.phase === 'installing'}
                     showChevron={false}
@@ -136,11 +122,11 @@ export default function SoftwareUpdateScreen() {
                         title={t('desktopUpdate.download')}
                         subtitle={t('desktopUpdate.downloadSubtitle')}
                         icon={<Ionicons name="cloud-download-outline" size={29} color="#34C759" />}
-                        onPress={() => void download()}
+                        onPress={() => void prepare()}
                         showChevron={false}
                     />
                 )}
-                {update.phase === 'downloaded' && (
+                {(update.phase === 'downloaded' || update.phase === 'installError') && (
                     <Item
                         title={t('desktopUpdate.restartNow')}
                         subtitle={t('desktopUpdate.readyMessage')}

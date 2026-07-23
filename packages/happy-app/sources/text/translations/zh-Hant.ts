@@ -561,6 +561,7 @@ export const zhHant: TranslationStructure = {
         releaseNotes: '更新內容',
         checkNow: '檢查更新',
         download: '下載更新',
+        apply: '更新',
         downloadSubtitle: '下載期間可以繼續使用應用程式',
         availableTitle: '發現新版本',
         availableMessage: ({ version }: { version: string }) => `Happy Next ${version} 已發布，是否立即下載？`,

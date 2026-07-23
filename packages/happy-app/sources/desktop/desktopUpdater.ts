@@ -17,6 +17,7 @@ export type DesktopUpdatePhase =
     | 'downloading'
     | 'downloaded'
     | 'installing'
+    | 'installError'
     | 'error';
 
 export type DesktopUpdateSnapshot = {
@@ -44,6 +45,7 @@ const initialSnapshot: DesktopUpdateSnapshot = {
 let snapshot = initialSnapshot;
 let activeUpdate: Update | null = null;
 let checkPromise: Promise<DesktopUpdateSnapshot> | null = null;
+let preparePromise: Promise<DesktopUpdateSnapshot> | null = null;
 const listeners = new Set<() => void>();
 
 function publish(next: DesktopUpdateSnapshot): DesktopUpdateSnapshot {
@@ -90,7 +92,13 @@ export function checkForDesktopUpdate(): Promise<DesktopUpdateSnapshot> {
     }
     if (
         activeUpdate
-        && (snapshot.phase === 'available' || snapshot.phase === 'downloading' || snapshot.phase === 'downloaded' || snapshot.phase === 'installing')
+        && (
+            snapshot.phase === 'available'
+            || snapshot.phase === 'downloading'
+            || snapshot.phase === 'downloaded'
+            || snapshot.phase === 'installing'
+            || snapshot.phase === 'installError'
+        )
     ) {
         return Promise.resolve(snapshot);
     }
@@ -204,8 +212,26 @@ export async function downloadDesktopUpdate(): Promise<DesktopUpdateSnapshot> {
     }
 }
 
+export function prepareDesktopUpdate(): Promise<DesktopUpdateSnapshot> {
+    if (preparePromise) {
+        return preparePromise;
+    }
+
+    preparePromise = (async () => {
+        const checked = await checkForDesktopUpdate();
+        if (checked.phase !== 'available') {
+            return checked;
+        }
+        return downloadDesktopUpdate();
+    })().finally(() => {
+        preparePromise = null;
+    });
+
+    return preparePromise;
+}
+
 export async function installDesktopUpdateAndRelaunch(): Promise<DesktopUpdateSnapshot> {
-    if (!activeUpdate || snapshot.phase !== 'downloaded') {
+    if (!activeUpdate || (snapshot.phase !== 'downloaded' && snapshot.phase !== 'installError')) {
         return snapshot;
     }
     const installing = publish({ ...snapshot, phase: 'installing', error: undefined });
@@ -217,7 +243,7 @@ export async function installDesktopUpdateAndRelaunch(): Promise<DesktopUpdateSn
     } catch (error) {
         return publish({
             ...snapshot,
-            phase: 'error',
+            phase: 'installError',
             error: errorMessage(error),
         });
     }

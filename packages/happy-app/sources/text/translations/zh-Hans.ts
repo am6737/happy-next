@@ -561,6 +561,7 @@ export const zhHans: TranslationStructure = {
         releaseNotes: '更新内容',
         checkNow: '检查更新',
         download: '下载更新',
+        apply: '更新',
         downloadSubtitle: '下载期间可以继续使用应用',
         availableTitle: '发现新版本',
         availableMessage: ({ version }: { version: string }) => `Happy Next ${version} 已发布，是否立即下载？`,

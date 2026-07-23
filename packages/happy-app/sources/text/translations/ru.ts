@@ -524,6 +524,7 @@ export const ru: TranslationStructure = {
         releaseNotes: 'What’s new',
         checkNow: 'Check for updates',
         download: 'Download update',
+        apply: 'Обновить',
         downloadSubtitle: 'You can keep using the app while it downloads',
         availableTitle: 'Update available',
         availableMessage: ({ version }: { version: string }) => `Happy Next ${version} is available. Download it now?`,

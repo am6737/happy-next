@@ -4,6 +4,8 @@ import * as React from 'react';
 import { Pressable, View } from 'react-native';
 import { useUnistyles } from 'react-native-unistyles';
 
+import { useAuth } from '@/auth/AuthContext';
+import { DesktopUpdateButton } from './DesktopUpdateButton';
 import { getDesktopPlatform, startDesktopWindowDragging } from './desktopWindowUtils';
 
 const WINDOWS_TITLE_BAR_HEIGHT = 40;
@@ -65,6 +67,7 @@ function runWindowAction(action: () => Promise<void>): void {
 export function DesktopWindowFrame({ children }: { children: React.ReactNode }) {
     const { theme } = useUnistyles();
     const desktopPlatform = getDesktopPlatform();
+    const { isAuthenticated } = useAuth();
     const [maximized, setMaximized] = React.useState(false);
 
     React.useEffect(() => {
@@ -111,6 +114,14 @@ export function DesktopWindowFrame({ children }: { children: React.ReactNode }) 
         return (
             <View style={{ flex: 1, backgroundColor: theme.colors.groupped.background }}>
                 {children}
+                {!isAuthenticated && (
+                    <View
+                        pointerEvents="box-none"
+                        style={{ bottom: 16, position: 'absolute', right: 16, zIndex: 1100 }}
+                    >
+                        <DesktopUpdateButton placement="floating" />
+                    </View>
+                )}
                 <View
                     {...({
                         'data-tauri-drag-region': true,
@@ -181,6 +192,14 @@ export function DesktopWindowFrame({ children }: { children: React.ReactNode }) 
             </View>
             <View style={{ flex: 1 }}>
                 {children}
+                {!isAuthenticated && (
+                    <View
+                        pointerEvents="box-none"
+                        style={{ bottom: 16, position: 'absolute', right: 16, zIndex: 1100 }}
+                    >
+                        <DesktopUpdateButton placement="floating" />
+                    </View>
+                )}
             </View>
         </View>
     );

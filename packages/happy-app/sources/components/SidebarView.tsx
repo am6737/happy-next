@@ -19,6 +19,7 @@ import { useDootaskProfile } from '@/sync/storage';
 import { Ionicons } from '@expo/vector-icons';
 import { requestCommandPalette } from './CommandPalette/events';
 import { getDesktopPlatform, startDesktopWindowDragging } from '@/desktop/desktopWindowUtils';
+import { DesktopUpdateButton } from '@/desktop/DesktopUpdateButton';
 
 const stylesheet = StyleSheet.create((theme, runtime) => ({
     container: {
@@ -346,6 +347,7 @@ export const SidebarView = React.memo((props: SidebarViewProps) => {
                     tintColor={theme.colors.header.tint}
                 />
             </Pressable>
+            <DesktopUpdateButton placement="titleBar" />
         </>
     );
 

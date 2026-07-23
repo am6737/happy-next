@@ -35,7 +35,7 @@ describe('desktop updater state', () => {
         });
     });
 
-    it('downloads, installs, and relaunches a verified update', async () => {
+    it('silently prepares, installs, and relaunches a verified update', async () => {
         const update = {
             currentVersion: '2.0.0',
             version: '2.1.0',
@@ -53,18 +53,45 @@ describe('desktop updater state', () => {
         mocks.relaunch.mockResolvedValue(undefined);
         const updater = await import('./desktopUpdater');
 
-        await expect(updater.checkForDesktopUpdate()).resolves.toMatchObject({
-            phase: 'available',
-            availableVersion: '2.1.0',
-        });
-        await expect(updater.downloadDesktopUpdate()).resolves.toMatchObject({
+        await expect(updater.prepareDesktopUpdate()).resolves.toMatchObject({
             phase: 'downloaded',
+            availableVersion: '2.1.0',
             downloadedBytes: 100,
             totalBytes: 100,
         });
+        expect(mocks.check).toHaveBeenCalledOnce();
+        expect(update.download).toHaveBeenCalledOnce();
         await updater.installDesktopUpdateAndRelaunch();
 
         expect(update.install).toHaveBeenCalledOnce();
+        expect(mocks.relaunch).toHaveBeenCalledOnce();
+    });
+
+    it('keeps a downloaded update available when installation fails', async () => {
+        const update = {
+            currentVersion: '2.0.0',
+            version: '2.1.0',
+            body: '',
+            date: '2026-07-23T00:00:00Z',
+            close: vi.fn().mockResolvedValue(undefined),
+            download: vi.fn().mockResolvedValue(undefined),
+            install: mocks.install
+                .mockRejectedValueOnce(new Error('install failed'))
+                .mockResolvedValueOnce(undefined),
+        };
+        mocks.check.mockResolvedValue(update);
+        mocks.relaunch.mockResolvedValue(undefined);
+        const updater = await import('./desktopUpdater');
+
+        await updater.prepareDesktopUpdate();
+        await expect(updater.installDesktopUpdateAndRelaunch()).resolves.toMatchObject({
+            phase: 'installError',
+            error: 'install failed',
+        });
+        expect(mocks.relaunch).not.toHaveBeenCalled();
+
+        await updater.installDesktopUpdateAndRelaunch();
+        expect(update.install).toHaveBeenCalledTimes(2);
         expect(mocks.relaunch).toHaveBeenCalledOnce();
     });
 });

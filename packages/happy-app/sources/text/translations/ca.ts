@@ -559,6 +559,7 @@ export const ca: TranslationStructure = {
         releaseNotes: 'What’s new',
         checkNow: 'Check for updates',
         download: 'Download update',
+        apply: 'Actualitza',
         downloadSubtitle: 'You can keep using the app while it downloads',
         availableTitle: 'Update available',
         availableMessage: ({ version }: { version: string }) => `Happy Next ${version} is available. Download it now?`,

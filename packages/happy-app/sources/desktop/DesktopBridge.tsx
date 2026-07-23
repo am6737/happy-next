@@ -13,9 +13,7 @@ import { subscribeToDesktopMessages } from './desktopEvents';
 import { subscribeToDesktopAuthentication } from './desktopAuthEvents';
 import { messagePreview, notificationId, sessionIdFromPath } from './desktopNotificationUtils';
 import {
-    checkForDesktopUpdate,
-    downloadDesktopUpdate,
-    installDesktopUpdateAndRelaunch,
+    prepareDesktopUpdate,
 } from './desktopUpdater';
 
 const DESKTOP_SHORTCUT = 'CommandOrControl+Shift+H';
@@ -39,8 +37,6 @@ export function DesktopBridge() {
     const notificationTimersRef = React.useRef(new Map<string, ReturnType<typeof setTimeout>>());
     const notificationPayloadRef = React.useRef(new Map<string, { title: string; body: string }>());
     const notificationSessionsRef = React.useRef(new Map<number, string>());
-    const promptedUpdateVersionRef = React.useRef<string | null>(null);
-
     React.useEffect(() => {
         if (!isTauriDesktop()) {
             return;
@@ -48,8 +44,8 @@ export function DesktopBridge() {
         let cancelled = false;
         let unlistenMenu: (() => void) | undefined;
 
-        const offerUpdate = async (interactive = false) => {
-            const result = await checkForDesktopUpdate();
+        const prepareUpdate = async (interactive = false) => {
+            const result = await prepareDesktopUpdate();
             if (interactive && result.phase === 'upToDate') {
                 Modal.alert(t('desktopUpdate.title'), t('desktopUpdate.upToDate'));
                 return;
@@ -60,56 +56,16 @@ export function DesktopBridge() {
             }
             if (interactive && result.phase === 'error') {
                 Modal.alert(t('desktopUpdate.failed'), t('desktopUpdate.tryAgain'));
-                return;
-            }
-            if (
-                cancelled
-                || result.phase !== 'available'
-                || !result.availableVersion
-                || (!interactive && promptedUpdateVersionRef.current === result.availableVersion)
-            ) {
-                return;
-            }
-            promptedUpdateVersionRef.current = result.availableVersion;
-            const download = await Modal.confirm(
-                t('desktopUpdate.availableTitle'),
-                t('desktopUpdate.availableMessage', { version: result.availableVersion }),
-                {
-                    confirmText: t('desktopUpdate.download'),
-                    cancelText: t('desktopUpdate.later'),
-                },
-            );
-            if (!download || cancelled) {
-                return;
-            }
-            const downloaded = await downloadDesktopUpdate();
-            if (downloaded.phase === 'error') {
-                Modal.alert(t('desktopUpdate.failed'), t('desktopUpdate.tryAgain'));
-                return;
-            }
-            if (downloaded.phase !== 'downloaded' || cancelled) {
-                return;
-            }
-            const restart = await Modal.confirm(
-                t('desktopUpdate.readyTitle'),
-                t('desktopUpdate.readyMessage'),
-                {
-                    confirmText: t('desktopUpdate.restartNow'),
-                    cancelText: t('desktopUpdate.restartLater'),
-                },
-            );
-            if (restart && !cancelled) {
-                await installDesktopUpdateAndRelaunch();
             }
         };
 
         const timer = setTimeout(() => {
-            void offerUpdate();
+            void prepareUpdate();
         }, 12_000);
 
         void listen<{ action: string }>('desktop-menu-action', ({ payload }) => {
             if (payload.action === 'softwareUpdate') {
-                void offerUpdate(true);
+                void prepareUpdate(true);
             }
         }).then((unlisten) => {
             if (cancelled) {
