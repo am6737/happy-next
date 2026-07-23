@@ -222,14 +222,14 @@ Use these status terms consistently:
 - macOS 12+ Universal `.app/.dmg`
 - Windows x64 MSI/NSIS
 
-Tag releases in `.github/workflows/release.yml` currently include Windows x64 desktop installers. The full signed/notarized macOS desktop release job is not yet present.
+Tag releases in `.github/workflows/release.yml` include Windows x64 installers and a macOS Universal job that imports a temporary Developer ID certificate, signs, notarizes, validates staples, runs Gatekeeper checks, and uploads DMG/zip artifacts. The job cannot be considered verified until the required Apple Secrets are configured and a real tag run succeeds. See `docs/desktop-release.md`.
 
 Before a public desktop release, complete all of the following:
 
 - synchronize the Git tag, Expo version, Cargo/Tauri version, installer metadata, and update metadata;
-- add macOS Universal release build, Developer ID signing, notarization, stapling, and Gatekeeper checks;
+- run and verify the macOS Universal Developer ID signing, notarization, stapling, and Gatekeeper job with approved Secrets;
 - upload macOS and Windows artifacts to the same GitHub Release without overwriting an existing release unexpectedly;
-- add Tauri updater support, public key configuration, signed update artifacts, and release metadata;
+- add Tauri updater client support and the approved public key; the release manifest generator is already prepared for signed artifacts;
 - test a real old-version-to-new-version update on both operating systems;
 - complete Windows x64 install/uninstall verification;
 - complete Apple Silicon verification and obtain Intel Mac coverage or explicitly mark it **未验证**.

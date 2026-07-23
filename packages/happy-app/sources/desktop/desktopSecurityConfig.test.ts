@@ -53,4 +53,20 @@ describe('desktop security configuration', () => {
         expect(permissions.some((permission) => permission.includes('fs:'))).toBe(false);
         expect(permissions).not.toContain('opener:allow-open-path');
     });
+
+    it('keeps credential-free desktop CI and guarded release automation in place', () => {
+        const desktopCi = readFileSync(resolve(process.cwd(), '../../.github/workflows/desktop-ci.yml'), 'utf8');
+        const release = readFileSync(resolve(process.cwd(), '../../.github/workflows/release.yml'), 'utf8');
+
+        expect(desktopCi).toContain('Build unsigned macOS Universal bundles');
+        expect(desktopCi).toContain('Build unsigned Windows x64 installers');
+        expect(desktopCi).toContain('yarn workspace happy-app test --run');
+        expect(release).toContain('build-desktop-macos');
+        expect(release).toContain('needs: [build-android, build-ios, build-desktop-macos, build-desktop-windows]');
+        expect(release).toContain('already exists; refusing to overwrite it');
+        expect(release).toContain("-name '*.sig'");
+        expect(release).toContain('generateDesktopUpdateManifest.cjs');
+        expect(release).not.toMatch(/\bset\s+-x\b/);
+        expect(release).not.toMatch(/echo\s+"\$APPLE_/);
+    });
 });

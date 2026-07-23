@@ -33,7 +33,8 @@
     "tauri:build:preview": "cross-env APP_ENV=preview tauri build --config src-tauri/tauri.preview.conf.json",
     "tauri:build:production": "cross-env APP_ENV=production tauri build",
     "tauri:build:macos:universal": "cross-env APP_ENV=production tauri build --target universal-apple-darwin --bundles app,dmg",
-    "tauri:build:windows:x64": "cross-env APP_ENV=production tauri build --target x86_64-pc-windows-msvc --bundles msi,nsis"
+    "tauri:build:windows:x64": "cross-env APP_ENV=production tauri build --target x86_64-pc-windows-msvc --bundles msi,nsis",
+    "desktop:updater:manifest": "node sources/scripts/generateDesktopUpdateManifest.cjs"
   },
   "jest": {
     "preset": "jest-expo"

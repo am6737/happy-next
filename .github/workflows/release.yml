@@ -154,8 +154,10 @@ jobs:
       - name: Build happy-wire
         run: yarn workspace happy-wire build
 
-      - name: Typecheck app
-        run: yarn workspace happy-app typecheck
+      - name: Typecheck and test app
+        run: |
+          yarn workspace happy-app typecheck
+          yarn workspace happy-app test --run
 
       - name: Build unsigned MSI and NSIS installers
         shell: pwsh
@@ -173,10 +175,142 @@ jobs:
             packages/happy-app/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
             packages/happy-app/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*-setup.exe
 
+  build-desktop-macos:
+    name: Build signed and notarized macOS Universal bundle
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: yarn
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/happy-app/src-tauri -> target
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Build happy-wire
+        run: yarn workspace happy-wire build
+
+      - name: Typecheck and test app
+        run: |
+          yarn workspace happy-app typecheck
+          yarn workspace happy-app test --run
+
+      - name: Validate macOS signing secrets
+        env:
+          APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_KEYCHAIN_PASSWORD: ${{ secrets.APPLE_KEYCHAIN_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          for name in \
+            APPLE_CERTIFICATE_BASE64 \
+            APPLE_CERTIFICATE_PASSWORD \
+            APPLE_KEYCHAIN_PASSWORD \
+            APPLE_SIGNING_IDENTITY \
+            APPLE_ID \
+            APPLE_PASSWORD \
+            APPLE_TEAM_ID; do
+            if [ -z "${!name}" ]; then
+              echo "Missing required secret: ${name}" >&2
+              exit 1
+            fi
+          done
+
+      - name: Import Developer ID certificate
+        env:
+          APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_KEYCHAIN_PASSWORD: ${{ secrets.APPLE_KEYCHAIN_PASSWORD }}
+        run: |
+          CERTIFICATE_PATH="$RUNNER_TEMP/developer-id.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/happy-next-signing.keychain-db"
+          printf '%s' "$APPLE_CERTIFICATE_BASE64" | base64 -D > "$CERTIFICATE_PATH"
+          security create-keychain -p "$APPLE_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$APPLE_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERTIFICATE_PATH" \
+            -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -A \
+            -t cert \
+            -f pkcs12 \
+            -k "$KEYCHAIN_PATH"
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s \
+            -k "$APPLE_KEYCHAIN_PASSWORD" \
+            "$KEYCHAIN_PATH"
+          security list-keychains -d user -s \
+            "$KEYCHAIN_PATH" \
+            "$HOME/Library/Keychains/login.keychain-db"
+
+      - name: Build, sign, and notarize macOS Universal bundle
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          export APP_VERSION="$version"
+          export TAURI_CONFIG="{\"version\":\"$version\"}"
+          yarn workspace happy-app tauri:build:macos:universal --ci
+
+      - name: Verify signature, notarization, stapling, and Gatekeeper
+        run: |
+          APP_PATH="$(find packages/happy-app/src-tauri/target/universal-apple-darwin/release/bundle/macos -maxdepth 1 -name '*.app' -print -quit)"
+          DMG_PATH="$(find packages/happy-app/src-tauri/target/universal-apple-darwin/release/bundle/dmg -maxdepth 1 -name '*.dmg' -print -quit)"
+          test -n "$APP_PATH" && test -n "$DMG_PATH"
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+          xcrun stapler validate "$APP_PATH"
+          xcrun stapler validate "$DMG_PATH"
+          spctl --assess --type execute --verbose=4 "$APP_PATH"
+          spctl --assess --type open --context context:primary-signature --verbose=4 "$DMG_PATH"
+
+      - name: Package macOS application archive
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          APP_PATH="$(find packages/happy-app/src-tauri/target/universal-apple-darwin/release/bundle/macos -maxdepth 1 -name '*.app' -print -quit)"
+          ditto -c -k --keepParent "$APP_PATH" \
+            "packages/happy-app/src-tauri/target/universal-apple-darwin/release/bundle/Happy-Next-${version}-macOS-universal.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-macos-universal
+          if-no-files-found: error
+          path: |
+            packages/happy-app/src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+            packages/happy-app/src-tauri/target/universal-apple-darwin/release/bundle/Happy-Next-*-macOS-universal.zip
+
+      - name: Remove temporary signing material
+        if: always()
+        env:
+          APPLE_KEYCHAIN_PASSWORD: ${{ secrets.APPLE_KEYCHAIN_PASSWORD }}
+        run: |
+          KEYCHAIN_PATH="$RUNNER_TEMP/happy-next-signing.keychain-db"
+          if [ -f "$KEYCHAIN_PATH" ]; then
+            security delete-keychain "$KEYCHAIN_PATH" || true
+          fi
+          rm -f "$RUNNER_TEMP/developer-id.p12"
+
   create-release:
     name: Create GitHub Release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [build-android, build-ios, build-desktop-windows]
+    needs: [build-android, build-ios, build-desktop-macos, build-desktop-windows]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -192,6 +326,23 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          if gh release view "${{ github.ref_name }}" >/dev/null 2>&1; then
+            echo "GitHub Release ${{ github.ref_name }} already exists; refusing to overwrite it." >&2
+            exit 1
+          fi
+          if find artifacts -maxdepth 1 -type f -name '*.sig' -print -quit | grep -q .; then
+            node packages/happy-app/sources/scripts/generateDesktopUpdateManifest.cjs \
+              --version "${{ github.ref_name }}" \
+              --repository "$GITHUB_REPOSITORY" \
+              --artifacts artifacts \
+              --output artifacts/latest.json
+          fi
+          (
+            cd artifacts
+            find . -maxdepth 1 -type f ! -name SHA256SUMS.txt -print0 \
+              | sort -z \
+              | xargs -0 sha256sum > SHA256SUMS.txt
+          )
           gh release create "${{ github.ref_name }}" \
             --title "Release ${{ github.ref_name }}" \
             --generate-notes \

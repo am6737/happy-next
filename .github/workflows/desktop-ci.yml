@@ -8,6 +8,7 @@ on:
       - 'packages/happy-wire/**'
       - 'yarn.lock'
       - '.github/workflows/desktop-ci.yml'
+      - '.github/workflows/release.yml'
   push:
     branches:
       - main
@@ -16,6 +17,7 @@ on:
       - 'packages/happy-wire/**'
       - 'yarn.lock'
       - '.github/workflows/desktop-ci.yml'
+      - '.github/workflows/release.yml'
 
 concurrency:
   group: desktop-ci-${{ github.ref }}
@@ -54,6 +56,9 @@ jobs:
 
       - name: Typecheck app
         run: yarn workspace happy-app typecheck
+
+      - name: Test app
+        run: yarn workspace happy-app test --run
 
       - name: Build unsigned macOS Universal bundles
         run: yarn workspace happy-app tauri:build:macos:universal --ci --no-sign
@@ -99,6 +104,9 @@ jobs:
 
       - name: Typecheck app
         run: yarn workspace happy-app typecheck
+
+      - name: Test app
+        run: yarn workspace happy-app test --run
 
       - name: Build unsigned Windows x64 installers
         run: yarn workspace happy-app tauri:build:windows:x64 --ci --no-sign
