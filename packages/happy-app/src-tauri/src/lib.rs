@@ -8,13 +8,11 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
-#[cfg(not(target_os = "macos"))]
-use tauri::Emitter;
 use tauri::{
-    menu::{Menu, MenuItem, PredefinedMenuItem},
+    menu::{Menu, MenuItem, PredefinedMenuItem, Submenu},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     window::{Color, Monitor},
-    AppHandle, LogicalSize, Manager, PhysicalPosition, Runtime, State, Theme, Window,
+    AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, Runtime, State, Theme, Window,
 };
 
 const TRAY_ID: &str = "main-tray";
@@ -22,6 +20,16 @@ const TRAY_SHOW_ID: &str = "tray-show";
 const TRAY_HIDE_ID: &str = "tray-hide";
 const TRAY_UNREAD_ID: &str = "tray-unread";
 const TRAY_QUIT_ID: &str = "tray-quit";
+const MENU_NEW_SESSION_ID: &str = "menu-new-session";
+const MENU_SEARCH_ID: &str = "menu-search";
+const MENU_FIND_ID: &str = "menu-find";
+const MENU_SESSIONS_ID: &str = "menu-sessions";
+const MENU_INBOX_ID: &str = "menu-inbox";
+const MENU_DOOTASK_ID: &str = "menu-dootask";
+const MENU_SETTINGS_ID: &str = "menu-settings";
+const MENU_BACK_ID: &str = "menu-back";
+const MENU_FORWARD_ID: &str = "menu-forward";
+const DESKTOP_MENU_ACTION_EVENT: &str = "desktop-menu-action";
 const UNAUTHENTICATED_WINDOW_WIDTH: f64 = 800.0;
 const UNAUTHENTICATED_WINDOW_HEIGHT: f64 = 600.0;
 const AUTHENTICATED_WINDOW_WIDTH: f64 = 1440.0;
@@ -49,6 +57,12 @@ const DESKTOP_NOTIFICATION_CLICKED_EVENT: &str = "desktop-notification-clicked";
 #[serde(rename_all = "camelCase")]
 struct DesktopNotificationClicked {
     session_id: String,
+}
+
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DesktopMenuAction {
+    action: &'static str,
 }
 
 #[derive(Clone, Copy, Debug, Default, serde::Deserialize, serde::Serialize, PartialEq, Eq)]
@@ -302,6 +316,176 @@ fn apply_desktop_unread_count<R: Runtime>(app: &AppHandle<R>, state: &DesktopSta
             let _ = item.set_text(text);
         }
     }
+}
+
+fn build_application_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
+    let new_session = MenuItem::with_id(
+        app,
+        MENU_NEW_SESSION_ID,
+        "New Session",
+        true,
+        Some("CmdOrCtrl+N"),
+    )?;
+    let search = MenuItem::with_id(app, MENU_SEARCH_ID, "Search…", true, Some("CmdOrCtrl+K"))?;
+    let find = MenuItem::with_id(app, MENU_FIND_ID, "Find…", true, Some("CmdOrCtrl+F"))?;
+    let sessions = MenuItem::with_id(app, MENU_SESSIONS_ID, "Sessions", true, Some("CmdOrCtrl+1"))?;
+    let inbox = MenuItem::with_id(app, MENU_INBOX_ID, "Inbox", true, Some("CmdOrCtrl+2"))?;
+    let dootask = MenuItem::with_id(app, MENU_DOOTASK_ID, "DooTask", true, Some("CmdOrCtrl+3"))?;
+    #[cfg(not(target_os = "macos"))]
+    let settings = MenuItem::with_id(
+        app,
+        MENU_SETTINGS_ID,
+        "Settings…",
+        true,
+        Some("CmdOrCtrl+,"),
+    )?;
+    #[cfg(target_os = "macos")]
+    let back_accelerator = "CmdOrCtrl+[";
+    #[cfg(not(target_os = "macos"))]
+    let back_accelerator = "Alt+Left";
+    let back = MenuItem::with_id(app, MENU_BACK_ID, "Back", true, Some(back_accelerator))?;
+    #[cfg(target_os = "macos")]
+    let forward_accelerator = "CmdOrCtrl+]";
+    #[cfg(not(target_os = "macos"))]
+    let forward_accelerator = "Alt+Right";
+    let forward = MenuItem::with_id(
+        app,
+        MENU_FORWARD_ID,
+        "Forward",
+        true,
+        Some(forward_accelerator),
+    )?;
+
+    let file_menu = Submenu::with_items(
+        app,
+        "File",
+        true,
+        &[
+            &new_session,
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::close_window(app, None)?,
+            #[cfg(not(target_os = "macos"))]
+            &PredefinedMenuItem::quit(app, None)?,
+        ],
+    )?;
+    let edit_menu = Submenu::with_items(
+        app,
+        "Edit",
+        true,
+        &[
+            &PredefinedMenuItem::undo(app, None)?,
+            &PredefinedMenuItem::redo(app, None)?,
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::cut(app, None)?,
+            &PredefinedMenuItem::copy(app, None)?,
+            &PredefinedMenuItem::paste(app, None)?,
+            &PredefinedMenuItem::select_all(app, None)?,
+        ],
+    )?;
+    let navigate_menu = Submenu::with_items(
+        app,
+        "Navigate",
+        true,
+        &[
+            &search,
+            &find,
+            &PredefinedMenuItem::separator(app)?,
+            &sessions,
+            &inbox,
+            &dootask,
+            #[cfg(not(target_os = "macos"))]
+            &settings,
+            &PredefinedMenuItem::separator(app)?,
+            &back,
+            &forward,
+        ],
+    )?;
+    let window_menu = Submenu::with_items(
+        app,
+        "Window",
+        true,
+        &[
+            &PredefinedMenuItem::minimize(app, None)?,
+            &PredefinedMenuItem::maximize(app, None)?,
+            #[cfg(target_os = "macos")]
+            &PredefinedMenuItem::fullscreen(app, None)?,
+        ],
+    )?;
+
+    #[cfg(target_os = "macos")]
+    {
+        let app_settings = MenuItem::with_id(
+            app,
+            MENU_SETTINGS_ID,
+            "Settings…",
+            true,
+            Some("CmdOrCtrl+,"),
+        )?;
+        let app_menu = Submenu::with_items(
+            app,
+            "Happy Next",
+            true,
+            &[
+                &PredefinedMenuItem::about(app, None, None)?,
+                &PredefinedMenuItem::separator(app)?,
+                &app_settings,
+                &PredefinedMenuItem::separator(app)?,
+                &PredefinedMenuItem::services(app, None)?,
+                &PredefinedMenuItem::separator(app)?,
+                &PredefinedMenuItem::hide(app, None)?,
+                &PredefinedMenuItem::hide_others(app, None)?,
+                &PredefinedMenuItem::show_all(app, None)?,
+                &PredefinedMenuItem::separator(app)?,
+                &PredefinedMenuItem::quit(app, None)?,
+            ],
+        )?;
+        Menu::with_items(
+            app,
+            &[
+                &app_menu,
+                &file_menu,
+                &edit_menu,
+                &navigate_menu,
+                &window_menu,
+            ],
+        )
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let help_menu = Submenu::with_items(
+            app,
+            "Help",
+            true,
+            &[&PredefinedMenuItem::about(app, None, None)?],
+        )?;
+        Menu::with_items(
+            app,
+            &[
+                &file_menu,
+                &edit_menu,
+                &navigate_menu,
+                &window_menu,
+                &help_menu,
+            ],
+        )
+    }
+}
+
+fn handle_application_menu_event(app: &AppHandle, id: &str) {
+    let action = match id {
+        MENU_NEW_SESSION_ID => "newSession",
+        MENU_SEARCH_ID | MENU_FIND_ID => "search",
+        MENU_SESSIONS_ID => "sessions",
+        MENU_INBOX_ID => "inbox",
+        MENU_DOOTASK_ID => "dootask",
+        MENU_SETTINGS_ID => "settings",
+        MENU_BACK_ID => "back",
+        MENU_FORWARD_ID => "forward",
+        _ => return,
+    };
+    show_main_window(app);
+    let _ = app.emit(DESKTOP_MENU_ACTION_EVENT, DesktopMenuAction { action });
 }
 
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {
@@ -876,7 +1060,10 @@ pub fn run() {
                 .build(),
         )
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
-        .menu(Menu::default)
+        .menu(build_application_menu)
+        .on_menu_event(|app, event| {
+            handle_application_menu_event(app, event.id().as_ref());
+        })
         .invoke_handler(tauri::generate_handler![
             set_close_to_tray,
             sync_desktop_bootstrap_state,

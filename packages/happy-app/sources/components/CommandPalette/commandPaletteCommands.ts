@@ -1,4 +1,6 @@
 import type { Machine, Session, SessionDraft } from '@/sync/storageTypes';
+import { desktopKeyboardShortcutLabel } from '@/desktop/desktopKeyboardShortcuts';
+import type { DesktopPlatform } from '@/desktop/desktopWindowUtils';
 import { t } from '@/text';
 import { isMachineOnline } from '@/utils/machineUtils';
 import type { Command } from './types';
@@ -11,6 +13,7 @@ type CommandPaletteCommandOptions = {
     dootaskConnected: boolean;
     experimentsEnabled: boolean;
     developerEnabled: boolean;
+    desktopPlatform: DesktopPlatform | null;
     navigate: (path: string) => void;
     navigateToSession: (sessionId: string) => void;
     logout: () => Promise<void>;
@@ -93,6 +96,9 @@ export function buildCommandPaletteCommands(options: CommandPaletteCommandOption
     const quickCategory = t('commandPalette.categoryQuickActions');
     const navigationCategory = t('commandPalette.categoryNavigation');
     const settingsCategory = t('settings.title');
+    const shortcut = (action: Parameters<typeof desktopKeyboardShortcutLabel>[0]) => (
+        options.desktopPlatform ? desktopKeyboardShortcutLabel(action, options.desktopPlatform) : undefined
+    );
 
     commands.push(
         routeCommand(options, {
@@ -100,7 +106,7 @@ export function buildCommandPaletteCommands(options: CommandPaletteCommandOption
             title: t('newSession.title'),
             subtitle: t('sessionInfo.newSessionSubtitle'),
             icon: 'add-circle-outline',
-            shortcut: '⌘N',
+            shortcut: shortcut('newSession'),
             category: quickCategory,
             categoryOrder: CATEGORY_ORDER.quick,
             priority: 1000,
@@ -112,7 +118,7 @@ export function buildCommandPaletteCommands(options: CommandPaletteCommandOption
             title: t('tabs.sessions'),
             subtitle: t('commandPalette.sessionsSubtitle'),
             icon: 'chatbubbles-outline',
-            shortcut: '⌘1',
+            shortcut: shortcut('sessions'),
             category: quickCategory,
             categoryOrder: CATEGORY_ORDER.quick,
             priority: 950,
@@ -124,7 +130,7 @@ export function buildCommandPaletteCommands(options: CommandPaletteCommandOption
             title: t('tabs.inbox'),
             subtitle: t('commandPalette.inboxSubtitle'),
             icon: 'mail-outline',
-            shortcut: '⌘2',
+            shortcut: shortcut('inbox'),
             category: quickCategory,
             categoryOrder: CATEGORY_ORDER.quick,
             priority: 900,
@@ -140,7 +146,7 @@ export function buildCommandPaletteCommands(options: CommandPaletteCommandOption
                 title: t('tabs.dootask'),
                 subtitle: t('commandPalette.dootaskSubtitle'),
                 icon: 'checkbox-outline',
-                shortcut: '⌘3',
+                shortcut: shortcut('dootask'),
                 category: quickCategory,
                 categoryOrder: CATEGORY_ORDER.quick,
                 priority: 850,
@@ -283,7 +289,7 @@ export function buildCommandPaletteCommands(options: CommandPaletteCommandOption
     })));
 
     const settingsCommands: Array<Omit<Command, 'action'> & { path: string }> = [
-        { id: 'settings', title: t('settings.title'), icon: 'settings-outline', shortcut: '⌘,', path: '/settings', priority: 1000 },
+        { id: 'settings', title: t('settings.title'), icon: 'settings-outline', shortcut: shortcut('settings'), path: '/settings', priority: 1000 },
         { id: 'settings-account', title: t('settings.account'), subtitle: t('settings.accountSubtitle'), icon: 'person-circle-outline', path: '/settings/account', priority: 900 },
         { id: 'settings-appearance', title: t('settings.appearance'), subtitle: t('settings.appearanceSubtitle'), icon: 'color-palette-outline', path: '/settings/appearance', priority: 850 },
         { id: 'settings-voice', title: t('settings.voiceAssistant'), subtitle: t('settings.voiceAssistantSubtitle'), icon: 'mic-outline', path: '/settings/voice', priority: 800 },

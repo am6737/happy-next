@@ -13,6 +13,7 @@ import { OPEN_COMMAND_PALETTE_EVENT } from './events';
 import { useModal } from '@/modal';
 import { buildCommandPaletteCommands } from './commandPaletteCommands';
 import { t } from '@/text';
+import { getDesktopPlatform } from '@/desktop/desktopWindowUtils';
 
 function sessionIdFromPath(pathname: string): string | null {
     const match = pathname.match(/^\/session\/([^/]+)/);
@@ -52,6 +53,7 @@ export function CommandPaletteProvider({ children }: { children: React.ReactNode
 
     const commands = useMemo(() => buildCommandPaletteCommands({
         ...commandState,
+        desktopPlatform: getDesktopPlatform(),
         currentSessionId: sessionIdFromPath(pathname),
         navigate: (path) => router.push(path as any),
         navigateToSession,

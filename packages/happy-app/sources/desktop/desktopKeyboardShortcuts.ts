@@ -10,6 +10,32 @@ export type DesktopKeyboardShortcutAction =
     | 'back'
     | 'forward';
 
+export function desktopKeyboardShortcutLabel(
+    action: DesktopKeyboardShortcutAction,
+    platform: DesktopPlatform,
+): string {
+    const primary = platform === 'macos' ? '⌘' : 'Ctrl+';
+
+    switch (action) {
+        case 'search':
+            return `${primary}K`;
+        case 'newSession':
+            return `${primary}N`;
+        case 'sessions':
+            return `${primary}1`;
+        case 'inbox':
+            return `${primary}2`;
+        case 'dootask':
+            return `${primary}3`;
+        case 'settings':
+            return `${primary},`;
+        case 'back':
+            return platform === 'macos' ? '⌘[' : 'Alt+Left';
+        case 'forward':
+            return platform === 'macos' ? '⌘]' : 'Alt+Right';
+    }
+}
+
 type ShortcutEvent = Pick<KeyboardEvent, 'key' | 'metaKey' | 'ctrlKey' | 'altKey'>;
 
 export function desktopKeyboardShortcutAction(

@@ -82,4 +82,41 @@ export function useGlobalKeyboard(handlers: KeyboardShortcutHandlers) {
         window.addEventListener('keydown', handleKeyDown, { capture: true });
         return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
     }, [handlers]);
+
+    useEffect(() => {
+        if (!isTauriDesktop()) {
+            return;
+        }
+
+        let unlisten: (() => void) | undefined;
+        let cancelled = false;
+        void import('@tauri-apps/api/event').then(async ({ listen }) => {
+            const dispose = await listen<{ action: DesktopKeyboardShortcutAction }>('desktop-menu-action', ({ payload }) => {
+                if (!handlers.enabled) {
+                    return;
+                }
+                const actions: Record<DesktopKeyboardShortcutAction, () => void> = {
+                    search: handlers.onSearch,
+                    newSession: handlers.onNewSession,
+                    settings: handlers.onSettings,
+                    sessions: handlers.onSessions,
+                    inbox: handlers.onInbox,
+                    dootask: handlers.onDootask,
+                    back: handlers.onBack,
+                    forward: handlers.onForward,
+                };
+                actions[payload.action]?.();
+            });
+            if (cancelled) {
+                dispose();
+            } else {
+                unlisten = dispose;
+            }
+        }).catch((error) => console.warn('Failed to register desktop menu listener:', error));
+
+        return () => {
+            cancelled = true;
+            unlisten?.();
+        };
+    }, [handlers]);
 }

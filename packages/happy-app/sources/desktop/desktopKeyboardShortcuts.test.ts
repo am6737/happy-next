@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { desktopKeyboardShortcutAction } from './desktopKeyboardShortcuts';
+import { desktopKeyboardShortcutAction, desktopKeyboardShortcutLabel } from './desktopKeyboardShortcuts';
 
 const event = (key: string, modifiers: Partial<KeyboardEvent> = {}) => ({
     key,
@@ -34,5 +34,14 @@ describe('desktopKeyboardShortcutAction', () => {
     it('does not accept the wrong primary modifier', () => {
         expect(desktopKeyboardShortcutAction(event('k', { ctrlKey: true }), 'macos')).toBeNull();
         expect(desktopKeyboardShortcutAction(event('k', { metaKey: true }), 'windows')).toBeNull();
+    });
+});
+
+describe('desktopKeyboardShortcutLabel', () => {
+    it('uses native-looking labels for each desktop platform', () => {
+        expect(desktopKeyboardShortcutLabel('search', 'macos')).toBe('⌘K');
+        expect(desktopKeyboardShortcutLabel('settings', 'macos')).toBe('⌘,');
+        expect(desktopKeyboardShortcutLabel('newSession', 'windows')).toBe('Ctrl+N');
+        expect(desktopKeyboardShortcutLabel('back', 'windows')).toBe('Alt+Left');
     });
 });

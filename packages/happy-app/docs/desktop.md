@@ -104,6 +104,8 @@ Application shortcuts currently include:
 | Back | `Cmd+[` | `Alt+Left` |
 | Forward | `Cmd+]` | `Alt+Right` |
 
+The native application menu exposes New Session, Search/Find, primary navigation, Settings, Back/Forward, standard Edit commands, and standard Window commands. Command-palette shortcut labels follow the current desktop platform instead of always showing macOS glyphs.
+
 ### Permissions and links
 
 - External HTTP/HTTPS links open in the system browser.

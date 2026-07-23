@@ -45,6 +45,7 @@ function build(overrides: Partial<Parameters<typeof buildCommandPaletteCommands>
         dootaskConnected: false,
         experimentsEnabled: false,
         developerEnabled: false,
+        desktopPlatform: null,
         navigate: vi.fn(),
         navigateToSession: vi.fn(),
         logout: vi.fn(),
@@ -88,6 +89,15 @@ describe('command palette command registry', () => {
             'settings-usage',
             'dev-menu',
         ]));
+    });
+
+    it('shows platform-appropriate desktop shortcut labels', () => {
+        const macCommands = build({ desktopPlatform: 'macos' });
+        const windowsCommands = build({ desktopPlatform: 'windows' });
+
+        expect(macCommands.find((item) => item.id === 'new-session')?.shortcut).toBe('⌘N');
+        expect(windowsCommands.find((item) => item.id === 'new-session')?.shortcut).toBe('Ctrl+N');
+        expect(windowsCommands.find((item) => item.id === 'settings')?.shortcut).toBe('Ctrl+,');
     });
 
     it('adds contextual actions for the current session and its machine', () => {
