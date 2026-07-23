@@ -10,13 +10,17 @@ import { storage } from '@/sync/storage';
 import { useShallow } from 'zustand/react/shallow';
 import { useNavigateToSession } from '@/hooks/useNavigateToSession';
 import { OPEN_COMMAND_PALETTE_EVENT } from './events';
+import { isTauriDesktop } from '@/utils/tauri';
+import { useModal } from '@/modal';
 
 export function CommandPaletteProvider({ children }: { children: React.ReactNode }) {
     const router = useRouter();
-    const { logout } = useAuth();
+    const { logout, isAuthenticated } = useAuth();
     const sessions = storage(useShallow((state) => state.sessions));
     const commandPaletteEnabled = storage(useShallow((state) => state.localSettings.commandPaletteEnabled));
     const navigateToSession = useNavigateToSession();
+    const { state: modalState, hideModal } = useModal();
+    const currentModal = modalState.modals[modalState.modals.length - 1];
 
     // Define available commands
     const commands = useMemo((): Command[] => {
@@ -136,7 +140,7 @@ export function CommandPaletteProvider({ children }: { children: React.ReactNode
     }, [commands]);
 
     const showCommandPalette = useCallback(() => {
-        if (!commandPaletteEnabled) return;
+        if (!isTauriDesktop() && !commandPaletteEnabled) return;
         openCommandPalette();
     }, [commandPaletteEnabled, openCommandPalette]);
 
@@ -146,8 +150,31 @@ export function CommandPaletteProvider({ children }: { children: React.ReactNode
         return () => window.removeEventListener(OPEN_COMMAND_PALETTE_EVENT, openCommandPalette);
     }, [openCommandPalette]);
 
-    // Set up global keyboard handler only if feature is enabled
-    useGlobalKeyboard(commandPaletteEnabled ? showCommandPalette : () => {});
+    const closeTopModal = useCallback(() => {
+        if (!currentModal) return;
+        if (currentModal.type === 'confirm') {
+            Modal.resolveConfirm(currentModal.id, false);
+        } else if (currentModal.type === 'prompt') {
+            Modal.resolvePrompt(currentModal.id, null);
+        }
+        hideModal(currentModal.id);
+    }, [currentModal, hideModal]);
+
+    const shortcutHandlers = useMemo(() => ({
+        enabled: isAuthenticated,
+        enableBrowserSearch: commandPaletteEnabled,
+        onSearch: showCommandPalette,
+        onNewSession: () => router.push('/new'),
+        onSettings: () => router.navigate('/settings'),
+        onSessions: () => router.navigate('/'),
+        onInbox: () => router.navigate('/(app)/inbox'),
+        onDootask: () => router.navigate('/(app)/dootask'),
+        onBack: () => window.history.back(),
+        onForward: () => window.history.forward(),
+        onEscape: currentModal ? closeTopModal : undefined,
+    }), [commandPaletteEnabled, currentModal, closeTopModal, isAuthenticated, router, showCommandPalette]);
+
+    useGlobalKeyboard(shortcutHandlers);
 
     return <>{children}</>;
 }

@@ -1,15 +1,21 @@
-use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    Mutex,
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    sync::{
+        atomic::{AtomicBool, AtomicU64, Ordering},
+        Arc, Mutex,
+    },
+    thread,
+    time::{Duration, Instant},
 };
 #[cfg(not(target_os = "macos"))]
 use tauri::Emitter;
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, LogicalSize, Manager, PhysicalPosition, Runtime, State, Window,
+    window::{Color, Monitor},
+    AppHandle, LogicalSize, Manager, PhysicalPosition, Runtime, State, Theme, Window,
 };
-use tauri_plugin_window_state::AppHandleExt;
 
 const TRAY_ID: &str = "main-tray";
 const TRAY_SHOW_ID: &str = "tray-show";
@@ -22,6 +28,19 @@ const AUTHENTICATED_WINDOW_WIDTH: f64 = 1440.0;
 const AUTHENTICATED_WINDOW_HEIGHT: f64 = 900.0;
 const AUTHENTICATED_MINIMUM_WIDTH: f64 = 1100.0;
 const AUTHENTICATED_MINIMUM_HEIGHT: f64 = 700.0;
+const WINDOW_EDGE_MARGIN: i32 = 8;
+const BOOTSTRAP_CACHE_FILE: &str = "desktop-bootstrap.json";
+const BOOTSTRAP_CACHE_VERSION: u32 = 1;
+const LIGHT_BACKGROUND_RGB: (u8, u8, u8) = (245, 245, 245);
+const DARK_BACKGROUND_RGB: (u8, u8, u8) = (30, 30, 30);
+#[cfg(target_os = "macos")]
+const AUTHENTICATED_TRAFFIC_LIGHT_Y: f64 = 26.0;
+#[cfg(target_os = "macos")]
+const UNAUTHENTICATED_TRAFFIC_LIGHT_Y: f64 = 30.0;
+#[cfg(target_os = "macos")]
+const AUTHENTICATED_TRAFFIC_LIGHT_X: f64 = 16.0;
+#[cfg(target_os = "macos")]
+const UNAUTHENTICATED_TRAFFIC_LIGHT_X: f64 = 20.0;
 #[cfg(not(target_os = "macos"))]
 const DESKTOP_NOTIFICATION_CLICKED_EVENT: &str = "desktop-notification-clicked";
 
@@ -32,9 +51,62 @@ struct DesktopNotificationClicked {
     session_id: String,
 }
 
+#[derive(Clone, Copy, Debug, Default, serde::Deserialize, serde::Serialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+enum DesktopThemePreference {
+    Light,
+    Dark,
+    #[default]
+    Adaptive,
+}
+
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+struct AuthenticatedWindowState {
+    x: i32,
+    y: i32,
+    width: f64,
+    height: f64,
+    #[serde(default)]
+    maximized: bool,
+}
+
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+struct DesktopBootstrapState {
+    #[serde(default = "bootstrap_cache_version")]
+    version: u32,
+    #[serde(default)]
+    last_authenticated: bool,
+    #[serde(default)]
+    theme_preference: DesktopThemePreference,
+    #[serde(default)]
+    window: Option<AuthenticatedWindowState>,
+}
+
+const fn bootstrap_cache_version() -> u32 {
+    BOOTSTRAP_CACHE_VERSION
+}
+
+impl Default for DesktopBootstrapState {
+    fn default() -> Self {
+        Self {
+            version: BOOTSTRAP_CACHE_VERSION,
+            last_authenticated: false,
+            theme_preference: DesktopThemePreference::Adaptive,
+            window: None,
+        }
+    }
+}
+
 struct DesktopState {
     close_to_tray: AtomicBool,
     explicit_quit: AtomicBool,
+    authenticated: AtomicBool,
+    bootstrap: Mutex<DesktopBootstrapState>,
+    bootstrap_path: Mutex<Option<PathBuf>>,
+    save_generation: Arc<AtomicU64>,
+    ignore_window_events_until: Mutex<Option<Instant>>,
     unread_item: Mutex<Option<MenuItem<tauri::Wry>>>,
 }
 
@@ -43,6 +115,11 @@ impl Default for DesktopState {
         Self {
             close_to_tray: AtomicBool::new(true),
             explicit_quit: AtomicBool::new(false),
+            authenticated: AtomicBool::new(false),
+            bootstrap: Mutex::new(DesktopBootstrapState::default()),
+            bootstrap_path: Mutex::new(None),
+            save_generation: Arc::new(AtomicU64::new(0)),
+            ignore_window_events_until: Mutex::new(None),
             unread_item: Mutex::new(None),
         }
     }
@@ -176,17 +253,16 @@ async fn show_desktop_notification(
 }
 
 #[tauri::command]
-fn desktop_should_start_hidden() -> bool {
-    should_start_hidden()
-}
-
-#[tauri::command]
 fn toggle_desktop_window(app: AppHandle) {
     toggle_main_window(&app);
 }
 
 #[tauri::command]
 fn set_desktop_unread_count(app: AppHandle, state: State<'_, DesktopState>, count: u32) {
+    apply_desktop_unread_count(&app, &state, count);
+}
+
+fn apply_desktop_unread_count<R: Runtime>(app: &AppHandle<R>, state: &DesktopState, count: u32) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.set_badge_count((count > 0).then_some(count as i64));
 
@@ -284,66 +360,489 @@ fn should_start_hidden() -> bool {
     std::env::args().any(|arg| arg == "--hidden")
 }
 
-fn window_state_flags() -> tauri_plugin_window_state::StateFlags {
-    tauri_plugin_window_state::StateFlags::SIZE
-        | tauri_plugin_window_state::StateFlags::POSITION
-        | tauri_plugin_window_state::StateFlags::MAXIMIZED
+fn read_bootstrap_state(path: &Path) -> DesktopBootstrapState {
+    let Ok(contents) = fs::read(path) else {
+        return DesktopBootstrapState::default();
+    };
+    let Ok(mut state) = serde_json::from_slice::<DesktopBootstrapState>(&contents) else {
+        return DesktopBootstrapState::default();
+    };
+    if state.version != BOOTSTRAP_CACHE_VERSION {
+        return DesktopBootstrapState::default();
+    }
+    if let Some(window) = state.window.as_ref() {
+        if !window.width.is_finite()
+            || !window.height.is_finite()
+            || window.width <= 0.0
+            || window.height <= 0.0
+        {
+            state.window = None;
+        }
+    }
+    state
+}
+
+fn write_bootstrap_state(path: &Path, state: &DesktopBootstrapState) -> std::io::Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let contents = serde_json::to_vec_pretty(state).map_err(std::io::Error::other)?;
+    let temporary_path = path.with_extension("json.tmp");
+    fs::write(&temporary_path, contents)?;
+    #[cfg(target_os = "windows")]
+    if path.exists() {
+        fs::remove_file(path)?;
+    }
+    fs::rename(temporary_path, path)
+}
+
+fn persist_bootstrap_state(state: &DesktopState) {
+    let path = state
+        .bootstrap_path
+        .lock()
+        .ok()
+        .and_then(|path| path.clone());
+    let snapshot = state.bootstrap.lock().ok().map(|state| state.clone());
+    if let (Some(path), Some(snapshot)) = (path, snapshot) {
+        let _ = write_bootstrap_state(&path, &snapshot);
+    }
+}
+
+fn schedule_bootstrap_save(state: &DesktopState) {
+    let path = state
+        .bootstrap_path
+        .lock()
+        .ok()
+        .and_then(|path| path.clone());
+    let snapshot = state.bootstrap.lock().ok().map(|state| state.clone());
+    let generation = state.save_generation.fetch_add(1, Ordering::SeqCst) + 1;
+    let save_generation = Arc::clone(&state.save_generation);
+    if let (Some(path), Some(snapshot)) = (path, snapshot) {
+        thread::spawn(move || {
+            thread::sleep(Duration::from_millis(350));
+            if save_generation.load(Ordering::SeqCst) == generation {
+                let _ = write_bootstrap_state(&path, &snapshot);
+            }
+        });
+    }
+}
+
+fn rectangles_intersection_area(left: (i64, i64, i64, i64), right: (i64, i64, i64, i64)) -> i64 {
+    let width = (left.2.min(right.2) - left.0.max(right.0)).max(0);
+    let height = (left.3.min(right.3) - left.1.max(right.1)).max(0);
+    width * height
+}
+
+fn monitor_rect(monitor: &Monitor) -> (i64, i64, i64, i64) {
+    let area = monitor.work_area();
+    let x = i64::from(area.position.x);
+    let y = i64::from(area.position.y);
+    (
+        x,
+        y,
+        x + i64::from(area.size.width),
+        y + i64::from(area.size.height),
+    )
+}
+
+fn choose_restore_monitor<'a>(
+    monitors: &'a [Monitor],
+    saved: &AuthenticatedWindowState,
+) -> Option<&'a Monitor> {
+    monitors
+        .iter()
+        .map(|monitor| {
+            let scale = monitor.scale_factor();
+            let saved_width = (saved.width * scale).round().max(1.0) as i64;
+            let saved_height = (saved.height * scale).round().max(1.0) as i64;
+            let area = rectangles_intersection_area(
+                (
+                    i64::from(saved.x),
+                    i64::from(saved.y),
+                    i64::from(saved.x) + saved_width,
+                    i64::from(saved.y) + saved_height,
+                ),
+                monitor_rect(monitor),
+            );
+            (monitor, area)
+        })
+        .max_by_key(|(_, area)| *area)
+        .and_then(|(monitor, area)| (area > 0).then_some(monitor))
+}
+
+fn clamp_window_to_monitor(
+    saved: Option<&AuthenticatedWindowState>,
+    monitor: &Monitor,
+    default_width: f64,
+    default_height: f64,
+    minimum_width: f64,
+    minimum_height: f64,
+) -> AuthenticatedWindowState {
+    let scale = monitor.scale_factor();
+    let area = monitor.work_area();
+    let available_width =
+        (f64::from(area.size.width) / scale - f64::from(WINDOW_EDGE_MARGIN * 2) / scale).max(1.0);
+    let available_height =
+        (f64::from(area.size.height) / scale - f64::from(WINDOW_EDGE_MARGIN * 2) / scale).max(1.0);
+    let width = saved
+        .map(|window| window.width)
+        .unwrap_or(default_width)
+        .clamp(minimum_width.min(available_width), available_width);
+    let height = saved
+        .map(|window| window.height)
+        .unwrap_or(default_height)
+        .clamp(minimum_height.min(available_height), available_height);
+    let physical_width = (width * scale).round() as i64;
+    let physical_height = (height * scale).round() as i64;
+    let area_left = i64::from(area.position.x) + i64::from(WINDOW_EDGE_MARGIN);
+    let area_top = i64::from(area.position.y) + i64::from(WINDOW_EDGE_MARGIN);
+    let area_right =
+        i64::from(area.position.x) + i64::from(area.size.width) - i64::from(WINDOW_EDGE_MARGIN);
+    let area_bottom =
+        i64::from(area.position.y) + i64::from(area.size.height) - i64::from(WINDOW_EDGE_MARGIN);
+
+    let (x, y) = if let Some(saved) = saved {
+        (
+            i64::from(saved.x).clamp(area_left, (area_right - physical_width).max(area_left)),
+            i64::from(saved.y).clamp(area_top, (area_bottom - physical_height).max(area_top)),
+        )
+    } else {
+        (
+            area_left + (area_right - area_left - physical_width).max(0) / 2,
+            area_top + (area_bottom - area_top - physical_height).max(0) / 2,
+        )
+    };
+
+    AuthenticatedWindowState {
+        x: x as i32,
+        y: y as i32,
+        width,
+        height,
+        maximized: saved.is_some_and(|window| window.maximized),
+    }
+}
+
+fn resolve_dark_background(
+    window: &tauri::WebviewWindow,
+    preference: DesktopThemePreference,
+) -> bool {
+    match preference {
+        DesktopThemePreference::Light => false,
+        DesktopThemePreference::Dark => true,
+        DesktopThemePreference::Adaptive => window.theme().is_ok_and(|theme| theme == Theme::Dark),
+    }
+}
+
+fn set_desktop_background(window: &tauri::WebviewWindow, preference: DesktopThemePreference) {
+    let dark = resolve_dark_background(window, preference);
+    let (red, green, blue) = if dark {
+        DARK_BACKGROUND_RGB
+    } else {
+        LIGHT_BACKGROUND_RGB
+    };
+    let color = Color(red, green, blue, 255);
+    let _ = window.set_background_color(Some(color));
+
+    #[cfg(target_os = "macos")]
+    {
+        use objc2_app_kit::{
+            NSAppearanceNameAqua, NSAppearanceNameDarkAqua, NSApplication, NSColor, NSWindow,
+        };
+        use objc2_foundation::NSArray;
+        use objc2_web_kit::WKWebView;
+
+        let _ = window.with_webview(move |webview| {
+            // SAFETY: Tauri provides the live WKWebView pointer and invokes this
+            // callback on the WebView UI thread.
+            unsafe {
+                let dark = match preference {
+                    DesktopThemePreference::Light => false,
+                    DesktopThemePreference::Dark => true,
+                    DesktopThemePreference::Adaptive => {
+                        let main_thread = objc2::MainThreadMarker::new()
+                            .expect("macOS appearance lookup must run on the main thread");
+                        let application = NSApplication::sharedApplication(main_thread);
+                        let appearances =
+                            NSArray::from_slice(&[NSAppearanceNameAqua, NSAppearanceNameDarkAqua]);
+                        application
+                            .effectiveAppearance()
+                            .bestMatchFromAppearancesWithNames(&appearances)
+                            .is_some_and(|appearance| {
+                                appearance.isEqualToString(NSAppearanceNameDarkAqua)
+                            })
+                    }
+                };
+                let (red, green, blue) = if dark {
+                    DARK_BACKGROUND_RGB
+                } else {
+                    LIGHT_BACKGROUND_RGB
+                };
+                let color = NSColor::colorWithSRGBRed_green_blue_alpha(
+                    f64::from(red) / 255.0,
+                    f64::from(green) / 255.0,
+                    f64::from(blue) / 255.0,
+                    1.0,
+                );
+                let ns_window = &*webview.ns_window().cast::<NSWindow>();
+                let webview = &*webview.inner().cast::<WKWebView>();
+                webview.setUnderPageBackgroundColor(Some(&color));
+                ns_window.setBackgroundColor(Some(&color));
+            }
+        });
+    }
+}
+
+#[cfg(target_os = "macos")]
+unsafe fn apply_macos_traffic_light_position(
+    ns_window: &objc2_app_kit::NSWindow,
+    authenticated: bool,
+) {
+    use objc2_app_kit::{NSView, NSWindowButton};
+
+    let (x, y) = if authenticated {
+        (AUTHENTICATED_TRAFFIC_LIGHT_X, AUTHENTICATED_TRAFFIC_LIGHT_Y)
+    } else {
+        (
+            UNAUTHENTICATED_TRAFFIC_LIGHT_X,
+            UNAUTHENTICATED_TRAFFIC_LIGHT_Y,
+        )
+    };
+
+    let Some(close) = ns_window.standardWindowButton(NSWindowButton::CloseButton) else {
+        return;
+    };
+    let Some(miniaturize) = ns_window.standardWindowButton(NSWindowButton::MiniaturizeButton)
+    else {
+        return;
+    };
+    let zoom = ns_window.standardWindowButton(NSWindowButton::ZoomButton);
+
+    let Some(title_bar_view) = close.superview().and_then(|view| view.superview()) else {
+        return;
+    };
+    title_bar_view.layoutSubtreeIfNeeded();
+    let close_rect = NSView::frame(&close);
+    let title_bar_height = close_rect.size.height + y;
+    let mut title_bar_rect = NSView::frame(&title_bar_view);
+    if (close_rect.origin.x - x).abs() < 0.25
+        && (title_bar_rect.size.height - title_bar_height).abs() < 0.25
+    {
+        return;
+    }
+    title_bar_rect.size.height = title_bar_height;
+    title_bar_rect.origin.y = ns_window.frame().size.height - title_bar_height;
+    title_bar_view.setFrame(title_bar_rect);
+
+    let spacing = NSView::frame(&miniaturize).origin.x - close_rect.origin.x;
+    for (index, button) in [Some(close), Some(miniaturize), zoom]
+        .into_iter()
+        .flatten()
+        .enumerate()
+    {
+        let mut origin = NSView::frame(&button).origin;
+        origin.x = x + index as f64 * spacing;
+        button.setFrameOrigin(origin);
+    }
+    ns_window.displayIfNeeded();
+}
+
+#[cfg(target_os = "macos")]
+fn reconcile_macos_traffic_light_position(app: &AppHandle) {
+    use objc2_app_kit::NSWindow;
+
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+    let app = app.clone();
+    let _ = window.with_webview(move |webview| {
+        let authenticated = app
+            .state::<DesktopState>()
+            .authenticated
+            .load(Ordering::SeqCst);
+        // SAFETY: Tauri provides the live NSWindow on the WebView UI thread.
+        unsafe {
+            let ns_window = &*webview.ns_window().cast::<NSWindow>();
+            apply_macos_traffic_light_position(ns_window, authenticated);
+        }
+    });
+}
+
+#[cfg(target_os = "macos")]
+fn show_prepared_macos_window(app: &AppHandle, authenticated: bool) {
+    use objc2_app_kit::{NSApplication, NSWindow};
+
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+    let _ = window.with_webview(move |webview| {
+        // SAFETY: The callback runs on the main thread with the live NSWindow.
+        unsafe {
+            let ns_window = &*webview.ns_window().cast::<NSWindow>();
+            apply_macos_traffic_light_position(ns_window, authenticated);
+            ns_window.deminiaturize(None);
+            ns_window.makeKeyAndOrderFront(None);
+            let main_thread = objc2::MainThreadMarker::new()
+                .expect("macOS application activation must run on the main thread");
+            #[allow(deprecated)]
+            NSApplication::sharedApplication(main_thread).activateIgnoringOtherApps(true);
+        }
+    });
 }
 
 fn configure_desktop_window(app: &AppHandle, authenticated: bool) {
     let Some(window) = app.get_webview_window("main") else {
         return;
     };
-
-    let (desired_width, desired_height) = if authenticated {
-        (AUTHENTICATED_WINDOW_WIDTH, AUTHENTICATED_WINDOW_HEIGHT)
-    } else {
-        (UNAUTHENTICATED_WINDOW_WIDTH, UNAUTHENTICATED_WINDOW_HEIGHT)
-    };
-    let mut target_width = desired_width;
-    let mut target_height = desired_height;
-
-    let current_monitor = window.current_monitor().ok().flatten();
-    if let Some(monitor) = current_monitor.as_ref() {
-        let monitor_size = monitor.size().to_logical::<f64>(monitor.scale_factor());
-        target_width = target_width.min((monitor_size.width - 40.0).max(480.0));
-        target_height = target_height.min((monitor_size.height - 80.0).max(480.0));
+    let state = app.state::<DesktopState>();
+    if let Ok(mut ignore_until) = state.ignore_window_events_until.lock() {
+        *ignore_until = Some(Instant::now() + Duration::from_millis(750));
     }
-
     let _ = window.unmaximize();
     let _ = window.set_resizable(true);
 
     if authenticated {
+        let saved = state
+            .bootstrap
+            .lock()
+            .ok()
+            .and_then(|bootstrap| bootstrap.window.clone());
+        let monitors = window.available_monitors().unwrap_or_default();
+        let primary_monitor = window.primary_monitor().ok().flatten();
+        let monitor = saved
+            .as_ref()
+            .and_then(|saved| choose_restore_monitor(&monitors, saved))
+            .or_else(|| {
+                primary_monitor.as_ref().and_then(|primary| {
+                    monitors
+                        .iter()
+                        .find(|monitor| monitor.position() == primary.position())
+                })
+            })
+            .or_else(|| monitors.first());
+        let target = monitor.map(|monitor| {
+            clamp_window_to_monitor(
+                saved.as_ref(),
+                monitor,
+                AUTHENTICATED_WINDOW_WIDTH,
+                AUTHENTICATED_WINDOW_HEIGHT,
+                AUTHENTICATED_MINIMUM_WIDTH,
+                AUTHENTICATED_MINIMUM_HEIGHT,
+            )
+        });
+        let target_width = target
+            .as_ref()
+            .map(|window| window.width)
+            .unwrap_or(AUTHENTICATED_WINDOW_WIDTH);
+        let target_height = target
+            .as_ref()
+            .map(|window| window.height)
+            .unwrap_or(AUTHENTICATED_WINDOW_HEIGHT);
         let _ = window.set_min_size(Some(LogicalSize::new(
             AUTHENTICATED_MINIMUM_WIDTH.min(target_width),
             AUTHENTICATED_MINIMUM_HEIGHT.min(target_height),
         )));
+        let _ = window.set_size(LogicalSize::new(target_width, target_height));
+        if let Some(target) = target.as_ref() {
+            let _ = window.set_position(PhysicalPosition::new(target.x, target.y));
+            if target.maximized {
+                let _ = window.maximize();
+            }
+        } else {
+            let _ = window.center();
+        }
     } else {
         let _ = window.set_min_size(None::<LogicalSize<f64>>);
-    }
-
-    let _ = window.set_size(LogicalSize::new(target_width, target_height));
-    if let Some(monitor) = current_monitor {
-        let scale_factor = monitor.scale_factor();
-        let target_size =
-            LogicalSize::new(target_width, target_height).to_physical::<u32>(scale_factor);
-        let monitor_position = monitor.position();
-        let monitor_size = monitor.size();
-        let centered_x = i64::from(monitor_position.x)
-            + (i64::from(monitor_size.width) - i64::from(target_size.width)) / 2;
-        let centered_y = i64::from(monitor_position.y)
-            + (i64::from(monitor_size.height) - i64::from(target_size.height)) / 2;
-        let _ = window.set_position(PhysicalPosition::new(centered_x as i32, centered_y as i32));
-    } else {
-        let _ = window.center();
+        let monitor = window
+            .current_monitor()
+            .ok()
+            .flatten()
+            .or_else(|| window.primary_monitor().ok().flatten());
+        if let Some(monitor) = monitor {
+            let target = clamp_window_to_monitor(
+                None,
+                &monitor,
+                UNAUTHENTICATED_WINDOW_WIDTH,
+                UNAUTHENTICATED_WINDOW_HEIGHT,
+                480.0,
+                480.0,
+            );
+            let _ = window.set_size(LogicalSize::new(target.width, target.height));
+            let _ = window.set_position(PhysicalPosition::new(target.x, target.y));
+        } else {
+            let _ = window.set_size(LogicalSize::new(
+                UNAUTHENTICATED_WINDOW_WIDTH,
+                UNAUTHENTICATED_WINDOW_HEIGHT,
+            ));
+            let _ = window.center();
+        }
     }
     let _ = window.set_resizable(authenticated);
-    let _ = app.save_window_state(window_state_flags());
+}
+
+fn capture_authenticated_window_state(window: &Window, state: &DesktopState) {
+    if !state.authenticated.load(Ordering::SeqCst) {
+        return;
+    }
+    if state
+        .ignore_window_events_until
+        .lock()
+        .ok()
+        .and_then(|until| *until)
+        .is_some_and(|until| Instant::now() < until)
+    {
+        return;
+    }
+    let maximized = window.is_maximized().unwrap_or(false);
+    if let Ok(mut bootstrap) = state.bootstrap.lock() {
+        let saved = bootstrap.window.get_or_insert(AuthenticatedWindowState {
+            x: 0,
+            y: 0,
+            width: AUTHENTICATED_WINDOW_WIDTH,
+            height: AUTHENTICATED_WINDOW_HEIGHT,
+            maximized,
+        });
+        saved.maximized = maximized;
+        if !maximized {
+            if let Ok(position) = window.outer_position() {
+                saved.x = position.x;
+                saved.y = position.y;
+            }
+            if let (Ok(size), Ok(scale)) = (window.inner_size(), window.scale_factor()) {
+                let logical = size.to_logical::<f64>(scale);
+                if logical.width.is_finite() && logical.height.is_finite() {
+                    saved.width = logical.width;
+                    saved.height = logical.height;
+                }
+            }
+        }
+    }
+    schedule_bootstrap_save(state);
 }
 
 #[tauri::command]
-fn set_desktop_authenticated_window(app: AppHandle, authenticated: bool) {
-    configure_desktop_window(&app, authenticated);
+fn sync_desktop_bootstrap_state(
+    app: AppHandle,
+    authenticated: bool,
+    theme_preference: DesktopThemePreference,
+) {
+    let state = app.state::<DesktopState>();
+    let authentication_changed =
+        state.authenticated.swap(authenticated, Ordering::SeqCst) != authenticated;
+    if let Ok(mut bootstrap) = state.bootstrap.lock() {
+        bootstrap.last_authenticated = authenticated;
+        bootstrap.theme_preference = theme_preference;
+    }
+
+    if let Some(window) = app.get_webview_window("main") {
+        set_desktop_background(&window, theme_preference);
+    }
+    if authentication_changed {
+        configure_desktop_window(&app, authenticated);
+    }
+    if !authenticated {
+        apply_desktop_unread_count(&app, &state, 0);
+    }
+    schedule_bootstrap_save(&state);
 }
 
 #[tauri::command]
@@ -362,12 +861,6 @@ pub fn run() {
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             show_main_window(app);
         }))
-        .plugin(
-            tauri_plugin_window_state::Builder::default()
-                .with_state_flags(window_state_flags())
-                .skip_initial_state("main")
-                .build(),
-        )
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(
@@ -379,11 +872,10 @@ pub fn run() {
         .menu(Menu::default)
         .invoke_handler(tauri::generate_handler![
             set_close_to_tray,
-            set_desktop_authenticated_window,
+            sync_desktop_bootstrap_state,
             start_desktop_window_dragging,
             show_desktop_window,
             show_desktop_notification,
-            desktop_should_start_hidden,
             toggle_desktop_window,
             set_desktop_unread_count
         ])
@@ -408,9 +900,37 @@ pub fn run() {
             if let Some(window) = app.get_webview_window("main") {
                 window.set_decorations(false)?;
             }
+
+            let bootstrap_path = app
+                .path()
+                .app_config_dir()
+                .map(|directory| directory.join(BOOTSTRAP_CACHE_FILE))?;
+            let bootstrap = read_bootstrap_state(&bootstrap_path);
+            let authenticated = bootstrap.last_authenticated;
+            let theme_preference = bootstrap.theme_preference;
+            let state = app.state::<DesktopState>();
+            state.authenticated.store(authenticated, Ordering::SeqCst);
+            if let Ok(mut path) = state.bootstrap_path.lock() {
+                *path = Some(bootstrap_path);
+            }
+            if let Ok(mut cached) = state.bootstrap.lock() {
+                *cached = bootstrap;
+            }
+            if let Some(window) = app.get_webview_window("main") {
+                set_desktop_background(&window, theme_preference);
+            }
+            configure_desktop_window(app.handle(), authenticated);
             Ok(())
         })
         .on_window_event(|window: &Window, event| {
+            if matches!(
+                event,
+                tauri::WindowEvent::Moved(_)
+                    | tauri::WindowEvent::Resized(_)
+                    | tauri::WindowEvent::ScaleFactorChanged { .. }
+            ) {
+                capture_authenticated_window_state(window, &window.state::<DesktopState>());
+            }
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 let state = window.state::<DesktopState>();
                 if state.explicit_quit.load(Ordering::SeqCst) {
@@ -430,14 +950,24 @@ pub fn run() {
         .expect("error while building tauri application")
         .run(|app, event| match event {
             tauri::RunEvent::Ready => {
-                configure_desktop_window(app, false);
-
                 if should_start_hidden() {
                     hide_main_window(app);
                 } else {
+                    #[cfg(target_os = "macos")]
+                    {
+                        let authenticated = app
+                            .state::<DesktopState>()
+                            .authenticated
+                            .load(Ordering::SeqCst);
+                        show_prepared_macos_window(app, authenticated);
+                    }
+                    #[cfg(not(target_os = "macos"))]
                     show_main_window(app);
                 }
             }
+            tauri::RunEvent::Exit => persist_bootstrap_state(&app.state::<DesktopState>()),
+            #[cfg(target_os = "macos")]
+            tauri::RunEvent::MainEventsCleared => reconcile_macos_traffic_light_position(app),
             #[cfg(target_os = "macos")]
             tauri::RunEvent::Reopen {
                 has_visible_windows: false,
@@ -445,4 +975,48 @@ pub fn run() {
             } => show_main_window(app),
             _ => {}
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bootstrap_cache_uses_safe_defaults_for_missing_fields() {
+        let state: DesktopBootstrapState = serde_json::from_str(r#"{"version":1}"#).unwrap();
+        assert!(!state.last_authenticated);
+        assert_eq!(state.theme_preference, DesktopThemePreference::Adaptive);
+        assert_eq!(state.window, None);
+    }
+
+    #[test]
+    fn bootstrap_cache_round_trips_authenticated_window_state() {
+        let state = DesktopBootstrapState {
+            version: BOOTSTRAP_CACHE_VERSION,
+            last_authenticated: true,
+            theme_preference: DesktopThemePreference::Dark,
+            window: Some(AuthenticatedWindowState {
+                x: -1280,
+                y: 24,
+                width: 1440.0,
+                height: 900.0,
+                maximized: true,
+            }),
+        };
+        let encoded = serde_json::to_string(&state).unwrap();
+        let decoded: DesktopBootstrapState = serde_json::from_str(&encoded).unwrap();
+        assert_eq!(decoded, state);
+    }
+
+    #[test]
+    fn offscreen_rectangles_have_no_intersection() {
+        assert_eq!(
+            rectangles_intersection_area((3000, 3000, 3800, 3600), (0, 0, 1920, 1080)),
+            0
+        );
+        assert_eq!(
+            rectangles_intersection_area((1600, 800, 2200, 1200), (0, 0, 1920, 1080)),
+            89_600
+        );
+    }
 }

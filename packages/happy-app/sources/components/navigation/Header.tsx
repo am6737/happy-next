@@ -274,7 +274,7 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
         justifyContent: 'flex-start',
     },
     macOSWindowControlsInset: {
-        transform: [{ translateX: 72 }],
+        transform: [{ translateX: 74 }],
     },
     sideContainerHug: {
         flexGrow: 0,

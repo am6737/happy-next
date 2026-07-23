@@ -2,21 +2,28 @@ import { invoke } from '@tauri-apps/api/core';
 import * as React from 'react';
 
 import { useAuth } from '@/auth/AuthContext';
+import { useLocalSetting } from '@/sync/storage';
 import { isTauriDesktop } from '@/utils/tauri';
+import { publishDesktopAuthentication } from './desktopAuthEvents';
 
 export function DesktopAuthWindowSync() {
     const { isAuthenticated } = useAuth();
+    const themePreference = useLocalSetting('themePreference');
 
     React.useEffect(() => {
         if (!isTauriDesktop()) {
             return;
         }
 
-        void invoke('set_desktop_authenticated_window', { authenticated: isAuthenticated })
+        publishDesktopAuthentication(isAuthenticated);
+        void invoke('sync_desktop_bootstrap_state', {
+            authenticated: isAuthenticated,
+            themePreference,
+        })
             .catch((error) => {
-                console.warn('Failed to update the desktop window mode:', error);
+                console.warn('Failed to update the desktop bootstrap state:', error);
             });
-    }, [isAuthenticated]);
+    }, [isAuthenticated, themePreference]);
 
     return null;
 }

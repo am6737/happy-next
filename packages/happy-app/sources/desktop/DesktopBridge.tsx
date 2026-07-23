@@ -8,6 +8,7 @@ import { storage, useLocalSetting } from '@/sync/storage';
 import { getSessionName } from '@/utils/sessionUtils';
 import { isTauriDesktop } from '@/utils/tauri';
 import { subscribeToDesktopMessages } from './desktopEvents';
+import { subscribeToDesktopAuthentication } from './desktopAuthEvents';
 import { messagePreview, notificationId, sessionIdFromPath } from './desktopNotificationUtils';
 
 const DESKTOP_SHORTCUT = 'CommandOrControl+Shift+H';
@@ -32,21 +33,20 @@ export function DesktopBridge() {
     const notificationPayloadRef = React.useRef(new Map<string, { title: string; body: string }>());
     const notificationSessionsRef = React.useRef(new Map<number, string>());
 
-    React.useEffect(() => {
-        if (!isTauriDesktop()) {
+    React.useEffect(() => subscribeToDesktopAuthentication((authenticated) => {
+        if (authenticated) {
             return;
         }
-
-        void invoke<boolean>('desktop_should_start_hidden')
-            .then((hiddenLaunch) => {
-                if (!hiddenLaunch) {
-                    return invoke('show_desktop_window');
-                }
-            })
-            .catch((error) => {
-                console.warn('Failed to apply the desktop launch visibility:', error);
-            });
-    }, []);
+        unreadBySessionRef.current.clear();
+        seenMessageIdsRef.current.clear();
+        notificationPayloadRef.current.clear();
+        notificationSessionsRef.current.clear();
+        for (const timer of notificationTimersRef.current.values()) {
+            clearTimeout(timer);
+        }
+        notificationTimersRef.current.clear();
+        void invoke('set_desktop_unread_count', { count: 0 });
+    }), []);
 
     React.useEffect(() => {
         currentSessionIdRef.current = currentSessionId;

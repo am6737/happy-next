@@ -98,7 +98,10 @@ dependencies = [
  "notify-rust",
  "objc2 0.6.4",
  "objc2-app-kit",
+ "objc2-foundation 0.3.1",
+ "objc2-web-kit",
  "serde",
+ "serde_json",
  "tauri",
  "tauri-build",
  "tauri-plugin-autostart",
@@ -108,7 +111,6 @@ dependencies = [
  "tauri-plugin-notifications",
  "tauri-plugin-opener",
  "tauri-plugin-single-instance",
- "tauri-plugin-window-state",
 ]
 
 [[package]]
@@ -4512,21 +4514,6 @@ dependencies = [
  "tracing",
  "windows-sys 0.60.2",
  "zbus",
-]
-
-[[package]]
-name = "tauri-plugin-window-state"
-version = "2.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "73736611e14142408d15353e21e3cca2f12a3cfb523ad0ce85999b6d2ef1a704"
-dependencies = [
- "bitflags 2.9.3",
- "log",
- "serde",
- "serde_json",
- "tauri",
- "tauri-plugin",
- "thiserror 2.0.16",
 ]
 
 [[package]]
