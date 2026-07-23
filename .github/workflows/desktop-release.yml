@@ -270,6 +270,21 @@ jobs:
           export APPLE_API_KEY_PATH="$RUNNER_TEMP/AuthKey_${APPLE_API_KEY}.p8"
           yarn workspace happy-app tauri:build:macos:universal --ci
 
+      - name: Notarize and staple macOS disk image
+        env:
+          ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          DMG_PATH="$(find packages/happy-app/src-tauri/target/universal-apple-darwin/release/bundle/dmg -maxdepth 1 -name '*.dmg' -print -quit)"
+          test -n "$DMG_PATH"
+          xcrun notarytool submit "$DMG_PATH" \
+            --key "$RUNNER_TEMP/AuthKey_${ASC_API_KEY_ID}.p8" \
+            --key-id "$ASC_API_KEY_ID" \
+            --issuer "$ASC_ISSUER_ID" \
+            --wait
+          xcrun stapler staple "$DMG_PATH"
+
       - name: Verify signature, notarization, stapling, and Gatekeeper
         run: |
           APP_PATH="$(find packages/happy-app/src-tauri/target/universal-apple-darwin/release/bundle/macos -maxdepth 1 -name '*.app' -print -quit)"
