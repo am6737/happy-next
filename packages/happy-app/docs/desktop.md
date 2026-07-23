@@ -1,141 +1,234 @@
 # Desktop client (Tauri 2)
 
-Happy Next desktop uses the Expo/React Native Web application as its UI and Tauri 2 as the native shell. Production builds export the web application to `dist` and embed those files in the desktop executable; API, authentication, Session, and Socket.IO traffic still targets a remote Happy server.
+Happy Next desktop embeds the Expo/React Native Web export in a Tauri 2 native shell. Production builds load the packaged `dist` directory; authentication, Sessions, messages, Socket.IO, uploads, and voice services continue to use a remote Happy server.
+
+This document describes the current implementation. A successful build is not considered a real-device installation or upgrade verification.
+
+## Supported baseline
+
+- macOS 12 or newer, Universal (`aarch64` + `x86_64`)
+- Windows 10/11 x64
+- Direct download through GitHub Releases
+- macOS public releases: Developer ID signing and Apple notarization required
+- Windows first release: unsigned, so SmartScreen/unknown-publisher warnings are expected
+- Linux is not a release target
 
 ## Local prerequisites
 
-- Node.js 20 (the release CI baseline)
+- Node.js 20 (release CI baseline)
 - Yarn 1.22.22
 - Rust 1.77.2 or newer
-- macOS: Xcode Command Line Tools and Xcode
-- Windows: the Tauri 2 Windows prerequisites, including WebView2 and the MSVC toolchain
+- macOS: Xcode and Xcode Command Line Tools
+- Windows: WebView2 and the MSVC Tauri prerequisites
 
-Run `yarn install --frozen-lockfile` from the repository root before building.
+Install dependencies from the repository root:
+
+```bash
+yarn install --frozen-lockfile
+```
 
 ## Build variants
 
-Run these commands from `packages/happy-app`:
+Run from `packages/happy-app`:
 
 ```bash
 yarn tauri:dev
+yarn tauri:dev:inspect
 yarn tauri:build:dev
 yarn tauri:build:preview
 yarn tauri:build:production
+yarn tauri:build:macos:universal
+yarn tauri:build:windows:x64
 ```
 
-Each command sets `APP_ENV` explicitly before Tauri starts Expo. This is important because `app.config.js` otherwise defaults to the development variant.
+Development uses `tauri.dev.conf.json`, the separate `com.hitosea.happy.dev` identifier, port 8082, and no CSP so Metro and Web Inspector can work. Preview merges `tauri.preview.conf.json` and permits configurable HTTP/HTTPS/WS/WSS test endpoints. Production uses `tauri.conf.json`, packaged local assets, and HTTPS/WSS remote connections only.
 
-Production uses `src-tauri/tauri.conf.json`. Development and preview merge their partial configuration from `tauri.dev.conf.json` and `tauri.preview.conf.json`.
+The app starts with built-in Happy server endpoints and lets the user configure a custom Happy server. Production custom endpoints must use HTTPS/WSS; plain HTTP/WS is limited to development and preview testing.
 
-The production desktop app uses the same server model as the web app: it starts with the built-in Happy server entry points and still lets the user select a custom Happy server. Production WebView connections therefore allow HTTPS/WSS endpoints but reject plain HTTP/WS. Preview may connect to configurable HTTP/WS test servers, while development disables CSP for the Expo development server. The application uses the Web platform `fetch` implementation, so the unused Tauri HTTP plugin is not bundled or exposed through capabilities.
+React Native Web and Unistyles create runtime styles. Production keeps `style-src 'self' 'unsafe-inline'` and disables only Tauri's build-time CSP rewriting for `style-src`. Blob URLs are allowed where required for image paste/upload and workers. The Tauri HTTP plugin is not exposed; application traffic uses the WebView `fetch` implementation.
 
-React Native Web and Unistyles create style rules dynamically at runtime. Tauri's build-time CSP rewriting is therefore disabled only for `style-src`; the explicit `style-src 'self' 'unsafe-inline'` policy remains in force. Script CSP rewriting remains enabled.
+Generated `dist` and `src-tauri/target` contents must not be committed.
 
-## Desktop product behavior
+## Current desktop behavior
 
-The desktop shell intentionally behaves like a resident messaging client rather than a browser tab:
+### Window lifecycle
 
-- New windows start at `1200 × 780`, remain resizable down to `900 × 600`, and are kept within the active display. The first launch after the desktop layout upgrade expands legacy small-window state once, while later launches continue to respect the user's saved size and position.
-- macOS uses an overlay title bar with native traffic-light controls and a dedicated content-safe drag region. Windows uses a compact frameless drag region with accessible minimize, maximize/restore, and close controls.
-- Closing the main window hides it to the system tray by default and keeps Socket.IO connected.
-- The tray menu can show, hide, or explicitly quit Happy Next and displays the current unread count.
-- Clicking the tray icon toggles the main window. Clicking the macOS Dock icon reopens a hidden window.
-- `Cmd+Q` on macOS and **Quit Happy Next** in the tray menu exit the process instead of hiding it.
-- A second launch activates the existing window instead of creating another instance.
-- Background WebView throttling is disabled so hidden-window message delivery is not intentionally suspended.
-- Native notifications are emitted for new agent replies and messages from another user when the relevant Session is not focused. Own messages, tool-only updates, events, and the currently visible Session are not notified.
-- Notification clicks request that the app show the main window and navigate to the associated Session. This still requires real-machine verification on each operating system.
-- macOS uses the Dock badge; Windows uses a taskbar overlay indicator; the tray menu provides a numeric count on both platforms.
-- The global show/hide shortcut is `Cmd+Shift+H` on macOS and `Ctrl+Shift+H` on Windows.
-- Launch-at-sign-in is disabled by default. When enabled, Happy Next starts hidden in the tray.
+- The native bootstrap cache is stored outside WebView storage in the Tauri app-data directory as `desktop-bootstrap.json`.
+- The cache contains only last authentication state, theme preference, and authenticated window geometry. It does not contain login credentials.
+- Before the WebView finishes loading, Tauri uses the cache to choose the initial theme, window size, position, and macOS traffic-light position.
+- Signed-out mode is centered at `800 × 600`, is not resizable, and uses the signed-out traffic-light layout.
+- Signed-in mode defaults to `1440 × 900`, has a minimum of `1100 × 700`, is resizable, and restores its previous size, position, and maximized state.
+- Restored geometry is clamped to an available monitor with an edge margin, preventing an old off-screen position from making the app inaccessible.
+- macOS uses an overlay title bar and native traffic lights. The signed-in and signed-out layouts have separate fixed traffic-light positions.
+- Custom drag regions avoid interactive controls and selectable title text.
+- Closing the main window hides it to the tray by default. Explicit Quit exits the process.
+- Clicking the macOS Dock icon or launching a second instance shows and activates the existing main window.
+- Background throttling is disabled so hiding the window does not intentionally suspend Socket.IO processing.
 
-Users can change close-to-tray, desktop notifications, launch-at-sign-in, and the global shortcut under **Settings → Notifications**. Close-to-tray, desktop notifications, and the shortcut are enabled by default; launch-at-sign-in is opt-in.
+### Tray, badges, and notifications
 
-Desktop-specific Tauri permissions are deliberately limited to notification permission/send/listener calls, autostart enable/disable/status calls, and global shortcut register/unregister/status calls.
+- macOS uses the dedicated template asset `src-tauri/icons/tray-icon.png`; it adapts to light and dark menu bars.
+- Windows currently uses the application icon for its tray icon.
+- The tray icon itself does not display a numeric badge or title.
+- The tray tooltip and disabled menu status line may describe the unread count.
+- macOS unread count is shown on the Dock badge. Windows uses a taskbar overlay indicator.
+- Signing out clears the desktop unread count.
+- Notifications are generated for relevant new agent replies and messages from another user when the Session should notify under the user's notification settings.
+- Own messages, tool-only updates, events, duplicate messages, and the currently focused Session do not produce a native notification.
+- Notification clicks show and activate the app, then navigate to the associated Session.
+- Notification permission is requested only when desktop notifications are enabled.
 
-## Local data behavior
+The notification click path has been exercised locally on macOS. Windows notification delivery, activation, and taskbar integration remain **未验证** until tested on a real Windows x64 machine.
 
-- authentication credentials use macOS Keychain or Windows Credential Manager through native Tauri commands and are never intentionally logged;
-- device-local settings and drafts use the React Native MMKV Web adapter, which also persists through `localStorage`;
-- encrypted message cache rows and coverage state use IndexedDB (`happy-message-cache-v1`).
+### Desktop settings and shortcuts
 
-The first desktop version with system credential storage deletes the legacy `auth_credentials` value from WebView `localStorage` without migrating it. Existing desktop users must sign in once again. There is intentionally no legacy credential migration or rollback path; credentials created after that sign-in are written only to the operating system credential store.
+The following settings are available under **Settings → Notifications**:
 
-Image files can already be dragged into the composer on Web/Tauri, and clipboard image paste is handled by the existing Web paste path. Text copy/paste uses the existing Expo/Web clipboard implementation. These paths were kept instead of adding redundant broad native clipboard or filesystem capabilities.
+- desktop notifications: enabled by default
+- close to tray: enabled by default
+- launch at sign-in: disabled by default
+- global show/hide shortcut: enabled by default
 
-Generated bundles are written below `src-tauri/target/release/bundle/`. The `dist` and `target` directories are generated and must not be committed.
+The global shortcut is `Cmd+Shift+H` on macOS and `Ctrl+Shift+H` on Windows.
 
-## Local verification
+Application shortcuts currently include:
 
-Before treating a desktop change as ready, run:
+| Action | macOS | Windows |
+| --- | --- | --- |
+| Search | `Cmd+K` or `Cmd+F` | `Ctrl+K` or `Ctrl+F` |
+| New Session | `Cmd+N` | `Ctrl+N` |
+| Sessions | `Cmd+1` | `Ctrl+1` |
+| Inbox | `Cmd+2` | `Ctrl+2` |
+| DooTask | `Cmd+3` | `Ctrl+3` |
+| Settings | `Cmd+,` or `Cmd+4` | `Ctrl+,` or `Ctrl+4` |
+| Back | `Cmd+[` | `Alt+Left` |
+| Forward | `Cmd+]` | `Alt+Right` |
+
+### Permissions and links
+
+- External HTTP/HTTPS links open in the system browser.
+- macOS bundles declare microphone and camera usage descriptions.
+- The macOS entitlements include audio-input and camera access for the hardened runtime.
+- Tauri capabilities are limited to window dragging, approved URL opening, notifications, autostart, and global shortcuts.
+- Image drag/drop and clipboard paste reuse the existing Web upload paths rather than broad native filesystem or clipboard permissions.
+
+## Local data and authentication
+
+The desktop WebView currently follows the Web storage model:
+
+- login credentials are stored in WebView `localStorage` under `auth_credentials`;
+- device-local settings and drafts use the MMKV Web adapter backed by `localStorage`;
+- encrypted message cache rows and coverage state use IndexedDB (`happy-message-cache-v1`);
+- native bootstrap state is stored separately in `desktop-bootstrap.json` so the shell can restore the window before WebView startup.
+
+The desktop client does **not** currently use macOS Keychain or Windows Credential Manager. Moving credentials to native secure storage would change the authentication/storage model and requires a separate product and migration decision. Never log credential values or include them in diagnostic output.
+
+## Verification commands
+
+After TypeScript changes:
 
 ```bash
 yarn typecheck
+```
+
+Run focused tests where applicable:
+
+```bash
+npx vitest run sources/desktop/desktopWindowUtils.test.ts
+npx vitest run sources/desktop/desktopKeyboardShortcuts.test.ts
+npx vitest run sources/desktop/DesktopBridge.test.ts
+npx vitest run sources/auth/tokenStorage.test.ts
+```
+
+After Rust or Tauri configuration changes:
+
+```bash
 cd src-tauri
 cargo fmt -- --check
 cargo check --locked
 ```
 
-For a production-shell smoke build without installers:
+Production-shell smoke build without installers:
 
 ```bash
 yarn tauri:build:production --no-bundle
 ```
 
-For local macOS artifacts:
+Local unsigned macOS bundles:
 
 ```bash
 yarn tauri:build:production --bundles app,dmg
 ```
 
-An unsigned or ad-hoc-signed local bundle is only a development artifact. It does not replace Developer ID signing, notarization, stapling, Gatekeeper verification, or installation tests on a clean Mac.
+Unsigned/ad-hoc local artifacts are development builds. They do not replace Developer ID signing, notarization, stapling, Gatekeeper verification, or testing on a clean machine.
 
-Desktop interaction checks should include:
+## Test matrix
 
-1. confirm a legacy small window is enlarged once and later manual resizing persists;
-2. drag the window from its custom top region and verify macOS traffic lights do not cover content;
-3. on Windows, exercise minimize, maximize/restore, close-to-tray, and keyboard/Snap window management;
-4. close the window and confirm the process remains in the tray;
-5. restore it from the tray and, on macOS, from the Dock;
-6. launch a second instance and confirm the existing window is focused;
-7. toggle the global shortcut setting and exercise `Cmd/Ctrl+Shift+H`;
-8. enable launch-at-sign-in and verify a hidden launch after a real OS sign-out/sign-in cycle;
-9. receive a message while another Session is visible and while the window is hidden;
-10. click a notification and confirm the correct Session opens;
-11. drag and paste an image into the composer;
-12. upgrade from a build that used WebView credentials and confirm it requires one new sign-in;
-13. quit and relaunch, then confirm the Keychain/Credential Manager login, settings, drafts, and cached messages persist.
+Use these status terms consistently:
 
-Tests that require actual OS notification centers, login startup, taskbar/Dock state, credential-store persistence, or shell interaction are **未验证** until performed on a real machine; compilation alone is not sufficient.
+- **Build verified**: compilation or packaging completed on the named host/runner.
+- **Interaction verified**: the behavior was exercised on a real machine.
+- **Install verified**: an installer was installed and removed on a real machine.
+- **Upgrade verified**: an installed older version successfully updated to the new version.
+- **未验证**: no equivalent real-machine verification has been completed.
 
-## Signing and release safety
+### macOS regression checklist
 
-- Never commit certificates, passwords, tokens, updater private keys, provisioning files, or generated key material.
-- Never echo secret values in scripts or GitHub Actions logs.
-- Developer ID credentials and the updater private key must be provided only through GitHub Actions Secrets.
-- Keep an offline backup of the updater private key. Only the updater public key belongs in the client configuration.
-- Do not overwrite an existing GitHub Release without explicit approval.
-- Windows artifacts are intentionally unsigned for the first release and will show SmartScreen/unknown-publisher warnings.
+1. Signed-out launch is centered at 800 × 600, fixed-size, correctly themed, and uses the signed-out traffic-light alignment.
+2. Signing in switches to the signed-in traffic-light layout and 1440 × 900 default geometry without visible jumps.
+3. Manual resize, move, maximize, quit, and relaunch restore the authenticated geometry.
+4. Saved off-screen geometry is clamped after monitor removal or resolution changes.
+5. The custom title area drags the window while titles and normal content remain selectable.
+6. Close-to-tray, tray restore, Dock restore, and explicit Quit behave correctly.
+7. A second launch activates the existing instance.
+8. Desktop notifications arrive, activate a hidden/background window, and navigate to the correct Session.
+9. Opening the current Session and signing out clear the appropriate Dock unread state.
+10. Application and global shortcuts work without breaking text input or composition.
+11. Launch-at-sign-in starts hidden after a real OS sign-out/sign-in cycle.
+12. Image paste, image drag/drop, image-only send, microphone, camera, and voice assistant work in a production build.
+13. Default and custom HTTPS/WSS Happy servers connect successfully.
 
-Tag releases build Windows x64 MSI and NSIS installers in `.github/workflows/release.yml`. The tag version is stripped of its leading `v` and passed to both Expo (`APP_VERSION`) and Tauri (`TAURI_CONFIG`) so the installer metadata matches the GitHub Release version. These artifacts remain **未验证** until installed and uninstalled on a real Windows x64 machine.
+### Windows x64 checklist — currently 未验证
 
-## Verification status terminology
+1. Install and uninstall both MSI and NSIS artifacts.
+2. Verify overwrite install and retained/removed user data behavior.
+3. Verify frameless drag, resize, minimize, maximize/restore, Snap Layout, and DPI scaling.
+4. Verify tray hide/restore/quit and single-instance activation.
+5. Verify native notifications, notification click navigation, and taskbar unread state.
+6. Verify autostart and `Ctrl+Shift+H` after a real sign-out/sign-in cycle.
+7. Verify microphone, camera, image paste/drop/upload, and voice assistant.
+8. Verify default and custom server connections.
+9. Verify installation under non-ASCII usernames and paths.
+10. Record expected unsigned SmartScreen/unknown-publisher prompts.
 
-- **Build verified**: compilation or packaging completed on the named runner/host.
-- **Install verified**: the installer was tested on a real machine.
-- **Upgrade verified**: a previously released version successfully updated through the configured updater.
+## CI and release status
 
-A successful CI build is not a macOS or Windows installation verification. Release notes and checklists must explicitly mark missing real-device checks as **未验证**.
+`.github/workflows/desktop-ci.yml` currently builds unsigned artifacts for:
 
-## Pending release configuration
+- macOS 12+ Universal `.app/.dmg`
+- Windows x64 MSI/NSIS
 
-The following items must be finalized before public desktop releases:
+Tag releases in `.github/workflows/release.yml` currently include Windows x64 desktop installers. The full signed/notarized macOS desktop release job is not yet present.
 
-- macOS 12+ Universal packaging and real-device coverage on both Apple Silicon and Intel;
-- Windows x64 packaging and real-device installation coverage;
-- validation of production HTTPS/WSS custom servers and preview HTTP/WS test servers;
-- production version synchronization between the Git tag, Expo config, Cargo, Tauri, installer names, and updater metadata;
-- Developer ID signing, notarization, stapling, and Gatekeeper checks;
-- GitHub Release desktop jobs and updater metadata/signatures;
-- Windows real-machine MSI/NSIS installation checks;
-- old-version-to-new-version updater tests.
+Before a public desktop release, complete all of the following:
+
+- synchronize the Git tag, Expo version, Cargo/Tauri version, installer metadata, and update metadata;
+- add macOS Universal release build, Developer ID signing, notarization, stapling, and Gatekeeper checks;
+- upload macOS and Windows artifacts to the same GitHub Release without overwriting an existing release unexpectedly;
+- add Tauri updater support, public key configuration, signed update artifacts, and release metadata;
+- test a real old-version-to-new-version update on both operating systems;
+- complete Windows x64 install/uninstall verification;
+- complete Apple Silicon verification and obtain Intel Mac coverage or explicitly mark it **未验证**.
+
+## Secrets and release safety
+
+- Never commit or print certificates, passwords, tokens, provisioning files, or updater private keys.
+- Developer ID credentials and the updater private key belong only in GitHub Actions Secrets.
+- Keep an offline backup of the updater private key. Only the updater public key belongs in client configuration.
+- Do not generate or replace the formal updater key without explicit approval.
+- Do not use Apple credentials or overwrite an existing GitHub Release without explicit approval.
+- CI success must never be reported as real-device installation or upgrade success.
+
+## Deferred scope: local CLI integration
+
+Local discovery, launch, and management of happy-cli, Claude Code, Codex, Gemini, or other processes is a separate P2 project. Do not add shell execution, process spawning, local IPC, or broad filesystem capabilities as part of desktop polish or release work.
