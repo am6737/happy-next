@@ -329,6 +329,7 @@ export function SessionContextMenu({ session, children }: { session: Session; ch
     const { theme } = useUnistyles();
     const { width, height } = useWindowDimensions();
     const [position, setPosition] = React.useState<MenuPosition | null>(null);
+    const [hoveredAction, setHoveredAction] = React.useState<SessionQuickActionKind | null>(null);
     const { actions, archiveMenu } = useSessionQuickActions(session);
 
     if (Platform.OS !== 'web') return <>{children}</>;
@@ -343,6 +344,7 @@ export function SessionContextMenu({ session, children }: { session: Session; ch
     }) => {
         event.preventDefault();
         event.stopPropagation();
+        setHoveredAction(null);
         setPosition({ x: event.nativeEvent.pageX, y: event.nativeEvent.pageY });
     };
     const webContextMenuProps = { onContextMenu: handleContextMenu };
@@ -350,10 +352,21 @@ export function SessionContextMenu({ session, children }: { session: Session; ch
     return (
         <>
             <View {...webContextMenuProps}>{children}</View>
-            <NativeModal transparent visible={position !== null} animationType="none" onRequestClose={() => setPosition(null)}>
+            <NativeModal
+                transparent
+                visible={position !== null}
+                animationType="none"
+                onRequestClose={() => {
+                    setPosition(null);
+                    setHoveredAction(null);
+                }}
+            >
                 <Pressable
                     style={styles.overlay}
-                    onPress={() => setPosition(null)}
+                    onPress={() => {
+                        setPosition(null);
+                        setHoveredAction(null);
+                    }}
                     {...webContextMenuProps}
                 >
                     <View style={[styles.menu, { left, top }]}>
@@ -361,14 +374,17 @@ export function SessionContextMenu({ session, children }: { session: Session; ch
                             <Pressable
                                 key={action.kind}
                                 disabled={action.disabled}
+                                onHoverIn={() => setHoveredAction(action.kind)}
+                                onHoverOut={() => setHoveredAction(current => current === action.kind ? null : current)}
                                 onPress={(event) => {
                                     event.stopPropagation?.();
                                     setPosition(null);
+                                    setHoveredAction(null);
                                     action.onPress();
                                 }}
                                 style={({ pressed }) => [
                                     styles.item,
-                                    pressed && { backgroundColor: theme.colors.surfacePressed },
+                                    (pressed || hoveredAction === action.kind) && { backgroundColor: theme.colors.surfacePressed },
                                     action.disabled && styles.disabled,
                                 ]}
                             >
