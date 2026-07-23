@@ -1,20 +1,64 @@
 name: Docker Publish
+run-name: "Docker ${{ inputs.release_tag }}"
 
 on:
-  push:
-    tags:
-      - 'v*'
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Existing version tag to publish (vX.Y.Z)'
+        required: true
+        type: string
+      publish_latest:
+        description: 'Also update the latest Docker tag'
+        required: true
+        default: true
+        type: boolean
+      confirmation:
+        description: 'Type PUBLISH-DOCKER to confirm'
+        required: true
+        type: string
+
+concurrency:
+  group: docker-publish-${{ inputs.release_tag }}
+  cancel-in-progress: false
 
 env:
   REGISTRY: docker.io
   NAMESPACE: kuaifan
 
 jobs:
+  preflight:
+    name: Validate Docker release tag
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Validate inputs and tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          if [ "$CONFIRMATION" != 'PUBLISH-DOCKER' ]; then
+            echo 'The confirmation input must be PUBLISH-DOCKER.' >&2
+            exit 1
+          fi
+          if ! printf '%s' "$RELEASE_TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo 'release_tag must use the vX.Y.Z format.' >&2
+            exit 1
+          fi
+          if ! gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Tag $RELEASE_TAG does not exist." >&2
+            exit 1
+          fi
+
   build:
     name: Build ${{ matrix.image }}
+    needs: preflight
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         include:
           - image: happy-server
@@ -34,17 +78,19 @@ jobs:
             context: packages/happy-web
 
     steps:
-      - name: Checkout
+      - name: Checkout release tag
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_tag }}
 
-      - name: Docker meta
+      - name: Docker metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.NAMESPACE }}/${{ matrix.image }}
           tags: |
-            type=semver,pattern={{version}}
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern={{version}},value=${{ inputs.release_tag }}
+            type=raw,value=latest,enable=${{ inputs.publish_latest }}
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3

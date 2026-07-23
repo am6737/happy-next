@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -88,31 +88,28 @@ describe('desktop security configuration', () => {
 
     it('keeps credential-free desktop CI and guarded release automation in place', () => {
         const desktopCi = readFileSync(resolve(process.cwd(), '../../.github/workflows/desktop-ci.yml'), 'utf8');
-        const desktopRelease = readFileSync(resolve(process.cwd(), '../../.github/workflows/desktop-release.yml'), 'utf8');
         const release = readFileSync(resolve(process.cwd(), '../../.github/workflows/release.yml'), 'utf8');
+        const dockerRelease = readFileSync(resolve(process.cwd(), '../../.github/workflows/docker-publish.yml'), 'utf8');
+        const iosSubmit = readFileSync(resolve(process.cwd(), '../../.github/workflows/ios-submit.yml'), 'utf8');
 
         expect(desktopCi).toContain('Build unsigned macOS Universal bundles');
         expect(desktopCi).toContain('Build unsigned Windows x64 installers');
         expect(desktopCi).toContain('Build unsigned Windows ARM64 installers');
         expect(desktopCi).toContain('windows-11-arm');
         expect(desktopCi).toContain('yarn workspace happy-app test --run');
-        expect(desktopRelease).toContain('APPEND-DESKTOP');
-        expect(desktopRelease).toContain('already contains desktop assets; refusing to overwrite them');
-        expect(desktopRelease).toContain('gh release upload "$RELEASE_TAG" artifacts/*');
-        expect(desktopRelease).not.toContain('--clobber');
-        expect(desktopRelease).toContain('--release-tag "$RELEASE_TAG"');
-        expect(desktopRelease).toContain('windows-11-arm');
-        expect(desktopRelease).toContain('yarn workspace happy-app ${{ matrix.build_script }} --ci --config $configPath');
-        expect(desktopRelease).toContain('Notarize and staple macOS disk image');
-        expect(desktopRelease).not.toContain('$env:TAURI_CONFIG');
-        expect(desktopRelease).not.toContain('export TAURI_CONFIG');
+        expect(existsSync(resolve(process.cwd(), '../../.github/workflows/desktop-release.yml'))).toBe(false);
+
+        expect(release).toContain('PUBLISH-RELEASE');
+        expect(release).not.toMatch(/\n  push:\s*\n\s+tags:/);
         expect(release).toContain('build-desktop-macos');
-        expect(release).toContain('needs: [build-android, build-ios, build-desktop-macos, build-desktop-windows]');
         expect(release).toContain('already exists; refusing to overwrite it');
-        expect(release).toContain("-name '*.sig'");
         expect(release).toContain('generateDesktopUpdateManifest.cjs');
         expect(release).toContain('TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}');
-        expect(release).toContain('*.app.tar.gz.sig');
+        expect(release).toContain('happy-next-${RELEASE_TAG}-macos-universal.app.tar.gz.sig');
+        expect(release).toContain('happy-next-$env:RELEASE_TAG-windows-${{ matrix.asset_arch }}-setup.exe');
+        expect(release).toContain('happy-next-${RELEASE_TAG}-android.${{ matrix.ext }}');
+        expect(release).toContain('happy-next-${RELEASE_TAG}-ios.ipa');
+        expect(release).toContain("[ \"$name\" != 'latest.json' ]");
         expect(release).toContain('desktop-release-artifacts');
         expect(release).toContain('tauri:build:windows:arm64');
         expect(release).toContain('ASC_API_KEY_P8_BASE64: ${{ secrets.ASC_API_KEY_P8_BASE64 }}');
@@ -123,5 +120,16 @@ describe('desktop security configuration', () => {
         expect(release).not.toContain('tauri:build:windows:x64 --ci --no-sign');
         expect(release).not.toMatch(/\bset\s+-x\b/);
         expect(release).not.toMatch(/echo\s+"\$APPLE_/);
+
+        expect(dockerRelease).toContain('PUBLISH-DOCKER');
+        expect(dockerRelease).toContain('ref: ${{ inputs.release_tag }}');
+        expect(dockerRelease).toContain('value=${{ inputs.release_tag }}');
+        expect(dockerRelease).not.toMatch(/\n  push:\s*\n\s+tags:/);
+
+        expect(iosSubmit).toContain('SUBMIT-IOS');
+        expect(iosSubmit).toContain('happy-next-${RELEASE_TAG}-ios.ipa');
+        expect(iosSubmit).toContain('gh release download "$RELEASE_TAG"');
+        expect(iosSubmit).toContain('eas submit');
+        expect(iosSubmit).not.toContain('eas build --local');
     });
 });

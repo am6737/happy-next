@@ -4,144 +4,178 @@ This document covers the direct-download macOS and Windows desktop release path.
 
 ## Release targets
 
-- macOS 12+ Universal DMG and zipped application
+- macOS 12+ Universal DMG, zipped application, and signed updater archive
 - Windows x64 MSI and NSIS installer
 - Windows ARM64 MSI and NSIS installer
+- Android APK/AAB and iOS IPA in the same GitHub Release
 - GitHub Releases distribution
-- Windows artifacts are intentionally unsigned for the first release
+- Windows installers are intentionally unsigned for the first release
 
-A tag build is not an installation or upgrade verification. Record real-machine results separately.
+A successful CI build is not proof of installation or upgrade behavior. Record real-machine results separately.
 
-## Required GitHub Actions Secrets for macOS
+## Release asset naming
 
-Configure these repository or environment Secrets before a release tag is pushed:
+Every versioned asset uses lowercase ASCII and hyphens:
 
-- `APPLE_CERTIFICATE_BASE64`: base64-encoded Developer ID Application `.p12`
-- `APPLE_CERTIFICATE_PASSWORD`: password protecting the `.p12`
-- `APPLE_KEYCHAIN_PASSWORD`: random password used only for the temporary CI keychain
-- `APPLE_SIGNING_IDENTITY`: complete Developer ID Application identity
-- `ASC_API_KEY_ID`: App Store Connect API key identifier used for notarization
-- `ASC_API_KEY_P8_BASE64`: base64-encoded App Store Connect API private key
-- `ASC_ISSUER_ID`: App Store Connect issuer identifier
+```text
+happy-next-vX.Y.Z-android.apk
+happy-next-vX.Y.Z-android.aab
+happy-next-vX.Y.Z-ios.ipa
+happy-next-vX.Y.Z-macos-universal.dmg
+happy-next-vX.Y.Z-macos-universal.zip
+happy-next-vX.Y.Z-macos-universal.app.tar.gz
+happy-next-vX.Y.Z-macos-universal.app.tar.gz.sig
+happy-next-vX.Y.Z-windows-x64-setup.exe
+happy-next-vX.Y.Z-windows-x64-setup.exe.sig
+happy-next-vX.Y.Z-windows-x64.msi
+happy-next-vX.Y.Z-windows-x64.msi.sig
+happy-next-vX.Y.Z-windows-arm64-setup.exe
+happy-next-vX.Y.Z-windows-arm64-setup.exe.sig
+happy-next-vX.Y.Z-windows-arm64.msi
+happy-next-vX.Y.Z-windows-arm64.msi.sig
+happy-next-vX.Y.Z-desktop-metadata.json
+happy-next-vX.Y.Z-sha256sums.txt
+```
 
-The workflow validates only that each value is present. It must never print the value. The certificate is decoded under `$RUNNER_TEMP`, imported into a temporary keychain, and deleted in an `always()` cleanup step.
+`latest.json` is the only unversioned asset because the production client uses a fixed updater endpoint.
 
-The existing App Store Connect API key Secrets are reused for notarization, avoiding an Apple ID app-specific password. Confirm that the key belongs to the same Apple team and has permission to submit Developer ID software for notarization.
+Do not put spaces in Release asset names. GitHub normalizes uploaded names containing spaces, which can make a pre-generated updater URL return 404.
 
-## Tag release flow
+## Required GitHub Actions Secrets
 
-`.github/workflows/release.yml` performs the following for a `vX.Y.Z` tag:
+### Desktop updater signing
 
-1. builds Android APK/AAB and iOS IPA using the existing mobile release flow;
-2. builds unsigned Windows x64 and ARM64 MSI and NSIS installers on native GitHub-hosted runners;
-3. builds the macOS Universal target;
-4. signs the macOS application and nested code with Developer ID;
-5. submits the macOS bundle for notarization through Tauri;
-6. validates the application and DMG staples;
-7. runs `codesign` and Gatekeeper (`spctl`) assessments;
-8. packages the application as a zip and uploads the zip and DMG;
-9. refuses to continue if a GitHub Release for the tag already exists;
-10. generates `SHA256SUMS.txt` and creates the GitHub Release.
+- `TAURI_SIGNING_PRIVATE_KEY`
+- `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`
 
-The workflow strips the leading `v`, passes it to Expo through `APP_VERSION`, and writes a temporary Tauri config override that is supplied with `tauri build --config`.
+### macOS Developer ID and notarization
 
-Do not push a release tag until the Apple Secrets are configured. A missing Secret intentionally fails the macOS release job before certificate import.
+- `APPLE_CERTIFICATE_BASE64`
+- `APPLE_CERTIFICATE_PASSWORD`
+- `APPLE_KEYCHAIN_PASSWORD`
+- `APPLE_SIGNING_IDENTITY`
+- `ASC_API_KEY_ID`
+- `ASC_API_KEY_P8_BASE64`
+- `ASC_ISSUER_ID`
 
-## Desktop-only manual release flow
+The workflow checks only whether each Secret is present. It must never print a credential value. Temporary certificates, API keys, and keychains are created under `$RUNNER_TEMP` and deleted in cleanup steps.
 
-`.github/workflows/desktop-release.yml` builds the production desktop application from the selected workflow ref without triggering Android, iOS, or Docker publishing. It currently supports appending desktop artifacts to an existing `vX.Y.Z` GitHub Release.
+Never commit a private updater key. Keep it only in GitHub Actions Secrets and an approved offline backup. The updater public key may be committed in `src-tauri/tauri.conf.json`.
 
-Required inputs:
+## Publishing model
 
-- `release_tag`: an existing GitHub Release tag;
-- `publish_update_manifest`: whether that Release should receive `latest.json`;
-- `confirmation`: the exact value `APPEND-DESKTOP`.
+Publishing is intentionally split into independent manual workflows:
 
-The workflow uses the production product name and identifier. It refuses to:
+| Product line | Workflow | Confirmation |
+|---|---|---|
+| GitHub Release: Android, iOS IPA, macOS, Windows | `.github/workflows/release.yml` | `PUBLISH-RELEASE` |
+| Docker images | `.github/workflows/docker-publish.yml` | `PUBLISH-DOCKER` |
+| Existing IPA to iOS App Store | `.github/workflows/ios-submit.yml` | `SUBMIT-IOS` |
+| CLI npm package | `.github/workflows/cli-publish.yml` | workflow-specific |
 
-- accept a non-semantic `vX.Y.Z` tag;
-- modify a Release that already contains desktop assets;
-- overwrite an existing asset;
-- publish `latest.json` to a Release that is not currently the newest GitHub Release.
+A release skill creates and pushes the immutable `vX.Y.Z` tag first, then explicitly dispatches only the selected workflows. Pushing a tag by itself does not publish GitHub or Docker assets.
 
-The application version is derived from the target Release tag, while `desktop-build-metadata.json` records the actual source commit used for the desktop build. This is important when desktop assets are appended after the original tag was created.
+The old desktop-only workflow was removed. Desktop artifacts are always released with the mobile GitHub Release so `latest.json`, source tag, mobile binaries, and desktop binaries remain consistent.
 
-For the initial production-path updater test:
+## GitHub Release workflow
 
-1. append version 2.7.5 installers to Release `v2.7.5` without `latest.json`;
-2. append version 2.7.6 installers and `latest.json` to Release `v2.7.6`;
-3. install the v2.7.5 desktop application from GitHub;
-4. verify it discovers, downloads, and installs v2.7.6.
+`.github/workflows/release.yml` accepts:
 
-This validates the release and updater mechanism, but both desktop binaries are built from the current source commit. They are not historical reconstructions of the original v2.7.5 and v2.7.6 source trees.
+- `release_tag`: an existing `vX.Y.Z` tag
+- `confirmation`: exactly `PUBLISH-RELEASE`
 
-## Unsigned CI
+The workflow:
 
-`.github/workflows/desktop-ci.yml` remains credential-free. It runs TypeScript checks and the app test suite, then builds:
+1. verifies the tag exists and the GitHub Release does not;
+2. checks out that exact tag in every build job;
+3. builds Android APK/AAB and iOS IPA;
+4. builds Windows x64 and ARM64 MSI/NSIS installers;
+5. signs Windows updater payloads with the Tauri updater key;
+6. builds a macOS Universal application;
+7. signs it with Developer ID and submits the application for notarization;
+8. separately notarizes and staples the DMG;
+9. validates application version, signatures, stapling, and Gatekeeper;
+10. renames every staged asset to the normalized `happy-next-vX.Y.Z-*` format;
+11. generates `latest.json`, desktop metadata, and SHA256 checksums;
+12. refuses unexpected asset names or an existing Release;
+13. creates the immutable GitHub Release.
 
-- unsigned macOS Universal `.app/.dmg` artifacts;
-- unsigned Windows x64 MSI/NSIS artifacts.
-- unsigned Windows ARM64 MSI/NSIS artifacts.
+The version is passed to Expo with `APP_VERSION` and to Tauri through a temporary config supplied with `tauri build --config`. Both macOS and Windows jobs fail if the bundled installer version does not match the requested tag.
 
-These artifacts are for build validation and internal testing only.
+## iOS App Store submission
+
+`.github/workflows/ios-submit.yml` does not rebuild the application. It requires an existing GitHub Release containing:
+
+```text
+happy-next-vX.Y.Z-ios.ipa
+```
+
+It downloads that exact IPA and submits it through EAS using the App Store Connect API key. This guarantees the App Store submission and GitHub Release refer to the same binary.
+
+## Docker publication
+
+`.github/workflows/docker-publish.yml` accepts an existing tag and checks out that exact source revision. It publishes versioned multi-architecture images independently from the GitHub Release workflow.
+
+Updating Docker `latest` is an explicit boolean input. Do not update `latest` when intentionally republishing an older version.
 
 ## Updater foundation
 
-The production client uses the Tauri updater plugin and checks:
+The production client checks:
 
 ```text
 https://github.com/hitosea/happy-next/releases/latest/download/latest.json
 ```
 
-The updater public key is committed in `src-tauri/tauri.conf.json`. The encrypted private key and password are configured as GitHub Actions Secrets:
+`sources/scripts/generateDesktopUpdateManifest.cjs`:
 
-- `TAURI_SIGNING_PRIVATE_KEY`
-- `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`
+- validates semantic versions and release tags;
+- requires a signed macOS `.app.tar.gz`;
+- requires signed Windows x64 and ARM64 payloads;
+- supports current `.exe`/`.msi` updater payloads and legacy `.nsis.zip`/`.msi.zip` payloads;
+- maps the Universal macOS archive to both Darwin architectures;
+- reads detached signatures without printing them;
+- writes exact GitHub Release asset URLs.
 
-The encrypted key backup must be moved from its temporary local directory to offline storage. The password is intentionally not stored beside the key and should remain in the approved password manager.
-
-`sources/scripts/generateDesktopUpdateManifest.cjs` creates the Tauri static `latest.json` structure from signed updater artifacts. It:
-
-- requires a semantic release version;
-- requires a signed macOS `.app.tar.gz` artifact;
-- requires architecture-specific signed Windows x64 and ARM64 updater artifacts, preferring `.nsis.zip` and falling back to `.msi.zip`;
-- maps the Universal macOS artifact to both Darwin architectures;
-- reads detached `.sig` files without printing their contents;
-- writes GitHub Release download URLs.
-
-The release workflow passes the updater Secrets to macOS and Windows builds, uploads updater archives and detached signatures, and generates `latest.json` before creating the GitHub Release. Windows installers remain intentionally unsigned even though their updater archives are cryptographically signed by the Tauri updater key.
-
-Never commit a private updater key. Store it only in GitHub Actions Secrets and an offline backup. The corresponding public key may be committed once approved.
+Windows installers remain unsigned at the operating-system level, even though updater payloads are cryptographically signed with the Tauri updater key.
 
 ## Release verification checklist
 
+### Artifact inspection
+
+- Every versioned asset starts with `happy-next-vX.Y.Z-`.
+- Only `latest.json` is unversioned.
+- `latest.json` contains `darwin-aarch64`, `darwin-x86_64`, `windows-x86_64`, and `windows-aarch64`.
+- Every updater URL returns HTTP 200.
+- Every updater payload has a matching detached signature.
+- Metadata records the tag version and source commit.
+
 ### macOS
 
-- Download the DMG from GitHub Releases on a clean Apple Silicon Mac.
-- Confirm Gatekeeper opens the app without an unidentified-developer warning.
-- Confirm the application identity with `codesign -dv --verbose=4`.
+- Download the DMG on a clean Apple Silicon Mac.
+- Confirm Gatekeeper opens it without an unidentified-developer warning.
+- Confirm identity with `codesign -dv --verbose=4`.
 - Confirm notarization with `spctl --assess --type execute --verbose=4`.
 - Install, launch, sign in, receive a notification, send an image, use microphone/camera, quit, and relaunch.
-- Repeat on Intel hardware or mark Intel interaction/install status **未验证**.
+- Repeat on Intel hardware or mark Intel testing **未验证**.
 
-### Windows x64
+### Windows x64 and ARM64
 
-- Download both MSI and NSIS artifacts on a real Windows 10/11 x64 machine.
+For each architecture:
+
+- Test both MSI and NSIS on a real supported Windows machine.
 - Record the expected unsigned SmartScreen/unknown-publisher warning.
 - Install, launch, sign in, exercise notifications/tray/taskbar/shortcuts/media, and uninstall.
-- Test overwrite installation with a newer version.
-
-### Windows ARM64
-
-- Download both MSI and NSIS artifacts on a real Windows 11 ARM64 machine.
-- Record the expected unsigned SmartScreen/unknown-publisher warning.
-- Install, launch, sign in, exercise notifications/tray/taskbar/shortcuts/media, and uninstall.
-- Test overwrite installation with a newer ARM64 version, or mark real-machine status **未验证**.
+- Test upgrading from an older release.
+- Mark any architecture without a real device as **未验证**.
 
 ### Updater
 
-- install a previously published version;
-- publish a newer signed version;
-- verify discovery, download, signature validation, installation, and restart;
-- verify failure leaves the old installation usable;
-- record the result as **Upgrade verified** only after real-machine completion.
+1. Install a genuinely older GitHub Release.
+2. Publish a newer signed GitHub Release.
+3. Verify background discovery and download.
+4. Verify the in-app update button appears in logged-out and logged-in layouts.
+5. Install and restart through the updater.
+6. Confirm the displayed version, login state, and local data after restart.
+7. Confirm a failed update leaves the old installation usable.
+
+Only record **Upgrade verified** after completing these steps on a real machine.

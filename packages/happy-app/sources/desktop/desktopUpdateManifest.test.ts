@@ -34,17 +34,17 @@ describe('desktop updater manifest generator', () => {
 
     it('generates signed platform entries for universal macOS and both Windows architectures', () => {
         const directory = mkdtempSync(join(tmpdir(), 'happy-desktop-update-'));
-        writeFileSync(join(directory, 'Happy.Next.app.tar.gz'), 'mac');
-        writeFileSync(join(directory, 'Happy.Next.app.tar.gz.sig'), 'mac-signature\n');
-        writeFileSync(join(directory, 'Happy.Next_2.3.4_x64-setup.exe'), 'windows-x64');
-        writeFileSync(join(directory, 'Happy.Next_2.3.4_x64-setup.exe.sig'), 'windows-x64-signature\n');
-        writeFileSync(join(directory, 'Happy.Next_2.3.4_arm64-setup.exe'), 'windows-arm64');
-        writeFileSync(join(directory, 'Happy.Next_2.3.4_arm64-setup.exe.sig'), 'windows-arm64-signature\n');
+        writeFileSync(join(directory, 'happy-next-v2.3.4-macos-universal.app.tar.gz'), 'mac');
+        writeFileSync(join(directory, 'happy-next-v2.3.4-macos-universal.app.tar.gz.sig'), 'mac-signature\n');
+        writeFileSync(join(directory, 'happy-next-v2.3.4-windows-x64-setup.exe'), 'windows-x64');
+        writeFileSync(join(directory, 'happy-next-v2.3.4-windows-x64-setup.exe.sig'), 'windows-x64-signature\n');
+        writeFileSync(join(directory, 'happy-next-v2.3.4-windows-arm64-setup.exe'), 'windows-arm64');
+        writeFileSync(join(directory, 'happy-next-v2.3.4-windows-arm64-setup.exe.sig'), 'windows-arm64-signature\n');
         const outputPath = join(directory, 'latest.json');
 
         const manifest = generateDesktopUpdateManifest({
             version: 'v2.3.4',
-            releaseTag: 'desktop-v2.3.4',
+            releaseTag: 'v2.3.4',
             repository: 'hitosea/happy-next',
             artifactsDir: directory,
             outputPath,
@@ -54,10 +54,12 @@ describe('desktop updater manifest generator', () => {
 
         expect(manifest.platforms['darwin-aarch64']).toEqual(manifest.platforms['darwin-x86_64']);
         expect(manifest.platforms['windows-x86_64'].signature).toBe('windows-x64-signature');
-        expect(manifest.platforms['windows-x86_64'].url).toContain('_x64-setup.exe');
+        expect(manifest.platforms['windows-x86_64'].url).toContain('happy-next-v2.3.4-windows-x64-setup.exe');
         expect(manifest.platforms['windows-aarch64'].signature).toBe('windows-arm64-signature');
-        expect(manifest.platforms['windows-aarch64'].url).toContain('_arm64-setup.exe');
-        expect(manifest.platforms['darwin-aarch64'].url).toContain('/releases/download/desktop-v2.3.4/');
+        expect(manifest.platforms['windows-aarch64'].url).toContain('happy-next-v2.3.4-windows-arm64-setup.exe');
+        expect(manifest.platforms['darwin-aarch64'].url).toContain('/releases/download/v2.3.4/');
+        expect(manifest.platforms['darwin-aarch64'].url).toContain('happy-next-v2.3.4-macos-universal.app.tar.gz');
+        expect(JSON.stringify(manifest)).not.toContain('%20');
         expect(JSON.parse(readFileSync(outputPath, 'utf8'))).toEqual(manifest);
     });
 });

@@ -1,451 +1,445 @@
 ---
 name: happy-next-release
-description: Cuts a happy-next release (CLI / App + Docker / iOS / full combo). Command-only — invoked via /happy-next-release.
+description: Cuts a happy-next release through explicit CLI, GitHub Release, Docker, iOS App Store, or full release paths. Command-only — invoked via /happy-next-release.
 ---
 
 # Happy Next 发布流程
 
-## Overview
+## 总则
 
-发版前先询问用户本次发哪条线，只展开对应 checklist。各发布线版本号**互相独立**：CLI 可单独发；手机 App、Docker 和桌面客户端绑定同一 tag；iOS 提审依赖对应 tag 已存在。全套（A + B + C）必须**按 A → B → C 顺序**走，否则 App tag 会漏掉 CLI 的 version bump commit，iOS 提审也会找不到 tag。
+每次调用先让用户选择一条发布线，只展开对应 checklist：
 
-**不要默认全发**。含 A（CLI）或 C（iOS）的分支还要再问触发方式，见下方「触发方式」小节。
+- **A. 仅 CLI**
+- **B. GitHub Release（App + Desktop）**
+- **C. Docker**
+- **D. iOS App Store**
+- **E. 全部**
 
-## 发布线一览（对应入口 A/B/C/E）
+版本关系：
 
-| 发布对象 | 版本源 | 触发方式 | Workflow |
-|---|---|---|---|
-| happy-next-cli（npm） | `packages/happy-cli/package.json` | 手动 `workflow_dispatch` | `cli-publish.yml` |
-| 手机 App（APK/AAB/IPA） | git tag 去掉 `v` 前缀 | 推 tag `v*` | `release.yml` |
-| Docker 镜像（server/webapp/voice/docs） | git tag | 推 tag `v*`（同上） | `docker-publish.yml` |
-| 桌面客户端（macOS Universal / Windows x64 / Windows ARM64） | git tag 去掉 `v` 前缀 | 推 tag `v*`（同上） | `release.yml` |
-| 仅桌面客户端（追加到既有 Release） | 手动输入既有 tag | 手动 `workflow_dispatch` | `desktop-release.yml` |
-| iOS App Store 提审 | 手动输入 | 手动 `workflow_dispatch` | `release.yml`（submit-ios 分支） |
+- CLI 使用 `packages/happy-cli/package.json` 中的独立 npm 版本。
+- B、C、D 使用同一个不可变的 `vX.Y.Z` git tag 和同一个源代码 commit。
+- B 包含 Android APK/AAB、iOS IPA、macOS Universal、Windows x64、Windows ARM64 和 `latest.json`。
+- D 不重新构建 IPA，只提交 B 已发布的同一份 IPA。
+- 推送 tag 本身不会发布 GitHub Release 或 Docker；必须显式触发相应 workflow。
+- 不再提供“仅桌面追加到既有 Release”入口。
 
-## 入口：问用户本次发什么
+不要默认发布全部。任何会真实发布、提交 App Store、创建 tag、覆盖 Secret 或修改 Release 的操作，都必须先展示目标版本和完整命令并等待用户确认。
 
-用 AskUserQuestion 或 options，让用户从以下选择：
-
-- **A. 仅 CLI**（改动只动了 `packages/happy-cli/`）
-- **B. App + Docker + Desktop**（改动涉及 happy-app / happy-server / happy-voice / happy-docs；同一个 tag 同时发布桌面安装包和更新清单）
-- **C. 仅 iOS App Store**（之前 tag 已发过，现在要提审）
-- **D. 全套**（A + B + C，按序执行）
-- **E. 仅桌面客户端**（不发布手机 App 和 Docker；通过手动工作流追加到指定的既有 Release）
-
-根据选择跳到对应小节，**只展开该分支的 checklist**，用 TodoWrite 建 todo 跟踪。
-
-选了 **A、C、D 或 E** 时，在进入第一个手动触发步骤前，再问一次触发方式（手动 / `gh`），见下节。
-
----
-
-## 共用前置检查（所有分支开头都跑）
+## 共用前置检查
 
 ```bash
-git status           # 工作区必须干净
-git branch --show-current  # 应在 main
-git pull origin main # 拉最新
+git status --short --branch
+git branch --show-current
+git fetch origin --tags
+git pull --ff-only origin main
 ```
 
-如果工作区不干净，询问用户是否先 commit 或 stash，不要自作主张。
+要求：
+
+- 工作区干净；
+- 当前分支为 `main`；
+- 本地 `main` 与远端同步；
+- 不得自行 stash、覆盖用户修改或强制推送。
+
+如果不干净，提供“先提交指定改动 / 用户自行处理”选项，不要自作主张。
+
+## 发布入口选择
+
+询问用户：
+
+- A. 仅 CLI
+- B. GitHub Release（App + Desktop）
+- C. Docker
+- D. iOS App Store
+- E. 全部
+
+选择后只执行对应分支。
 
 ---
 
-## 触发方式：手动 vs `gh`（A / C / D / E 用到）
+# A. 仅 CLI
 
-CLI 发布（A）、iOS 提审（C）和桌面独立发布（E）都靠手动 `workflow_dispatch`。进入这些步骤前，询问用户：
-
-- **手动触发**：我把网页链接和要填的字段给你，你自己点 Run，完成后回我"已触发"。
-- **AI 用 `gh` 触发**：我直接在终端跑 `gh workflow run`，并用 `gh run watch` 盯进度。
-
-注意：
-
-- `gh` 触发会**真实推送一次发布**（npm publish / ASC 提审），和网页点 Run 等价、不可撤销。**跑命令前必须把完整命令和版本号展示给用户，等用户确认**。
-- 选 **D（全套）** 时，A 步骤和 C 步骤各问一次（或开头一次性确认整轮都用同一种方式）。
-- 默认仓库为 `origin`（`hitosea/happy-next`），`gh` 命令无需 `-R`。
-
-各步骤里都给了「手动」和「`gh`」两套指令，按用户的选择执行其一即可。
-
----
-
-## 版本号 bump 规则（A、B 共用）
-
-基于待发布的 commit 类型给出建议，让用户确认或覆盖：
-
-- 只有 `fix(...)` / `chore(...)` / `docs(...)` → 建议 **patch**
-- 出现 `feat(...)` → 建议 **minor**
-- commit 里带 `BREAKING CHANGE` 或 `!:` → 建议 **major**
-
----
-
-## 分支 A：仅 CLI
-
-### A1. 确认改动范围
+## A1. 审计 CLI 改动
 
 ```bash
-git log origin/main~5..origin/main --stat -- packages/happy-cli/
+LAST_CLI=$(git log --oneline --grep='^release: happy-next-cli' | head -1 | awk '{print $1}')
+RANGE="${LAST_CLI:+${LAST_CLI}..HEAD}"
+git log ${RANGE:--30} --oneline --no-merges -- packages/happy-cli packages/happy-wire
 ```
 
-向用户展示最近几个 commit 涉及的文件，确认是否仅 CLI 改动。如果混入了 App/Server 改动但用户只想发 CLI，**警告用户**——version bump commit 会混入 main，可能让后续 App tag release notes 变乱。
+展示 CLI/wire 改动。如果没有需要发布的 CLI 改动，建议取消。
 
-### A2. 本地 typecheck
+## A2. 校验
 
 ```bash
-cd packages/happy-cli && yarn build
+cd packages/happy-cli
+yarn build
 ```
 
-失败就停下，不要继续发。
+修改过 `happy-wire` 时还必须：
 
-### A3. 决定 version bump 类型
+```bash
+cd packages/happy-wire
+yarn build
+```
 
-先跑这段脚本，把当前版本和三个候选版本一次性算出来：
+## A3. 决定 CLI 版本
 
 ```bash
 node -e "
 const v = require('./packages/happy-cli/package.json').version.split('.').map(Number);
 console.log('当前: ' + v.join('.'));
-console.log('patch → ' + v[0] + '.' + v[1] + '.' + (v[2]+1));
-console.log('minor → ' + v[0] + '.' + (v[1]+1) + '.0');
-console.log('major → ' + (v[0]+1) + '.0.0');
+console.log('patch: ' + v[0] + '.' + v[1] + '.' + (v[2] + 1));
+console.log('minor: ' + v[0] + '.' + (v[1] + 1) + '.0');
+console.log('major: ' + (v[0] + 1) + '.0.0');
 "
 ```
 
-再扫描自上次 CLI 发布以来的 commit 类型，给出建议的 bump 类型：
+建议规则：
+
+- `fix/chore/docs`：patch
+- `feat`：minor
+- `BREAKING CHANGE` 或 `!:`：major
+
+把当前版本、候选版本、建议和依据交给用户确认。
+
+## A4. 发布
+
+执行前展示并确认：
 
 ```bash
-LAST_CLI=$(git log --oneline --grep='^release: happy-next-cli' | head -1 | awk '{print $1}')
-# 首次发布或找不到历史 CLI release commit 时，回退看最近 30 条 CLI 相关 commit
-RANGE="${LAST_CLI:+${LAST_CLI}..HEAD}"
-git log ${RANGE:--30} --oneline --no-merges -- packages/happy-cli packages/happy-wire
+gh workflow run cli-publish.yml \
+  -f version={CLI版本} \
+  -f dry-run=false
 ```
 
-按「版本号 bump 规则」判断建议类型，把"当前版本 / 三个候选 / 建议 bump 类型 / 判断依据"一起展示给用户，让用户确认或覆盖。
-
-### A4. ⏸ 触发 workflow（按「触发方式」小节用户的选择二选一）
-
-**手动触发：**
-
-> 请打开 <https://github.com/hitosea/happy-next/actions/workflows/cli-publish.yml> → 点 **Run workflow** → `Version to publish` 填 `{用户选的版本}` → `Dry run` 保持 `false`（默认） → 点绿色 Run workflow。完成后告诉我"已触发"。
->
-> **等用户确认。不要继续。**
-
-**AI 用 `gh` 触发**（先把命令展示给用户、等确认后再跑）：
+确认后执行并监听：
 
 ```bash
-gh workflow run cli-publish.yml -f version={用户选的版本} -f dry-run=false
+RUN_ID=$(gh run list --workflow=cli-publish.yml --limit 1 --json databaseId -q '.[0].databaseId')
+gh run watch "$RUN_ID"
 ```
 
-字段名照抄：版本是 `version`、关 dry run 是 `dry-run=false`（注意是中划线）。
-
-### A5. 监控 + 收尾
-
-告知用户 workflow 会自动：bump 版本 → 跑测试 → `npm publish` → 提交 `release: happy-next-cli v{X.Y.Z}` 回 main。
-
-若是 `gh` 触发，可直接盯进度：
+成功后：
 
 ```bash
-gh run watch $(gh run list --workflow=cli-publish.yml --limit 1 --json databaseId -q '.[0].databaseId')
+git pull --ff-only origin main
+node -p "require('./packages/happy-cli/package.json').version"
 ```
-
-等 workflow 成功后（手动方式则等用户确认）：
-
-```bash
-git pull origin main   # 拉回 CI 提交的 version bump
-node -p "require('./packages/happy-cli/package.json').version"  # 核对新版本号
-```
-
-向用户展示新版本号，确认本次发版完成。
 
 ---
 
-## 分支 B：App + Docker + Desktop
+# B. GitHub Release（App + Desktop）
 
-### B1. 确认上一个 tag + 累积改动
+## B1. 审计待发布改动
 
 ```bash
-git tag --sort=-creatordate | grep '^v[0-9]' | head -5    # 最近几个 vX.Y.Z 格式 tag
-LAST=$(git tag --sort=-creatordate | grep '^v[0-9]' | head -1)
-git log ${LAST}..HEAD --oneline --no-merges
+LAST=$(git tag --sort=-version:refname | grep '^v[0-9]' | head -1)
+git log "${LAST}..HEAD" --oneline --no-merges
 ```
 
-向用户展示累积 commit 列表，让用户决定是否值得发版。如果没什么用户可感知的变化，劝退。
+如果没有用户可感知变化，建议不发布。
 
-如果本次包含桌面发布，再检查 Actions Secret **名称是否存在**（不要读取或打印值）：
+## B2. 检查发布 Secrets
+
+只检查名称，不读取值：
 
 ```bash
 gh secret list --app actions | cut -f1
 ```
 
-桌面发布必须具备：
+要求：
 
-- updater：`TAURI_SIGNING_PRIVATE_KEY`、`TAURI_SIGNING_PRIVATE_KEY_PASSWORD`
-- Developer ID：`APPLE_CERTIFICATE_BASE64`、`APPLE_CERTIFICATE_PASSWORD`、`APPLE_KEYCHAIN_PASSWORD`、`APPLE_SIGNING_IDENTITY`
-- notarization：`ASC_API_KEY_ID`、`ASC_API_KEY_P8_BASE64`、`ASC_ISSUER_ID`
+- `EXPO_TOKEN`
+- `TAURI_SIGNING_PRIVATE_KEY`
+- `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`
+- `APPLE_CERTIFICATE_BASE64`
+- `APPLE_CERTIFICATE_PASSWORD`
+- `APPLE_KEYCHAIN_PASSWORD`
+- `APPLE_SIGNING_IDENTITY`
+- `ASC_API_KEY_ID`
+- `ASC_API_KEY_P8_BASE64`
+- `ASC_ISSUER_ID`
 
-缺少 Secret 时停在这里，列出缺少的**名称**并让用户配置；不得要求用户把值发到聊天中，也不得把值写入日志。上传或替换 Secret、证书或私钥前必须再次确认。
+缺少任何 Secret 都停止。不得让用户在聊天中粘贴私钥、证书或密码。
 
-### B2. 决定新 tag 版本号
-
-先跑这段脚本，把最近的 tag 和三个候选版本一次性算出来：
+## B3. 决定 App 版本
 
 ```bash
-LAST=$(git tag --sort=-creatordate | grep '^v[0-9]' | head -1)
+LAST=$(git tag --sort=-version:refname | grep '^v[0-9]' | head -1)
 node -e "
 const v = '$LAST'.replace(/^v/, '').split('.').map(Number);
 console.log('当前: $LAST');
-console.log('patch → v' + v[0] + '.' + v[1] + '.' + (v[2]+1));
-console.log('minor → v' + v[0] + '.' + (v[1]+1) + '.0');
-console.log('major → v' + (v[0]+1) + '.0.0');
+console.log('patch: v' + v[0] + '.' + v[1] + '.' + (v[2] + 1));
+console.log('minor: v' + v[0] + '.' + (v[1] + 1) + '.0');
+console.log('major: v' + (v[0] + 1) + '.0.0');
 "
 ```
 
-再基于 B1 已列出的 commit，按「版本号 bump 规则」判断建议类型，把"当前 tag / 三个候选 / 建议 bump 类型 / 判断依据"一起展示给用户，让用户确认或覆盖。
+按 commit 类型给出 patch/minor/major 建议，让用户确认最终 `vX.Y.Z`。
 
-### B3. 更新 CHANGELOG + README + docs（6 个文件）
+确认该 tag 和 Release 均不存在：
 
-| # | 文件 | 方式 |
-|---|------|------|
-| 1 | `packages/happy-app/CHANGELOG.md` | 手写新版本条目 |
-| 2 | `packages/happy-app/sources/changelog/changelog.json` | 运行脚本自动生成 |
-| 3 | `README.md` | 合并新功能进已有章节 |
-| 4 | `README.zh-CN.md` | 合并新功能进已有章节 |
-| 5 | `docs/changes-from-happy.md` | 合并新功能进已有章节 |
-| 6 | `docs/changes-from-happy.zh-CN.md` | 合并新功能进已有章节 |
+```bash
+git rev-parse "refs/tags/{tag}" 2>/dev/null || true
+gh release view "{tag}" 2>/dev/null || true
+```
 
-先把 B1 列出的 commit 按功能领域分类，向用户展示分类结果，**等用户确认**后再开始写入。
+已使用的版本不得覆盖或重建，改用更高版本。
 
-#### B3.1 编写 CHANGELOG.md
+## B4. 更新 changelog 和产品文档
 
-文件：`packages/happy-app/CHANGELOG.md`
+涉及文件：
 
-先读文件顶部最新的 `## Version N` 条目，连同本轮 commit 一起，**询问用户：新增一个版本条目，还是在最后一个版本上更新内容**。更新模式沿用原 Version 号、日期改今天；新增模式 N+1、插到顶部。
+1. `packages/happy-app/CHANGELOG.md`
+2. `packages/happy-app/sources/changelog/changelog.json`
+3. `README.md`
+4. `README.zh-CN.md`
+5. `docs/changes-from-happy.md`
+6. `docs/changes-from-happy.zh-CN.md`
 
-格式要求（参考已有版本风格）：
+先将 commit 按用户可感知的功能领域分类并展示草稿，等待用户确认。
 
-- 标题：`## Version N - YYYY-MM-DD`（N 是顺序号，不是 tag 名；日期是今天）
-- 一句话摘要（英文）
-- Bullet points，每条以功能领域开头，简洁描述用户可感知的变化
-- 不写技术实现细节，面向用户
+规则：
 
-先把草稿（新增条目或合并后的完整条目）展示给用户确认，再写入文件。
+- `CHANGELOG.md` 按版本记录；
+- 其余四个 md 是完整功能总览，不增加版本标题；
+- 中英文结构与含义保持一致；
+- 不写仅对开发者有意义的实现细节。
 
-#### B3.2 生成 changelog.json
+生成 JSON：
 
 ```bash
 cd packages/happy-app
 npx tsx sources/scripts/parseChangelog.ts
 ```
 
-自动生成 `packages/happy-app/sources/changelog/changelog.json`。核对 `latestVersion` 已更新。
-
-#### B3.3 更新 README（中英文）
-
-文件：`README.md` + `README.zh-CN.md`
-
-**关键原则**：这两个文件展示的是「Happy Next 相比 Happy 的完整功能」，**不按版本分**。
-
-- 将新功能合并进已有章节（如 DooTask 新功能并入「DooTask Integration」章节）
-- 全新功能领域加为新的独立章节（不加版本标签）
-- 同步更新 "Why Happy Next" 亮点列表（带 emoji 的那段）
-- 中英文内容保持一致
-
-#### B3.4 更新 changes-from-happy 文档（中英文）
-
-文件：`docs/changes-from-happy.md` + `docs/changes-from-happy.zh-CN.md`
-
-**关键原则**：同样**不按版本分**，是 Happy Next 相对 Happy 的完整变更记录。
-
-- 更新顶部 TL;DR 概览表格
-- 将新功能合并进已有章节
-- 全新功能领域加为独立章节（不加版本标签）
-- 更新 bug 修复计数
-- 中英文内容保持一致
-
-#### B3 注意事项
-
-- CHANGELOG.md 是唯一按版本记录的文件，其余 4 个 md 文件都是功能总览
-- 中英文文档结构和内容必须对齐
-- 版本号中提到的依赖版本（如 Codex vX.Y.Z）需确认是最新的
-
-### B4. 提交 changelog 改动并推送
+运行校验：
 
 ```bash
-git add packages/happy-app/CHANGELOG.md packages/happy-app/sources/changelog/changelog.json README.md README.zh-CN.md docs/changes-from-happy.md docs/changes-from-happy.zh-CN.md
-git commit -m "docs: changelog for {新版本号}"
+yarn typecheck
+yarn test --run
+```
+
+只提交这六个文档文件：
+
+```bash
+git add \
+  packages/happy-app/CHANGELOG.md \
+  packages/happy-app/sources/changelog/changelog.json \
+  README.md README.zh-CN.md \
+  docs/changes-from-happy.md \
+  docs/changes-from-happy.zh-CN.md
+git commit -m "docs: changelog for {tag}"
 git push origin main
 ```
 
-### B5. 打 tag 并推送
+## B5. 创建不可变 tag
 
-**注意**：下面命令里的 `{版本号}` 是占位符，必须替换成 B2 中用户确认的实际 tag（形如 `v2.1.0`）。**不要**原样执行。
+展示并再次确认：
 
 ```bash
-VERSION={版本号}   # 例如 VERSION=v2.1.0
-git tag $VERSION
-git push origin $VERSION
+git tag {tag}
+git push origin {tag}
 ```
 
-**推送 tag 会同时触发 `release.yml` 和 `docker-publish.yml` 两条流水线**，无法撤销。推送前再次跟用户确认版本号。
+tag 必须指向已经推送的 `main` commit。不得移动、删除或强推已发布 tag。
 
-### B6. ⏸ 监控构建
+## B6. 触发 GitHub Release
 
-给用户：
+workflow 输入：
 
-> 流水线正在跑：<https://github.com/hitosea/happy-next/actions>
-> - `Release`：~45-90 分钟，并行构建 Android APK/AAB、iOS IPA、macOS Universal、Windows x64 和 Windows ARM64，完成后自动创建 GitHub Release
-> - `Docker Publish`：~10-20 分钟，推 4 个镜像到 Docker Hub `kuaifan/*`
->
-> 完成后告诉我结果，或告诉我某条失败了。
+- `release_tag={tag}`
+- `confirmation=PUBLISH-RELEASE`
 
-**等用户确认。**
+展示命令并等待确认：
 
-### B7. 校验 Release 页
+```bash
+gh workflow run release.yml \
+  -f release_tag={tag} \
+  -f confirmation=PUBLISH-RELEASE
+```
 
-告知用户检查 <https://github.com/hitosea/happy-next/releases/tag/{新版本号}>：
+确认后执行并监听：
 
-- 有 APK/AAB/IPA、macOS Universal DMG/ZIP、Windows x64 MSI/NSIS、Windows ARM64 MSI/NSIS
-- 有各桌面平台的 updater archive、`.sig`、`latest.json` 和 `SHA256SUMS.txt`
-- `latest.json` 包含 `darwin-aarch64`、`darwin-x86_64`、`windows-x86_64`、`windows-aarch64`
-- Release notes 自动生成合理
+```bash
+RUN_ID=$(gh run list --workflow=release.yml --limit 1 --json databaseId -q '.[0].databaseId')
+gh run watch "$RUN_ID"
+```
 
-CI 构建成功只代表产物生成成功，不能写成真机安装或升级验证成功。macOS、Windows x64、Windows ARM64 未在真实设备测试时必须明确标注“未验证”。
+## B7. 验证 Release
 
-### B8. 两版本桌面升级验收（首次接入或 updater 变更时必做）
+```bash
+gh release view {tag} --json tagName,assets,url
+```
 
-1. 先发布版本 A，并从 GitHub Release 下载对应架构的正式安装包。
-2. 在真实设备安装 A，启动并确认客户端显示版本 A。
-3. 再发布更高版本 B；等待客户端后台下载完成。
-4. 未登录时确认右下角出现“更新”，已登录时确认设置图标后出现“更新”。
-5. 点击“更新”，确认安装、重启并显示版本 B，且登录状态与本地数据保持正常。
-6. macOS 至少在 Apple Silicon 真机完成；Intel、Windows x64、Windows ARM64 分别记录结果，缺少设备就标注“未验证”。
-7. 不要删除、覆盖或重建已发布的 Release 来伪造升级测试；若 A/B 任何一个构建失败，使用新的更高版本修复。
+除 `latest.json` 外，所有附件必须以 `happy-next-{tag}-` 开头：
+
+```text
+happy-next-vX.Y.Z-android.apk
+happy-next-vX.Y.Z-android.aab
+happy-next-vX.Y.Z-ios.ipa
+happy-next-vX.Y.Z-macos-universal.dmg
+happy-next-vX.Y.Z-macos-universal.zip
+happy-next-vX.Y.Z-macos-universal.app.tar.gz
+happy-next-vX.Y.Z-macos-universal.app.tar.gz.sig
+happy-next-vX.Y.Z-windows-x64-setup.exe
+happy-next-vX.Y.Z-windows-x64-setup.exe.sig
+happy-next-vX.Y.Z-windows-x64.msi
+happy-next-vX.Y.Z-windows-x64.msi.sig
+happy-next-vX.Y.Z-windows-arm64-setup.exe
+happy-next-vX.Y.Z-windows-arm64-setup.exe.sig
+happy-next-vX.Y.Z-windows-arm64.msi
+happy-next-vX.Y.Z-windows-arm64.msi.sig
+happy-next-vX.Y.Z-desktop-metadata.json
+happy-next-vX.Y.Z-sha256sums.txt
+latest.json
+```
+
+必须下载并检查 `latest.json`：
+
+- version 等于 tag；
+- 四个平台键齐全；
+- URL 中没有空格或 `%20`；
+- 每个 URL 返回 HTTP 200；
+- 签名非空。
+
+CI 成功不能描述为真机安装或升级成功。未测试的平台明确标记 **未验证**。
 
 ---
 
-## 分支 E：仅桌面客户端
+# C. Docker
 
-该分支不会发布 Android、iOS 或 Docker。当前支持把生产桌面客户端追加到一个已经存在、且尚无桌面附件的 `vX.Y.Z` Release。
+## C1. 选择 tag
 
-### E1. 检查目标 Release
+Docker 必须使用现有不可变 `vX.Y.Z` tag。
 
-```bash
-gh release view {目标 tag} --json tagName,isDraft,isPrerelease,assets
-```
+如果是 B 同版本，复用 B 创建的 tag；如果是 Docker-only 新版本，先审计改动、确认版本，并按 B5 创建 tag，但不要触发 B。
 
-确认：
+## C2. 决定是否更新 latest
 
-- tag 使用 `vX.Y.Z`；
-- Release 已存在；
-- 没有 DMG、MSI、NSIS、updater archive、`.sig`、`latest.json` 等桌面附件；
-- 本次构建会使用当前 main 源码，只把应用版本设置为目标 tag 的版本号，因此不应描述为历史源码复现。
+- 发布最新正式版本：`publish_latest=true`
+- 重建旧版本或补历史镜像：`publish_latest=false`
 
-如果要发布 `latest.json`，目标 Release 必须是当前仓库最新的正式 Release。
+如果目标 tag 不是当前最高正式版本，默认建议 `false`。
 
-### E2. 检查桌面发布 Secrets
+## C3. 触发
 
-只检查 Secret 名称，不读取值：
+展示并等待确认：
 
 ```bash
-gh secret list --app actions | cut -f1
+gh workflow run docker-publish.yml \
+  -f release_tag={tag} \
+  -f publish_latest={true|false} \
+  -f confirmation=PUBLISH-DOCKER
 ```
 
-要求与 B1 的桌面 Secrets 清单一致。缺少任何一项就停止。
-
-### E3. ⏸ 触发桌面工作流
-
-触发参数：
-
-- `release_tag={目标 tag}`
-- `publish_update_manifest=true|false`
-- `confirmation=APPEND-DESKTOP`
-
-**手动触发：**
-
-> 打开 <https://github.com/hitosea/happy-next/actions/workflows/desktop-release.yml>，选择 main，填写上述三个参数后运行。
-
-**AI 使用 `gh` 触发：**先展示完整命令并等待确认，再执行：
+确认后执行并监听：
 
 ```bash
-gh workflow run desktop-release.yml \
-  -f release_tag={目标 tag} \
-  -f publish_update_manifest={true|false} \
-  -f confirmation=APPEND-DESKTOP
+RUN_ID=$(gh run list --workflow=docker-publish.yml --limit 1 --json databaseId -q '.[0].databaseId')
+gh run watch "$RUN_ID"
 ```
 
-该操作会真实修改既有 GitHub Release。即使用户之前选择了 E，也必须在运行命令前再次展示 tag 和 `publish_update_manifest` 值。
+成功后核对五个镜像的版本标签与架构：
 
-### E4. 监控和校验
-
-```bash
-gh run watch $(gh run list --workflow=desktop-release.yml --limit 1 --json databaseId -q '.[0].databaseId')
-gh release view {目标 tag} --json assets --jq '.assets[].name'
-```
-
-确认 macOS Universal、Windows x64、Windows ARM64、updater archives、签名、构建元数据和桌面校验和均存在。只有 `publish_update_manifest=true` 的最新 Release 应包含 `latest.json`。
-
-### E5. 两版本升级测试
-
-首次验证推荐：
-
-1. 先向较旧 Release 追加桌面安装包，`publish_update_manifest=false`；
-2. 再向当前最新 Release 追加桌面安装包，`publish_update_manifest=true`；
-3. 从旧 Release 安装桌面客户端；
-4. 验证它通过正式更新地址升级到最新 Release。
-
-不得使用 `--clobber` 覆盖已有附件。若附件已经存在，选择新版本或先人工审计，不要自动删除。
+- `kuaifan/happy-server`
+- `kuaifan/happy-app`
+- `kuaifan/happy-voice`
+- `kuaifan/happy-docs`
+- `kuaifan/happy-web`
 
 ---
 
-## 分支 C：仅 iOS App Store
+# D. iOS App Store
 
-前提：对应 tag 的 `release.yml` 已跑完，IPA 已在 GitHub Release 里（若刚走完分支 B，等其 `Release` 流水线跑完即可）。
+## D1. 前置检查
 
-### C1. ⏸ 触发（按「触发方式」小节用户的选择二选一）
+必须已有 B 创建的 GitHub Release，且包含：
 
-**手动触发：**
-
-> 请打开 <https://github.com/hitosea/happy-next/actions/workflows/release.yml> → **Run workflow** → `version` 填要提审的版本号（不带 `v` 前缀，如 `2.0.4`） → Run。完成后告诉我"已触发"。
->
-> **等用户确认。**
-
-**AI 用 `gh` 触发**（先把命令和版本号展示给用户、等确认后再跑）：
-
-```bash
-gh workflow run release.yml -f version={提审版本号，不带 v}
-gh run watch $(gh run list --workflow=release.yml --limit 1 --json databaseId -q '.[0].databaseId')
+```text
+happy-next-{tag}-ios.ipa
 ```
 
-该触发只跑 `submit-ios` 任务（tag-push 才跑的 build 任务会因 `if` 跳过）：重新本地构建 IPA → 通过 ASC API 提审。
+检查：
+
+```bash
+gh release view {tag} --json assets --jq '.assets[].name'
+```
+
+没有该 IPA 时停止，不允许 D 分支重新构建一个不同的 IPA。
+
+## D2. 触发提审
+
+这是不可逆的外部发布操作。展示并等待确认：
+
+```bash
+gh workflow run ios-submit.yml \
+  -f release_tag={tag} \
+  -f confirmation=SUBMIT-IOS
+```
+
+确认后执行并监听：
+
+```bash
+RUN_ID=$(gh run list --workflow=ios-submit.yml --limit 1 --json databaseId -q '.[0].databaseId')
+gh run watch "$RUN_ID"
+```
+
+workflow 会下载 GitHub Release 中的同一份 IPA，并通过 EAS 提交 App Store Connect。
+
+成功只代表上传/提交请求完成；审核状态需要在 App Store Connect 中另行核对。
 
 ---
 
-## 分支 D：全套（A + B + C）
+# E. 全部
 
-**顺序敏感**——必须按 A → B → C，不能并行：
+全套包含 A + B + C + D。
 
-1. 走完**分支 A**全部步骤（CLI 发布 + A5 的 `git pull` 拿到 CI 推回的版本号 commit）
-2. 走完**分支 B**（更新 changelog → commit → 打 tag → 推送，触发手机 App + Docker + Desktop 发布）
-3. 等 B 的 `Release` 流水线跑完、IPA 已在 Release 页后，走**分支 C**（用 B 刚推的版本号提审 iOS）
+## E1. 确认两个版本
 
-为什么这个顺序：
+分别确认：
 
-- A 先于 B —— 否则 CLI 的 version bump commit 不在 App tag 里，用户在 App 看到的 release notes 会缺这条。
-- C 在 B 之后 —— iOS 提审需要对应 tag 已存在；提审版本号用 B2 里确认的 tag（去掉 `v`）。
+- CLI npm 版本；
+- App/Docker `vX.Y.Z` tag。
 
-触发方式：A 步和 C 步都是手动 `workflow_dispatch`，按「触发方式」小节用户的选择执行（建议开头一次性问清整轮用手动还是 `gh`）。
+二者互相独立，不强制相同。
+
+## E2. 执行顺序
+
+1. 完成 A，拉回 CLI workflow 写入 main 的版本提交。
+2. 完成 B1-B5，创建包含 CLI 版本提交的 App/Docker tag。
+3. 同时触发 B6 与 C3；它们使用同一 tag 和 commit，可以并行。
+4. B 完成并验证 IPA 后，执行 D。
+5. 最终核对 npm、GitHub Release、Docker Hub、App Store Connect。
+
+A 必须先于 App/Docker tag，D 必须晚于 B。B 与 C 可以并行。
 
 ---
 
-## 常见坑
+# 首次完整桌面升级验收
 
-| 现象 | 原因 | 处理 |
-|---|---|---|
-| `cli-publish.yml` 报 `npm whoami` 失败 | `NPM_TOKEN` secret 过期 | 让用户到仓库 Settings → Secrets 更新 |
-| Tag 已推但 Release 页没出现 | iOS/Android 构建失败，`needs` 卡住 | 看 Actions 日志，修复后 delete + retag |
-| Docker 镜像没推成功 | Docker Hub token 过期 | `DOCKERHUB_TOKEN` secret 更新 |
-| `git push origin v2.0.4` 失败：already exists | 该版本号已用过 | 确认是误操作还是版本冲突；选新号或 `git push origin :refs/tags/v2.0.4` 先删再推（慎用，若已触发过 workflow 会重复发布） |
+首次正式验证或 updater 发生变化时，必须发布两个真实的新版本，不得向历史 Release 追加当前源码构建的桌面文件。
 
-## 不要做的事
+1. 发布较低版本 A 的完整 B Release。
+2. 从 GitHub 下载并安装 A。
+3. 确认客户端显示版本 A。
+4. 发布较高版本 B 的完整 B Release。
+5. 等待后台下载，检查未登录和已登录布局中的更新按钮。
+6. 点击更新并确认重启到 B。
+7. 检查登录状态、本地数据、通知、图片、麦克风和摄像头。
+8. Apple Silicon、Intel、Windows x64、Windows ARM64 分别记录；没有真机就标记 **未验证**。
 
-- 不要手动改 `packages/happy-cli/package.json` 的 version——`cli-publish.yml` 会自动 bump
-- 不要手动改 `app.config.js` 里的 `version` 默认值——它读的是 `APP_VERSION` 环境变量（从 tag 名注入）
-- 不要在 tag 已推送后再去改那个 commit——tag 指针会不匹配
+不要删除或覆盖已成功发布的版本来伪造升级测试；失败时使用新的更高版本修复。
+
+# 禁止事项
+
+- 不提交或输出证书、Token、密码、私钥。
+- 不使用 `--clobber` 覆盖 Release 附件。
+- 不移动或强推正式 tag。
+- 不把 CI 成功等同于真机验证成功。
+- 不在 D 分支重新构建 IPA。
+- 不让推送 tag 隐式触发未选择的发布线。
+- 不手动修改 `app.config.js` 的默认版本。
+- 不手动修改 CLI package version；CLI workflow 负责版本提交。

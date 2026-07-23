@@ -1,0 +1,130 @@
+name: iOS App Store
+run-name: "iOS App Store ${{ inputs.release_tag }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Existing GitHub Release tag containing the IPA (vX.Y.Z)'
+        required: true
+        type: string
+      confirmation:
+        description: 'Type SUBMIT-IOS to confirm App Store submission'
+        required: true
+        type: string
+
+concurrency:
+  group: ios-app-store-${{ inputs.release_tag }}
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    name: Validate iOS Release asset
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      ipa_name: ${{ steps.release.outputs.ipa_name }}
+    steps:
+      - name: Validate tag, Release, and IPA
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          if [ "$CONFIRMATION" != 'SUBMIT-IOS' ]; then
+            echo 'The confirmation input must be SUBMIT-IOS.' >&2
+            exit 1
+          fi
+          if ! printf '%s' "$RELEASE_TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo 'release_tag must use the vX.Y.Z format.' >&2
+            exit 1
+          fi
+          ipa_name="happy-next-${RELEASE_TAG}-ios.ipa"
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null
+          if ! gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' |
+            grep -Fxq "$ipa_name"; then
+            echo "GitHub Release $RELEASE_TAG does not contain $ipa_name." >&2
+            exit 1
+          fi
+          echo "ipa_name=$ipa_name" >> "$GITHUB_OUTPUT"
+
+  submit-ios:
+    name: Submit existing IPA to App Store
+    needs: preflight
+    runs-on: macos-26
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: packages/happy-app
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_tag }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: yarn
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+        working-directory: .
+
+      - name: Setup EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Download the exact GitHub Release IPA
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          IPA_NAME: ${{ needs.preflight.outputs.ipa_name }}
+        run: |
+          gh release download "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern "$IPA_NAME" \
+            --dir .
+
+      - name: Prepare App Store Connect API key
+        env:
+          ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+          ASC_API_KEY_P8_BASE64: ${{ secrets.ASC_API_KEY_P8_BASE64 }}
+        run: |
+          printf '%s' "$ASC_API_KEY_P8_BASE64" |
+            base64 -D > "$RUNNER_TEMP/AuthKey_${ASC_API_KEY_ID}.p8"
+          chmod 600 "$RUNNER_TEMP/AuthKey_${ASC_API_KEY_ID}.p8"
+
+      - name: Submit existing IPA
+        env:
+          ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          IPA_NAME: ${{ needs.preflight.outputs.ipa_name }}
+        run: |
+          jq \
+            --arg keyPath "$RUNNER_TEMP/AuthKey_${ASC_API_KEY_ID}.p8" \
+            --arg keyId "$ASC_API_KEY_ID" \
+            --arg issuerId "$ASC_ISSUER_ID" \
+            '.submit.production.ios += {
+              "ascApiKeyPath": $keyPath,
+              "ascApiKeyId": $keyId,
+              "ascApiKeyIssuerId": $issuerId
+            }' eas.json > eas.submit.json
+
+          mv eas.submit.json eas.json
+          eas submit \
+            -p ios \
+            --profile production \
+            --path "./$IPA_NAME" \
+            --non-interactive
+
+      - name: Remove temporary App Store Connect key
+        if: always()
+        env:
+          ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+        run: rm -f "$RUNNER_TEMP/AuthKey_${ASC_API_KEY_ID}.p8"
