@@ -14,6 +14,7 @@ use tauri::{
     window::{Color, Monitor},
     AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, Runtime, State, Theme, Window,
 };
+use tauri_plugin_opener::OpenerExt;
 
 const TRAY_ID: &str = "main-tray";
 const TRAY_SHOW_ID: &str = "tray-show";
@@ -63,6 +64,18 @@ struct DesktopNotificationClicked {
 #[serde(rename_all = "camelCase")]
 struct DesktopMenuAction {
     action: &'static str,
+}
+
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DesktopDiagnostics {
+    app_name: String,
+    app_version: String,
+    identifier: String,
+    operating_system: &'static str,
+    architecture: &'static str,
+    build_profile: &'static str,
+    log_directory: String,
 }
 
 #[derive(Clone, Copy, Debug, Default, serde::Deserialize, serde::Serialize, PartialEq, Eq)]
@@ -1041,9 +1054,55 @@ fn start_desktop_window_dragging(window: tauri::WebviewWindow) -> Result<(), Str
     window.start_dragging().map_err(|error| error.to_string())
 }
 
+#[tauri::command]
+fn get_desktop_diagnostics(app: AppHandle) -> Result<DesktopDiagnostics, String> {
+    let log_directory = app
+        .path()
+        .app_log_dir()
+        .map_err(|error| error.to_string())?;
+    Ok(DesktopDiagnostics {
+        app_name: app.package_info().name.clone(),
+        app_version: app.package_info().version.to_string(),
+        identifier: app.config().identifier.clone(),
+        operating_system: std::env::consts::OS,
+        architecture: std::env::consts::ARCH,
+        build_profile: if cfg!(debug_assertions) {
+            "debug"
+        } else {
+            "release"
+        },
+        log_directory: log_directory.to_string_lossy().into_owned(),
+    })
+}
+
+#[tauri::command]
+fn open_desktop_log_directory(app: AppHandle) -> Result<(), String> {
+    let directory = app
+        .path()
+        .app_log_dir()
+        .map_err(|error| error.to_string())?;
+    fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
+    app.opener()
+        .open_path(directory.to_string_lossy().into_owned(), None::<String>)
+        .map_err(|error| error.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let builder = tauri::Builder::default().manage(DesktopState::default());
+    let log_level = if cfg!(debug_assertions) {
+        log::LevelFilter::Debug
+    } else {
+        log::LevelFilter::Info
+    };
+    let builder = tauri::Builder::default()
+        .manage(DesktopState::default())
+        .plugin(
+            tauri_plugin_log::Builder::default()
+                .level(log_level)
+                .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepSome(3))
+                .max_file_size(1_000_000)
+                .build(),
+        );
 
     #[cfg(target_os = "macos")]
     let builder = builder.plugin(tauri_plugin_notifications::init());
@@ -1071,17 +1130,11 @@ pub fn run() {
             show_desktop_window,
             show_desktop_notification,
             toggle_desktop_window,
-            set_desktop_unread_count
+            set_desktop_unread_count,
+            get_desktop_diagnostics,
+            open_desktop_log_directory
         ])
         .setup(|app| {
-            if cfg!(debug_assertions) {
-                app.handle().plugin(
-                    tauri_plugin_log::Builder::default()
-                        .level(log::LevelFilter::Info)
-                        .build(),
-                )?;
-            }
-
             #[cfg(debug_assertions)]
             if std::env::var_os("HAPPY_OPEN_DEVTOOLS").is_some() {
                 if let Some(window) = app.get_webview_window("main") {
@@ -1114,6 +1167,16 @@ pub fn run() {
                 set_desktop_background(&window, theme_preference);
             }
             configure_desktop_window(app.handle(), authenticated);
+            log::info!(
+                "desktop setup complete (profile={}, os={}, arch={})",
+                if cfg!(debug_assertions) {
+                    "debug"
+                } else {
+                    "release"
+                },
+                std::env::consts::OS,
+                std::env::consts::ARCH
+            );
             Ok(())
         })
         .on_window_event(|window: &Window, event| {

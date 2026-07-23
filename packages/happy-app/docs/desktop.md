@@ -113,6 +113,15 @@ The native application menu exposes New Session, Search/Find, primary navigation
 - The macOS entitlements include audio-input and camera access for the hardened runtime.
 - Tauri capabilities are limited to window dragging, approved URL opening, notifications, autostart, and global shortcuts.
 - Image drag/drop and clipboard paste reuse the existing Web upload paths rather than broad native filesystem or clipboard permissions.
+- Microphone denial guidance distinguishes the Tauri app from a browser and directs users to the operating-system privacy settings.
+
+### Diagnostics and failure recovery
+
+- **Settings → Desktop diagnostics** shows the app version, identifier, operating system, architecture, build profile, sanitized server endpoint, and Socket.IO state.
+- Diagnostic information can be copied without login credentials, URL credentials/query strings, message content, or profile data.
+- The diagnostics screen can test the current app-config endpoint and open the native log directory.
+- Native logs rotate locally, keeping up to three files with a 1 MB limit per file.
+- Image uploads have a 60-second timeout. Upload/send failures keep the composer content available for retry and show a user-visible error instead of only producing an unhandled promise rejection.
 
 ## Local data and authentication
 

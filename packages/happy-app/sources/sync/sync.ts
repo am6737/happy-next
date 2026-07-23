@@ -1103,9 +1103,14 @@ class Sync {
             const apiUrl = getServerUrl();
             const token = this.credentials.token;
 
-            for (const img of images) {
-                const uploaded = await uploadChatImage(sessionId, img, token, apiUrl);
-                uploadedImages.push(uploaded);
+            try {
+                for (const img of images) {
+                    const uploaded = await uploadChatImage(sessionId, img, token, apiUrl);
+                    uploadedImages.push(uploaded);
+                }
+            } catch (error) {
+                log.log(`[SEND_DEBUG][SYNC] image_upload_failed sid=${sessionId} localId=${localId} error=${error instanceof Error ? error.message : 'Unknown error'}`);
+                return { error: 'Image upload failed', localId };
             }
 
             messageContent = {

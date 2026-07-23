@@ -369,6 +369,14 @@ export const SettingsView = React.memo(function SettingsView() {
                     icon={<Ionicons name="mic-outline" size={29} color="#34C759" />}
                     onPress={() => router.push('/settings/voice')}
                 />
+                {isTauriDesktop() && (
+                    <Item
+                        title={t('settingsDesktop.diagnosticsTitle')}
+                        subtitle={t('settingsDesktop.diagnosticsSubtitle')}
+                        icon={<Ionicons name="pulse-outline" size={29} color="#34C759" />}
+                        onPress={() => router.push('/settings/desktop-diagnostics')}
+                    />
+                )}
                 {(Platform.OS !== 'web' || isTauriDesktop()) && (
                     <Item
                         title={t('settings.notifications')}

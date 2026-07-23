@@ -1123,6 +1123,12 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
                         } else {
                             failedMessageRef.current = { localId: result.localId, content: contentForRetry };
                             log.log(`[SEND_DEBUG][UI] record_retry sid=${sessionId} localId=${result.localId}`);
+                            Modal.alert(
+                                t('common.error'),
+                                imagesToSend?.length
+                                    ? t('errors.imageUploadFailed')
+                                    : t('errors.messageSendFailed'),
+                            );
                         }
                     } finally {
                         setIsSending(false);
