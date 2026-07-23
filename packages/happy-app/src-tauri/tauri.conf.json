@@ -13,20 +13,21 @@
     "windows": [
       {
         "title": "Happy Next",
-        "width": 1280,
-        "height": 820,
-        "minWidth": 1024,
-        "minHeight": 680,
+        "width": 1440,
+        "height": 900,
+        "minWidth": 1100,
+        "minHeight": 700,
         "center": true,
         "preventOverflow": true,
+        "visible": false,
         "resizable": true,
         "fullscreen": false,
         "decorations": true,
         "titleBarStyle": "Overlay",
         "hiddenTitle": true,
         "trafficLightPosition": {
-          "x": 30,
-          "y": 24
+          "x": 16,
+          "y": 26
         },
         "backgroundThrottling": "disabled"
       }

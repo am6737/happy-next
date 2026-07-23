@@ -44,12 +44,13 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
     },
     desktopTrafficLightSpacer: {
         height: 48,
-        width: 100,
+        width: 88,
     },
     desktopTitleBarControls: {
         alignItems: 'center',
         flexDirection: 'row',
-        gap: 6,
+        gap: 5,
+        transform: [{ translateY: -2 }],
     },
     desktopTitleBarSpacer: {
         flex: 1,
@@ -57,10 +58,10 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
     },
     desktopNavigationButton: {
         alignItems: 'center',
-        borderRadius: 7,
-        height: 32,
+        borderRadius: 6,
+        height: 28,
         justifyContent: 'center',
-        width: 32,
+        width: 28,
     },
     logoContainer: {
         width: 32,
@@ -293,7 +294,7 @@ export const SidebarView = React.memo((props: SidebarViewProps) => {
                 <Image
                     source={require('@/assets/images/navigation/inbox.png')}
                     contentFit="contain"
-                    style={{ width: 24, height: 24, margin: 4 }}
+                    style={{ width: 20, height: 20, margin: 4 }}
                     tintColor={theme.colors.header.tint}
                 />
                 {friendRequests.length > 0 && (
@@ -317,7 +318,7 @@ export const SidebarView = React.memo((props: SidebarViewProps) => {
                     <Image
                         source={require('@/assets/images/navigation/todo.png')}
                         contentFit="contain"
-                        style={{ width: 24, height: 24, margin: 4 }}
+                        style={{ width: 20, height: 20, margin: 4 }}
                         tintColor={theme.colors.header.tint}
                     />
                 </Pressable>
@@ -331,7 +332,7 @@ export const SidebarView = React.memo((props: SidebarViewProps) => {
                 <Image
                     source={require('@/assets/images/navigation/setting.png')}
                     contentFit="contain"
-                    style={{ width: 24, height: 24, margin: 4 }}
+                    style={{ width: 20, height: 20, margin: 4 }}
                     tintColor={theme.colors.header.tint}
                 />
             </Pressable>
