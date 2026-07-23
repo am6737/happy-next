@@ -95,7 +95,15 @@ export function DesktopWindowFrame({ children }: { children: React.ReactNode }) 
             <View style={{ flex: 1, backgroundColor: theme.colors.groupped.background }}>
                 {children}
                 <View
-                    {...({ 'data-tauri-drag-region': true } as any)}
+                    {...({
+                        'data-tauri-drag-region': true,
+                        onPointerDown: (event: any) => {
+                            if ((event.nativeEvent?.button ?? event.button) === 0) {
+                                event.preventDefault?.();
+                                void window.startDragging();
+                            }
+                        },
+                    } as any)}
                     style={{
                         height: 8,
                         left: MACOS_RIGHT_DRAG_STRIP_LEFT,

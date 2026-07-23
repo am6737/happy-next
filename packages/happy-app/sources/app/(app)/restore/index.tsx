@@ -21,6 +21,7 @@ const stylesheet = StyleSheet.create((theme) => ({
     container: {
         flex: 1,
         alignItems: 'center',
+        justifyContent: 'center',
         paddingHorizontal: 24,
     },
     contentWrapper: {
@@ -35,13 +36,18 @@ const stylesheet = StyleSheet.create((theme) => ({
         ...Typography.default(),
     },
     secondInstructionText: {
-        fontSize: 14,
-        lineHeight: 22,
+        fontSize: 15,
+        lineHeight: 25,
         color: theme.colors.textSecondary,
-        marginBottom: 16,
-        marginTop: 12,
+        marginBottom: 20,
+        marginTop: 16,
         alignSelf: 'stretch',
         ...Typography.default(),
+    },
+    instructionsContainer: {
+        alignSelf: 'center',
+        maxWidth: 520,
+        width: '100%',
     },
     qrInstructions: {
         fontSize: 14,
@@ -137,7 +143,7 @@ export default function Restore() {
         <ScrollView style={styles.scrollView} contentContainerStyle={{ flexGrow: 1 }}>
             <View style={styles.container}>
 
-                <View style={{ width: '100%', maxWidth: layout.maxWidth }}>
+                <View style={styles.instructionsContainer}>
                     <Text style={styles.secondInstructionText}>
                         1. {t('connect.linkDeviceStep1')}{'\n'}
                         2. {t('connect.linkDeviceStep2')}{'\n'}
@@ -158,7 +164,7 @@ export default function Restore() {
                         backgroundColor={'white'}
                     />
                 )}
-                <View style={{ width: '100%', maxWidth: 280, paddingTop: 16, paddingBottom: 16 }}>
+                <View style={{ width: '100%', maxWidth: 280, paddingTop: 20, paddingBottom: 12 }}>
                     <RoundButton title={t('connect.restoreWithSecretKey')} onPress={() => {
                         router.push('/restore/manual');
                     }} />

@@ -5,7 +5,7 @@ use std::sync::{
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, LogicalSize, Manager, Runtime, State, Window,
+    AppHandle, LogicalSize, Manager, PhysicalPosition, Runtime, State, Window,
 };
 use tauri_plugin_window_state::AppHandleExt;
 
@@ -215,7 +215,8 @@ fn configure_desktop_window(app: &AppHandle, authenticated: bool) {
     let mut target_width = desired_width;
     let mut target_height = desired_height;
 
-    if let Ok(Some(monitor)) = window.current_monitor() {
+    let current_monitor = window.current_monitor().ok().flatten();
+    if let Some(monitor) = current_monitor.as_ref() {
         let monitor_size = monitor.size().to_logical::<f64>(monitor.scale_factor());
         target_width = target_width.min((monitor_size.width - 40.0).max(480.0));
         target_height = target_height.min((monitor_size.height - 80.0).max(480.0));
@@ -234,7 +235,20 @@ fn configure_desktop_window(app: &AppHandle, authenticated: bool) {
     }
 
     let _ = window.set_size(LogicalSize::new(target_width, target_height));
-    let _ = window.center();
+    if let Some(monitor) = current_monitor {
+        let scale_factor = monitor.scale_factor();
+        let target_size =
+            LogicalSize::new(target_width, target_height).to_physical::<u32>(scale_factor);
+        let monitor_position = monitor.position();
+        let monitor_size = monitor.size();
+        let centered_x = i64::from(monitor_position.x)
+            + (i64::from(monitor_size.width) - i64::from(target_size.width)) / 2;
+        let centered_y = i64::from(monitor_position.y)
+            + (i64::from(monitor_size.height) - i64::from(target_size.height)) / 2;
+        let _ = window.set_position(PhysicalPosition::new(centered_x as i32, centered_y as i32));
+    } else {
+        let _ = window.center();
+    }
     let _ = window.set_resizable(authenticated);
     let _ = app.save_window_state(window_state_flags());
 }

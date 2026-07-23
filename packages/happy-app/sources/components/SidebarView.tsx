@@ -19,6 +19,7 @@ import { useDootaskProfile } from '@/sync/storage';
 import { Ionicons } from '@expo/vector-icons';
 import { requestCommandPalette } from './CommandPalette/events';
 import { getDesktopPlatform } from '@/desktop/desktopWindowUtils';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 
 const stylesheet = StyleSheet.create((theme, runtime) => ({
     container: {
@@ -178,6 +179,15 @@ export const SidebarView = React.memo((props: SidebarViewProps) => {
     const inboxHasContent = useInboxHasContent();
     const dootaskProfile = useDootaskProfile();
     const isDesktopMacOS = getDesktopPlatform() === 'macos';
+    const desktopDragProps = isDesktopMacOS ? {
+        'data-tauri-drag-region': true,
+        onPointerDown: (event: any) => {
+            if ((event.nativeEvent?.button ?? event.button) === 0) {
+                event.preventDefault?.();
+                void getCurrentWindow().startDragging();
+            }
+        },
+    } as any : {};
     // Compute connection status once per render (theme-reactive, no stale memoization)
     const connectionStatus = (() => {
         const { status } = socketStatus;
@@ -294,7 +304,7 @@ export const SidebarView = React.memo((props: SidebarViewProps) => {
                 <Image
                     source={require('@/assets/images/navigation/inbox.png')}
                     contentFit="contain"
-                    style={{ width: 20, height: 20, margin: 4 }}
+                    style={{ width: 20, height: 20, margin: 4, opacity: isDesktopMacOS ? 0.62 : 1 }}
                     tintColor={theme.colors.header.tint}
                 />
                 {friendRequests.length > 0 && (
@@ -318,7 +328,7 @@ export const SidebarView = React.memo((props: SidebarViewProps) => {
                     <Image
                         source={require('@/assets/images/navigation/todo.png')}
                         contentFit="contain"
-                        style={{ width: 20, height: 20, margin: 4 }}
+                        style={{ width: 20, height: 20, margin: 4, opacity: isDesktopMacOS ? 0.62 : 1 }}
                         tintColor={theme.colors.header.tint}
                     />
                 </Pressable>
@@ -332,7 +342,7 @@ export const SidebarView = React.memo((props: SidebarViewProps) => {
                 <Image
                     source={require('@/assets/images/navigation/setting.png')}
                     contentFit="contain"
-                    style={{ width: 20, height: 20, margin: 4 }}
+                    style={{ width: 20, height: 20, margin: 4, opacity: isDesktopMacOS ? 0.62 : 1 }}
                     tintColor={theme.colors.header.tint}
                 />
             </Pressable>
@@ -345,14 +355,14 @@ export const SidebarView = React.memo((props: SidebarViewProps) => {
                 {isDesktopMacOS && (
                     <View style={styles.desktopTitleBar}>
                         <View
-                            {...({ 'data-tauri-drag-region': true } as any)}
+                            {...desktopDragProps}
                             style={styles.desktopTrafficLightSpacer}
                         />
                         <View style={styles.desktopTitleBarControls}>
                             {navigationButtons}
                         </View>
                         <View
-                            {...({ 'data-tauri-drag-region': true } as any)}
+                            {...desktopDragProps}
                             style={styles.desktopTitleBarSpacer}
                         />
                     </View>

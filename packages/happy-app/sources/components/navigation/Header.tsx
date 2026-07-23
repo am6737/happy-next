@@ -9,6 +9,9 @@ import { Typography } from '@/constants/Typography';
 import { StyleSheet } from 'react-native-unistyles';
 import { t } from '@/text';
 import { isTauriDesktop } from '@/utils/tauri';
+import { useAuth } from '@/auth/AuthContext';
+import { getDesktopPlatform } from '@/desktop/desktopWindowUtils';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 
 interface HeaderProps {
     title?: React.ReactNode;
@@ -28,6 +31,8 @@ interface HeaderProps {
 
 export const Header = React.memo((props: HeaderProps) => {
     const styles = stylesheet;
+    const { isAuthenticated } = useAuth();
+    const needsMacOSWindowControlsInset = getDesktopPlatform() === 'macos' && !isAuthenticated;
 
     const {
         title,
@@ -71,11 +76,26 @@ export const Header = React.memo((props: HeaderProps) => {
         <View style={[containerStyle]}>
             <View style={styles.contentWrapper}>
                 <View style={[styles.content, { height: headerHeight }]}>
-                    <View style={[styles.leftContainer, leftAligned && styles.sideContainerHug]}>
+                    <View style={[
+                        styles.leftContainer,
+                        leftAligned && styles.sideContainerHug,
+                        needsMacOSWindowControlsInset && styles.macOSWindowControlsInset,
+                    ]}>
                         {headerLeft && headerLeft()}
                     </View>
 
-                    <View style={[styles.centerContainer, leftAligned && styles.centerContainerLeft]}>
+                    <View
+                        {...(getDesktopPlatform() ? {
+                            'data-tauri-drag-region': true,
+                            onPointerDown: (event: any) => {
+                                if ((event.nativeEvent?.button ?? event.button) === 0) {
+                                    event.preventDefault?.();
+                                    void getCurrentWindow().startDragging();
+                                }
+                            },
+                        } as any : {})}
+                        style={[styles.centerContainer, leftAligned && styles.centerContainerLeft]}
+                    >
                         {title}
                         {subtitle && <Text style={subtitleStyle} numberOfLines={1}>{subtitle}</Text>}
                     </View>
@@ -237,6 +257,9 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'flex-start',
+    },
+    macOSWindowControlsInset: {
+        transform: [{ translateX: 72 }],
     },
     sideContainerHug: {
         flexGrow: 0,
