@@ -25,6 +25,7 @@ import { getWorktreeInfo, cleanupWorktree } from '@/utils/worktreeOps';
 import { ActionMenuModal } from '@/components/ActionMenuModal';
 import { ActionMenuItem } from '@/components/ActionMenu';
 import { sync } from '@/sync/sync';
+import { SessionContextMenu } from './SessionContextMenu';
 
 const stylesheet = StyleSheet.create((theme, runtime) => ({
     container: {
@@ -405,8 +406,9 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder }: { sessi
     }, [performArchive, session.metadata]);
 
     const itemContent = (
-        <Pressable
-            style={[
+        <SessionContextMenu session={session}>
+            <Pressable
+                style={[
                 styles.sessionRow,
                 selected && styles.sessionRowSelected
             ]}
@@ -481,7 +483,8 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder }: { sessi
                     </Text>
                 </View>
             </View>
-        </Pressable>
+            </Pressable>
+        </SessionContextMenu>
     );
 
     const archiveModal = (

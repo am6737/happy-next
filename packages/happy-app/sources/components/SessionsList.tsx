@@ -30,6 +30,7 @@ import { sessionDelete } from '@/sync/ops';
 import { HappyError } from '@/utils/errors';
 import { Modal } from '@/modal';
 import { sync } from '@/sync/sync';
+import { SessionContextMenu } from './SessionContextMenu';
 
 const stylesheet = StyleSheet.create((theme) => ({
     container: {
@@ -702,8 +703,9 @@ const SessionItem = React.memo(({ session, selected, isFirst, isLast, isSingle }
     }, [session]);
 
     const itemContent = (
-        <Pressable
-            style={[
+        <SessionContextMenu session={session}>
+            <Pressable
+                style={[
                 compactSessionView ? styles.sessionItemCompact : styles.sessionItem,
                 selected && styles.sessionItemSelected,
                 isSingle ? styles.sessionItemSingle :
@@ -801,7 +803,8 @@ const SessionItem = React.memo(({ session, selected, isFirst, isLast, isSingle }
                     </>
                 )}
             </View>
-        </Pressable>
+            </Pressable>
+        </SessionContextMenu>
     );
 
     const containerStyles = [
