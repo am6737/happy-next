@@ -44,4 +44,5 @@ describe('DesktopBridge helpers', () => {
         expect(notificationId('session-a')).toBeGreaterThan(0);
         expect(notificationId('session-a')).toBeLessThanOrEqual(0x7fffffff);
     });
+
 });

@@ -1,5 +1,6 @@
 import * as React from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { addPluginListener, invoke, type PluginListener } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { usePathname, useRouter } from 'expo-router';
 
@@ -10,6 +11,7 @@ import { subscribeToDesktopMessages } from './desktopEvents';
 import { messagePreview, notificationId, sessionIdFromPath } from './desktopNotificationUtils';
 
 const DESKTOP_SHORTCUT = 'CommandOrControl+Shift+H';
+const IS_MACOS_DESKTOP = typeof navigator !== 'undefined' && /Macintosh|Mac OS X/.test(navigator.userAgent);
 
 export function DesktopBridge() {
     const router = useRouter();
@@ -28,6 +30,7 @@ export function DesktopBridge() {
     const seenMessageIdsRef = React.useRef(new Set<string>());
     const notificationTimersRef = React.useRef(new Map<string, ReturnType<typeof setTimeout>>());
     const notificationPayloadRef = React.useRef(new Map<string, { title: string; body: string }>());
+    const notificationSessionsRef = React.useRef(new Map<number, string>());
 
     React.useEffect(() => {
         if (!isTauriDesktop()) {
@@ -118,6 +121,12 @@ export function DesktopBridge() {
         if (!isTauriDesktop() || !notificationsEnabled) {
             return;
         }
+        if (IS_MACOS_DESKTOP) {
+            void invoke('plugin:notifications|request_permission')
+                .catch((error) => console.warn('Failed to request native macOS notification permission:', error));
+            return;
+        }
+
         void import('@tauri-apps/plugin-notification').then(async ({ isPermissionGranted, requestPermission }) => {
             try {
                 if (!(await isPermissionGranted())) {
@@ -134,8 +143,14 @@ export function DesktopBridge() {
             return;
         }
         let unlistenFocus: (() => void) | undefined;
-        let notificationListener: { unregister: () => void } | undefined;
+        let unlistenNotificationClick: (() => void) | undefined;
+        let nativeNotificationClickListener: PluginListener | undefined;
         let cancelled = false;
+
+        const openNotificationSession = (sessionId: string) => {
+            void invoke('show_desktop_window');
+            router.push(`/session/${encodeURIComponent(sessionId)}`);
+        };
 
         void getCurrentWindow().isFocused().then((focused) => {
             windowFocusedRef.current = focused;
@@ -155,20 +170,36 @@ export function DesktopBridge() {
             }
         });
 
-        void import('@tauri-apps/plugin-notification').then(async ({ onAction }) => {
-            const listener = await onAction((notification) => {
-                const sessionId = notification.extra?.sessionId;
-                if (typeof sessionId === 'string') {
-                    void invoke('show_desktop_window');
-                    router.push(`/session/${encodeURIComponent(sessionId)}`);
-                }
-            });
-            if (cancelled) {
-                listener.unregister();
-            } else {
-                notificationListener = listener;
+        void listen<{ sessionId: string }>('desktop-notification-clicked', ({ payload }) => {
+            if (typeof payload.sessionId === 'string') {
+                openNotificationSession(payload.sessionId);
             }
-        }).catch((error) => console.warn('Failed to register notification action listener:', error));
+        }).then((unlisten) => {
+            if (cancelled) {
+                unlisten();
+            } else {
+                unlistenNotificationClick = unlisten;
+            }
+        }).catch((error) => console.warn('Failed to register notification click listener:', error));
+
+        if (IS_MACOS_DESKTOP) {
+            void addPluginListener<{ id: number }>('notifications', 'notificationClicked', (notification) => {
+                const state = storage.getState();
+                const sessionId = notificationSessionsRef.current.get(notification.id)
+                    ?? [...Object.keys(state.sessions), ...Object.keys(state.sharedSessions)]
+                        .find((candidate) => notificationId(candidate) === notification.id);
+                if (sessionId) {
+                    openNotificationSession(sessionId);
+                }
+            }).then(async (listener) => {
+                if (cancelled) {
+                    await listener.unregister();
+                    return;
+                }
+                nativeNotificationClickListener = listener;
+                await invoke('plugin:notifications|set_click_listener_active', { active: true });
+            }).catch((error) => console.warn('Failed to register native macOS notification click listener:', error));
+        }
 
         const unsubscribeMessages = subscribeToDesktopMessages(({ sessionId, messages }) => {
             const state = storage.getState();
@@ -223,18 +254,23 @@ export function DesktopBridge() {
                 if (!payload) {
                     return;
                 }
-                void import('@tauri-apps/plugin-notification').then(async ({ isPermissionGranted, sendNotification }) => {
-                    if (await isPermissionGranted()) {
-                        sendNotification({
-                            id: notificationId(sessionId),
-                            title: payload.title,
-                            body: payload.body.slice(0, 240),
-                            group: sessionId,
-                            autoCancel: true,
-                            extra: { sessionId },
-                        });
-                    }
-                }).catch((error) => console.warn('Failed to send desktop notification:', error));
+                const sendDesktopNotification = async () => {
+                    const id = notificationId(sessionId);
+                    notificationSessionsRef.current.set(id, sessionId);
+                    await invoke('show_desktop_notification', {
+                        notificationId: id,
+                        title: payload.title,
+                        body: payload.body.slice(0, 240),
+                        sessionId,
+                    });
+                };
+
+                // The native command owns permission handling. Keeping the permission
+                // check here caused notifications to be silently skipped when WebKit's
+                // platform detection or the separate official plugin disagreed with the
+                // native notification backend.
+                void sendDesktopNotification()
+                    .catch((error) => console.warn('Failed to send desktop notification:', error));
             }, 500);
             notificationTimersRef.current.set(sessionId, timer);
         });
@@ -243,7 +279,11 @@ export function DesktopBridge() {
             cancelled = true;
             unsubscribeMessages();
             unlistenFocus?.();
-            notificationListener?.unregister();
+            unlistenNotificationClick?.();
+            if (nativeNotificationClickListener) {
+                void nativeNotificationClickListener.unregister();
+                void invoke('plugin:notifications|set_click_listener_active', { active: false });
+            }
             for (const timer of notificationTimersRef.current.values()) {
                 clearTimeout(timer);
             }

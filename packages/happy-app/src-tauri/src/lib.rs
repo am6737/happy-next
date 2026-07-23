@@ -2,6 +2,8 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
     Mutex,
 };
+#[cfg(not(target_os = "macos"))]
+use tauri::Emitter;
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -20,6 +22,15 @@ const AUTHENTICATED_WINDOW_WIDTH: f64 = 1440.0;
 const AUTHENTICATED_WINDOW_HEIGHT: f64 = 900.0;
 const AUTHENTICATED_MINIMUM_WIDTH: f64 = 1100.0;
 const AUTHENTICATED_MINIMUM_HEIGHT: f64 = 700.0;
+#[cfg(not(target_os = "macos"))]
+const DESKTOP_NOTIFICATION_CLICKED_EVENT: &str = "desktop-notification-clicked";
+
+#[cfg(not(target_os = "macos"))]
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DesktopNotificationClicked {
+    session_id: String,
+}
 
 struct DesktopState {
     close_to_tray: AtomicBool,
@@ -39,7 +50,16 @@ impl Default for DesktopState {
 
 fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
     #[cfg(target_os = "macos")]
-    let _ = app.show();
+    {
+        let _ = app.show();
+        let _ = app.run_on_main_thread(|| {
+            let main_thread = objc2::MainThreadMarker::new()
+                .expect("macOS application activation must run on the main thread");
+            #[allow(deprecated)]
+            objc2_app_kit::NSApplication::sharedApplication(main_thread)
+                .activateIgnoringOtherApps(true);
+        });
+    }
 
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.unminimize();
@@ -86,6 +106,76 @@ fn show_desktop_window(app: AppHandle) {
 }
 
 #[tauri::command]
+async fn show_desktop_notification(
+    app: AppHandle,
+    notification_id: i32,
+    title: String,
+    body: String,
+    session_id: String,
+) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        use tauri::plugin::PermissionState;
+        use tauri_plugin_notifications::NotificationsExt;
+        let _ = session_id;
+
+        let permission = app
+            .notifications()
+            .request_permission()
+            .await
+            .map_err(|error| format!("failed to request notification permission: {error}"))?;
+        if permission != PermissionState::Granted {
+            return Err(format!(
+                "macOS notification permission is not granted: {permission:?}"
+            ));
+        }
+
+        app.notifications()
+            .builder()
+            .id(notification_id)
+            .title(title)
+            .body(body)
+            .auto_cancel()
+            .show()
+            .await
+            .map_err(|error| error.to_string())?;
+        return Ok(());
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let mut notification = notify_rust::Notification::new();
+        notification.summary(&title).body(&body);
+
+        #[cfg(target_os = "windows")]
+        if !tauri::is_dev() {
+            notification.app_id(&app.config().identifier);
+        }
+
+        let handle = notification.show().map_err(|error| error.to_string())?;
+        std::thread::spawn(move || {
+            let _ = handle.wait_for_response(|response: &notify_rust::NotificationResponse| {
+                if !matches!(
+                    response,
+                    notify_rust::NotificationResponse::Default
+                        | notify_rust::NotificationResponse::Action(_)
+                        | notify_rust::NotificationResponse::Reply(_)
+                ) {
+                    return;
+                }
+
+                show_main_window(&app);
+                let _ = app.emit(
+                    DESKTOP_NOTIFICATION_CLICKED_EVENT,
+                    DesktopNotificationClicked { session_id },
+                );
+            });
+        });
+        Ok(())
+    }
+}
+
+#[tauri::command]
 fn desktop_should_start_hidden() -> bool {
     should_start_hidden()
 }
@@ -120,9 +210,7 @@ fn set_desktop_unread_count(app: AppHandle, state: State<'_, DesktopState>, coun
         let _ = tray.set_tooltip(Some(tooltip));
 
         #[cfg(target_os = "macos")]
-        {
-            let _ = tray.set_title((count > 0).then(|| count.to_string()));
-        }
+        let _ = tray.set_title(None::<String>);
     }
 
     if let Ok(item) = state.unread_item.lock() {
@@ -265,8 +353,12 @@ fn start_desktop_window_dragging(window: tauri::WebviewWindow) -> Result<(), Str
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
-        .manage(DesktopState::default())
+    let builder = tauri::Builder::default().manage(DesktopState::default());
+
+    #[cfg(target_os = "macos")]
+    let builder = builder.plugin(tauri_plugin_notifications::init());
+
+    builder
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             show_main_window(app);
         }))
@@ -290,6 +382,7 @@ pub fn run() {
             set_desktop_authenticated_window,
             start_desktop_window_dragging,
             show_desktop_window,
+            show_desktop_notification,
             desktop_should_start_hidden,
             toggle_desktop_window,
             set_desktop_unread_count
