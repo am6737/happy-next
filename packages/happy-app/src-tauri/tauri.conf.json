@@ -46,7 +46,8 @@
     "copyright": "Copyright © 2026 Happy Next Contributors",
     "category": "DeveloperTool",
     "macOS": {
-      "minimumSystemVersion": "12.0"
+      "minimumSystemVersion": "12.0",
+      "entitlements": "Entitlements.plist"
     },
     "icon": [
       "icons/32x32.png",
