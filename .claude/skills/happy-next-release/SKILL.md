@@ -7,7 +7,7 @@ description: Cuts a happy-next release (CLI / App + Docker / iOS / full combo). 
 
 ## Overview
 
-发版前先询问用户本次发哪条线，只展开对应 checklist。各发布线版本号**互相独立**：CLI 可单独发；App 与 Docker 绑定同一 tag；iOS 提审依赖对应 tag 已存在。全套（A + B + C）必须**按 A → B → C 顺序**走，否则 App tag 会漏掉 CLI 的 version bump commit，iOS 提审也会找不到 tag。
+发版前先询问用户本次发哪条线，只展开对应 checklist。各发布线版本号**互相独立**：CLI 可单独发；手机 App、Docker 和桌面客户端绑定同一 tag；iOS 提审依赖对应 tag 已存在。全套（A + B + C）必须**按 A → B → C 顺序**走，否则 App tag 会漏掉 CLI 的 version bump commit，iOS 提审也会找不到 tag。
 
 **不要默认全发**。含 A（CLI）或 C（iOS）的分支还要再问触发方式，见下方「触发方式」小节。
 
@@ -18,6 +18,7 @@ description: Cuts a happy-next release (CLI / App + Docker / iOS / full combo). 
 | happy-next-cli（npm） | `packages/happy-cli/package.json` | 手动 `workflow_dispatch` | `cli-publish.yml` |
 | 手机 App（APK/AAB/IPA） | git tag 去掉 `v` 前缀 | 推 tag `v*` | `release.yml` |
 | Docker 镜像（server/webapp/voice/docs） | git tag | 推 tag `v*`（同上） | `docker-publish.yml` |
+| 桌面客户端（macOS Universal / Windows x64 / Windows ARM64） | git tag 去掉 `v` 前缀 | 推 tag `v*`（同上） | `release.yml` |
 | iOS App Store 提审 | 手动输入 | 手动 `workflow_dispatch` | `release.yml`（submit-ios 分支） |
 
 ## 入口：问用户本次发什么
@@ -25,7 +26,7 @@ description: Cuts a happy-next release (CLI / App + Docker / iOS / full combo). 
 用 AskUserQuestion 或 options，让用户从以下选择：
 
 - **A. 仅 CLI**（改动只动了 `packages/happy-cli/`）
-- **B. 仅 App + Docker**（改动涉及 happy-app / happy-server / happy-voice / happy-docs）
+- **B. App + Docker + Desktop**（改动涉及 happy-app / happy-server / happy-voice / happy-docs；同一个 tag 同时发布桌面安装包和更新清单）
 - **C. 仅 iOS App Store**（之前 tag 已发过，现在要提审）
 - **D. 全套**（A + B + C，按序执行）
 
@@ -154,7 +155,7 @@ node -p "require('./packages/happy-cli/package.json').version"  # 核对新版�
 
 ---
 
-## 分支 B：仅 App + Docker
+## 分支 B：App + Docker + Desktop
 
 ### B1. 确认上一个 tag + 累积改动
 
@@ -165,6 +166,20 @@ git log ${LAST}..HEAD --oneline --no-merges
 ```
 
 向用户展示累积 commit 列表，让用户决定是否值得发版。如果没什么用户可感知的变化，劝退。
+
+如果本次包含桌面发布，再检查 Actions Secret **名称是否存在**（不要读取或打印值）：
+
+```bash
+gh secret list --app actions | cut -f1
+```
+
+桌面发布必须具备：
+
+- updater：`TAURI_SIGNING_PRIVATE_KEY`、`TAURI_SIGNING_PRIVATE_KEY_PASSWORD`
+- Developer ID：`APPLE_CERTIFICATE_BASE64`、`APPLE_CERTIFICATE_PASSWORD`、`APPLE_KEYCHAIN_PASSWORD`、`APPLE_SIGNING_IDENTITY`
+- notarization：`ASC_API_KEY_ID`、`ASC_API_KEY_P8_BASE64`、`ASC_ISSUER_ID`
+
+缺少 Secret 时停在这里，列出缺少的**名称**并让用户配置；不得要求用户把值发到聊天中，也不得把值写入日志。上传或替换 Secret、证书或私钥前必须再次确认。
 
 ### B2. 决定新 tag 版本号
 
@@ -274,7 +289,7 @@ git push origin $VERSION
 给用户：
 
 > 流水线正在跑：<https://github.com/hitosea/happy-next/actions>
-> - `Release`：~20-30 分钟，并行构建 Android APK/AAB + iOS IPA，完成后自动建 GitHub Release 挂载三个安装包
+> - `Release`：~45-90 分钟，并行构建 Android APK/AAB、iOS IPA、macOS Universal、Windows x64 和 Windows ARM64，完成后自动创建 GitHub Release
 > - `Docker Publish`：~10-20 分钟，推 4 个镜像到 Docker Hub `kuaifan/*`
 >
 > 完成后告诉我结果，或告诉我某条失败了。
@@ -285,8 +300,22 @@ git push origin $VERSION
 
 告知用户检查 <https://github.com/hitosea/happy-next/releases/tag/{新版本号}>：
 
-- 有 3 个附件（APK/AAB/IPA）
+- 有 APK/AAB/IPA、macOS Universal DMG/ZIP、Windows x64 MSI/NSIS、Windows ARM64 MSI/NSIS
+- 有各桌面平台的 updater archive、`.sig`、`latest.json` 和 `SHA256SUMS.txt`
+- `latest.json` 包含 `darwin-aarch64`、`darwin-x86_64`、`windows-x86_64`、`windows-aarch64`
 - Release notes 自动生成合理
+
+CI 构建成功只代表产物生成成功，不能写成真机安装或升级验证成功。macOS、Windows x64、Windows ARM64 未在真实设备测试时必须明确标注“未验证”。
+
+### B8. 两版本桌面升级验收（首次接入或 updater 变更时必做）
+
+1. 先发布版本 A，并从 GitHub Release 下载对应架构的正式安装包。
+2. 在真实设备安装 A，启动并确认客户端显示版本 A。
+3. 再发布更高版本 B；等待客户端后台下载完成。
+4. 未登录时确认右下角出现“更新”，已登录时确认设置图标后出现“更新”。
+5. 点击“更新”，确认安装、重启并显示版本 B，且登录状态与本地数据保持正常。
+6. macOS 至少在 Apple Silicon 真机完成；Intel、Windows x64、Windows ARM64 分别记录结果，缺少设备就标注“未验证”。
+7. 不要删除、覆盖或重建已发布的 Release 来伪造升级测试；若 A/B 任何一个构建失败，使用新的更高版本修复。
 
 ---
 
@@ -318,7 +347,7 @@ gh run watch $(gh run list --workflow=release.yml --limit 1 --json databaseId -q
 **顺序敏感**——必须按 A → B → C，不能并行：
 
 1. 走完**分支 A**全部步骤（CLI 发布 + A5 的 `git pull` 拿到 CI 推回的版本号 commit）
-2. 走完**分支 B**（更新 changelog → commit → 打 tag → 推送，触发 `Release` + `Docker Publish`）
+2. 走完**分支 B**（更新 changelog → commit → 打 tag → 推送，触发手机 App + Docker + Desktop 发布）
 3. 等 B 的 `Release` 流水线跑完、IPA 已在 Release 页后，走**分支 C**（用 B 刚推的版本号提审 iOS）
 
 为什么这个顺序：

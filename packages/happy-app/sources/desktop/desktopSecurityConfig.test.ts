@@ -92,6 +92,8 @@ describe('desktop security configuration', () => {
 
         expect(desktopCi).toContain('Build unsigned macOS Universal bundles');
         expect(desktopCi).toContain('Build unsigned Windows x64 installers');
+        expect(desktopCi).toContain('Build unsigned Windows ARM64 installers');
+        expect(desktopCi).toContain('windows-11-arm');
         expect(desktopCi).toContain('yarn workspace happy-app test --run');
         expect(release).toContain('build-desktop-macos');
         expect(release).toContain('needs: [build-android, build-ios, build-desktop-macos, build-desktop-windows]');
@@ -100,7 +102,9 @@ describe('desktop security configuration', () => {
         expect(release).toContain('generateDesktopUpdateManifest.cjs');
         expect(release).toContain('TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}');
         expect(release).toContain('*.app.tar.gz.sig');
-        expect(release).toContain('*.nsis.zip.sig');
+        expect(release).toContain('desktop-release-artifacts');
+        expect(release).toContain('tauri:build:windows:arm64');
+        expect(release).toContain('ASC_API_KEY_P8_BASE64: ${{ secrets.ASC_API_KEY_P8_BASE64 }}');
         expect(release).not.toContain('tauri:build:windows:x64 --ci --no-sign');
         expect(release).not.toMatch(/\bset\s+-x\b/);
         expect(release).not.toMatch(/echo\s+"\$APPLE_/);

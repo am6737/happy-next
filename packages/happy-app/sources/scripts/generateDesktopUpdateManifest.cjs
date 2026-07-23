@@ -25,9 +25,16 @@ function findSignedArtifact(files, matcher, label) {
     return { artifact, signatureFile };
 }
 
-function findWindowsUpdaterArtifact(files) {
+function findWindowsUpdaterArtifact(files, architecture) {
+    const architectureTokens = architecture === 'x64'
+        ? ['_x64', '-x64', '_x86_64', '-x86_64']
+        : ['_arm64', '-arm64', '_aarch64', '-aarch64'];
     for (const extension of ['.nsis.zip', '.msi.zip']) {
-        const artifact = files.find((file) => file.endsWith(extension));
+        const artifact = files.find((file) => {
+            const normalized = file.toLowerCase();
+            return normalized.endsWith(extension)
+                && architectureTokens.some((token) => normalized.includes(token));
+        });
         if (!artifact) {
             continue;
         }
@@ -37,7 +44,7 @@ function findWindowsUpdaterArtifact(files) {
         }
         return { artifact, signatureFile };
     }
-    throw new Error('Missing Windows x64 updater artifact');
+    throw new Error(`Missing Windows ${architecture} updater artifact`);
 }
 
 function generateDesktopUpdateManifest({
@@ -55,14 +62,16 @@ function generateDesktopUpdateManifest({
 
     const files = fs.readdirSync(artifactsDir).filter((file) => fs.statSync(path.join(artifactsDir, file)).isFile());
     const mac = findSignedArtifact(files, /\.app\.tar\.gz$/, 'macOS Universal');
-    const windows = findWindowsUpdaterArtifact(files);
+    const windowsX64 = findWindowsUpdaterArtifact(files, 'x64');
+    const windowsArm64 = findWindowsUpdaterArtifact(files, 'arm64');
 
     const entry = ({ artifact, signatureFile }) => ({
         signature: fs.readFileSync(path.join(artifactsDir, signatureFile), 'utf8').trim(),
         url: releaseUrl(repository, version, artifact),
     });
     const macEntry = entry(mac);
-    const windowsEntry = entry(windows);
+    const windowsX64Entry = entry(windowsX64);
+    const windowsArm64Entry = entry(windowsArm64);
     const manifest = {
         version,
         notes,
@@ -70,7 +79,8 @@ function generateDesktopUpdateManifest({
         platforms: {
             'darwin-aarch64': macEntry,
             'darwin-x86_64': macEntry,
-            'windows-x86_64': windowsEntry,
+            'windows-x86_64': windowsX64Entry,
+            'windows-aarch64': windowsArm64Entry,
         },
     };
 

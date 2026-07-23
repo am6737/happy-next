@@ -119,3 +119,51 @@ jobs:
           path: |
             packages/happy-app/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
             packages/happy-app/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*-setup.exe
+
+  windows-arm64:
+    name: Windows ARM64
+    runs-on: windows-11-arm
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: yarn
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-pc-windows-msvc
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/happy-app/src-tauri -> target
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Build happy-wire
+        run: yarn workspace happy-wire build
+
+      - name: Typecheck app
+        run: yarn workspace happy-app typecheck
+
+      - name: Test app
+        run: yarn workspace happy-app test --run
+
+      - name: Build unsigned Windows ARM64 installers
+        run: yarn workspace happy-app tauri:build:windows:arm64 --ci --no-sign
+
+      - name: Upload Windows installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-windows-arm64-unsigned
+          if-no-files-found: error
+          path: |
+            packages/happy-app/src-tauri/target/aarch64-pc-windows-msvc/release/bundle/msi/*.msi
+            packages/happy-app/src-tauri/target/aarch64-pc-windows-msvc/release/bundle/nsis/*-setup.exe

@@ -26,14 +26,14 @@ describe('desktop updater manifest generator', () => {
         expect(() => normalizeVersion('latest')).toThrow('Invalid desktop update version');
     });
 
-    it('generates signed platform entries for universal macOS and Windows x64', () => {
+    it('generates signed platform entries for universal macOS and both Windows architectures', () => {
         const directory = mkdtempSync(join(tmpdir(), 'happy-desktop-update-'));
         writeFileSync(join(directory, 'Happy.Next.app.tar.gz'), 'mac');
         writeFileSync(join(directory, 'Happy.Next.app.tar.gz.sig'), 'mac-signature\n');
-        writeFileSync(join(directory, 'Happy.Next.nsis.zip'), 'windows');
-        writeFileSync(join(directory, 'Happy.Next.nsis.zip.sig'), 'windows-signature\n');
-        writeFileSync(join(directory, 'Happy.Next.msi.zip'), 'windows-msi');
-        writeFileSync(join(directory, 'Happy.Next.msi.zip.sig'), 'windows-msi-signature\n');
+        writeFileSync(join(directory, 'Happy.Next_2.3.4_x64-setup.nsis.zip'), 'windows-x64');
+        writeFileSync(join(directory, 'Happy.Next_2.3.4_x64-setup.nsis.zip.sig'), 'windows-x64-signature\n');
+        writeFileSync(join(directory, 'Happy.Next_2.3.4_arm64-setup.nsis.zip'), 'windows-arm64');
+        writeFileSync(join(directory, 'Happy.Next_2.3.4_arm64-setup.nsis.zip.sig'), 'windows-arm64-signature\n');
         const outputPath = join(directory, 'latest.json');
 
         const manifest = generateDesktopUpdateManifest({
@@ -46,8 +46,10 @@ describe('desktop updater manifest generator', () => {
         });
 
         expect(manifest.platforms['darwin-aarch64']).toEqual(manifest.platforms['darwin-x86_64']);
-        expect(manifest.platforms['windows-x86_64'].signature).toBe('windows-signature');
+        expect(manifest.platforms['windows-x86_64'].signature).toBe('windows-x64-signature');
         expect(manifest.platforms['windows-x86_64'].url).toContain('.nsis.zip');
+        expect(manifest.platforms['windows-aarch64'].signature).toBe('windows-arm64-signature');
+        expect(manifest.platforms['windows-aarch64'].url).toContain('_arm64-setup.nsis.zip');
         expect(manifest.platforms['darwin-aarch64'].url).toContain('/releases/download/v2.3.4/');
         expect(JSON.parse(readFileSync(outputPath, 'utf8'))).toEqual(manifest);
     });

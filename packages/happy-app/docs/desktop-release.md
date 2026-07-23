@@ -6,6 +6,7 @@ This document covers the direct-download macOS and Windows desktop release path.
 
 - macOS 12+ Universal DMG and zipped application
 - Windows x64 MSI and NSIS installer
+- Windows ARM64 MSI and NSIS installer
 - GitHub Releases distribution
 - Windows artifacts are intentionally unsigned for the first release
 
@@ -19,20 +20,20 @@ Configure these repository or environment Secrets before a release tag is pushed
 - `APPLE_CERTIFICATE_PASSWORD`: password protecting the `.p12`
 - `APPLE_KEYCHAIN_PASSWORD`: random password used only for the temporary CI keychain
 - `APPLE_SIGNING_IDENTITY`: complete Developer ID Application identity
-- `APPLE_ID`: Apple account used by the notarization service
-- `APPLE_PASSWORD`: app-specific password for notarization
-- `APPLE_TEAM_ID`: Apple Developer team identifier
+- `ASC_API_KEY_ID`: App Store Connect API key identifier used for notarization
+- `ASC_API_KEY_P8_BASE64`: base64-encoded App Store Connect API private key
+- `ASC_ISSUER_ID`: App Store Connect issuer identifier
 
 The workflow validates only that each value is present. It must never print the value. The certificate is decoded under `$RUNNER_TEMP`, imported into a temporary keychain, and deleted in an `always()` cleanup step.
 
-Prefer migrating notarization to an App Store Connect API key later if the team wants to avoid Apple ID app-specific passwords. That change should be reviewed separately rather than mixing both credential mechanisms.
+The existing App Store Connect API key Secrets are reused for notarization, avoiding an Apple ID app-specific password. Confirm that the key belongs to the same Apple team and has permission to submit Developer ID software for notarization.
 
 ## Tag release flow
 
 `.github/workflows/release.yml` performs the following for a `vX.Y.Z` tag:
 
 1. builds Android APK/AAB and iOS IPA using the existing mobile release flow;
-2. builds unsigned Windows x64 MSI and NSIS installers;
+2. builds unsigned Windows x64 and ARM64 MSI and NSIS installers on native GitHub-hosted runners;
 3. builds the macOS Universal target;
 4. signs the macOS application and nested code with Developer ID;
 5. submits the macOS bundle for notarization through Tauri;
@@ -52,6 +53,7 @@ Do not push a release tag until the Apple Secrets are configured. A missing Secr
 
 - unsigned macOS Universal `.app/.dmg` artifacts;
 - unsigned Windows x64 MSI/NSIS artifacts.
+- unsigned Windows ARM64 MSI/NSIS artifacts.
 
 These artifacts are for build validation and internal testing only.
 
@@ -74,7 +76,7 @@ The encrypted key backup must be moved from its temporary local directory to off
 
 - requires a semantic release version;
 - requires a signed macOS `.app.tar.gz` artifact;
-- prefers a signed Windows `.nsis.zip` artifact and falls back to `.msi.zip`;
+- requires architecture-specific signed Windows x64 and ARM64 updater artifacts, preferring `.nsis.zip` and falling back to `.msi.zip`;
 - maps the Universal macOS artifact to both Darwin architectures;
 - reads detached `.sig` files without printing their contents;
 - writes GitHub Release download URLs.
@@ -100,6 +102,13 @@ Never commit a private updater key. Store it only in GitHub Actions Secrets and 
 - Record the expected unsigned SmartScreen/unknown-publisher warning.
 - Install, launch, sign in, exercise notifications/tray/taskbar/shortcuts/media, and uninstall.
 - Test overwrite installation with a newer version.
+
+### Windows ARM64
+
+- Download both MSI and NSIS artifacts on a real Windows 11 ARM64 machine.
+- Record the expected unsigned SmartScreen/unknown-publisher warning.
+- Install, launch, sign in, exercise notifications/tray/taskbar/shortcuts/media, and uninstall.
+- Test overwrite installation with a newer ARM64 version, or mark real-machine status **未验证**.
 
 ### Updater
 
