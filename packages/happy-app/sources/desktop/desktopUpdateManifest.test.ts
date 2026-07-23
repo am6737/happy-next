@@ -36,10 +36,10 @@ describe('desktop updater manifest generator', () => {
         const directory = mkdtempSync(join(tmpdir(), 'happy-desktop-update-'));
         writeFileSync(join(directory, 'Happy.Next.app.tar.gz'), 'mac');
         writeFileSync(join(directory, 'Happy.Next.app.tar.gz.sig'), 'mac-signature\n');
-        writeFileSync(join(directory, 'Happy.Next_2.3.4_x64-setup.nsis.zip'), 'windows-x64');
-        writeFileSync(join(directory, 'Happy.Next_2.3.4_x64-setup.nsis.zip.sig'), 'windows-x64-signature\n');
-        writeFileSync(join(directory, 'Happy.Next_2.3.4_arm64-setup.nsis.zip'), 'windows-arm64');
-        writeFileSync(join(directory, 'Happy.Next_2.3.4_arm64-setup.nsis.zip.sig'), 'windows-arm64-signature\n');
+        writeFileSync(join(directory, 'Happy.Next_2.3.4_x64-setup.exe'), 'windows-x64');
+        writeFileSync(join(directory, 'Happy.Next_2.3.4_x64-setup.exe.sig'), 'windows-x64-signature\n');
+        writeFileSync(join(directory, 'Happy.Next_2.3.4_arm64-setup.exe'), 'windows-arm64');
+        writeFileSync(join(directory, 'Happy.Next_2.3.4_arm64-setup.exe.sig'), 'windows-arm64-signature\n');
         const outputPath = join(directory, 'latest.json');
 
         const manifest = generateDesktopUpdateManifest({
@@ -54,9 +54,9 @@ describe('desktop updater manifest generator', () => {
 
         expect(manifest.platforms['darwin-aarch64']).toEqual(manifest.platforms['darwin-x86_64']);
         expect(manifest.platforms['windows-x86_64'].signature).toBe('windows-x64-signature');
-        expect(manifest.platforms['windows-x86_64'].url).toContain('.nsis.zip');
+        expect(manifest.platforms['windows-x86_64'].url).toContain('_x64-setup.exe');
         expect(manifest.platforms['windows-aarch64'].signature).toBe('windows-arm64-signature');
-        expect(manifest.platforms['windows-aarch64'].url).toContain('_arm64-setup.nsis.zip');
+        expect(manifest.platforms['windows-aarch64'].url).toContain('_arm64-setup.exe');
         expect(manifest.platforms['darwin-aarch64'].url).toContain('/releases/download/desktop-v2.3.4/');
         expect(JSON.parse(readFileSync(outputPath, 'utf8'))).toEqual(manifest);
     });

@@ -43,7 +43,7 @@ The existing App Store Connect API key Secrets are reused for notarization, avoi
 9. refuses to continue if a GitHub Release for the tag already exists;
 10. generates `SHA256SUMS.txt` and creates the GitHub Release.
 
-The workflow strips the leading `v` and passes the same version to Expo and Tauri through `APP_VERSION` and `TAURI_CONFIG`.
+The workflow strips the leading `v`, passes it to Expo through `APP_VERSION`, and writes a temporary Tauri config override that is supplied with `tauri build --config`.
 
 Do not push a release tag until the Apple Secrets are configured. A missing Secret intentionally fails the macOS release job before certificate import.
 

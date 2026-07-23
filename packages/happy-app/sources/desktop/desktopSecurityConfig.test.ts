@@ -102,6 +102,10 @@ describe('desktop security configuration', () => {
         expect(desktopRelease).not.toContain('--clobber');
         expect(desktopRelease).toContain('--release-tag "$RELEASE_TAG"');
         expect(desktopRelease).toContain('windows-11-arm');
+        expect(desktopRelease).toContain('yarn workspace happy-app ${{ matrix.build_script }} --ci --config $configPath');
+        expect(desktopRelease).toContain('Notarize and staple macOS disk image');
+        expect(desktopRelease).not.toContain('$env:TAURI_CONFIG');
+        expect(desktopRelease).not.toContain('export TAURI_CONFIG');
         expect(release).toContain('build-desktop-macos');
         expect(release).toContain('needs: [build-android, build-ios, build-desktop-macos, build-desktop-windows]');
         expect(release).toContain('already exists; refusing to overwrite it');
@@ -112,6 +116,10 @@ describe('desktop security configuration', () => {
         expect(release).toContain('desktop-release-artifacts');
         expect(release).toContain('tauri:build:windows:arm64');
         expect(release).toContain('ASC_API_KEY_P8_BASE64: ${{ secrets.ASC_API_KEY_P8_BASE64 }}');
+        expect(release).toContain('yarn workspace happy-app tauri:build:macos:universal --ci --config "$RUNNER_TEMP/tauri-version.json"');
+        expect(release).toContain('Notarize and staple macOS disk image');
+        expect(release).not.toContain('$env:TAURI_CONFIG');
+        expect(release).not.toContain('export TAURI_CONFIG');
         expect(release).not.toContain('tauri:build:windows:x64 --ci --no-sign');
         expect(release).not.toMatch(/\bset\s+-x\b/);
         expect(release).not.toMatch(/echo\s+"\$APPLE_/);

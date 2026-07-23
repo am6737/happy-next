@@ -146,8 +146,18 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           APP_VERSION: ${{ needs.preflight.outputs.version }}
         run: |
-          $env:TAURI_CONFIG = @{ version = $env:APP_VERSION } | ConvertTo-Json -Compress
-          yarn workspace happy-app ${{ matrix.build_script }} --ci
+          $configPath = Join-Path $env:RUNNER_TEMP 'tauri-version.json'
+          @{ version = $env:APP_VERSION } | ConvertTo-Json -Compress | Set-Content -Encoding utf8 $configPath
+          yarn workspace happy-app ${{ matrix.build_script }} --ci --config $configPath
+          $bundle = "packages/happy-app/src-tauri/target/${{ matrix.rust_target }}/release/bundle"
+          $installers = @(Get-ChildItem $bundle -Recurse -File | Where-Object { $_.Extension -in '.msi', '.exe' })
+          if ($installers.Count -eq 0) {
+            throw 'No Windows installers were produced'
+          }
+          $wrongVersions = @($installers | Where-Object { $_.Name -notmatch [regex]::Escape($env:APP_VERSION) })
+          if ($wrongVersions.Count -gt 0) {
+            throw "Windows installer version mismatch: $($wrongVersions.Name -join ', ')"
+          }
 
       - name: Stage Windows artifacts
         shell: pwsh
@@ -266,9 +276,9 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
-          export TAURI_CONFIG="{\"version\":\"$APP_VERSION\"}"
+          jq -n --arg version "$APP_VERSION" '{version: $version}' > "$RUNNER_TEMP/tauri-version.json"
           export APPLE_API_KEY_PATH="$RUNNER_TEMP/AuthKey_${APPLE_API_KEY}.p8"
-          yarn workspace happy-app tauri:build:macos:universal --ci
+          yarn workspace happy-app tauri:build:macos:universal --ci --config "$RUNNER_TEMP/tauri-version.json"
 
       - name: Notarize and staple macOS disk image
         env:
@@ -286,10 +296,14 @@ jobs:
           xcrun stapler staple "$DMG_PATH"
 
       - name: Verify signature, notarization, stapling, and Gatekeeper
+        env:
+          APP_VERSION: ${{ needs.preflight.outputs.version }}
         run: |
           APP_PATH="$(find packages/happy-app/src-tauri/target/universal-apple-darwin/release/bundle/macos -maxdepth 1 -name '*.app' -print -quit)"
           DMG_PATH="$(find packages/happy-app/src-tauri/target/universal-apple-darwin/release/bundle/dmg -maxdepth 1 -name '*.dmg' -print -quit)"
           test -n "$APP_PATH" && test -n "$DMG_PATH"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Contents/Info.plist")" = "$APP_VERSION"
+          basename "$DMG_PATH" | grep -Fq "_${APP_VERSION}_"
           codesign --verify --deep --strict --verbose=2 "$APP_PATH"
           xcrun stapler validate "$APP_PATH"
           xcrun stapler validate "$DMG_PATH"

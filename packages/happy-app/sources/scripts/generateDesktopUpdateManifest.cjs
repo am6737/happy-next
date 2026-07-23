@@ -37,7 +37,7 @@ function findWindowsUpdaterArtifact(files, architecture) {
     const architectureTokens = architecture === 'x64'
         ? ['_x64', '-x64', '_x86_64', '-x86_64']
         : ['_arm64', '-arm64', '_aarch64', '-aarch64'];
-    for (const extension of ['.nsis.zip', '.msi.zip']) {
+    for (const extension of ['.nsis.zip', '.msi.zip', '-setup.exe', '.msi']) {
         const artifact = files.find((file) => {
             const normalized = file.toLowerCase();
             return normalized.endsWith(extension)
