@@ -1368,7 +1368,8 @@ export const zhHant: TranslationStructure = {
 
     welcome: {
         // Main welcome screen for unauthenticated users
-        title: 'Claude Code、Codex 和 Gemini 行動用戶端',
+        title: 'Claude Code、Codex 和 Gemini 的用戶端',
+        mobileTitle: 'Claude Code、Codex 和 Gemini 的行動用戶端',
         subtitle: '端對端加密，您的帳戶僅儲存在您的裝置上。',
         createAccount: '建立帳戶',
         linkOrRestoreAccount: '連結或恢復帳戶',

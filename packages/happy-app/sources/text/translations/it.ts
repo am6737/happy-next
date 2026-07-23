@@ -1396,7 +1396,8 @@ export const it: TranslationStructure = {
 
     welcome: {
         // Main welcome screen for unauthenticated users
-        title: 'Client mobile di Claude Code, Codex e Gemini',
+        title: 'Client di Claude Code, Codex e Gemini',
+        mobileTitle: 'Client mobile di Claude Code, Codex e Gemini',
         subtitle: 'Crittografia end-to-end e account memorizzato solo sul tuo dispositivo.',
         createAccount: 'Crea account',
         linkOrRestoreAccount: 'Collega o ripristina account',

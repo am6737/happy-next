@@ -1383,7 +1383,8 @@ export const en = {
 
     welcome: {
         // Main welcome screen for unauthenticated users
-        title: 'Claude Code, Codex, and Gemini mobile client',
+        title: 'Client for Claude Code, Codex, and Gemini',
+        mobileTitle: 'Mobile client for Claude Code, Codex, and Gemini',
         subtitle: 'End-to-end encrypted and your account is stored only on your device.',
         createAccount: 'Create account',
         linkOrRestoreAccount: 'Link or restore account',

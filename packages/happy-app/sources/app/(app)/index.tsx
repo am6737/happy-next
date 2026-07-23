@@ -35,6 +35,8 @@ function NotAuthenticated() {
     const router = useRouter();
     const isLandscape = useIsLandscape();
     const insets = useSafeAreaInsets();
+    const isMobilePlatform = Platform.OS === 'android' || Platform.OS === 'ios';
+    const welcomeTitle = t(isMobilePlatform ? 'welcome.mobileTitle' : 'welcome.title');
 
     const createAccount = async () => {
         try {
@@ -57,12 +59,12 @@ function NotAuthenticated() {
                 style={styles.logo}
             />
             <Text style={styles.title}>
-                {t('welcome.title')}
+                {welcomeTitle}
             </Text>
             <Text style={styles.subtitle}>
                 {t('welcome.subtitle')}
             </Text>
-            {Platform.OS !== 'android' && Platform.OS !== 'ios' ? (
+            {!isMobilePlatform ? (
                 <>
                     <View style={styles.buttonContainer}>
                         <RoundButton
@@ -118,12 +120,12 @@ function NotAuthenticated() {
                 </View>
                 <View style={styles.landscapeContentSection}>
                     <Text style={styles.landscapeTitle}>
-                        {t('welcome.title')}
+                        {welcomeTitle}
                     </Text>
                     <Text style={styles.landscapeSubtitle}>
                         {t('welcome.subtitle')}
                     </Text>
-                    {Platform.OS !== 'android' && Platform.OS !== 'ios'
+                    {!isMobilePlatform
                         ? (<>
                             <View style={styles.landscapeButtonContainer}>
                                 <RoundButton

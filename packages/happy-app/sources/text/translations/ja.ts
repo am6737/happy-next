@@ -1398,7 +1398,8 @@ export const ja: TranslationStructure = {
 
     welcome: {
         // Main welcome screen for unauthenticated users
-        title: 'Claude Code、Codex、Geminiのモバイルクライアント',
+        title: 'Claude Code、Codex、Geminiのクライアント',
+        mobileTitle: 'Claude Code、Codex、Geminiのモバイルクライアント',
         subtitle: 'エンドツーエンド暗号化され、アカウントはデバイスにのみ保存されます。',
         createAccount: 'アカウントを作成',
         linkOrRestoreAccount: 'アカウントをリンクまたは復元',
