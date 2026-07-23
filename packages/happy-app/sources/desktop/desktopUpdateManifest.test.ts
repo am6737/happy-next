@@ -7,11 +7,14 @@ import { describe, expect, it } from 'vitest';
 const require = createRequire(import.meta.url);
 const {
     generateDesktopUpdateManifest,
+    normalizeReleaseTag,
     normalizeVersion,
 } = require('../scripts/generateDesktopUpdateManifest.cjs') as {
     normalizeVersion(value: string): string;
+    normalizeReleaseTag(value: string | undefined, version: string): string;
     generateDesktopUpdateManifest(options: {
         version: string;
+        releaseTag?: string;
         repository: string;
         artifactsDir: string;
         outputPath: string;
@@ -24,6 +27,9 @@ describe('desktop updater manifest generator', () => {
     it('normalizes release tags and rejects invalid versions', () => {
         expect(normalizeVersion('v2.3.4')).toBe('2.3.4');
         expect(() => normalizeVersion('latest')).toThrow('Invalid desktop update version');
+        expect(normalizeReleaseTag(undefined, '2.3.4')).toBe('v2.3.4');
+        expect(normalizeReleaseTag('desktop-v2.3.4', '2.3.4')).toBe('desktop-v2.3.4');
+        expect(() => normalizeReleaseTag('../v2.3.4', '2.3.4')).toThrow('Invalid desktop release tag');
     });
 
     it('generates signed platform entries for universal macOS and both Windows architectures', () => {
@@ -38,6 +44,7 @@ describe('desktop updater manifest generator', () => {
 
         const manifest = generateDesktopUpdateManifest({
             version: 'v2.3.4',
+            releaseTag: 'desktop-v2.3.4',
             repository: 'hitosea/happy-next',
             artifactsDir: directory,
             outputPath,
@@ -50,7 +57,7 @@ describe('desktop updater manifest generator', () => {
         expect(manifest.platforms['windows-x86_64'].url).toContain('.nsis.zip');
         expect(manifest.platforms['windows-aarch64'].signature).toBe('windows-arm64-signature');
         expect(manifest.platforms['windows-aarch64'].url).toContain('_arm64-setup.nsis.zip');
-        expect(manifest.platforms['darwin-aarch64'].url).toContain('/releases/download/v2.3.4/');
+        expect(manifest.platforms['darwin-aarch64'].url).toContain('/releases/download/desktop-v2.3.4/');
         expect(JSON.parse(readFileSync(outputPath, 'utf8'))).toEqual(manifest);
     });
 });

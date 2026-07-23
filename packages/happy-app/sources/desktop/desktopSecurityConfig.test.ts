@@ -88,6 +88,7 @@ describe('desktop security configuration', () => {
 
     it('keeps credential-free desktop CI and guarded release automation in place', () => {
         const desktopCi = readFileSync(resolve(process.cwd(), '../../.github/workflows/desktop-ci.yml'), 'utf8');
+        const desktopRelease = readFileSync(resolve(process.cwd(), '../../.github/workflows/desktop-release.yml'), 'utf8');
         const release = readFileSync(resolve(process.cwd(), '../../.github/workflows/release.yml'), 'utf8');
 
         expect(desktopCi).toContain('Build unsigned macOS Universal bundles');
@@ -95,6 +96,12 @@ describe('desktop security configuration', () => {
         expect(desktopCi).toContain('Build unsigned Windows ARM64 installers');
         expect(desktopCi).toContain('windows-11-arm');
         expect(desktopCi).toContain('yarn workspace happy-app test --run');
+        expect(desktopRelease).toContain('APPEND-DESKTOP');
+        expect(desktopRelease).toContain('already contains desktop assets; refusing to overwrite them');
+        expect(desktopRelease).toContain('gh release upload "$RELEASE_TAG" artifacts/*');
+        expect(desktopRelease).not.toContain('--clobber');
+        expect(desktopRelease).toContain('--release-tag "$RELEASE_TAG"');
+        expect(desktopRelease).toContain('windows-11-arm');
         expect(release).toContain('build-desktop-macos');
         expect(release).toContain('needs: [build-android, build-ios, build-desktop-macos, build-desktop-windows]');
         expect(release).toContain('already exists; refusing to overwrite it');

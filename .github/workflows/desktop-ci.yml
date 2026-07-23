@@ -8,6 +8,7 @@ on:
       - 'packages/happy-wire/**'
       - 'yarn.lock'
       - '.github/workflows/desktop-ci.yml'
+      - '.github/workflows/desktop-release.yml'
       - '.github/workflows/release.yml'
   push:
     branches:
@@ -17,6 +18,7 @@ on:
       - 'packages/happy-wire/**'
       - 'yarn.lock'
       - '.github/workflows/desktop-ci.yml'
+      - '.github/workflows/desktop-release.yml'
       - '.github/workflows/release.yml'
 
 concurrency:

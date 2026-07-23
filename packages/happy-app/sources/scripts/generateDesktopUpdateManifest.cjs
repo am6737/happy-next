@@ -9,8 +9,16 @@ function normalizeVersion(value) {
     return version;
 }
 
-function releaseUrl(repository, version, filename) {
-    return `https://github.com/${repository}/releases/download/v${version}/${encodeURIComponent(filename)}`;
+function normalizeReleaseTag(value, version) {
+    const tag = String(value || `v${version}`).trim();
+    if (!/^[0-9A-Za-z][0-9A-Za-z._-]*$/.test(tag)) {
+        throw new Error(`Invalid desktop release tag: ${value}`);
+    }
+    return tag;
+}
+
+function releaseUrl(repository, releaseTag, filename) {
+    return `https://github.com/${repository}/releases/download/${encodeURIComponent(releaseTag)}/${encodeURIComponent(filename)}`;
 }
 
 function findSignedArtifact(files, matcher, label) {
@@ -49,6 +57,7 @@ function findWindowsUpdaterArtifact(files, architecture) {
 
 function generateDesktopUpdateManifest({
     version: rawVersion,
+    releaseTag: rawReleaseTag,
     repository,
     artifactsDir,
     outputPath,
@@ -56,6 +65,7 @@ function generateDesktopUpdateManifest({
     pubDate = new Date().toISOString(),
 }) {
     const version = normalizeVersion(rawVersion);
+    const releaseTag = normalizeReleaseTag(rawReleaseTag, version);
     if (!/^[^/\s]+\/[^/\s]+$/.test(repository || '')) {
         throw new Error('Repository must use the owner/name format');
     }
@@ -67,7 +77,7 @@ function generateDesktopUpdateManifest({
 
     const entry = ({ artifact, signatureFile }) => ({
         signature: fs.readFileSync(path.join(artifactsDir, signatureFile), 'utf8').trim(),
-        url: releaseUrl(repository, version, artifact),
+        url: releaseUrl(repository, releaseTag, artifact),
     });
     const macEntry = entry(mac);
     const windowsX64Entry = entry(windowsX64);
@@ -105,6 +115,7 @@ if (require.main === module) {
     const args = parseArguments(process.argv.slice(2));
     generateDesktopUpdateManifest({
         version: args.version,
+        releaseTag: args['release-tag'],
         repository: args.repository,
         artifactsDir: path.resolve(args.artifacts),
         outputPath: path.resolve(args.output),
@@ -116,5 +127,6 @@ if (require.main === module) {
 
 module.exports = {
     generateDesktopUpdateManifest,
+    normalizeReleaseTag,
     normalizeVersion,
 };

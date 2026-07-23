@@ -11,7 +11,7 @@ description: Cuts a happy-next release (CLI / App + Docker / iOS / full combo). 
 
 **不要默认全发**。含 A（CLI）或 C（iOS）的分支还要再问触发方式，见下方「触发方式」小节。
 
-## 发布线一览（4 个目标，对应入口 A/B/C）
+## 发布线一览（对应入口 A/B/C/E）
 
 | 发布对象 | 版本源 | 触发方式 | Workflow |
 |---|---|---|---|
@@ -19,6 +19,7 @@ description: Cuts a happy-next release (CLI / App + Docker / iOS / full combo). 
 | 手机 App（APK/AAB/IPA） | git tag 去掉 `v` 前缀 | 推 tag `v*` | `release.yml` |
 | Docker 镜像（server/webapp/voice/docs） | git tag | 推 tag `v*`（同上） | `docker-publish.yml` |
 | 桌面客户端（macOS Universal / Windows x64 / Windows ARM64） | git tag 去掉 `v` 前缀 | 推 tag `v*`（同上） | `release.yml` |
+| 仅桌面客户端（追加到既有 Release） | 手动输入既有 tag | 手动 `workflow_dispatch` | `desktop-release.yml` |
 | iOS App Store 提审 | 手动输入 | 手动 `workflow_dispatch` | `release.yml`（submit-ios 分支） |
 
 ## 入口：问用户本次发什么
@@ -29,10 +30,11 @@ description: Cuts a happy-next release (CLI / App + Docker / iOS / full combo). 
 - **B. App + Docker + Desktop**（改动涉及 happy-app / happy-server / happy-voice / happy-docs；同一个 tag 同时发布桌面安装包和更新清单）
 - **C. 仅 iOS App Store**（之前 tag 已发过，现在要提审）
 - **D. 全套**（A + B + C，按序执行）
+- **E. 仅桌面客户端**（不发布手机 App 和 Docker；通过手动工作流追加到指定的既有 Release）
 
 根据选择跳到对应小节，**只展开该分支的 checklist**，用 TodoWrite 建 todo 跟踪。
 
-选了 **A、C 或 D** 时，在进入第一个手动触发步骤前，再问一次触发方式（手动 / `gh`），见下节。
+选了 **A、C、D 或 E** 时，在进入第一个手动触发步骤前，再问一次触发方式（手动 / `gh`），见下节。
 
 ---
 
@@ -48,9 +50,9 @@ git pull origin main # 拉最新
 
 ---
 
-## 触发方式：手动 vs `gh`（仅 A / C / D 用到）
+## 触发方式：手动 vs `gh`（A / C / D / E 用到）
 
-CLI 发布（A）和 iOS 提审（C）都靠手动 `workflow_dispatch`。进入这些步骤前，询问用户：
+CLI 发布（A）、iOS 提审（C）和桌面独立发布（E）都靠手动 `workflow_dispatch`。进入这些步骤前，询问用户：
 
 - **手动触发**：我把网页链接和要填的字段给你，你自己点 Run，完成后回我"已触发"。
 - **AI 用 `gh` 触发**：我直接在终端跑 `gh workflow run`，并用 `gh run watch` 盯进度。
@@ -316,6 +318,80 @@ CI 构建成功只代表产物生成成功，不能写成真机安装或升级�
 5. 点击“更新”，确认安装、重启并显示版本 B，且登录状态与本地数据保持正常。
 6. macOS 至少在 Apple Silicon 真机完成；Intel、Windows x64、Windows ARM64 分别记录结果，缺少设备就标注“未验证”。
 7. 不要删除、覆盖或重建已发布的 Release 来伪造升级测试；若 A/B 任何一个构建失败，使用新的更高版本修复。
+
+---
+
+## 分支 E：仅桌面客户端
+
+该分支不会发布 Android、iOS 或 Docker。当前支持把生产桌面客户端追加到一个已经存在、且尚无桌面附件的 `vX.Y.Z` Release。
+
+### E1. 检查目标 Release
+
+```bash
+gh release view {目标 tag} --json tagName,isDraft,isPrerelease,assets
+```
+
+确认：
+
+- tag 使用 `vX.Y.Z`；
+- Release 已存在；
+- 没有 DMG、MSI、NSIS、updater archive、`.sig`、`latest.json` 等桌面附件；
+- 本次构建会使用当前 main 源码，只把应用版本设置为目标 tag 的版本号，因此不应描述为历史源码复现。
+
+如果要发布 `latest.json`，目标 Release 必须是当前仓库最新的正式 Release。
+
+### E2. 检查桌面发布 Secrets
+
+只检查 Secret 名称，不读取值：
+
+```bash
+gh secret list --app actions | cut -f1
+```
+
+要求与 B1 的桌面 Secrets 清单一致。缺少任何一项就停止。
+
+### E3. ⏸ 触发桌面工作流
+
+触发参数：
+
+- `release_tag={目标 tag}`
+- `publish_update_manifest=true|false`
+- `confirmation=APPEND-DESKTOP`
+
+**手动触发：**
+
+> 打开 <https://github.com/hitosea/happy-next/actions/workflows/desktop-release.yml>，选择 main，填写上述三个参数后运行。
+
+**AI 使用 `gh` 触发：**先展示完整命令并等待确认，再执行：
+
+```bash
+gh workflow run desktop-release.yml \
+  -f release_tag={目标 tag} \
+  -f publish_update_manifest={true|false} \
+  -f confirmation=APPEND-DESKTOP
+```
+
+该操作会真实修改既有 GitHub Release。即使用户之前选择了 E，也必须在运行命令前再次展示 tag 和 `publish_update_manifest` 值。
+
+### E4. 监控和校验
+
+```bash
+gh run watch $(gh run list --workflow=desktop-release.yml --limit 1 --json databaseId -q '.[0].databaseId')
+gh release view {目标 tag} --json assets --jq '.assets[].name'
+```
+
+确认 macOS Universal、Windows x64、Windows ARM64、updater archives、签名、构建元数据和桌面校验和均存在。只有 `publish_update_manifest=true` 的最新 Release 应包含 `latest.json`。
+
+### E5. 两版本升级测试
+
+首次验证推荐：
+
+1. 先向较旧 Release 追加桌面安装包，`publish_update_manifest=false`；
+2. 再向当前最新 Release 追加桌面安装包，`publish_update_manifest=true`；
+3. 从旧 Release 安装桌面客户端；
+4. 验证它通过正式更新地址升级到最新 Release。
+
+不得使用 `--clobber` 覆盖已有附件。若附件已经存在，选择新版本或先人工审计，不要自动删除。
 
 ---
 

@@ -47,6 +47,34 @@ The workflow strips the leading `v` and passes the same version to Expo and Taur
 
 Do not push a release tag until the Apple Secrets are configured. A missing Secret intentionally fails the macOS release job before certificate import.
 
+## Desktop-only manual release flow
+
+`.github/workflows/desktop-release.yml` builds the production desktop application from the selected workflow ref without triggering Android, iOS, or Docker publishing. It currently supports appending desktop artifacts to an existing `vX.Y.Z` GitHub Release.
+
+Required inputs:
+
+- `release_tag`: an existing GitHub Release tag;
+- `publish_update_manifest`: whether that Release should receive `latest.json`;
+- `confirmation`: the exact value `APPEND-DESKTOP`.
+
+The workflow uses the production product name and identifier. It refuses to:
+
+- accept a non-semantic `vX.Y.Z` tag;
+- modify a Release that already contains desktop assets;
+- overwrite an existing asset;
+- publish `latest.json` to a Release that is not currently the newest GitHub Release.
+
+The application version is derived from the target Release tag, while `desktop-build-metadata.json` records the actual source commit used for the desktop build. This is important when desktop assets are appended after the original tag was created.
+
+For the initial production-path updater test:
+
+1. append version 2.7.5 installers to Release `v2.7.5` without `latest.json`;
+2. append version 2.7.6 installers and `latest.json` to Release `v2.7.6`;
+3. install the v2.7.5 desktop application from GitHub;
+4. verify it discovers, downloads, and installs v2.7.6.
+
+This validates the release and updater mechanism, but both desktop binaries are built from the current source commit. They are not historical reconstructions of the original v2.7.5 and v2.7.6 source trees.
+
 ## Unsigned CI
 
 `.github/workflows/desktop-ci.yml` remains credential-free. It runs TypeScript checks and the app test suite, then builds:
