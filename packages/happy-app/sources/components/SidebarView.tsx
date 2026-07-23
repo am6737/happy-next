@@ -18,8 +18,7 @@ import { useInboxHasContent } from '@/hooks/useInboxHasContent';
 import { useDootaskProfile } from '@/sync/storage';
 import { Ionicons } from '@expo/vector-icons';
 import { requestCommandPalette } from './CommandPalette/events';
-import { getDesktopPlatform } from '@/desktop/desktopWindowUtils';
-import { invoke } from '@tauri-apps/api/core';
+import { getDesktopPlatform, startDesktopWindowDragging } from '@/desktop/desktopWindowUtils';
 
 const stylesheet = StyleSheet.create((theme, runtime) => ({
     container: {
@@ -185,7 +184,7 @@ export const SidebarView = React.memo((props: SidebarViewProps) => {
         onMouseDown: (event: any) => {
             if (event.button === 0) {
                 event.preventDefault?.();
-                void invoke('start_desktop_window_dragging');
+                startDesktopWindowDragging();
             }
         },
     } as any : {};

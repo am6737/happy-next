@@ -24,8 +24,7 @@ import { t } from '@/text';
 import { isUsingCustomServer } from '@/sync/serverConfig';
 import { trackFriendsSearch } from '@/track';
 import { DooTaskCreateSheet } from './dootask/DooTaskCreateSheet';
-import { getDesktopPlatform } from '@/desktop/desktopWindowUtils';
-import { invoke } from '@tauri-apps/api/core';
+import { getDesktopPlatform, startDesktopWindowDragging } from '@/desktop/desktopWindowUtils';
 
 interface MainViewProps {
     variant: 'phone' | 'sidebar';
@@ -408,7 +407,7 @@ export const MainView = React.memo(({ variant }: MainViewProps) => {
                                 onMouseDown: (event: any) => {
                                     if (event.button === 0) {
                                         event.preventDefault?.();
-                                        void invoke('start_desktop_window_dragging');
+                                        startDesktopWindowDragging();
                                     }
                                 },
                             } as any)}

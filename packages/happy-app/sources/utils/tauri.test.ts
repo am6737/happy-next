@@ -14,7 +14,7 @@ vi.mock('react-native', () => ({
     Linking: { openURL: mocks.openURL },
 }));
 
-import { isTauriDesktop, openExternalUrl } from './tauri';
+import { isAllowedExternalUrl, isTauriDesktop, openExternalUrl } from './tauri';
 
 describe('Tauri desktop helpers', () => {
     beforeEach(() => {
@@ -49,6 +49,18 @@ describe('Tauri desktop helpers', () => {
             '_blank',
             'noopener,noreferrer',
         );
+        expect(mocks.invoke).not.toHaveBeenCalled();
+    });
+
+    it('only permits external protocols handled by the operating system', async () => {
+        expect(isAllowedExternalUrl('https://example.com')).toBe(true);
+        expect(isAllowedExternalUrl('mailto:support@example.com')).toBe(true);
+        expect(isAllowedExternalUrl('javascript:alert(1)')).toBe(false);
+        expect(isAllowedExternalUrl('file:///etc/passwd')).toBe(false);
+        expect(isAllowedExternalUrl('not a url')).toBe(false);
+
+        await expect(openExternalUrl('javascript:alert(1)')).resolves.toBeUndefined();
+        expect(mocks.windowOpen).not.toHaveBeenCalled();
         expect(mocks.invoke).not.toHaveBeenCalled();
     });
 });

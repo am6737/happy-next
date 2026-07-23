@@ -2,6 +2,16 @@ import { invoke } from '@tauri-apps/api/core';
 import * as WebBrowser from 'expo-web-browser';
 import { Linking, Platform } from 'react-native';
 
+const ALLOWED_EXTERNAL_PROTOCOLS = new Set(['http:', 'https:', 'mailto:', 'tel:']);
+
+export function isAllowedExternalUrl(url: string): boolean {
+    try {
+        return ALLOWED_EXTERNAL_PROTOCOLS.has(new URL(url).protocol);
+    } catch {
+        return false;
+    }
+}
+
 export function isTauriDesktop(): boolean {
     return Platform.OS === 'web'
         && typeof window !== 'undefined'
@@ -12,6 +22,11 @@ export async function openExternalUrl(
     url: string,
     options: { nativeBrowser?: 'system' | 'in-app' } = {},
 ): Promise<void> {
+    if (!isAllowedExternalUrl(url)) {
+        console.warn('Blocked unsupported external URL');
+        return;
+    }
+
     if (isTauriDesktop()) {
         await invoke('plugin:opener|open_url', { url, with: null });
         return;

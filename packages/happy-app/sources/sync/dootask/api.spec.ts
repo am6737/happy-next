@@ -1,4 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+vi.mock('@/auth/tokenStorage', () => ({
+    TokenStorage: { getCredentials: vi.fn() },
+}));
+vi.mock('@/sync/serverConfig', () => ({
+    getServerUrl: () => 'https://api.happy-next.com',
+}));
+
 import { dootaskLogin, dootaskGetTokenExpire, dootaskFetchTasks } from './api';
 
 describe('dootask api', () => {

@@ -1,11 +1,10 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import * as React from 'react';
 import { Pressable, View } from 'react-native';
 import { useUnistyles } from 'react-native-unistyles';
 
-import { getDesktopPlatform } from './desktopWindowUtils';
+import { getDesktopPlatform, startDesktopWindowDragging } from './desktopWindowUtils';
 
 const WINDOWS_TITLE_BAR_HEIGHT = 40;
 const WINDOWS_CONTROL_WIDTH = 46;
@@ -21,11 +20,14 @@ type WindowControlProps = {
 function WindowControl({ accessibilityLabel, destructive, icon, onPress }: WindowControlProps) {
     const { theme } = useUnistyles();
     const [hovered, setHovered] = React.useState(false);
+    const [focused, setFocused] = React.useState(false);
 
     return (
         <Pressable
             accessibilityLabel={accessibilityLabel}
             accessibilityRole="button"
+            onBlur={() => setFocused(false)}
+            onFocus={() => setFocused(true)}
             onHoverIn={() => setHovered(true)}
             onHoverOut={() => setHovered(false)}
             onPress={onPress}
@@ -33,13 +35,17 @@ function WindowControl({ accessibilityLabel, destructive, icon, onPress }: Windo
                 alignItems: 'center',
                 backgroundColor: destructive && hovered
                     ? '#E81123'
-                    : hovered || pressed
+                    : hovered || pressed || focused
                         ? theme.colors.surfacePressed
                         : 'transparent',
                 height: WINDOWS_TITLE_BAR_HEIGHT,
                 justifyContent: 'center',
+                outlineColor: focused ? theme.colors.textLink : 'transparent',
+                outlineOffset: -2,
+                outlineStyle: 'solid',
+                outlineWidth: focused ? 2 : 0,
                 width: WINDOWS_CONTROL_WIDTH,
-            })}
+            } as any)}
         >
             <MaterialCommunityIcons
                 color={destructive && hovered ? '#FFFFFF' : theme.colors.text}
@@ -48,6 +54,12 @@ function WindowControl({ accessibilityLabel, destructive, icon, onPress }: Windo
             />
         </Pressable>
     );
+}
+
+function runWindowAction(action: () => Promise<void>): void {
+    void action().catch((error) => {
+        console.warn('Desktop window action failed:', error);
+    });
 }
 
 export function DesktopWindowFrame({ children }: { children: React.ReactNode }) {
@@ -65,9 +77,13 @@ export function DesktopWindowFrame({ children }: { children: React.ReactNode }) 
         let unlisten: (() => void) | undefined;
 
         const updateMaximized = async () => {
-            const value = await window.isMaximized();
-            if (mounted) {
-                setMaximized(value);
+            try {
+                const value = await window.isMaximized();
+                if (mounted) {
+                    setMaximized(value);
+                }
+            } catch (error) {
+                console.warn('Failed to read desktop window state:', error);
             }
         };
 
@@ -76,7 +92,7 @@ export function DesktopWindowFrame({ children }: { children: React.ReactNode }) 
             void updateMaximized();
         }).then((cleanup) => {
             unlisten = cleanup;
-        });
+        }).catch((error) => console.warn('Failed to observe desktop window size:', error));
 
         return () => {
             mounted = false;
@@ -101,7 +117,7 @@ export function DesktopWindowFrame({ children }: { children: React.ReactNode }) 
                         onMouseDown: (event: any) => {
                             if (event.button === 0) {
                                 event.preventDefault?.();
-                                void invoke('start_desktop_window_dragging');
+                                startDesktopWindowDragging();
                             }
                         },
                     } as any)}
@@ -125,7 +141,7 @@ export function DesktopWindowFrame({ children }: { children: React.ReactNode }) 
             <View
                 {...({
                     onDoubleClick: () => {
-                        void window.toggleMaximize();
+                        runWindowAction(() => window.toggleMaximize());
                     },
                 } as any)}
                 {...({ 'data-tauri-drag-region': true } as any)}
@@ -148,18 +164,18 @@ export function DesktopWindowFrame({ children }: { children: React.ReactNode }) 
                     <WindowControl
                         accessibilityLabel="Minimize window"
                         icon="window-minimize"
-                        onPress={() => void window.minimize()}
+                        onPress={() => runWindowAction(() => window.minimize())}
                     />
                     <WindowControl
                         accessibilityLabel={maximized ? 'Restore window' : 'Maximize window'}
                         icon={maximized ? 'window-restore' : 'window-maximize'}
-                        onPress={() => void window.toggleMaximize()}
+                        onPress={() => runWindowAction(() => window.toggleMaximize())}
                     />
                     <WindowControl
                         accessibilityLabel="Close window"
                         destructive
                         icon="window-close"
-                        onPress={() => void window.close()}
+                        onPress={() => runWindowAction(() => window.close())}
                     />
                 </View>
             </View>

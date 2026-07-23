@@ -112,6 +112,8 @@ The native application menu exposes New Session, Search/Find, primary navigation
 - macOS bundles declare microphone and camera usage descriptions.
 - The macOS entitlements include audio-input and camera access for the hardened runtime.
 - Tauri capabilities are limited to window dragging, approved URL opening, notifications, autostart, and global shortcuts.
+- Core Tauri access is enumerated per command; the frontend is not granted `core:default`, filesystem, shell, process, or arbitrary path-opening permissions.
+- External navigation accepts only HTTP, HTTPS, `mailto:`, and `tel:` URLs. Script, file, data, and custom protocols are blocked from the generic external-link path.
 - Image drag/drop and clipboard paste reuse the existing Web upload paths rather than broad native filesystem or clipboard permissions.
 - Microphone denial guidance distinguishes the Tauri app from a browser and directs users to the operating-system privacy settings.
 
@@ -122,6 +124,7 @@ The native application menu exposes New Session, Search/Find, primary navigation
 - The diagnostics screen can test the current app-config endpoint and open the native log directory.
 - Native logs rotate locally, keeping up to three files with a 1 MB limit per file.
 - Image uploads have a 60-second timeout. Upload/send failures keep the composer content available for retry and show a user-visible error instead of only producing an unhandled promise rejection.
+- Native window operations catch and report rejected platform calls instead of leaving unhandled promises; Windows title-bar controls expose keyboard focus indicators and accessible labels.
 
 ## Local data and authentication
 

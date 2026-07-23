@@ -2,16 +2,19 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
     isTauriDesktop: vi.fn(),
+    invoke: vi.fn(),
 }));
 
 vi.mock('@/utils/tauri', () => ({ isTauriDesktop: mocks.isTauriDesktop }));
+vi.mock('@tauri-apps/api/core', () => ({ invoke: mocks.invoke }));
 
-import { getDesktopPlatform } from './desktopWindowUtils';
+import { getDesktopPlatform, startDesktopWindowDragging } from './desktopWindowUtils';
 
 describe('desktop window platform detection', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         mocks.isTauriDesktop.mockReturnValue(true);
+        mocks.invoke.mockResolvedValue(undefined);
     });
 
     it('detects macOS WebViews', () => {
@@ -36,5 +39,15 @@ describe('desktop window platform detection', () => {
         mocks.isTauriDesktop.mockReturnValue(false);
 
         expect(getDesktopPlatform()).toBeNull();
+    });
+
+    it('starts native dragging only inside Tauri', () => {
+        startDesktopWindowDragging();
+        expect(mocks.invoke).toHaveBeenCalledWith('start_desktop_window_dragging');
+
+        mocks.invoke.mockClear();
+        mocks.isTauriDesktop.mockReturnValue(false);
+        startDesktopWindowDragging();
+        expect(mocks.invoke).not.toHaveBeenCalled();
     });
 });

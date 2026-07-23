@@ -10,8 +10,7 @@ import { StyleSheet } from 'react-native-unistyles';
 import { t } from '@/text';
 import { isTauriDesktop } from '@/utils/tauri';
 import { useAuth } from '@/auth/AuthContext';
-import { getDesktopPlatform } from '@/desktop/desktopWindowUtils';
-import { invoke } from '@tauri-apps/api/core';
+import { getDesktopPlatform, startDesktopWindowDragging } from '@/desktop/desktopWindowUtils';
 
 interface HeaderProps {
     title?: React.ReactNode;
@@ -46,7 +45,7 @@ export const Header = React.memo((props: HeaderProps) => {
             }
 
             event.preventDefault?.();
-            void invoke('start_desktop_window_dragging');
+            startDesktopWindowDragging();
         },
     } as any : {};
 
