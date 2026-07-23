@@ -158,10 +158,15 @@ const NavigationHeaderComponent: React.FC<NativeStackHeaderProps> = React.memo((
     const { options, route, back, navigation } = props;
     const extendedOptions = options as ExtendedNavigationOptions;
     const isTablet = useIsTablet();
+    const { isAuthenticated } = useAuth();
 
-    // Check if we should hide back button on tablet
+    // In the authenticated tablet master-detail layout, index 0 is the empty
+    // detail pane and index 1 is the first real screen selected from the
+    // permanent sidebar. Avoid offering a back action that only returns to the
+    // empty pane. Unauthenticated tablet screens do not have that sidebar and
+    // should retain their normal back navigation.
     const shouldHideBackButton = React.useMemo(() => {
-        if (!isTablet || isTauriDesktop()) return false;
+        if (!isTablet || !isAuthenticated || isTauriDesktop()) return false;
 
         // Get navigation state to check stack depth
         const state = navigation.getState();
@@ -170,7 +175,7 @@ const NavigationHeaderComponent: React.FC<NativeStackHeaderProps> = React.memo((
         // Hide back button if we're at the first or second screen in the stack
         // In tablet mode, index 0 is the empty screen, index 1 is the first real screen
         return currentIndex <= 1;
-    }, [isTablet, navigation]);
+    }, [isAuthenticated, isTablet, navigation]);
 
     // Extract title - handle both string and function types
     let title: React.ReactNode | null = null;
