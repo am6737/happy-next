@@ -117,6 +117,15 @@ The native application menu exposes New Session, Search/Find, primary navigation
 - Image drag/drop and clipboard paste reuse the existing Web upload paths rather than broad native filesystem or clipboard permissions.
 - Microphone denial guidance distinguishes the Tauri app from a browser and directs users to the operating-system privacy settings.
 
+### Software updates
+
+- Production builds check the official GitHub Releases `latest.json` endpoint after startup without delaying the initial window.
+- Update checks are disabled for development and preview identifiers.
+- Available updates are never installed silently: the user chooses whether to download and when to restart.
+- Download progress, release notes, retry state, and a manual **Settings → Software update** action are available in the app.
+- The native application menu also exposes **Check for Updates…**.
+- Update archives are verified with the public key embedded in `tauri.conf.json`; the private key and its password are stored only in GitHub Actions Secrets and the separately managed encrypted backup.
+
 ### Diagnostics and failure recovery
 
 - **Settings → Desktop diagnostics** shows the app version, identifier, operating system, architecture, build profile, sanitized server endpoint, and Socket.IO state.
@@ -229,7 +238,7 @@ Before a public desktop release, complete all of the following:
 - synchronize the Git tag, Expo version, Cargo/Tauri version, installer metadata, and update metadata;
 - run and verify the macOS Universal Developer ID signing, notarization, stapling, and Gatekeeper job with approved Secrets;
 - upload macOS and Windows artifacts to the same GitHub Release without overwriting an existing release unexpectedly;
-- add Tauri updater client support and the approved public key; the release manifest generator is already prepared for signed artifacts;
+- publish signed updater artifacts and `latest.json` through a real tag release;
 - test a real old-version-to-new-version update on both operating systems;
 - complete Windows x64 install/uninstall verification;
 - complete Apple Silicon verification and obtain Intel Mac coverage or explicitly mark it **未验证**.
@@ -239,7 +248,7 @@ Before a public desktop release, complete all of the following:
 - Never commit or print certificates, passwords, tokens, provisioning files, or updater private keys.
 - Developer ID credentials and the updater private key belong only in GitHub Actions Secrets.
 - Keep an offline backup of the updater private key. Only the updater public key belongs in client configuration.
-- Do not generate or replace the formal updater key without explicit approval.
+- Do not replace the formal updater key without explicit approval; replacing it would prevent existing installations from trusting future updates.
 - Do not use Apple credentials or overwrite an existing GitHub Release without explicit approval.
 - CI success must never be reported as real-device installation or upgrade success.
 

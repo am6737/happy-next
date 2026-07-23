@@ -52,6 +52,26 @@ describe('desktop security configuration', () => {
         expect(permissions.some((permission) => permission.includes('shell'))).toBe(false);
         expect(permissions.some((permission) => permission.includes('fs:'))).toBe(false);
         expect(permissions).not.toContain('opener:allow-open-path');
+        expect(permissions).toEqual(expect.arrayContaining([
+            'process:allow-restart',
+            'updater:allow-check',
+            'updater:allow-download',
+            'updater:allow-install',
+        ]));
+        expect(permissions).not.toContain('process:allow-exit');
+    });
+
+    it('pins production updates to the official signed GitHub release feed', () => {
+        const config = readJson('src-tauri/tauri.conf.json');
+
+        expect(config.bundle.createUpdaterArtifacts).toBe(true);
+        expect(config.plugins.updater.endpoints).toEqual([
+            'https://github.com/hitosea/happy-next/releases/latest/download/latest.json',
+        ]);
+        expect(config.plugins.updater.pubkey).toMatch(/^[A-Za-z0-9+/=]+$/);
+        expect(config.plugins.updater.pubkey.length).toBeGreaterThan(100);
+        expect(config.plugins.updater.pubkey).not.toContain('PRIVATE');
+        expect(config.plugins.updater.windows.installMode).toBe('passive');
     });
 
     it('keeps credential-free desktop CI and guarded release automation in place', () => {
@@ -66,6 +86,10 @@ describe('desktop security configuration', () => {
         expect(release).toContain('already exists; refusing to overwrite it');
         expect(release).toContain("-name '*.sig'");
         expect(release).toContain('generateDesktopUpdateManifest.cjs');
+        expect(release).toContain('TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}');
+        expect(release).toContain('*.app.tar.gz.sig');
+        expect(release).toContain('*.nsis.zip.sig');
+        expect(release).not.toContain('tauri:build:windows:x64 --ci --no-sign');
         expect(release).not.toMatch(/\bset\s+-x\b/);
         expect(release).not.toMatch(/echo\s+"\$APPLE_/);
     });

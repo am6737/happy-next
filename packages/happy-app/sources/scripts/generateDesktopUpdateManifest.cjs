@@ -25,6 +25,21 @@ function findSignedArtifact(files, matcher, label) {
     return { artifact, signatureFile };
 }
 
+function findWindowsUpdaterArtifact(files) {
+    for (const extension of ['.nsis.zip', '.msi.zip']) {
+        const artifact = files.find((file) => file.endsWith(extension));
+        if (!artifact) {
+            continue;
+        }
+        const signatureFile = `${artifact}.sig`;
+        if (!files.includes(signatureFile)) {
+            throw new Error(`Missing signature for ${artifact}`);
+        }
+        return { artifact, signatureFile };
+    }
+    throw new Error('Missing Windows x64 updater artifact');
+}
+
 function generateDesktopUpdateManifest({
     version: rawVersion,
     repository,
@@ -40,7 +55,7 @@ function generateDesktopUpdateManifest({
 
     const files = fs.readdirSync(artifactsDir).filter((file) => fs.statSync(path.join(artifactsDir, file)).isFile());
     const mac = findSignedArtifact(files, /\.app\.tar\.gz$/, 'macOS Universal');
-    const windows = findSignedArtifact(files, /\.(?:nsis|msi)\.zip$/, 'Windows x64');
+    const windows = findWindowsUpdaterArtifact(files);
 
     const entry = ({ artifact, signatureFile }) => ({
         signature: fs.readFileSync(path.join(artifactsDir, signatureFile), 'utf8').trim(),
@@ -83,7 +98,9 @@ if (require.main === module) {
         repository: args.repository,
         artifactsDir: path.resolve(args.artifacts),
         outputPath: path.resolve(args.output),
-        notes: args.notes || '',
+        notes: args['notes-file']
+            ? fs.readFileSync(path.resolve(args['notes-file']), 'utf8').trim()
+            : args.notes || '',
     });
 }
 

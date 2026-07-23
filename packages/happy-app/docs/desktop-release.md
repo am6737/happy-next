@@ -57,16 +57,29 @@ These artifacts are for build validation and internal testing only.
 
 ## Updater foundation
 
-`sources/scripts/generateDesktopUpdateManifest.cjs` creates the Tauri static `latest.json` structure when signed updater artifacts are present. It:
+The production client uses the Tauri updater plugin and checks:
+
+```text
+https://github.com/hitosea/happy-next/releases/latest/download/latest.json
+```
+
+The updater public key is committed in `src-tauri/tauri.conf.json`. The encrypted private key and password are configured as GitHub Actions Secrets:
+
+- `TAURI_SIGNING_PRIVATE_KEY`
+- `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`
+
+The encrypted key backup must be moved from its temporary local directory to offline storage. The password is intentionally not stored beside the key and should remain in the approved password manager.
+
+`sources/scripts/generateDesktopUpdateManifest.cjs` creates the Tauri static `latest.json` structure from signed updater artifacts. It:
 
 - requires a semantic release version;
 - requires a signed macOS `.app.tar.gz` artifact;
-- requires a signed Windows `.nsis.zip` or `.msi.zip` artifact;
+- prefers a signed Windows `.nsis.zip` artifact and falls back to `.msi.zip`;
 - maps the Universal macOS artifact to both Darwin architectures;
 - reads detached `.sig` files without printing their contents;
 - writes GitHub Release download URLs.
 
-The release workflow invokes the generator only if `.sig` files exist. At present the client updater plugin, endpoint, formal public key, and updater artifact signing are not enabled. Those items remain blocked on explicit approval to generate or install the formal updater key.
+The release workflow passes the updater Secrets to macOS and Windows builds, uploads updater archives and detached signatures, and generates `latest.json` before creating the GitHub Release. Windows installers remain intentionally unsigned even though their updater archives are cryptographically signed by the Tauri updater key.
 
 Never commit a private updater key. Store it only in GitHub Actions Secrets and an offline backup. The corresponding public key may be committed once approved.
 
@@ -89,8 +102,6 @@ Never commit a private updater key. Store it only in GitHub Actions Secrets and 
 - Test overwrite installation with a newer version.
 
 ### Updater
-
-After the formal updater key is configured:
 
 - install a previously published version;
 - publish a newer signed version;

@@ -32,6 +32,8 @@ describe('desktop updater manifest generator', () => {
         writeFileSync(join(directory, 'Happy.Next.app.tar.gz.sig'), 'mac-signature\n');
         writeFileSync(join(directory, 'Happy.Next.nsis.zip'), 'windows');
         writeFileSync(join(directory, 'Happy.Next.nsis.zip.sig'), 'windows-signature\n');
+        writeFileSync(join(directory, 'Happy.Next.msi.zip'), 'windows-msi');
+        writeFileSync(join(directory, 'Happy.Next.msi.zip.sig'), 'windows-msi-signature\n');
         const outputPath = join(directory, 'latest.json');
 
         const manifest = generateDesktopUpdateManifest({
@@ -45,6 +47,7 @@ describe('desktop updater manifest generator', () => {
 
         expect(manifest.platforms['darwin-aarch64']).toEqual(manifest.platforms['darwin-x86_64']);
         expect(manifest.platforms['windows-x86_64'].signature).toBe('windows-signature');
+        expect(manifest.platforms['windows-x86_64'].url).toContain('.nsis.zip');
         expect(manifest.platforms['darwin-aarch64'].url).toContain('/releases/download/v2.3.4/');
         expect(JSON.parse(readFileSync(outputPath, 'utf8'))).toEqual(manifest);
     });

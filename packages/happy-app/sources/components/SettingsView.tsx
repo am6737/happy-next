@@ -371,6 +371,14 @@ export const SettingsView = React.memo(function SettingsView() {
                 />
                 {isTauriDesktop() && (
                     <Item
+                        title={t('desktopUpdate.title')}
+                        subtitle={t('desktopUpdate.settingsSubtitle')}
+                        icon={<Ionicons name="cloud-download-outline" size={29} color="#007AFF" />}
+                        onPress={() => router.push('/settings/software-update')}
+                    />
+                )}
+                {isTauriDesktop() && (
+                    <Item
                         title={t('settingsDesktop.diagnosticsTitle')}
                         subtitle={t('settingsDesktop.diagnosticsSubtitle')}
                         icon={<Ionicons name="pulse-outline" size={29} color="#34C759" />}

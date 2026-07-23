@@ -5,11 +5,18 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { usePathname, useRouter } from 'expo-router';
 
 import { storage, useLocalSetting } from '@/sync/storage';
+import { Modal } from '@/modal';
+import { t } from '@/text';
 import { getSessionName } from '@/utils/sessionUtils';
 import { isTauriDesktop } from '@/utils/tauri';
 import { subscribeToDesktopMessages } from './desktopEvents';
 import { subscribeToDesktopAuthentication } from './desktopAuthEvents';
 import { messagePreview, notificationId, sessionIdFromPath } from './desktopNotificationUtils';
+import {
+    checkForDesktopUpdate,
+    downloadDesktopUpdate,
+    installDesktopUpdateAndRelaunch,
+} from './desktopUpdater';
 
 const DESKTOP_SHORTCUT = 'CommandOrControl+Shift+H';
 const IS_MACOS_DESKTOP = typeof navigator !== 'undefined' && /Macintosh|Mac OS X/.test(navigator.userAgent);
@@ -32,6 +39,92 @@ export function DesktopBridge() {
     const notificationTimersRef = React.useRef(new Map<string, ReturnType<typeof setTimeout>>());
     const notificationPayloadRef = React.useRef(new Map<string, { title: string; body: string }>());
     const notificationSessionsRef = React.useRef(new Map<number, string>());
+    const promptedUpdateVersionRef = React.useRef<string | null>(null);
+
+    React.useEffect(() => {
+        if (!isTauriDesktop()) {
+            return;
+        }
+        let cancelled = false;
+        let unlistenMenu: (() => void) | undefined;
+
+        const offerUpdate = async (interactive = false) => {
+            const result = await checkForDesktopUpdate();
+            if (interactive && result.phase === 'upToDate') {
+                Modal.alert(t('desktopUpdate.title'), t('desktopUpdate.upToDate'));
+                return;
+            }
+            if (interactive && result.phase === 'unsupported') {
+                Modal.alert(t('desktopUpdate.title'), t('desktopUpdate.productionOnly'));
+                return;
+            }
+            if (interactive && result.phase === 'error') {
+                Modal.alert(t('desktopUpdate.failed'), t('desktopUpdate.tryAgain'));
+                return;
+            }
+            if (
+                cancelled
+                || result.phase !== 'available'
+                || !result.availableVersion
+                || (!interactive && promptedUpdateVersionRef.current === result.availableVersion)
+            ) {
+                return;
+            }
+            promptedUpdateVersionRef.current = result.availableVersion;
+            const download = await Modal.confirm(
+                t('desktopUpdate.availableTitle'),
+                t('desktopUpdate.availableMessage', { version: result.availableVersion }),
+                {
+                    confirmText: t('desktopUpdate.download'),
+                    cancelText: t('desktopUpdate.later'),
+                },
+            );
+            if (!download || cancelled) {
+                return;
+            }
+            const downloaded = await downloadDesktopUpdate();
+            if (downloaded.phase === 'error') {
+                Modal.alert(t('desktopUpdate.failed'), t('desktopUpdate.tryAgain'));
+                return;
+            }
+            if (downloaded.phase !== 'downloaded' || cancelled) {
+                return;
+            }
+            const restart = await Modal.confirm(
+                t('desktopUpdate.readyTitle'),
+                t('desktopUpdate.readyMessage'),
+                {
+                    confirmText: t('desktopUpdate.restartNow'),
+                    cancelText: t('desktopUpdate.restartLater'),
+                },
+            );
+            if (restart && !cancelled) {
+                await installDesktopUpdateAndRelaunch();
+            }
+        };
+
+        const timer = setTimeout(() => {
+            void offerUpdate();
+        }, 12_000);
+
+        void listen<{ action: string }>('desktop-menu-action', ({ payload }) => {
+            if (payload.action === 'softwareUpdate') {
+                void offerUpdate(true);
+            }
+        }).then((unlisten) => {
+            if (cancelled) {
+                unlisten();
+            } else {
+                unlistenMenu = unlisten;
+            }
+        }).catch((error) => console.warn('Failed to register software update menu listener:', error));
+
+        return () => {
+            cancelled = true;
+            clearTimeout(timer);
+            unlistenMenu?.();
+        };
+    }, [router]);
 
     React.useEffect(() => {
         if (!isTauriDesktop()) {

@@ -159,13 +159,29 @@ jobs:
           yarn workspace happy-app typecheck
           yarn workspace happy-app test --run
 
+      - name: Validate updater signing secrets
+        shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY)) {
+            throw 'Missing required secret: TAURI_SIGNING_PRIVATE_KEY'
+          }
+          if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD)) {
+            throw 'Missing required secret: TAURI_SIGNING_PRIVATE_KEY_PASSWORD'
+          }
+
       - name: Build unsigned MSI and NSIS installers
         shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           $version = "${{ github.ref_name }}" -replace '^v', ''
           $env:APP_VERSION = $version
           $env:TAURI_CONFIG = @{ version = $version } | ConvertTo-Json -Compress
-          yarn workspace happy-app tauri:build:windows:x64 --ci --no-sign
+          yarn workspace happy-app tauri:build:windows:x64 --ci
 
       - uses: actions/upload-artifact@v4
         with:
@@ -174,6 +190,10 @@ jobs:
           path: |
             packages/happy-app/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
             packages/happy-app/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*-setup.exe
+            packages/happy-app/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi.zip
+            packages/happy-app/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi.zip.sig
+            packages/happy-app/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.nsis.zip
+            packages/happy-app/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.nsis.zip.sig
 
   build-desktop-macos:
     name: Build signed and notarized macOS Universal bundle
@@ -216,6 +236,8 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           for name in \
             APPLE_CERTIFICATE_BASE64 \
@@ -224,7 +246,9 @@ jobs:
             APPLE_SIGNING_IDENTITY \
             APPLE_ID \
             APPLE_PASSWORD \
-            APPLE_TEAM_ID; do
+            APPLE_TEAM_ID \
+            TAURI_SIGNING_PRIVATE_KEY \
+            TAURI_SIGNING_PRIVATE_KEY_PASSWORD; do
             if [ -z "${!name}" ]; then
               echo "Missing required secret: ${name}" >&2
               exit 1
@@ -264,6 +288,8 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           version="${GITHUB_REF_NAME#v}"
           export APP_VERSION="$version"
@@ -295,6 +321,8 @@ jobs:
           path: |
             packages/happy-app/src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
             packages/happy-app/src-tauri/target/universal-apple-darwin/release/bundle/Happy-Next-*-macOS-universal.zip
+            packages/happy-app/src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app.tar.gz
+            packages/happy-app/src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app.tar.gz.sig
 
       - name: Remove temporary signing material
         if: always()
@@ -330,11 +358,15 @@ jobs:
             echo "GitHub Release ${{ github.ref_name }} already exists; refusing to overwrite it." >&2
             exit 1
           fi
+          gh api --method POST "repos/$GITHUB_REPOSITORY/releases/generate-notes" \
+            -f tag_name="${{ github.ref_name }}" \
+            --jq '.body' > "$RUNNER_TEMP/release-notes.md"
           if find artifacts -maxdepth 1 -type f -name '*.sig' -print -quit | grep -q .; then
             node packages/happy-app/sources/scripts/generateDesktopUpdateManifest.cjs \
               --version "${{ github.ref_name }}" \
               --repository "$GITHUB_REPOSITORY" \
               --artifacts artifacts \
+              --notes-file "$RUNNER_TEMP/release-notes.md" \
               --output artifacts/latest.json
           fi
           (
@@ -345,7 +377,7 @@ jobs:
           )
           gh release create "${{ github.ref_name }}" \
             --title "Release ${{ github.ref_name }}" \
-            --generate-notes \
+            --notes-file "$RUNNER_TEMP/release-notes.md" \
             artifacts/*
 
   # ── Manual trigger: iOS → App Store ──

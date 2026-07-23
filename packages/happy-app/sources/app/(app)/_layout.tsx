@@ -202,6 +202,12 @@ export default function RootLayout() {
                 }}
             />
             <Stack.Screen
+                name="settings/software-update"
+                options={{
+                    headerTitle: t('desktopUpdate.title'),
+                }}
+            />
+            <Stack.Screen
                 name="settings/voice"
                 options={{
                     headerTitle: t('settings.voiceAssistant'),

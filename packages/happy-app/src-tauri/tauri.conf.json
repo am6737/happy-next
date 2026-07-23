@@ -55,6 +55,18 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDdCMTMzREJFREU4REZFMkYKUldRdi9vM2V2ajBUZThNZW9lZTU3b05lN0d4cklGcWhFSGJDZUFRcklKaFpFTW45YiswdjBDVzUK",
+      "endpoints": [
+        "https://github.com/hitosea/happy-next/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

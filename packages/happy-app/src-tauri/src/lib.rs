@@ -30,6 +30,7 @@ const MENU_DOOTASK_ID: &str = "menu-dootask";
 const MENU_SETTINGS_ID: &str = "menu-settings";
 const MENU_BACK_ID: &str = "menu-back";
 const MENU_FORWARD_ID: &str = "menu-forward";
+const MENU_SOFTWARE_UPDATE_ID: &str = "menu-software-update";
 const DESKTOP_MENU_ACTION_EVENT: &str = "desktop-menu-action";
 const UNAUTHENTICATED_WINDOW_WIDTH: f64 = 800.0;
 const UNAUTHENTICATED_WINDOW_HEIGHT: f64 = 600.0;
@@ -368,6 +369,13 @@ fn build_application_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         true,
         Some(forward_accelerator),
     )?;
+    let software_update = MenuItem::with_id(
+        app,
+        MENU_SOFTWARE_UPDATE_ID,
+        "Check for Updates…",
+        true,
+        None::<&str>,
+    )?;
 
     let file_menu = Submenu::with_items(
         app,
@@ -440,6 +448,7 @@ fn build_application_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
             true,
             &[
                 &PredefinedMenuItem::about(app, None, None)?,
+                &software_update,
                 &PredefinedMenuItem::separator(app)?,
                 &app_settings,
                 &PredefinedMenuItem::separator(app)?,
@@ -470,7 +479,11 @@ fn build_application_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
             app,
             "Help",
             true,
-            &[&PredefinedMenuItem::about(app, None, None)?],
+            &[
+                &software_update,
+                &PredefinedMenuItem::separator(app)?,
+                &PredefinedMenuItem::about(app, None, None)?,
+            ],
         )?;
         Menu::with_items(
             app,
@@ -495,6 +508,7 @@ fn handle_application_menu_event(app: &AppHandle, id: &str) {
         MENU_SETTINGS_ID => "settings",
         MENU_BACK_ID => "back",
         MENU_FORWARD_ID => "forward",
+        MENU_SOFTWARE_UPDATE_ID => "softwareUpdate",
         _ => return,
     };
     show_main_window(app);
@@ -1113,6 +1127,8 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(
             tauri_plugin_autostart::Builder::new()
                 .args(["--hidden"])
