@@ -1,16 +1,21 @@
 import React from 'react';
-import { View, StyleSheet, Platform } from 'react-native';
+import { Text, View, Platform } from 'react-native';
+import { StyleSheet } from 'react-native-unistyles';
 import { CommandPaletteInput } from './CommandPaletteInput';
 import { CommandPaletteResults } from './CommandPaletteResults';
 import { useCommandPalette } from './useCommandPalette';
 import { Command } from './types';
+import { Typography } from '@/constants/Typography';
+import { t } from '@/text';
+import type { CachedMessageSearchMatch } from '@/sync/messagesStore/cachedMessageSearch';
 
 interface CommandPaletteProps {
     commands: Command[];
+    searchCachedMessages?: (query: string) => Promise<CachedMessageSearchMatch[]>;
     onClose: () => void;
 }
 
-export function CommandPalette({ commands, onClose }: CommandPaletteProps) {
+export function CommandPalette({ commands, searchCachedMessages, onClose }: CommandPaletteProps) {
     const {
         searchQuery,
         selectedIndex,
@@ -20,7 +25,14 @@ export function CommandPalette({ commands, onClose }: CommandPaletteProps) {
         handleSelectCommand,
         handleKeyPress,
         setSelectedIndex,
-    } = useCommandPalette(commands, onClose);
+        executingCommandId,
+        isSearchingMessages,
+    } = useCommandPalette(commands, onClose, searchCachedMessages);
+
+    const resultCount = React.useMemo(
+        () => filteredCategories.reduce((count, category) => count + category.commands.length, 0),
+        [filteredCategories],
+    );
 
     // Only render on web
     if (Platform.OS !== 'web') {
@@ -40,14 +52,28 @@ export function CommandPalette({ commands, onClose }: CommandPaletteProps) {
                 selectedIndex={selectedIndex}
                 onSelectCommand={handleSelectCommand}
                 onSelectionChange={setSelectedIndex}
+                executingCommandId={executingCommandId}
+                searchQuery={searchQuery}
             />
+            <View style={styles.footer}>
+                <Text style={[styles.footerText, Typography.default()]}>
+                    {isSearchingMessages
+                        ? t('commandPalette.searchingMessages')
+                        : t('commandPalette.resultCount', { count: resultCount })}
+                </Text>
+                <View style={styles.footerHints}>
+                    <Text style={[styles.footerText, Typography.default()]}>{t('commandPalette.navigateHint')}</Text>
+                    <Text style={[styles.footerText, Typography.default()]}>{t('commandPalette.selectHint')}</Text>
+                    <Text style={[styles.footerText, Typography.default()]}>{t('commandPalette.closeHint')}</Text>
+                </View>
+            </View>
         </View>
     );
 }
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create((theme) => ({
     container: {
-        backgroundColor: '#FFFFFF',
+        backgroundColor: theme.colors.surface,
         borderRadius: 16,
         width: '100%',
         maxWidth: 800, // Increased from 640 for wider input
@@ -58,15 +84,34 @@ const styles = StyleSheet.create({
             maxHeight: 500, // Fallback for native
         }),
         overflow: 'hidden',
-        shadowColor: '#000',
+        shadowColor: theme.colors.shadow.color,
         shadowOffset: {
             width: 0,
             height: 20,
         },
-        shadowOpacity: 0.25,
+        shadowOpacity: theme.dark ? 0.55 : 0.25,
         shadowRadius: 40,
         elevation: 20,
         borderWidth: 1,
-        borderColor: 'rgba(0, 0, 0, 0.08)',
+        borderColor: theme.colors.divider,
     },
-});
+    footer: {
+        minHeight: 38,
+        paddingHorizontal: 16,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        borderTopWidth: StyleSheet.hairlineWidth,
+        borderTopColor: theme.colors.divider,
+        backgroundColor: theme.colors.surfaceHigh,
+    },
+    footerHints: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 14,
+    },
+    footerText: {
+        color: theme.colors.textSecondary,
+        fontSize: 11,
+    },
+}));

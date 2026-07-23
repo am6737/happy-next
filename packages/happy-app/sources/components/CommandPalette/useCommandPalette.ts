@@ -1,75 +1,95 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { TextInput } from 'react-native';
-import { Command, CommandCategory } from './types';
+import { Command } from './types';
+import { applyCachedMessageMatches, groupCommands } from './search';
+import { showToast } from '@/components/Toast';
+import { t } from '@/text';
+import type { CachedMessageSearchMatch } from '@/sync/messagesStore/cachedMessageSearch';
 
-export function useCommandPalette(commands: Command[], onClose: () => void) {
+export function useCommandPalette(
+    commands: Command[],
+    onClose: () => void,
+    searchCachedMessages?: (query: string) => Promise<CachedMessageSearchMatch[]>,
+) {
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedIndex, setSelectedIndex] = useState(0);
+    const [executingCommandId, setExecutingCommandId] = useState<string | null>(null);
+    const [cachedMessageMatches, setCachedMessageMatches] = useState<CachedMessageSearchMatch[]>([]);
+    const [isSearchingMessages, setIsSearchingMessages] = useState(false);
     const inputRef = useRef<TextInput>(null);
 
     // Filter commands based on search query
-    const filteredCategories = useMemo((): CommandCategory[] => {
-        if (!searchQuery.trim()) {
-            // Group commands by category
-            const grouped = commands.reduce((acc, command) => {
-                const category = command.category || 'General';
-                if (!acc[category]) {
-                    acc[category] = [];
-                }
-                acc[category].push(command);
-                return acc;
-            }, {} as Record<string, Command[]>);
+    useEffect(() => {
+        const query = searchQuery.trim();
+        let cancelled = false;
+        let timer: ReturnType<typeof setTimeout> | null = null;
 
-            return Object.entries(grouped).map(([title, cmds]) => ({
-                id: title.toLowerCase().replace(/\s+/g, '-'),
-                title,
-                commands: cmds
-            }));
+        setCachedMessageMatches([]);
+        if (!searchCachedMessages || query.length < 2) {
+            setIsSearchingMessages(false);
+            return () => {};
         }
 
-        // Fuzzy search
-        const query = searchQuery.toLowerCase();
-        const filtered = commands.filter(command => {
-            const titleMatch = command.title.toLowerCase().includes(query);
-            const subtitleMatch = command.subtitle?.toLowerCase().includes(query);
-            return titleMatch || subtitleMatch;
-        });
+        setIsSearchingMessages(true);
+        timer = setTimeout(() => {
+            searchCachedMessages(query)
+                .then((matches) => {
+                    if (!cancelled) setCachedMessageMatches(matches);
+                })
+                .catch((error) => {
+                    console.warn('[CommandPalette] Cached message search failed:', error);
+                })
+                .finally(() => {
+                    if (!cancelled) setIsSearchingMessages(false);
+                });
+        }, 200);
 
-        if (filtered.length === 0) {
-            return [];
-        }
+        return () => {
+            cancelled = true;
+            if (timer) clearTimeout(timer);
+        };
+    }, [searchCachedMessages, searchQuery]);
 
-        // Group filtered results
-        const grouped = filtered.reduce((acc, command) => {
-            const category = command.category || 'Results';
-            if (!acc[category]) {
-                acc[category] = [];
-            }
-            acc[category].push(command);
-            return acc;
-        }, {} as Record<string, Command[]>);
+    const searchableCommands = useMemo(() => {
+        return applyCachedMessageMatches(
+            commands,
+            cachedMessageMatches,
+            searchQuery,
+            t('commandPalette.messageMatch'),
+        );
+    }, [cachedMessageMatches, commands, searchQuery]);
 
-        return Object.entries(grouped).map(([title, cmds]) => ({
-            id: title.toLowerCase().replace(/\s+/g, '-'),
-            title,
-            commands: cmds
-        }));
-    }, [commands, searchQuery]);
+    const filteredCategories = useMemo(
+        () => groupCommands(searchableCommands, searchQuery),
+        [searchableCommands, searchQuery],
+    );
 
     // Reset selection when search changes
     useEffect(() => {
         setSelectedIndex(0);
     }, [searchQuery]);
 
-    const handleSelectCommand = useCallback((command: Command) => {
-        command.action();
-        onClose();
-    }, [onClose]);
+    const handleSelectCommand = useCallback(async (command: Command) => {
+        if (executingCommandId) return;
+        setExecutingCommandId(command.id);
+        try {
+            await command.action();
+            onClose();
+        } catch (error) {
+            console.error('[CommandPalette] Command failed:', command.id, error);
+            showToast(t('commandPalette.actionFailed'), { icon: 'alert-circle-outline' });
+            setExecutingCommandId(null);
+        }
+    }, [executingCommandId, onClose]);
 
     // Get flattened commands for keyboard navigation
     const allCommands = useMemo(() => {
         return filteredCategories.flatMap(cat => cat.commands);
     }, [filteredCategories]);
+
+    useEffect(() => {
+        setSelectedIndex((current) => Math.min(current, Math.max(allCommands.length - 1, 0)));
+    }, [allCommands.length]);
 
     const handleKeyPress = useCallback((key: string) => {
         switch(key) {
@@ -77,10 +97,16 @@ export function useCommandPalette(commands: Command[], onClose: () => void) {
                 onClose();
                 break;
             case 'ArrowDown':
-                setSelectedIndex(prev => Math.min(prev + 1, allCommands.length - 1));
+                setSelectedIndex(prev => Math.min(prev + 1, Math.max(allCommands.length - 1, 0)));
                 break;
             case 'ArrowUp':
                 setSelectedIndex(prev => Math.max(prev - 1, 0));
+                break;
+            case 'Home':
+                setSelectedIndex(0);
+                break;
+            case 'End':
+                setSelectedIndex(Math.max(allCommands.length - 1, 0));
                 break;
             case 'Enter':
                 if (allCommands[selectedIndex]) {
@@ -103,5 +129,7 @@ export function useCommandPalette(commands: Command[], onClose: () => void) {
         handleSelectCommand,
         handleKeyPress,
         setSelectedIndex,
+        executingCommandId,
+        isSearchingMessages,
     };
 }

@@ -84,6 +84,14 @@ import {
     resolveNewerCoveragePatch,
 } from './messagesStore/common';
 import type { MessagePage, SessionMessageCacheState, SessionMessageCacheStatePatch } from './messagesStore/types';
+import {
+    cachedMessageMatchesQuery,
+    cachedMessageSnippet,
+    extractCachedMessageText,
+    normalizeCachedMessageSearchText,
+    type CachedMessageSearchEntry,
+    type CachedMessageSearchMatch,
+} from './messagesStore/cachedMessageSearch';
 import { emitDesktopMessages } from '@/desktop/desktopEvents';
 
 type PermissionMode = NonNullable<Session['permissionMode']>;
@@ -211,6 +219,8 @@ class Sync {
     /** Memoized minimap user-message lists per session, keyed by a cache-state freshness signature,
      *  so refocusing a session doesn't re-decrypt its whole history. See getCachedUserMessagesForMinimap. */
     private minimapUserMessagesCache = new Map<string, { signature: string; messages: UserTextMessage[] }>();
+    /** Decrypted local message text used by Command+K search. Invalidated whenever cached rows change. */
+    private cachedMessageSearchIndex = new Map<string, { signature: string; entries: CachedMessageSearchEntry[] }>();
     /** Per-session last-known seq for v3 incremental fetch */
     private sessionLastSeq = new Map<string, number>();
     /** Callbacks to run before applying a sent message (keyed by localId).
@@ -543,6 +553,7 @@ class Sync {
         this.messageCacheGeneration.set(sessionId, next);
         // Any cache clear/invalidate must drop the memoized minimap list too.
         this.minimapUserMessagesCache.delete(sessionId);
+        this.cachedMessageSearchIndex.delete(sessionId);
         return next;
     }
 
@@ -3186,6 +3197,7 @@ class Sync {
             } else {
                 await messageRepository.upsertMessages(accountKey, sessionId, messages);
             }
+            this.cachedMessageSearchIndex.delete(sessionId);
             if (!isCurrent()) {
                 return false;
             }
@@ -3370,6 +3382,86 @@ class Sync {
             : collectedUserMessages;
         this.minimapUserMessagesCache.set(sessionId, { signature, messages: result });
         return result;
+    }
+
+    private getCachedMessageSearchEntries = async (sessionId: string): Promise<CachedMessageSearchEntry[]> => {
+        const accountKey = this.getMessageAccountKey();
+        if (!accountKey) return [];
+        const encryption = this.encryption.getSessionEncryption(sessionId);
+        if (!encryption) return [];
+
+        const cacheState = await this.getCachedMessageState(sessionId);
+        const signature = cacheState
+            ? `${cacheState.updatedAt}:${cacheState.contiguousMinSeq}:${cacheState.contiguousMaxSeq}:${cacheState.oldestLoadedSeq}`
+            : 'empty';
+        const memo = this.cachedMessageSearchIndex.get(sessionId);
+        if (memo?.signature === signature) return memo.entries;
+
+        const PAGE_SIZE = Sync.INITIAL_MESSAGES_LIMIT;
+        const entries: CachedMessageSearchEntry[] = [];
+        let beforeSeq: number | null = null;
+
+        try {
+            while (true) {
+                const page: MessagePage | null = beforeSeq === null
+                    ? await this.readCachedLatestMessages(sessionId, PAGE_SIZE)
+                    : await this.readCachedMessagesBefore(sessionId, beforeSeq, PAGE_SIZE);
+                if (!page || page.messages.length === 0) break;
+
+                const decrypted = await encryption.decryptMessages(page.messages);
+                for (const item of decrypted) {
+                    if (!item) continue;
+                    const normalized = normalizeRawMessage(item.id, item.localId, item.createdAt, item.content);
+                    if (!normalized) continue;
+                    normalized.seq = item.seq;
+                    const text = extractCachedMessageText(normalized);
+                    if (!text) continue;
+                    entries.push({
+                        text,
+                        normalizedText: normalizeCachedMessageSearchText(text),
+                        seq: item.seq ?? 0,
+                    });
+                }
+
+                if (!page.hasMoreLocal || page.minSeq === null) break;
+                beforeSeq = page.minSeq;
+            }
+        } catch (error) {
+            console.warn(`Failed to build cached message search index for ${sessionId}:`, error);
+            return [];
+        }
+
+        entries.sort((a, b) => b.seq - a.seq);
+        this.cachedMessageSearchIndex.set(sessionId, { signature, entries });
+        return entries;
+    }
+
+    /** Search only locally persisted, already-encrypted message cache. Never makes a network request. */
+    searchCachedMessages = async (
+        rawQuery: string,
+        sessionIds: string[],
+        limit = 30,
+    ): Promise<CachedMessageSearchMatch[]> => {
+        const query = normalizeCachedMessageSearchText(rawQuery);
+        if (query.length < 2 || sessionIds.length === 0) return [];
+
+        const matches: CachedMessageSearchMatch[] = [];
+        const CONCURRENCY = 3;
+        for (let offset = 0; offset < sessionIds.length && matches.length < limit; offset += CONCURRENCY) {
+            const batch = sessionIds.slice(offset, offset + CONCURRENCY);
+            const batchMatches = await Promise.all(batch.map(async (sessionId) => {
+                const entries = await this.getCachedMessageSearchEntries(sessionId);
+                const entry = entries.find((candidate) => cachedMessageMatchesQuery(candidate.normalizedText, query));
+                return entry
+                    ? { sessionId, snippet: cachedMessageSnippet(entry.text, query) }
+                    : null;
+            }));
+            for (const match of batchMatches) {
+                if (match) matches.push(match);
+                if (matches.length >= limit) break;
+            }
+        }
+        return matches;
     }
 
     private decryptAndNormalizeMessages = async (
