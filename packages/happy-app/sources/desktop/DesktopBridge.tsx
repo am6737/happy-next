@@ -33,24 +33,29 @@ export function DesktopBridge() {
     const notificationPayloadRef = React.useRef(new Map<string, { title: string; body: string }>());
     const notificationSessionsRef = React.useRef(new Map<number, string>());
 
-    React.useEffect(() => subscribeToDesktopAuthentication((authenticated) => {
-        if (authenticated) {
+    React.useEffect(() => {
+        if (!isTauriDesktop()) {
             return;
         }
-        unreadBySessionRef.current.clear();
-        seenMessageIdsRef.current.clear();
-        notificationPayloadRef.current.clear();
-        notificationSessionsRef.current.clear();
-        for (const timer of notificationTimersRef.current.values()) {
-            clearTimeout(timer);
-        }
-        notificationTimersRef.current.clear();
-        void invoke('set_desktop_unread_count', { count: 0 });
-    }), []);
+        return subscribeToDesktopAuthentication((authenticated) => {
+            if (authenticated) {
+                return;
+            }
+            unreadBySessionRef.current.clear();
+            seenMessageIdsRef.current.clear();
+            notificationPayloadRef.current.clear();
+            notificationSessionsRef.current.clear();
+            for (const timer of notificationTimersRef.current.values()) {
+                clearTimeout(timer);
+            }
+            notificationTimersRef.current.clear();
+            void invoke('set_desktop_unread_count', { count: 0 });
+        });
+    }, []);
 
     React.useEffect(() => {
         currentSessionIdRef.current = currentSessionId;
-        if (currentSessionId && windowFocusedRef.current) {
+        if (isTauriDesktop() && currentSessionId && windowFocusedRef.current) {
             unreadBySessionRef.current.delete(currentSessionId);
             const count = [...unreadBySessionRef.current.values()].reduce((sum, ids) => sum + ids.size, 0);
             void invoke('set_desktop_unread_count', { count });
