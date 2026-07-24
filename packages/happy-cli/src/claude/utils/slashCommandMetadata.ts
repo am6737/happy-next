@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
 import os from 'node:os';
 import { basename, dirname, join, relative, resolve } from 'node:path';
+import { parseMarkdownFrontmatter, readYamlString } from '@/utils/yaml';
 
 export type ClaudeSlashCommandKind = 'command' | 'skill';
 export type ClaudeSlashCommandScope = 'REPO' | 'USER' | 'PLUGIN' | 'SYSTEM';
@@ -67,30 +68,9 @@ function collectAncestors(from: string, until: string): string[] {
     return result;
 }
 
-function parseFrontmatter(markdown: string): Record<string, string> | null {
-    const match = markdown.match(/^---\r?\n([\s\S]*?)\r?\n---/);
-    if (!match) return null;
-
-    const values: Record<string, string> = {};
-    for (const line of match[1].split(/\r?\n/)) {
-        const colonIndex = line.indexOf(':');
-        if (colonIndex <= 0) continue;
-        const key = line.slice(0, colonIndex).trim();
-        let value = line.slice(colonIndex + 1).trim();
-        if (
-            (value.startsWith('"') && value.endsWith('"')) ||
-            (value.startsWith("'") && value.endsWith("'"))
-        ) {
-            value = value.slice(1, -1);
-        }
-        values[key] = value;
-    }
-    return values;
-}
-
-function readFrontmatter(filePath: string): Record<string, string> | null {
+function readFrontmatter(filePath: string): Record<string, unknown> | null {
     try {
-        return parseFrontmatter(readFileSync(filePath, 'utf8'));
+        return parseMarkdownFrontmatter(readFileSync(filePath, 'utf8'));
     } catch {
         return null;
     }
@@ -122,14 +102,15 @@ function scanSkillRoot(
             const frontmatter = readFrontmatter(skillPath);
             if (!frontmatter && !existsSync(skillPath)) continue;
 
-            const skillName = frontmatter?.name?.trim() || entry.name;
+            const skillName = readYamlString(frontmatter?.name) || entry.name;
+            const description = readYamlString(frontmatter?.description, true);
             const aliases = [skillName];
             if (pluginName) aliases.push(`${pluginName}:${skillName}`);
 
             addAlias(map, aliases, {
                 kind: 'skill',
                 scope,
-                ...(frontmatter?.description ? { description: frontmatter.description } : {}),
+                ...(description ? { description } : {}),
             });
         }
     } catch {
@@ -167,10 +148,11 @@ function scanCommandRoot(
                 aliases.push(...aliases.map(alias => `${pluginName}:${alias}`));
             }
             const frontmatter = readFrontmatter(fullPath);
+            const description = readYamlString(frontmatter?.description, true);
             addAlias(map, aliases, {
                 kind: 'command',
                 scope,
-                ...(frontmatter?.description ? { description: frontmatter.description } : {}),
+                ...(description ? { description } : {}),
             });
         }
     }

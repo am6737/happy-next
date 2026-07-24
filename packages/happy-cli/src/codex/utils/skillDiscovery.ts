@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { readdirSync, readFileSync, realpathSync } from 'node:fs';
 import os from 'node:os';
 import { dirname, join, resolve } from 'node:path';
+import { isYamlRecord, parseMarkdownFrontmatter, parseYamlRecord, readYamlString } from '@/utils/yaml';
 import { getCodexHomeDir } from './codexHome';
 
 export type CodexSkillScope = 'REPO' | 'USER' | 'ADMIN' | 'SYSTEM';
@@ -65,34 +66,15 @@ function collectAncestors(from: string, until: string): string[] {
     return result;
 }
 
-function parseFrontmatter(markdown: string): Record<string, string> | null {
-    const match = markdown.match(/^---\r?\n([\s\S]*?)\r?\n---/);
-    if (!match) return null;
-
-    const values: Record<string, string> = {};
-    for (const line of match[1].split(/\r?\n/)) {
-        const colonIndex = line.indexOf(':');
-        if (colonIndex <= 0) continue;
-        const key = line.slice(0, colonIndex).trim();
-        let value = line.slice(colonIndex + 1).trim();
-        if (
-            (value.startsWith('"') && value.endsWith('"')) ||
-            (value.startsWith("'") && value.endsWith("'"))
-        ) {
-            value = value.slice(1, -1);
-        }
-        values[key] = value;
-    }
-    return values;
-}
-
 function parseOpenAiYaml(skillDir: string): Pick<CodexSkillMetadata, 'displayName' | 'shortDescription'> {
     const metadataPath = join(skillDir, 'agents', 'openai.yaml');
 
     try {
         const yaml = readFileSync(metadataPath, 'utf8');
-        const displayName = yaml.match(/^\s*display_name:\s*["']?(.+?)["']?\s*$/m)?.[1];
-        const shortDescription = yaml.match(/^\s*short_description:\s*["']?(.+?)["']?\s*$/m)?.[1];
+        const parsed = parseYamlRecord(yaml);
+        const values = parsed && isYamlRecord(parsed.interface) ? parsed.interface : parsed;
+        const displayName = readYamlString(values?.display_name, true);
+        const shortDescription = readYamlString(values?.short_description, true);
         const result: Pick<CodexSkillMetadata, 'displayName' | 'shortDescription'> = {};
         if (displayName) result.displayName = displayName;
         if (shortDescription) result.shortDescription = shortDescription;
@@ -107,9 +89,9 @@ function readSkill(skillDir: string, scope: CodexSkillScope): CodexSkillMetadata
 
     try {
         const markdown = readFileSync(skillPath, 'utf8');
-        const frontmatter = parseFrontmatter(markdown);
-        const name = frontmatter?.name?.trim();
-        const description = frontmatter?.description?.trim();
+        const frontmatter = parseMarkdownFrontmatter(markdown);
+        const name = readYamlString(frontmatter?.name);
+        const description = readYamlString(frontmatter?.description, true);
         if (!name || !description) return null;
 
         const uiMetadata = parseOpenAiYaml(skillDir);

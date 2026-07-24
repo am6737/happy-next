@@ -27,6 +27,52 @@ afterEach(() => {
 });
 
 describe('discoverCodexSkills', () => {
+    it.each([
+        ['folded', '>', 'The fallback workflow for authoring custom HyperFrames videos at any length.'],
+        ['folded-strip', '>-', 'The fallback workflow for authoring custom HyperFrames videos at any length.'],
+        ['literal', '|', 'The fallback workflow for authoring custom HyperFrames videos at any length.'],
+    ])('parses %s YAML block descriptions as a single-line summary', (_label, indicator, expected) => {
+        const homeDir = createTempDir();
+        const codexHome = createTempDir();
+        const cwd = join(homeDir, 'project');
+        const skillDir = join(codexHome, 'skills', 'video');
+        mkdirSync(skillDir, { recursive: true });
+        writeFileSync(
+            join(skillDir, 'SKILL.md'),
+            `---\nname: video\ndescription: ${indicator}\n  The fallback workflow for authoring custom\n  HyperFrames videos at any length.\n---\n`,
+            'utf8',
+        );
+
+        const skills = discoverCodexSkills(cwd, homeDir, { CODEX_HOME: codexHome });
+
+        expect(skills).toContainEqual(expect.objectContaining({
+            name: 'video',
+            description: expected,
+        }));
+    });
+
+    it('parses nested OpenAI UI metadata with YAML syntax', () => {
+        const homeDir = createTempDir();
+        const codexHome = createTempDir();
+        const cwd = join(homeDir, 'project');
+        const skillPath = writeSkill(codexHome, 'video', 'video');
+        const agentsDir = join(dirname(skillPath), 'agents');
+        mkdirSync(agentsDir, { recursive: true });
+        writeFileSync(
+            join(agentsDir, 'openai.yaml'),
+            'interface:\n  display_name: "Video: General"\n  short_description: >-\n    Author custom HyperFrames\n    video compositions\n',
+            'utf8',
+        );
+
+        const skills = discoverCodexSkills(cwd, homeDir, { CODEX_HOME: codexHome });
+
+        expect(skills).toContainEqual(expect.objectContaining({
+            name: 'video',
+            displayName: 'Video: General',
+            shortDescription: 'Author custom HyperFrames video compositions',
+        }));
+    });
+
     it('discovers user and system skills from CODEX_HOME', () => {
         const homeDir = createTempDir();
         const codexHome = createTempDir();

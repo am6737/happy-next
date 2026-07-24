@@ -9,9 +9,8 @@
  * Edit here — the on-disk copies are content-compared and overwritten on update.
  */
 
-// NOTE: keep `description` a single-line plain scalar. Happy's frontmatter parser does not support
-// YAML block scalars (`>-`, `>`, `|`) and renders the indicator literally, so a folded value shows
-// up as the description text ">-" in the skill list.
+// NOTE: keep this bundled public description stable and single-line so it remains compatible with
+// every client that consumes the generated skill, including clients with minimal frontmatter parsers.
 const ORCHESTRATOR_PUBLIC_MODE = `If this skill is selected implicitly, use orchestration for the current task and its directly related
 follow-up work; do not carry the mode into unrelated topics. If the user invokes an
 \`/orchestrator:*\` command or explicitly asks to enter Orchestrator mode, keep using it for related

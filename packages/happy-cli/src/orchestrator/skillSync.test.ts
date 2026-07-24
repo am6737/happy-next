@@ -113,9 +113,8 @@ describe('syncOrchestratorAssets', () => {
 });
 
 describe('orchestrator skill frontmatter', () => {
-  // Happy's frontmatter parser does not understand YAML block scalars; a folded `description: >-`
-  // value is rendered literally as ">-" in the skill list. The description must stay a single-line
-  // plain scalar so both Claude Code and Happy show it correctly.
+  // Keep the bundled public description stable and single-line for compatibility with every client
+  // that consumes the generated skill, including clients with minimal frontmatter parsers.
   const frontmatter = ORCHESTRATOR_SKILL_MD.match(/^---\n([\s\S]*?)\n---/)?.[1] ?? '';
   const descriptionLine = frontmatter.split('\n').find((line) => line.startsWith('description:'));
 
