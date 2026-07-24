@@ -26,6 +26,8 @@ description: Cuts a happy-next release through explicit CLI, GitHub Release, Doc
 
 不要默认发布全部。任何会真实发布、提交 App Store、创建 tag、覆盖 Secret 或修改 Release 的操作，都必须先展示目标版本和完整命令并等待用户确认。
 
+触发任何 GitHub Actions workflow 后，立即返回 Run URL 并在后台监控；不得同步阻塞等待，运行结束后报告结果。
+
 ## 共用前置检查
 
 ```bash
