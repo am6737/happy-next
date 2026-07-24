@@ -154,19 +154,19 @@ impl Default for DesktopState {
     }
 }
 
-fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
+fn show_main_window(app: &AppHandle) {
     #[cfg(target_os = "macos")]
     {
         let _ = app.show();
-        let _ = app.run_on_main_thread(|| {
-            let main_thread = objc2::MainThreadMarker::new()
-                .expect("macOS application activation must run on the main thread");
-            #[allow(deprecated)]
-            objc2_app_kit::NSApplication::sharedApplication(main_thread)
-                .activateIgnoringOtherApps(true);
-        });
+        let authenticated = app
+            .state::<DesktopState>()
+            .authenticated
+            .load(Ordering::SeqCst);
+        show_prepared_macos_window(app, authenticated);
+        schedule_macos_traffic_light_reconciliation(app);
     }
 
+    #[cfg(not(target_os = "macos"))]
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.unminimize();
         let _ = window.show();
@@ -180,7 +180,7 @@ fn hide_main_window<R: Runtime>(app: &AppHandle<R>) {
     }
 }
 
-fn toggle_main_window<R: Runtime>(app: &AppHandle<R>) {
+fn toggle_main_window(app: &AppHandle) {
     let Some(window) = app.get_webview_window("main") else {
         return;
     };
@@ -188,9 +188,7 @@ fn toggle_main_window<R: Runtime>(app: &AppHandle<R>) {
     if window.is_visible().unwrap_or(false) && window.is_focused().unwrap_or(false) {
         let _ = window.hide();
     } else {
-        let _ = window.unminimize();
-        let _ = window.show();
-        let _ = window.set_focus();
+        show_main_window(app);
     }
 }
 
@@ -887,6 +885,20 @@ fn reconcile_macos_traffic_light_position(app: &AppHandle) {
 }
 
 #[cfg(target_os = "macos")]
+fn schedule_macos_traffic_light_reconciliation(app: &AppHandle) {
+    for delay in [Duration::from_millis(50), Duration::from_millis(200)] {
+        let scheduler = app.clone();
+        let callback_app = app.clone();
+        thread::spawn(move || {
+            thread::sleep(delay);
+            let _ = scheduler.run_on_main_thread(move || {
+                reconcile_macos_traffic_light_position(&callback_app);
+            });
+        });
+    }
+}
+
+#[cfg(target_os = "macos")]
 fn show_prepared_macos_window(app: &AppHandle, authenticated: bool) {
     use objc2_app_kit::{NSApplication, NSWindow};
 
@@ -996,6 +1008,12 @@ fn configure_desktop_window(app: &AppHandle, authenticated: bool) {
         }
     }
     let _ = window.set_resizable(authenticated);
+
+    #[cfg(target_os = "macos")]
+    {
+        reconcile_macos_traffic_light_position(app);
+        schedule_macos_traffic_light_reconciliation(app);
+    }
 }
 
 fn capture_authenticated_window_state(window: &Window, state: &DesktopState) {
@@ -1206,6 +1224,13 @@ pub fn run() {
             ) {
                 capture_authenticated_window_state(window, &window.state::<DesktopState>());
             }
+            #[cfg(target_os = "macos")]
+            if matches!(
+                event,
+                tauri::WindowEvent::Resized(_) | tauri::WindowEvent::ScaleFactorChanged { .. }
+            ) {
+                reconcile_macos_traffic_light_position(window.app_handle());
+            }
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 let state = window.state::<DesktopState>();
                 if state.explicit_quit.load(Ordering::SeqCst) {
@@ -1228,21 +1253,10 @@ pub fn run() {
                 if should_start_hidden() {
                     hide_main_window(app);
                 } else {
-                    #[cfg(target_os = "macos")]
-                    {
-                        let authenticated = app
-                            .state::<DesktopState>()
-                            .authenticated
-                            .load(Ordering::SeqCst);
-                        show_prepared_macos_window(app, authenticated);
-                    }
-                    #[cfg(not(target_os = "macos"))]
                     show_main_window(app);
                 }
             }
             tauri::RunEvent::Exit => persist_bootstrap_state(&app.state::<DesktopState>()),
-            #[cfg(target_os = "macos")]
-            tauri::RunEvent::MainEventsCleared => reconcile_macos_traffic_light_position(app),
             #[cfg(target_os = "macos")]
             tauri::RunEvent::Reopen {
                 has_visible_windows: false,
