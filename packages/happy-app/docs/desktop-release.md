@@ -13,6 +13,8 @@ This document covers the direct-download macOS and Windows desktop release path.
 
 A successful CI build is not proof of installation or upgrade behavior. Record real-machine results separately.
 
+The macOS build runs on Xcode 26. It compiles `src-tauri/icons/HappyNext.icon` with `actool`, embeds the resulting `Assets.car`, and keeps `icon.icns` as the macOS 12–25 fallback. The compiled `src-tauri/icons/generated` directory is disposable build output and must not be committed.
+
 ## Release asset naming
 
 Every versioned asset uses lowercase ASCII and hyphens:
@@ -91,7 +93,7 @@ The workflow:
 3. builds Android APK/AAB and iOS IPA;
 4. builds Windows x64 and ARM64 MSI/NSIS installers;
 5. signs Windows updater payloads with the Tauri updater key;
-6. builds a macOS Universal application;
+6. compiles the macOS 26 layered icon and builds a macOS 12+ Universal application;
 7. signs it with Developer ID and submits the application for notarization;
 8. separately notarizes and staples the DMG;
 9. validates application version, signatures, stapling, and Gatekeeper;

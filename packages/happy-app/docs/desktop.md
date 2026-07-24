@@ -7,7 +7,7 @@ This document describes the current implementation. A successful build is not co
 ## Supported baseline
 
 - macOS 12 or newer, Universal (`aarch64` + `x86_64`)
-- Windows 10/11 x64
+- Windows 10/11 x64 and ARM64
 - Direct download through GitHub Releases
 - macOS public releases: Developer ID signing and Apple notarization required
 - Windows first release: unsigned, so SmartScreen/unknown-publisher warnings are expected
@@ -18,7 +18,7 @@ This document describes the current implementation. A successful build is not co
 - Node.js 20 (release CI baseline)
 - Yarn 1.22.22
 - Rust 1.77.2 or newer
-- macOS: Xcode and Xcode Command Line Tools
+- macOS: Xcode 26 and Xcode Command Line Tools (required to compile the layered macOS 26 icon; deployment remains macOS 12+)
 - Windows: WebView2 and the MSVC Tauri prerequisites
 
 Install dependencies from the repository root:
@@ -86,7 +86,7 @@ Generated `dist` and `src-tauri/target` contents must not be committed.
 - Notification clicks show and activate the app, then navigate to the associated Session.
 - Notification permission is requested only when desktop notifications are enabled.
 
-The notification click path has been exercised locally on macOS. Windows notification delivery, activation, and taskbar integration remain **未验证** until tested on a real Windows x64 machine.
+The notification click path has been exercised locally on macOS. Windows notification delivery, activation, and taskbar integration remain **未验证** until tested on real Windows x64 and ARM64 machines.
 
 ### Desktop settings and shortcuts
 
@@ -129,7 +129,8 @@ The native application menu exposes New Session, Search/Find, primary navigation
 
 - Production builds check the official GitHub Releases `latest.json` endpoint after startup without delaying the initial window.
 - Update checks are disabled for development and preview identifiers.
-- Available updates are never installed silently: the user chooses whether to download and when to restart.
+- After discovering an available update, production builds download the signed updater payload in the background without interrupting the user.
+- Updates are never installed silently. When the payload is ready, signed-out layouts show an **Update** button in the lower-right corner and signed-in layouts show it after the Settings icon; clicking it installs the verified payload and restarts the app.
 - Download progress, release notes, retry state, and a manual **Settings → Software update** action are available in the app.
 - The native application menu also exposes **Check for Updates…**.
 - Update archives are verified with the public key embedded in `tauri.conf.json`; the private key and its password are stored only in GitHub Actions Secrets and the separately managed encrypted backup.
@@ -179,6 +180,15 @@ cargo fmt -- --check
 cargo check --locked
 ```
 
+After changing the desktop icon master or icon generator:
+
+```bash
+yarn desktop:icons
+yarn desktop:icon:macos
+```
+
+The second command is macOS-only and requires Xcode 26. Its `Assets.car` output is generated during builds and must not be committed.
+
 Production-shell smoke build without installers:
 
 ```bash
@@ -219,7 +229,9 @@ Use these status terms consistently:
 12. Image paste, image drag/drop, image-only send, microphone, camera, and voice assistant work in a production build.
 13. Default and custom HTTPS/WSS Happy servers connect successfully.
 
-### Windows x64 checklist — currently 未验证
+### Windows x64 and ARM64 checklist — currently 未验证
+
+Run the checklist separately on each architecture:
 
 1. Install and uninstall both MSI and NSIS artifacts.
 2. Verify overwrite install and retained/removed user data behavior.
@@ -238,8 +250,9 @@ Use these status terms consistently:
 
 - macOS 12+ Universal `.app/.dmg`
 - Windows x64 MSI/NSIS
+- Windows ARM64 MSI/NSIS
 
-Tag releases in `.github/workflows/release.yml` include Windows x64 installers and a macOS Universal job that imports a temporary Developer ID certificate, signs, notarizes, validates staples, runs Gatekeeper checks, and uploads DMG/zip artifacts. The job cannot be considered verified until the required Apple Secrets are configured and a real tag run succeeds. See `docs/desktop-release.md`.
+Tag releases in `.github/workflows/release.yml` include Windows x64 and ARM64 installers and a macOS Universal job that compiles the layered icon with Xcode 26, imports a temporary Developer ID certificate, signs, notarizes, validates staples, runs Gatekeeper checks, and uploads DMG/zip artifacts. The job cannot be considered verified until the required Apple Secrets are configured and a real tag run succeeds. See `docs/desktop-release.md`.
 
 Before a public desktop release, complete all of the following:
 
@@ -247,8 +260,8 @@ Before a public desktop release, complete all of the following:
 - run and verify the macOS Universal Developer ID signing, notarization, stapling, and Gatekeeper job with approved Secrets;
 - upload macOS and Windows artifacts to the same GitHub Release without overwriting an existing release unexpectedly;
 - publish signed updater artifacts and `latest.json` through a real tag release;
-- test a real old-version-to-new-version update on both operating systems;
-- complete Windows x64 install/uninstall verification;
+- test a real old-version-to-new-version update on macOS, Windows x64, and Windows ARM64;
+- complete Windows x64 and ARM64 install/uninstall verification;
 - complete Apple Silicon verification and obtain Intel Mac coverage or explicitly mark it **未验证**.
 
 ## Secrets and release safety
