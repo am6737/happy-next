@@ -65,6 +65,14 @@ Generated `dist` and `src-tauri/target` contents must not be committed.
 - Clicking the macOS Dock icon or launching a second instance shows and activates the existing main window.
 - Background throttling is disabled so hiding the window does not intentionally suspend Socket.IO processing.
 
+### Desktop icons
+
+- `sources/assets/images/icon.png` is the full-bleed 1024×1024 desktop icon master.
+- Run `yarn desktop:icons` after changing the master. The generator creates separate optical variants for macOS and Windows rather than scaling one precomposed icon everywhere.
+- macOS 26+ uses the layered `src-tauri/icons/HappyNext.icon` source compiled into `Assets.car`, with a full-bleed opaque background and system-applied masking. `src-tauri/icons/icon.icns` remains the fallback for macOS 12–25.
+- Windows uses a fuller canvas and independently optimized 16px, 24px, 32px, 48px, 64px, and 256px representations in `src-tauri/icons/icon.ico`.
+- The generator also refreshes the standard Tauri PNG icon sizes. It does not generate unused Windows Store tiles or modify the iOS, Android, favicon, or tray icon assets.
+
 ### Tray, badges, and notifications
 
 - macOS uses the dedicated template asset `src-tauri/icons/tray-icon.png`; it adapts to light and dark menu bars.
