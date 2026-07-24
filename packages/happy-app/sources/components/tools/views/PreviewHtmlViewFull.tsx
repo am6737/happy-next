@@ -8,6 +8,9 @@ import { toolFullViewStyles } from '../ToolFullView';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { LongPressCopy, useCopySelectable } from '@/components/LongPressCopy';
 import { setPreviewHtml } from '../previewHtmlStore';
+import { isTauriDesktop, openDesktopHtmlPreviewInBrowser } from '@/utils/tauri';
+import { showToast } from '@/components/Toast';
+import { t } from '@/text';
 
 interface PreviewHtmlViewFullProps {
     tool: ToolCall;
@@ -98,7 +101,17 @@ export const PreviewHtmlViewFull = React.memo<PreviewHtmlViewFullProps>(({ tool 
     const router = useRouter();
     const { id: sessionId } = useLocalSearchParams<{ id: string }>();
 
-    const handleOpenInNewWindow = React.useCallback(() => {
+    const handleOpenInNewWindow = React.useCallback(async () => {
+        if (isTauriDesktop()) {
+            try {
+                await openDesktopHtmlPreviewInBrowser(html);
+            } catch (error) {
+                console.error('Failed to open desktop HTML preview window:', error);
+                showToast(t('status.operationFailed'), { icon: 'alert-circle-outline' });
+            }
+            return;
+        }
+
         if (Platform.OS === 'web') {
             const win = window.open('', '_blank');
             if (win) {

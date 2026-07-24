@@ -1,5 +1,8 @@
 use std::{
+    collections::HashMap,
     fs,
+    io::{Read, Write},
+    net::{SocketAddr, TcpListener, TcpStream},
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicBool, AtomicU64, Ordering},
@@ -15,6 +18,7 @@ use tauri::{
     AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, Runtime, State, Theme, Window,
 };
 use tauri_plugin_opener::OpenerExt;
+use uuid::Uuid;
 
 const TRAY_ID: &str = "main-tray";
 const TRAY_SHOW_ID: &str = "tray-show";
@@ -43,6 +47,7 @@ const BOOTSTRAP_CACHE_FILE: &str = "desktop-bootstrap.json";
 const BOOTSTRAP_CACHE_VERSION: u32 = 1;
 const LIGHT_BACKGROUND_RGB: (u8, u8, u8) = (245, 245, 245);
 const DARK_BACKGROUND_RGB: (u8, u8, u8) = (30, 30, 30);
+const HTML_PREVIEW_MAX_AGE: Duration = Duration::from_secs(24 * 60 * 60);
 #[cfg(target_os = "macos")]
 const AUTHENTICATED_TRAFFIC_LIGHT_Y: f64 = 26.0;
 #[cfg(target_os = "macos")]
@@ -137,6 +142,7 @@ struct DesktopState {
     save_generation: Arc<AtomicU64>,
     ignore_window_events_until: Mutex<Option<Instant>>,
     unread_item: Mutex<Option<MenuItem<tauri::Wry>>>,
+    html_preview_server: Mutex<Option<HtmlPreviewServer>>,
 }
 
 impl Default for DesktopState {
@@ -150,8 +156,20 @@ impl Default for DesktopState {
             save_generation: Arc::new(AtomicU64::new(0)),
             ignore_window_events_until: Mutex::new(None),
             unread_item: Mutex::new(None),
+            html_preview_server: Mutex::new(None),
         }
     }
+}
+
+#[derive(Clone)]
+struct HtmlPreviewServer {
+    address: SocketAddr,
+    previews: Arc<Mutex<HashMap<String, HtmlPreviewEntry>>>,
+}
+
+struct HtmlPreviewEntry {
+    html: Arc<str>,
+    created_at: Instant,
 }
 
 fn show_main_window(app: &AppHandle) {
@@ -1121,6 +1139,158 @@ fn open_desktop_log_directory(app: AppHandle) -> Result<(), String> {
         .map_err(|error| error.to_string())
 }
 
+fn write_http_response(
+    stream: &mut TcpStream,
+    status: &str,
+    content_type: &str,
+    body: &[u8],
+    include_body: bool,
+) -> std::io::Result<()> {
+    write!(
+        stream,
+        "HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nCache-Control: no-store\r\nReferrer-Policy: no-referrer\r\nX-Content-Type-Options: nosniff\r\nConnection: close\r\n\r\n",
+        body.len()
+    )?;
+    if include_body {
+        stream.write_all(body)?;
+    }
+    stream.flush()
+}
+
+fn handle_html_preview_request(
+    mut stream: TcpStream,
+    previews: &Arc<Mutex<HashMap<String, HtmlPreviewEntry>>>,
+) -> std::io::Result<()> {
+    stream.set_read_timeout(Some(Duration::from_secs(2)))?;
+    stream.set_write_timeout(Some(Duration::from_secs(5)))?;
+    let mut request = [0_u8; 8192];
+    let bytes_read = stream.read(&mut request)?;
+    let request = String::from_utf8_lossy(&request[..bytes_read]);
+    let Some(request_line) = request.lines().next() else {
+        return write_http_response(
+            &mut stream,
+            "400 Bad Request",
+            "text/plain; charset=utf-8",
+            b"Bad request",
+            true,
+        );
+    };
+    let mut parts = request_line.split_whitespace();
+    let method = parts.next().unwrap_or_default();
+    let path = parts.next().unwrap_or_default();
+    let include_body = method != "HEAD";
+    if method != "GET" && method != "HEAD" {
+        return write_http_response(
+            &mut stream,
+            "405 Method Not Allowed",
+            "text/plain; charset=utf-8",
+            b"Method not allowed",
+            include_body,
+        );
+    }
+
+    let token = path
+        .split('?')
+        .next()
+        .and_then(|path| path.strip_prefix("/preview/"));
+    let html = token.and_then(|token| {
+        let mut entries = previews.lock().ok()?;
+        entries.retain(|_, entry| entry.created_at.elapsed() < HTML_PREVIEW_MAX_AGE);
+        entries.get(token).map(|entry| Arc::clone(&entry.html))
+    });
+    if let Some(html) = html {
+        write_http_response(
+            &mut stream,
+            "200 OK",
+            "text/html; charset=utf-8",
+            html.as_bytes(),
+            include_body,
+        )
+    } else {
+        write_http_response(
+            &mut stream,
+            "404 Not Found",
+            "text/plain; charset=utf-8",
+            b"Preview not found or expired",
+            include_body,
+        )
+    }
+}
+
+fn start_html_preview_server() -> Result<HtmlPreviewServer, String> {
+    let listener =
+        TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0)).map_err(|error| error.to_string())?;
+    let address = listener.local_addr().map_err(|error| error.to_string())?;
+    let previews = Arc::new(Mutex::new(HashMap::new()));
+    let thread_previews = Arc::clone(&previews);
+    thread::Builder::new()
+        .name("happy-html-preview".to_string())
+        .spawn(move || {
+            for connection in listener.incoming() {
+                match connection {
+                    Ok(stream) => {
+                        if let Err(error) = handle_html_preview_request(stream, &thread_previews) {
+                            log::debug!("HTML preview request failed: {error}");
+                        }
+                    }
+                    Err(error) => {
+                        log::warn!("HTML preview server stopped: {error}");
+                        break;
+                    }
+                }
+            }
+        })
+        .map_err(|error| error.to_string())?;
+    Ok(HtmlPreviewServer { address, previews })
+}
+
+fn html_preview_server(state: &DesktopState) -> Result<HtmlPreviewServer, String> {
+    let mut server = state
+        .html_preview_server
+        .lock()
+        .map_err(|_| "HTML preview server lock poisoned".to_string())?;
+    if server.is_none() {
+        *server = Some(start_html_preview_server()?);
+    }
+    server
+        .as_ref()
+        .cloned()
+        .ok_or_else(|| "Failed to start HTML preview server".to_string())
+}
+
+#[tauri::command]
+fn open_desktop_html_preview(
+    app: AppHandle,
+    state: State<'_, DesktopState>,
+    html: String,
+) -> Result<(), String> {
+    let server = html_preview_server(&state)?;
+    let token = Uuid::new_v4().simple().to_string();
+    {
+        let mut previews = server
+            .previews
+            .lock()
+            .map_err(|_| "HTML preview store lock poisoned".to_string())?;
+        previews.retain(|_, entry| entry.created_at.elapsed() < HTML_PREVIEW_MAX_AGE);
+        previews.insert(
+            token.clone(),
+            HtmlPreviewEntry {
+                html: Arc::<str>::from(html),
+                created_at: Instant::now(),
+            },
+        );
+    }
+
+    let url = format!("http://{}/preview/{token}", server.address);
+    if let Err(error) = app.opener().open_url(url, None::<String>) {
+        if let Ok(mut previews) = server.previews.lock() {
+            previews.remove(&token);
+        }
+        return Err(error.to_string());
+    }
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let log_level = if cfg!(debug_assertions) {
@@ -1168,7 +1338,8 @@ pub fn run() {
             toggle_desktop_window,
             set_desktop_unread_count,
             get_desktop_diagnostics,
-            open_desktop_log_directory
+            open_desktop_log_directory,
+            open_desktop_html_preview
         ])
         .setup(|app| {
             #[cfg(debug_assertions)]
@@ -1307,5 +1478,29 @@ mod tests {
             rectangles_intersection_area((1600, 800, 2200, 1200), (0, 0, 1920, 1080)),
             89_600
         );
+    }
+
+    #[test]
+    fn html_preview_server_serves_tokenized_html_without_caching() {
+        let server = start_html_preview_server().unwrap();
+        server.previews.lock().unwrap().insert(
+            "test-token".to_string(),
+            HtmlPreviewEntry {
+                html: Arc::<str>::from("<html><body>preview</body></html>"),
+                created_at: Instant::now(),
+            },
+        );
+
+        let mut stream = TcpStream::connect(server.address).unwrap();
+        stream
+            .write_all(b"GET /preview/test-token HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n")
+            .unwrap();
+        stream.shutdown(std::net::Shutdown::Write).unwrap();
+        let mut response = String::new();
+        stream.read_to_string(&mut response).unwrap();
+
+        assert!(response.starts_with("HTTP/1.1 200 OK\r\n"));
+        assert!(response.contains("Cache-Control: no-store\r\n"));
+        assert!(response.ends_with("<html><body>preview</body></html>"));
     }
 }

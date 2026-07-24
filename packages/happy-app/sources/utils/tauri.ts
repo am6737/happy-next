@@ -18,6 +18,13 @@ export function isTauriDesktop(): boolean {
         && (window as typeof window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ !== undefined;
 }
 
+export async function openDesktopHtmlPreviewInBrowser(html: string): Promise<void> {
+    if (!isTauriDesktop()) {
+        throw new Error('Desktop HTML previews are only available in the Tauri app');
+    }
+    await invoke('open_desktop_html_preview', { html });
+}
+
 export async function openExternalUrl(
     url: string,
     options: { nativeBrowser?: 'system' | 'in-app' } = {},
