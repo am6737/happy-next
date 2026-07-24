@@ -75,6 +75,7 @@ Running `happy` prints a QR code for device pairing.
 - 📋 **DooTask integration** - Task management with real-time chat and one-click AI sessions
 - 📨 **Pending message queue** - Messages queued and auto-dispatched when CLI is ready
 - 📱 **Native mobile UX** - Platform-native bottom tabs and headers on iOS / Android, iPad windowed-mode polish
+- 🖥️ **Desktop apps** - Native-feeling macOS and Windows clients with tray residency, notifications, shortcuts, and signed updates
 
 ## How does it work?
 
@@ -83,6 +84,14 @@ On your computer, run `happy` instead of `claude`, `happy codex` instead of `cod
 ## What’s new in Happy Next
 
 Happy Next is a major evolution of the original Happy. Here are the highlights:
+
+### Desktop Apps (macOS + Windows)
+- Direct-download clients for macOS 12+ Universal, Windows x64, and Windows ARM64
+- Native window sizing and restoration, frameless macOS title-bar integration, multi-monitor bounds protection, and theme-correct startup
+- Tray residency, close-to-tray behavior, single-instance activation, native notifications, and Dock/taskbar unread indicators
+- Native application menus, search and navigation shortcuts, optional launch at sign-in, and a global show/hide shortcut
+- Signed automatic updates download quietly in the background and wait for the user to install and restart
+- Desktop diagnostics, rotating local logs, upload retry recovery, microphone/camera support, system-browser external links, and restricted native capabilities
 
 ### Orchestrator
 - Define task dependency graphs (DAGs) with per-task model and working directory

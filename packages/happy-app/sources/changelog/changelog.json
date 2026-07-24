@@ -1,6 +1,22 @@
 {
   "entries": [
     {
+      "version": 20,
+      "date": "2026-07-24",
+      "summary": "Happy Next is now ready for direct desktop distribution on macOS and Windows, with native window behavior, tray residency, notifications, signed automatic updates, diagnostics, desktop shortcuts, and platform-optimized icons.",
+      "changes": [
+        "Desktop apps: native-feeling desktop clients for macOS 12+ Universal, Windows x64, and Windows ARM64, distributed directly through GitHub Releases",
+        "Window experience: authentication-aware window sizing, native state restoration, frameless macOS title bar integration, reliable dragging, multi-monitor bounds protection, and theme-correct startup",
+        "Tray and notifications: close to tray, single-instance activation, native notifications that open the corresponding Session, and Dock/taskbar unread indicators",
+        "Desktop controls: native application menus, search and navigation shortcuts, optional launch at sign-in, and a global show/hide shortcut",
+        "Automatic updates: signed update packages download quietly in the background and expose an in-app Update button when ready; installation and restart remain user initiated",
+        "Reliability: desktop diagnostics, rotating native logs, upload failure recovery, persistent composer content, and significantly lower idle CPU usage",
+        "Security and permissions: restricted Tauri capabilities, hardened navigation and CSP boundaries, system-browser external links, and explicit microphone and camera support",
+        "Visual polish: platform-specific macOS and Windows icons, including the macOS 26 layered icon format and compatibility icons for older macOS versions"
+      ],
+      "rawMarkdown": "## Version 20 - 2026-07-24\n\n\nHappy Next is now ready for direct desktop distribution on macOS and Windows, with native window behavior, tray residency, notifications, signed automatic updates, diagnostics, desktop shortcuts, and platform-optimized icons.\n\n- Desktop apps: native-feeling desktop clients for macOS 12+ Universal, Windows x64, and Windows ARM64, distributed directly through GitHub Releases\n- Window experience: authentication-aware window sizing, native state restoration, frameless macOS title bar integration, reliable dragging, multi-monitor bounds protection, and theme-correct startup\n- Tray and notifications: close to tray, single-instance activation, native notifications that open the corresponding Session, and Dock/taskbar unread indicators\n- Desktop controls: native application menus, search and navigation shortcuts, optional launch at sign-in, and a global show/hide shortcut\n- Automatic updates: signed update packages download quietly in the background and expose an in-app Update button when ready; installation and restart remain user initiated\n- Reliability: desktop diagnostics, rotating native logs, upload failure recovery, persistent composer content, and significantly lower idle CPU usage\n- Security and permissions: restricted Tauri capabilities, hardened navigation and CSP boundaries, system-browser external links, and explicit microphone and camera support\n- Visual polish: platform-specific macOS and Windows icons, including the macOS 26 layered icon format and compatibility icons for older macOS versions"
+    },
+    {
       "version": 19,
       "date": "2026-07-22",
       "summary": "Sessions gain convenient quick actions, Orchestrator runs become easier to inspect and navigate, Codex skills join slash-command autocomplete, navigation headers are more consistent, and chat reliability improves across web and smaller screens.",
@@ -325,5 +341,5 @@
       "rawMarkdown": "## Version 1 - 2025-05-12\n\n\nWelcome to Happy - your secure, encrypted mobile companion for Claude Code. This inaugural release establishes the foundation for private, powerful AI interactions on the go.\n\n- Implemented end-to-end encrypted session management ensuring complete privacy\n- Integrated intelligent voice assistant with natural conversation capabilities\n- Added experimental file manager with syntax highlighting and tree navigation\n- Built seamless real-time synchronization across all your devices\n- Established native support for iOS, Android, and responsive web interfaces"
     }
   ],
-  "latestVersion": 19
+  "latestVersion": 20
 }

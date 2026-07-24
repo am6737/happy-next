@@ -1,5 +1,18 @@
 # Changelog
 
+## Version 20 - 2026-07-24
+
+Happy Next is now ready for direct desktop distribution on macOS and Windows, with native window behavior, tray residency, notifications, signed automatic updates, diagnostics, desktop shortcuts, and platform-optimized icons.
+
+- Desktop apps: native-feeling desktop clients for macOS 12+ Universal, Windows x64, and Windows ARM64, distributed directly through GitHub Releases
+- Window experience: authentication-aware window sizing, native state restoration, frameless macOS title bar integration, reliable dragging, multi-monitor bounds protection, and theme-correct startup
+- Tray and notifications: close to tray, single-instance activation, native notifications that open the corresponding Session, and Dock/taskbar unread indicators
+- Desktop controls: native application menus, search and navigation shortcuts, optional launch at sign-in, and a global show/hide shortcut
+- Automatic updates: signed update packages download quietly in the background and expose an in-app Update button when ready; installation and restart remain user initiated
+- Reliability: desktop diagnostics, rotating native logs, upload failure recovery, persistent composer content, and significantly lower idle CPU usage
+- Security and permissions: restricted Tauri capabilities, hardened navigation and CSP boundaries, system-browser external links, and explicit microphone and camera support
+- Visual polish: platform-specific macOS and Windows icons, including the macOS 26 layered icon format and compatibility icons for older macOS versions
+
 ## Version 19 - 2026-07-22
 
 Sessions gain convenient quick actions, Orchestrator runs become easier to inspect and navigate, Codex skills join slash-command autocomplete, navigation headers are more consistent, and chat reliability improves across web and smaller screens.

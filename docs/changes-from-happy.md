@@ -8,6 +8,7 @@ This document summarizes what changed in Happy Next compared to the original Hap
 
 | Area | What changed |
 |---|---|
+| Desktop apps | Direct-download macOS 12+ Universal and Windows x64/ARM64 clients with native windows, tray residency, notifications, shortcuts, diagnostics, and signed automatic updates |
 | Orchestrator | Multi-agent DAG task scheduling with per-task model, working directory, real-time monitoring, execution history, and linked run navigation |
 | Pending queue | Server-side message queue with auto-dispatch, queue panel UI, send-now, plus edit and pause/draft of queued messages |
 | Multi-agent | Claude Code, Codex, and Gemini are all first-class agents |
@@ -30,6 +31,20 @@ This document summarizes what changed in Happy Next compared to the original Hap
 | Rebrand | CLI published as `happy-next-cli`, binary remains `happy` |
 
 ---
+
+## Desktop Apps
+
+Happy Next now ships as a native-feeling desktop client instead of requiring a browser tab.
+
+- **Cross-platform distribution**: macOS 12+ Universal, Windows x64, and Windows ARM64 installers are published directly through GitHub Releases
+- **Native window lifecycle**: authentication-aware sizing, state restoration, multi-monitor bounds protection, theme-correct startup, macOS title-bar integration, and reliable custom drag regions
+- **Resident experience**: close to tray, explicit Quit, single-instance activation, optional launch at sign-in, and a global show/hide shortcut
+- **Notifications and unread state**: native notifications open the associated Session, hidden windows return to the foreground, and unread state appears on the Dock or Windows taskbar
+- **Desktop controls**: native application menus plus search, navigation, new-session, inbox, DooTask, and settings shortcuts
+- **Signed updates**: updater payloads are cryptographically verified, downloaded quietly in the background, and installed only after the user clicks the in-app Update button
+- **Diagnostics and recovery**: sanitized desktop diagnostics, rotating local logs, upload timeouts and retry handling, and preserved composer content after failures
+- **Security and media**: restricted Tauri capabilities, hardened CSP and navigation boundaries, system-browser external links, and explicit microphone/camera support
+- **Platform visuals**: independent macOS and Windows icon assets, including the macOS 26 layered icon format and compatibility fallback for older macOS versions
 
 ## Orchestrator
 
