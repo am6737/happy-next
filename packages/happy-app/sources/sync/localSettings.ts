@@ -20,6 +20,7 @@ export const LocalSettingsSchema = z.object({
     // Session list UI state (device-specific)
     sessionListSelectedTab: z.string().nullable().describe('Persisted selected tab in the session list ("all" / "shared" / "sharedByMe" / a machineId)'),
     machineNameCache: z.record(z.string(), z.string()).describe('Cached machineId -> display name, so machine tabs keep their names before machines sync on restart'),
+    collapsedSessionProjectGroups: z.record(z.string(), z.boolean()).describe('Collapsed project paths in the active session list'),
     webSidebarWidth: z.number().finite().nullable().describe('Persisted web sidebar width in pixels'),
 });
 
@@ -49,6 +50,7 @@ export const localSettingsDefaults: LocalSettings = {
     acknowledgedCliVersions: {},
     sessionListSelectedTab: null,
     machineNameCache: {},
+    collapsedSessionProjectGroups: {},
     webSidebarWidth: null,
 };
 Object.freeze(localSettingsDefaults);
