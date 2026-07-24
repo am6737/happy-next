@@ -39,6 +39,21 @@ describe('DesktopBridge helpers', () => {
         }), 'me')).toBe('hello');
     });
 
+    it('removes all line breaks from notification bodies', () => {
+        expect(messagePreview(message({
+            role: 'agent',
+            content: [
+                { type: 'text', text: 'First line\r\n\n   \r\nSecond line', uuid: 'u1', parentUUID: null },
+                { type: 'text', text: 'Third\u2028line', uuid: 'u2', parentUUID: null },
+            ],
+        }), 'me')).toBe('First line Second line Third line');
+        expect(messagePreview(message({
+            role: 'user',
+            sentBy: 'friend',
+            content: { type: 'text', text: 'Hello\n\n\nworld' },
+        }), 'me')).toBe('Hello world');
+    });
+
     it('creates stable positive 32-bit notification IDs', () => {
         expect(notificationId('session-a')).toBe(notificationId('session-a'));
         expect(notificationId('session-a')).toBeGreaterThan(0);
