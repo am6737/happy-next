@@ -268,15 +268,15 @@ const stylesheet = StyleSheet.create((theme) => ({
         maxWidth: 160,
         ...Typography.default(),
     },
-    filterChipDot: {
-        width: 8,
-        height: 8,
-        borderRadius: 4,
-        backgroundColor: '#007AFF',
-        marginRight: 7,
-    },
-    filterChipStatusDot: {
-        marginRight: 7,
+    filterChipCornerBadge: {
+        position: 'absolute',
+        top: -2,
+        right: -2,
+        width: 12,
+        height: 12,
+        borderRadius: 6,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     emptyContainer: {
         alignItems: 'center',
@@ -322,35 +322,39 @@ function getSessionIdFromPathname(pathname: string): string | null {
 const SessionTabBar = React.memo(function SessionTabBar({ tabs, onSelect }: { tabs: TabItem[]; onSelect: (key: SessionTab) => void }) {
     const styles = stylesheet;
     const { theme } = useUnistyles();
-    const chips = tabs.map((tab) => (
-        <Pressable
-            key={tab.key}
-            style={[
-                styles.filterChip,
-                { backgroundColor: tab.active ? theme.colors.button.primary.background : theme.colors.surface },
-            ]}
-            onPress={() => onSelect(tab.key)}
-        >
-            <View style={styles.filterChipInner}>
-                {tab.dot === 'attention' ? (
-                    <StatusDot color="#FF9500" isPulsing size={8} style={styles.filterChipStatusDot} />
-                ) : tab.dot === 'thinking' ? (
-                    <StatusDot color="#007AFF" isPulsing size={8} style={styles.filterChipStatusDot} />
-                ) : tab.dot === 'completed' ? (
-                    <View style={styles.filterChipDot} />
-                ) : null}
-                <Text
-                    numberOfLines={1}
-                    style={[
-                        styles.filterChipText,
-                        { color: tab.active ? theme.colors.button.primary.tint : theme.colors.text },
-                    ]}
-                >
-                    {tab.label}
-                </Text>
-            </View>
-        </Pressable>
-    ));
+    const chips = tabs.map((tab) => {
+        const backgroundColor = tab.active
+            ? theme.colors.button.primary.background
+            : (theme.dark ? '#2f2f2f' : '#e8e8e8');
+        return (
+            <Pressable
+                key={tab.key}
+                style={[styles.filterChip, { backgroundColor }]}
+                onPress={() => onSelect(tab.key)}
+            >
+                <View style={styles.filterChipInner}>
+                    <Text
+                        numberOfLines={1}
+                        style={[
+                            styles.filterChipText,
+                            { color: tab.active ? theme.colors.button.primary.tint : theme.colors.text },
+                        ]}
+                    >
+                        {tab.label}
+                    </Text>
+                </View>
+                {tab.dot !== 'none' && (
+                    <View style={[styles.filterChipCornerBadge, { backgroundColor: theme.colors.groupped.background }]}>
+                        <StatusDot
+                            color={tab.dot === 'attention' ? '#FF9500' : '#007AFF'}
+                            isPulsing={tab.dot === 'attention' || tab.dot === 'thinking'}
+                            size={8}
+                        />
+                    </View>
+                )}
+            </Pressable>
+        );
+    });
     // Web/desktop: wrap onto multiple lines (no touch gestures to scroll).
     // Mobile: horizontal scroll, swipeable by touch.
     return Platform.OS === 'web' ? (
