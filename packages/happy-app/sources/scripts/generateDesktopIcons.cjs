@@ -8,12 +8,18 @@ const projectRoot = path.resolve(__dirname, '../..');
 const assetsDirectory = path.join(projectRoot, 'sources/assets/images');
 const iconsDirectory = path.join(projectRoot, 'src-tauri/icons');
 const masterPath = path.join(assetsDirectory, 'icon.png');
+const foregroundPath = path.join(assetsDirectory, 'icon-adaptive.png');
 const macosAdaptiveIconDirectory = path.join(iconsDirectory, 'HappyNext.icon');
 const macosAdaptiveIconAssetsDirectory = path.join(macosAdaptiveIconDirectory, 'Assets');
 
 const BACKGROUND = '#18171c';
 const MASTER_SIZE = 1024;
-const FULL_MARK_BOUNDS = { left: 282, top: 200, width: 460, height: 625 };
+const FULL_MARK_BOUNDS = { left: 376, top: 353, width: 272, height: 319 };
+const DESKTOP_MARK_SCALE = 1.1;
+const MACOS_ADAPTIVE_GLYPH_HEIGHT = 625;
+const MACOS_LARGE_MARK_RATIO = 0.52;
+const MACOS_SMALL_MARK_RATIO = 0.64;
+const MACOS_64_MARK_RATIO = MACOS_SMALL_MARK_RATIO * 0.95;
 
 function roundedRectSvg(size, inset, radius) {
     const dimension = size - inset * 2;
@@ -25,47 +31,29 @@ function roundedRectSvg(size, inset, radius) {
     `);
 }
 
-function simplifiedMarkSvg(width) {
-    const height = Math.round(width * 456 / 334);
-    return {
-        height,
-        input: Buffer.from(`
-            <svg width="${width}" height="${height}" viewBox="0 0 334 456" xmlns="http://www.w3.org/2000/svg">
-              <g fill="#fff">
-                <rect x="0" y="0" width="96" height="456"/>
-                <rect x="238" y="0" width="96" height="456"/>
-                <rect x="0" y="184" width="334" height="88"/>
-              </g>
-            </svg>
-        `),
-    };
+function trayIconSvg() {
+    return Buffer.from(`
+        <svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <mask id="tray-mark">
+              <rect width="64" height="64" fill="#000"/>
+              <path d="M7 4h14v21h22V4h14v56H43V39H21v21H7z" fill="#fff"/>
+              <path d="M43 39L57 27V35L43 47Z" fill="#000"/>
+            </mask>
+          </defs>
+          <g transform="translate(32 32) scale(.95) translate(-32 -32)">
+            <rect width="64" height="64" fill="#000" mask="url(#tray-mark)"/>
+          </g>
+        </svg>
+    `);
 }
 
 async function extractFullMark() {
-    const { data, info } = await sharp(masterPath)
+    return sharp(foregroundPath)
         .extract(FULL_MARK_BOUNDS)
         .ensureAlpha()
-        .raw()
-        .toBuffer({ resolveWithObject: true });
-    const output = Buffer.alloc(info.width * info.height * 4);
-    const background = [24, 23, 28];
-
-    for (let pixel = 0; pixel < info.width * info.height; pixel += 1) {
-        const offset = pixel * 4;
-        const alpha = Math.max(0, Math.min(1, (
-            (data[offset] - background[0]) / (255 - background[0])
-            + (data[offset + 1] - background[1]) / (255 - background[1])
-            + (data[offset + 2] - background[2]) / (255 - background[2])
-        ) / 3));
-        output[offset] = 255;
-        output[offset + 1] = 255;
-        output[offset + 2] = 255;
-        output[offset + 3] = Math.round(alpha * 255);
-    }
-
-    return sharp(output, {
-        raw: { width: info.width, height: info.height, channels: 4 },
-    }).png().toBuffer();
+        .png()
+        .toBuffer();
 }
 
 async function renderIcon({ size, plateRatio, radiusRatio, markRatio, simplified }, fullMark) {
@@ -73,12 +61,10 @@ async function renderIcon({ size, plateRatio, radiusRatio, markRatio, simplified
     const inset = (size - plateSize) / 2;
     const radius = Math.max(1, plateSize * radiusRatio);
     const markWidth = Math.max(3, Math.round(plateSize * markRatio));
-    const mark = simplified
-        ? simplifiedMarkSvg(markWidth)
-        : {
-            height: Math.round(markWidth * FULL_MARK_BOUNDS.height / FULL_MARK_BOUNDS.width),
-            input: await sharp(fullMark).resize({ width: markWidth }).png().toBuffer(),
-        };
+    const mark = {
+        height: Math.round(markWidth * FULL_MARK_BOUNDS.height / FULL_MARK_BOUNDS.width),
+        input: await sharp(fullMark).resize({ width: markWidth }).png().toBuffer(),
+    };
     const left = Math.round((size - markWidth) / 2);
     const top = Math.round((size - mark.height) / 2);
 
@@ -103,7 +89,7 @@ async function renderMacLargeMaster(fullMark) {
         size: MASTER_SIZE,
         plateRatio: 0.8125,
         radiusRatio: 0.2,
-        markRatio: 0.449,
+        markRatio: MACOS_LARGE_MARK_RATIO,
         simplified: false,
     }, fullMark);
 }
@@ -126,17 +112,17 @@ async function renderMacIcon(logicalSize, scale, fullMark, largeMaster) {
         size,
         plateRatio: 1,
         radiusRatio: 0.14,
-        markRatio: 0.54,
+        markRatio: size === 64 ? MACOS_64_MARK_RATIO : MACOS_SMALL_MARK_RATIO,
         simplified: useSimplifiedMark,
     }, fullMark);
 }
 
-async function renderWindowsIcon(size, fullMark) {
+async function renderWindowsIcon(size, fullMark, markScale = 1) {
     return renderIcon({
         size,
         plateRatio: size <= 32 ? 1 : size <= 64 ? 0.96 : 0.94,
         radiusRatio: Math.max(1.5 / size, 2 / 48),
-        markRatio: size <= 32 ? 0.6 : size <= 48 ? 0.56 : 0.52,
+        markRatio: (size <= 32 ? 0.6 : size <= 48 ? 0.56 : 0.52) * markScale,
         simplified: size <= 48,
     }, fullMark);
 }
@@ -167,6 +153,25 @@ function createIco(images) {
 
 async function writePng(filePath, data) {
     await fs.promises.writeFile(filePath, data);
+}
+
+async function normalizeTransparentPixels(input) {
+    const { data, info } = await sharp(input)
+        .ensureAlpha()
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+
+    for (let offset = 0; offset < data.length; offset += 4) {
+        if (data[offset + 3] === 0) {
+            data[offset] = 255;
+            data[offset + 1] = 255;
+            data[offset + 2] = 255;
+        }
+    }
+
+    return sharp(data, {
+        raw: { width: info.width, height: info.height, channels: 4 },
+    }).png().toBuffer();
 }
 
 async function generateMacIcons(fullMark) {
@@ -202,6 +207,11 @@ async function generateMacIcons(fullMark) {
     }
 
     await fs.promises.mkdir(macosAdaptiveIconAssetsDirectory, { recursive: true });
+    const adaptiveMark = await sharp(fullMark)
+        .resize({ height: MACOS_ADAPTIVE_GLYPH_HEIGHT })
+        .png()
+        .toBuffer();
+    const adaptiveMarkMetadata = await sharp(adaptiveMark).metadata();
     const adaptiveGlyph = await sharp({
         create: {
             width: MASTER_SIZE,
@@ -211,13 +221,16 @@ async function generateMacIcons(fullMark) {
         },
     })
         .composite([{
-            input: fullMark,
-            left: FULL_MARK_BOUNDS.left,
-            top: FULL_MARK_BOUNDS.top,
+            input: adaptiveMark,
+            left: Math.round((MASTER_SIZE - adaptiveMarkMetadata.width) / 2),
+            top: Math.round((MASTER_SIZE - adaptiveMarkMetadata.height) / 2),
         }])
         .png()
         .toBuffer();
-    await writePng(path.join(macosAdaptiveIconAssetsDirectory, 'glyph.png'), adaptiveGlyph);
+    await writePng(
+        path.join(macosAdaptiveIconAssetsDirectory, 'glyph.png'),
+        await normalizeTransparentPixels(adaptiveGlyph),
+    );
     await fs.promises.writeFile(
         path.join(macosAdaptiveIconDirectory, 'icon.json'),
         `${JSON.stringify({
@@ -226,7 +239,6 @@ async function generateMacIcons(fullMark) {
                 layers: [{
                     'image-name': 'glyph.png',
                     name: 'Happy Next',
-                    fill: { solid: 'srgb:1.00000,1.00000,1.00000,1.00000' },
                 }],
                 specular: false,
                 translucency: { enabled: false, value: 0 },
@@ -237,10 +249,10 @@ async function generateMacIcons(fullMark) {
 }
 
 async function generateWindowsIcons(fullMark) {
-    const icoSizes = [16, 24, 32, 48, 64, 256];
+    const icoSizes = [16, 24, 32, 48, 64, 128, 256];
     const icoImages = [];
     for (const size of icoSizes) {
-        icoImages.push({ size, data: await renderWindowsIcon(size, fullMark) });
+        icoImages.push({ size, data: await renderWindowsIcon(size, fullMark, DESKTOP_MARK_SCALE) });
     }
     await fs.promises.writeFile(path.join(iconsDirectory, 'icon.ico'), createIco(icoImages));
 
@@ -250,8 +262,15 @@ async function generateWindowsIcons(fullMark) {
         ['128x128@2x.png', 256],
     ]);
     for (const [filename, size] of pngOutputs) {
-        await writePng(path.join(iconsDirectory, filename), await renderWindowsIcon(size, fullMark));
+        await writePng(path.join(iconsDirectory, filename), await renderWindowsIcon(size, fullMark, DESKTOP_MARK_SCALE));
     }
+}
+
+async function generateTrayIcon() {
+    await sharp(trayIconSvg())
+        .ensureAlpha()
+        .png()
+        .toFile(path.join(iconsDirectory, 'tray-icon.png'));
 }
 
 async function main() {
@@ -262,6 +281,7 @@ async function main() {
     const fullMark = await extractFullMark();
     await generateMacIcons(fullMark);
     await generateWindowsIcons(fullMark);
+    await generateTrayIcon();
     console.log('Generated independent macOS and Windows desktop icons.');
 }
 

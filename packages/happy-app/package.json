@@ -38,6 +38,7 @@
     "tauri:build:windows:arm64": "cross-env APP_ENV=production tauri build --target aarch64-pc-windows-msvc --bundles msi,nsis",
     "desktop:updater:manifest": "node sources/scripts/generateDesktopUpdateManifest.cjs",
     "desktop:icons": "node sources/scripts/generateDesktopIcons.cjs",
+    "brand:assets": "node sources/scripts/generateBrandAssets.cjs && yarn desktop:icons && yarn desktop:icon:macos",
     "desktop:icon:macos": "node sources/scripts/compileMacosIcon.cjs"
   },
   "jest": {
