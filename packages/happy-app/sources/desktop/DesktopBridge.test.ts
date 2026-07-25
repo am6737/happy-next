@@ -54,6 +54,18 @@ describe('DesktopBridge helpers', () => {
         }), 'me')).toBe('Hello world');
     });
 
+    it('uses plain-text previews for Markdown messages', () => {
+        expect(messagePreview(message({
+            role: 'agent',
+            content: [{
+                type: 'text',
+                text: '## **Done**\n```ts\nconst hidden = true;\n```\n[Open details](https://example.com)',
+                uuid: 'u',
+                parentUUID: null,
+            }],
+        }), 'me')).toBe('Done [Code] Open details');
+    });
+
     it('creates stable positive 32-bit notification IDs', () => {
         expect(notificationId('session-a')).toBe(notificationId('session-a'));
         expect(notificationId('session-a')).toBeGreaterThan(0);

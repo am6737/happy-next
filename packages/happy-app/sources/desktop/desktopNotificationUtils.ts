@@ -1,8 +1,5 @@
 import type { NormalizedMessage } from '@/sync/typesRaw';
-
-function notificationText(text: string): string {
-    return text.trim().replace(/\s*[\r\n\u2028\u2029]+\s*/g, ' ');
-}
+import { formatMessagePreviewText } from '@/utils/messagePreviewText';
 
 export function sessionIdFromPath(pathname: string | null): string | null {
     const match = pathname?.match(/\/session\/([^/]+)/);
@@ -18,7 +15,7 @@ export function messagePreview(message: NormalizedMessage, currentUserId: string
         if (!message.sentBy || message.sentBy === currentUserId) {
             return null;
         }
-        return notificationText(message.content.text) || 'New message';
+        return formatMessagePreviewText(message.content.text) || 'New message';
     }
 
     if (message.role !== 'agent') {
@@ -27,7 +24,7 @@ export function messagePreview(message: NormalizedMessage, currentUserId: string
 
     const text = message.content
         .filter((item): item is Extract<(typeof message.content)[number], { type: 'text' }> => item.type === 'text')
-        .map((item) => notificationText(item.text))
+        .map((item) => formatMessagePreviewText(item.text))
         .filter(Boolean)
         .join(' ');
     return text || null;

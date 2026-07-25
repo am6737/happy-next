@@ -12,6 +12,7 @@ import { isTauriDesktop } from '@/utils/tauri';
 import { subscribeToDesktopMessages } from './desktopEvents';
 import { subscribeToDesktopAuthentication } from './desktopAuthEvents';
 import { messagePreview, notificationId, sessionIdFromPath } from './desktopNotificationUtils';
+import { truncateMessagePreviewText } from '@/utils/messagePreviewText';
 import {
     prepareDesktopUpdate,
 } from './desktopUpdater';
@@ -314,7 +315,7 @@ export function DesktopBridge() {
                     await invoke('show_desktop_notification', {
                         notificationId: id,
                         title: payload.title,
-                        body: payload.body.slice(0, 240),
+                        body: truncateMessagePreviewText(payload.body, 240),
                         sessionId,
                     });
                 };
