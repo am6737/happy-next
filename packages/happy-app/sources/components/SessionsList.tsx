@@ -325,7 +325,7 @@ const SessionTabBar = React.memo(function SessionTabBar({ tabs, onSelect }: { ta
     const chips = tabs.map((tab) => {
         const backgroundColor = tab.active
             ? theme.colors.button.primary.background
-            : (theme.dark ? '#2f2f2f' : '#e8e8e8');
+            : (Platform.OS == 'web' ? (theme.dark ? '#2f2f2f' : '#e8e8e8'): theme.colors.surface);
         return (
             <Pressable
                 key={tab.key}
