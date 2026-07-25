@@ -14,8 +14,10 @@ use std::{
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem, Submenu},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    webview::{NewWindowResponse, WebviewWindowBuilder},
     window::{Color, Monitor},
-    AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, Runtime, State, Theme, Window,
+    AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, Runtime, State, Theme, WebviewUrl,
+    Window, WindowEvent,
 };
 use tauri_plugin_opener::OpenerExt;
 use uuid::Uuid;
@@ -169,6 +171,7 @@ struct HtmlPreviewServer {
 
 struct HtmlPreviewEntry {
     html: Arc<str>,
+    dark: bool,
     created_at: Instant,
 }
 
@@ -1189,23 +1192,54 @@ fn handle_html_preview_request(
         );
     }
 
-    let token = path
+    let preview_path = path
         .split('?')
         .next()
         .and_then(|path| path.strip_prefix("/preview/"));
-    let html = token.and_then(|token| {
+    let route = preview_path.and_then(|path| {
+        let mut segments = path.split('/');
+        let token = segments.next().filter(|token| !token.is_empty())?;
+        let resource = segments.next();
+        if segments.next().is_some() || resource.is_some_and(|resource| resource != "content") {
+            return None;
+        }
+        Some((token, resource == Some("content")))
+    });
+    let preview = route.and_then(|(token, content)| {
         let mut entries = previews.lock().ok()?;
         entries.retain(|_, entry| entry.created_at.elapsed() < HTML_PREVIEW_MAX_AGE);
-        entries.get(token).map(|entry| Arc::clone(&entry.html))
+        entries.get(token).map(|entry| {
+            (
+                token.to_string(),
+                content,
+                Arc::clone(&entry.html),
+                entry.dark,
+            )
+        })
     });
-    if let Some(html) = html {
-        write_http_response(
-            &mut stream,
-            "200 OK",
-            "text/html; charset=utf-8",
-            html.as_bytes(),
-            include_body,
-        )
+    if let Some((token, content, html, dark)) = preview {
+        if content {
+            write_http_response(
+                &mut stream,
+                "200 OK",
+                "text/html; charset=utf-8",
+                html.as_bytes(),
+                include_body,
+            )
+        } else {
+            let scheme = if dark { "dark" } else { "light" };
+            let background = if dark { "#1e1e1e" } else { "#f5f5f5" };
+            let shell = format!(
+                "<!doctype html><html style=\"color-scheme:{scheme}\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"color-scheme\" content=\"{scheme}\"><style>html,body{{width:100%;height:100%;margin:0;overflow:hidden;background:{background};color-scheme:{scheme}}}iframe{{display:block;width:100%;height:100%;border:0;background:transparent}}</style></head><body><iframe title=\"HTML Preview\" src=\"/preview/{token}/content\" sandbox=\"allow-scripts allow-forms allow-modals allow-downloads allow-popups\" referrerpolicy=\"no-referrer\"></iframe></body></html>"
+            );
+            write_http_response(
+                &mut stream,
+                "200 OK",
+                "text/html; charset=utf-8",
+                shell.as_bytes(),
+                include_body,
+            )
+        }
     } else {
         write_http_response(
             &mut stream,
@@ -1258,13 +1292,12 @@ fn html_preview_server(state: &DesktopState) -> Result<HtmlPreviewServer, String
         .ok_or_else(|| "Failed to start HTML preview server".to_string())
 }
 
-#[tauri::command]
-fn open_desktop_html_preview(
-    app: AppHandle,
-    state: State<'_, DesktopState>,
+fn store_html_preview(
+    state: &DesktopState,
     html: String,
-) -> Result<(), String> {
-    let server = html_preview_server(&state)?;
+    dark: bool,
+) -> Result<(HtmlPreviewServer, String, tauri::Url), String> {
+    let server = html_preview_server(state)?;
     let token = Uuid::new_v4().simple().to_string();
     {
         let mut previews = server
@@ -1276,19 +1309,89 @@ fn open_desktop_html_preview(
             token.clone(),
             HtmlPreviewEntry {
                 html: Arc::<str>::from(html),
+                dark,
                 created_at: Instant::now(),
             },
         );
     }
 
-    let url = format!("http://{}/preview/{token}", server.address);
-    if let Err(error) = app.opener().open_url(url, None::<String>) {
-        if let Ok(mut previews) = server.previews.lock() {
-            previews.remove(&token);
-        }
-        return Err(error.to_string());
+    let url = format!("http://{}/preview/{token}", server.address)
+        .parse::<tauri::Url>()
+        .map_err(|error| error.to_string())?;
+    Ok((server, token, url))
+}
+
+fn remove_html_preview(server: &HtmlPreviewServer, token: &str) {
+    if let Ok(mut previews) = server.previews.lock() {
+        previews.remove(token);
     }
-    Ok(())
+}
+
+fn is_allowed_preview_document(candidate: &tauri::Url, preview: &tauri::Url) -> bool {
+    let candidate_path = candidate.path().trim_end_matches('/');
+    let preview_path = preview.path().trim_end_matches('/');
+    candidate.scheme() == preview.scheme()
+        && candidate.host_str() == preview.host_str()
+        && candidate.port_or_known_default() == preview.port_or_known_default()
+        && (candidate_path == preview_path || candidate_path == format!("{preview_path}/content"))
+        && candidate.query() == preview.query()
+}
+
+#[tauri::command]
+async fn open_desktop_html_preview(
+    app: AppHandle,
+    state: State<'_, DesktopState>,
+    html: String,
+    title: Option<String>,
+) -> Result<(), String> {
+    let preference = state
+        .bootstrap
+        .lock()
+        .map(|bootstrap| bootstrap.theme_preference)
+        .unwrap_or_default();
+    let dark = app
+        .get_webview_window("main")
+        .is_some_and(|window| resolve_dark_background(&window, preference));
+    let (server, token, url) = store_html_preview(&state, html, dark)?;
+    let label = format!("html-preview-{token}");
+    let window_title = title
+        .filter(|title| !title.trim().is_empty())
+        .unwrap_or_else(|| "HTML Preview".to_string());
+    let navigation_url = url.clone();
+    let (red, green, blue) = if dark {
+        DARK_BACKGROUND_RGB
+    } else {
+        LIGHT_BACKGROUND_RGB
+    };
+    let window_theme = if dark { Theme::Dark } else { Theme::Light };
+
+    let result = WebviewWindowBuilder::new(&app, label, WebviewUrl::External(url.clone()))
+        .title(window_title)
+        .inner_size(1100.0, 760.0)
+        .min_inner_size(640.0, 400.0)
+        .center()
+        .theme(Some(window_theme))
+        .background_color(Color(red, green, blue, 255))
+        .on_navigation(move |candidate| is_allowed_preview_document(candidate, &navigation_url))
+        .on_new_window(|_, _| NewWindowResponse::Deny)
+        .build();
+
+    match result {
+        Ok(window) => {
+            let cleanup_server = server.clone();
+            let cleanup_token = token.clone();
+            window.on_window_event(move |event| {
+                if matches!(event, WindowEvent::Destroyed) {
+                    remove_html_preview(&cleanup_server, &cleanup_token);
+                }
+            });
+            Ok(())
+        }
+        Err(window_error) => {
+            remove_html_preview(&server, &token);
+            Err(window_error.to_string())
+        }
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -1487,6 +1590,7 @@ mod tests {
             "test-token".to_string(),
             HtmlPreviewEntry {
                 html: Arc::<str>::from("<html><body>preview</body></html>"),
+                dark: true,
                 created_at: Instant::now(),
             },
         );
@@ -1501,6 +1605,38 @@ mod tests {
 
         assert!(response.starts_with("HTTP/1.1 200 OK\r\n"));
         assert!(response.contains("Cache-Control: no-store\r\n"));
+        assert!(response.contains("<meta name=\"color-scheme\" content=\"dark\">"));
+        assert!(response.contains("src=\"/preview/test-token/content\""));
+
+        let mut stream = TcpStream::connect(server.address).unwrap();
+        stream
+            .write_all(b"GET /preview/test-token/content HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n")
+            .unwrap();
+        stream.shutdown(std::net::Shutdown::Write).unwrap();
+        let mut response = String::new();
+        stream.read_to_string(&mut response).unwrap();
+
+        assert!(response.starts_with("HTTP/1.1 200 OK\r\n"));
         assert!(response.ends_with("<html><body>preview</body></html>"));
+    }
+
+    #[test]
+    fn preview_navigation_only_allows_the_original_document() {
+        let preview = "http://127.0.0.1:43123/preview/token"
+            .parse::<tauri::Url>()
+            .unwrap();
+        let fragment = "http://127.0.0.1:43123/preview/token#section"
+            .parse::<tauri::Url>()
+            .unwrap();
+        let content = "http://127.0.0.1:43123/preview/token/content"
+            .parse::<tauri::Url>()
+            .unwrap();
+        let other_preview = "http://127.0.0.1:43123/preview/other"
+            .parse::<tauri::Url>()
+            .unwrap();
+
+        assert!(is_allowed_preview_document(&fragment, &preview));
+        assert!(is_allowed_preview_document(&content, &preview));
+        assert!(!is_allowed_preview_document(&other_preview, &preview));
     }
 }

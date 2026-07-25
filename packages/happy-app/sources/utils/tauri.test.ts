@@ -14,7 +14,12 @@ vi.mock('react-native', () => ({
     Linking: { openURL: mocks.openURL },
 }));
 
-import { isAllowedExternalUrl, isTauriDesktop, openDesktopHtmlPreviewInBrowser, openExternalUrl } from './tauri';
+import {
+    isAllowedExternalUrl,
+    isTauriDesktop,
+    openDesktopHtmlPreview,
+    openExternalUrl,
+} from './tauri';
 
 describe('Tauri desktop helpers', () => {
     beforeEach(() => {
@@ -52,16 +57,17 @@ describe('Tauri desktop helpers', () => {
         expect(mocks.invoke).not.toHaveBeenCalled();
     });
 
-    it('opens generated HTML through the desktop preview command', async () => {
+    it('opens generated HTML in a lightweight desktop preview window', async () => {
         vi.stubGlobal('window', {
             __TAURI_INTERNALS__: {},
             open: mocks.windowOpen,
         });
 
-        await openDesktopHtmlPreviewInBrowser('<html><body>preview</body></html>');
+        await openDesktopHtmlPreview('<html><body>preview</body></html>', 'Example');
 
         expect(mocks.invoke).toHaveBeenCalledWith('open_desktop_html_preview', {
             html: '<html><body>preview</body></html>',
+            title: 'Example',
         });
     });
 
