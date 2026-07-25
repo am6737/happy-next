@@ -21,7 +21,7 @@ function faviconMarkSvg(size = 1024, active = false) {
     return Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 1024 1024">${faviconArtwork(active)}</svg>`);
 }
 function standaloneMarkSvg(size, hColor) {
-    return Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 1024 1024"><g transform="matrix(4.15625 0 0 5.1 -149.5 -300)">${markPaths(hColor)}</g></svg>`);
+    return Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 1024 1024"><g transform="translate(0 512) scale(1 .954) translate(0 -512)"><g transform="matrix(4.15625 0 0 5.1 -149.5 -300)">${markPaths(hColor)}</g></g></svg>`);
 }
 function splashSvg(background, hColor) {
     const transform = background

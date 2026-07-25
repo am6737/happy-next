@@ -18,10 +18,11 @@ export const HeaderLogo = React.memo(() => {
             justifyContent: 'center',
         }}>
             <Image
-                source={require('@/assets/images/logo-black.png')}
+                source={theme.dark
+                    ? require('@/assets/images/logo-white.png')
+                    : require('@/assets/images/logo-black.png')}
                 contentFit="contain"
                 style={{ width: 24, height: 24 }}
-                tintColor={theme.colors.header.tint}
             />
         </View>
     );
