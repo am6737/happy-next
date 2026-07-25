@@ -40,6 +40,7 @@ import { isTauriDesktop } from '@/utils/tauri';
 import { DesktopBridge } from '@/desktop/DesktopBridge';
 import { DesktopWindowFrame } from '@/desktop/DesktopWindowFrame';
 import { DesktopAuthWindowSync } from '@/desktop/DesktopAuthWindowSync';
+import { ThemePreferenceSync } from '@/components/ThemePreferenceSync';
 
 let currentAppState: string = AppState.currentState;
 let currentSessionId: string | null = null;
@@ -320,6 +321,7 @@ export default function RootLayout() {
                 <GestureHandlerRootView style={{ flex: 1 }}>
                     <BottomSheetModalProvider>
                         <AuthProvider initialCredentials={initState.credentials}>
+                            <ThemePreferenceSync />
                             <DesktopAuthWindowSync />
                             <ThemeProvider value={navigationTheme}>
                                 <StatusBarProvider>
