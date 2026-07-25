@@ -202,7 +202,7 @@ export function EmptyMainScreen() {
                             <View style={styles.buttonsContainer}>
                                 <View style={styles.buttonWrapper}>
                                     <RoundButton
-                                        title={t('components.emptyMainScreen.openCamera')}
+                                        title={t('common.continue')}
                                         size="large"
                                         loading={isLoading}
                                         onPress={launchScanner}

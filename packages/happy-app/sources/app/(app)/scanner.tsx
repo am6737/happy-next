@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { memo } from 'react';
-import { View, Text, TouchableOpacity } from 'react-native';
-import { Camera, useCameraDevice, useCameraPermission, useCodeScanner } from 'react-native-vision-camera';
+import { AppState, Linking, View, Text, TouchableOpacity } from 'react-native';
+import { Camera, type CameraPermissionStatus, useCameraDevice, useCameraPermission, useCodeScanner } from 'react-native-vision-camera';
 import { useLocalSearchParams, router } from 'expo-router';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { useScannerEvents } from '@/hooks/useScannerEvents';
@@ -14,15 +14,35 @@ function ScannerScreen() {
     const { scanId } = useLocalSearchParams<{ scanId: string }>();
     const device = useCameraDevice('back');
     const { hasPermission, requestPermission } = useCameraPermission();
+    const [permissionStatus, setPermissionStatus] = React.useState<CameraPermissionStatus>(() => Camera.getCameraPermissionStatus());
     const emitScan = useScannerEvents((s) => s.emitScan);
     const hasScannedRef = React.useRef(false);
 
-    // 请求权限
+    // Keep the screen in sync when the user changes camera access in Settings.
     React.useEffect(() => {
-        if (!hasPermission) {
-            requestPermission();
+        if (hasPermission) {
+            setPermissionStatus('granted');
         }
-    }, [hasPermission, requestPermission]);
+    }, [hasPermission]);
+
+    React.useEffect(() => {
+        const subscription = AppState.addEventListener('change', (state) => {
+            if (state === 'active') {
+                setPermissionStatus(Camera.getCameraPermissionStatus());
+            }
+        });
+
+        return () => subscription.remove();
+    }, []);
+
+    const handleRequestPermission = React.useCallback(async () => {
+        await requestPermission();
+        setPermissionStatus(Camera.getCameraPermissionStatus());
+    }, [requestPermission]);
+
+    const handleOpenSettings = React.useCallback(() => {
+        void Linking.openSettings();
+    }, []);
 
     const handleCodeScanned = React.useCallback((value: string) => {
         if (value && !hasScannedRef.current && scanId) {
@@ -46,15 +66,37 @@ function ScannerScreen() {
         router.back();
     }, []);
 
-    // 无权限状态
-    if (!hasPermission) {
+    // Explain why camera access is needed before showing the system prompt.
+    if (permissionStatus === 'not-determined') {
         return (
             <View style={[styles.container, { backgroundColor: theme.colors.surface }]}>
                 <Text style={[styles.message, { color: theme.colors.text }]}>
                     {t('modals.cameraPermissionsRequiredToScanQr')}
                 </Text>
-                <TouchableOpacity style={styles.button} onPress={requestPermission}>
-                    <Text style={styles.buttonText}>{t('common.grantPermission')}</Text>
+                <TouchableOpacity style={styles.button} onPress={handleRequestPermission}>
+                    <Text style={styles.buttonText}>{t('common.continue')}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.secondaryButton} onPress={handleClose}>
+                    <Text style={[styles.secondaryButtonText, { color: theme.colors.text }]}>{t('common.cancel')}</Text>
+                </TouchableOpacity>
+            </View>
+        );
+    }
+
+    // Once access has been denied, iOS requires the user to enable it in Settings.
+    if (permissionStatus === 'denied' || permissionStatus === 'restricted') {
+        return (
+            <View style={[styles.container, { backgroundColor: theme.colors.surface }]}>
+                <Text style={[styles.message, { color: theme.colors.text }]}>
+                    {t('modals.cameraPermissionsRequiredToScanQr')}
+                </Text>
+                {permissionStatus === 'denied' && (
+                    <TouchableOpacity style={styles.button} onPress={handleOpenSettings}>
+                        <Text style={styles.buttonText}>{t('tabs.settings')}</Text>
+                    </TouchableOpacity>
+                )}
+                <TouchableOpacity style={styles.secondaryButton} onPress={handleClose}>
+                    <Text style={[styles.secondaryButtonText, { color: theme.colors.text }]}>{t('common.cancel')}</Text>
                 </TouchableOpacity>
             </View>
         );
@@ -117,6 +159,16 @@ const styles = StyleSheet.create((theme) => ({
     },
     buttonText: {
         color: theme.colors.button.primary.tint,
+        fontSize: 16,
+        fontWeight: '600',
+    },
+    secondaryButton: {
+        marginTop: 12,
+        paddingHorizontal: 24,
+        paddingVertical: 12,
+        alignSelf: 'center',
+    },
+    secondaryButtonText: {
         fontSize: 16,
         fontWeight: '600',
     },
