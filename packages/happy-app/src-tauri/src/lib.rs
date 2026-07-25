@@ -14,10 +14,10 @@ use std::{
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem, Submenu},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    webview::{NewWindowResponse, WebviewWindowBuilder},
+    webview::{NewWindowFeatures, NewWindowResponse, WebviewWindowBuilder},
     window::{Color, Monitor},
     AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, Runtime, State, Theme, WebviewUrl,
-    Window, WindowEvent,
+    Window,
 };
 use tauri_plugin_opener::OpenerExt;
 use uuid::Uuid;
@@ -1230,7 +1230,7 @@ fn handle_html_preview_request(
             let scheme = if dark { "dark" } else { "light" };
             let background = if dark { "#1e1e1e" } else { "#f5f5f5" };
             let shell = format!(
-                "<!doctype html><html style=\"color-scheme:{scheme}\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"color-scheme\" content=\"{scheme}\"><style>html,body{{width:100%;height:100%;margin:0;overflow:hidden;background:{background};color-scheme:{scheme}}}iframe{{display:block;width:100%;height:100%;border:0;background:transparent}}</style></head><body><iframe title=\"HTML Preview\" src=\"/preview/{token}/content\" sandbox=\"allow-scripts allow-forms allow-modals allow-downloads allow-popups\" referrerpolicy=\"no-referrer\"></iframe></body></html>"
+                "<!doctype html><html style=\"color-scheme:{scheme}\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"color-scheme\" content=\"{scheme}\"><style>html,body{{width:100%;height:100%;margin:0;overflow:hidden;background:{background};color-scheme:{scheme}}}iframe{{display:block;width:100%;height:100%;border:0;background:transparent}}</style></head><body><iframe title=\"HTML Preview\" src=\"/preview/{token}/content\"></iframe></body></html>"
             );
             write_http_response(
                 &mut stream,
@@ -1327,14 +1327,96 @@ fn remove_html_preview(server: &HtmlPreviewServer, token: &str) {
     }
 }
 
-fn is_allowed_preview_document(candidate: &tauri::Url, preview: &tauri::Url) -> bool {
-    let candidate_path = candidate.path().trim_end_matches('/');
-    let preview_path = preview.path().trim_end_matches('/');
-    candidate.scheme() == preview.scheme()
-        && candidate.host_str() == preview.host_str()
-        && candidate.port_or_known_default() == preview.port_or_known_default()
-        && (candidate_path == preview_path || candidate_path == format!("{preview_path}/content"))
-        && candidate.query() == preview.query()
+fn preview_shell_url_for_content(url: &tauri::Url) -> Option<tauri::Url> {
+    if url.scheme() != "http" || url.host_str() != Some("127.0.0.1") {
+        return None;
+    }
+    let shell_path = url.path().strip_suffix("/content")?;
+    if !shell_path.starts_with("/preview/") || shell_path == "/preview/" {
+        return None;
+    }
+
+    let mut shell_url = url.clone();
+    shell_url.set_path(shell_path);
+    shell_url.set_query(None);
+    shell_url.set_fragment(None);
+    Some(shell_url)
+}
+
+fn create_html_preview_child_window(
+    app: &AppHandle,
+    requested_url: tauri::Url,
+    features: NewWindowFeatures,
+    dark: bool,
+    preview_title: Arc<str>,
+) -> NewWindowResponse<tauri::Wry> {
+    let label = format!("html-preview-child-{}", Uuid::new_v4().simple());
+    let (red, green, blue) = if dark {
+        DARK_BACKGROUND_RGB
+    } else {
+        LIGHT_BACKGROUND_RGB
+    };
+    let window_theme = if dark { Theme::Dark } else { Theme::Light };
+    let nested_app = app.clone();
+    let nested_title = Arc::clone(&preview_title);
+
+    if let Some(shell_url) = preview_shell_url_for_content(&requested_url) {
+        let result = WebviewWindowBuilder::new(app, label, WebviewUrl::External(shell_url))
+            .title(preview_title.to_string())
+            .inner_size(1100.0, 760.0)
+            .min_inner_size(640.0, 400.0)
+            .window_features(features)
+            .theme(Some(window_theme))
+            .background_color(Color(red, green, blue, 255))
+            .on_new_window(move |url, features| {
+                create_html_preview_child_window(
+                    &nested_app,
+                    url,
+                    features,
+                    dark,
+                    Arc::clone(&nested_title),
+                )
+            })
+            .build();
+
+        if let Err(error) = result {
+            log::warn!("Failed to create isolated HTML frame window: {error}");
+        }
+        return NewWindowResponse::Deny;
+    }
+
+    let blank_url = "about:blank"
+        .parse::<tauri::Url>()
+        .expect("about:blank must be a valid URL");
+
+    let result = WebviewWindowBuilder::new(app, label, WebviewUrl::External(blank_url))
+        .title(requested_url.as_str())
+        .inner_size(1100.0, 760.0)
+        .min_inner_size(640.0, 400.0)
+        .window_features(features)
+        .theme(Some(window_theme))
+        .background_color(Color(red, green, blue, 255))
+        .on_document_title_changed(|window, title| {
+            let _ = window.set_title(&title);
+        })
+        .on_new_window(move |url, features| {
+            create_html_preview_child_window(
+                &nested_app,
+                url,
+                features,
+                dark,
+                Arc::clone(&nested_title),
+            )
+        })
+        .build();
+
+    match result {
+        Ok(window) => NewWindowResponse::Create { window },
+        Err(error) => {
+            log::warn!("Failed to create HTML preview child window: {error}");
+            NewWindowResponse::Deny
+        }
+    }
 }
 
 #[tauri::command]
@@ -1357,13 +1439,14 @@ async fn open_desktop_html_preview(
     let window_title = title
         .filter(|title| !title.trim().is_empty())
         .unwrap_or_else(|| "HTML Preview".to_string());
-    let navigation_url = url.clone();
     let (red, green, blue) = if dark {
         DARK_BACKGROUND_RGB
     } else {
         LIGHT_BACKGROUND_RGB
     };
     let window_theme = if dark { Theme::Dark } else { Theme::Light };
+    let popup_app = app.clone();
+    let popup_title = Arc::<str>::from(window_title.clone());
 
     let result = WebviewWindowBuilder::new(&app, label, WebviewUrl::External(url.clone()))
         .title(window_title)
@@ -1372,21 +1455,19 @@ async fn open_desktop_html_preview(
         .center()
         .theme(Some(window_theme))
         .background_color(Color(red, green, blue, 255))
-        .on_navigation(move |candidate| is_allowed_preview_document(candidate, &navigation_url))
-        .on_new_window(|_, _| NewWindowResponse::Deny)
+        .on_new_window(move |url, features| {
+            create_html_preview_child_window(
+                &popup_app,
+                url,
+                features,
+                dark,
+                Arc::clone(&popup_title),
+            )
+        })
         .build();
 
     match result {
-        Ok(window) => {
-            let cleanup_server = server.clone();
-            let cleanup_token = token.clone();
-            window.on_window_event(move |event| {
-                if matches!(event, WindowEvent::Destroyed) {
-                    remove_html_preview(&cleanup_server, &cleanup_token);
-                }
-            });
-            Ok(())
-        }
+        Ok(_) => Ok(()),
         Err(window_error) => {
             remove_html_preview(&server, &token);
             Err(window_error.to_string())
@@ -1621,22 +1702,16 @@ mod tests {
     }
 
     #[test]
-    fn preview_navigation_only_allows_the_original_document() {
-        let preview = "http://127.0.0.1:43123/preview/token"
+    fn preview_frame_content_reopens_through_the_theme_shell() {
+        let content = "http://127.0.0.1:43123/preview/token/content?ignored=1#section"
             .parse::<tauri::Url>()
             .unwrap();
-        let fragment = "http://127.0.0.1:43123/preview/token#section"
-            .parse::<tauri::Url>()
-            .unwrap();
-        let content = "http://127.0.0.1:43123/preview/token/content"
-            .parse::<tauri::Url>()
-            .unwrap();
-        let other_preview = "http://127.0.0.1:43123/preview/other"
-            .parse::<tauri::Url>()
-            .unwrap();
+        let shell = preview_shell_url_for_content(&content).unwrap();
 
-        assert!(is_allowed_preview_document(&fragment, &preview));
-        assert!(is_allowed_preview_document(&content, &preview));
-        assert!(!is_allowed_preview_document(&other_preview, &preview));
+        assert_eq!(shell.as_str(), "http://127.0.0.1:43123/preview/token");
+        assert!(preview_shell_url_for_content(
+            &"https://example.com/content".parse::<tauri::Url>().unwrap()
+        )
+        .is_none());
     }
 }
