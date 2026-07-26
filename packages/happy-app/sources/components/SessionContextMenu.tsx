@@ -1,5 +1,5 @@
 import React from 'react';
-import { Modal as NativeModal, Platform, Pressable, useWindowDimensions, View } from 'react-native';
+import { Platform, Pressable, useWindowDimensions, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { Text } from '@/components/StyledText';
@@ -28,6 +28,7 @@ import { getWorkspaceRepos } from '@/utils/workspaceRepos';
 import { ActionMenuModal } from './ActionMenuModal';
 import { ActionMenuItem } from './ActionMenu';
 import { getSessionQuickActionKinds, SessionQuickActionKind } from './sessionQuickActions';
+import { SessionContextMenuPortal } from './SessionContextMenuPortal';
 
 type MenuPosition = { x: number; y: number };
 type QuickAction = {
@@ -44,9 +45,6 @@ const ITEM_HEIGHT = 42;
 const MENU_PADDING = 8;
 
 const styles = StyleSheet.create((theme) => ({
-    overlay: {
-        flex: 1,
-    },
     menu: {
         position: 'absolute',
         width: MENU_WIDTH,
@@ -330,7 +328,47 @@ export function SessionContextMenu({ session, children }: { session: Session; ch
     const { width, height } = useWindowDimensions();
     const [position, setPosition] = React.useState<MenuPosition | null>(null);
     const [hoveredAction, setHoveredAction] = React.useState<SessionQuickActionKind | null>(null);
+    const menuRef = React.useRef<HTMLElement | null>(null);
     const { actions, archiveMenu } = useSessionQuickActions(session);
+
+    const closeMenu = React.useCallback(() => {
+        setPosition(null);
+        setHoveredAction(null);
+    }, []);
+
+    React.useEffect(() => {
+        if (Platform.OS !== 'web' || position === null || typeof document === 'undefined') return;
+
+        const isInsideMenu = (target: EventTarget | null) => (
+            target instanceof Node && menuRef.current?.contains(target)
+        );
+        const handlePointerDown = (event: PointerEvent) => {
+            if (!isInsideMenu(event.target)) closeMenu();
+        };
+        const handleContextMenuOutside = (event: MouseEvent) => {
+            if (isInsideMenu(event.target)) {
+                event.preventDefault();
+                return;
+            }
+            // Do not prevent the event here. A session row may replace this menu,
+            // while every other target should keep the browser/system menu.
+            closeMenu();
+        };
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') closeMenu();
+        };
+
+        document.addEventListener('pointerdown', handlePointerDown, true);
+        document.addEventListener('contextmenu', handleContextMenuOutside, true);
+        document.addEventListener('keydown', handleKeyDown, true);
+        window.addEventListener('scroll', closeMenu, true);
+        return () => {
+            document.removeEventListener('pointerdown', handlePointerDown, true);
+            document.removeEventListener('contextmenu', handleContextMenuOutside, true);
+            document.removeEventListener('keydown', handleKeyDown, true);
+            window.removeEventListener('scroll', closeMenu, true);
+        };
+    }, [closeMenu, position]);
 
     if (Platform.OS !== 'web') return <>{children}</>;
 
@@ -340,36 +378,28 @@ export function SessionContextMenu({ session, children }: { session: Session; ch
     const handleContextMenu = (event: {
         preventDefault: () => void;
         stopPropagation: () => void;
-        nativeEvent: { pageX: number; pageY: number };
+        nativeEvent: { pageX: number; pageY: number; clientX?: number; clientY?: number };
     }) => {
         event.preventDefault();
         event.stopPropagation();
         setHoveredAction(null);
-        setPosition({ x: event.nativeEvent.pageX, y: event.nativeEvent.pageY });
+        setPosition({
+            x: event.nativeEvent.clientX ?? event.nativeEvent.pageX,
+            y: event.nativeEvent.clientY ?? event.nativeEvent.pageY,
+        });
     };
     const webContextMenuProps = { onContextMenu: handleContextMenu };
 
     return (
         <>
             <View {...webContextMenuProps}>{children}</View>
-            <NativeModal
-                transparent
-                visible={position !== null}
-                animationType="none"
-                onRequestClose={() => {
-                    setPosition(null);
-                    setHoveredAction(null);
-                }}
-            >
-                <Pressable
-                    style={styles.overlay}
-                    onPress={() => {
-                        setPosition(null);
-                        setHoveredAction(null);
-                    }}
-                    {...webContextMenuProps}
-                >
-                    <View style={[styles.menu, { left, top }]}>
+            {position !== null && (
+                <SessionContextMenuPortal>
+                    <View
+                        ref={(node) => { menuRef.current = node as unknown as HTMLElement | null; }}
+                        pointerEvents="auto"
+                        style={[styles.menu, { left, top }]}
+                    >
                         {actions.map(action => (
                             <Pressable
                                 key={action.kind}
@@ -378,8 +408,7 @@ export function SessionContextMenu({ session, children }: { session: Session; ch
                                 onHoverOut={() => setHoveredAction(current => current === action.kind ? null : current)}
                                 onPress={(event) => {
                                     event.stopPropagation?.();
-                                    setPosition(null);
-                                    setHoveredAction(null);
+                                    closeMenu();
                                     action.onPress();
                                 }}
                                 style={({ pressed }) => [
@@ -399,8 +428,8 @@ export function SessionContextMenu({ session, children }: { session: Session; ch
                             </Pressable>
                         ))}
                     </View>
-                </Pressable>
-            </NativeModal>
+                </SessionContextMenuPortal>
+            )}
             {archiveMenu}
         </>
     );
