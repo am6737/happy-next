@@ -27,6 +27,56 @@ afterEach(() => {
 });
 
 describe('discoverCodexSkills', () => {
+    it('discovers enabled plugin skills from the Codex plugin cache with a namespace', () => {
+        const homeDir = createTempDir();
+        const codexHome = createTempDir();
+        const cwd = join(homeDir, 'project');
+        const pluginDir = join(codexHome, 'plugins', 'cache', 'dootask-skills', 'dootask', '0.2.0');
+        mkdirSync(join(pluginDir, '.codex-plugin'), { recursive: true });
+        writeFileSync(
+            join(pluginDir, '.codex-plugin', 'plugin.json'),
+            JSON.stringify({ name: 'dootask', version: '0.2.0', skills: './skills/' }),
+            'utf8',
+        );
+        writeSkill(pluginDir, 'create-plugin', 'create-plugin');
+        writeFileSync(
+            join(codexHome, 'config.toml'),
+            '[plugins."dootask@dootask-skills"]\nenabled = true\n',
+            'utf8',
+        );
+
+        const skills = discoverCodexSkills(cwd, homeDir, { CODEX_HOME: codexHome });
+
+        expect(skills).toContainEqual(expect.objectContaining({
+            name: 'dootask:create-plugin',
+            scope: 'USER',
+            path: join(pluginDir, 'skills', 'create-plugin', 'SKILL.md'),
+        }));
+    });
+
+    it('does not discover disabled plugin skills', () => {
+        const homeDir = createTempDir();
+        const codexHome = createTempDir();
+        const cwd = join(homeDir, 'project');
+        const pluginDir = join(codexHome, 'plugins', 'cache', 'dootask-skills', 'dootask', '0.2.0');
+        mkdirSync(join(pluginDir, '.codex-plugin'), { recursive: true });
+        writeFileSync(
+            join(pluginDir, '.codex-plugin', 'plugin.json'),
+            JSON.stringify({ name: 'dootask', version: '0.2.0', skills: './skills/' }),
+            'utf8',
+        );
+        writeSkill(pluginDir, 'create-plugin', 'create-plugin');
+        writeFileSync(
+            join(codexHome, 'config.toml'),
+            '[plugins."dootask@dootask-skills"]\nenabled = false\n\n[features]\nenabled = true\n',
+            'utf8',
+        );
+
+        const skills = discoverCodexSkills(cwd, homeDir, { CODEX_HOME: codexHome });
+
+        expect(skills.some(skill => skill.name === 'dootask:create-plugin')).toBe(false);
+    });
+
     it.each([
         ['folded', '>', 'The fallback workflow for authoring custom HyperFrames videos at any length.'],
         ['folded-strip', '>-', 'The fallback workflow for authoring custom HyperFrames videos at any length.'],
