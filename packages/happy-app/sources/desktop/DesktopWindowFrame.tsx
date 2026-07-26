@@ -6,7 +6,7 @@ import { useUnistyles } from 'react-native-unistyles';
 
 import { useAuth } from '@/auth/AuthContext';
 import { DesktopUpdateButton } from './DesktopUpdateButton';
-import { getDesktopPlatform, startDesktopWindowDragging } from './desktopWindowUtils';
+import { getDesktopPlatform, handleDesktopTitleBarMouseDown } from './desktopWindowUtils';
 
 const WINDOWS_TITLE_BAR_HEIGHT = 40;
 const WINDOWS_CONTROL_WIDTH = 46;
@@ -109,6 +109,9 @@ export function DesktopWindowFrame({ children }: { children: React.ReactNode }) 
 
     const window = getCurrentWindow();
     const isMacOS = desktopPlatform === 'macos';
+    const handleTitleBarMouseDown = (event: any) => {
+        handleDesktopTitleBarMouseDown(event, { allowMaximize: isAuthenticated });
+    };
 
     if (isMacOS) {
         return (
@@ -125,12 +128,7 @@ export function DesktopWindowFrame({ children }: { children: React.ReactNode }) 
                 <View
                     {...({
                         'data-tauri-drag-region': true,
-                        onMouseDown: (event: any) => {
-                            if (event.button === 0) {
-                                event.preventDefault?.();
-                                startDesktopWindowDragging();
-                            }
-                        },
+                        onMouseDown: handleTitleBarMouseDown,
                     } as any)}
                     style={{
                         height: 8,
@@ -151,11 +149,9 @@ export function DesktopWindowFrame({ children }: { children: React.ReactNode }) 
         <View style={{ flex: 1, backgroundColor: theme.colors.groupped.background }}>
             <View
                 {...({
-                    onDoubleClick: () => {
-                        runWindowAction(() => window.toggleMaximize());
-                    },
+                    'data-tauri-drag-region': true,
+                    onMouseDown: handleTitleBarMouseDown,
                 } as any)}
-                {...({ 'data-tauri-drag-region': true } as any)}
                 style={{
                     alignItems: 'center',
                     backgroundColor: theme.colors.header.background,

@@ -24,7 +24,7 @@ import { t } from '@/text';
 import { isUsingCustomServer } from '@/sync/serverConfig';
 import { trackFriendsSearch } from '@/track';
 import { DooTaskCreateSheet } from './dootask/DooTaskCreateSheet';
-import { getDesktopPlatform, startDesktopWindowDragging } from '@/desktop/desktopWindowUtils';
+import { getDesktopPlatform, handleDesktopTitleBarMouseDown } from '@/desktop/desktopWindowUtils';
 
 interface MainViewProps {
     variant: 'phone' | 'sidebar';
@@ -418,12 +418,7 @@ export const MainView = React.memo(({ variant }: MainViewProps) => {
                         <View
                             {...({
                                 'data-tauri-drag-region': true,
-                                onMouseDown: (event: any) => {
-                                    if (event.button === 0) {
-                                        event.preventDefault?.();
-                                        startDesktopWindowDragging();
-                                    }
-                                },
+                                onMouseDown: handleDesktopTitleBarMouseDown,
                             } as any)}
                             style={styles.emptyDetailDragRegion}
                         />

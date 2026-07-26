@@ -10,7 +10,7 @@ import { StyleSheet } from 'react-native-unistyles';
 import { t } from '@/text';
 import { isTauriDesktop } from '@/utils/tauri';
 import { useAuth } from '@/auth/AuthContext';
-import { getDesktopPlatform, startDesktopWindowDragging } from '@/desktop/desktopWindowUtils';
+import { getDesktopPlatform, handleDesktopTitleBarMouseDown } from '@/desktop/desktopWindowUtils';
 
 interface HeaderProps {
     title?: React.ReactNode;
@@ -35,17 +35,7 @@ export const Header = React.memo((props: HeaderProps) => {
     const needsMacOSWindowControlsInset = desktopPlatform === 'macos' && !isAuthenticated;
     const desktopDragProps = desktopPlatform ? {
         onMouseDown: (event: any) => {
-            if (event.button !== 0) {
-                return;
-            }
-
-            const target = event.target as HTMLElement | null;
-            if (target?.closest?.('[data-desktop-no-drag], button, [role="button"], [tabindex], a, input, textarea, select')) {
-                return;
-            }
-
-            event.preventDefault?.();
-            startDesktopWindowDragging();
+            handleDesktopTitleBarMouseDown(event, { allowMaximize: isAuthenticated });
         },
     } as any : {};
 

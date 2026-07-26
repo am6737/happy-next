@@ -44,6 +44,7 @@ describe('desktop security configuration', () => {
             'core:event:allow-unlisten',
             'core:window:allow-close',
             'core:window:allow-is-focused',
+            'core:window:allow-is-fullscreen',
             'core:window:allow-is-maximized',
             'core:window:allow-minimize',
             'core:window:allow-start-dragging',

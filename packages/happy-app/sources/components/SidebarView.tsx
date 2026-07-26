@@ -18,8 +18,9 @@ import { useInboxHasContent } from '@/hooks/useInboxHasContent';
 import { useDootaskProfile } from '@/sync/storage';
 import { Ionicons } from '@expo/vector-icons';
 import { requestCommandPalette } from './CommandPalette/events';
-import { getDesktopPlatform, startDesktopWindowDragging } from '@/desktop/desktopWindowUtils';
+import { getDesktopPlatform, handleDesktopTitleBarMouseDown } from '@/desktop/desktopWindowUtils';
 import { DesktopUpdateButton } from '@/desktop/DesktopUpdateButton';
+import { useDesktopWindowFullscreen } from '@/desktop/useDesktopWindowFullscreen';
 
 const stylesheet = StyleSheet.create((theme, runtime) => ({
     container: {
@@ -180,14 +181,10 @@ export const SidebarView = React.memo((props: SidebarViewProps) => {
     const dootaskProfile = useDootaskProfile();
     const [isSearchHovered, setIsSearchHovered] = React.useState(false);
     const isDesktopMacOS = getDesktopPlatform() === 'macos';
+    const isDesktopFullscreen = useDesktopWindowFullscreen(isDesktopMacOS);
     const desktopDragProps = isDesktopMacOS ? {
         'data-tauri-drag-region': true,
-        onMouseDown: (event: any) => {
-            if (event.button === 0) {
-                event.preventDefault?.();
-                startDesktopWindowDragging();
-            }
-        },
+        onMouseDown: handleDesktopTitleBarMouseDown,
     } as any : {};
     // Compute connection status once per render (theme-reactive, no stale memoization)
     const connectionStatus = (() => {
@@ -358,7 +355,10 @@ export const SidebarView = React.memo((props: SidebarViewProps) => {
                     <View style={styles.desktopTitleBar}>
                         <View
                             {...desktopDragProps}
-                            style={styles.desktopTrafficLightSpacer}
+                            style={[
+                                styles.desktopTrafficLightSpacer,
+                                isDesktopFullscreen && { width: 12 },
+                            ]}
                         />
                         <View style={styles.desktopTitleBarControls}>
                             {navigationButtons}
@@ -370,7 +370,7 @@ export const SidebarView = React.memo((props: SidebarViewProps) => {
                     </View>
                 )}
                 <View
-                    {...(isDesktopMacOS ? { 'data-tauri-drag-region': true } as any : {})}
+                    {...desktopDragProps}
                     style={[
                         styles.header,
                         {
