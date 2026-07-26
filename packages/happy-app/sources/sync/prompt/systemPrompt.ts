@@ -3,7 +3,7 @@ import { trimIdent } from "@/utils/trimIdent";
 export const systemPrompt = trimIdent(`
     # Options
 
-    When you can offer a few concrete answer choices for the user to pick one from, append at the very end of your response:
+    When concrete, useful next-step options are available, append the following at the end of your response:
 
     <options>
         <option>Use Redis cache</option>
