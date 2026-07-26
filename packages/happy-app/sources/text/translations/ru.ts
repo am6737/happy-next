@@ -1434,7 +1434,8 @@ export const ru: TranslationStructure = {
         failedToConnectTerminal: 'Не удалось подключить терминал',
         cameraPermissionsRequiredToConnectTerminal: 'Для подключения терминала требуется доступ к камере',
         failedToLinkDevice: 'Не удалось связать устройство',
-        cameraPermissionsRequiredToScanQr: 'Для сканирования QR-кодов требуется доступ к камере'
+        cameraPermissionsRequiredToScanQr: 'Для сканирования QR-кодов требуется доступ к камере',
+        reviewDemoQrScannedSuccessfully: 'Демонстрационный QR-код для проверки успешно отсканирован. Сканер QR-кодов работает правильно.'
     },
 
 

@@ -1467,7 +1467,8 @@ export const ja: TranslationStructure = {
         failedToConnectTerminal: 'ターミナルの接続に失敗しました',
         cameraPermissionsRequiredToConnectTerminal: 'ターミナルの接続にはカメラの権限が必要です',
         failedToLinkDevice: 'デバイスのリンクに失敗しました',
-        cameraPermissionsRequiredToScanQr: 'QRコードのスキャンにはカメラの権限が必要です'
+        cameraPermissionsRequiredToScanQr: 'QRコードのスキャンにはカメラの権限が必要です',
+        reviewDemoQrScannedSuccessfully: '審査用デモQRコードを正常にスキャンしました。QRスキャナーは正しく動作しています。'
     },
 
 

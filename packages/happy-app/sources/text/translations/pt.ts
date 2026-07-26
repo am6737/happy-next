@@ -1435,7 +1435,8 @@ export const pt: TranslationStructure = {
         failedToConnectTerminal: 'Falha ao conectar terminal',
         cameraPermissionsRequiredToConnectTerminal: 'Permissões de câmera são necessárias para conectar terminal',
         failedToLinkDevice: 'Falha ao vincular dispositivo',
-        cameraPermissionsRequiredToScanQr: 'Permissões de câmera são necessárias para escanear códigos QR'
+        cameraPermissionsRequiredToScanQr: 'Permissões de câmera são necessárias para escanear códigos QR',
+        reviewDemoQrScannedSuccessfully: 'O código QR de demonstração para análise foi lido com sucesso. O leitor de QR está funcionando corretamente.'
     },
 
 

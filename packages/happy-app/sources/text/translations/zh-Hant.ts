@@ -1437,7 +1437,8 @@ export const zhHant: TranslationStructure = {
         failedToConnectTerminal: '連線終端失敗',
         cameraPermissionsRequiredToConnectTerminal: '連線終端需要相機權限',
         failedToLinkDevice: '連結裝置失敗',
-        cameraPermissionsRequiredToScanQr: '掃描 QR Code 需要相機權限'
+        cameraPermissionsRequiredToScanQr: '掃描 QR Code 需要相機權限',
+        reviewDemoQrScannedSuccessfully: '審核示範 QR Code 掃描成功，QR Code 掃描功能運作正常。'
     },
 
 

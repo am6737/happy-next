@@ -1437,7 +1437,8 @@ export const zhHans: TranslationStructure = {
         failedToConnectTerminal: '连接终端失败',
         cameraPermissionsRequiredToConnectTerminal: '连接终端需要相机权限',
         failedToLinkDevice: '链接设备失败',
-        cameraPermissionsRequiredToScanQr: '扫描二维码需要相机权限'
+        cameraPermissionsRequiredToScanQr: '扫描二维码需要相机权限',
+        reviewDemoQrScannedSuccessfully: '审核演示二维码扫描成功，二维码扫描功能运行正常。'
     },
 
 
