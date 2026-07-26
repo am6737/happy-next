@@ -22,6 +22,8 @@ use tauri::{
 use tauri_plugin_opener::OpenerExt;
 use uuid::Uuid;
 
+mod native_startup_logo;
+
 const TRAY_ID: &str = "main-tray";
 const TRAY_SHOW_ID: &str = "tray-show";
 const TRAY_HIDE_ID: &str = "tray-hide";
@@ -187,7 +189,12 @@ fn show_main_window(app: &AppHandle) {
         schedule_macos_traffic_light_reconciliation(app);
     }
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
+    {
+        show_prepared_windows_window(app);
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.unminimize();
         let _ = window.show();
@@ -228,6 +235,11 @@ fn set_close_to_tray(state: State<'_, DesktopState>, enabled: bool) {
 #[tauri::command]
 fn show_desktop_window(app: AppHandle) {
     show_main_window(&app);
+}
+
+#[tauri::command]
+fn dismiss_native_startup_logo(app: AppHandle) {
+    native_startup_logo::dismiss(&app);
 }
 
 #[tauri::command]
@@ -921,16 +933,68 @@ fn schedule_macos_traffic_light_reconciliation(app: &AppHandle) {
 
 #[cfg(target_os = "macos")]
 fn show_prepared_macos_window(app: &AppHandle, authenticated: bool) {
+    if !native_startup_logo::is_pending() {
+        present_macos_window(app, authenticated, false);
+        return;
+    }
+
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+    let scheduler = app.clone();
+    let callback_app = app.clone();
+    thread::spawn(move || {
+        // Window setters issued during setup are dispatched through the platform event loop.
+        // Keep the window hidden until its physical frame is unchanged across two samples.
+        let mut previous = None;
+        let mut stable_samples = 0;
+        for _ in 0..12 {
+            let current = window
+                .outer_position()
+                .ok()
+                .zip(window.outer_size().ok())
+                .map(|(position, size)| (position.x, position.y, size.width, size.height));
+            if current.is_some() && current == previous {
+                stable_samples += 1;
+                if stable_samples >= 2 {
+                    break;
+                }
+            } else {
+                stable_samples = 0;
+                previous = current;
+            }
+            thread::sleep(Duration::from_millis(16));
+        }
+
+        let _ = scheduler.run_on_main_thread(move || {
+            present_macos_window(&callback_app, authenticated, true);
+        });
+    });
+}
+
+#[cfg(target_os = "macos")]
+fn present_macos_window(app: &AppHandle, authenticated: bool, install_startup_logo: bool) {
     use objc2_app_kit::{NSApplication, NSWindow};
 
     let Some(window) = app.get_webview_window("main") else {
         return;
     };
+    let theme_preference = app
+        .state::<DesktopState>()
+        .bootstrap
+        .lock()
+        .ok()
+        .map(|bootstrap| bootstrap.theme_preference)
+        .unwrap_or_default();
+    let dark = resolve_dark_background(&window, theme_preference);
     let _ = window.with_webview(move |webview| {
         // SAFETY: The callback runs on the main thread with the live NSWindow.
         unsafe {
             let ns_window = &*webview.ns_window().cast::<NSWindow>();
             apply_macos_traffic_light_position(ns_window, authenticated);
+            if install_startup_logo {
+                native_startup_logo::install_macos(ns_window, dark);
+            }
             ns_window.deminiaturize(None);
             ns_window.makeKeyAndOrderFront(None);
             let main_thread = objc2::MainThreadMarker::new()
@@ -938,6 +1002,61 @@ fn show_prepared_macos_window(app: &AppHandle, authenticated: bool) {
             #[allow(deprecated)]
             NSApplication::sharedApplication(main_thread).activateIgnoringOtherApps(true);
         }
+    });
+}
+
+#[cfg(target_os = "windows")]
+fn show_prepared_windows_window(app: &AppHandle) {
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+    if !native_startup_logo::is_pending() {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+        return;
+    }
+
+    let theme_preference = app
+        .state::<DesktopState>()
+        .bootstrap
+        .lock()
+        .ok()
+        .map(|bootstrap| bootstrap.theme_preference)
+        .unwrap_or_default();
+    let dark = resolve_dark_background(&window, theme_preference);
+    let scheduler = app.clone();
+    thread::spawn(move || {
+        let mut previous = None;
+        let mut stable_samples = 0;
+        for _ in 0..12 {
+            let current = window
+                .outer_position()
+                .ok()
+                .zip(window.outer_size().ok())
+                .map(|(position, size)| (position.x, position.y, size.width, size.height));
+            if current.is_some() && current == previous {
+                stable_samples += 1;
+                if stable_samples >= 2 {
+                    break;
+                }
+            } else {
+                stable_samples = 0;
+                previous = current;
+            }
+            thread::sleep(Duration::from_millis(16));
+        }
+
+        let callback_app = scheduler.clone();
+        let _ = scheduler.run_on_main_thread(move || {
+            let Some(window) = callback_app.get_webview_window("main") else {
+                return;
+            };
+            native_startup_logo::install_windows(&window, dark);
+            let _ = window.unminimize();
+            let _ = window.show();
+            let _ = window.set_focus();
+        });
     });
 }
 
@@ -1515,6 +1634,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             set_close_to_tray,
+            dismiss_native_startup_logo,
             sync_desktop_bootstrap_state,
             start_desktop_window_dragging,
             show_desktop_window,
@@ -1578,6 +1698,13 @@ pub fn run() {
                     | tauri::WindowEvent::ScaleFactorChanged { .. }
             ) {
                 capture_authenticated_window_state(window, &window.state::<DesktopState>());
+            }
+            #[cfg(target_os = "windows")]
+            if matches!(
+                event,
+                tauri::WindowEvent::Resized(_) | tauri::WindowEvent::ScaleFactorChanged { .. }
+            ) {
+                native_startup_logo::resize_windows(window);
             }
             #[cfg(target_os = "macos")]
             if matches!(

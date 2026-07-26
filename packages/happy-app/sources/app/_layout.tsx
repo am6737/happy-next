@@ -293,6 +293,14 @@ export default function RootLayout() {
             setTimeout(() => {
                 SplashScreen.hideAsync();
             }, 100);
+
+            if (Platform.OS === 'web' && isTauriDesktop()) {
+                requestAnimationFrame(() => {
+                    void import('@tauri-apps/api/core')
+                        .then(({ invoke }) => invoke('dismiss_native_startup_logo'))
+                        .catch((error) => console.warn('Failed to dismiss native startup logo:', error));
+                });
+            }
         }
     }, [initState]);
 
