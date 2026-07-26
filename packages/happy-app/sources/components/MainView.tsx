@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { View, ActivityIndicator, Text, Pressable, Platform } from 'react-native';
+import { View, ActivityIndicator, Text, Pressable, Platform, Image } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import TabView from './NativeBottomTabs';
 import { useFriendRequests, useSocketStatus, useRealtimeStatus, useDootaskProfile } from '@/sync/storage';
@@ -72,6 +72,13 @@ const styles = StyleSheet.create((theme) => ({
         flex: 1,
         flexBasis: 0,
         flexGrow: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    emptyDetailLogo: {
+        width: 92,
+        height: 92,
+        opacity: 0.11,
     },
     emptyDetailDragRegion: {
         height: 48,
@@ -400,6 +407,13 @@ export const MainView = React.memo(({ variant }: MainViewProps) => {
             <>
                 <Stack.Screen options={{ headerShown: false }} />
                 <View style={styles.emptyStateContentContainer}>
+                    <Image
+                        source={theme.dark
+                            ? require('@/assets/images/logo-white.png')
+                            : require('@/assets/images/logo-black.png')}
+                        resizeMode="contain"
+                        style={styles.emptyDetailLogo}
+                    />
                     {isDesktopMacOS && (
                         <View
                             {...({
