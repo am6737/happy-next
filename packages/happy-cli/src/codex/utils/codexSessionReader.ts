@@ -157,6 +157,13 @@ export async function readCodexSessionUserMessages(
   codexSessionId: string,
   limit: number = 50,
 ): Promise<CodexUserMessage[]> {
+  const messages = await readAllCodexSessionUserMessages(codexSessionId);
+  return messages.slice(-limit);
+}
+
+export async function readAllCodexSessionUserMessages(
+  codexSessionId: string,
+): Promise<CodexUserMessage[]> {
   const filePath = findCodexSessionFile(codexSessionId);
   if (!filePath) {
     logger.debug(`[CodexSessionReader] Session file not found for: ${codexSessionId}`);
@@ -191,7 +198,7 @@ export async function readCodexSessionUserMessages(
         const timestamp = parsed.timestamp || '';
         messages.push({
           uuid: generateStableUuid(timestamp, userIndex),
-          content: text.length > 500 ? text.substring(0, 500) + '...' : text,
+          content: text,
           timestamp,
           index: userIndex,
         });
@@ -202,7 +209,7 @@ export async function readCodexSessionUserMessages(
     }
   }
 
-  return messages.slice(-limit);
+  return messages;
 }
 
 export interface CodexSessionIndexEntry {

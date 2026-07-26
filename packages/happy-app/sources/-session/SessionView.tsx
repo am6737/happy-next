@@ -21,7 +21,7 @@ import { useImagePicker } from '@/hooks/useImagePicker';
 import { Modal } from '@/modal';
 import { voiceHooks } from '@/realtime/hooks/voiceHooks';
 import { startRealtimeSession, stopRealtimeSession } from '@/realtime/RealtimeSession';
-import { sessionAbort, machineGetClaudeSessionUserMessages, machineDuplicateClaudeSession, machineForkClaudeSession, machineSpawnNewSession, machineGetGeminiSessionUserMessages, machineDuplicateGeminiSession, machineForkGeminiSession, machineGetCodexSessionUserMessages, machineDuplicateCodexSession, machineForkCodexSession, type UserMessageWithUuid } from '@/sync/ops';
+import { sessionAbort, machineGetClaudeSessionUserMessages, machineDuplicateClaudeSession, machineForkClaudeSession, machineSpawnNewSession, machineGetGeminiSessionUserMessages, machineDuplicateGeminiSession, machineForkGeminiSession, machineGetCodexSessionUserMessages, machineDuplicateCodexSession, machineForkCodexSession, machineResolveClaudeForkTarget, machineResolveGeminiForkTarget, machineResolveCodexForkTarget, machineGetClaudeSessionUserMessage, machineGetGeminiSessionUserMessage, machineGetCodexSessionUserMessage, type UserMessageWithUuid, type UserMessagePage, type ResolvedForkTarget } from '@/sync/ops';
 import { storage, useIsDataReady, useLocalSetting, useOrchestratorRunningTaskCount, useOrchestratorHasRuns, useRealtimeStatus, useSessionMessages, useSessionMessagesFetching, useSessionPendingMessages, useSessionUsage, useSetting } from '@/sync/storage';
 import { useSession } from '@/sync/storage';
 import { Session } from '@/sync/storageTypes';
@@ -34,7 +34,6 @@ import { useDeviceType, useIsLandscape, useIsTablet } from '@/utils/responsive';
 import { formatPathRelativeToHome, generateCopyTitle, getSessionAvatarId, getSessionName, useSessionStatus, copySessionMetadata, copySessionModeSettings } from '@/utils/sessionUtils';
 import { getNativeHeaderTitleWidth } from '@/utils/nativeHeaderTitleWidth';
 import { isVersionSupported, useLatestCliVersion } from '@/utils/versionUtils';
-import { matchForkUuid } from '@/utils/forkTarget';
 import { log } from '@/log';
 import { Ionicons } from '@expo/vector-icons';
 import { useHeaderHeight as useNavigationHeaderHeight } from '@react-navigation/elements';
@@ -500,8 +499,10 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
     const [duplicateSheetVisible, setDuplicateSheetVisible] = React.useState(false);
     const [duplicateMessages, setDuplicateMessages] = React.useState<UserMessageWithUuid[] | null>(null);
     const [duplicateLoading, setDuplicateLoading] = React.useState(false);
+    const [duplicateLoadingMore, setDuplicateLoadingMore] = React.useState(false);
+    const [duplicateHasMore, setDuplicateHasMore] = React.useState(false);
+    const [duplicateBeforeIndex, setDuplicateBeforeIndex] = React.useState<number | null>(null);
     const [duplicateConfirming, setDuplicateConfirming] = React.useState(false);
-    const duplicateProjectIdRef = React.useRef<string | null>(null);
     // Id of the user message whose per-message fork is in progress (drives the
     // in-icon spinner on its action bar).
     const [forkingMessageId, setForkingMessageId] = React.useState<string | null>(null);
@@ -544,6 +545,35 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
         storage.getState().setSessionFastMode(sessionId, enabled);
     }, [sessionId]);
 
+    const loadDuplicateMessagesPage = React.useCallback(async (beforeIndex?: number): Promise<UserMessagePage> => {
+        const flavor = session.metadata?.flavor;
+        const claudeSessionId = session.metadata?.claudeSessionId;
+        const codexSessionId = session.metadata?.codexSessionId;
+        if (!machineId) return { messages: [], hasMore: false, nextBeforeIndex: null };
+
+        if (flavor === 'gemini') {
+            return machineGetGeminiSessionUserMessages(machineId, session.id, { beforeIndex });
+        }
+        if (flavor === 'codex' && codexSessionId) {
+            return machineGetCodexSessionUserMessages(machineId, codexSessionId, { beforeIndex });
+        }
+        if (claudeSessionId) {
+            const result = await machineGetClaudeSessionUserMessages(machineId, claudeSessionId, { beforeIndex });
+            return result;
+        }
+        return { messages: [], hasMore: false, nextBeforeIndex: null };
+    }, [machineId, session.id, session.metadata?.flavor, session.metadata?.claudeSessionId, session.metadata?.codexSessionId]);
+
+    const applyDuplicatePage = React.useCallback((page: UserMessagePage, appendOlder: boolean) => {
+        setDuplicateMessages((current) => {
+            if (!appendOlder || !current) return page.messages;
+            const seen = new Set(current.map((message) => message.uuid));
+            return [...page.messages.filter((message) => !seen.has(message.uuid)), ...current];
+        });
+        setDuplicateHasMore(page.hasMore);
+        setDuplicateBeforeIndex(page.nextBeforeIndex);
+    }, []);
+
     // Handle opening the duplicate sheet - loads user messages from the session
     const handleOpenDuplicateSheet = React.useCallback(async () => {
         const flavor = session.metadata?.flavor;
@@ -561,19 +591,11 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
         setDuplicateSheetVisible(true);
         setDuplicateLoading(true);
         setDuplicateMessages(null);
+        setDuplicateHasMore(false);
+        setDuplicateBeforeIndex(null);
 
         try {
-            if (flavor === 'gemini') {
-                const result = await machineGetGeminiSessionUserMessages(machineId, session.id);
-                setDuplicateMessages(result.messages);
-            } else if (flavor === 'codex' && codexSessionId) {
-                const result = await machineGetCodexSessionUserMessages(machineId, codexSessionId);
-                setDuplicateMessages(result.messages);
-            } else if (claudeSessionId) {
-                const result = await machineGetClaudeSessionUserMessages(machineId, claudeSessionId);
-                setDuplicateMessages(result.messages);
-                duplicateProjectIdRef.current = result.projectId;
-            }
+            applyDuplicatePage(await loadDuplicateMessagesPage(), false);
         } catch (error) {
             console.error('Failed to load duplicate messages:', error);
             Modal.alert(t('common.error'), t('duplicate.loadFailed'));
@@ -581,11 +603,23 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
         } finally {
             setDuplicateLoading(false);
         }
-    }, [machineId, session.id, session.metadata?.flavor, session.metadata?.claudeSessionId, session.metadata?.codexSessionId]);
+    }, [machineId, session.metadata?.flavor, session.metadata?.claudeSessionId, session.metadata?.codexSessionId, loadDuplicateMessagesPage, applyDuplicatePage]);
+
+    const handleLoadMoreDuplicateMessages = React.useCallback(async () => {
+        if (duplicateLoadingMore || !duplicateHasMore || duplicateBeforeIndex == null) return;
+        setDuplicateLoadingMore(true);
+        try {
+            applyDuplicatePage(await loadDuplicateMessagesPage(duplicateBeforeIndex), true);
+        } catch (error) {
+            console.error('Failed to load older duplicate messages:', error);
+            Modal.alert(t('common.error'), t('duplicate.loadFailed'));
+        } finally {
+            setDuplicateLoadingMore(false);
+        }
+    }, [duplicateLoadingMore, duplicateHasMore, duplicateBeforeIndex, loadDuplicateMessagesPage, applyDuplicatePage]);
 
     // Core fork-and-spawn logic, shared by the duplicate sheet and the
-    // per-message fork icon. `userMessages` is the loaded CLI message list,
-    // used to recover the selected message's text for the new session draft.
+    // per-message fork icon.
     //
     // `uuid` is the CLI message to truncate before (the new session keeps
     // everything older than it). Passing `uuid: null` forks the WHOLE session
@@ -593,8 +627,8 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
     // no following user prompt to truncate at. `skipDraft` suppresses the draft
     // write (AI-message forks continue after the reply, so there's nothing to
     // pre-fill; user-message forks pre-fill the tapped prompt).
-    const forkSessionFromUuid = React.useCallback(async (opts: { uuid: string | null; userMessages: UserMessageWithUuid[]; skipDraft: boolean }) => {
-        const { uuid, userMessages, skipDraft } = opts;
+    const forkSessionFromUuid = React.useCallback(async (opts: { uuid: string | null; draftText?: string; skipDraft: boolean }) => {
+        const { uuid, draftText, skipDraft } = opts;
         const flavor = session.metadata?.flavor;
         const claudeSessionId = session.metadata?.claudeSessionId;
         const codexSessionId = session.metadata?.codexSessionId;
@@ -669,10 +703,9 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
 
                 // Save the selected message as a draft in the new session so it appears in the input box.
                 // Skipped for AI-message forks (the new session continues after the reply, nothing to pre-fill).
-                const selectedMessage = uuid ? userMessages.find(m => m.uuid === uuid) : undefined;
-                if (!skipDraft && selectedMessage?.content) {
+                if (!skipDraft && draftText) {
                     storage.getState().setDraft(spawnResult.sessionId, {
-                        text: selectedMessage.content,
+                        text: draftText,
                         images: [],
                     });
                 }
@@ -692,13 +725,46 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
         }
     }, [machineId, session.id, session.metadata?.flavor, session.metadata?.claudeSessionId, session.metadata?.codexSessionId, session.metadata?.path, router]);
 
-    // Handle selecting a message in the duplicate sheet
-    const handleDuplicateSelect = React.useCallback((uuid: string) => {
-        forkSessionFromUuid({ uuid, userMessages: duplicateMessages ?? [], skipDraft: false });
-    }, [forkSessionFromUuid, duplicateMessages]);
+    // Handle selecting a message in the duplicate sheet. Picker rows are previews,
+    // so fetch the full prompt by UUID before creating the new-session draft.
+    const handleDuplicateSelect = React.useCallback(async (uuid: string) => {
+        const flavor = session.metadata?.flavor;
+        const claudeSessionId = session.metadata?.claudeSessionId;
+        const codexSessionId = session.metadata?.codexSessionId;
+        if (!machineId) return;
+        setDuplicateConfirming(true);
+        try {
+            let selected: UserMessageWithUuid | null = null;
+            if (flavor === 'gemini') {
+                selected = await machineGetGeminiSessionUserMessage(machineId, session.id, uuid);
+            } else if (flavor === 'codex' && codexSessionId) {
+                selected = await machineGetCodexSessionUserMessage(machineId, codexSessionId, uuid);
+            } else if (claudeSessionId) {
+                selected = await machineGetClaudeSessionUserMessage(machineId, claudeSessionId, uuid);
+            }
+            if (!selected) {
+                setDuplicateConfirming(false);
+                Modal.alert(t('common.error'), t('duplicate.loadFailed'));
+                return;
+            }
+            await forkSessionFromUuid({ uuid, draftText: selected.content, skipDraft: false });
+        } catch (error) {
+            console.error('Failed to load selected duplicate message:', error);
+            // Compatibility fallback for older CLIs that do not expose the
+            // full-message lookup RPC yet. Their picker rows contain the best
+            // available content (full for Claude, preview for Codex/Gemini).
+            const selectedPreview = duplicateMessages?.find((message) => message.uuid === uuid);
+            if (selectedPreview) {
+                await forkSessionFromUuid({ uuid, draftText: selectedPreview.content, skipDraft: false });
+            } else {
+                setDuplicateConfirming(false);
+                Modal.alert(t('common.error'), t('duplicate.loadFailed'));
+            }
+        }
+    }, [machineId, session.id, session.metadata?.flavor, session.metadata?.claudeSessionId, session.metadata?.codexSessionId, forkSessionFromUuid, duplicateMessages]);
 
-    // Runs after the user confirms a per-message fork: load CLI user messages,
-    // match the tapped message to a UUID, then fork. The network load is
+    // Runs after the user confirms a per-message fork: ask the CLI to resolve
+    // the tapped message against the complete local JSONL, then fork. The RPC is
     // deferred to here (post-confirm) so tapping the fork icon shows the
     // confirm dialog instantly instead of waiting on an RPC round-trip.
     // Falls back to opening the sheet if the target can't be matched.
@@ -720,41 +786,41 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
             // No truncation target (forking from the latest AI reply): duplicate
             // the whole session, no draft.
             if (!request.target) {
-                await forkSessionFromUuid({ uuid: null, userMessages: [], skipDraft: true });
+                await forkSessionFromUuid({ uuid: null, skipDraft: true });
                 return;
             }
 
             const target = request.target;
-            let userMessages: UserMessageWithUuid[] = [];
+            let resolved: ResolvedForkTarget | null = null;
             try {
                 if (flavor === 'gemini') {
-                    userMessages = (await machineGetGeminiSessionUserMessages(machineId, session.id)).messages;
+                    resolved = await machineResolveGeminiForkTarget(machineId, session.id, target.text, target.createdAt);
                 } else if (flavor === 'codex' && codexSessionId) {
-                    userMessages = (await machineGetCodexSessionUserMessages(machineId, codexSessionId)).messages;
+                    resolved = await machineResolveCodexForkTarget(machineId, codexSessionId, target.text, target.createdAt);
                 } else if (claudeSessionId) {
-                    const result = await machineGetClaudeSessionUserMessages(machineId, claudeSessionId);
-                    userMessages = result.messages;
-                    duplicateProjectIdRef.current = result.projectId;
+                    resolved = await machineResolveClaudeForkTarget(machineId, claudeSessionId, target.text, target.createdAt);
                 }
             } catch (error) {
-                console.error('Failed to load fork messages:', error);
-                Modal.alert(t('common.error'), t('duplicate.loadFailed'));
+                console.warn('Failed to resolve fork target, falling back to picker:', error);
+                await handleOpenDuplicateSheet();
                 return;
             }
 
-            const uuid = matchForkUuid({ text: target.text, createdAt: target.createdAt }, userMessages);
-            if (!uuid) {
-                // Fallback: open the sheet so the user can pick manually.
-                setDuplicateMessages(userMessages);
-                setDuplicateSheetVisible(true);
+            if (!resolved) {
+                // Fallback: open the paginated sheet so the user can pick manually.
+                await handleOpenDuplicateSheet();
                 return;
             }
 
-            await forkSessionFromUuid({ uuid, userMessages, skipDraft: request.skipDraft });
+            await forkSessionFromUuid({
+                uuid: resolved.uuid,
+                draftText: request.skipDraft ? undefined : target.text,
+                skipDraft: request.skipDraft,
+            });
         } finally {
             setForkingMessageId(null);
         }
-    }, [machineId, session.id, session.metadata?.flavor, session.metadata?.claudeSessionId, session.metadata?.codexSessionId, forkSessionFromUuid]);
+    }, [machineId, session.id, session.metadata?.flavor, session.metadata?.claudeSessionId, session.metadata?.codexSessionId, forkSessionFromUuid, handleOpenDuplicateSheet]);
 
     // Handle the per-message fork icon: show the confirm dialog immediately,
     // then do the network work in performForkFromMessage once confirmed.
@@ -1292,9 +1358,12 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
                 visible={duplicateSheetVisible}
                 messages={duplicateMessages}
                 loading={duplicateLoading}
+                loadingMore={duplicateLoadingMore}
+                hasMore={duplicateHasMore}
                 confirming={duplicateConfirming}
                 onClose={handleCloseDuplicateSheet}
                 onSelect={handleDuplicateSelect}
+                onLoadMore={handleLoadMoreDuplicateMessages}
             />
 
             {/* Image Picker Sheet */}

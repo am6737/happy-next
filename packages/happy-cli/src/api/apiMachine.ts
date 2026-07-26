@@ -10,11 +10,11 @@ import { isDebug } from '@/utils/env';
 import { MachineMetadata, DaemonState, Machine, Update, UpdateMachineBody } from './types';
 import { registerCommonHandlers, SpawnSessionOptions, SpawnSessionResult } from '../modules/common/registerCommonHandlers';
 import { registerOpenClawHandlers, openClawTunnelManager } from '../modules/openclaw';
-import { listClaudeSessionsFromIndex, getClaudeSessionPreview, findClaudeProjectId, getClaudeSessionUserMessages, saveClaudeSessionCacheStats } from '@/claude/utils/claudeSessionIndex';
+import { listClaudeSessionsFromIndex, getClaudeSessionPreview, findClaudeProjectId, readAllClaudeSessionUserMessages, saveClaudeSessionCacheStats } from '@/claude/utils/claudeSessionIndex';
 import { forkAndTruncateSession, forkSession } from '@/claude/utils/claudeSessionFork';
 import { readGeminiSessionLog, listGeminiSessions, getGeminiSessionPreview, saveGeminiSessionCacheStats } from '@/gemini/utils/sessionReader';
 import { forkGeminiSession, forkAndTruncateGeminiSession } from '@/gemini/utils/sessionFork';
-import { readCodexSessionUserMessages, listCodexSessions, getCodexSessionPreview, saveCodexSessionCacheStats } from '@/codex/utils/codexSessionReader';
+import { readAllCodexSessionUserMessages, listCodexSessions, getCodexSessionPreview, saveCodexSessionCacheStats } from '@/codex/utils/codexSessionReader';
 import { forkCodexSession, forkAndTruncateCodexSession } from '@/codex/utils/codexSessionFork';
 import { SessionCache, matchFields, type SessionCacheRuntimeStats } from '@/cache/SessionCache';
 import { encodeBase64, decodeBase64, encrypt, decrypt } from './encryption';
@@ -22,6 +22,7 @@ import { backoff } from '@/utils/time';
 import { RpcHandlerManager } from './rpc/RpcHandlerManager';
 import { execSync, execFileSync } from 'node:child_process';
 import { readdirSync, rmdirSync } from 'node:fs';
+import { paginateSessionUserMessages, resolveSessionUserMessage, type SessionUserMessage } from '@/utils/sessionUserMessages';
 
 function createSessionCacheStatsReporter(
     saveStats: (stats: SessionCacheRuntimeStats) => Promise<void>,
@@ -480,7 +481,7 @@ export class ApiMachineClient {
 
         // Get user messages with UUIDs for the duplicate/fork feature
         this.rpcHandlerManager.registerHandler('claude-session-user-messages', async (params: any) => {
-            const { sessionId, limit = 50 } = params || {};
+            const { sessionId, limit = 100, beforeIndex, preview } = params || {};
 
             if (!sessionId || typeof sessionId !== 'string') {
                 throw new Error('sessionId is required');
@@ -492,9 +493,30 @@ export class ApiMachineClient {
                 throw new Error('Session not found');
             }
 
-            const messageLimit = typeof limit === 'number' && limit > 0 ? Math.min(Math.floor(limit), 100) : 50;
-            const messages = await getClaudeSessionUserMessages(projectId, sessionId, messageLimit);
-            return { messages, projectId };
+            const messageLimit = typeof limit === 'number' && limit > 0 ? Math.min(Math.floor(limit), 100) : 100;
+            const allMessages = await readAllClaudeSessionUserMessages(projectId, sessionId);
+            return { ...paginateSessionUserMessages(allMessages, messageLimit, beforeIndex, preview === true), projectId };
+        });
+
+        this.rpcHandlerManager.registerHandler('claude-resolve-fork-target', async (params: any) => {
+            const { sessionId, text, createdAt } = params || {};
+            if (!sessionId || typeof sessionId !== 'string') throw new Error('sessionId is required');
+            if (typeof text !== 'string') throw new Error('text is required');
+            const projectId = await findClaudeProjectId(sessionId);
+            if (!projectId) throw new Error('Session not found');
+            const messages = await readAllClaudeSessionUserMessages(projectId, sessionId);
+            const message = resolveSessionUserMessage(messages, { text, createdAt });
+            return { message: message ? { uuid: message.uuid, timestamp: message.timestamp, index: message.index } : null, projectId };
+        });
+
+        this.rpcHandlerManager.registerHandler('claude-session-user-message', async (params: any) => {
+            const { sessionId, uuid } = params || {};
+            if (!sessionId || typeof sessionId !== 'string') throw new Error('sessionId is required');
+            if (!uuid || typeof uuid !== 'string') throw new Error('uuid is required');
+            const projectId = await findClaudeProjectId(sessionId);
+            if (!projectId) throw new Error('Session not found');
+            const messages = await readAllClaudeSessionUserMessages(projectId, sessionId);
+            return { message: messages.find((message) => message.uuid === uuid) ?? null, projectId };
         });
 
         // Fork and truncate a Claude session for the duplicate feature
@@ -540,23 +562,53 @@ export class ApiMachineClient {
 
         // Get user messages from a Gemini session JSONL
         this.rpcHandlerManager.registerHandler('gemini-session-user-messages', async (params: any) => {
-            const { sessionId, limit = 50 } = params || {};
+            const { sessionId, limit = 100, beforeIndex } = params || {};
             if (!sessionId || typeof sessionId !== 'string') {
                 throw new Error('sessionId is required');
             }
-            const messageLimit = typeof limit === 'number' && limit > 0 ? Math.min(Math.floor(limit), 100) : 50;
+            const messageLimit = typeof limit === 'number' && limit > 0 ? Math.min(Math.floor(limit), 100) : 100;
             const lines = await readGeminiSessionLog(sessionId);
             let userIndex = 0;
-            const messages = lines
+            const allMessages: SessionUserMessage[] = lines
                 .filter(l => l.type === 'user')
                 .map(l => ({
                     uuid: l.uuid,
-                    content: l.message.length > 500 ? l.message.substring(0, 500) + '...' : l.message,
+                    content: l.message,
                     timestamp: new Date(l.timestamp).toISOString(),
                     index: userIndex++,
-                }))
-                .slice(-messageLimit);
-            return { messages };
+                }));
+            return paginateSessionUserMessages(allMessages, messageLimit, beforeIndex);
+        });
+
+        this.rpcHandlerManager.registerHandler('gemini-resolve-fork-target', async (params: any) => {
+            const { sessionId, text, createdAt } = params || {};
+            if (!sessionId || typeof sessionId !== 'string') throw new Error('sessionId is required');
+            if (typeof text !== 'string') throw new Error('text is required');
+            const lines = await readGeminiSessionLog(sessionId);
+            let userIndex = 0;
+            const messages: SessionUserMessage[] = lines.filter(l => l.type === 'user').map(l => ({
+                uuid: l.uuid,
+                content: l.message,
+                timestamp: new Date(l.timestamp).toISOString(),
+                index: userIndex++,
+            }));
+            const message = resolveSessionUserMessage(messages, { text, createdAt });
+            return { message: message ? { uuid: message.uuid, timestamp: message.timestamp, index: message.index } : null };
+        });
+
+        this.rpcHandlerManager.registerHandler('gemini-session-user-message', async (params: any) => {
+            const { sessionId, uuid } = params || {};
+            if (!sessionId || typeof sessionId !== 'string') throw new Error('sessionId is required');
+            if (!uuid || typeof uuid !== 'string') throw new Error('uuid is required');
+            const lines = await readGeminiSessionLog(sessionId);
+            let userIndex = 0;
+            const messages: SessionUserMessage[] = lines.filter(l => l.type === 'user').map(l => ({
+                uuid: l.uuid,
+                content: l.message,
+                timestamp: new Date(l.timestamp).toISOString(),
+                index: userIndex++,
+            }));
+            return { message: messages.find((message) => message.uuid === uuid) ?? null };
         });
 
         // Fork and truncate a Gemini session for duplicate
@@ -584,13 +636,30 @@ export class ApiMachineClient {
 
         // Get user messages from a Codex session JSONL
         this.rpcHandlerManager.registerHandler('codex-session-user-messages', async (params: any) => {
-            const { codexSessionId, limit = 50 } = params || {};
+            const { codexSessionId, limit = 100, beforeIndex } = params || {};
             if (!codexSessionId || typeof codexSessionId !== 'string') {
                 throw new Error('codexSessionId is required');
             }
-            const messageLimit = typeof limit === 'number' && limit > 0 ? Math.min(Math.floor(limit), 100) : 50;
-            const messages = await readCodexSessionUserMessages(codexSessionId, messageLimit);
-            return { messages };
+            const messageLimit = typeof limit === 'number' && limit > 0 ? Math.min(Math.floor(limit), 100) : 100;
+            const allMessages = await readAllCodexSessionUserMessages(codexSessionId);
+            return paginateSessionUserMessages(allMessages, messageLimit, beforeIndex);
+        });
+
+        this.rpcHandlerManager.registerHandler('codex-resolve-fork-target', async (params: any) => {
+            const { codexSessionId, text, createdAt } = params || {};
+            if (!codexSessionId || typeof codexSessionId !== 'string') throw new Error('codexSessionId is required');
+            if (typeof text !== 'string') throw new Error('text is required');
+            const messages = await readAllCodexSessionUserMessages(codexSessionId);
+            const message = resolveSessionUserMessage(messages, { text, createdAt });
+            return { message: message ? { uuid: message.uuid, timestamp: message.timestamp, index: message.index } : null };
+        });
+
+        this.rpcHandlerManager.registerHandler('codex-session-user-message', async (params: any) => {
+            const { codexSessionId, uuid } = params || {};
+            if (!codexSessionId || typeof codexSessionId !== 'string') throw new Error('codexSessionId is required');
+            if (!uuid || typeof uuid !== 'string') throw new Error('uuid is required');
+            const messages = await readAllCodexSessionUserMessages(codexSessionId);
+            return { message: messages.find((message) => message.uuid === uuid) ?? null };
         });
 
         // Fork and truncate a Codex session for duplicate

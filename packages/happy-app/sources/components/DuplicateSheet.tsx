@@ -48,9 +48,12 @@ interface DuplicateSheetProps {
     visible: boolean;
     messages: ClaudeUserMessageWithUuid[] | null;
     loading: boolean;
+    loadingMore?: boolean;
+    hasMore?: boolean;
     confirming?: boolean;
     onClose: () => void;
     onSelect: (uuid: string) => void;
+    onLoadMore?: () => void;
     onClosed?: () => void;
 }
 
@@ -89,9 +92,12 @@ export function DuplicateSheet({
     visible,
     messages,
     loading,
+    loadingMore = false,
+    hasMore = false,
     confirming = false,
     onClose,
     onSelect,
+    onLoadMore,
     onClosed,
 }: DuplicateSheetProps) {
     const insets = useSafeAreaInsets();
@@ -421,6 +427,13 @@ export function DuplicateSheet({
                             onScroll={handleMessageInteractionMove}
                             scrollEventThrottle={16}
                             onScrollBeginDrag={hideCopyMenu}
+                            onEndReached={hasMore && !loadingMore ? onLoadMore : undefined}
+                            onEndReachedThreshold={0.25}
+                            ListFooterComponent={loadingMore ? (
+                                <View style={styles.loadMoreContainer as ViewStyle}>
+                                    <ActivityIndicator size="small" color="#8E8E93" />
+                                </View>
+                            ) : null}
                             showsVerticalScrollIndicator={false}
                             keyExtractor={(msg, index) => `${msg.uuid}-${index}`}
                             renderItem={({ item: msg, index }: ListRenderItemInfo<ClaudeUserMessageWithUuid>) => {
@@ -698,6 +711,11 @@ const styles = StyleSheet.create((theme) => ({
     contentContainer: {
         padding: 16,
         gap: 8,
+    },
+    loadMoreContainer: {
+        paddingVertical: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     loadingContainer: {
         alignItems: 'center',

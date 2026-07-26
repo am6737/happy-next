@@ -97,4 +97,22 @@ describe('listCodexSessions', () => {
     expect(cache.lastRun.filesReparsed).toBe(1);
     expect(cache.lastRun.resultCount).toBe(1);
   });
+
+  it('keeps user messages on both sides of a compacted record', async () => {
+    const sessionUuid = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+    const codexSessionsDir = join(codexHomeDir, 'sessions', '2026', '03', '12');
+    mkdirSync(codexSessionsDir, { recursive: true });
+    const filePath = join(codexSessionsDir, `rollout-2026-03-12T000000-${sessionUuid}.jsonl`);
+    const lines = [
+      { type: 'response_item', payload: { role: 'user', content: [{ type: 'input_text', text: 'before compact' }] }, timestamp: '2026-03-12T00:00:01.000Z' },
+      { type: 'compacted', payload: { message: 'summary' }, timestamp: '2026-03-12T00:00:02.000Z' },
+      { type: 'response_item', payload: { role: 'user', content: [{ type: 'input_text', text: 'after compact' }] }, timestamp: '2026-03-12T00:00:03.000Z' },
+    ];
+    writeFileSync(filePath, lines.map((line) => JSON.stringify(line)).join('\n') + '\n');
+
+    vi.resetModules();
+    const { readAllCodexSessionUserMessages } = await import('./codexSessionReader');
+    const messages = await readAllCodexSessionUserMessages(sessionUuid);
+    expect(messages.map((message) => message.content)).toEqual(['before compact', 'after compact']);
+  });
 });
