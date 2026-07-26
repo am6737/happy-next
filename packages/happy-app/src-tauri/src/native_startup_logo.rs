@@ -184,15 +184,15 @@ mod windows {
     use windows_sys::Win32::{
         Foundation::{COLORREF, HWND, LPARAM, LRESULT, RECT, WPARAM},
         Graphics::Gdi::{
-            BeginPaint, CreateSolidBrush, DeleteObject, EndPaint, FillRect, SetDIBitsToDevice,
-            BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, PAINTSTRUCT,
+            BeginPaint, CreateSolidBrush, DeleteObject, EndPaint, FillRect, InvalidateRect,
+            SetDIBitsToDevice, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, PAINTSTRUCT,
         },
         System::LibraryLoader::GetModuleHandleW,
         UI::WindowsAndMessaging::{
             CreateWindowExW, DefWindowProcW, DestroyWindow, FindWindowExW, GetClientRect,
-            InvalidateRect, RegisterClassW, SetLayeredWindowAttributes, SetWindowPos, HWND_TOP,
-            LWA_ALPHA, SWP_NOACTIVATE, SWP_SHOWWINDOW, WM_ERASEBKGND, WM_PAINT, WNDCLASSW,
-            WS_CHILD, WS_CLIPSIBLINGS, WS_EX_LAYERED, WS_VISIBLE,
+            RegisterClassW, SetLayeredWindowAttributes, SetWindowPos, HWND_TOP, LWA_ALPHA,
+            SWP_NOACTIVATE, SWP_SHOWWINDOW, WM_ERASEBKGND, WM_PAINT, WNDCLASSW, WS_CHILD,
+            WS_CLIPSIBLINGS, WS_EX_LAYERED, WS_VISIBLE,
         },
     };
 
