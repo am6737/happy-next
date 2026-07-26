@@ -37,14 +37,14 @@ This document summarizes what changed in Happy Next compared to the original Hap
 Happy Next now ships as a native-feeling desktop client instead of requiring a browser tab.
 
 - **Cross-platform distribution**: macOS 12+ Universal, Windows x64, and Windows ARM64 installers are published directly through GitHub Releases
-- **Native window lifecycle**: authentication-aware sizing, state restoration, multi-monitor bounds protection, theme-correct startup, macOS title-bar integration, and reliable custom drag regions
+- **Native window lifecycle**: authentication-aware sizing, state restoration, refined fullscreen/title-bar interactions, multi-monitor bounds protection, theme-correct startup with a native startup logo, macOS title-bar integration, and reliable custom drag regions
 - **Resident experience**: close to tray, explicit Quit, single-instance activation, optional launch at sign-in, and a global show/hide shortcut
-- **Notifications and unread state**: native notifications open the associated Session, hidden windows return to the foreground, and unread state appears on the Dock or Windows taskbar
+- **Notifications and unread state**: clean plain-text native notifications open the associated Session, hidden windows return to the foreground, and unread state appears on the Dock or Windows taskbar
 - **Desktop controls**: native application menus plus search, navigation, new-session, inbox, DooTask, and settings shortcuts
 - **Signed updates**: updater payloads are cryptographically verified, downloaded quietly in the background, and installed only after the user clicks the in-app Update button
 - **Diagnostics and recovery**: sanitized desktop diagnostics, rotating local logs, upload timeouts and retry handling, and preserved composer content after failures
-- **Security and media**: restricted Tauri capabilities, hardened CSP and navigation boundaries, system-browser external links, and explicit microphone/camera support
-- **Platform visuals**: independent macOS and Windows icon assets, including the macOS 26 layered icon format and compatibility fallback for older macOS versions
+- **Security and media**: restricted Tauri capabilities, hardened CSP and navigation boundaries, native context menus, reliable theme-isolated HTML preview child windows, system-browser external links, and explicit microphone/camera support
+- **Platform visuals**: refreshed logos, favicons, splash screens, notification assets, and independent macOS and Windows icons, including the macOS 26 layered icon format and compatibility fallback for older macOS versions
 
 ## Orchestrator
 
@@ -85,7 +85,7 @@ The original Happy only supported Claude Code. Happy Next treats Claude Code, Co
 
 - **Multi-agent history page** with per-provider tabs (Claude / Codex / Gemini)
 - **Session resume and duplicate/fork** for all three agents
-- **`/duplicate` slash command**: opens a message picker to fork a session from any point in the conversation — including directly from an AI reply — creating a new session with history up to the selected message
+- **`/duplicate` slash command**: opens a message picker to fork a session from any point in the conversation — including directly from an AI reply — creating a new session with history up to the selected message and reliably resolving the corresponding user-message target
 - **Per-agent model selection** cached independently, with context window display
 - **Claude Opus 4.8** added to the model catalog
 - **Claude Fable 5** added to the model catalog, with 1M-context variant and low / medium / high / xhigh / max reasoning effort presets
@@ -289,7 +289,8 @@ Extensive improvements to the chat and session management experience.
 - **Context usage tooltip**: hover the context indicator to see a token-count breakdown
 - **Resizable web sidebar**: drag the sidebar edge to adjust its width
 - **Smart session defaults**: new session creation automatically picks the best available machine
-- **Per-machine session tabs**: the active/inactive split is replaced by per-machine tabs that group sessions by the machine they run on, so multi-machine setups are easier to navigate; each tab carries a status dot — orange when a session on that machine needs permission, reflecting the live thinking state — while the aggregate 'all' tab stays dot-free
+- **Per-machine session tabs**: the active/inactive split is replaced by per-machine tabs that group sessions by the machine they run on, so multi-machine setups are easier to navigate; each tab carries a stable status dot — orange when a session on that machine needs permission, reflecting the live thinking state — while the aggregate 'all' tab stays dot-free
+- **Collapsible project folders**: related sessions are grouped into folders that can be collapsed, with folder state retained locally
 - **Device and agent filter dropdowns**: filter session history by machine and agent type
 - **Session preview expand/collapse**: expand messages inline with increased preview limit
 - **Metadata caching**: session listing performance improved via metadata cache
@@ -347,6 +348,7 @@ The CLI (`happy-next-cli`) received substantial upgrades.
 - **Gemini interrupt marker alignment**: Gemini's abort feedback now sends `[Request interrupted by user]` as a gemini agent message — the same marker bubble Claude and Codex use — instead of the centered "Aborted by user" status event, so the interrupt UX is consistent across all three providers
 - **Hot-swap model & plan mode**: switching the model or toggling plan mode no longer cold-restarts the Claude subprocess. When only the model or permission/plan mode changes on an already-warm process, the change is applied in place via the stream-json control channel, so it takes effect instantly mid-session instead of paying a session-resume restart
 - **Remote→local stdin cleanup**: switching a session from remote back to local now cleans up terminal stdin, so leftover raw-mode input no longer leaks into the terminal
+- **Skill metadata and plugin discovery**: multiline skill metadata parses correctly, and enabled Codex plugin skills are discovered consistently
 
 ## Server
 
@@ -363,6 +365,9 @@ The CLI (`happy-next-cli`) received substantial upgrades.
 
 ## UI & Polish
 
+- **Brand refresh**: refreshed Happy Next logos, favicons, splash screens, notification assets, and mobile/desktop icons
+- **Adaptive themes**: system-theme changes apply reliably across the app and desktop authentication windows
+- **iOS permissions**: clearer scanner camera-permission handling, with the unused motion permission removed
 - **Dark mode** fixes throughout (text contrast, chips, status badges, input fields)
 - **i18n**: Chinese Simplified/Traditional system locale declaration, CJK input height handling, internationalized pickers
 - **Keyboard handling**: content follows keyboard smoothly, no jitter

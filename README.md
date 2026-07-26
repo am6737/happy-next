@@ -87,11 +87,11 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 
 ### Desktop Apps (macOS + Windows)
 - Direct-download clients for macOS 12+ Universal, Windows x64, and Windows ARM64
-- Native window sizing and restoration, frameless macOS title-bar integration, multi-monitor bounds protection, and theme-correct startup
-- Tray residency, close-to-tray behavior, single-instance activation, native notifications, and Dock/taskbar unread indicators
+- Native window sizing and restoration, frameless macOS title-bar integration, refined fullscreen/title-bar interactions, multi-monitor bounds protection, and theme-correct startup with a native startup logo
+- Tray residency, close-to-tray behavior, single-instance activation, clean plain-text native notifications, and Dock/taskbar unread indicators
 - Native application menus, search and navigation shortcuts, optional launch at sign-in, and a global show/hide shortcut
 - Signed automatic updates download quietly in the background and wait for the user to install and restart
-- Desktop diagnostics, rotating local logs, upload retry recovery, microphone/camera support, system-browser external links, and restricted native capabilities
+- Desktop diagnostics, rotating local logs, upload retry recovery, microphone/camera support, native context menus, reliable theme-isolated HTML preview windows, system-browser external links, and restricted native capabilities
 
 ### Orchestrator
 - Define task dependency graphs (DAGs) with per-task model and working directory
@@ -201,7 +201,7 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Session titles seeded from the first user message for new sessions (until an AI summary takes over)
 - Slash command results surface even when the agent emits no assistant message (e.g. unknown commands no longer blank out)
 - Slash-command autocomplete shows each command's source scope (repo / user / plugin / system) and kind; session capabilities are stored separately from metadata and sync live so command and skill lists stay fresh
-- `/duplicate` command to fork a session from any message, including directly from an AI reply
+- `/duplicate` command to fork a session from any message, including directly from an AI reply, with more reliable user-message target resolution
 - Sending shows an optimistic "Processing…" status immediately, plus a "refreshing" indicator while the message list reloads
 - Message pagination, unread blue dot indicator, compact list view
 - Conversation minimap panel — tap to jump to any part of a long conversation at a glance, populated from the offline message cache so the overview is available even before messages finish loading or while offline
@@ -210,7 +210,8 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Context usage tooltip on the context indicator showing token-count breakdown details
 - Resizable sidebar on web — drag the edge to adjust width
 - New session defaults now pick the best available machine automatically
-- Per-machine session tabs (sessions grouped by the machine they run on), each tab showing a status dot — orange when a session on that machine needs permission, reflecting the live thinking state — while the aggregate 'all' tab stays dot-free; session preview expand/collapse, metadata caching
+- Per-machine session tabs (sessions grouped by the machine they run on), each tab showing a stable status dot — orange when a session on that machine needs permission, reflecting the live thinking state — while the aggregate 'all' tab stays dot-free; session preview expand/collapse, metadata caching
+- Collapsible project folders group related sessions, with folder state retained locally
 - Machine tabs remain visible when shared sessions are present, and the Shared by me list refreshes after sharing changes
 - Recent session history pagination for faster initial load
 - Session rename with lock (prevent AI auto-update), search in history
@@ -241,6 +242,7 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Stop/ESC interrupts now keep the Claude and Codex backends warm so the next message resumes instantly instead of cold-restarting; Gemini's interrupt feedback now matches Claude/Codex with a `[Request interrupted by user]` marker
 - Switching model or toggling plan mode hot-swaps on the already-warm Claude subprocess instead of cold-restarting, so changes apply instantly mid-session
 - Switching a session from remote back to local cleans up terminal stdin so leftover raw-mode input no longer leaks into the terminal
+- Multiline skill metadata parses correctly, and enabled Codex plugin skills are discovered consistently
 
 ### Bug Fixes & Stability
 - 255+ bug fixes: message sending reliability, session lifecycle, Markdown rendering, navigation, voice, DooTask, sharing
@@ -254,6 +256,9 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - iOS 26 fixes: scroll-edge fade suppression, full-screen translucent chat overlay with keyboard, prompt modal presentation
 - iPad / Mac windowed-mode polish: sidebar header reserves space for window controls, fixed session header resize, top-tab insets, list divider rendering, and windowed keyboard overlap
 - Web: bottom tab bundling fix, session header navigation fix, path autocomplete focus handling
+- Refreshed Happy Next logos, favicons, splash screens, notification assets, and mobile/desktop icons
+- Adaptive system-theme updates now apply reliably across app and desktop authentication windows
+- iOS scanner camera-permission flow is clearer, with the unused motion permission removed
 - Dark mode fixes throughout the app
 - i18n improvements (Chinese Simplified/Traditional, CJK input handling)
 - Markdown rendering: tables, inline code, nested fences, clickable file paths

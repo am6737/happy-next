@@ -1,8 +1,8 @@
 # Changelog
 
-## Version 20 - 2026-07-24
+## Version 20 - 2026-07-26
 
-Happy Next is now ready for direct desktop distribution on macOS and Windows, with native window behavior, tray residency, notifications, signed automatic updates, diagnostics, desktop shortcuts, and platform-optimized icons.
+Happy Next is now ready for direct desktop distribution on macOS and Windows, while adding collapsible session folders, refreshed branding, and further polish across desktop windows, HTML previews, notifications, adaptive themes, message duplication, iOS permissions, and the CLI.
 
 - Desktop apps: native-feeling desktop clients for macOS 12+ Universal, Windows x64, and Windows ARM64, distributed directly through GitHub Releases
 - Window experience: authentication-aware window sizing, native state restoration, frameless macOS title bar integration, reliable dragging, multi-monitor bounds protection, and theme-correct startup
@@ -11,7 +11,13 @@ Happy Next is now ready for direct desktop distribution on macOS and Windows, wi
 - Automatic updates: signed update packages download quietly in the background and expose an in-app Update button when ready; installation and restart remain user initiated
 - Reliability: desktop diagnostics, rotating native logs, upload failure recovery, persistent composer content, and significantly lower idle CPU usage
 - Security and permissions: restricted Tauri capabilities, hardened navigation and CSP boundaries, system-browser external links, and explicit microphone and camera support
-- Visual polish: platform-specific macOS and Windows icons, including the macOS 26 layered icon format and compatibility icons for older macOS versions
+- Visual polish: refreshed logos, favicons, splash screens, notification assets, and platform-specific macOS and Windows icons, including the macOS 26 layered icon format and compatibility icons for older macOS versions
+- Session organization: sessions can be grouped into collapsible project folders, with folder state retained locally
+- Desktop polish: added a native startup logo and improved empty-state branding, title-bar interactions, fullscreen behavior, and native context menus
+- HTML previews: preview windows open more reliably with isolated, theme-correct child-window behavior
+- Notifications and themes: notification previews use clean plain text, while adaptive system-theme changes apply reliably across app and desktop authentication windows
+- Messages and iOS: duplicate/fork actions resolve the intended user-message target more reliably; scanner camera permissions are clearer and an unused motion permission is removed
+- CLI: Happy CLI updated to v0.6.5 with multiline skill-metadata parsing, enabled plugin-skill discovery, and more reliable message-target resolution
 
 ## Version 19 - 2026-07-22
 
