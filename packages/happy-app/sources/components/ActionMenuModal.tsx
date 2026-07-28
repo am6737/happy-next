@@ -5,7 +5,7 @@
  * Similar to iOS ActionSheet behavior.
  */
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useContext, useEffect, useRef, useState } from 'react';
 import {
     View,
     Modal,
@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
 import { ActionMenu, ActionMenuItem } from './ActionMenu';
+import { ActionMenuOverlayContext } from './ActionMenuOverlayProvider';
 
 // On web, stop events from propagating to expo-router's modal overlay
 const stopPropagation = (e: { stopPropagation: () => void }) => e.stopPropagation();
@@ -51,7 +52,50 @@ const styles = StyleSheet.create({
     },
 });
 
-export function ActionMenuModal({ visible, items, onClose, deferItemPress, title }: ActionMenuModalProps) {
+function IOSActionMenuOverlay({ visible, items, onClose, deferItemPress, title }: ActionMenuModalProps) {
+    const overlay = useContext(ActionMenuOverlayContext);
+    const id = useRef(`action-menu-${Math.random().toString(36).slice(2)}`).current;
+    const propsRef = useRef({ items, onClose, deferItemPress, title });
+    const pendingActionRef = useRef<(() => void) | null>(null);
+    propsRef.current = { items, onClose, deferItemPress, title };
+
+    useEffect(() => {
+        if (!overlay) return;
+
+        if (!visible) {
+            overlay.dismiss(id);
+            return;
+        }
+
+        const current = propsRef.current;
+        const overlayItems = current.deferItemPress
+            ? current.items.map((item) => ({
+                ...item,
+                onPress: () => {
+                    pendingActionRef.current = item.onPress;
+                },
+            }))
+            : current.items;
+
+        overlay.present({
+            id,
+            items: overlayItems,
+            title: current.title,
+            onClose: () => propsRef.current.onClose(),
+            onDismissed: () => {
+                const pendingAction = pendingActionRef.current;
+                pendingActionRef.current = null;
+                pendingAction?.();
+            },
+        });
+    }, [id, overlay, visible]);
+
+    useEffect(() => () => overlay?.dismiss(id), [id, overlay]);
+
+    return null;
+}
+
+function NativeActionMenuModal({ visible, items, onClose, deferItemPress, title }: ActionMenuModalProps) {
     // Track actual modal visibility (delayed hide for animation)
     const [modalVisible, setModalVisible] = useState(false);
     const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -163,4 +207,12 @@ export function ActionMenuModal({ visible, items, onClose, deferItemPress, title
             </View>
         </Modal>
     );
+}
+
+export function ActionMenuModal(props: ActionMenuModalProps) {
+    if (Platform.OS === 'ios') {
+        return <IOSActionMenuOverlay {...props} />;
+    }
+
+    return <NativeActionMenuModal {...props} />;
 }

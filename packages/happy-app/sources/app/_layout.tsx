@@ -41,6 +41,7 @@ import { DesktopBridge } from '@/desktop/DesktopBridge';
 import { DesktopWindowFrame } from '@/desktop/DesktopWindowFrame';
 import { DesktopAuthWindowSync } from '@/desktop/DesktopAuthWindowSync';
 import { ThemePreferenceSync } from '@/components/ThemePreferenceSync';
+import { ActionMenuOverlayProvider } from '@/components/ActionMenuOverlayProvider';
 
 let currentAppState: string = AppState.currentState;
 let currentSessionId: string | null = null;
@@ -337,9 +338,11 @@ export default function RootLayout() {
                                         <CommandPaletteProvider>
                                             <RealtimeProvider>
                                                 <DesktopWindowFrame>
-                                                    <HorizontalSafeAreaWrapper>
-                                                        <SidebarNavigator />
-                                                    </HorizontalSafeAreaWrapper>
+                                                    <ActionMenuOverlayProvider>
+                                                        <HorizontalSafeAreaWrapper>
+                                                            <SidebarNavigator />
+                                                        </HorizontalSafeAreaWrapper>
+                                                    </ActionMenuOverlayProvider>
                                                 </DesktopWindowFrame>
                                             </RealtimeProvider>
                                         </CommandPaletteProvider>
