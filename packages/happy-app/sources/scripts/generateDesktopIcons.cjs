@@ -15,11 +15,13 @@ const macosAdaptiveIconAssetsDirectory = path.join(macosAdaptiveIconDirectory, '
 const BACKGROUND = '#18171c';
 const MASTER_SIZE = 1024;
 const FULL_MARK_BOUNDS = { left: 376, top: 353, width: 272, height: 319 };
-const DESKTOP_MARK_SCALE = 1.1;
-const MACOS_ADAPTIVE_GLYPH_HEIGHT = 625;
-const MACOS_LARGE_MARK_RATIO = 0.52;
+const MACOS_ADAPTIVE_GLYPH_HEIGHT = 594;
+const MACOS_LARGE_MARK_RATIO = 0.494;
 const MACOS_SMALL_MARK_RATIO = 0.64;
 const MACOS_64_MARK_RATIO = MACOS_SMALL_MARK_RATIO * 0.95;
+const WINDOWS_TINY_MARK_RATIO = 0.66;
+const WINDOWS_MEDIUM_MARK_RATIO = 0.54;
+const WINDOWS_LARGE_MARK_RATIO = 0.494;
 
 function roundedRectSvg(size, inset, radius) {
     const dimension = size - inset * 2;
@@ -117,12 +119,16 @@ async function renderMacIcon(logicalSize, scale, fullMark, largeMaster) {
     }, fullMark);
 }
 
-async function renderWindowsIcon(size, fullMark, markScale = 1) {
+async function renderWindowsIcon(size, fullMark) {
     return renderIcon({
         size,
         plateRatio: size <= 32 ? 1 : size <= 64 ? 0.96 : 0.94,
         radiusRatio: Math.max(1.5 / size, 2 / 48),
-        markRatio: (size <= 32 ? 0.6 : size <= 48 ? 0.56 : 0.52) * markScale,
+        markRatio: size < 32
+            ? WINDOWS_TINY_MARK_RATIO
+            : size <= 48
+                ? WINDOWS_MEDIUM_MARK_RATIO
+                : WINDOWS_LARGE_MARK_RATIO,
         simplified: size <= 48,
     }, fullMark);
 }
@@ -252,7 +258,7 @@ async function generateWindowsIcons(fullMark) {
     const icoSizes = [16, 24, 32, 48, 64, 128, 256];
     const icoImages = [];
     for (const size of icoSizes) {
-        icoImages.push({ size, data: await renderWindowsIcon(size, fullMark, DESKTOP_MARK_SCALE) });
+        icoImages.push({ size, data: await renderWindowsIcon(size, fullMark) });
     }
     await fs.promises.writeFile(path.join(iconsDirectory, 'icon.ico'), createIco(icoImages));
 
@@ -262,7 +268,7 @@ async function generateWindowsIcons(fullMark) {
         ['128x128@2x.png', 256],
     ]);
     for (const [filename, size] of pngOutputs) {
-        await writePng(path.join(iconsDirectory, filename), await renderWindowsIcon(size, fullMark, DESKTOP_MARK_SCALE));
+        await writePng(path.join(iconsDirectory, filename), await renderWindowsIcon(size, fullMark));
     }
 }
 

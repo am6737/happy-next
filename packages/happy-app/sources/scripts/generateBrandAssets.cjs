@@ -52,6 +52,7 @@ function coreIconSvg(kind) {
         small: 'matrix(1.6923 0 0 1.7667 241.23 229.33)',
         notification: 'matrix(2.1074 0 0 2.2 -81.18 -98)',
         large: 'matrix(3.3261 0 0 3.4722 -20.18 -43.55)',
+        appleAppIcon: 'matrix(3.1612 0 0 3.3 6.21 -16)',
     };
     if (kind === 'adaptive' || kind === 'monochrome') {
         return Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024"><g transform="${transforms.small}">${markPaths(colors.white)}</g></svg>`);
@@ -62,7 +63,7 @@ function coreIconSvg(kind) {
     if (kind === 'tauri') {
         return Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024"><circle cx="512" cy="516" r="466" fill="#000000" opacity=".14"/><circle cx="512" cy="504" r="466" fill="#FCF8EE" stroke="#E7E2D7" stroke-width="3"/><g transform="${transforms.large}">${markPaths(colors.ink)}</g></svg>`);
     }
-    return Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024"><rect width="1024" height="1024" fill="${colors.background}"/><g transform="${transforms.large}">${markPaths(colors.white)}</g></svg>`);
+    return Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024"><rect width="1024" height="1024" fill="${colors.background}"/><g transform="${transforms.appleAppIcon}">${markPaths(colors.white)}</g></svg>`);
 }
 function createIco(images) {
     const header = Buffer.alloc(6); header.writeUInt16LE(0,0); header.writeUInt16LE(1,2); header.writeUInt16LE(images.length,4);
