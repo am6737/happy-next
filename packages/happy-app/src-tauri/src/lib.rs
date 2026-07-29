@@ -324,6 +324,36 @@ fn set_desktop_unread_count(app: AppHandle, state: State<'_, DesktopState>, coun
     apply_desktop_unread_count(&app, &state, count);
 }
 
+#[cfg(target_os = "windows")]
+fn windows_unread_overlay_icon() -> tauri::image::Image<'static> {
+    const SIZE: u32 = 32;
+    const CENTER: f32 = (SIZE as f32 - 1.0) / 2.0;
+    const OUTER_RADIUS: f32 = 13.5;
+    const INNER_RADIUS: f32 = 9.5;
+    const UNREAD_BLUE: [u8; 3] = [0, 122, 255];
+
+    let mut rgba = Vec::with_capacity((SIZE * SIZE * 4) as usize);
+    for y in 0..SIZE {
+        for x in 0..SIZE {
+            let dx = x as f32 - CENTER;
+            let dy = y as f32 - CENTER;
+            let distance = (dx * dx + dy * dy).sqrt();
+            let outer_coverage = (OUTER_RADIUS + 0.5 - distance).clamp(0.0, 1.0);
+            let inner_coverage = (INNER_RADIUS + 0.5 - distance).clamp(0.0, 1.0);
+            let blend = inner_coverage;
+
+            rgba.extend_from_slice(&[
+                ((255.0 * (1.0 - blend)) + (UNREAD_BLUE[0] as f32 * blend)).round() as u8,
+                ((255.0 * (1.0 - blend)) + (UNREAD_BLUE[1] as f32 * blend)).round() as u8,
+                ((255.0 * (1.0 - blend)) + (UNREAD_BLUE[2] as f32 * blend)).round() as u8,
+                (255.0 * outer_coverage).round() as u8,
+            ]);
+        }
+    }
+
+    tauri::image::Image::new_owned(rgba, SIZE, SIZE)
+}
+
 fn apply_desktop_unread_count<R: Runtime>(app: &AppHandle<R>, state: &DesktopState, count: u32) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.set_badge_count((count > 0).then_some(count as i64));
@@ -331,7 +361,7 @@ fn apply_desktop_unread_count<R: Runtime>(app: &AppHandle<R>, state: &DesktopSta
         #[cfg(target_os = "windows")]
         {
             let overlay = if count > 0 {
-                app.default_window_icon().cloned()
+                Some(windows_unread_overlay_icon())
             } else {
                 None
             };
