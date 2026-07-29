@@ -23,6 +23,8 @@ use tauri_plugin_opener::OpenerExt;
 use uuid::Uuid;
 
 mod native_startup_logo;
+#[cfg(target_os = "macos")]
+mod webkit_storage_maintenance;
 
 const TRAY_ID: &str = "main-tray";
 const TRAY_SHOW_ID: &str = "tray-show";
@@ -1596,6 +1598,10 @@ async fn open_desktop_html_preview(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let context = tauri::generate_context!();
+    #[cfg(target_os = "macos")]
+    webkit_storage_maintenance::run(&context.config().identifier);
+
     let log_level = if cfg!(debug_assertions) {
         log::LevelFilter::Debug
     } else {
@@ -1728,7 +1734,7 @@ pub fn run() {
                 }
             }
         })
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("error while building tauri application")
         .run(|app, event| match event {
             tauri::RunEvent::Ready => {

@@ -140,6 +140,8 @@ type SessionMessagesResponse = {
  * blue dot shows only when taskCompleted > lastViewedAt.
  */
 export const sessionLastViewedAt = loadSessionLastViewedAt();
+const SESSIONS_CACHE_SAVE_DEBOUNCE_MS = 1_000;
+const SESSIONS_CACHE_SAVE_MIN_INTERVAL_MS = 30_000;
 
 function markSessionViewed(sessionId: string) {
     const session = storage.getState().sessions[sessionId];
@@ -279,6 +281,7 @@ class Sync {
     private lastSessionsCursorMs = 0;
     private sessionsBootstrapMachine = new SessionsBootstrapMachine();
     private sessionsCacheSaveTimer: ReturnType<typeof setTimeout> | null = null;
+    private lastSessionsCacheSaveAt = 0;
 
     constructor() {
         this.sessionsSync = new InvalidateSync(this.runSessionsSync);
@@ -5279,8 +5282,15 @@ class Sync {
     private scheduleSessionsCacheSave = () => {
         if (!this.serverID) return;
         if (this.sessionsCacheSaveTimer) {
-            clearTimeout(this.sessionsCacheSaveTimer);
+            return;
         }
+        const now = Date.now();
+        const delay = this.lastSessionsCacheSaveAt === 0
+            ? SESSIONS_CACHE_SAVE_DEBOUNCE_MS
+            : Math.max(
+                SESSIONS_CACHE_SAVE_DEBOUNCE_MS,
+                SESSIONS_CACHE_SAVE_MIN_INTERVAL_MS - (now - this.lastSessionsCacheSaveAt),
+            );
         this.sessionsCacheSaveTimer = setTimeout(() => {
             this.sessionsCacheSaveTimer = null;
             const state = storage.getState();
@@ -5290,7 +5300,8 @@ class Sync {
                 sharedSessions: state.sharedSessions,
                 sessionDataKeys: Object.fromEntries(this.encryptedSessionDataKeys),
             });
-        }, 500);
+            this.lastSessionsCacheSaveAt = Date.now();
+        }, delay);
     }
 
     private applySessionDiff = (active: Session[], newActive: Session[]) => {

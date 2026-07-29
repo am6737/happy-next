@@ -153,6 +153,12 @@ The desktop WebView currently follows the Web storage model:
 - encrypted message cache rows and coverage state use IndexedDB (`happy-message-cache-v1`);
 - native bootstrap state is stored separately in `desktop-bootstrap.json` so the shell can restore the window before WebView startup.
 
+The session-list cache coalesces updates and avoids rewriting identical content because WebKit stores each
+`localStorage` write in a SQLite WAL. On macOS, a one-time pre-WebView migration removes legacy LocalStorage
+databases that may contain oversized WAL files. Existing desktop users must sign in again and may lose local-only
+settings and drafts. IndexedDB message caches are not removed. A marker in the app-support directory prevents the
+reset from running again; failed resets remain unmarked and retry on the next launch.
+
 The desktop client does **not** currently use macOS Keychain or Windows Credential Manager. Moving credentials to native secure storage would change the authentication/storage model and requires a separate product and migration decision. Never log credential values or include them in diagnostic output.
 
 ## Verification commands
