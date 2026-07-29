@@ -31,6 +31,7 @@ import { HappyError } from '@/utils/errors';
 import { Modal } from '@/modal';
 import { sync } from '@/sync/sync';
 import { SessionContextMenu } from './SessionContextMenu';
+import { getDesktopPlatform } from '@/desktop/desktopWindowUtils';
 
 const stylesheet = StyleSheet.create((theme) => ({
     container: {
@@ -378,11 +379,13 @@ export function SessionsList() {
     const sharedData = useSharedSessionListViewData();
     const sharedByMeData = useSharedByMeSessionListViewData();
     const machineNames = useMachineNameMap();
+    const hideSessionTabs = getDesktopPlatform() === 'windows';
     // Selected tab is persisted to disk so it survives app restarts.
     const [persistedTab, setPersistedTab] = useLocalSettingMutable('sessionListSelectedTab');
     // machineId -> name cache, so machine tabs keep their labels before machines sync.
     const [machineNameCache, setMachineNameCache] = useLocalSettingMutable('machineNameCache');
-    const [activeTab, _setActiveTab] = React.useState<SessionTab>(persistedTab ?? 'all');
+    const [activeTab, _setActiveTab] = React.useState<SessionTab>(hideSessionTabs ? 'all' : (persistedTab ?? 'all'));
+    const effectiveActiveTab: SessionTab = hideSessionTabs ? 'all' : activeTab;
     const [pendingSessionNavigationId, setPendingSessionNavigationId] = React.useState<string | null>(null);
     const setActiveTab = React.useCallback((tab: SessionTab) => {
         setPersistedTab(tab);
@@ -420,7 +423,7 @@ export function SessionsList() {
         return Array.from(groups.values()).sort((a, b) => a.name.localeCompare(b.name));
     }, [allActiveSessions, machineNames, machineNameCache]);
     const hasSharedSessions = (sharedData?.length ?? 0) > 0;
-    const showMachineTabs = machineGroups.length >= 2 || hasSharedSessions;
+    const showMachineTabs = !hideSessionTabs && (machineGroups.length >= 2 || hasSharedSessions);
 
     // Persist live machine names so they survive app restarts (machines sync lazily).
     React.useEffect(() => {
@@ -459,6 +462,10 @@ export function SessionsList() {
     // Fall back to 'all' if the current tab is no longer available (e.g. a machine
     // went away, or a sharing tab became empty).
     React.useEffect(() => {
+        if (hideSessionTabs && activeTab !== 'all') {
+            setActiveTab('all');
+            return;
+        }
         if (activeTab === 'shared' && sharedData && sharedData.length === 0) {
             setActiveTab('all');
         }
@@ -473,15 +480,15 @@ export function SessionsList() {
         if (data !== null && isMachineTab && (!showMachineTabs || !machineGroups.some(g => g.id === activeTab))) {
             setActiveTab('all');
         }
-    }, [activeTab, data, sharedData, sharedByMeData, machineGroups, showMachineTabs, setActiveTab]);
+    }, [activeTab, data, sharedData, sharedByMeData, machineGroups, showMachineTabs, hideSessionTabs, setActiveTab]);
 
     const tabData = React.useMemo(() => {
-        if (activeTab === 'shared') return sharedData;
-        if (activeTab === 'sharedByMe') return sharedByMeData;
-        if (activeTab === 'all') return data;
-        const group = machineGroups.find(g => g.id === activeTab);
+        if (effectiveActiveTab === 'shared') return sharedData;
+        if (effectiveActiveTab === 'sharedByMe') return sharedByMeData;
+        if (effectiveActiveTab === 'all') return data;
+        const group = machineGroups.find(g => g.id === effectiveActiveTab);
         return group ? [{ type: 'active-sessions' as const, sessions: group.sessions }] : data;
-    }, [activeTab, sharedData, sharedByMeData, data, machineGroups]);
+    }, [effectiveActiveTab, sharedData, sharedByMeData, data, machineGroups]);
 
     const sharedSessions = React.useMemo(() => collectSessions(sharedData), [sharedData]);
     const sharedByMeSessions = React.useMemo(() => collectSessions(sharedByMeData), [sharedByMeData]);
@@ -505,11 +512,11 @@ export function SessionsList() {
     }, [pendingSessionNavigationId, pendingActiveSession, showMachineTabs, machineGroups, sharedSessions, sharedByMeSessions, data]);
     const activeTabContainsPendingSession = React.useMemo(() => {
         if (!pendingSessionNavigationId) return false;
-        if (activeTab === 'all') return collectSessions(data).some(session => session.id === pendingSessionNavigationId);
-        if (activeTab === 'shared') return sharedSessions.some(session => session.id === pendingSessionNavigationId);
-        if (activeTab === 'sharedByMe') return sharedByMeSessions.some(session => session.id === pendingSessionNavigationId);
-        return machineGroups.find(group => group.id === activeTab)?.sessions.some(session => session.id === pendingSessionNavigationId) ?? false;
-    }, [pendingSessionNavigationId, activeTab, data, sharedSessions, sharedByMeSessions, machineGroups]);
+        if (effectiveActiveTab === 'all') return collectSessions(data).some(session => session.id === pendingSessionNavigationId);
+        if (effectiveActiveTab === 'shared') return sharedSessions.some(session => session.id === pendingSessionNavigationId);
+        if (effectiveActiveTab === 'sharedByMe') return sharedByMeSessions.some(session => session.id === pendingSessionNavigationId);
+        return machineGroups.find(group => group.id === effectiveActiveTab)?.sessions.some(session => session.id === pendingSessionNavigationId) ?? false;
+    }, [pendingSessionNavigationId, effectiveActiveTab, data, sharedSessions, sharedByMeSessions, machineGroups]);
 
     // Per-tab dot indicator, mirroring useSessionStatus precedence:
     // 'attention' (needs permission, orange pulse) > 'thinking' (blue pulse) >
@@ -609,12 +616,12 @@ export function SessionsList() {
     React.useEffect(() => {
         if (!pendingSessionNavigationId || !pendingSessionTargetTab) return;
         if (!activeTabContainsPendingSession) {
-            if (activeTab !== pendingSessionTargetTab) setActiveTab(pendingSessionTargetTab);
+            if (effectiveActiveTab !== pendingSessionTargetTab) setActiveTab(pendingSessionTargetTab);
             return;
         }
         scheduleRevealSelectedSession(pendingSessionNavigationId);
         setPendingSessionNavigationId(null);
-    }, [pendingSessionNavigationId, pendingSessionTargetTab, activeTabContainsPendingSession, activeTab, setActiveTab, scheduleRevealSelectedSession]);
+    }, [pendingSessionNavigationId, pendingSessionTargetTab, activeTabContainsPendingSession, effectiveActiveTab, setActiveTab, scheduleRevealSelectedSession]);
 
     React.useEffect(() => () => {
         if (revealFrameRef.current !== null) cancelAnimationFrame(revealFrameRef.current);
@@ -714,6 +721,7 @@ export function SessionsList() {
     // "All" tab, then the sharing tabs. The "All" tab is also added when only sharing
     // tabs exist, so the user can always get back to the main active list.
     const visibleTabs = React.useMemo(() => {
+        if (hideSessionTabs) return [];
         const result: { key: SessionTab; label: string }[] = [];
         if (showMachineTabs) {
             result.push({ key: 'all', label: t('session.tabs.all') });
@@ -727,18 +735,18 @@ export function SessionsList() {
             result.unshift({ key: 'all', label: t('session.tabs.all') });
         }
         return result;
-    }, [showMachineTabs, machineGroups, hasSharedSessions, hasSharedByMeSessions]);
+    }, [hideSessionTabs, showMachineTabs, machineGroups, hasSharedSessions, hasSharedByMeSessions]);
 
     // Flattened, primitive-only tab descriptors. The upstream list churns its identity on
     // every session realtime update, so we key the memo off a content signature: tabItems
     // keeps a stable reference until the actual tab content changes. That in turn keeps
     // HeaderComponent stable, so FlatList doesn't remount (and thus re-render) the tab bar.
-    const tabsSignature = visibleTabs.map((tab) => `${tab.key}|${tab.label}|${tabDot[tab.key] ?? 'none'}|${activeTab === tab.key ? 1 : 0}`).join(',');
+    const tabsSignature = visibleTabs.map((tab) => `${tab.key}|${tab.label}|${tabDot[tab.key] ?? 'none'}|${effectiveActiveTab === tab.key ? 1 : 0}`).join(',');
     const tabItems = React.useMemo<TabItem[]>(() => visibleTabs.map((tab) => ({
         key: tab.key,
         label: tab.label,
         dot: tabDot[tab.key] ?? 'none',
-        active: activeTab === tab.key,
+        active: effectiveActiveTab === tab.key,
     // eslint-disable-next-line react-hooks/exhaustive-deps
     })), [tabsSignature]);
 

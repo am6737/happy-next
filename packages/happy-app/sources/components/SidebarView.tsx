@@ -86,6 +86,18 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
         whiteSpace: Platform.select({ web: 'nowrap', default: undefined }),
         ...Typography.default('semiBold'),
     },
+    windowsSidebarTitle: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: theme.colors.header.tint,
+        ...Typography.default('semiBold'),
+    },
+    windowsSidebarTitleContainer: {
+        height: 44,
+        justifyContent: 'flex-end',
+        paddingBottom: 7,
+        paddingHorizontal: 16,
+    },
     statusContainer: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -172,7 +184,9 @@ export const SidebarView = React.memo((props: SidebarViewProps) => {
     const inboxHasContent = useInboxHasContent();
     const dootaskProfile = useDootaskProfile();
     const [isSearchHovered, setIsSearchHovered] = React.useState(false);
-    const isDesktopMacOS = getDesktopPlatform() === 'macos';
+    const desktopPlatform = getDesktopPlatform();
+    const isDesktopMacOS = desktopPlatform === 'macos';
+    const isDesktopWindows = desktopPlatform === 'windows';
     const isDesktopFullscreen = useDesktopWindowFullscreen(isDesktopMacOS);
     const desktopDragProps = isDesktopMacOS ? {
         'data-tauri-drag-region': true,
@@ -356,53 +370,56 @@ export const SidebarView = React.memo((props: SidebarViewProps) => {
                         />
                     </View>
                 )}
-                <View
-                    {...desktopDragProps}
-                    style={[
-                        styles.header,
-                        {
-                            height: headerHeight,
-                            paddingLeft: isDesktopMacOS
-                                ? Math.max(safeArea.left, 0) + 16
-                                : Math.max(safeArea.left, windowControlsInset) + 16,
-                        },
-                    ]}
-                >
-                    {/* Logo - always first */}
-                    <Pressable style={styles.logoContainer} onPress={handleGoHome}>
-                        <Image
-                            source={theme.dark ? require('@/assets/images/logo-white.png') : require('@/assets/images/logo-black.png')}
-                            contentFit="contain"
-                            style={[styles.logo, { height: 24, width: 24 }]}
-                        />
-                    </Pressable>
-
-                    {/* Left-justified title - in document flow, prevents overlap */}
-                    <View style={styles.titleContainerLeft}>
-                        {titleContent}
+                {isDesktopWindows ? (
+                    <View style={styles.windowsSidebarTitleContainer}>
+                        <Text style={styles.windowsSidebarTitle}>{t('sidebar.sessionsTitle')}</Text>
                     </View>
+                ) : (
+                    <View
+                        {...desktopDragProps}
+                        style={[
+                            styles.header,
+                            {
+                                height: headerHeight,
+                                paddingLeft: isDesktopMacOS
+                                    ? Math.max(safeArea.left, 0) + 16
+                                    : Math.max(safeArea.left, windowControlsInset) + 16,
+                            },
+                        ]}
+                    >
+                        <Pressable style={styles.logoContainer} onPress={handleGoHome}>
+                            <Image
+                                source={theme.dark ? require('@/assets/images/logo-white.png') : require('@/assets/images/logo-black.png')}
+                                contentFit="contain"
+                                style={[styles.logo, { height: 24, width: 24 }]}
+                            />
+                        </Pressable>
 
-                    {/* Navigation icons */}
-                    <View style={styles.rightContainer}>
-                        {isDesktopMacOS ? (
-                            <Pressable
-                                accessibilityLabel={t('commandPalette.placeholder')}
-                                onPress={requestCommandPalette}
-                                onHoverIn={() => setIsSearchHovered(true)}
-                                onHoverOut={() => setIsSearchHovered(false)}
-                                hitSlop={10}
-                                style={styles.desktopNavigationButton}
-                            >
-                                <Ionicons
-                                    name="search-outline"
-                                    size={20}
-                                    color={theme.colors.header.tint}
-                                    style={{ opacity: isSearchHovered ? 1 : 0.6 }}
-                                />
-                            </Pressable>
-                        ) : navigationButtons}
+                        <View style={styles.titleContainerLeft}>
+                            {titleContent}
+                        </View>
+
+                        <View style={styles.rightContainer}>
+                            {isDesktopMacOS ? (
+                                <Pressable
+                                    accessibilityLabel={t('commandPalette.placeholder')}
+                                    onPress={requestCommandPalette}
+                                    onHoverIn={() => setIsSearchHovered(true)}
+                                    onHoverOut={() => setIsSearchHovered(false)}
+                                    hitSlop={10}
+                                    style={styles.desktopNavigationButton}
+                                >
+                                    <Ionicons
+                                        name="search-outline"
+                                        size={20}
+                                        color={theme.colors.header.tint}
+                                        style={{ opacity: isSearchHovered ? 1 : 0.6 }}
+                                    />
+                                </Pressable>
+                            ) : navigationButtons}
+                        </View>
                     </View>
-                </View>
+                )}
                 {realtimeStatus !== 'disconnected' && (
                     <VoiceAssistantStatusBar variant="sidebar" />
                 )}
