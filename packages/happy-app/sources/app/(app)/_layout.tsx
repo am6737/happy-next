@@ -9,6 +9,8 @@ import { useUnistyles } from 'react-native-unistyles';
 import { t } from '@/text';
 import { Ionicons } from '@expo/vector-icons';
 import { isUsingCustomServer } from '@/sync/serverConfig';
+import { useAuth } from '@/auth/AuthContext';
+import { getDesktopPlatform } from '@/desktop/desktopWindowUtils';
 
 export const unstable_settings = {
     initialRouteName: 'index',
@@ -20,6 +22,8 @@ export default function RootLayout() {
     const { theme } = useUnistyles();
     const router = useRouter();
     const isCustomServer = isUsingCustomServer();
+    const { isAuthenticated } = useAuth();
+    const hideUnauthenticatedWindowsHeader = getDesktopPlatform() === 'windows' && !isAuthenticated;
 
     return (
         <Stack
@@ -246,14 +250,14 @@ export default function RootLayout() {
             <Stack.Screen
                 name="restore/index"
                 options={{
-                    headerShown: true,
+                    headerShown: !hideUnauthenticatedWindowsHeader,
                     headerTitle: t('navigation.linkNewDevice'),
                 }}
             />
             <Stack.Screen
                 name="restore/manual"
                 options={{
-                    headerShown: true,
+                    headerShown: !hideUnauthenticatedWindowsHeader,
                     headerTitle: t('navigation.restoreWithSecretKey'),
                 }}
             />

@@ -1,7 +1,7 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
+import { usePathname, useRouter } from 'expo-router';
 import * as React from 'react';
 import { Pressable, Text, useWindowDimensions, View } from 'react-native';
 import { useUnistyles } from 'react-native-unistyles';
@@ -9,6 +9,7 @@ import { useUnistyles } from 'react-native-unistyles';
 import { useAuth } from '@/auth/AuthContext';
 import { useInboxHasContent } from '@/hooks/useInboxHasContent';
 import { useDootaskProfile, useFriendRequests, useSocketStatus } from '@/sync/storage';
+import { getServerInfo } from '@/sync/serverConfig';
 import { t } from '@/text';
 import { StatusDot } from '@/components/StatusDot';
 import { requestCommandPalette } from '@/components/CommandPalette/events';
@@ -20,6 +21,25 @@ const WINDOWS_TITLE_BAR_HEIGHT = 40;
 const WINDOWS_CONTROL_WIDTH = 46;
 const MACOS_RIGHT_DRAG_STRIP_LEFT = 360;
 const WINDOWS_NAVIGATION_BUTTON_SIZE = 30;
+
+type WindowsUnauthenticatedRoute = 'welcome' | 'restore' | 'restoreManual' | 'server';
+
+function getWindowsUnauthenticatedRoute(pathname: string): WindowsUnauthenticatedRoute | null {
+    const normalizedPathname = pathname.length > 1 ? pathname.replace(/\/$/, '') : pathname;
+
+    switch (normalizedPathname) {
+        case '/':
+            return 'welcome';
+        case '/restore':
+            return 'restore';
+        case '/restore/manual':
+            return 'restoreManual';
+        case '/server':
+            return 'server';
+        default:
+            return null;
+    }
+}
 
 type WindowControlProps = {
     accessibilityLabel: string;
@@ -226,10 +246,68 @@ function WindowsTitleBarNavigation() {
     );
 }
 
+function WindowsUnauthenticatedNavigation() {
+    const { theme } = useUnistyles();
+    const router = useRouter();
+    const socketStatus = useSocketStatus();
+    const serverInfo = getServerInfo();
+    const connectionStatus = (() => {
+        switch (socketStatus.status) {
+            case 'connected':
+                return { color: theme.colors.status.connected, text: t('status.connected') };
+            case 'connecting':
+                return { color: theme.colors.status.connecting, text: t('status.connecting') };
+            case 'disconnected':
+                return { color: theme.colors.status.disconnected, text: t('status.disconnected') };
+            case 'error':
+                return { color: theme.colors.status.error, text: t('status.error') };
+            default:
+                return { color: theme.colors.status.default, text: '' };
+        }
+    })();
+    const serverLabel = serverInfo.hostname + (serverInfo.port ? `:${serverInfo.port}` : '');
+
+    return (
+        <View
+            {...({ 'data-desktop-no-drag': true } as any)}
+            style={{ alignItems: 'center', flexDirection: 'row', gap: 6, height: WINDOWS_TITLE_BAR_HEIGHT, marginRight: 7 }}
+        >
+            {serverInfo.isCustom ? (
+                <Text
+                    numberOfLines={1}
+                    ref={(element: any) => {
+                        if (element && typeof element === 'object') {
+                            element.title = serverInfo.resolvedUrl;
+                        }
+                    }}
+                    style={{ color: theme.colors.textSecondary, fontSize: 11, fontWeight: '500', maxWidth: 180 }}
+                >
+                    {serverLabel}
+                </Text>
+            ) : !!connectionStatus.text ? (
+                <View style={{ alignItems: 'center', flexDirection: 'row', gap: 5, paddingHorizontal: 4 }}>
+                    <StatusDot color={connectionStatus.color} isPulsing={socketStatus.status === 'connecting'} size={6} />
+                    <Text style={{ color: connectionStatus.color, fontSize: 11, fontWeight: '500' }}>
+                        {connectionStatus.text}
+                    </Text>
+                </View>
+            ) : null}
+            <WindowsNavigationButton
+                accessibilityLabel={t('server.serverConfiguration')}
+                onPress={() => router.push('/server')}
+            >
+                <Ionicons name="server-outline" size={18} color={theme.colors.header.tint} />
+            </WindowsNavigationButton>
+        </View>
+    );
+}
+
 export function DesktopWindowFrame({ children }: { children: React.ReactNode }) {
     const { theme } = useUnistyles();
     const desktopPlatform = getDesktopPlatform();
     const { isAuthenticated } = useAuth();
+    const pathname = usePathname();
+    const router = useRouter();
     const [maximized, setMaximized] = React.useState(false);
     const isWindowsFullscreen = useDesktopWindowFullscreen(desktopPlatform === 'windows');
     const { width: windowWidth } = useWindowDimensions();
@@ -312,6 +390,21 @@ export function DesktopWindowFrame({ children }: { children: React.ReactNode }) 
     }
 
     const titleBarHeight = WINDOWS_TITLE_BAR_HEIGHT;
+    const unauthenticatedRoute = !isAuthenticated ? getWindowsUnauthenticatedRoute(pathname) : null;
+    const unauthenticatedTitle = unauthenticatedRoute === 'restore'
+        ? t('navigation.linkNewDevice')
+        : unauthenticatedRoute === 'restoreManual'
+            ? t('navigation.restoreWithSecretKey')
+            : unauthenticatedRoute === 'server'
+                ? t('server.serverConfiguration')
+                : null;
+    const handleUnauthenticatedBack = () => {
+        if (router.canGoBack()) {
+            router.back();
+        } else {
+            router.replace('/');
+        }
+    };
 
     return (
         <View style={{ flex: 1, backgroundColor: theme.colors.groupped.background }}>
@@ -335,20 +428,40 @@ export function DesktopWindowFrame({ children }: { children: React.ReactNode }) 
                     {...({ 'data-tauri-drag-region': true } as any)}
                     style={{ alignItems: 'center', flexDirection: 'row', gap: 8, paddingLeft: 12 }}
                 >
-                    <Image
-                        source={theme.dark
-                            ? require('@/assets/images/logo-white.png')
-                            : require('@/assets/images/logo-black.png')}
-                        contentFit="contain"
-                        style={{ height: 20, width: 20 }}
-                    />
-                    {windowWidth >= 600 && (
-                        <Text
-                            selectable={false}
-                            style={{ color: theme.colors.header.tint, fontSize: 13, fontWeight: '600' }}
-                        >
-                            Happy Next
-                        </Text>
+                    {!!unauthenticatedTitle ? (
+                        <>
+                            <WindowsNavigationButton
+                                accessibilityLabel={t('common.back')}
+                                onPress={handleUnauthenticatedBack}
+                            >
+                                <Ionicons name="chevron-back" size={20} color={theme.colors.header.tint} />
+                            </WindowsNavigationButton>
+                            <Text
+                                numberOfLines={1}
+                                selectable={false}
+                                style={{ color: theme.colors.header.tint, fontSize: 13, fontWeight: '600' }}
+                            >
+                                {unauthenticatedTitle}
+                            </Text>
+                        </>
+                    ) : (
+                        <>
+                            <Image
+                                source={theme.dark
+                                    ? require('@/assets/images/logo-white.png')
+                                    : require('@/assets/images/logo-black.png')}
+                                contentFit="contain"
+                                style={{ height: 20, width: 20 }}
+                            />
+                            {windowWidth >= 600 && (
+                                <Text
+                                    selectable={false}
+                                    style={{ color: theme.colors.header.tint, fontSize: 13, fontWeight: '600' }}
+                                >
+                                    Happy Next
+                                </Text>
+                            )}
+                        </>
                     )}
                 </View>
                 <View
@@ -356,7 +469,10 @@ export function DesktopWindowFrame({ children }: { children: React.ReactNode }) 
                     style={{ flex: 1, height: titleBarHeight }}
                 />
                 {isAuthenticated && <WindowsTitleBarNavigation />}
-                <View style={{ backgroundColor: theme.colors.divider, height: 20, marginHorizontal: 10, width: 1 }} />
+                {!isAuthenticated && unauthenticatedRoute === 'welcome' && <WindowsUnauthenticatedNavigation />}
+                {isAuthenticated && (
+                    <View style={{ backgroundColor: theme.colors.divider, height: 20, marginHorizontal: 10, width: 1 }} />
+                )}
                 <View style={{ flexDirection: 'row', height: titleBarHeight }}>
                     <WindowControl
                         accessibilityLabel="Minimize window"

@@ -14,6 +14,7 @@ import { trackAccountCreated, trackAccountRestored } from '@/track';
 import { HomeHeaderNotAuth } from "@/components/HomeHeader";
 import { MainView } from "@/components/MainView";
 import { t } from '@/text';
+import { getDesktopPlatform } from '@/desktop/desktopWindowUtils';
 
 export default function Home() {
     const auth = useAuth();
@@ -172,7 +173,7 @@ function NotAuthenticated() {
 
     return (
         <>
-            <HomeHeaderNotAuth />
+            {getDesktopPlatform() !== 'windows' && <HomeHeaderNotAuth />}
             {isLandscape ? landscapeLayout : portraitLayout}
         </>
     )

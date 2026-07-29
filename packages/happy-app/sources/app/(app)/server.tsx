@@ -13,6 +13,7 @@ import { t } from '@/text';
 import { getCustomServerUrl, resolveServerConfig, setServerUrl, validateServerUrl, getServerInfo } from '@/sync/serverConfig';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { useAuth } from '@/auth/AuthContext';
+import { getDesktopPlatform } from '@/desktop/desktopWindowUtils';
 
 const stylesheet = StyleSheet.create((theme) => ({
     keyboardAvoidingView: {
@@ -81,7 +82,8 @@ export default function ServerConfigScreen() {
     const { theme } = useUnistyles();
     const styles = stylesheet;
     const navigation = useNavigation();
-    const { logout } = useAuth();
+    const { isAuthenticated, logout } = useAuth();
+    const hideUnauthenticatedWindowsHeader = getDesktopPlatform() === 'windows' && !isAuthenticated;
     const serverInfo = getServerInfo();
     const [inputUrl, setInputUrl] = useState(getCustomServerUrl() ?? '');
     const [error, setError] = useState<string | null>(null);
@@ -181,7 +183,7 @@ export default function ServerConfigScreen() {
         <>
             <Stack.Screen
                 options={{
-                    headerShown: true,
+                    headerShown: !hideUnauthenticatedWindowsHeader,
                     headerTitle: t('server.serverConfiguration'),
                 }}
             />
