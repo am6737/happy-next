@@ -72,14 +72,6 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
         height: 24,
         width: 24,
     },
-    titleContainer: {
-        position: 'absolute',
-        left: 0,
-        right: 0,
-        flexDirection: 'column',
-        alignItems: 'center',
-        pointerEvents: 'none',
-    },
     titleContainerLeft: {
         flex: 1,
         flexDirection: 'column',
@@ -228,12 +220,7 @@ export const SidebarView = React.memo((props: SidebarViewProps) => {
         }
     })();
 
-    // Calculate sidebar width and determine title positioning
-    // Uses same formula as SidebarNavigator.tsx:18 for consistency
     const { width: windowWidth, height: windowHeight } = useWindowDimensions();
-    const sidebarWidth = props.sidebarWidth ?? Math.min(Math.max(Math.floor(windowWidth * 0.3), 250), 360);
-    // 3 icons (108px total), threshold 328px → left-justify below ~340px
-    const shouldLeftJustify = sidebarWidth < 340 || !!dootaskProfile;
 
     // iPad Stage Manager / Mac Catalyst draws window controls (traffic lights)
     // at the top-left, OUTSIDE of safeAreaInsets — system chrome that overlays
@@ -391,11 +378,9 @@ export const SidebarView = React.memo((props: SidebarViewProps) => {
                     </Pressable>
 
                     {/* Left-justified title - in document flow, prevents overlap */}
-                    {shouldLeftJustify && (
-                        <View style={styles.titleContainerLeft}>
-                            {titleContent}
-                        </View>
-                    )}
+                    <View style={styles.titleContainerLeft}>
+                        {titleContent}
+                    </View>
 
                     {/* Navigation icons */}
                     <View style={styles.rightContainer}>
@@ -417,13 +402,6 @@ export const SidebarView = React.memo((props: SidebarViewProps) => {
                             </Pressable>
                         ) : navigationButtons}
                     </View>
-
-                    {/* Centered title - absolute positioned over full header */}
-                    {!shouldLeftJustify && (
-                        <View style={styles.titleContainer}>
-                            {titleContent}
-                        </View>
-                    )}
                 </View>
                 {realtimeStatus !== 'disconnected' && (
                     <VoiceAssistantStatusBar variant="sidebar" />
