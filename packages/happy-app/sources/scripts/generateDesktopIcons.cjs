@@ -120,10 +120,11 @@ async function renderMacIcon(logicalSize, scale, fullMark, largeMaster) {
 }
 
 async function renderWindowsIcon(size, fullMark) {
-    return renderIcon({
-        size,
+    const renderScale = size === 16 ? 4 : 1;
+    const rendered = await renderIcon({
+        size: size * renderScale,
         plateRatio: size <= 32 ? 1 : size <= 64 ? 0.96 : 0.94,
-        radiusRatio: Math.max(1.5 / size, 2 / 48),
+        radiusRatio: size >= 32 ? 0.12 : 1.5 / size,
         markRatio: size < 32
             ? WINDOWS_TINY_MARK_RATIO
             : size <= 48
@@ -131,6 +132,10 @@ async function renderWindowsIcon(size, fullMark) {
                 : WINDOWS_LARGE_MARK_RATIO,
         simplified: size <= 48,
     }, fullMark);
+
+    return renderScale === 1
+        ? rendered
+        : sharp(rendered).resize(size, size).png().toBuffer();
 }
 
 function createIco(images) {
