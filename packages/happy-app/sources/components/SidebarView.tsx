@@ -86,18 +86,6 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
         whiteSpace: Platform.select({ web: 'nowrap', default: undefined }),
         ...Typography.default('semiBold'),
     },
-    windowsSidebarTitle: {
-        fontSize: 15,
-        fontWeight: '600',
-        color: theme.colors.header.tint,
-        ...Typography.default('semiBold'),
-    },
-    windowsSidebarTitleContainer: {
-        height: 44,
-        justifyContent: 'flex-end',
-        paddingBottom: 7,
-        paddingHorizontal: 16,
-    },
     statusContainer: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -370,11 +358,7 @@ export const SidebarView = React.memo((props: SidebarViewProps) => {
                         />
                     </View>
                 )}
-                {isDesktopWindows ? (
-                    <View style={styles.windowsSidebarTitleContainer}>
-                        <Text style={styles.windowsSidebarTitle}>{t('sidebar.sessionsTitle')}</Text>
-                    </View>
-                ) : (
+                {!isDesktopWindows && (
                     <View
                         {...desktopDragProps}
                         style={[

@@ -8,7 +8,7 @@ import { useInboxHasContent } from '@/hooks/useInboxHasContent';
 import { useIsTablet } from '@/utils/responsive';
 import { useRouter, Stack } from 'expo-router';
 import { EmptySessionsTablet } from './EmptySessionsTablet';
-import { SessionsList } from './SessionsList';
+import { SessionsList, SessionsSidebarTitle } from './SessionsList';
 import { FABWide } from './FABWide';
 import { TabBar, TabType } from './TabBar';
 import { InboxView } from './InboxView';
@@ -262,7 +262,9 @@ export const MainView = React.memo(({ variant }: MainViewProps) => {
     const inboxHasContent = useInboxHasContent();
     const showDootaskTab = !!dootaskProfile;
     const isCustomServer = isUsingCustomServer();
-    const isDesktopMacOS = getDesktopPlatform() === 'macos';
+    const desktopPlatform = getDesktopPlatform();
+    const isDesktopMacOS = desktopPlatform === 'macos';
+    const isDesktopWindows = desktopPlatform === 'windows';
 
     // Tab state management
     const [activeTab, setActiveTab] = React.useState<TabType>('sessions');
@@ -370,6 +372,7 @@ export const MainView = React.memo(({ variant }: MainViewProps) => {
         if (sessionListViewData === null) {
             return (
                 <View style={styles.sidebarContentContainer}>
+                    {isDesktopWindows && <SessionsSidebarTitle />}
                     <View style={styles.tabletLoadingContainer}>
                         <ActivityIndicator size="small" color={theme.colors.textSecondary} />
                     </View>
@@ -381,6 +384,7 @@ export const MainView = React.memo(({ variant }: MainViewProps) => {
         if (sessionListViewData.length === 0) {
             return (
                 <View style={styles.sidebarContentContainer}>
+                    {isDesktopWindows && <SessionsSidebarTitle />}
                     <View style={styles.emptyStateContainer}>
                         <EmptySessionsTablet />
                     </View>

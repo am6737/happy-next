@@ -136,7 +136,7 @@ function WindowsTitleBarNavigation() {
     return (
         <View
             {...({ 'data-desktop-no-drag': true } as any)}
-            style={{ alignItems: 'center', flexDirection: 'row', gap: 2, height: WINDOWS_TITLE_BAR_HEIGHT }}
+            style={{ alignItems: 'center', flexDirection: 'row', gap: 6, height: WINDOWS_TITLE_BAR_HEIGHT }}
         >
             {!!connectionStatus.text && (
                 <View style={{ alignItems: 'center', flexDirection: 'row', gap: 5, paddingHorizontal: 8 }}>
@@ -356,7 +356,7 @@ export function DesktopWindowFrame({ children }: { children: React.ReactNode }) 
                     style={{ flex: 1, height: titleBarHeight }}
                 />
                 {isAuthenticated && <WindowsTitleBarNavigation />}
-                <View style={{ backgroundColor: theme.colors.divider, height: 20, marginHorizontal: 7, width: 1 }} />
+                <View style={{ backgroundColor: theme.colors.divider, height: 20, marginHorizontal: 10, width: 1 }} />
                 <View style={{ flexDirection: 'row', height: titleBarHeight }}>
                     <WindowControl
                         accessibilityLabel="Minimize window"
