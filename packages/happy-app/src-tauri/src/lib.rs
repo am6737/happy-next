@@ -1464,6 +1464,16 @@ fn preview_shell_url_for_content(url: &tauri::Url) -> Option<tauri::Url> {
     Some(shell_url)
 }
 
+fn remove_windows_child_window_menu(window: &tauri::WebviewWindow<tauri::Wry>) {
+    #[cfg(target_os = "windows")]
+    if let Err(error) = window.remove_menu() {
+        log::warn!("Failed to remove child window menu: {error}");
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    let _ = window;
+}
+
 fn create_html_preview_child_window(
     app: &AppHandle,
     requested_url: tauri::Url,
@@ -1500,8 +1510,9 @@ fn create_html_preview_child_window(
             })
             .build();
 
-        if let Err(error) = result {
-            log::warn!("Failed to create isolated HTML frame window: {error}");
+        match result {
+            Ok(window) => remove_windows_child_window_menu(&window),
+            Err(error) => log::warn!("Failed to create isolated HTML frame window: {error}"),
         }
         return NewWindowResponse::Deny;
     }
@@ -1532,7 +1543,10 @@ fn create_html_preview_child_window(
         .build();
 
     match result {
-        Ok(window) => NewWindowResponse::Create { window },
+        Ok(window) => {
+            remove_windows_child_window_menu(&window);
+            NewWindowResponse::Create { window }
+        }
         Err(error) => {
             log::warn!("Failed to create HTML preview child window: {error}");
             NewWindowResponse::Deny
@@ -1588,7 +1602,10 @@ async fn open_desktop_html_preview(
         .build();
 
     match result {
-        Ok(_) => Ok(()),
+        Ok(window) => {
+            remove_windows_child_window_menu(&window);
+            Ok(())
+        }
         Err(window_error) => {
             remove_html_preview(&server, &token);
             Err(window_error.to_string())
