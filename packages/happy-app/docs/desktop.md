@@ -78,12 +78,14 @@ Generated `dist` and `src-tauri/target` contents must not be committed.
 - macOS uses the dedicated template asset `src-tauri/icons/tray-icon.png`; it adapts to light and dark menu bars.
 - Windows currently uses the application icon for its tray icon.
 - The tray icon itself does not display a numeric badge or title.
-- The tray tooltip and disabled menu status line may describe the unread count.
-- macOS unread count is shown on the Dock badge. Windows uses a taskbar overlay indicator.
-- Signing out clears the desktop unread count.
+- The tray tooltip and disabled menu status line may describe the attention count.
+- macOS shows the number of Sessions needing attention on the Dock badge. Windows shows a taskbar overlay whenever at least one Session needs attention.
+- A Session needs attention when it has an unread task completion or a pending permission request. Multiple events in one Session count once. Task completions dismissed on another client clear the desktop indicator after metadata sync.
+- Messages from another user still produce native notifications, but do not create a persistent Dock or taskbar indicator because shared-message read state is not synchronized yet.
+- Signing out clears the desktop attention count.
 - Agent text is retained as a completion preview but does not notify while the agent is still working. A native notification is generated when the turn becomes ready, using the Session name and the latest agent text, or a generic ready message when the turn has no text.
 - New permission requests and messages from another user notify immediately. Own messages, tool-only updates, duplicate messages, and the currently focused Session do not produce a native notification.
-- Notification clicks show and activate the app, clear that Session's desktop unread state, and navigate to the Session without stacking a duplicate route.
+- Notification clicks show and activate the app and navigate to the Session without stacking a duplicate route. Viewing the Session dismisses completion attention; permission attention remains until the request is handled.
 - Notification permission is requested only when desktop notifications are enabled.
 
 The notification click path has been exercised locally on macOS. Windows notification delivery, activation, and taskbar integration remain **未验证** until tested on real Windows x64 and ARM64 machines.

@@ -13,11 +13,13 @@ import { subscribeToDesktopMessages, subscribeToDesktopPermissionRequests } from
 import { subscribeToDesktopAuthentication } from './desktopAuthEvents';
 import {
     agentMessagePreview,
+    countDesktopAttentionSessions,
     isReadyEvent,
     notificationId,
     otherUserMessagePreview,
     sessionIdFromPath,
 } from './desktopNotificationUtils';
+import { sessionLastViewedAt } from '@/sync/sync';
 import { truncateMessagePreviewText } from '@/utils/messagePreviewText';
 import {
     prepareDesktopUpdate,
@@ -39,7 +41,7 @@ export function DesktopBridge() {
 
     const currentSessionIdRef = React.useRef(currentSessionId);
     const windowFocusedRef = React.useRef(true);
-    const unreadBySessionRef = React.useRef(new Map<string, Set<string>>());
+    const desktopAttentionCountRef = React.useRef(-1);
     const seenMessageIdsRef = React.useRef(new Set<string>());
     const seenPermissionRequestIdsRef = React.useRef(new Set<string>());
     const latestAgentPreviewBySessionRef = React.useRef(new Map<string, string>());
@@ -99,7 +101,7 @@ export function DesktopBridge() {
             if (authenticated) {
                 return;
             }
-            unreadBySessionRef.current.clear();
+            desktopAttentionCountRef.current = 0;
             seenMessageIdsRef.current.clear();
             seenPermissionRequestIdsRef.current.clear();
             latestAgentPreviewBySessionRef.current.clear();
@@ -115,12 +117,30 @@ export function DesktopBridge() {
 
     React.useEffect(() => {
         currentSessionIdRef.current = currentSessionId;
-        if (isTauriDesktop() && currentSessionId && windowFocusedRef.current) {
-            unreadBySessionRef.current.delete(currentSessionId);
-            const count = [...unreadBySessionRef.current.values()].reduce((sum, ids) => sum + ids.size, 0);
-            void invoke('set_desktop_unread_count', { count });
-        }
     }, [currentSessionId]);
+
+    React.useEffect(() => {
+        if (!isTauriDesktop()) {
+            return;
+        }
+
+        const syncDesktopAttentionCount = () => {
+            const state = storage.getState();
+            const count = countDesktopAttentionSessions(
+                state.sessions,
+                state.sharedSessions,
+                sessionLastViewedAt,
+            );
+            if (desktopAttentionCountRef.current === count) {
+                return;
+            }
+            desktopAttentionCountRef.current = count;
+            void invoke('set_desktop_unread_count', { count });
+        };
+
+        syncDesktopAttentionCount();
+        return storage.subscribe(syncDesktopAttentionCount);
+    }, []);
 
     React.useEffect(() => {
         if (!isTauriDesktop()) {
@@ -221,10 +241,6 @@ export function DesktopBridge() {
             notificationPayloadRef.current.delete(sessionId);
             notificationSessionsRef.current.delete(notificationId(sessionId));
 
-            unreadBySessionRef.current.delete(sessionId);
-            const count = [...unreadBySessionRef.current.values()].reduce((sum, ids) => sum + ids.size, 0);
-            void invoke('set_desktop_unread_count', { count });
-
             currentSessionIdRef.current = sessionId;
             void invoke('show_desktop_window')
                 .catch((error) => console.warn('Failed to show desktop window from notification:', error));
@@ -236,11 +252,6 @@ export function DesktopBridge() {
         });
         void getCurrentWindow().onFocusChanged(({ payload: focused }) => {
             windowFocusedRef.current = focused;
-            if (focused && currentSessionIdRef.current) {
-                unreadBySessionRef.current.delete(currentSessionIdRef.current);
-                const count = [...unreadBySessionRef.current.values()].reduce((sum, ids) => sum + ids.size, 0);
-                void invoke('set_desktop_unread_count', { count });
-            }
         }).then((unlisten) => {
             if (cancelled) {
                 unlisten();
@@ -283,10 +294,8 @@ export function DesktopBridge() {
         const unsubscribeMessages = subscribeToDesktopMessages(({ sessionId, messages }) => {
             const state = storage.getState();
             const currentUserId = state.profile.id || null;
-            const unreadMessageIds: string[] = [];
             let notificationBody: string | null = null;
             let completionMessageId: string | null = null;
-            let completionShouldNotify = false;
 
             for (const message of messages) {
                 if (seenMessageIdsRef.current.has(message.id)) {
@@ -301,14 +310,12 @@ export function DesktopBridge() {
                 const agentPreview = agentMessagePreview(message);
                 if (agentPreview) {
                     latestAgentPreviewBySessionRef.current.set(sessionId, agentPreview);
-                    unreadMessageIds.push(message.id);
                     continue;
                 }
 
                 const otherUserPreview = otherUserMessagePreview(message, currentUserId);
                 if (otherUserPreview) {
                     notificationBody = otherUserPreview;
-                    unreadMessageIds.push(message.id);
                     continue;
                 }
 
@@ -320,7 +327,6 @@ export function DesktopBridge() {
             if (completionMessageId) {
                 const hasActiveDelegatedWork = Object.keys(state.orchestratorActivity[sessionId] ?? {}).length > 0;
                 if (!hasActiveDelegatedWork) {
-                    completionShouldNotify = true;
                     notificationBody = latestAgentPreviewBySessionRef.current.get(sessionId)
                         ?? 'Your agent is waiting for your command';
                     latestAgentPreviewBySessionRef.current.delete(sessionId);
@@ -328,23 +334,6 @@ export function DesktopBridge() {
             }
 
             const isCurrentAndFocused = windowFocusedRef.current && currentSessionIdRef.current === sessionId;
-            if (completionMessageId
-                && completionShouldNotify
-                && !isCurrentAndFocused
-                && unreadMessageIds.length === 0
-                && (unreadBySessionRef.current.get(sessionId)?.size ?? 0) === 0) {
-                unreadMessageIds.push(completionMessageId);
-            }
-            if (!isCurrentAndFocused && unreadMessageIds.length > 0) {
-                const ids = unreadBySessionRef.current.get(sessionId) ?? new Set<string>();
-                for (const messageId of unreadMessageIds) {
-                    ids.add(messageId);
-                }
-                unreadBySessionRef.current.set(sessionId, ids);
-                const count = [...unreadBySessionRef.current.values()].reduce((sum, value) => sum + value.size, 0);
-                void invoke('set_desktop_unread_count', { count });
-            }
-
             const shouldNotify = notificationsEnabled
                 && !isCurrentAndFocused
                 && !(windowFocusedRef.current && hideNotificationsWhenActive)
@@ -400,14 +389,6 @@ export function DesktopBridge() {
             }
 
             const isCurrentAndFocused = windowFocusedRef.current && currentSessionIdRef.current === sessionId;
-            if (!isCurrentAndFocused) {
-                const ids = unreadBySessionRef.current.get(sessionId) ?? new Set<string>();
-                ids.add(`permission:${requestId}`);
-                unreadBySessionRef.current.set(sessionId, ids);
-                const count = [...unreadBySessionRef.current.values()].reduce((sum, value) => sum + value.size, 0);
-                void invoke('set_desktop_unread_count', { count });
-            }
-
             const shouldNotify = notificationsEnabled
                 && !isCurrentAndFocused
                 && !(windowFocusedRef.current && hideNotificationsWhenActive)

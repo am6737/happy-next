@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
 import type { NormalizedMessage } from '@/sync/typesRaw';
+import type { Session } from '@/sync/storageTypes';
 import {
     agentMessagePreview,
+    countDesktopAttentionSessions,
     isReadyEvent,
     notificationId,
     otherUserMessagePreview,
+    sessionNeedsDesktopAttention,
     sessionIdFromPath,
 } from './desktopNotificationUtils';
 
@@ -19,6 +22,15 @@ function message(value: Partial<NormalizedMessage>): NormalizedMessage {
         content: [],
         ...value,
     } as NormalizedMessage;
+}
+
+function session(value: Partial<Session> & Pick<Session, 'id'>): Session {
+    return {
+        active: true,
+        agentState: null,
+        metadata: null,
+        ...value,
+    } as Session;
 }
 
 describe('DesktopBridge helpers', () => {
@@ -80,6 +92,49 @@ describe('DesktopBridge helpers', () => {
         expect(notificationId('session-a')).toBe(notificationId('session-a'));
         expect(notificationId('session-a')).toBeGreaterThan(0);
         expect(notificationId('session-a')).toBeLessThanOrEqual(0x7fffffff);
+    });
+
+    it('uses the same completion dismissal semantics for desktop attention', () => {
+        const completed = session({
+            id: 'completed',
+            agentState: { taskCompleted: 200 } as Session['agentState'],
+            metadata: { completionDismissedAt: 100 } as Session['metadata'],
+        });
+
+        expect(sessionNeedsDesktopAttention(completed, 150, 300)).toBe(true);
+        expect(sessionNeedsDesktopAttention(completed, 200, 300)).toBe(false);
+        expect(sessionNeedsDesktopAttention({
+            ...completed,
+            metadata: { completionDismissedAt: 200 } as Session['metadata'],
+        }, 0, 300)).toBe(false);
+    });
+
+    it('counts pending permissions and completion once per session', () => {
+        const needsPermission = session({
+            id: 'attention',
+            agentState: {
+                taskCompleted: 200,
+                requests: {
+                    request1: { tool: 'Bash', arguments: {}, createdAt: 250 },
+                },
+            } as Session['agentState'],
+        });
+
+        expect(countDesktopAttentionSessions(
+            { attention: needsPermission },
+            { attention: needsPermission },
+            new Map(),
+            300,
+        )).toBe(1);
+    });
+
+    it('does not persist an attention indicator for ordinary sessions', () => {
+        expect(countDesktopAttentionSessions(
+            { idle: session({ id: 'idle' }) },
+            {},
+            new Map(),
+            300,
+        )).toBe(0);
     });
 
 });

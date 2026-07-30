@@ -1,5 +1,7 @@
 import type { NormalizedMessage } from '@/sync/typesRaw';
+import type { Session } from '@/sync/storageTypes';
 import { formatMessagePreviewText } from '@/utils/messagePreviewText';
+import { hasUnreadCompletionSince } from '@/utils/sessionAttention';
 
 export function sessionIdFromPath(pathname: string | null): string | null {
     const match = pathname?.match(/\/session\/([^/]+)/);
@@ -32,6 +34,38 @@ export function otherUserMessagePreview(message: NormalizedMessage, currentUserI
 
 export function isReadyEvent(message: NormalizedMessage): boolean {
     return message.role === 'event' && message.content.type === 'ready';
+}
+
+export function sessionNeedsDesktopAttention(
+    session: Session,
+    localLastViewedAt: number,
+    now: number = Date.now(),
+): boolean {
+    return hasUnreadCompletionSince(session, localLastViewedAt, now)
+        || Object.keys(session.agentState?.requests ?? {}).length > 0;
+}
+
+export function countDesktopAttentionSessions(
+    sessions: Record<string, Session>,
+    sharedSessions: Record<string, Session>,
+    lastViewedAt: ReadonlyMap<string, number>,
+    now: number = Date.now(),
+): number {
+    const uniqueSessions = new Map<string, Session>();
+    for (const session of Object.values(sharedSessions)) {
+        uniqueSessions.set(session.id, session);
+    }
+    for (const session of Object.values(sessions)) {
+        uniqueSessions.set(session.id, session);
+    }
+
+    let count = 0;
+    for (const session of uniqueSessions.values()) {
+        if (sessionNeedsDesktopAttention(session, lastViewedAt.get(session.id) ?? 0, now)) {
+            count += 1;
+        }
+    }
+    return count;
 }
 
 export function notificationId(sessionId: string): number {

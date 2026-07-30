@@ -373,7 +373,7 @@ fn apply_desktop_unread_count<R: Runtime>(app: &AppHandle<R>, state: &DesktopSta
         let tooltip = if count == 0 {
             "Happy Next".to_string()
         } else {
-            format!("Happy Next · {count} unread")
+            format!("Happy Next · {count} sessions need attention")
         };
         let _ = tray.set_tooltip(Some(tooltip));
 
@@ -384,12 +384,11 @@ fn apply_desktop_unread_count<R: Runtime>(app: &AppHandle<R>, state: &DesktopSta
     if let Ok(item) = state.unread_item.lock() {
         if let Some(item) = item.as_ref() {
             let text = if count == 0 {
-                "No unread messages".to_string()
+                "No sessions need attention".to_string()
+            } else if count == 1 {
+                "1 session needs attention".to_string()
             } else {
-                format!(
-                    "{count} unread message{}",
-                    if count == 1 { "" } else { "s" }
-                )
+                format!("{count} sessions need attention")
             };
             let _ = item.set_text(text);
         }
@@ -585,7 +584,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let unread = MenuItem::with_id(
         app,
         TRAY_UNREAD_ID,
-        "No unread messages",
+        "No sessions need attention",
         false,
         None::<&str>,
     )?;
