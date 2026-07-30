@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import type { NormalizedMessage } from '@/sync/typesRaw';
-import { messagePreview, notificationId, sessionIdFromPath } from './desktopNotificationUtils';
+import {
+    agentMessagePreview,
+    isReadyEvent,
+    notificationId,
+    otherUserMessagePreview,
+    sessionIdFromPath,
+} from './desktopNotificationUtils';
 
 function message(value: Partial<NormalizedMessage>): NormalizedMessage {
     return {
@@ -22,32 +28,36 @@ describe('DesktopBridge helpers', () => {
         expect(sessionIdFromPath('/settings')).toBeNull();
     });
 
-    it('only previews messages worth notifying about', () => {
-        expect(messagePreview(message({
+    it('separates agent completion content from immediately notifiable user messages', () => {
+        expect(agentMessagePreview(message({
             role: 'agent',
             content: [{ type: 'text', text: 'Done', uuid: 'u', parentUUID: null }],
-        }), 'me')).toBe('Done');
-        expect(messagePreview(message({
+        }))).toBe('Done');
+        expect(otherUserMessagePreview(message({
             role: 'user',
             sentBy: 'me',
             content: { type: 'text', text: 'my message' },
         }), 'me')).toBeNull();
-        expect(messagePreview(message({
+        expect(otherUserMessagePreview(message({
             role: 'user',
             sentBy: 'friend',
             content: { type: 'text', text: 'hello' },
         }), 'me')).toBe('hello');
+        expect(isReadyEvent(message({
+            role: 'event',
+            content: { type: 'ready' },
+        }))).toBe(true);
     });
 
     it('removes all line breaks from notification bodies', () => {
-        expect(messagePreview(message({
+        expect(agentMessagePreview(message({
             role: 'agent',
             content: [
                 { type: 'text', text: 'First line\r\n\n   \r\nSecond line', uuid: 'u1', parentUUID: null },
                 { type: 'text', text: 'Third\u2028line', uuid: 'u2', parentUUID: null },
             ],
-        }), 'me')).toBe('First line Second line Third line');
-        expect(messagePreview(message({
+        }))).toBe('First line Second line Third line');
+        expect(otherUserMessagePreview(message({
             role: 'user',
             sentBy: 'friend',
             content: { type: 'text', text: 'Hello\n\n\nworld' },
@@ -55,7 +65,7 @@ describe('DesktopBridge helpers', () => {
     });
 
     it('uses plain-text previews for Markdown messages', () => {
-        expect(messagePreview(message({
+        expect(agentMessagePreview(message({
             role: 'agent',
             content: [{
                 type: 'text',
@@ -63,7 +73,7 @@ describe('DesktopBridge helpers', () => {
                 uuid: 'u',
                 parentUUID: null,
             }],
-        }), 'me')).toBe('Done [Code] Open details');
+        }))).toBe('Done [Code] Open details');
     });
 
     it('creates stable positive 32-bit notification IDs', () => {

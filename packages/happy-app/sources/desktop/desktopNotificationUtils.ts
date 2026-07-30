@@ -10,14 +10,7 @@ export function sessionIdFromPath(pathname: string | null): string | null {
     return id === 'recent' || id === 'claude' ? null : id;
 }
 
-export function messagePreview(message: NormalizedMessage, currentUserId: string | null): string | null {
-    if (message.role === 'user') {
-        if (!message.sentBy || message.sentBy === currentUserId) {
-            return null;
-        }
-        return formatMessagePreviewText(message.content.text) || 'New message';
-    }
-
+export function agentMessagePreview(message: NormalizedMessage): string | null {
     if (message.role !== 'agent') {
         return null;
     }
@@ -28,6 +21,17 @@ export function messagePreview(message: NormalizedMessage, currentUserId: string
         .filter(Boolean)
         .join(' ');
     return text || null;
+}
+
+export function otherUserMessagePreview(message: NormalizedMessage, currentUserId: string | null): string | null {
+    if (message.role !== 'user' || !message.sentBy || message.sentBy === currentUserId) {
+        return null;
+    }
+    return formatMessagePreviewText(message.content.text) || 'New message';
+}
+
+export function isReadyEvent(message: NormalizedMessage): boolean {
+    return message.role === 'event' && message.content.type === 'ready';
 }
 
 export function notificationId(sessionId: string): number {

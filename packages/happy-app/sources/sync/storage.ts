@@ -30,6 +30,7 @@ import {
     type SessionModeConfigDocument,
     type SessionModeConfigPatch,
 } from "./sessionModeConfig";
+import { emitDesktopPermissionRequest } from '@/desktop/desktopEvents';
 import {
     removePendingMessageFromQueue,
     sortPendingQueue,
@@ -648,6 +649,18 @@ export const storage = create<StorageState>()((set, get) => {
                     // Check for NEW permission requests before processing
                     const currentRealtimeSessionId = getCurrentRealtimeSessionId();
                     const voiceSession = getVoiceSession();
+                    const oldRequests = oldSession?.agentState?.requests || {};
+                    const newRequests = newSession.agentState?.requests || {};
+
+                    for (const [requestId, request] of Object.entries(newRequests)) {
+                        if (!oldRequests[requestId]) {
+                            emitDesktopPermissionRequest({
+                                sessionId: session.id,
+                                requestId,
+                                toolName: request.tool,
+                            });
+                        }
+                    }
 
                     // console.log('[REALTIME DEBUG] Permission check:', {
                     //     currentRealtimeSessionId,
@@ -659,9 +672,6 @@ export const storage = create<StorageState>()((set, get) => {
                     // });
 
                     if (currentRealtimeSessionId === session.id && voiceSession) {
-                        const oldRequests = oldSession?.agentState?.requests || {};
-                        const newRequests = newSession.agentState?.requests || {};
-
                         // Find NEW permission requests only
                         for (const [requestId, request] of Object.entries(newRequests)) {
                             if (!oldRequests[requestId]) {

@@ -81,9 +81,9 @@ Generated `dist` and `src-tauri/target` contents must not be committed.
 - The tray tooltip and disabled menu status line may describe the unread count.
 - macOS unread count is shown on the Dock badge. Windows uses a taskbar overlay indicator.
 - Signing out clears the desktop unread count.
-- Notifications are generated for relevant new agent replies and messages from another user when the Session should notify under the user's notification settings.
-- Own messages, tool-only updates, events, duplicate messages, and the currently focused Session do not produce a native notification.
-- Notification clicks show and activate the app, then navigate to the associated Session.
+- Agent text is retained as a completion preview but does not notify while the agent is still working. A native notification is generated when the turn becomes ready, using the Session name and the latest agent text, or a generic ready message when the turn has no text.
+- New permission requests and messages from another user notify immediately. Own messages, tool-only updates, duplicate messages, and the currently focused Session do not produce a native notification.
+- Notification clicks show and activate the app, clear that Session's desktop unread state, and navigate to the Session without stacking a duplicate route.
 - Notification permission is requested only when desktop notifications are enabled.
 
 The notification click path has been exercised locally on macOS. Windows notification delivery, activation, and taskbar integration remain **未验证** until tested on real Windows x64 and ARM64 machines.

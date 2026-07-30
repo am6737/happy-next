@@ -9,9 +9,15 @@ import { Modal } from '@/modal';
 import { t } from '@/text';
 import { getSessionName } from '@/utils/sessionUtils';
 import { isTauriDesktop } from '@/utils/tauri';
-import { subscribeToDesktopMessages } from './desktopEvents';
+import { subscribeToDesktopMessages, subscribeToDesktopPermissionRequests } from './desktopEvents';
 import { subscribeToDesktopAuthentication } from './desktopAuthEvents';
-import { messagePreview, notificationId, sessionIdFromPath } from './desktopNotificationUtils';
+import {
+    agentMessagePreview,
+    isReadyEvent,
+    notificationId,
+    otherUserMessagePreview,
+    sessionIdFromPath,
+} from './desktopNotificationUtils';
 import { truncateMessagePreviewText } from '@/utils/messagePreviewText';
 import {
     prepareDesktopUpdate,
@@ -35,6 +41,8 @@ export function DesktopBridge() {
     const windowFocusedRef = React.useRef(true);
     const unreadBySessionRef = React.useRef(new Map<string, Set<string>>());
     const seenMessageIdsRef = React.useRef(new Set<string>());
+    const seenPermissionRequestIdsRef = React.useRef(new Set<string>());
+    const latestAgentPreviewBySessionRef = React.useRef(new Map<string, string>());
     const notificationTimersRef = React.useRef(new Map<string, ReturnType<typeof setTimeout>>());
     const notificationPayloadRef = React.useRef(new Map<string, { title: string; body: string }>());
     const notificationSessionsRef = React.useRef(new Map<number, string>());
@@ -93,6 +101,8 @@ export function DesktopBridge() {
             }
             unreadBySessionRef.current.clear();
             seenMessageIdsRef.current.clear();
+            seenPermissionRequestIdsRef.current.clear();
+            latestAgentPreviewBySessionRef.current.clear();
             notificationPayloadRef.current.clear();
             notificationSessionsRef.current.clear();
             for (const timer of notificationTimersRef.current.values()) {
@@ -203,8 +213,22 @@ export function DesktopBridge() {
         let cancelled = false;
 
         const openNotificationSession = (sessionId: string) => {
-            void invoke('show_desktop_window');
-            router.push(`/session/${encodeURIComponent(sessionId)}`);
+            const pendingTimer = notificationTimersRef.current.get(sessionId);
+            if (pendingTimer) {
+                clearTimeout(pendingTimer);
+                notificationTimersRef.current.delete(sessionId);
+            }
+            notificationPayloadRef.current.delete(sessionId);
+            notificationSessionsRef.current.delete(notificationId(sessionId));
+
+            unreadBySessionRef.current.delete(sessionId);
+            const count = [...unreadBySessionRef.current.values()].reduce((sum, ids) => sum + ids.size, 0);
+            void invoke('set_desktop_unread_count', { count });
+
+            currentSessionIdRef.current = sessionId;
+            void invoke('show_desktop_window')
+                .catch((error) => console.warn('Failed to show desktop window from notification:', error));
+            router.replace(`/session/${encodeURIComponent(sessionId)}`);
         };
 
         void getCurrentWindow().isFocused().then((focused) => {
@@ -259,26 +283,62 @@ export function DesktopBridge() {
         const unsubscribeMessages = subscribeToDesktopMessages(({ sessionId, messages }) => {
             const state = storage.getState();
             const currentUserId = state.profile.id || null;
-            const relevant = messages.filter((message) => {
+            const unreadMessageIds: string[] = [];
+            let notificationBody: string | null = null;
+            let completionMessageId: string | null = null;
+            let completionShouldNotify = false;
+
+            for (const message of messages) {
                 if (seenMessageIdsRef.current.has(message.id)) {
-                    return false;
+                    continue;
                 }
                 seenMessageIdsRef.current.add(message.id);
                 if (seenMessageIdsRef.current.size > 5000) {
                     seenMessageIdsRef.current.clear();
                     seenMessageIdsRef.current.add(message.id);
                 }
-                return messagePreview(message, currentUserId) !== null;
-            });
-            if (relevant.length === 0) {
-                return;
+
+                const agentPreview = agentMessagePreview(message);
+                if (agentPreview) {
+                    latestAgentPreviewBySessionRef.current.set(sessionId, agentPreview);
+                    unreadMessageIds.push(message.id);
+                    continue;
+                }
+
+                const otherUserPreview = otherUserMessagePreview(message, currentUserId);
+                if (otherUserPreview) {
+                    notificationBody = otherUserPreview;
+                    unreadMessageIds.push(message.id);
+                    continue;
+                }
+
+                if (isReadyEvent(message)) {
+                    completionMessageId = message.id;
+                }
+            }
+
+            if (completionMessageId) {
+                const hasActiveDelegatedWork = Object.keys(state.orchestratorActivity[sessionId] ?? {}).length > 0;
+                if (!hasActiveDelegatedWork) {
+                    completionShouldNotify = true;
+                    notificationBody = latestAgentPreviewBySessionRef.current.get(sessionId)
+                        ?? 'Your agent is waiting for your command';
+                    latestAgentPreviewBySessionRef.current.delete(sessionId);
+                }
             }
 
             const isCurrentAndFocused = windowFocusedRef.current && currentSessionIdRef.current === sessionId;
-            if (!isCurrentAndFocused) {
+            if (completionMessageId
+                && completionShouldNotify
+                && !isCurrentAndFocused
+                && unreadMessageIds.length === 0
+                && (unreadBySessionRef.current.get(sessionId)?.size ?? 0) === 0) {
+                unreadMessageIds.push(completionMessageId);
+            }
+            if (!isCurrentAndFocused && unreadMessageIds.length > 0) {
                 const ids = unreadBySessionRef.current.get(sessionId) ?? new Set<string>();
-                for (const message of relevant) {
-                    ids.add(message.id);
+                for (const messageId of unreadMessageIds) {
+                    ids.add(messageId);
                 }
                 unreadBySessionRef.current.set(sessionId, ids);
                 const count = [...unreadBySessionRef.current.values()].reduce((sum, value) => sum + value.size, 0);
@@ -289,14 +349,13 @@ export function DesktopBridge() {
                 && !isCurrentAndFocused
                 && !(windowFocusedRef.current && hideNotificationsWhenActive)
                 && !(windowFocusedRef.current && hideSessionNotificationsWhenActive && currentSessionIdRef.current === sessionId);
-            if (!shouldNotify) {
+            if (!notificationBody || !shouldNotify) {
                 return;
             }
 
             const session = state.sessions[sessionId] ?? state.sharedSessions[sessionId];
             const title = session ? getSessionName(session) : 'Happy Next';
-            const body = messagePreview(relevant[relevant.length - 1], currentUserId) ?? 'New message';
-            notificationPayloadRef.current.set(sessionId, { title, body });
+            notificationPayloadRef.current.set(sessionId, { title, body: notificationBody });
 
             const existingTimer = notificationTimersRef.current.get(sessionId);
             if (existingTimer) {
@@ -330,9 +389,55 @@ export function DesktopBridge() {
             notificationTimersRef.current.set(sessionId, timer);
         });
 
+        const unsubscribePermissionRequests = subscribeToDesktopPermissionRequests(({ sessionId, requestId, toolName }) => {
+            if (seenPermissionRequestIdsRef.current.has(requestId)) {
+                return;
+            }
+            seenPermissionRequestIdsRef.current.add(requestId);
+            if (seenPermissionRequestIdsRef.current.size > 5000) {
+                seenPermissionRequestIdsRef.current.clear();
+                seenPermissionRequestIdsRef.current.add(requestId);
+            }
+
+            const isCurrentAndFocused = windowFocusedRef.current && currentSessionIdRef.current === sessionId;
+            if (!isCurrentAndFocused) {
+                const ids = unreadBySessionRef.current.get(sessionId) ?? new Set<string>();
+                ids.add(`permission:${requestId}`);
+                unreadBySessionRef.current.set(sessionId, ids);
+                const count = [...unreadBySessionRef.current.values()].reduce((sum, value) => sum + value.size, 0);
+                void invoke('set_desktop_unread_count', { count });
+            }
+
+            const shouldNotify = notificationsEnabled
+                && !isCurrentAndFocused
+                && !(windowFocusedRef.current && hideNotificationsWhenActive)
+                && !(windowFocusedRef.current && hideSessionNotificationsWhenActive && currentSessionIdRef.current === sessionId);
+            if (!shouldNotify) {
+                return;
+            }
+
+            const state = storage.getState();
+            const session = state.sessions[sessionId] ?? state.sharedSessions[sessionId];
+            const title = session ? getSessionName(session) : 'Permission Request';
+            const agentName = session?.metadata?.flavor === 'codex'
+                ? 'Codex'
+                : session?.metadata?.flavor === 'gemini'
+                    ? 'Gemini'
+                    : 'Claude';
+            const id = notificationId(sessionId);
+            notificationSessionsRef.current.set(id, sessionId);
+            void invoke('show_desktop_notification', {
+                notificationId: id,
+                title,
+                body: `${agentName} wants to ${toolName}`,
+                sessionId,
+            }).catch((error) => console.warn('Failed to send desktop permission notification:', error));
+        });
+
         return () => {
             cancelled = true;
             unsubscribeMessages();
+            unsubscribePermissionRequests();
             unlistenFocus?.();
             unlistenNotificationClick?.();
             if (nativeNotificationClickListener) {
