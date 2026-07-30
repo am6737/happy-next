@@ -573,6 +573,16 @@ export type NormalizedMessage = ({
 
 type PlanStepStatus = 'pending' | 'in_progress' | 'completed';
 
+function normalizePlanStepStatus(status: unknown): PlanStepStatus | null {
+    if (status === 'inProgress') {
+        return 'in_progress';
+    }
+    if (status === 'pending' || status === 'in_progress' || status === 'completed') {
+        return status;
+    }
+    return null;
+}
+
 function normalizePlanUpdateMessage(
     messageId: string,
     text: string,
@@ -610,17 +620,17 @@ function normalizePlanUpdateMessage(
                 return null;
             }
             const step = typeof item.step === 'string' ? item.step.trim() : '';
-            const status = item.status;
+            const status = normalizePlanStepStatus(item.status);
             if (!step) {
                 return null;
             }
-            if (status !== 'pending' && status !== 'in_progress' && status !== 'completed') {
+            if (!status) {
                 return null;
             }
             return {
                 id: `plan_step_${index + 1}`,
                 content: step,
-                status: status as PlanStepStatus,
+                status,
             };
         })
         .filter((todo: { id: string; content: string; status: PlanStepStatus } | null): todo is { id: string; content: string; status: PlanStepStatus } => Boolean(todo));
