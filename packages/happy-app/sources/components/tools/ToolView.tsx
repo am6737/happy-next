@@ -18,6 +18,8 @@ import { t } from '@/text';
 import { useOrchestratorActiveRunIds } from '@/sync/storage';
 import { shouldShowOrchestratorSubmitActivityIndicator } from './toolStatusIconRules';
 import { extractOrchestratorSubmitRunId, getOrchestratorToolNavigationTarget } from './orchestratorRunId';
+import { useOpenHtmlPreview } from './previewHtml';
+import { getPreviewHtmlInput } from './previewHtmlInput';
 
 interface ToolViewProps {
     metadata: Metadata | null;
@@ -52,6 +54,8 @@ export const ToolView = React.memo<ToolViewProps>((props) => {
         () => getOrchestratorToolNavigationTarget(tool),
         [tool],
     );
+    const previewHtmlInput = React.useMemo(() => getPreviewHtmlInput(tool), [tool]);
+    const openHtmlPreview = useOpenHtmlPreview(previewHtmlInput, sessionId);
 
     const openMessageDetail = React.useCallback(() => {
         if (sessionId && messageId) {
@@ -81,12 +85,17 @@ export const ToolView = React.memo<ToolViewProps>((props) => {
             });
             return;
         }
+        if (previewHtmlInput) {
+            void openHtmlPreview();
+            return;
+        }
         openMessageDetail();
-    }, [onPress, openMessageDetail, orchestratorNavigationTarget, router]);
+    }, [onPress, openHtmlPreview, openMessageDetail, orchestratorNavigationTarget, previewHtmlInput, router]);
 
     // Enable pressable if either onPress is provided or we have navigation params
-    const isPressable = !!(onPress || orchestratorNavigationTarget || (sessionId && messageId));
-    const showMessageDetailButton = !!(orchestratorNavigationTarget && sessionId && messageId);
+    const primaryNavigationTarget = orchestratorNavigationTarget || previewHtmlInput;
+    const isPressable = !!(onPress || primaryNavigationTarget || (sessionId && messageId));
+    const showMessageDetailButton = !!(primaryNavigationTarget && sessionId && messageId);
 
     let knownTool = knownTools[tool.name as keyof typeof knownTools] as any;
 

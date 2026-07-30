@@ -1,16 +1,13 @@
 import * as React from 'react';
 import { View, Text, Platform, Pressable, ActivityIndicator } from 'react-native';
 import { Ionicons, FontAwesome6 } from '@expo/vector-icons';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { ToolCall } from '@/sync/typesMessage';
 import { Metadata } from '@/sync/storageTypes';
 import { toolFullViewStyles } from '../ToolFullView';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { LongPressCopy, useCopySelectable } from '@/components/LongPressCopy';
-import { setPreviewHtml } from '../previewHtmlStore';
-import { isTauriDesktop, openDesktopHtmlPreview } from '@/utils/tauri';
-import { showToast } from '@/components/Toast';
-import { t } from '@/text';
+import { useOpenHtmlPreview } from '../previewHtml';
 
 interface PreviewHtmlViewFullProps {
     tool: ToolCall;
@@ -41,6 +38,8 @@ export const PreviewHtmlViewFull = React.memo<PreviewHtmlViewFullProps>(({ tool 
     const selectable = useCopySelectable();
     const { theme } = useUnistyles();
     const [contentHeight, setContentHeight] = React.useState(MIN_PREVIEW_HEIGHT);
+    const { id: sessionId } = useLocalSearchParams<{ id: string }>();
+    const openHtmlPreview = useOpenHtmlPreview(html ? { html, title } : null, sessionId);
 
     // Web: listen for height messages from iframe
     React.useEffect(() => {
@@ -98,37 +97,11 @@ export const PreviewHtmlViewFull = React.memo<PreviewHtmlViewFullProps>(({ tool 
         );
     }
 
-    const router = useRouter();
-    const { id: sessionId } = useLocalSearchParams<{ id: string }>();
-
-    const handleOpenInNewWindow = React.useCallback(async () => {
-        if (isTauriDesktop()) {
-            try {
-                await openDesktopHtmlPreview(html, title);
-            } catch (error) {
-                console.error('Failed to open desktop HTML preview window:', error);
-                showToast(t('status.operationFailed'), { icon: 'alert-circle-outline' });
-            }
-            return;
-        }
-
-        if (Platform.OS === 'web') {
-            const win = window.open('', '_blank');
-            if (win) {
-                win.document.write(html);
-                win.document.close();
-            }
-        } else if (sessionId) {
-            setPreviewHtml(html, title);
-            router.push(`/session/${sessionId}/preview`);
-        }
-    }, [html, title, sessionId, router]);
-
     return (
         <View style={styles.container}>
             <View style={styles.titleBar}>
                 <Text style={styles.titleText} numberOfLines={1}>{title || 'Preview'}</Text>
-                <Pressable style={styles.openButton} onPress={handleOpenInNewWindow}>
+                <Pressable style={styles.openButton} onPress={() => { void openHtmlPreview(); }}>
                     <FontAwesome6 name="window-restore" size={16} color={theme.colors.textSecondary} />
                 </Pressable>
             </View>
