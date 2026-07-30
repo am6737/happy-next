@@ -1196,6 +1196,9 @@ export const en = {
     },
 
     files: {
+        statusTitle: 'File Status',
+        searchChangesPlaceholder: 'Search changed files...',
+        noPendingChanges: 'No changes waiting to be staged or committed',
         searchPlaceholder: 'Search files...',
         detachedHead: 'detached HEAD',
         summary: ({ staged, unstaged }: { staged: number; unstaged: number }) => `${staged} staged • ${unstaged} unstaged`,

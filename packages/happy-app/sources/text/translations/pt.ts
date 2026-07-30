@@ -1182,6 +1182,9 @@ export const pt: TranslationStructure = {
     },
 
     files: {
+        statusTitle: 'Status dos arquivos',
+        searchChangesPlaceholder: 'Buscar arquivos alterados...',
+        noPendingChanges: 'Não há alterações aguardando preparo ou commit',
         searchPlaceholder: 'Buscar arquivos...',
         detachedHead: 'HEAD desanexado',
         summary: ({ staged, unstaged }: { staged: number; unstaged: number }) => `${staged} preparados • ${unstaged} não preparados`,

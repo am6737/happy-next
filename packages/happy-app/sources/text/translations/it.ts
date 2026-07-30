@@ -1212,6 +1212,9 @@ export const it: TranslationStructure = {
     },
 
     files: {
+        statusTitle: 'Stato dei file',
+        searchChangesPlaceholder: 'Cerca file modificati...',
+        noPendingChanges: 'Nessuna modifica da aggiungere allo stage o confermare',
         searchPlaceholder: 'Cerca file...',
         detachedHead: 'HEAD scollegato',
         summary: ({ staged, unstaged }: { staged: number; unstaged: number }) => `${staged} in stage • ${unstaged} non in stage`,

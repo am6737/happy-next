@@ -1184,6 +1184,9 @@ export const zhHans: TranslationStructure = {
     },
 
     files: {
+        statusTitle: '文件状态',
+        searchChangesPlaceholder: '搜索更改文件...',
+        noPendingChanges: '没有待暂存或待提交的更改',
         searchPlaceholder: '搜索文件...',
         detachedHead: '游离 HEAD',
         summary: ({ staged, unstaged }: { staged: number; unstaged: number }) => `${staged} 已暂存 • ${unstaged} 未暂存`,

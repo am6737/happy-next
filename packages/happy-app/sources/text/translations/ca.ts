@@ -1182,6 +1182,9 @@ export const ca: TranslationStructure = {
     },
 
     files: {
+        statusTitle: 'Estat dels fitxers',
+        searchChangesPlaceholder: 'Cerca fitxers modificats...',
+        noPendingChanges: 'No hi ha canvis pendents de preparar o confirmar',
         searchPlaceholder: 'Cerca fitxers...',
         detachedHead: 'HEAD separat',
         summary: ({ staged, unstaged }: { staged: number; unstaged: number }) => `${staged} preparats • ${unstaged} sense preparar`,

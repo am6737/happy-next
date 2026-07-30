@@ -1214,6 +1214,9 @@ export const ja: TranslationStructure = {
     },
 
     files: {
+        statusTitle: 'ファイルの状態',
+        searchChangesPlaceholder: '変更されたファイルを検索...',
+        noPendingChanges: 'ステージ待ちまたはコミット待ちの変更はありません',
         searchPlaceholder: 'ファイルを検索...',
         detachedHead: 'detached HEAD',
         summary: ({ staged, unstaged }: { staged: number; unstaged: number }) => `ステージ済み ${staged} • 未ステージ ${unstaged}`,

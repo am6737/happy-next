@@ -115,7 +115,7 @@ export default function RootLayout() {
                 name="session/[id]/files"
                 options={{
                     headerShown: true,
-                    headerTitle: t('common.files'),
+                    headerTitle: t('files.statusTitle'),
                 }}
             />
             <Stack.Screen

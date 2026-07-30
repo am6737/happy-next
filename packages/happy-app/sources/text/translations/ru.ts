@@ -1193,6 +1193,9 @@ export const ru: TranslationStructure = {
     },
 
     files: {
+        statusTitle: 'Статус файлов',
+        searchChangesPlaceholder: 'Поиск изменённых файлов...',
+        noPendingChanges: 'Нет изменений, ожидающих подготовки или коммита',
         searchPlaceholder: 'Поиск файлов...',
         detachedHead: 'отделённый HEAD',
         summary: ({ staged, unstaged }: { staged: number; unstaged: number }) => `${staged} подготовлено • ${unstaged} не подготовлено`,

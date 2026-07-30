@@ -1182,6 +1182,9 @@ export const es: TranslationStructure = {
     },
 
     files: {
+        statusTitle: 'Estado de archivos',
+        searchChangesPlaceholder: 'Buscar archivos modificados...',
+        noPendingChanges: 'No hay cambios pendientes de preparar o confirmar',
         searchPlaceholder: 'Buscar archivos...',
         detachedHead: 'HEAD separado',
         summary: ({ staged, unstaged }: { staged: number; unstaged: number }) => `${staged} preparados • ${unstaged} sin preparar`,

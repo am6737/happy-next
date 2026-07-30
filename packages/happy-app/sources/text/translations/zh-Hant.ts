@@ -1184,6 +1184,9 @@ export const zhHant: TranslationStructure = {
     },
 
     files: {
+        statusTitle: '檔案狀態',
+        searchChangesPlaceholder: '搜尋變更檔案...',
+        noPendingChanges: '沒有待暫存或待提交的變更',
         searchPlaceholder: '搜尋檔案...',
         detachedHead: '游離 HEAD',
         summary: ({ staged, unstaged }: { staged: number; unstaged: number }) => `${staged} 已暫存 • ${unstaged} 未暫存`,
