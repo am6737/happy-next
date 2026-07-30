@@ -34,6 +34,19 @@ describe('desktop security configuration', () => {
         );
     });
 
+    it('mounts the web code editor without CSP-blocked srcdoc scripts', () => {
+        const editorSource = readFileSync(
+            resolve(process.cwd(), 'sources/components/CodeEditor.web.tsx'),
+            'utf8',
+        );
+
+        expect(editorSource).toContain('new EditorView');
+        expect(editorSource).not.toContain('<iframe');
+        expect(editorSource).not.toContain('srcDoc=');
+        expect(directive(readJson('src-tauri/tauri.conf.json').app.security.csp, 'script-src'))
+            .not.toContain("'unsafe-inline'");
+    });
+
     it('grants only the core window and event commands used by the desktop bridge', () => {
         const capability = readJson('src-tauri/capabilities/default.json');
         const permissions: string[] = capability.permissions;

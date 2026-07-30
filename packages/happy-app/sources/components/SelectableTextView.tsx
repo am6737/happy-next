@@ -3,7 +3,7 @@ import { Platform } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { useUnistyles } from 'react-native-unistyles';
 import { highlightMarkdownToHtml } from '@/utils/highlightMarkdownToHtml';
-import { MONO_FONT_STACK } from '@/components/codeEditorShared';
+import { MONO_FONT_STACK } from '@/components/codeEditorConstants';
 
 /**
  * Selectable, syntax-highlighted text rendering shared by the text-selection
