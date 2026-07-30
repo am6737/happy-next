@@ -2,10 +2,31 @@ import { Usage } from '../api/types';
 
 /**
  * Pricing rates per million tokens for different models
- * Source: https://www.anthropic.com/api (approximate as of early 2025)
+ * Source: https://platform.claude.com/docs/en/about-claude/pricing (as of July 2026)
  */
 export const PRICING = {
-    // --- Claude 4 & Future Models ---
+    // --- Claude 5 ---
+    'claude-fable-5': {
+        input: 10.0,
+        output: 50.0,
+        cache_write: 12.50,
+        cache_read: 1.0
+    },
+    'claude-opus-5': {
+        input: 5.0,
+        output: 25.0,
+        cache_write: 6.25,
+        cache_read: 0.50
+    },
+    // Introductory pricing through August 31, 2026.
+    'claude-sonnet-5': {
+        input: 2.0,
+        output: 10.0,
+        cache_write: 2.50,
+        cache_read: 0.20
+    },
+
+    // --- Claude 4 ---
     'claude-4.5-opus': {
         input: 5.0,
         output: 25.0,
@@ -105,14 +126,19 @@ export function calculateCost(usage: Usage, modelId?: string): { total: number, 
     // Fallback if model not found
     if (!pricing) {
         // Try fuzzy matching for common aliases
-        if (modelId?.includes('opus')) {
-            if (modelId.includes('4.5')) pricing = PRICING['claude-4.5-opus'];
+        if (modelId?.includes('fable-5')) {
+            pricing = PRICING['claude-fable-5'];
+        }
+        else if (modelId?.includes('opus')) {
+            if (modelId.includes('opus-5')) pricing = PRICING['claude-opus-5'];
+            else if (modelId.includes('4.5')) pricing = PRICING['claude-4.5-opus'];
             else if (modelId.includes('4.1')) pricing = PRICING['claude-4.1-opus'];
             else if (modelId.includes('4')) pricing = PRICING['claude-4-opus'];
             else pricing = PRICING['claude-3-opus-20240229'];
         }
         else if (modelId?.includes('sonnet')) {
-            if (modelId.includes('4.6')) pricing = PRICING['claude-4.6-sonnet'];
+            if (modelId.includes('sonnet-5')) pricing = PRICING['claude-sonnet-5'];
+            else if (modelId.includes('4.6')) pricing = PRICING['claude-4.6-sonnet'];
             else if (modelId.includes('4.5')) pricing = PRICING['claude-4.5-sonnet'];
             else if (modelId.includes('4')) pricing = PRICING['claude-4-sonnet'];
             else pricing = PRICING['claude-3-5-sonnet-20241022'];

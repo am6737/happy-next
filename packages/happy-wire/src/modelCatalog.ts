@@ -17,6 +17,8 @@ export type ClaudeModelFamily =
     | typeof MODEL_MODE_DEFAULT
     | 'claude-fable-5'
     | 'claude-fable-5[1m]'
+    | 'claude-opus-5'
+    | 'claude-sonnet-5'
     | 'claude-opus-4-8'
     | 'claude-opus-4-8[1m]'
     | 'claude-opus-4-7'
@@ -31,6 +33,8 @@ export const MODEL_MODES = [
     MODEL_MODE_DEFAULT,
     'claude-fable-5',
     'claude-fable-5[1m]',
+    'claude-opus-5',
+    'claude-sonnet-5',
     'claude-opus-4-8',
     'claude-opus-4-8[1m]',
     'claude-opus-4-7',
@@ -50,6 +54,16 @@ export const MODEL_MODES = [
     'claude-fable-5[1m]-high',
     'claude-fable-5[1m]-xhigh',
     'claude-fable-5[1m]-max',
+    'claude-opus-5-low',
+    'claude-opus-5-medium',
+    'claude-opus-5-high',
+    'claude-opus-5-xhigh',
+    'claude-opus-5-max',
+    'claude-sonnet-5-low',
+    'claude-sonnet-5-medium',
+    'claude-sonnet-5-high',
+    'claude-sonnet-5-xhigh',
+    'claude-sonnet-5-max',
     'claude-opus-4-8-low',
     'claude-opus-4-8-medium',
     'claude-opus-4-8-high',
@@ -119,9 +133,10 @@ export const MODEL_MODES = [
     'gpt-5.2-medium',
     'gpt-5.2-high',
     'gpt-5.2-xhigh',
-    'gemini-3.5-pro-preview',
     'gemini-3.1-pro-preview',
+    'gemini-3.6-flash',
     'gemini-3.5-flash',
+    'gemini-3.5-flash-lite',
     'gemini-3.1-flash-lite',
     'gemini-2.5-pro',
     'gemini-2.5-flash-lite',
@@ -133,6 +148,8 @@ export const CLAUDE_MODEL_MODES = [
     MODEL_MODE_DEFAULT,
     'claude-fable-5',
     'claude-fable-5[1m]',
+    'claude-opus-5',
+    'claude-sonnet-5',
     'claude-opus-4-8',
     'claude-opus-4-8[1m]',
     'claude-opus-4-7',
@@ -152,6 +169,16 @@ export const CLAUDE_MODEL_MODES = [
     'claude-fable-5[1m]-high',
     'claude-fable-5[1m]-xhigh',
     'claude-fable-5[1m]-max',
+    'claude-opus-5-low',
+    'claude-opus-5-medium',
+    'claude-opus-5-high',
+    'claude-opus-5-xhigh',
+    'claude-opus-5-max',
+    'claude-sonnet-5-low',
+    'claude-sonnet-5-medium',
+    'claude-sonnet-5-high',
+    'claude-sonnet-5-xhigh',
+    'claude-sonnet-5-max',
     'claude-opus-4-8-low',
     'claude-opus-4-8-medium',
     'claude-opus-4-8-high',
@@ -192,9 +219,10 @@ export const CLAUDE_MODEL_MODES = [
 
 export const GEMINI_MODEL_MODES = [
     MODEL_MODE_DEFAULT,
-    'gemini-3.5-pro-preview',
     'gemini-3.1-pro-preview',
+    'gemini-3.6-flash',
     'gemini-3.5-flash',
+    'gemini-3.5-flash-lite',
     'gemini-3.1-flash-lite',
     'gemini-2.5-pro',
     'gemini-2.5-flash-lite',
@@ -262,7 +290,9 @@ export function getValidModelModesForAgent(agent: AgentFlavor): readonly ModelMo
 export const CLAUDE_MODEL_OPTIONS = [
     { value: MODEL_MODE_DEFAULT, label: 'Use CLI configured model', shortLabel: 'CLI', description: 'Use profile/CLI defaults' },
     { value: 'claude-fable-5', label: 'Fable 5', shortLabel: 'Fable 5', description: 'Most powerful, most intelligent' },
-    { value: 'claude-opus-4-8', label: 'Opus 4.8', shortLabel: 'Opus 4.8', description: 'Most capable' },
+    { value: 'claude-opus-5', label: 'Opus 5', shortLabel: 'Opus 5', description: 'Best for complex agentic coding' },
+    { value: 'claude-sonnet-5', label: 'Sonnet 5', shortLabel: 'Sonnet 5', description: 'Best balance of speed and intelligence' },
+    { value: 'claude-opus-4-8', label: 'Opus 4.8', shortLabel: 'Opus 4.8', description: 'Previous generation Opus' },
     { value: 'claude-opus-4-7', label: 'Opus 4.7', shortLabel: 'Opus 4.7', description: 'Previous generation Opus' },
     { value: 'claude-opus-4-6', label: 'Opus 4.6', shortLabel: 'Opus 4.6', description: 'Older Opus' },
     { value: 'claude-sonnet-4-6', label: 'Sonnet 4.6', shortLabel: 'Sonnet 4.6', description: 'Balanced speed and quality' },
@@ -274,7 +304,9 @@ export const CLAUDE_MODEL_OPTIONS = [
 export const CLAUDE_MODEL_FAMILY_OPTIONS = [
     { value: MODEL_MODE_DEFAULT, label: 'Use CLI configured model', shortLabel: 'CLI', description: 'Use profile/CLI defaults' },
     { value: 'claude-fable-5', label: 'Fable 5', shortLabel: 'Fable 5', description: 'Most powerful, most intelligent' },
-    { value: 'claude-opus-4-8', label: 'Opus 4.8', shortLabel: 'Opus 4.8', description: 'Most capable' },
+    { value: 'claude-opus-5', label: 'Opus 5', shortLabel: 'Opus 5', description: 'Best for complex agentic coding' },
+    { value: 'claude-sonnet-5', label: 'Sonnet 5', shortLabel: 'Sonnet 5', description: 'Best balance of speed and intelligence' },
+    { value: 'claude-opus-4-8', label: 'Opus 4.8', shortLabel: 'Opus 4.8', description: 'Previous generation Opus' },
     { value: 'claude-opus-4-7', label: 'Opus 4.7', shortLabel: 'Opus 4.7', description: 'Previous generation Opus' },
     { value: 'claude-opus-4-6', label: 'Opus 4.6', shortLabel: 'Opus 4.6', description: 'Older Opus' },
     { value: 'claude-sonnet-4-6', label: 'Sonnet 4.6', shortLabel: 'Sonnet 4.6', description: 'Balanced speed and quality' },
@@ -292,6 +324,16 @@ const CLAUDE_MODE_TO_SELECTION: Partial<Record<ModelMode, { family: ClaudeModelF
     'claude-fable-5[1m]-high': { family: 'claude-fable-5[1m]', effort: 'high' },
     'claude-fable-5[1m]-xhigh': { family: 'claude-fable-5[1m]', effort: 'xhigh' },
     'claude-fable-5[1m]-max': { family: 'claude-fable-5[1m]', effort: 'max' },
+    'claude-opus-5-low': { family: 'claude-opus-5', effort: 'low' },
+    'claude-opus-5-medium': { family: 'claude-opus-5', effort: 'medium' },
+    'claude-opus-5-high': { family: 'claude-opus-5', effort: 'high' },
+    'claude-opus-5-xhigh': { family: 'claude-opus-5', effort: 'xhigh' },
+    'claude-opus-5-max': { family: 'claude-opus-5', effort: 'max' },
+    'claude-sonnet-5-low': { family: 'claude-sonnet-5', effort: 'low' },
+    'claude-sonnet-5-medium': { family: 'claude-sonnet-5', effort: 'medium' },
+    'claude-sonnet-5-high': { family: 'claude-sonnet-5', effort: 'high' },
+    'claude-sonnet-5-xhigh': { family: 'claude-sonnet-5', effort: 'xhigh' },
+    'claude-sonnet-5-max': { family: 'claude-sonnet-5', effort: 'max' },
     'claude-opus-4-8-low': { family: 'claude-opus-4-8', effort: 'low' },
     'claude-opus-4-8-medium': { family: 'claude-opus-4-8', effort: 'medium' },
     'claude-opus-4-8-high': { family: 'claude-opus-4-8', effort: 'high' },
@@ -332,9 +374,10 @@ const CLAUDE_MODE_TO_SELECTION: Partial<Record<ModelMode, { family: ClaudeModelF
 
 export const GEMINI_MODEL_OPTIONS = [
     { value: MODEL_MODE_DEFAULT, label: 'Use CLI configured model', shortLabel: 'CLI', description: 'Use profile/CLI defaults' },
-    { value: 'gemini-3.5-pro-preview', label: '3.5 Pro (Preview)', shortLabel: '3.5 Pro', description: 'Most capable' },
+    { value: 'gemini-3.6-flash', label: '3.6 Flash', shortLabel: '3.6 Flash', description: 'Latest balance of speed and intelligence' },
     { value: 'gemini-3.1-pro-preview', label: '3.1 Pro (Preview)', shortLabel: '3.1 Pro', description: 'Previous generation Pro' },
     { value: 'gemini-3.5-flash', label: '3.5 Flash', shortLabel: '3.5 Flash', description: 'Fast frontier agentic and coding model' },
+    { value: 'gemini-3.5-flash-lite', label: '3.5 Flash-Lite', shortLabel: '3.5 Flash-Lite', description: 'Fastest, most cost-effective 3.5 model' },
     { value: 'gemini-3.1-flash-lite', label: '3.1 Flash-Lite', shortLabel: '3.1 Flash-Lite', description: 'Lightweight, optimized for speed and cost' },
     { value: 'gemini-2.5-pro', label: '2.5 Pro', shortLabel: '2.5 Pro', description: 'Previous generation' },
     { value: 'gemini-2.5-flash-lite', label: '2.5 Flash-Lite', shortLabel: '2.5 Flash-Lite', description: 'Lightweight free-tier friendly model' },
@@ -433,6 +476,7 @@ export function parseClaudeModelMode(mode: ModelMode): { family: ClaudeModelFami
 
 export function getClaudeReasoningOptions(family: ClaudeModelFamily): readonly ClaudeReasoningEffort[] {
     if (family === 'claude-fable-5' || family === 'claude-fable-5[1m]'
+        || family === 'claude-opus-5' || family === 'claude-sonnet-5'
         || family === 'claude-opus-4-8' || family === 'claude-opus-4-8[1m]'
         || family === 'claude-opus-4-7' || family === 'claude-opus-4-7[1m]') return ['max', 'xhigh', 'high', 'medium', 'low'];
     if (family === 'claude-opus-4-6' || family === 'claude-opus-4-6[1m]'
@@ -442,9 +486,8 @@ export function getClaudeReasoningOptions(family: ClaudeModelFamily): readonly C
 }
 
 export function claudeSupportsFastMode(family: ClaudeModelFamily): boolean {
-    return family === 'claude-opus-4-8' || family === 'claude-opus-4-8[1m]'
-        || family === 'claude-opus-4-7' || family === 'claude-opus-4-7[1m]'
-        || family === 'claude-opus-4-6' || family === 'claude-opus-4-6[1m]';
+    return family === 'claude-opus-5'
+        || family === 'claude-opus-4-8' || family === 'claude-opus-4-8[1m]';
 }
 
 /** Strip the [1m] suffix to get the base family ("default" passes through). */
@@ -454,7 +497,7 @@ export function claudeBaseFamily(family: ClaudeModelFamily): ClaudeModelFamily {
 
 /**
  * Families where 1M context is an explicit opt-in via the [1m] suffix.
- * Fable 5 / Opus 4.8 are always-1M (see claudeAlways1M); Haiku has no 1M variant.
+ * Claude 5 / Opus 4.8 are always-1M (see claudeAlways1M); Haiku has no 1M variant.
  */
 export function claudeHas1MOptIn(family: ClaudeModelFamily): boolean {
     const base = claudeBaseFamily(family);
@@ -464,7 +507,8 @@ export function claudeHas1MOptIn(family: ClaudeModelFamily): boolean {
 /** Families whose context window is 1M by default with no 200K tier — the [1m] suffix is a no-op. */
 export function claudeAlways1M(family: ClaudeModelFamily): boolean {
     const base = claudeBaseFamily(family);
-    return base === 'claude-fable-5' || base === 'claude-opus-4-8';
+    return base === 'claude-fable-5' || base === 'claude-opus-5'
+        || base === 'claude-sonnet-5' || base === 'claude-opus-4-8';
 }
 
 /** Combine a base family with the 1M toggle into the wire family value. */
@@ -519,14 +563,17 @@ const MODEL_NAME_LABELS: Record<string, string> = {
     'gpt-5.4-mini': 'GPT-5.4-Mini',
     'gpt-5.2': 'GPT-5.2',
     'claude-fable-5': 'Claude Fable 5',
+    'claude-opus-5': 'Claude Opus 5',
+    'claude-sonnet-5': 'Claude Sonnet 5',
     'claude-opus-4-8': 'Claude Opus 4.8',
     'claude-opus-4-7': 'Claude Opus 4.7',
     'claude-opus-4-6': 'Claude Opus 4.6',
     'claude-sonnet-4-6': 'Claude Sonnet 4.6',
     'claude-haiku-4-5': 'Claude Haiku 4.5',
-    'gemini-3.5-pro-preview': 'Gemini 3.5 Pro (Preview)',
     'gemini-3.1-pro-preview': 'Gemini 3.1 Pro (Preview)',
+    'gemini-3.6-flash': 'Gemini 3.6 Flash',
     'gemini-3.5-flash': 'Gemini 3.5 Flash',
+    'gemini-3.5-flash-lite': 'Gemini 3.5 Flash-Lite',
     'gemini-3.1-flash-lite': 'Gemini 3.1 Flash-Lite',
     'gemini-2.5-pro': 'Gemini 2.5 Pro',
     'gemini-2.5-flash-lite': 'Gemini 2.5 Flash-Lite',
@@ -630,9 +677,11 @@ const AGENT_DEFAULT_CONTEXT_WINDOWS: Record<AgentFlavor, number> = {
 };
 
 const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
-    // Claude models (default 200K; 1M is opt-in via [1m] suffix in Claude Code)
+    // Claude models (newer families are native 1M; older supported families opt in via [1m])
     'claude-fable-5': 1_000_000, // Fable 5 defaults to 1M; base name resolves to 1M
     'claude-fable-5[1m]': 1_000_000,
+    'claude-opus-5': 1_000_000,
+    'claude-sonnet-5': 1_000_000,
     'claude-opus-4-8': 1_000_000, // 4.8 defaults to 1M (no opt-in needed); base name resolves to 1M
     'claude-opus-4-8[1m]': 1_000_000,
     'claude-opus-4-7': 200_000,
@@ -651,9 +700,10 @@ const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
     'gpt-5.4-mini': 272_000,
     'gpt-5.2': 272_000,
     // Gemini models
-    'gemini-3.5-pro-preview': 1_000_000,
+    'gemini-3.6-flash': 1_000_000,
     'gemini-3.1-pro-preview': 1_000_000,
     'gemini-3.5-flash': 1_000_000,
+    'gemini-3.5-flash-lite': 1_000_000,
     'gemini-3.1-flash-lite': 1_000_000,
     'gemini-2.5-pro': 1_000_000,
     'gemini-2.5-flash-lite': 1_000_000,

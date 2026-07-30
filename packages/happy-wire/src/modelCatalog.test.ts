@@ -5,9 +5,11 @@ import {
     claudeBaseFamily,
     claudeFamilyWith1M,
     claudeHas1MOptIn,
+    claudeSupportsFastMode,
     formatModelDisplay,
     CODEX_MODEL_MODES,
     GEMINI_MODEL_MODES,
+    getClaudeReasoningOptions,
     getCodexReasoningOptions,
     getMaxContextSize,
     isModelMode,
@@ -28,6 +30,10 @@ describe('modelCatalog', () => {
         expect(isModelModeForAgent('claude', 'claude-opus-4-6')).toBe(true);
         expect(isModelModeForAgent('claude', 'claude-opus-4-8')).toBe(true);
         expect(isModelModeForAgent('claude', 'claude-opus-4-8[1m]-xhigh')).toBe(true);
+        expect(isModelModeForAgent('claude', 'claude-opus-5-max')).toBe(true);
+        expect(isModelModeForAgent('claude', 'claude-sonnet-5-xhigh')).toBe(true);
+        expect(isModelModeForAgent('gemini', 'gemini-3.6-flash')).toBe(true);
+        expect(isModelModeForAgent('gemini', 'gemini-3.5-flash-lite')).toBe(true);
         expect(isModelModeForAgent('gemini', 'gemini-2.5-flash-lite')).toBe(true);
     });
 
@@ -86,11 +92,13 @@ describe('modelCatalog', () => {
         expect(claudeBaseFamily('claude-fable-5')).toBe('claude-fable-5');
         expect(claudeHas1MOptIn('claude-opus-4-7')).toBe(true);
         expect(claudeHas1MOptIn('claude-opus-4-6[1m]')).toBe(true);
-        // Fable 5 / Opus 4.8 are always 1M (no 200K tier); Haiku has no 1M variant.
+        // Claude 5 / Opus 4.8 are always 1M (no 200K tier); Haiku has no 1M variant.
         expect(claudeHas1MOptIn('claude-fable-5')).toBe(false);
         expect(claudeHas1MOptIn('claude-opus-4-8')).toBe(false);
         expect(claudeHas1MOptIn('claude-haiku-4-5')).toBe(false);
         expect(claudeAlways1M('claude-fable-5')).toBe(true);
+        expect(claudeAlways1M('claude-opus-5')).toBe(true);
+        expect(claudeAlways1M('claude-sonnet-5')).toBe(true);
         expect(claudeAlways1M('claude-opus-4-8[1m]')).toBe(true);
         expect(claudeAlways1M('claude-opus-4-7')).toBe(false);
         expect(claudeAlways1M('claude-haiku-4-5')).toBe(false);
@@ -99,6 +107,18 @@ describe('modelCatalog', () => {
         // Always-1M families canonicalize to the base name — the suffix would be a no-op.
         expect(claudeFamilyWith1M('claude-fable-5', true)).toBe('claude-fable-5');
         expect(claudeFamilyWith1M('claude-haiku-4-5', true)).toBe('claude-haiku-4-5');
+    });
+
+    it('exposes all effort levels for Claude 5 models', () => {
+        expect(getClaudeReasoningOptions('claude-opus-5')).toEqual(['max', 'xhigh', 'high', 'medium', 'low']);
+        expect(getClaudeReasoningOptions('claude-sonnet-5')).toEqual(['max', 'xhigh', 'high', 'medium', 'low']);
+    });
+
+    it('limits Claude fast mode to currently supported Opus models', () => {
+        expect(claudeSupportsFastMode('claude-opus-5')).toBe(true);
+        expect(claudeSupportsFastMode('claude-opus-4-8')).toBe(true);
+        expect(claudeSupportsFastMode('claude-opus-4-7')).toBe(false);
+        expect(claudeSupportsFastMode('claude-sonnet-5')).toBe(false);
     });
 
     it('renders both [1m] and base model name formats consistently', () => {
@@ -123,10 +143,15 @@ describe('modelCatalog', () => {
 
     it('keeps gemini free-tier fallback model in catalog', () => {
         expect(GEMINI_MODEL_MODES[0]).toBe(MODEL_MODE_DEFAULT);
+        expect(GEMINI_MODEL_MODES).toContain('gemini-3.6-flash');
+        expect(GEMINI_MODEL_MODES).toContain('gemini-3.5-flash-lite');
+        expect(GEMINI_MODEL_MODES as readonly string[]).not.toContain('gemini-3.5-pro-preview');
         expect(GEMINI_MODEL_MODES).toContain('gemini-2.5-flash-lite');
     });
 
     it('resolves context windows for claude composite and fast model modes', () => {
+        expect(getMaxContextSize('claude-opus-5-max', 'claude')).toBe(1_000_000);
+        expect(getMaxContextSize('claude-sonnet-5-xhigh', 'claude')).toBe(1_000_000);
         expect(getMaxContextSize('claude-opus-4-8-high', 'claude')).toBe(1_000_000);
         expect(getMaxContextSize('claude-opus-4-8[1m]', 'claude')).toBe(1_000_000);
         expect(getMaxContextSize('claude-opus-4-8[1m]-xhigh', 'claude')).toBe(1_000_000);
