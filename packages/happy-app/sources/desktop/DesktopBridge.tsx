@@ -237,6 +237,8 @@ export function DesktopBridge() {
         let unlistenFocus: (() => void) | undefined;
         let unlistenNotificationClick: (() => void) | undefined;
         let nativeNotificationClickListener: PluginListener | undefined;
+        let nativeNotificationActionListener: PluginListener | undefined;
+        let lastNativeNotificationOpen: { id: number; openedAt: number } | undefined;
         let cancelled = false;
 
         const openNotificationSession = (sessionId: string) => {
@@ -261,6 +263,24 @@ export function DesktopBridge() {
                 ?? [...Object.keys(state.sessions), ...Object.keys(state.sharedSessions)]
                     .find((candidate) => notificationId(candidate) === id)
                 ?? null;
+        };
+
+        const openMacNotification = (rawId: number | string, payloadSessionId?: unknown) => {
+            const id = typeof rawId === 'number' ? rawId : Number.parseInt(rawId, 10);
+            if (!Number.isFinite(id)) {
+                return;
+            }
+            const now = Date.now();
+            if (lastNativeNotificationOpen?.id === id && now - lastNativeNotificationOpen.openedAt < 1000) {
+                return;
+            }
+            const sessionId = typeof payloadSessionId === 'string'
+                ? payloadSessionId
+                : sessionIdForNotification(id);
+            if (sessionId) {
+                lastNativeNotificationOpen = { id, openedAt: now };
+                openNotificationSession(sessionId);
+            }
         };
 
         void getCurrentWindow().isFocused().then((focused) => {
@@ -309,19 +329,23 @@ export function DesktopBridge() {
         }).catch((error) => console.warn('Failed to register notification click listener:', error));
 
         if (IS_MACOS_DESKTOP) {
-            void addPluginListener<{ id: number | string; data?: Record<string, unknown> }>('notifications', 'notificationClicked', (notification) => {
-                const parsedId = typeof notification.id === 'number'
-                    ? notification.id
-                    : Number.parseInt(notification.id, 10);
-                if (!Number.isFinite(parsedId)) {
+            void addPluginListener<{
+                actionId: string;
+                notification?: { id: number | string };
+            }>('notifications', 'actionPerformed', (action) => {
+                if (action.actionId === 'tap' && action.notification) {
+                    openMacNotification(action.notification.id);
+                }
+            }).then(async (listener) => {
+                if (cancelled) {
+                    await listener.unregister();
                     return;
                 }
-                const payloadSessionId = notification.data?.sessionId;
-                const sessionId = (typeof payloadSessionId === 'string' ? payloadSessionId : null)
-                    ?? sessionIdForNotification(parsedId);
-                if (sessionId) {
-                    openNotificationSession(sessionId);
-                }
+                nativeNotificationActionListener = listener;
+            }).catch((error) => console.warn('Failed to register native macOS notification action listener:', error));
+
+            void addPluginListener<{ id: number | string; data?: Record<string, unknown> }>('notifications', 'notificationClicked', (notification) => {
+                openMacNotification(notification.id, notification.data?.sessionId);
             }).then(async (listener) => {
                 if (cancelled) {
                     await listener.unregister();
@@ -470,6 +494,9 @@ export function DesktopBridge() {
             if (nativeNotificationClickListener) {
                 void nativeNotificationClickListener.unregister();
                 void invoke('plugin:notifications|set_click_listener_active', { active: false });
+            }
+            if (nativeNotificationActionListener) {
+                void nativeNotificationActionListener.unregister();
             }
             for (const timer of notificationTimersRef.current.values()) {
                 clearTimeout(timer);

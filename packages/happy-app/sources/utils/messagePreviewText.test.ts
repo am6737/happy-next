@@ -35,6 +35,18 @@ describe('formatMessagePreviewText', () => {
         expect(formatMessagePreviewText('Use C++, foo_bar, foo__bar__, Promise<T>, a * b, and path/to/file.'))
             .toBe('Use C++, foo_bar, foo__bar__, Promise<T>, a * b, and path/to/file.');
     });
+
+    it('formats Markdown next to Chinese punctuation and flattens tables', () => {
+        expect(formatMessagePreviewText([
+            '## **处理完成**，请查看：',
+            '>> ~~旧方案~~已替换。',
+            '| 项目 | 状态 |',
+            '| --- | :---: |',
+            '| 桌面通知 | **正常** |',
+        ].join('\n'))).toBe(
+            '处理完成，请查看： 旧方案已替换。 项目 · 状态 桌面通知 · 正常',
+        );
+    });
 });
 
 describe('truncateMessagePreviewText', () => {
