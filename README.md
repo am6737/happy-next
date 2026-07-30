@@ -87,11 +87,11 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 
 ### Desktop Apps (macOS + Windows)
 - Direct-download clients for macOS 12+ Universal, Windows x64, and Windows ARM64
-- Native window sizing and restoration, frameless macOS title-bar integration, refined fullscreen/title-bar interactions, multi-monitor bounds protection, and theme-correct startup with a native startup logo
-- Tray residency, close-to-tray behavior, single-instance activation, clean plain-text native notifications, and Dock/taskbar unread indicators
+- Native window sizing and restoration, frameless macOS title-bar integration, an integrated Windows title bar, refined fullscreen/title-bar interactions, multi-monitor bounds protection, and theme-correct startup with a native startup logo
+- Tray residency, close-to-tray behavior, single-instance activation, clean plain-text native notifications that reliably open the corresponding session, and unified Dock/taskbar unread indicators
 - Native application menus, search and navigation shortcuts, optional launch at sign-in, and a global show/hide shortcut
 - Signed automatic updates download quietly in the background and wait for the user to install and restart
-- Desktop diagnostics, rotating local logs, upload retry recovery, microphone/camera support, native context menus, reliable theme-isolated HTML preview windows, system-browser external links, and restricted native capabilities
+- Desktop diagnostics, rotating local logs, WebKit storage maintenance, upload retry recovery, microphone/camera support, native context menus, reliable theme-isolated HTML preview windows, CSP-compatible code editing, system-browser external links, and restricted native capabilities
 
 ### Orchestrator
 - Define task dependency graphs (DAGs) with per-task model and working directory
@@ -117,9 +117,10 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - AI backend profiles with presets for DeepSeek, Z.AI, OpenAI, Azure, and Google AI
 - Claude Opus 4.8 support with empty thinking block filtering for clean 4.x rendering
 - Claude Fable 5 (with 1M-context variant) in the Claude model catalog, with low / medium / high / xhigh / max reasoning effort presets
+- Claude Opus 5 and Claude Sonnet 5 with 1M context, current reasoning-effort presets, fast-mode capability detection, and updated cost tracking
 - Streamlined model picker: Claude 1M-context variants collapse into a single toggle (7 models instead of 12), reasoning-effort presets show side by side on wide screens, and Claude defaults to High effort
 - GPT-5.5 support for Codex with low/medium/high/xhigh reasoning levels
-- Gemini 3.1 Pro and Gemini 3 Flash (GA) in the model catalog; wizard handles flash model variants
+- Gemini 3.6 Flash and Gemini 3.5 Flash-Lite join the refreshed Gemini catalog alongside Gemini 3.1 Pro and Gemini 3.5 Flash
 
 ### Voice Assistant (Happy Voice)
 - Voice gateway auth now uses short-lived tokens for improved security
@@ -150,6 +151,7 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Commits list tags the commit at the upstream branch tip
 - Copy the current browser breadcrumb path directly from the navigation bar
 - Loading feedback for bulk git actions while the operation runs
+- Opening Files from git status focuses the relevant changed files
 
 ### Session Sharing
 - Share sessions with friends via direct invite or public link
@@ -225,7 +227,8 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Tool input/output formatted as key-value pairs instead of raw JSON
 - Unrecognized tool calls render as a generic 'other' block with a dynamic title and icon, instead of an empty placeholder
 - Agent event messages strip ANSI escape codes from child-CLI stderr so subprocess banner color sequences no longer leak into the chat as raw `[90m…[0m`
-- `preview_html` tool for full-page HTML preview, colon-separated MCP tool naming
+- `preview_html` tool for full-page HTML preview, with supported tool messages opening previews directly, plus colon-separated MCP tool naming
+- Codex in-progress plan steps remain visible while a session is running
 - CLI hot-upgrade support mid-session
 - Path picker with directory autocomplete via remote machine listing (web + mobile)
 - Session header unified across iOS / Android / web with left-aligned title, new-session button on the header right, and a header title in the session info screen
@@ -252,7 +255,7 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 ### UI & Polish
 - Native platform-feel mobile UX: iOS / Android use the platform-native bottom tab bar and native header on home, chat, and inbox screens
 - Inbox-first bottom tab order, "Session" tab label, dedicated navigation icons (no more brutalist placeholders)
-- iOS polish: chevron-only back button, header avatar geometry/clipping fixes, centered native header title, centralized status bar controller
+- iOS polish: chevron-only back button, header avatar geometry/clipping fixes, centered native header title, centralized status bar controller, and stable action menus while the keyboard is visible
 - iOS 26 fixes: scroll-edge fade suppression, full-screen translucent chat overlay with keyboard, prompt modal presentation
 - iPad / Mac windowed-mode polish: sidebar header reserves space for window controls, fixed session header resize, top-tab insets, list divider rendering, and windowed keyboard overlap
 - Web: bottom tab bundling fix, session header navigation fix, path autocomplete focus handling

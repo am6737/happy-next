@@ -37,13 +37,13 @@ This document summarizes what changed in Happy Next compared to the original Hap
 Happy Next now ships as a native-feeling desktop client instead of requiring a browser tab.
 
 - **Cross-platform distribution**: macOS 12+ Universal, Windows x64, and Windows ARM64 installers are published directly through GitHub Releases
-- **Native window lifecycle**: authentication-aware sizing, state restoration, refined fullscreen/title-bar interactions, multi-monitor bounds protection, theme-correct startup with a native startup logo, macOS title-bar integration, and reliable custom drag regions
+- **Native window lifecycle**: authentication-aware sizing, state restoration, refined fullscreen/title-bar interactions, multi-monitor bounds protection, theme-correct startup with a native startup logo, macOS title-bar integration, an integrated Windows title bar, and reliable custom drag regions
 - **Resident experience**: close to tray, explicit Quit, single-instance activation, optional launch at sign-in, and a global show/hide shortcut
-- **Notifications and unread state**: clean plain-text native notifications open the associated Session, hidden windows return to the foreground, and unread state appears on the Dock or Windows taskbar
+- **Notifications and unread state**: clean plain-text native notifications reliably open the associated Session, hidden windows return to the foreground, and unified unread state appears on the Dock or Windows taskbar
 - **Desktop controls**: native application menus plus search, navigation, new-session, inbox, DooTask, and settings shortcuts
 - **Signed updates**: updater payloads are cryptographically verified, downloaded quietly in the background, and installed only after the user clicks the in-app Update button
-- **Diagnostics and recovery**: sanitized desktop diagnostics, rotating local logs, upload timeouts and retry handling, and preserved composer content after failures
-- **Security and media**: restricted Tauri capabilities, hardened CSP and navigation boundaries, native context menus, reliable theme-isolated HTML preview child windows, system-browser external links, and explicit microphone/camera support
+- **Diagnostics and recovery**: sanitized desktop diagnostics, rotating local logs, WebKit storage maintenance, upload timeouts and retry handling, and preserved composer content after failures
+- **Security and media**: restricted Tauri capabilities, hardened CSP and navigation boundaries, native context menus, reliable theme-isolated HTML preview child windows, CSP-compatible code editing, system-browser external links, and explicit microphone/camera support
 - **Platform visuals**: refreshed logos, favicons, splash screens, notification assets, and independent macOS and Windows icons, including the macOS 26 layered icon format and compatibility fallback for older macOS versions
 
 ## Orchestrator
@@ -89,6 +89,8 @@ The original Happy only supported Claude Code. Happy Next treats Claude Code, Co
 - **Per-agent model selection** cached independently, with context window display
 - **Claude Opus 4.8** added to the model catalog
 - **Claude Fable 5** added to the model catalog, with 1M-context variant and low / medium / high / xhigh / max reasoning effort presets
+- **Claude Opus 5 and Claude Sonnet 5** added with 1M context, current reasoning-effort presets, fast-mode capability detection, and updated cost tracking
+- **Refreshed Gemini catalog** adds Gemini 3.6 Flash and Gemini 3.5 Flash-Lite alongside Gemini 3.1 Pro and Gemini 3.5 Flash
 - **Streamlined model picker**: Claude 1M-context variants collapse into a single toggle (7 models instead of 12); reasoning-effort presets show side by side on wide screens and Claude defaults to High effort
 - **Codex v0.145.0**: bundled Codex CLI updated with a refreshed model catalog
 - **Cost tracking** with accurate token usage for Claude models (cache tokens, reasoning tokens)
@@ -159,6 +161,7 @@ The app now includes a full code browsing and git management experience.
 - **Upstream-tip marker** in the commits list to highlight the commit that matches the upstream branch tip
 - **Breadcrumb path copy**: copy the current browser breadcrumb path directly from the navigation bar
 - **Bulk git action feedback**: loading indicator shown while bulk git operations run
+- **Git status file focus**: opening Files from git status focuses the relevant changed files
 
 ## Session Sharing
 
@@ -298,7 +301,8 @@ Extensive improvements to the chat and session management experience.
 - **Per-agent permission mode**: permission mode stored and restored per agent type
 - **Shared-by-me filter**: filter sessions that you shared with others
 - **Image support in drafts**: attach images to message drafts
-- **`preview_html` tool**: full-page HTML preview tool for rendering HTML content
+- **`preview_html` tool**: full-page HTML preview tool for rendering HTML content, with supported tool messages opening previews directly
+- **Codex plan progress**: in-progress plan steps remain visible while a session is running
 - **Dual-mode long-press copy**: long-press to copy in tool detail views (text or JSON)
 - **Colon-separated tool naming**: support MCP tool names with colons (`server:tool`)
 - **Tool input as display name**: use tool input title for MCP tool display name
@@ -367,7 +371,7 @@ The CLI (`happy-next-cli`) received substantial upgrades.
 
 - **Brand refresh**: refreshed Happy Next logos, favicons, splash screens, notification assets, and mobile/desktop icons
 - **Adaptive themes**: system-theme changes apply reliably across the app and desktop authentication windows
-- **iOS permissions**: clearer scanner camera-permission handling, with the unused motion permission removed
+- **iOS polish and permissions**: action menus remain stable while the keyboard is visible, scanner camera-permission handling is clearer, and the unused motion permission is removed
 - **Dark mode** fixes throughout (text contrast, chips, status badges, input fields)
 - **i18n**: Chinese Simplified/Traditional system locale declaration, CJK input height handling, internationalized pickers
 - **Keyboard handling**: content follows keyboard smoothly, no jitter

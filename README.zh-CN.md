@@ -87,11 +87,11 @@ Happy Next 是原版 Happy 的重大演进，以下是亮点：
 
 ### 桌面客户端（macOS + Windows）
 - 提供 macOS 12+ Universal、Windows x64 和 Windows ARM64 直接下载版本
-- 登录状态自适应窗口尺寸与原生状态恢复、macOS 无边框标题栏、优化的全屏/标题栏交互、多显示器边界保护，以及带原生启动 Logo 的主题无闪烁启动
-- 托盘常驻、关闭到托盘、单实例激活、干净的纯文本系统通知，以及程序坞/任务栏未读提示
+- 登录状态自适应窗口尺寸与原生状态恢复、macOS 无边框标题栏、集成式 Windows 标题栏、优化的全屏/标题栏交互、多显示器边界保护，以及带原生启动 Logo 的主题无闪烁启动
+- 托盘常驻、关闭到托盘、单实例激活、可可靠打开对应会话的纯文本系统通知，以及统一的程序坞/任务栏未读提示
 - 原生应用菜单、搜索与导航快捷键、可选开机启动和全局显示/隐藏快捷键
 - 签名更新包在后台静默下载，由用户点击更新按钮后安装并重启
-- 桌面诊断、轮转本地日志、上传失败恢复、麦克风/摄像头支持、原生上下文菜单、可靠且主题隔离的 HTML 预览窗口、系统浏览器外链和受限原生权限
+- 桌面诊断、轮转本地日志、WebKit 存储维护、上传失败恢复、麦克风/摄像头支持、原生上下文菜单、可靠且主题隔离的 HTML 预览窗口、兼容 CSP 的代码编辑、系统浏览器外链和受限原生权限
 
 ### 编排器（Orchestrator）
 - 定义任务依赖图（DAG），支持按任务指定模型和工作目录
@@ -117,9 +117,10 @@ Happy Next 是原版 Happy 的重大演进，以下是亮点：
 - AI 后端配置文件，内置 DeepSeek、Z.AI、OpenAI、Azure 和 Google AI 预设
 - 新增 Claude Opus 4.8 支持，过滤 4.x 模型的空 thinking 块以保证渲染干净
 - 模型目录新增 Claude Fable 5（含 1M 上下文变体），提供 low / medium / high / xhigh / max 五档推理强度
+- 新增 Claude Opus 5 和 Claude Sonnet 5，支持 1M 上下文、当前推理强度预设、快速模式能力识别和更新后的费用追踪
 - 精简模型选择器：Claude 1M 上下文变体收进单个开关（模型从 12 个减到 7 个），宽屏下推理强度并排显示，Claude 默认 High 强度
 - 新增 GPT-5.5 Codex 支持，提供 low/medium/high/xhigh 四档推理强度
-- 新增 Gemini 3.1 Pro，Gemini 3 Flash 转 GA；Wizard 兼容 flash 模型变体
+- 刷新 Gemini 模型目录，加入 Gemini 3.6 Flash 和 Gemini 3.5 Flash-Lite，并保留 Gemini 3.1 Pro 与 Gemini 3.5 Flash
 
 ### 语音助手（Happy Voice）
 - 语音网关认证改用短效 token，安全性提升
@@ -150,6 +151,7 @@ Happy Next 是原版 Happy 的重大演进，以下是亮点：
 - 提交列表标记上游分支 tip 所在的 commit
 - 可直接从导航栏复制当前浏览器面包屑路径
 - 批量 Git 操作执行期间显示加载反馈
+- 从 git 状态打开文件页时自动聚焦相关变更文件
 
 ### 会话共享
 - 直接邀请好友或通过公开链接分享会话
@@ -225,7 +227,8 @@ Happy Next 是原版 Happy 的重大演进，以下是亮点：
 - 工具输入/输出格式化为 key-value 对（替代原始 JSON）
 - 未识别的工具调用以通用的 'other' 块渲染（带动态标题和图标），不再显示空占位
 - Agent event 消息会用 strip-ansi 过滤子 CLI stderr 中的 ANSI 转义码，子进程启动横幅的颜色序列不再以 `[90m…[0m` 形式泄露到聊天里
-- `preview_html` 工具全页面 HTML 预览，冒号分隔 MCP 工具命名
+- `preview_html` 工具支持全页面 HTML 预览，受支持的工具消息可直接打开预览，并支持冒号分隔 MCP 工具命名
+- Codex 会话运行时保留并显示进行中的计划步骤
 - CLI 会话中途热升级
 - 路径选择器支持目录自动补全，通过远程机器列表实现（Web + 移动端）
 - Session header 在 iOS / Android / Web 端统一为左对齐标题，header 右侧新增"新建会话"按钮，会话详情页加上 header 标题
@@ -252,7 +255,7 @@ Happy Next 是原版 Happy 的重大演进，以下是亮点：
 ### UI 和打磨
 - 原生平台感的移动体验：iOS / Android 首页、聊天、收件箱采用平台原生底栏与原生 header
 - 底栏顺序调整为收件箱优先，标签"Terminal"改名"Session"，并替换 brutalist 占位符为正式导航图标
-- iOS 打磨：返回按钮统一 chevron-only、header 头像几何/裁剪修正、原生 header 标题居中、集中式状态栏控制器
+- iOS 打磨：返回按钮统一 chevron-only、header 头像几何/裁剪修正、原生 header 标题居中、集中式状态栏控制器，以及键盘显示时稳定的操作菜单
 - iOS 26 适配：scroll-edge 渐隐抑制、键盘下全屏半透明聊天叠层、prompt modal 呈现
 - iPad / Mac 窗口化打磨：侧栏 header 为窗口控件预留空间，修复 session header resize、top tab insets、列表分割线渲染、窗口键盘遮挡
 - Web：底栏 bundling 修复、session header 导航修复、路径补全焦点处理
