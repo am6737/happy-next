@@ -310,7 +310,7 @@ export function DesktopBridge() {
                 unlisten();
             } else {
                 unlistenNotificationClick = unlisten;
-                if (IS_WINDOWS_DESKTOP) {
+                if (IS_WINDOWS_DESKTOP || IS_MACOS_DESKTOP) {
                     void invoke<number[]>('set_desktop_notification_click_listener_ready', { ready: true })
                         .then((pendingIds) => {
                             if (cancelled) {
@@ -323,7 +323,7 @@ export function DesktopBridge() {
                                 }
                             }
                         })
-                        .catch((error) => console.warn('Failed to activate Windows notification click listener:', error));
+                        .catch((error) => console.warn('Failed to activate desktop notification click listener:', error));
                 }
             }
         }).catch((error) => console.warn('Failed to register notification click listener:', error));
@@ -488,7 +488,7 @@ export function DesktopBridge() {
             unsubscribePermissionRequests();
             unlistenFocus?.();
             unlistenNotificationClick?.();
-            if (IS_WINDOWS_DESKTOP) {
+            if (IS_WINDOWS_DESKTOP || IS_MACOS_DESKTOP) {
                 void invoke('set_desktop_notification_click_listener_ready', { ready: false });
             }
             if (nativeNotificationClickListener) {

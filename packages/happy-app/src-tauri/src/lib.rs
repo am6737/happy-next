@@ -62,11 +62,9 @@ const UNAUTHENTICATED_TRAFFIC_LIGHT_Y: f64 = 30.0;
 const AUTHENTICATED_TRAFFIC_LIGHT_X: f64 = 16.0;
 #[cfg(target_os = "macos")]
 const UNAUTHENTICATED_TRAFFIC_LIGHT_X: f64 = 20.0;
-#[cfg(not(target_os = "macos"))]
 const DESKTOP_NOTIFICATION_CLICKED_EVENT: &str = "desktop-notification-clicked";
 const DESKTOP_NOTIFICATION_PROTOCOL_PREFIX: &str = "happy-next://notification/";
 
-#[cfg(not(target_os = "macos"))]
 #[derive(Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct DesktopNotificationClicked {
@@ -249,14 +247,17 @@ where
 {
     args.into_iter()
         .filter_map(|argument| {
-            argument
-                .as_ref()
-                .strip_prefix(DESKTOP_NOTIFICATION_PROTOCOL_PREFIX)?
-                .parse::<i32>()
-                .ok()
-                .filter(|id| *id > 0)
+            positive_notification_id(
+                argument
+                    .as_ref()
+                    .strip_prefix(DESKTOP_NOTIFICATION_PROTOCOL_PREFIX)?,
+            )
         })
         .collect()
+}
+
+fn positive_notification_id(value: &str) -> Option<i32> {
+    value.parse::<i32>().ok().filter(|id| *id > 0)
 }
 
 #[cfg(target_os = "windows")]
@@ -381,8 +382,7 @@ fn show_windows_notification(
     notifier.Show(&toast).map_err(|error| error.to_string())
 }
 
-#[cfg(target_os = "windows")]
-fn activate_windows_notification(app: &AppHandle, notification_id: i32) {
+fn activate_desktop_notification(app: &AppHandle, notification_id: i32) {
     show_main_window(app);
     let should_emit =
         if let Ok(mut activation) = app.state::<DesktopState>().notification_activation.lock() {
@@ -406,6 +406,82 @@ fn activate_windows_notification(app: &AppHandle, notification_id: i32) {
                 notification_id: Some(notification_id),
             },
         );
+    }
+}
+
+#[cfg(target_os = "macos")]
+mod macos_notification_delegate {
+    use super::{activate_desktop_notification, positive_notification_id};
+    use block2::DynBlock;
+    use objc2::rc::Retained;
+    use objc2::runtime::ProtocolObject;
+    use objc2::{define_class, msg_send, AnyThread, DefinedClass};
+    use objc2_foundation::{NSObject, NSObjectProtocol};
+    use objc2_user_notifications::{
+        UNNotification, UNNotificationPresentationOptions, UNNotificationResponse,
+        UNUserNotificationCenter, UNUserNotificationCenterDelegate,
+    };
+    use std::sync::OnceLock;
+    use tauri::AppHandle;
+
+    define_class!(
+        // SAFETY: NSObject has no subclassing requirements, and the ivar is valid
+        // for the lifetime of the delegate retained below.
+        #[unsafe(super(NSObject))]
+        #[name = "HappyNotificationCenterDelegate"]
+        #[ivars = AppHandle]
+        struct NotificationCenterDelegate;
+
+        unsafe impl NSObjectProtocol for NotificationCenterDelegate {}
+
+        unsafe impl UNUserNotificationCenterDelegate for NotificationCenterDelegate {
+            #[unsafe(method(userNotificationCenter:willPresentNotification:withCompletionHandler:))]
+            unsafe fn will_present(
+                &self,
+                _center: &UNUserNotificationCenter,
+                _notification: &UNNotification,
+                completion_handler: &DynBlock<dyn Fn(UNNotificationPresentationOptions)>,
+            ) {
+                completion_handler.call((UNNotificationPresentationOptions::Badge
+                    | UNNotificationPresentationOptions::Sound
+                    | UNNotificationPresentationOptions::Banner
+                    | UNNotificationPresentationOptions::List,));
+            }
+
+            #[unsafe(method(userNotificationCenter:didReceiveNotificationResponse:withCompletionHandler:))]
+            unsafe fn did_receive(
+                &self,
+                _center: &UNUserNotificationCenter,
+                response: &UNNotificationResponse,
+                completion_handler: &DynBlock<dyn Fn()>,
+            ) {
+                let identifier = unsafe { response.notification().request().identifier() };
+                if let Some(notification_id) = positive_notification_id(&identifier.to_string()) {
+                    activate_desktop_notification(self.ivars(), notification_id);
+                } else {
+                    log::warn!("Ignoring macOS notification with invalid identifier: {identifier}");
+                }
+                completion_handler.call(());
+            }
+        }
+    );
+
+    impl NotificationCenterDelegate {
+        fn new(app: AppHandle) -> Retained<Self> {
+            let this = Self::alloc().set_ivars(app);
+            unsafe { msg_send![super(this), init] }
+        }
+    }
+
+    static DELEGATE: OnceLock<Retained<NotificationCenterDelegate>> = OnceLock::new();
+
+    pub fn install(app: &AppHandle) -> Result<(), String> {
+        let delegate = DELEGATE.get_or_init(|| NotificationCenterDelegate::new(app.clone()));
+        let center = unsafe { UNUserNotificationCenter::currentNotificationCenter() };
+        unsafe {
+            center.setDelegate(Some(ProtocolObject::from_ref(&**delegate)));
+        }
+        Ok(())
     }
 }
 
@@ -1871,7 +1947,7 @@ pub fn run() {
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             #[cfg(target_os = "windows")]
             if let Some(notification_id) = notification_ids_from_args(_args).into_iter().next() {
-                activate_windows_notification(app, notification_id);
+                activate_desktop_notification(app, notification_id);
                 return;
             }
             show_main_window(app);
@@ -1913,6 +1989,8 @@ pub fn run() {
             }
 
             build_tray(app.handle())?;
+            #[cfg(target_os = "macos")]
+            macos_notification_delegate::install(app.handle())?;
             #[cfg(target_os = "windows")]
             {
                 if let Err(error) = register_windows_notification_protocol(app.handle()) {
