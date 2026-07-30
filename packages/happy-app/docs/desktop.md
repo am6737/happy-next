@@ -85,7 +85,7 @@ Generated `dist` and `src-tauri/target` contents must not be committed.
 - Signing out clears the desktop attention count.
 - Agent text is retained as a completion preview but does not notify while the agent is still working. A native notification is generated when the turn becomes ready, using the Session name and the latest agent text, or a generic ready message when the turn has no text.
 - New permission requests and messages from another user notify immediately. Own messages, tool-only updates, duplicate messages, and the currently focused Session do not produce a native notification.
-- Notification clicks show and activate the app and navigate to the Session without stacking a duplicate route. Viewing the Session dismisses completion attention; permission attention remains until the request is handled.
+- Notification clicks, including older entries opened from macOS or Windows Notification Center, show and activate the app and navigate to the Session without stacking a duplicate route. Notification routing is retained across desktop app restarts; Windows uses the per-user `happy-next://` protocol to forward persisted toast activations into the running or newly launched app. Viewing the Session dismisses completion attention; permission attention remains until the request is handled.
 - Notification permission is requested only when desktop notifications are enabled.
 
 The notification click path has been exercised locally on macOS. Windows notification delivery, activation, and taskbar integration remain **未验证** until tested on real Windows x64 and ARM64 machines.

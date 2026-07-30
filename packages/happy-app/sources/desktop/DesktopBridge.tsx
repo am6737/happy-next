@@ -22,11 +22,17 @@ import {
 import { sessionLastViewedAt } from '@/sync/sync';
 import { truncateMessagePreviewText } from '@/utils/messagePreviewText';
 import {
+    clearDesktopNotificationRoutes,
+    rememberDesktopNotificationRoute,
+    resolveDesktopNotificationRoute,
+} from './desktopNotificationRoutes';
+import {
     prepareDesktopUpdate,
 } from './desktopUpdater';
 
 const DESKTOP_SHORTCUT = 'CommandOrControl+Shift+H';
 const IS_MACOS_DESKTOP = typeof navigator !== 'undefined' && /Macintosh|Mac OS X/.test(navigator.userAgent);
+const IS_WINDOWS_DESKTOP = typeof navigator !== 'undefined' && /Windows/.test(navigator.userAgent);
 
 export function DesktopBridge() {
     const router = useRouter();
@@ -102,6 +108,7 @@ export function DesktopBridge() {
                 return;
             }
             desktopAttentionCountRef.current = 0;
+            clearDesktopNotificationRoutes();
             seenMessageIdsRef.current.clear();
             seenPermissionRequestIdsRef.current.clear();
             latestAgentPreviewBySessionRef.current.clear();
@@ -247,6 +254,15 @@ export function DesktopBridge() {
             router.replace(`/session/${encodeURIComponent(sessionId)}`);
         };
 
+        const sessionIdForNotification = (id: number): string | null => {
+            const state = storage.getState();
+            return resolveDesktopNotificationRoute(id)
+                ?? notificationSessionsRef.current.get(id)
+                ?? [...Object.keys(state.sessions), ...Object.keys(state.sharedSessions)]
+                    .find((candidate) => notificationId(candidate) === id)
+                ?? null;
+        };
+
         void getCurrentWindow().isFocused().then((focused) => {
             windowFocusedRef.current = focused;
         });
@@ -260,24 +276,49 @@ export function DesktopBridge() {
             }
         });
 
-        void listen<{ sessionId: string }>('desktop-notification-clicked', ({ payload }) => {
-            if (typeof payload.sessionId === 'string') {
-                openNotificationSession(payload.sessionId);
+        void listen<{ sessionId?: string; notificationId?: number }>('desktop-notification-clicked', ({ payload }) => {
+            const sessionId = typeof payload.sessionId === 'string'
+                ? payload.sessionId
+                : typeof payload.notificationId === 'number'
+                    ? sessionIdForNotification(payload.notificationId)
+                    : null;
+            if (sessionId) {
+                openNotificationSession(sessionId);
             }
         }).then((unlisten) => {
             if (cancelled) {
                 unlisten();
             } else {
                 unlistenNotificationClick = unlisten;
+                if (IS_WINDOWS_DESKTOP) {
+                    void invoke<number[]>('set_desktop_notification_click_listener_ready', { ready: true })
+                        .then((pendingIds) => {
+                            if (cancelled) {
+                                return;
+                            }
+                            for (const id of pendingIds) {
+                                const sessionId = sessionIdForNotification(id);
+                                if (sessionId) {
+                                    openNotificationSession(sessionId);
+                                }
+                            }
+                        })
+                        .catch((error) => console.warn('Failed to activate Windows notification click listener:', error));
+                }
             }
         }).catch((error) => console.warn('Failed to register notification click listener:', error));
 
         if (IS_MACOS_DESKTOP) {
-            void addPluginListener<{ id: number }>('notifications', 'notificationClicked', (notification) => {
-                const state = storage.getState();
-                const sessionId = notificationSessionsRef.current.get(notification.id)
-                    ?? [...Object.keys(state.sessions), ...Object.keys(state.sharedSessions)]
-                        .find((candidate) => notificationId(candidate) === notification.id);
+            void addPluginListener<{ id: number | string; data?: Record<string, unknown> }>('notifications', 'notificationClicked', (notification) => {
+                const parsedId = typeof notification.id === 'number'
+                    ? notification.id
+                    : Number.parseInt(notification.id, 10);
+                if (!Number.isFinite(parsedId)) {
+                    return;
+                }
+                const payloadSessionId = notification.data?.sessionId;
+                const sessionId = (typeof payloadSessionId === 'string' ? payloadSessionId : null)
+                    ?? sessionIdForNotification(parsedId);
                 if (sessionId) {
                     openNotificationSession(sessionId);
                 }
@@ -360,6 +401,7 @@ export function DesktopBridge() {
                 const sendDesktopNotification = async () => {
                     const id = notificationId(sessionId);
                     notificationSessionsRef.current.set(id, sessionId);
+                    rememberDesktopNotificationRoute(id, sessionId);
                     await invoke('show_desktop_notification', {
                         notificationId: id,
                         title: payload.title,
@@ -407,6 +449,7 @@ export function DesktopBridge() {
                     : 'Claude';
             const id = notificationId(sessionId);
             notificationSessionsRef.current.set(id, sessionId);
+            rememberDesktopNotificationRoute(id, sessionId);
             void invoke('show_desktop_notification', {
                 notificationId: id,
                 title,
@@ -421,6 +464,9 @@ export function DesktopBridge() {
             unsubscribePermissionRequests();
             unlistenFocus?.();
             unlistenNotificationClick?.();
+            if (IS_WINDOWS_DESKTOP) {
+                void invoke('set_desktop_notification_click_listener_ready', { ready: false });
+            }
             if (nativeNotificationClickListener) {
                 void nativeNotificationClickListener.unregister();
                 void invoke('plugin:notifications|set_click_listener_active', { active: false });

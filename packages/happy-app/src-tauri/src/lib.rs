@@ -64,12 +64,14 @@ const AUTHENTICATED_TRAFFIC_LIGHT_X: f64 = 16.0;
 const UNAUTHENTICATED_TRAFFIC_LIGHT_X: f64 = 20.0;
 #[cfg(not(target_os = "macos"))]
 const DESKTOP_NOTIFICATION_CLICKED_EVENT: &str = "desktop-notification-clicked";
+const DESKTOP_NOTIFICATION_PROTOCOL_PREFIX: &str = "happy-next://notification/";
 
 #[cfg(not(target_os = "macos"))]
 #[derive(Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct DesktopNotificationClicked {
-    session_id: String,
+    session_id: Option<String>,
+    notification_id: Option<i32>,
 }
 
 #[derive(Clone, serde::Serialize)]
@@ -149,6 +151,13 @@ struct DesktopState {
     ignore_window_events_until: Mutex<Option<Instant>>,
     unread_item: Mutex<Option<MenuItem<tauri::Wry>>>,
     html_preview_server: Mutex<Option<HtmlPreviewServer>>,
+    notification_activation: Mutex<DesktopNotificationActivationState>,
+}
+
+#[derive(Default)]
+struct DesktopNotificationActivationState {
+    listener_ready: bool,
+    pending_ids: Vec<i32>,
 }
 
 impl Default for DesktopState {
@@ -163,6 +172,10 @@ impl Default for DesktopState {
             ignore_window_events_until: Mutex::new(None),
             unread_item: Mutex::new(None),
             html_preview_server: Mutex::new(None),
+            notification_activation: Mutex::new(DesktopNotificationActivationState {
+                listener_ready: false,
+                pending_ids: notification_ids_from_args(std::env::args()),
+            }),
         }
     }
 }
@@ -229,6 +242,189 @@ fn quit_app<R: Runtime>(app: &AppHandle<R>) {
     app.exit(0);
 }
 
+fn notification_ids_from_args<I, S>(args: I) -> Vec<i32>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+{
+    args.into_iter()
+        .filter_map(|argument| {
+            argument
+                .as_ref()
+                .strip_prefix(DESKTOP_NOTIFICATION_PROTOCOL_PREFIX)?
+                .parse::<i32>()
+                .ok()
+                .filter(|id| *id > 0)
+        })
+        .collect()
+}
+
+#[cfg(target_os = "windows")]
+fn set_windows_registry_string(path: &str, name: Option<&str>, value: &str) -> Result<(), String> {
+    use windows_sys::Win32::{
+        Foundation::ERROR_SUCCESS,
+        System::Registry::{
+            RegCloseKey, RegCreateKeyW, RegSetValueExW, HKEY, HKEY_CURRENT_USER, REG_SZ,
+        },
+    };
+
+    fn wide(value: &str) -> Vec<u16> {
+        value.encode_utf16().chain(std::iter::once(0)).collect()
+    }
+
+    let path = wide(path);
+    let name = name.map(wide);
+    let value = wide(value);
+    let mut key: HKEY = std::ptr::null_mut();
+    let create_result = unsafe { RegCreateKeyW(HKEY_CURRENT_USER, path.as_ptr(), &mut key) };
+    if create_result != ERROR_SUCCESS {
+        return Err(format!("failed to create registry key: {create_result}"));
+    }
+
+    let name_ptr = name.as_ref().map_or(std::ptr::null(), |name| name.as_ptr());
+    let set_result = unsafe {
+        RegSetValueExW(
+            key,
+            name_ptr,
+            0,
+            REG_SZ,
+            value.as_ptr().cast(),
+            (value.len() * std::mem::size_of::<u16>()) as u32,
+        )
+    };
+    unsafe {
+        RegCloseKey(key);
+    }
+    if set_result == ERROR_SUCCESS {
+        Ok(())
+    } else {
+        Err(format!("failed to set registry value: {set_result}"))
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn register_windows_notification_protocol(app: &AppHandle) -> Result<(), String> {
+    let executable = std::env::current_exe().map_err(|error| error.to_string())?;
+    let command = format!("\"{}\" \"%1\"", executable.display());
+    let protocol_key = r"Software\Classes\happy-next";
+    set_windows_registry_string(protocol_key, None, "URL:Happy Next notification")?;
+    set_windows_registry_string(protocol_key, Some("URL Protocol"), "")?;
+    set_windows_registry_string(
+        r"Software\Classes\happy-next\DefaultIcon",
+        None,
+        &format!("\"{}\",0", executable.display()),
+    )?;
+    set_windows_registry_string(
+        r"Software\Classes\happy-next\shell\open\command",
+        None,
+        &command,
+    )?;
+
+    let app_id_key = format!(
+        r"Software\Classes\AppUserModelId\{}",
+        app.config().identifier
+    );
+    set_windows_registry_string(
+        &app_id_key,
+        Some("DisplayName"),
+        app.config().product_name.as_deref().unwrap_or("Happy Next"),
+    )?;
+    set_windows_registry_string(
+        &app_id_key,
+        Some("IconUri"),
+        &executable.display().to_string(),
+    )
+}
+
+#[cfg(target_os = "windows")]
+fn escape_windows_toast_xml(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&apos;")
+}
+
+#[cfg(target_os = "windows")]
+fn show_windows_notification(
+    app: &AppHandle,
+    notification_id: i32,
+    title: &str,
+    body: &str,
+) -> Result<(), String> {
+    use windows::{
+        core::HSTRING,
+        Data::Xml::Dom::XmlDocument,
+        UI::Notifications::{ToastNotification, ToastNotificationManager},
+    };
+
+    let document = XmlDocument::new().map_err(|error| error.to_string())?;
+    let activation_url = format!("{DESKTOP_NOTIFICATION_PROTOCOL_PREFIX}{notification_id}");
+    let xml = format!(
+        r#"<toast activationType="protocol" launch="{activation_url}"><visual><binding template="ToastGeneric"><text>{}</text><text>{}</text></binding></visual></toast>"#,
+        escape_windows_toast_xml(title),
+        escape_windows_toast_xml(body),
+    );
+    document
+        .LoadXml(&HSTRING::from(xml))
+        .map_err(|error| error.to_string())?;
+    let toast =
+        ToastNotification::CreateToastNotification(&document).map_err(|error| error.to_string())?;
+    toast
+        .SetTag(&HSTRING::from(notification_id.to_string()))
+        .map_err(|error| error.to_string())?;
+    let notifier = ToastNotificationManager::CreateToastNotifierWithId(&HSTRING::from(
+        app.config().identifier.as_str(),
+    ))
+    .map_err(|error| error.to_string())?;
+    notifier.Show(&toast).map_err(|error| error.to_string())
+}
+
+#[cfg(target_os = "windows")]
+fn activate_windows_notification(app: &AppHandle, notification_id: i32) {
+    show_main_window(app);
+    let should_emit =
+        if let Ok(mut activation) = app.state::<DesktopState>().notification_activation.lock() {
+            if activation.listener_ready {
+                true
+            } else {
+                if !activation.pending_ids.contains(&notification_id) {
+                    activation.pending_ids.push(notification_id);
+                }
+                false
+            }
+        } else {
+            false
+        };
+
+    if should_emit {
+        let _ = app.emit(
+            DESKTOP_NOTIFICATION_CLICKED_EVENT,
+            DesktopNotificationClicked {
+                session_id: None,
+                notification_id: Some(notification_id),
+            },
+        );
+    }
+}
+
+#[tauri::command]
+fn set_desktop_notification_click_listener_ready(
+    state: State<'_, DesktopState>,
+    ready: bool,
+) -> Vec<i32> {
+    let Ok(mut activation) = state.notification_activation.lock() else {
+        return Vec::new();
+    };
+    activation.listener_ready = ready;
+    if ready {
+        std::mem::take(&mut activation.pending_ids)
+    } else {
+        Vec::new()
+    }
+}
+
 #[tauri::command]
 fn set_close_to_tray(state: State<'_, DesktopState>, enabled: bool) {
     state.close_to_tray.store(enabled, Ordering::SeqCst);
@@ -256,7 +452,6 @@ async fn show_desktop_notification(
     {
         use tauri::plugin::PermissionState;
         use tauri_plugin_notifications::NotificationsExt;
-        let _ = session_id;
 
         let permission = app
             .notifications()
@@ -274,6 +469,7 @@ async fn show_desktop_notification(
             .id(notification_id)
             .title(title)
             .body(body)
+            .extra("sessionId", session_id)
             .auto_cancel()
             .show()
             .await
@@ -281,15 +477,17 @@ async fn show_desktop_notification(
         return Ok(());
     }
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
+    {
+        let _ = session_id;
+        show_windows_notification(&app, notification_id, &title, &body)?;
+        return Ok(());
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         let mut notification = notify_rust::Notification::new();
         notification.summary(&title).body(&body);
-
-        #[cfg(target_os = "windows")]
-        if !tauri::is_dev() {
-            notification.app_id(&app.config().identifier);
-        }
 
         let handle = notification.show().map_err(|error| error.to_string())?;
         std::thread::spawn(move || {
@@ -306,7 +504,10 @@ async fn show_desktop_notification(
                 show_main_window(&app);
                 let _ = app.emit(
                     DESKTOP_NOTIFICATION_CLICKED_EVENT,
-                    DesktopNotificationClicked { session_id },
+                    DesktopNotificationClicked {
+                        session_id: Some(session_id),
+                        notification_id: None,
+                    },
                 );
             });
         });
@@ -1668,6 +1869,11 @@ pub fn run() {
 
     builder
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            #[cfg(target_os = "windows")]
+            if let Some(notification_id) = notification_ids_from_args(_args).into_iter().next() {
+                activate_windows_notification(app, notification_id);
+                return;
+            }
             show_main_window(app);
         }))
         .plugin(tauri_plugin_opener::init())
@@ -1691,6 +1897,7 @@ pub fn run() {
             start_desktop_window_dragging,
             show_desktop_window,
             show_desktop_notification,
+            set_desktop_notification_click_listener_ready,
             toggle_desktop_window,
             set_desktop_unread_count,
             get_desktop_diagnostics,
@@ -1707,8 +1914,13 @@ pub fn run() {
 
             build_tray(app.handle())?;
             #[cfg(target_os = "windows")]
-            if let Some(window) = app.get_webview_window("main") {
-                window.set_decorations(false)?;
+            {
+                if let Err(error) = register_windows_notification_protocol(app.handle()) {
+                    log::warn!("Failed to register Windows notification protocol: {error}");
+                }
+                if let Some(window) = app.get_webview_window("main") {
+                    window.set_decorations(false)?;
+                }
             }
 
             let bootstrap_path = app
@@ -1829,6 +2041,24 @@ mod tests {
         let encoded = serde_json::to_string(&state).unwrap();
         let decoded: DesktopBootstrapState = serde_json::from_str(&encoded).unwrap();
         assert_eq!(decoded, state);
+    }
+
+    #[test]
+    fn extracts_notification_ids_from_protocol_activation_arguments() {
+        assert_eq!(
+            notification_ids_from_args([
+                "happy-next.exe",
+                "happy-next://notification/42",
+                "--hidden",
+            ]),
+            vec![42]
+        );
+        assert!(notification_ids_from_args([
+            "happy-next://notification/not-a-number",
+            "happy-next://notification/-1",
+            "https://example.com/notification/42",
+        ])
+        .is_empty());
     }
 
     #[test]
