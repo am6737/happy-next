@@ -76,9 +76,6 @@ function ScannerScreen() {
                 <TouchableOpacity style={styles.button} onPress={handleRequestPermission}>
                     <Text style={styles.buttonText}>{t('common.continue')}</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.secondaryButton} onPress={handleClose}>
-                    <Text style={[styles.secondaryButtonText, { color: theme.colors.text }]}>{t('common.cancel')}</Text>
-                </TouchableOpacity>
             </View>
         );
     }
