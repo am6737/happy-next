@@ -21,6 +21,11 @@ Happy Next is now ready for direct desktop distribution on macOS and Windows, wi
 - Models: added Claude Opus 5, Claude Sonnet 5, Gemini 3.6 Flash, and Gemini 3.5 Flash-Lite with updated reasoning options, context limits, fast-mode support, and Claude 5 cost calculation
 - Messages and iOS: duplicate/fork actions resolve the intended user-message target more reliably; action menus remain stable with the keyboard visible; scanner camera permissions are clearer and an unused motion permission is removed
 - Notifications and themes: notification previews use clean plain text, while adaptive system-theme changes apply reliably across app and desktop authentication windows
+- iOS privacy: the camera permission explanation now proceeds directly to the iOS system permission request without offering a cancel action
+- Desktop notifications: clicking macOS notifications reliably restores the app and opens the associated session
+- Desktop updates: automatic update checks now repeat periodically and when the app regains focus, while avoiding redundant requests
+- Windows notifications: native notifications now display the Happy Next app icon consistently
+- Windows navigation: clicking the title-bar logo now returns directly to the Sessions home screen
 - CLI: Happy CLI updated to v0.6.6 with refreshed model support and pricing, multiline skill-metadata parsing, enabled plugin-skill discovery, and more reliable message-target resolution
 
 ## Version 19 - 2026-07-22
