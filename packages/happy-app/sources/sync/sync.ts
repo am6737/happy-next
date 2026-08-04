@@ -71,6 +71,16 @@ import {
     type SessionModeAgentType,
     type SessionModeConfigPatch,
 } from './sessionModeConfig';
+import {
+    SESSION_APPEARANCE_KV_KEY,
+    applySessionAppearancePatches,
+    createEmptySessionAppearance,
+    decodeSessionAppearanceValue,
+    encodeSessionAppearanceValue,
+    normalizeSessionAppearance,
+    type SessionAppearancePatch,
+    type SessionMarkerColor,
+} from './sessionAppearance';
 import { messageRepository } from './messagesStore/messageRepository';
 import {
     buildCoverageStatePatch,
@@ -239,6 +249,7 @@ class Sync {
     private artifactDataKeys = new Map<string, Uint8Array>(); // Store artifact data encryption keys internally
     private settingsSync: InvalidateSync;
     private sessionModeConfigSync: InvalidateSync;
+    private sessionAppearanceSync: InvalidateSync;
     private profileSync: InvalidateSync;
     private machinesSync: InvalidateSync;
     private pushTokenSync: InvalidateSync;
@@ -254,6 +265,7 @@ class Sync {
     private activityAccumulator: ActivityUpdateAccumulator;
     private pendingSettings: Partial<Settings> = loadPendingSettings();
     private pendingSessionModePatches: SessionModeConfigPatch[] = [];
+    private pendingSessionAppearancePatches: SessionAppearancePatch[] = [];
 
     // Track which session the user is currently viewing
     private viewingSessionId: string | null = null;
@@ -287,6 +299,7 @@ class Sync {
         this.sessionsSync = new InvalidateSync(this.runSessionsSync);
         this.settingsSync = new InvalidateSync(this.syncSettings);
         this.sessionModeConfigSync = new InvalidateSync(this.syncSessionModeConfig);
+        this.sessionAppearanceSync = new InvalidateSync(this.syncSessionAppearance);
         this.profileSync = new InvalidateSync(this.fetchProfile);
         this.machinesSync = new InvalidateSync(this.fetchMachines);
         this.nativeUpdateSync = new InvalidateSync(this.fetchNativeUpdate);
@@ -318,6 +331,7 @@ class Sync {
                 this.openClawMachinesSync.invalidate();
                 this.pushTokenSync.invalidate();
                 this.sessionsSync.invalidate();
+                this.sessionAppearanceSync.invalidate();
                 this.nativeUpdateSync.invalidate();
                 log.log('📱 App became active: Invalidating artifacts sync');
                 this.artifactsSync.invalidate();
@@ -393,6 +407,7 @@ class Sync {
         // Await settings sync to have fresh settings
         await this.settingsSync.awaitQueue();
         await this.sessionModeConfigSync.awaitQueue();
+        await this.sessionAppearanceSync.awaitQueue();
 
         // Await profile sync to have fresh profile
         await this.profileSync.awaitQueue();
@@ -467,6 +482,7 @@ class Sync {
         this.sessionsSync.invalidate();
         this.settingsSync.invalidate();
         this.sessionModeConfigSync.invalidate();
+        this.sessionAppearanceSync.invalidate();
         this.profileSync.invalidate();
         this.machinesSync.invalidate();
         this.openClawMachinesSync.invalidate();
@@ -1568,6 +1584,17 @@ class Sync {
 
         this.pendingSessionModePatches.push(patch);
         this.sessionModeConfigSync.invalidate();
+    }
+
+    queueSessionMarkerColorUpdate = (
+        sessionId: string,
+        color: SessionMarkerColor | null,
+        updatedAt: number = Date.now(),
+    ) => {
+        const patch: SessionAppearancePatch = { sessionId, color, updatedAt };
+        storage.getState().applySessionAppearancePatchLocal(patch);
+        this.pendingSessionAppearancePatches.push(patch);
+        this.sessionAppearanceSync.invalidate();
     }
 
     refreshProfile = async () => {
@@ -2965,6 +2992,67 @@ class Sync {
         storage.getState().applySessionModeConfigFromCloud(doc, latest.version);
     }
 
+    private syncSessionAppearance = async () => {
+        if (!this.credentials) return;
+
+        let pending = this.pendingSessionAppearancePatches.splice(0);
+        const maxRetries = 3;
+        let retryCount = 0;
+        let didWriteSuccessfully = false;
+
+        if (pending.length > 0) {
+            let baseVersion = storage.getState().sessionAppearanceVersion;
+            let baseDoc = normalizeSessionAppearance(storage.getState().sessionAppearance);
+
+            while (retryCount < maxRetries) {
+                const mergedDoc = applySessionAppearancePatches(baseDoc, pending);
+                const result = await kvMutate(this.credentials, [{
+                    key: SESSION_APPEARANCE_KV_KEY,
+                    value: encodeSessionAppearanceValue(mergedDoc),
+                    version: baseVersion,
+                }]);
+
+                if (result.success) {
+                    const nextVersion = result.results[0]?.version ?? baseVersion;
+                    storage.getState().applySessionAppearanceFromCloud(mergedDoc, nextVersion);
+                    pending = [];
+                    didWriteSuccessfully = true;
+                    break;
+                }
+
+                const mismatch = result.errors.find(error => error.key === SESSION_APPEARANCE_KV_KEY);
+                if (!mismatch) {
+                    this.pendingSessionAppearancePatches = [...pending, ...this.pendingSessionAppearancePatches];
+                    throw new Error('Failed to update session appearance: missing mismatch payload');
+                }
+
+                baseVersion = mismatch.version;
+                baseDoc = mismatch.value
+                    ? decodeSessionAppearanceValue(mismatch.value)
+                    : createEmptySessionAppearance();
+                storage.getState().applySessionAppearanceFromCloud(baseDoc, baseVersion);
+                retryCount += 1;
+            }
+
+            if (pending.length > 0) {
+                this.pendingSessionAppearancePatches = [...pending, ...this.pendingSessionAppearancePatches];
+                throw new Error(`Session appearance sync failed after ${maxRetries} retries due to version conflicts`);
+            }
+        }
+
+        if (didWriteSuccessfully) return;
+
+        const latest = await kvGet(this.credentials, SESSION_APPEARANCE_KV_KEY);
+        if (!latest) {
+            storage.getState().applySessionAppearanceFromCloud(createEmptySessionAppearance(), -1);
+            return;
+        }
+        storage.getState().applySessionAppearanceFromCloud(
+            decodeSessionAppearanceValue(latest.value),
+            latest.version,
+        );
+    }
+
     private syncSettings = async () => {
         if (!this.credentials) return;
 
@@ -4230,12 +4318,20 @@ class Sync {
                 }
             }
         } else if (updateData.body.t === 'kv-batch-update') {
-            const change = updateData.body.changes.find((item) => item.key === SESSION_MODE_CONFIG_KV_KEY);
-            if (change) {
-                const doc = change.value
-                    ? decodeSessionModeConfigValue(change.value)
+            const modeConfigChange = updateData.body.changes.find((item) => item.key === SESSION_MODE_CONFIG_KV_KEY);
+            if (modeConfigChange) {
+                const doc = modeConfigChange.value
+                    ? decodeSessionModeConfigValue(modeConfigChange.value)
                     : createEmptySessionModeConfig();
-                storage.getState().applySessionModeConfigFromCloud(doc, change.version);
+                storage.getState().applySessionModeConfigFromCloud(doc, modeConfigChange.version);
+            }
+
+            const appearanceChange = updateData.body.changes.find((item) => item.key === SESSION_APPEARANCE_KV_KEY);
+            if (appearanceChange) {
+                const doc = appearanceChange.value
+                    ? decodeSessionAppearanceValue(appearanceChange.value)
+                    : createEmptySessionAppearance();
+                storage.getState().applySessionAppearanceFromCloud(doc, appearanceChange.version);
             }
         } else if (updateData.body.t === 'new-machine') {
             // Re-fetch all machines to pick up the newly registered device

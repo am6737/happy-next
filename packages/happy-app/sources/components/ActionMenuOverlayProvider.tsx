@@ -12,6 +12,9 @@ interface OverlayEntry {
     onClose: () => void;
     onDismissed: () => void;
     title?: string;
+    headerContent?: React.ReactNode;
+    footerContent?: React.ReactNode;
+    maxHeight?: number;
 }
 
 interface OverlayContextValue {
@@ -134,7 +137,14 @@ export function ActionMenuOverlayProvider({ children }: { children: React.ReactN
                                 },
                             ]}
                         >
-                            <ActionMenu items={entry.items} onClose={entry.onClose} title={entry.title} />
+                            <ActionMenu
+                                items={entry.items}
+                                onClose={entry.onClose}
+                                title={entry.title}
+                                headerContent={entry.headerContent}
+                                footerContent={entry.footerContent}
+                                maxHeight={entry.maxHeight}
+                            />
                         </Animated.View>
                     </View>
                 ) : null}

@@ -31,6 +31,7 @@ import { HappyError } from '@/utils/errors';
 import { Modal } from '@/modal';
 import { sync } from '@/sync/sync';
 import { SessionContextMenu } from './SessionContextMenu';
+import { SessionColorMarkerForSession } from './SessionColorMarker';
 import { getDesktopPlatform } from '@/desktop/desktopWindowUtils';
 
 const stylesheet = StyleSheet.create((theme) => ({
@@ -915,6 +916,7 @@ const SessionItem = React.memo(({ session, selected, isFirst, isLast, isSingle, 
                     }}>
                         {sessionName}
                     </Text>
+                    <SessionColorMarkerForSession sessionId={session.id} />
                 </View>
 
                 {!compactSessionView && (

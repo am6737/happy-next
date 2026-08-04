@@ -1,11 +1,13 @@
 import React from 'react';
 import { Platform, Pressable, useWindowDimensions, View } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from '@/components/StyledText';
 import { Typography } from '@/constants/Typography';
 import { Session } from '@/sync/storageTypes';
-import { useOrchestratorHasRuns } from '@/sync/storage';
+import { useOrchestratorHasRuns, useSessionMarkerColor } from '@/sync/storage';
 import { getSessionName, useSessionStatus, generateCopyTitle, copySessionMetadata, copySessionModeSettings } from '@/utils/sessionUtils';
 import { useRouter } from 'expo-router';
 import { t } from '@/text';
@@ -29,6 +31,8 @@ import { ActionMenuModal } from './ActionMenuModal';
 import { ActionMenuItem } from './ActionMenu';
 import { getSessionQuickActionKinds, SessionQuickActionKind } from './sessionQuickActions';
 import { SessionContextMenuPortal } from './SessionContextMenuPortal';
+import { SessionColorPalette } from './SessionColorMarker';
+import type { SessionMarkerColor } from '@/sync/sessionAppearance';
 
 type MenuPosition = { x: number; y: number };
 type QuickAction = {
@@ -40,15 +44,17 @@ type QuickAction = {
     onPress: () => void;
 };
 
-const MENU_WIDTH = 220;
+const MENU_WIDTH = 212;
 const ITEM_HEIGHT = 42;
 const MENU_PADDING = 8;
+const PALETTE_HEIGHT = 46;
 
 const styles = StyleSheet.create((theme) => ({
     menu: {
         position: 'absolute',
         width: MENU_WIDTH,
-        paddingVertical: MENU_PADDING,
+        paddingTop: MENU_PADDING,
+        paddingBottom: 0,
         borderRadius: 10,
         backgroundColor: theme.colors.surface,
         borderWidth: StyleSheet.hairlineWidth,
@@ -326,15 +332,29 @@ function useSessionQuickActions(session: Session) {
 export function SessionContextMenu({ session, children }: { session: Session; children: React.ReactNode }) {
     const { theme } = useUnistyles();
     const { width, height } = useWindowDimensions();
+    const safeArea = useSafeAreaInsets();
     const [position, setPosition] = React.useState<MenuPosition | null>(null);
     const [hoveredAction, setHoveredAction] = React.useState<SessionQuickActionKind | null>(null);
+    const [nativeMenuVisible, setNativeMenuVisible] = React.useState(false);
     const menuRef = React.useRef<HTMLElement | null>(null);
+    const lastLongPressAtRef = React.useRef(0);
     const { actions, archiveMenu } = useSessionQuickActions(session);
+    const markerColor = useSessionMarkerColor(session.id);
+    const nativeQuickActionsMaxHeight = Math.max(
+        240,
+        height - safeArea.top - safeArea.bottom - 72,
+    );
 
     const closeMenu = React.useCallback(() => {
         setPosition(null);
         setHoveredAction(null);
     }, []);
+
+    const selectMarkerColor = React.useCallback((color: SessionMarkerColor | null) => {
+        closeMenu();
+        setNativeMenuVisible(false);
+        sync.queueSessionMarkerColorUpdate(session.id, color);
+    }, [closeMenu, session.id]);
 
     React.useEffect(() => {
         if (Platform.OS !== 'web' || position === null || typeof document === 'undefined') return;
@@ -370,9 +390,51 @@ export function SessionContextMenu({ session, children }: { session: Session; ch
         };
     }, [closeMenu, position]);
 
-    if (Platform.OS !== 'web') return <>{children}</>;
+    if (Platform.OS !== 'web') {
+        const child = React.isValidElement(children)
+            ? React.cloneElement(children as React.ReactElement<any>, {
+                onLongPress: (event: unknown) => {
+                    (children.props as { onLongPress?: (event: unknown) => void }).onLongPress?.(event);
+                    lastLongPressAtRef.current = Date.now();
+                    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                    setNativeMenuVisible(true);
+                },
+                onPress: (event: unknown) => {
+                    if (Date.now() - lastLongPressAtRef.current < 1_000) return;
+                    (children.props as { onPress?: (event: unknown) => void }).onPress?.(event);
+                },
+                delayLongPress: 450,
+            })
+            : children;
+        const nativeItems: ActionMenuItem[] = actions.map(action => ({
+            label: action.label,
+            destructive: action.destructive,
+            disabled: action.disabled,
+            onPress: action.onPress,
+        }));
 
-    const menuHeight = actions.length * ITEM_HEIGHT + MENU_PADDING * 2;
+        return (
+            <>
+                {child}
+                <ActionMenuModal
+                    visible={nativeMenuVisible}
+                    title={t('sessionInfo.quickActions')}
+                    items={nativeItems}
+                    onClose={() => setNativeMenuVisible(false)}
+                    maxHeight={nativeQuickActionsMaxHeight}
+                    footerContent={(
+                        <SessionColorPalette
+                            selectedColor={markerColor}
+                            onSelect={selectMarkerColor}
+                        />
+                    )}
+                />
+                {archiveMenu}
+            </>
+        );
+    }
+
+    const menuHeight = actions.length * ITEM_HEIGHT + MENU_PADDING + PALETTE_HEIGHT;
     const left = position ? Math.max(8, Math.min(position.x, width - MENU_WIDTH - 8)) : 0;
     const top = position ? Math.max(8, Math.min(position.y, height - menuHeight - 8)) : 0;
     const handleContextMenu = (event: {
@@ -427,6 +489,11 @@ export function SessionContextMenu({ session, children }: { session: Session; ch
                                 </Text>
                             </Pressable>
                         ))}
+                        <SessionColorPalette
+                            selectedColor={markerColor}
+                            onSelect={selectMarkerColor}
+                            compact
+                        />
                     </View>
                 </SessionContextMenuPortal>
             )}

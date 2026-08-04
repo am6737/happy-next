@@ -30,6 +30,12 @@ import {
     type SessionModeConfigDocument,
     type SessionModeConfigPatch,
 } from "./sessionModeConfig";
+import {
+    applySessionAppearancePatch,
+    createEmptySessionAppearance,
+    type SessionAppearanceDocument,
+    type SessionAppearancePatch,
+} from './sessionAppearance';
 import { emitDesktopPermissionRequest } from '@/desktop/desktopEvents';
 import {
     removePendingMessageFromQueue,
@@ -99,6 +105,8 @@ interface StorageState {
     settingsVersion: number | null;
     sessionModeConfig: SessionModeConfigDocument;
     sessionModeConfigVersion: number;
+    sessionAppearance: SessionAppearanceDocument;
+    sessionAppearanceVersion: number;
     localSettings: LocalSettings;
     profile: Profile;
     sessions: Record<string, Session>;
@@ -184,6 +192,8 @@ interface StorageState {
     applySettingsLocal: (settings: Partial<Settings>) => void;
     applySessionModeConfigFromCloud: (doc: SessionModeConfigDocument, version: number) => void;
     applySessionModeConfigPatchLocal: (patch: SessionModeConfigPatch) => void;
+    applySessionAppearanceFromCloud: (doc: SessionAppearanceDocument, version: number) => void;
+    applySessionAppearancePatchLocal: (patch: SessionAppearancePatch) => void;
     applyLocalSettings: (settings: Partial<LocalSettings>) => void;
     applyProfile: (profile: Profile) => void;
     applyGitStatus: (sessionId: string, status: GitStatus | null) => void;
@@ -419,6 +429,8 @@ export const storage = create<StorageState>()((set, get) => {
         settingsVersion: version,
         sessionModeConfig: createEmptySessionModeConfig(),
         sessionModeConfigVersion: -1,
+        sessionAppearance: createEmptySessionAppearance(),
+        sessionAppearanceVersion: -1,
         localSettings,
         profile,
         sessions: {},
@@ -1261,6 +1273,19 @@ export const storage = create<StorageState>()((set, get) => {
                     : state.sessionListViewData,
             };
         }),
+        applySessionAppearanceFromCloud: (doc: SessionAppearanceDocument, version: number) => set((state) => {
+            if (version < state.sessionAppearanceVersion) return state;
+            if (version === state.sessionAppearanceVersion && doc === state.sessionAppearance) return state;
+            return {
+                ...state,
+                sessionAppearance: doc,
+                sessionAppearanceVersion: version,
+            };
+        }),
+        applySessionAppearancePatchLocal: (patch: SessionAppearancePatch) => set((state) => ({
+            ...state,
+            sessionAppearance: applySessionAppearancePatch(state.sessionAppearance, patch),
+        })),
         applyLocalSettings: (delta: Partial<LocalSettings>) => set((state) => {
             const updatedLocalSettings = applyLocalSettings(state.localSettings, delta);
             saveLocalSettings(updatedLocalSettings);
@@ -2362,6 +2387,10 @@ export function useSettings(): Settings {
 
 export function useSessionModeConfig(): SessionModeConfigDocument {
     return storage(useShallow((state) => state.sessionModeConfig));
+}
+
+export function useSessionMarkerColor(sessionId: string) {
+    return storage(useShallow((state) => state.sessionAppearance.sessions[sessionId]?.color ?? null));
 }
 
 export function useSessionModeLastUsed(agentType: SessionModeAgentType) {

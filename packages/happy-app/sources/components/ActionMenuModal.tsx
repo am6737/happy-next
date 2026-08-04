@@ -31,6 +31,9 @@ interface ActionMenuModalProps {
     deferItemPress?: boolean;
     /** Optional title displayed at the top of the menu */
     title?: string;
+    headerContent?: React.ReactNode;
+    footerContent?: React.ReactNode;
+    maxHeight?: number;
 }
 
 const ANIMATION_DURATION = 250;
@@ -52,12 +55,12 @@ const styles = StyleSheet.create({
     },
 });
 
-function IOSActionMenuOverlay({ visible, items, onClose, deferItemPress, title }: ActionMenuModalProps) {
+function IOSActionMenuOverlay({ visible, items, onClose, deferItemPress, title, headerContent, footerContent, maxHeight }: ActionMenuModalProps) {
     const overlay = useContext(ActionMenuOverlayContext);
     const id = useRef(`action-menu-${Math.random().toString(36).slice(2)}`).current;
-    const propsRef = useRef({ items, onClose, deferItemPress, title });
+    const propsRef = useRef({ items, onClose, deferItemPress, title, headerContent, footerContent, maxHeight });
     const pendingActionRef = useRef<(() => void) | null>(null);
-    propsRef.current = { items, onClose, deferItemPress, title };
+    propsRef.current = { items, onClose, deferItemPress, title, headerContent, footerContent, maxHeight };
 
     useEffect(() => {
         if (!overlay) return;
@@ -81,6 +84,9 @@ function IOSActionMenuOverlay({ visible, items, onClose, deferItemPress, title }
             id,
             items: overlayItems,
             title: current.title,
+            headerContent: current.headerContent,
+            footerContent: current.footerContent,
+            maxHeight: current.maxHeight,
             onClose: () => propsRef.current.onClose(),
             onDismissed: () => {
                 const pendingAction = pendingActionRef.current;
@@ -95,7 +101,7 @@ function IOSActionMenuOverlay({ visible, items, onClose, deferItemPress, title }
     return null;
 }
 
-function NativeActionMenuModal({ visible, items, onClose, deferItemPress, title }: ActionMenuModalProps) {
+function NativeActionMenuModal({ visible, items, onClose, deferItemPress, title, headerContent, footerContent, maxHeight }: ActionMenuModalProps) {
     // Track actual modal visibility (delayed hide for animation)
     const [modalVisible, setModalVisible] = useState(false);
     const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -202,7 +208,14 @@ function NativeActionMenuModal({ visible, items, onClose, deferItemPress, title 
                         },
                     ]}
                 >
-                    <ActionMenu items={wrappedItems} onClose={handleClose} title={title} />
+                    <ActionMenu
+                        items={wrappedItems}
+                        onClose={handleClose}
+                        title={title}
+                        headerContent={headerContent}
+                        footerContent={footerContent}
+                        maxHeight={maxHeight}
+                    />
                 </Animated.View>
             </View>
         </Modal>

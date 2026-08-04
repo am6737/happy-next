@@ -23,12 +23,16 @@ export interface ActionMenuItem {
     color?: string;
     /** Show checkmark to indicate current/active state */
     selected?: boolean;
+    disabled?: boolean;
 }
 
 interface ActionMenuProps {
     items: ActionMenuItem[];
     onClose: () => void;
     title?: string;
+    headerContent?: React.ReactNode;
+    footerContent?: React.ReactNode;
+    maxHeight?: number;
 }
 
 const styles = StyleSheet.create((theme) => ({
@@ -68,6 +72,9 @@ const styles = StyleSheet.create((theme) => ({
     itemTextSecondary: {
         color: theme.colors.textSecondary,
     },
+    itemDisabled: {
+        opacity: 0.45,
+    },
     titleContainer: {
         paddingVertical: 12,
         paddingHorizontal: 20,
@@ -98,7 +105,7 @@ const styles = StyleSheet.create((theme) => ({
     },
 }));
 
-export function ActionMenu({ items, onClose, title }: ActionMenuProps) {
+export function ActionMenu({ items, onClose, title, headerContent, footerContent, maxHeight = 400 }: ActionMenuProps) {
     const { theme } = useUnistyles();
     const safeArea = useSafeAreaInsets();
 
@@ -111,20 +118,23 @@ export function ActionMenu({ items, onClose, title }: ActionMenuProps) {
 
     return (
         <View style={[styles.wrapper, { paddingBottom: safeArea.bottom + 8 }]}>
-            <View style={[styles.container, { maxHeight: 400 }]}>
+            <View style={[styles.container, { maxHeight }]}>
                 {title ? (
                     <View style={styles.titleContainer}>
                         <Text style={styles.titleText} numberOfLines={2}>{title}</Text>
                     </View>
                 ) : null}
+                {headerContent}
                 <ScrollView bounces={false}>
                     {items.map((item, index) => (
                         <Pressable
                             key={index}
+                            disabled={item.disabled}
                             style={({ pressed }) => [
                                 styles.item,
                                 index === items.length - 1 && styles.itemLast,
                                 pressed && { backgroundColor: theme.colors.surfacePressed },
+                                item.disabled && styles.itemDisabled,
                             ]}
                             onPress={() => handleItemPress(item)}
                         >
@@ -145,6 +155,7 @@ export function ActionMenu({ items, onClose, title }: ActionMenuProps) {
                             </View>
                         </Pressable>
                     ))}
+                    {footerContent}
                 </ScrollView>
             </View>
             <View style={styles.cancelContainer}>

@@ -25,6 +25,7 @@ import { ActionMenuModal } from '@/components/ActionMenuModal';
 import { ActionMenuItem } from '@/components/ActionMenu';
 import { sync } from '@/sync/sync';
 import { SessionContextMenu } from './SessionContextMenu';
+import { SessionColorMarkerForSession } from './SessionColorMarker';
 import { SessionProjectGroup, useCollapsedSessionProjectGroups, useSessionProjectGroups } from '@/hooks/useSessionProjectGroups';
 
 const stylesheet = StyleSheet.create((theme, runtime) => ({
@@ -484,6 +485,7 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder, registerS
                     >
                         {sessionName}
                     </Text>
+                    <SessionColorMarkerForSession sessionId={session.id} />
                 </View>
 
                 {/* Status line with dot */}
