@@ -27,12 +27,10 @@ export function pushRoutes(app: Fastify) {
         try {
             await db.accountPushToken.upsert({
                 where: {
-                    accountId_token: {
-                        accountId: userId,
-                        token: token
-                    }
+                    token
                 },
                 update: {
+                    accountId: userId,
                     updatedAt: new Date()
                 },
                 create: {
