@@ -51,7 +51,6 @@ type ChatMessageListProps = {
     userDisabledAt: Record<number, string | null>;
     onLoadMore: () => void;
     loadingMore: boolean;
-    loading?: boolean;
     hasMore: boolean;
     onMessageLongPress: (msg: DooTaskDialogMsg, layout?: { y: number; height: number }) => void;
     onImagePress: (url: string) => void;
@@ -82,7 +81,6 @@ export const ChatMessageList = React.memo(({
     userDisabledAt,
     onLoadMore,
     loadingMore,
-    loading,
     hasMore,
     onMessageLongPress,
     onImagePress,
@@ -223,18 +221,6 @@ export const ChatMessageList = React.memo(({
         );
     }, [loadingMore]);
 
-    const listEmpty = React.useMemo(() => (
-        <View style={styles.emptyContainer}>
-            {loading ? (
-                <ActivityIndicator size="small" color={theme.colors.textSecondary} />
-            ) : (
-                <Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>
-                    {t('dootask.chatEmpty')}
-                </Text>
-            )}
-        </View>
-    ), [loading, theme]);
-
     // Force FlatList to re-render when avatar data loads asynchronously
     const extraData = React.useMemo(() => ({ userAvatars, userNames, userDisabledAt }), [userAvatars, userNames, userDisabledAt]);
 
@@ -252,7 +238,6 @@ export const ChatMessageList = React.memo(({
                 onEndReached={handleEndReached}
                 onEndReachedThreshold={0.3}
                 ListFooterComponent={listFooter}
-                ListEmptyComponent={listEmpty}
                 contentContainerStyle={styles.contentContainer}
                 initialNumToRender={50}
                 maxToRenderPerBatch={50}
@@ -334,15 +319,5 @@ const styles = StyleSheet.create((theme) => ({
     loadingFooter: {
         paddingVertical: theme.margins.lg,
         alignItems: 'center',
-    },
-    emptyContainer: {
-        flex: 1,
-        alignItems: 'center',
-        justifyContent: 'center',
-        transform: [{ scaleY: -1 }],
-    },
-    emptyText: {
-        ...Typography.default(),
-        fontSize: 14,
     },
 }));
