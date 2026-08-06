@@ -25,6 +25,7 @@
         "decorations": true,
         "titleBarStyle": "Overlay",
         "hiddenTitle": true,
+        "dragDropEnabled": false,
         "backgroundThrottling": "disabled"
       }
     ],

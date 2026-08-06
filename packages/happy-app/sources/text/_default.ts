@@ -772,6 +772,7 @@ export const en = {
         takePhoto: 'Take Photo',
         chooseFromLibrary: 'Choose from Library',
         pasteFromClipboard: 'Paste from Clipboard',
+        dropImagesToAttach: 'Drop images to attach',
         sharing: {
             title: 'Sharing',
             directSharing: 'Direct sharing',

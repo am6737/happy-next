@@ -793,6 +793,7 @@ export const ja: TranslationStructure = {
         takePhoto: '写真を撮る',
         chooseFromLibrary: 'ライブラリから選択',
         pasteFromClipboard: 'クリップボードから貼り付け',
+        dropImagesToAttach: 'ドロップして画像を添付',
         sharing: {
             title: '共有',
             directSharing: 'ダイレクト共有',

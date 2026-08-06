@@ -934,6 +934,7 @@ export const ru: TranslationStructure = {
         takePhoto: 'Сделать фото',
         chooseFromLibrary: 'Выбрать из галереи',
         pasteFromClipboard: 'Вставить из буфера обмена',
+        dropImagesToAttach: 'Отпустите изображения, чтобы прикрепить их',
         sharing: {
             title: 'Общий доступ',
             directSharing: 'Прямой доступ',

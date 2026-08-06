@@ -791,6 +791,7 @@ export const it: TranslationStructure = {
         takePhoto: 'Scatta foto',
         chooseFromLibrary: 'Scegli dalla galleria',
         pasteFromClipboard: 'Incolla dagli appunti',
+        dropImagesToAttach: 'Rilascia le immagini per allegarle',
         sharing: {
             title: 'Condivisione',
             directSharing: 'Condivisione diretta',
