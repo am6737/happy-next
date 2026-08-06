@@ -176,6 +176,7 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Globalized WebSocket connection with real-time task updates and persistent server-side connection
 - DooTask recents merged into the main inbox with persistent cache and silent background refresh
 - Session avatars on DooTask-related sessions, chat header adapts to dialog type
+- Empty chats show a consistently centered empty state
 
 ### Self-Hosting
 - One-command `docker-compose up` (Web + API + Voice + Postgres + Redis + MinIO)
@@ -218,6 +219,7 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Recent session history pagination for faster initial load
 - Session rename with lock (prevent AI auto-update), search in history
 - Session-info quick actions for common session tasks
+- Seven session color markers can be assigned or cleared from session menus for quick visual organization across session lists
 - Options click-to-send / long-press-to-fill, scroll-to-bottom button
 - "Always show context size" defaults to on so usage is visible without opening session details
 - Per-message action bar with copy, fork-from-here (with progress spinner), read-aloud, and full timestamp on web hover / native tap
@@ -255,7 +257,7 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 ### UI & Polish
 - Native platform-feel mobile UX: iOS / Android use the platform-native bottom tab bar and native header on home, chat, and inbox screens
 - Inbox-first bottom tab order, "Session" tab label, dedicated navigation icons (no more brutalist placeholders)
-- iOS polish: chevron-only back button, header avatar geometry/clipping fixes, centered native header title, centralized status bar controller, and stable action menus while the keyboard is visible
+- iOS polish: chevron-only back button, header avatar geometry/clipping fixes, centered native header title, centralized status bar controller, stable action menus while the keyboard is visible, conflict-free image opening after dismissing the keyboard, and duplicate sheets without white overlays
 - iOS 26 fixes: scroll-edge fade suppression, full-screen translucent chat overlay with keyboard, prompt modal presentation
 - iPad / Mac windowed-mode polish: sidebar header reserves space for window controls, fixed session header resize, top-tab insets, list divider rendering, and windowed keyboard overlap
 - Web: bottom tab bundling fix, session header navigation fix, path autocomplete focus handling

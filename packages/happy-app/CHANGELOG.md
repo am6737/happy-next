@@ -1,5 +1,14 @@
 # Changelog
 
+## Version 21 - 2026-08-06
+
+Sessions can now be labeled with seven color markers for quicker visual organization. This release also improves iOS image opening and duplicate-sheet behavior when the keyboard is visible, and centers the empty state in DooTask chats.
+
+- Sessions: assign or clear one of seven color markers from the session menu, visible throughout session lists
+- iOS: dismiss the keyboard before opening images to prevent presentation conflicts
+- iOS: prevent a white overlay when opening the duplicate-session sheet with the keyboard visible
+- DooTask: center the empty-chat state consistently
+
 ## Version 20 - 2026-07-30
 
 Happy Next is now ready for direct desktop distribution on macOS and Windows, with a more native and reliable window experience, refreshed Claude and Gemini model support, easier HTML and Git workflows, collapsible session folders, refreshed branding, and further polish across notifications, session progress, iOS action menus, adaptive themes, message duplication, permissions, and the CLI.

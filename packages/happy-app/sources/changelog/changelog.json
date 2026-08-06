@@ -1,6 +1,18 @@
 {
   "entries": [
     {
+      "version": 21,
+      "date": "2026-08-06",
+      "summary": "Sessions can now be labeled with seven color markers for quicker visual organization. This release also improves iOS image opening and duplicate-sheet behavior when the keyboard is visible, and centers the empty state in DooTask chats.",
+      "changes": [
+        "Sessions: assign or clear one of seven color markers from the session menu, visible throughout session lists",
+        "iOS: dismiss the keyboard before opening images to prevent presentation conflicts",
+        "iOS: prevent a white overlay when opening the duplicate-session sheet with the keyboard visible",
+        "DooTask: center the empty-chat state consistently"
+      ],
+      "rawMarkdown": "## Version 21 - 2026-08-06\n\n\nSessions can now be labeled with seven color markers for quicker visual organization. This release also improves iOS image opening and duplicate-sheet behavior when the keyboard is visible, and centers the empty state in DooTask chats.\n\n- Sessions: assign or clear one of seven color markers from the session menu, visible throughout session lists\n- iOS: dismiss the keyboard before opening images to prevent presentation conflicts\n- iOS: prevent a white overlay when opening the duplicate-session sheet with the keyboard visible\n- DooTask: center the empty-chat state consistently"
+    },
+    {
       "version": 20,
       "date": "2026-07-30",
       "summary": "Happy Next is now ready for direct desktop distribution on macOS and Windows, with a more native and reliable window experience, refreshed Claude and Gemini model support, easier HTML and Git workflows, collapsible session folders, refreshed branding, and further polish across notifications, session progress, iOS action menus, adaptive themes, message duplication, permissions, and the CLI.",
@@ -356,5 +368,5 @@
       "rawMarkdown": "## Version 1 - 2025-05-12\n\n\nWelcome to Happy - your secure, encrypted mobile companion for Claude Code. This inaugural release establishes the foundation for private, powerful AI interactions on the go.\n\n- Implemented end-to-end encrypted session management ensuring complete privacy\n- Integrated intelligent voice assistant with natural conversation capabilities\n- Added experimental file manager with syntax highlighting and tree navigation\n- Built seamless real-time synchronization across all your devices\n- Established native support for iOS, Android, and responsive web interfaces"
     }
   ],
-  "latestVersion": 20
+  "latestVersion": 21
 }

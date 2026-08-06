@@ -224,6 +224,7 @@ Deep integration with DooTask project management, from browsing tasks to launchi
 - **Related task in session info**: session info page shows the linked DooTask task
 - **Persistent connection**: DooTask connection saved to server via UserKVStore
 - **Simple status badge**: tasks without workflow show a simple status badge
+- **Centered empty chats**: the empty state stays centered consistently when a chat has no messages
 
 ## Self-Hosting
 
@@ -266,6 +267,7 @@ Extensive improvements to the chat and session management experience.
 - **Session search** in history page
 - **Session rename** with lock to prevent AI auto-update
 - **Session quick actions** in session info for common session tasks
+- **Session color markers**: assign or clear one of seven colors from session menus for quick visual organization across session lists
 - **Session preview** on history page
 - **`/duplicate` command** in chat input to fork a session from any message, including directly from an AI reply (with DuplicateSheet picker)
 - **Optimistic send status**: an immediate "Processing…" status after sending, plus a "refreshing" indicator while the message list reloads
@@ -317,6 +319,7 @@ Extensive improvements to the chat and session management experience.
 - **Session draft as single source of truth**: rewritten to eliminate drafts vanishing or reappearing
 - **Generic 'other' tool block**: unrecognized tool calls render with a dynamic title and icon instead of an empty placeholder
 - **Agent event ANSI strip**: agent event messages strip ANSI escape codes from child-CLI stderr so subprocess banner color sequences no longer leak into the chat as raw `[90m…[0m`
+- **iOS modal reliability**: image viewing waits for the keyboard to dismiss, and the duplicate-session sheet no longer leaves a white overlay when opened with the keyboard visible
 
 ## CLI Improvements
 

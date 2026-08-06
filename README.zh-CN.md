@@ -176,6 +176,7 @@ Happy Next 是原版 Happy 的重大演进，以下是亮点：
 - 全局化 WebSocket 连接，实时任务更新，持久化服务端连接
 - DooTask 最近会话合并进收件箱，持久化缓存 + 后台静默刷新
 - DooTask 关联会话显示头像，chat header 按对话类型自适应
+- 空白聊天状态始终保持居中显示
 
 ### 自托管
 - 一条命令 `docker-compose up`（Web + API + Voice + Postgres + Redis + MinIO）
@@ -218,6 +219,7 @@ Happy Next 是原版 Happy 的重大演进，以下是亮点：
 - 最近会话历史分页，加快首屏加载
 - 会话重命名并锁定（防止 AI 自动更新）、历史搜索
 - 会话详情提供常用会话任务的快捷操作
+- 可从会话菜单设置或清除七种会话颜色标记，在各会话列表中快速直观地分类
 - 选项点击发送 / 长按填充、滚动到底部按钮
 - "始终显示上下文大小"默认开启，无需进入会话详情即可看到用量
 - 逐条消息 action bar：复制、从此处分叉（带进度转圈）、朗读、以及完整时间戳（Web 悬浮 / 原生点按显示）
@@ -255,7 +257,7 @@ Happy Next 是原版 Happy 的重大演进，以下是亮点：
 ### UI 和打磨
 - 原生平台感的移动体验：iOS / Android 首页、聊天、收件箱采用平台原生底栏与原生 header
 - 底栏顺序调整为收件箱优先，标签"Terminal"改名"Session"，并替换 brutalist 占位符为正式导航图标
-- iOS 打磨：返回按钮统一 chevron-only、header 头像几何/裁剪修正、原生 header 标题居中、集中式状态栏控制器，以及键盘显示时稳定的操作菜单
+- iOS 打磨：返回按钮统一 chevron-only、header 头像几何/裁剪修正、原生 header 标题居中、集中式状态栏控制器、键盘显示时稳定的操作菜单、收起键盘后无冲突地打开图片，以及复制会话面板不再出现白色覆层
 - iOS 26 适配：scroll-edge 渐隐抑制、键盘下全屏半透明聊天叠层、prompt modal 呈现
 - iPad / Mac 窗口化打磨：侧栏 header 为窗口控件预留空间，修复 session header resize、top tab insets、列表分割线渲染、窗口键盘遮挡
 - Web：底栏 bundling 修复、session header 导航修复、路径补全焦点处理
