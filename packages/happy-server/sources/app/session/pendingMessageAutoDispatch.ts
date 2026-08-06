@@ -7,7 +7,7 @@ import {
 } from "@/app/presence/sessionTurnRuntime";
 import { scheduleFirstMessageReplay } from "@/app/api/routes/firstMessageReplay";
 import { dispatchSessionMessage } from "@/app/session/sessionMessageDispatch";
-import { takeNextPendingMessageForDispatch } from "@/app/session/pendingMessageService";
+import { findNextPendingMessageForDispatch } from "@/app/session/pendingMessageService";
 
 function extractEncryptedText(content: unknown): string {
     if (
@@ -41,17 +41,10 @@ export async function dispatchNextPendingIfPossible(params: {
         // arrives at the app before the next pending message is dispatched.
         await new Promise(r => setTimeout(r, 3000));
 
-        const pending = await takeNextPendingMessageForDispatch(params.sessionId);
+        const pending = await findNextPendingMessageForDispatch(params.sessionId);
         if (!pending) {
             return { dispatched: false };
         }
-
-        await eventRouter.emitEphemeralToSessionSubscribers({
-            ownerId: params.ownerId,
-            sessionId: params.sessionId,
-            payload: buildPendingMessageDeleteEphemeral(params.sessionId, pending.id),
-            recipientFilter: { type: "all-interested-in-session", sessionId: params.sessionId },
-        });
 
         const content = extractEncryptedText(pending.content);
         const dispatched = await dispatchSessionMessage({
@@ -62,6 +55,14 @@ export async function dispatchNextPendingIfPossible(params: {
             sentBy: pending.sentBy,
             sentByName: pending.sentByName,
             trackCliDelivery: pending.trackCliDelivery,
+            pendingMessageId: pending.id,
+        });
+
+        await eventRouter.emitEphemeralToSessionSubscribers({
+            ownerId: params.ownerId,
+            sessionId: params.sessionId,
+            payload: buildPendingMessageDeleteEphemeral(params.sessionId, pending.id),
+            recipientFilter: { type: "all-interested-in-session", sessionId: params.sessionId },
         });
 
         markDispatched(params.sessionId);

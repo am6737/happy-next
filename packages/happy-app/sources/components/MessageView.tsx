@@ -13,7 +13,7 @@ import { Message, UserTextMessage, AgentTextMessage, ToolCallMessage } from "@/s
 import { Metadata } from "@/sync/storageTypes";
 import { layout } from "./layout";
 import { ToolView } from "./tools/ToolView";
-import { AgentEvent } from "@/sync/typesRaw";
+import { AgentEvent, AttachmentContent, ImageContent } from "@/sync/typesRaw";
 import stripAnsi from 'strip-ansi';
 import { Option } from './markdown/MarkdownView';
 import { OptionItem as OptionItemData } from './markdown/parseMarkdown';
@@ -24,6 +24,12 @@ import { showCopiedToast, showToast } from '@/components/Toast';
 import { formatMessageTime, formatFullMessageTime } from '@/utils/messageTime';
 import { hapticsLight } from './haptics';
 import { useMessageTts } from '@/hooks/useMessageTts';
+import { getServerUrl } from '@/sync/serverConfig';
+import { File, Paths } from 'expo-file-system';
+import { attachmentArrayBuffer, decryptAttachmentBytes } from '@/sync/attachmentCrypto';
+import { downloadPublicShareAttachmentBytes } from '@/sync/publicShareAttachmentDownload';
+import { shareAttachmentFile } from '@/sync/shareAttachmentFile';
+import { isTauriDesktop, saveTauriAttachment } from '@/sync/saveTauriAttachment';
 
 export const MessageView = (props: {
   message: Message;
@@ -39,6 +45,8 @@ export const MessageView = (props: {
   onFork?: () => void;
   showActionBar?: boolean;
   forkLoading?: boolean;
+  publicShareToken?: string;
+  publicShareAccessToken?: string;
 }) => {
   return (
     <View style={styles.messageContainer} renderToHardwareTextureAndroid={true}>
@@ -57,6 +65,8 @@ export const MessageView = (props: {
           onFork={props.onFork}
           showActionBar={props.showActionBar}
           forkLoading={props.forkLoading}
+          publicShareToken={props.publicShareToken}
+          publicShareAccessToken={props.publicShareAccessToken}
         />
       </View>
     </View>
@@ -189,6 +199,253 @@ function useMessageHover() {
   return { hovered, handlers };
 }
 
+async function fetchAttachmentPlaintext(
+  attachment: AttachmentContent,
+  publicShareToken?: string,
+  publicShareAccessToken?: string,
+  signal?: AbortSignal,
+): Promise<Uint8Array> {
+  const credentials = sync.getCredentials();
+  if (!publicShareToken && !credentials) throw new Error('Not authenticated');
+  const url = publicShareToken
+    ? `${getServerUrl()}/v1/public-share/${encodeURIComponent(publicShareToken)}/attachments/${encodeURIComponent(attachment.id)}/download?consent=true`
+    : `${getServerUrl()}/v1/chat/attachments/${encodeURIComponent(attachment.id)}/download`;
+  const headers = credentials && !publicShareToken
+    ? { Authorization: `Bearer ${credentials.token}` }
+    : undefined;
+  const ciphertext = publicShareToken
+    ? await downloadPublicShareAttachmentBytes(url, { signal, resourceAccessToken: publicShareAccessToken })
+    : await (async () => {
+      const response = await fetch(url, { headers, signal });
+      if (!response.ok) throw new Error(`Download failed: ${response.status}`);
+      return new Uint8Array(await response.arrayBuffer());
+    })();
+  return decryptAttachmentBytes(attachment, ciphertext);
+}
+
+function TauriImagePreview(props: { uri: string; width: number; height: number; label: string }) {
+  const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
+
+  React.useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    let disposed = false;
+    const image = new window.Image();
+    image.onload = () => {
+      if (disposed) return;
+      const pixelRatio = window.devicePixelRatio || 1;
+      canvas.width = Math.round(props.width * pixelRatio);
+      canvas.height = Math.round(props.height * pixelRatio);
+      const context = canvas.getContext('2d');
+      if (!context) return;
+      context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+      context.clearRect(0, 0, props.width, props.height);
+      const scale = Math.min(props.width / image.naturalWidth, props.height / image.naturalHeight);
+      const width = image.naturalWidth * scale;
+      const height = image.naturalHeight * scale;
+      context.drawImage(image, (props.width - width) / 2, (props.height - height) / 2, width, height);
+    };
+    image.src = props.uri;
+
+    return () => {
+      disposed = true;
+      image.onload = null;
+      image.src = '';
+    };
+  }, [props.height, props.uri, props.width]);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      role="img"
+      aria-label={props.label}
+      style={{ width: props.width, height: props.height, display: 'block' }}
+    />
+  );
+}
+
+function EncryptedImageAttachment(props: {
+  attachment: AttachmentContent;
+  publicShareToken?: string;
+  publicShareAccessToken?: string;
+}) {
+  const [uri, setUri] = React.useState<string | null>(null);
+  const [failed, setFailed] = React.useState(false);
+  const [viewerVisible, setViewerVisible] = React.useState(false);
+  const publicShareAccessTokenRef = React.useRef(props.publicShareAccessToken);
+  publicShareAccessTokenRef.current = props.publicShareAccessToken;
+
+  React.useEffect(() => {
+    let disposed = false;
+    let objectUrl: string | null = null;
+    let temporaryFile: File | null = null;
+    const abortController = new AbortController();
+    void (async () => {
+      try {
+        const accessToken = publicShareAccessTokenRef.current;
+        let plaintext: Uint8Array;
+        try {
+          plaintext = await fetchAttachmentPlaintext(props.attachment, props.publicShareToken, accessToken, abortController.signal);
+        } catch (error) {
+          const refreshedAccessToken = publicShareAccessTokenRef.current;
+          if (!props.publicShareToken || !refreshedAccessToken || refreshedAccessToken === accessToken) throw error;
+          plaintext = await fetchAttachmentPlaintext(props.attachment, props.publicShareToken, refreshedAccessToken, abortController.signal);
+        }
+        if (disposed) return;
+        if (Platform.OS === 'web') {
+          objectUrl = URL.createObjectURL(new Blob([attachmentArrayBuffer(plaintext)], { type: props.attachment.mimeType }));
+          setUri(objectUrl);
+        } else {
+          temporaryFile = new File(Paths.cache, `${props.attachment.id}-preview`);
+          temporaryFile.write(plaintext);
+          setUri(temporaryFile.uri);
+        }
+      } catch {
+        if (!disposed) setFailed(true);
+      }
+    })();
+    return () => {
+      disposed = true;
+      abortController.abort();
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      if (temporaryFile?.exists) temporaryFile.delete();
+    };
+  }, [props.attachment, props.publicShareToken]);
+
+  const aspectRatio = props.attachment.image
+    ? Math.max(0.75, Math.min(2, props.attachment.image.width / props.attachment.image.height))
+    : 1.5;
+  const tauriDesktop = isTauriDesktop();
+  const desktopPreviewWidth = 280;
+  const desktopPreviewHeight = Math.min(280, Math.max(140, Math.round(desktopPreviewWidth / aspectRatio)));
+  return (
+    <>
+      <Pressable
+        style={[
+          styles.encryptedImageAttachment,
+          tauriDesktop
+            ? { width: desktopPreviewWidth, height: desktopPreviewHeight }
+            : { aspectRatio },
+        ]}
+        onPress={uri ? () => setViewerVisible(true) : undefined}
+        disabled={!uri}
+      >
+        {uri ? (
+          tauriDesktop ? (
+            <TauriImagePreview
+              uri={uri}
+              width={desktopPreviewWidth}
+              height={desktopPreviewHeight}
+              label={props.attachment.name}
+            />
+          ) : (
+            <Image source={{ uri }} style={styles.encryptedImage} contentFit="contain" />
+          )
+        ) : failed ? (
+          <Ionicons name="image-outline" size={28} color={styles.messageAttachmentIcon.color} />
+        ) : (
+          <ActivityIndicator size="small" color={styles.messageAttachmentIcon.color} />
+        )}
+      </Pressable>
+      {uri ? (
+        <ImageViewer
+          images={[{ uri }]}
+          initialIndex={0}
+          visible={viewerVisible}
+          onClose={() => setViewerVisible(false)}
+        />
+      ) : null}
+    </>
+  );
+}
+
+function LegacyMessageImages(props: { images: ImageContent[] }) {
+  const tauriDesktop = isTauriDesktop();
+  const [resolvedUris, setResolvedUris] = React.useState<Array<string | null>>(() =>
+    props.images.map((image) => tauriDesktop ? null : image.url)
+  );
+  const [viewerVisible, setViewerVisible] = React.useState(false);
+  const [viewerIndex, setViewerIndex] = React.useState(0);
+
+  React.useEffect(() => {
+    if (!tauriDesktop) {
+      setResolvedUris(props.images.map((image) => image.url));
+      return;
+    }
+
+    let disposed = false;
+    const objectUrls: string[] = [];
+    const abortController = new AbortController();
+    setResolvedUris(props.images.map(() => null));
+
+    void (async () => {
+      const { fetch: tauriFetch } = await import('@tauri-apps/plugin-http');
+      await Promise.all(props.images.map(async (image, index) => {
+        try {
+          const response = await tauriFetch(image.url, { signal: abortController.signal });
+          if (!response.ok) throw new Error(`Image download failed: ${response.status}`);
+          const objectUrl = URL.createObjectURL(await response.blob());
+          if (disposed) {
+            URL.revokeObjectURL(objectUrl);
+            return;
+          }
+          objectUrls.push(objectUrl);
+          setResolvedUris((current) => current.map((uri, currentIndex) => currentIndex === index ? objectUrl : uri));
+        } catch {
+          // Keep the thumbhash placeholder when a legacy image is unavailable.
+        }
+      }));
+    })();
+
+    return () => {
+      disposed = true;
+      abortController.abort();
+      objectUrls.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [props.images, tauriDesktop]);
+
+  const viewerImages = resolvedUris.flatMap((uri) => uri ? [{ uri }] : []);
+  const handlePress = (imageIndex: number) => {
+    if (!resolvedUris[imageIndex]) return;
+    setViewerIndex(resolvedUris.slice(0, imageIndex).filter(Boolean).length);
+    setViewerVisible(true);
+  };
+
+  return (
+    <>
+      <View style={styles.messageImages}>
+        {props.images.map((image, index) => (
+          <Pressable key={index} onPress={() => handlePress(index)} disabled={!resolvedUris[index]}>
+            {tauriDesktop && resolvedUris[index] ? (
+              <TauriImagePreview
+                uri={resolvedUris[index]}
+                width={120}
+                height={120}
+                label=""
+              />
+            ) : (
+              <Image
+                key={resolvedUris[index] ?? `placeholder-${index}`}
+                source={resolvedUris[index] ? { uri: resolvedUris[index] } : undefined}
+                style={{ width: 120, height: 120, borderRadius: 8 }}
+                contentFit="contain"
+                placeholder={image.thumbhash ? { thumbhash: image.thumbhash } : undefined}
+              />
+            )}
+          </Pressable>
+        ))}
+      </View>
+      <ImageViewer
+        images={viewerImages}
+        initialIndex={viewerIndex}
+        visible={viewerVisible}
+        onClose={() => setViewerVisible(false)}
+      />
+    </>
+  );
+}
+
 async function copyMessageText(text: string | null | undefined) {
   if (!text) return;
   await Clipboard.setStringAsync(text);
@@ -211,6 +468,8 @@ function RenderBlock(props: {
   onFork?: () => void;
   showActionBar?: boolean;
   forkLoading?: boolean;
+  publicShareToken?: string;
+  publicShareAccessToken?: string;
 }): React.ReactElement {
   switch (props.message.kind) {
     case 'user-text':
@@ -229,6 +488,8 @@ function RenderBlock(props: {
           onFork={props.onFork}
           showActionBar={props.showActionBar}
           forkLoading={props.forkLoading}
+          publicShareToken={props.publicShareToken}
+          publicShareAccessToken={props.publicShareAccessToken}
         />
       );
 
@@ -286,10 +547,10 @@ function UserTextBlock(props: {
   onFork?: () => void;
   showActionBar?: boolean;
   forkLoading?: boolean;
+  publicShareToken?: string;
+  publicShareAccessToken?: string;
 }) {
   const router = useRouter();
-  const [imageViewerVisible, setImageViewerVisible] = React.useState(false);
-  const [imageViewerIndex, setImageViewerIndex] = React.useState(0);
   const [optionsLoadingState, setOptionsLoadingState] = React.useState<OptionsLoadingState>({ loadingIndex: null });
 
   // Click to send
@@ -327,12 +588,26 @@ function UserTextBlock(props: {
   }, [props.onFillInput]);
 
   const images = props.message.images ?? [];
-  const imageViewingImages = images.map(img => ({ uri: img.url }));
-
-  const handleImagePress = React.useCallback((index: number) => {
-    setImageViewerIndex(index);
-    setImageViewerVisible(true);
-  }, []);
+  const attachments = props.message.attachments ?? [];
+  const handleAttachmentPress = React.useCallback(async (attachment: typeof attachments[number]) => {
+    try {
+      const plaintext = await fetchAttachmentPlaintext(attachment, props.publicShareToken, props.publicShareAccessToken);
+      if (Platform.OS === 'web' && isTauriDesktop()) {
+        await saveTauriAttachment(attachment, plaintext);
+      } else if (Platform.OS === 'web') {
+        const objectUrl = URL.createObjectURL(new Blob([attachmentArrayBuffer(plaintext)], { type: attachment.mimeType }));
+        const anchor = document.createElement('a');
+        anchor.href = objectUrl;
+        anchor.download = attachment.name;
+        anchor.click();
+        URL.revokeObjectURL(objectUrl);
+      } else {
+        await shareAttachmentFile(attachment, plaintext);
+      }
+    } catch {
+      Modal.alert(t('common.error'), t('session.attachmentDownloadFailed'));
+    }
+  }, [attachments, props.publicShareAccessToken, props.publicShareToken]);
 
   const senderLabel = React.useMemo(() => {
     if (!props.isSharedSession || !props.showSenderName || !props.message.sentBy) return null;
@@ -364,27 +639,25 @@ function UserTextBlock(props: {
       )}
       <View style={styles.userMessageBubble}>
         {images.length > 0 && (
-          <>
-            <View style={styles.messageImages}>
-              {images.map((img, index) => (
-                <Pressable key={index} onPress={() => handleImagePress(index)}>
-                  <Image
-                    source={{ uri: img.url }}
-                    style={{ width: 120, height: 120, borderRadius: 8 }}
-                    contentFit="cover"
-                    placeholder={img.thumbhash ? { thumbhash: img.thumbhash } : undefined}
-                  />
-                </Pressable>
-              ))}
-            </View>
-            <ImageViewer
-              images={imageViewingImages}
-              initialIndex={imageViewerIndex}
-              visible={imageViewerVisible}
-              onClose={() => setImageViewerVisible(false)}
-            />
-          </>
+          <LegacyMessageImages images={images} />
         )}
+        {attachments.map((attachment) => attachment.kind === 'image' ? (
+          <EncryptedImageAttachment
+            key={attachment.id}
+            attachment={attachment}
+            publicShareToken={props.publicShareToken}
+            publicShareAccessToken={props.publicShareAccessToken}
+          />
+        ) : (
+          <Pressable key={attachment.id} style={styles.messageAttachment} onPress={() => handleAttachmentPress(attachment)}>
+            <Ionicons name="document-outline" size={22} color={styles.messageAttachmentIcon.color} />
+            <View style={{ flex: 1 }}>
+              <Text numberOfLines={1} style={styles.messageAttachmentName}>{attachment.name}</Text>
+              <Text style={styles.messageAttachmentSize}>{formatAttachmentSize(attachment.size)}</Text>
+            </View>
+            <Ionicons name="download-outline" size={20} color={styles.messageAttachmentIcon.color} />
+          </Pressable>
+        ))}
         {isTooLong ? (
           <Pressable
             onPress={handleOpenFullText}
@@ -587,6 +860,12 @@ function ToolCallBlock(props: {
   );
 }
 
+function formatAttachmentSize(size: number): string {
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 const styles = StyleSheet.create((theme) => ({
   messageContainer: {
     flexDirection: 'row',
@@ -698,5 +977,36 @@ const styles = StyleSheet.create((theme) => ({
     marginTop: 8,
     marginBottom: 8,
     gap: 12,
+  },
+  messageAttachment: {
+    width: 280,
+    maxWidth: '100%',
+    minHeight: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: theme.colors.surfaceHighest,
+  },
+  messageAttachmentName: { color: theme.colors.text, fontSize: 13 },
+  messageAttachmentSize: { color: theme.colors.textSecondary, fontSize: 11, marginTop: 2 },
+  messageAttachmentIcon: { color: theme.colors.textSecondary },
+  encryptedImageAttachment: {
+    width: 280,
+    maxWidth: '100%',
+    maxHeight: 280,
+    minHeight: 140,
+    marginVertical: 6,
+    borderRadius: 8,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.surfaceHighest,
+  },
+  encryptedImage: {
+    width: '100%',
+    height: '100%',
   },
 }));

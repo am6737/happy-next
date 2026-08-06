@@ -52,6 +52,7 @@ model Account {
   UsageReport         UsageReport[]
   Machine             Machine[]
   UploadedFile        UploadedFile[]
+  ChatAttachment      ChatAttachment[]
   ServiceAccountToken ServiceAccountToken[]
   RelationshipsFrom   UserRelationship[]       @relation("RelationshipsFrom")
   RelationshipsTo     UserRelationship[]       @relation("RelationshipsTo")
@@ -124,6 +125,7 @@ model Session {
   shares            SessionShare[]
   publicShare       PublicSessionShare?
   capabilities      SessionCapabilities?
+  attachments       ChatAttachment[]
   controllerRuns    OrchestratorRun[]       @relation("ControllerRuns")
   workerExecutions  OrchestratorExecution[] @relation("WorkerExecutions")
 
@@ -405,6 +407,49 @@ model UploadedFile {
 
   @@unique([accountId, path])
   @@index([accountId])
+}
+
+model ChatAttachment {
+  id                String   @id @default(cuid())
+  accountId         String
+  account           Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  sessionId         String
+  session           Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  path              String   @unique
+  originalName      String?
+  mimeType          String?
+  size              Int
+  kind              String?
+  encryptionVersion Int @default(1)
+  messageLocalId    String?
+  committedAt       DateTime?
+  expiresAt         DateTime?
+  cleanupStartedAt  DateTime?
+  width             Int?
+  height            Int?
+  thumbhash         String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([accountId])
+  @@index([accountId, committedAt])
+  @@index([sessionId])
+  @@index([sessionId, committedAt])
+  @@index([sessionId, messageLocalId])
+  @@index([committedAt, expiresAt, cleanupStartedAt])
+}
+
+model AttachmentObjectDeletion {
+  id            String   @id @default(cuid())
+  path          String   @unique
+  attempts      Int      @default(0)
+  nextAttemptAt DateTime @default(now())
+  claimedAt     DateTime?
+  lastError     String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([nextAttemptAt, claimedAt])
 }
 
 model ServiceAccountToken {

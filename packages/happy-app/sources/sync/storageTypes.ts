@@ -90,6 +90,11 @@ export const MetadataSchema = z.object({
 export type Metadata = z.infer<typeof MetadataSchema>;
 
 export const SessionCapabilitiesSchema = z.object({
+    attachments: z.object({
+        version: z.literal(2),
+        maxFiles: z.number().int().positive(),
+        maxFileSize: z.number().int().positive(),
+    }).optional(),
     tools: z.array(z.string()).optional(),
     slashCommands: z.array(z.string()).optional(),
     slashCommandMetadata: z.array(z.object({

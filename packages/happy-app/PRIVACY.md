@@ -1,6 +1,6 @@
 # Privacy Policy for Happy Next
 
-**Last Updated: January 2025**
+**Last Updated: July 31, 2026**
 
 ## Overview
 
@@ -25,10 +25,10 @@ Happy Next is committed to protecting your privacy. This policy explains how we 
 - **No Content Tracking**: We only track basic app usage events, never any message content, code, or personal information
 - **Opt-Out Available**: You can disable analytics collection at any time in the app settings
 
-### Subscription Management (Revenue Cat)
-- **Account ID**: Revenue Cat uses your account ID to manage subscriptions and enable premium features
-- **Backend Integration**: This ID allows us to provide additional features from our backend while maintaining end-to-end encryption for your content
-- **Data Separation**: Purchase analytics sent to PostHog use the anonymized ID instead - we cannot match Revenue Cat data with PostHog analytics
+### Optional Camera and Microphone Data
+- **Camera**: Camera access is used only after you open a QR scanning or image-sharing feature and grant the system permission. QR codes are processed on the device. Images are transmitted only when you explicitly choose to share them.
+- **Microphone**: Microphone access is used only after you start a voice feature and grant the system permission. Audio is processed for the voice conversation you requested.
+- **Permission Choice**: Refusing camera, microphone, or notification permission does not prevent you from using unrelated app features.
 
 ## What We Don't Collect
 - Your actual code or conversation content (we can't decrypt it)
@@ -80,7 +80,11 @@ You have the right to:
 
 ## Data Sharing
 
-We do not share your data with anyone. Period.
+We disclose data only to the service providers needed for the functions described above:
+- **Expo Push Service** may process push identifiers and notification payloads to deliver notifications. Expo privacy information: https://expo.dev/privacy
+- **PostHog** processes the anonymous usage identifier and basic app events described above. PostHog privacy information: https://posthog.com/privacy
+
+We do not sell personal information or share message or code content for advertising. Service providers may process only the information needed to provide their respective services.
 
 ## Changes to This Policy
 

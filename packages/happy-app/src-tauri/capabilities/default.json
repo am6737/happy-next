@@ -30,6 +30,20 @@
     "process:allow-restart",
     "updater:allow-check",
     "updater:allow-download",
-    "updater:allow-install"
+    "updater:allow-install",
+    "http:default",
+    "dialog:allow-save",
+    "fs:allow-write-file",
+    {
+      "identifier": "http:default",
+      "allow": [
+        {
+          "url": "https://**"
+        },
+        {
+          "url": "http://**"
+        }
+      ]
+    }
   ]
 }

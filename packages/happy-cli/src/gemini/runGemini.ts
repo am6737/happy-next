@@ -40,7 +40,9 @@ import { GeminiPermissionHandler } from '@/gemini/utils/permissionHandler';
 import { GeminiReasoningProcessor } from '@/gemini/utils/reasoningProcessor';
 import { GeminiDiffProcessor } from '@/gemini/utils/diffProcessor';
 import type { GeminiMode, CodexMessagePayload } from '@/gemini/types';
-import type { ImageContent, PermissionMode } from '@/api/types';
+import type { AttachmentContent, ImageContent, PermissionMode } from '@/api/types';
+import { readFile } from 'node:fs/promises';
+import { appendAttachmentManifest, resolveAttachments } from '@/utils/resolveAttachments';
 import { formatMessageForGemini } from '@/utils/formatImageMessage';
 import { GEMINI_MODEL_ENV, DEFAULT_GEMINI_MODEL } from '@/gemini/constants';
 import { getFirstTurnInstruction } from '@/orchestrator/firstTurnInstruction';
@@ -151,7 +153,10 @@ export async function runGemini(opts: {
 
   // Register built-in slash commands (e.g. /preview-html) on a session; re-applied after swaps.
   const registerBuiltinSlashCommands = (target: ApiSessionClient) => {
-    target.updateCapabilities((currentCapabilities) => addBuiltinSlashCommands(currentCapabilities));
+    target.updateCapabilities((currentCapabilities) => addBuiltinSlashCommands({
+      ...currentCapabilities,
+      attachments: { version: 2, maxFiles: 10, maxFileSize: 25 * 1024 * 1024 },
+    }));
   };
 
   // Session swap synchronization to prevent race conditions during message processing
@@ -327,7 +332,10 @@ export async function runGemini(opts: {
     const isMixedContent = message.content.type === 'mixed';
     const originalUserMessage = message.content.text;
     const images: ImageContent[] = isMixedContent && 'images' in message.content
-        ? message.content.images
+        ? message.content.images ?? []
+        : [];
+    const attachments: AttachmentContent[] = isMixedContent && 'attachments' in message.content
+        ? message.content.attachments ?? []
         : [];
 
     if (images.length > 0) {
@@ -358,6 +366,7 @@ export async function runGemini(opts: {
       model: messageModel,
       originalUserMessage, // Store original message separately
       images: images.length > 0 ? images : undefined, // Include images if present
+      attachments: attachments.length > 0 ? attachments : undefined,
     };
     messageQueue.push(fullPrompt, mode);
     
@@ -1321,11 +1330,24 @@ export async function runGemini(opts: {
 
         // Download and format images if present in the message mode
         let promptImages: { data: string; mimeType: string }[] | undefined;
+        if (message.mode.attachments?.length) {
+          const resolved = await resolveAttachments({
+            attachments: message.mode.attachments,
+            sessionId: session.sessionId,
+            cwd: process.cwd(),
+            token: opts.credentials.token,
+          });
+          promptToSend = appendAttachmentManifest(promptToSend, resolved);
+          const privateImages = await Promise.all(resolved
+            .filter((item) => item.kind === 'image')
+            .map(async (item) => ({ data: (await readFile(item.path)).toString('base64'), mimeType: item.mimeType })));
+          if (privateImages.length) promptImages = privateImages;
+        }
         if (message.mode.images && message.mode.images.length > 0) {
           logger.debug(`[gemini] Downloading ${message.mode.images.length} image(s) for prompt`);
           const formattedContent = await formatMessageForGemini(promptToSend, message.mode.images);
           // Extract image parts from the formatted content
-          promptImages = formattedContent.parts
+          const legacyImages = formattedContent.parts
             .filter((part): part is { inlineData: { mimeType: string; data: string } } =>
               'inlineData' in part && part.inlineData !== undefined
             )
@@ -1333,6 +1355,7 @@ export async function runGemini(opts: {
               data: part.inlineData.data,
               mimeType: part.inlineData.mimeType,
             }));
+          promptImages = [...(promptImages ?? []), ...legacyImages];
           logger.debug(`[gemini] Prepared ${promptImages.length} image(s) for ACP prompt`);
         }
 

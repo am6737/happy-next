@@ -1,6 +1,33 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createId } from '@paralleldrive/cuid2';
-import { normalizeRawMessage } from './typesRaw';
+import { normalizeRawMessage, RawRecordSchema } from './typesRaw';
+
+describe('attachment message compatibility', () => {
+    it('accepts mixed messages with encrypted attachments and no legacy images', () => {
+        expect(RawRecordSchema.safeParse({
+            role: 'user',
+            content: {
+                type: 'mixed',
+                text: 'Review this file',
+                attachments: [{
+                    v: 2,
+                    id: 'attachment-1',
+                    kind: 'file',
+                    name: 'report.pdf',
+                    mimeType: 'application/pdf',
+                    size: 1024,
+                    encryption: {
+                        algorithm: 'secretbox',
+                        key: 'a'.repeat(43),
+                        nonce: 'b'.repeat(32),
+                        plaintextSha256: 'a'.repeat(64),
+                        ciphertextSize: 1040,
+                    },
+                }],
+            },
+        }).success).toBe(true);
+    });
+});
 
 describe('Session protocol normalization', () => {
     let originalEnableSessionProtocolSend: string | undefined;

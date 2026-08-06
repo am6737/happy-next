@@ -304,6 +304,8 @@ export interface AccessPublicShareResponse {
     owner: ShareUserProfile;
     /** Whether consent is required (echoed) */
     isConsentRequired: boolean;
+    /** Short-lived credential for follow-up message and attachment requests */
+    resourceAccessToken: string;
 }
 
 /** Response containing access logs for a public share */

@@ -4,7 +4,7 @@
  * Centralized type definitions for Gemini integration.
  */
 
-import type { ImageContent, PermissionMode } from '@/api/types';
+import type { AttachmentContent, ImageContent, PermissionMode } from '@/api/types';
 
 /**
  * Mode configuration for Gemini messages
@@ -14,6 +14,7 @@ export interface GeminiMode {
   model?: string;
   originalUserMessage?: string; // Original user message without system prompt
   images?: ImageContent[]; // Optional images for multimodal messages
+  attachments?: AttachmentContent[];
 }
 
 /**

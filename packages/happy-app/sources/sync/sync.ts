@@ -16,6 +16,7 @@ import {
 } from './apiTypes';
 import type { ApiEphemeralActivityUpdate, ApiUpdateContainer } from './apiTypes';
 import { Session, Machine, PendingMessage, SessionCapabilitiesSchema } from './storageTypes';
+import type { SessionCapabilities } from './storageTypes';
 import { InvalidateSync } from '@/utils/sync';
 import { ActivityUpdateAccumulator } from './reducer/activityUpdateAccumulator';
 import { randomUUID, getRandomBytes } from 'expo-crypto';
@@ -23,9 +24,14 @@ import * as Notifications from 'expo-notifications';
 import { registerPushToken } from './apiPush';
 import { Platform, AppState } from 'react-native';
 import { isRunningOnMac } from '@/utils/platform';
-import { NormalizedMessage, normalizeRawMessage, RawRecord, RawRecordSchema, ImageContent } from './typesRaw';
+import { AttachmentContent, NormalizedMessage, normalizeRawMessage, RawRecord, RawRecordSchema, ImageContent } from './typesRaw';
 import { uploadChatImage } from './uploadChatImage';
+import { uploadChatAttachment } from './uploadChatAttachment';
+import { PreparedAttachmentUpload, uploadAttachmentBatch } from './uploadAttachmentBatch';
+import { isAttachmentLeaseErrorResponse } from './attachmentLeaseError';
+import { localImagesToAttachments } from './localImageAttachments';
 import { LocalImage } from '@/components/ImagePreview';
+import type { LocalAttachment } from '@/components/AttachmentPreview';
 import { applySettings, Settings, settingsDefaults, settingsParse, SUPPORTED_SCHEMA_VERSION } from './settings';
 import { Profile, profileParse } from './profile';
 import { loadPendingSettings, savePendingSettings, loadSessionLastViewedAt, saveSessionLastViewedAt, loadSessionsCache, saveSessionsCache } from './persistence';
@@ -126,6 +132,7 @@ type PreparedOutgoingMessage = {
     localId: string;
     encryptedRawRecord: string;
     normalizedMessage: NormalizedMessage | null;
+    attachmentIds: string[];
 };
 
 type SessionMessagesResponse = {
@@ -229,6 +236,8 @@ class Sync {
      *  Ensures input is cleared before message appears, regardless of whether
      *  the HTTP response or WebSocket echo arrives first. */
     private pendingSendCallbacks = new Map<string, () => void>();
+    private preparedAttachmentUploads = new Map<string, PreparedAttachmentUpload>();
+    private sessionCapabilitiesFetches = new Map<string, Promise<SessionCapabilities | null>>();
     /** Defer showing no_cli_connection so CLI cold-start has a chance to attach
      *  and clear via message-delivery-cleared before the user sees the badge. */
     private deliveryErrorTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -803,7 +812,7 @@ class Sync {
         }
 
         if (raw.content.type === 'mixed') {
-            return { previewText: raw.content.text, imageCount: raw.content.images.length };
+            return { previewText: raw.content.text, imageCount: raw.content.images?.length ?? 0 };
         }
 
         return { previewText: '', imageCount: 0 };
@@ -1067,7 +1076,8 @@ class Sync {
         text: string,
         displayText?: string,
         images?: LocalImage[],
-        existingLocalId?: string
+        existingLocalId?: string,
+        attachments?: LocalAttachment[],
     ): Promise<PreparedOutgoingMessage | { error: string; localId: string }> {
         const encryption = this.encryption.getSessionEncryption(sessionId);
         if (!encryption) {
@@ -1099,27 +1109,66 @@ class Sync {
         const { model: resolvedModel, reasoningEffort } = resolveModelSelectionForFlavor(flavor, modelMode);
         const model = (resolvedModel && fastMode) ? `${resolvedModel}-fast` : resolvedModel;
         const fallbackModel: string | null = null;
+        let sessionCapabilities: SessionCapabilities | undefined = storage.getState().sessionCapabilities[sessionId]?.capabilities;
+        if (images?.length && !sessionCapabilities) {
+            // Capabilities are normally populated asynchronously (for example by autocomplete
+            // or a session update). Resolve them before choosing the image protocol so a v2
+            // session never falls back to the legacy public-S3 upload merely because the local
+            // cache has not loaded yet. Fetch errors intentionally abort the send instead of
+            // silently creating another legacy image URL.
+            sessionCapabilities = await this.fetchSessionCapabilities(sessionId) ?? undefined;
+        }
+        const encryptImagesAsAttachments = sessionCapabilities?.attachments?.version === 2;
+        const imageAttachments: LocalAttachment[] = encryptImagesAsAttachments
+            ? localImagesToAttachments(images ?? [])
+            : [];
+        const outgoingAttachments = [...imageAttachments, ...(attachments ?? [])];
 
-        let messageContent: { type: 'text'; text: string } | { type: 'mixed'; text: string; images: ImageContent[] };
-        if (images && images.length > 0) {
+        let messageContent: { type: 'text'; text: string } | {
+            type: 'mixed'; text: string; images?: ImageContent[]; attachments?: AttachmentContent[];
+        };
+        const uploadedAttachments: AttachmentContent[] = [];
+        try {
+            if (outgoingAttachments.length) {
+                const fingerprint = JSON.stringify(outgoingAttachments.map(({ uri, name, mimeType, size, image }) => ({ uri, name, mimeType, size, image })));
+                const apiUrl = getServerUrl();
+                const token = this.credentials.token;
+                uploadedAttachments.push(...await uploadAttachmentBatch({
+                    attachments: outgoingAttachments,
+                    fingerprint,
+                    cached: this.preparedAttachmentUploads.get(localId),
+                    upload: (attachment) => uploadChatAttachment(sessionId, attachment, token, apiUrl),
+                    onProgress: (progress) => this.preparedAttachmentUploads.set(localId, progress),
+                }));
+            } else {
+                this.preparedAttachmentUploads.delete(localId);
+            }
+        } catch (error) {
+            log.log(`[SEND_DEBUG][SYNC] attachment_upload_failed sid=${sessionId} localId=${localId} error=${error instanceof Error ? error.message : 'Unknown error'}`);
+            return { error: 'Attachment upload failed', localId };
+        }
+
+        if ((images && images.length > 0) || uploadedAttachments.length > 0) {
             const uploadedImages: ImageContent[] = [];
-            const apiUrl = getServerUrl();
-            const token = this.credentials.token;
-
-            try {
+            if (images?.length && !encryptImagesAsAttachments) {
+                const apiUrl = getServerUrl();
+                const token = this.credentials.token;
+                try {
                 for (const img of images) {
                     const uploaded = await uploadChatImage(sessionId, img, token, apiUrl);
                     uploadedImages.push(uploaded);
                 }
-            } catch (error) {
-                log.log(`[SEND_DEBUG][SYNC] image_upload_failed sid=${sessionId} localId=${localId} error=${error instanceof Error ? error.message : 'Unknown error'}`);
-                return { error: 'Image upload failed', localId };
+                } catch (error) {
+                    log.log(`[SEND_DEBUG][SYNC] image_upload_failed sid=${sessionId} localId=${localId} error=${error instanceof Error ? error.message : 'Unknown error'}`);
+                    return { error: 'Image upload failed', localId };
+                }
             }
 
             messageContent = {
                 type: 'mixed',
                 text,
                 images: uploadedImages,
+                ...(uploadedAttachments.length ? { attachments: uploadedAttachments } : {}),
             };
         } else {
             messageContent = {
@@ -1155,6 +1204,7 @@ class Sync {
             localId,
             encryptedRawRecord,
             normalizedMessage,
+            attachmentIds: uploadedAttachments.map((attachment) => attachment.id),
         };
     }
 
@@ -1164,14 +1214,25 @@ class Sync {
         displayText?: string,
         images?: LocalImage[],
         existingLocalId?: string,
-        onBeforeApply?: () => void
+        onBeforeApply?: () => void,
+        attachments?: LocalAttachment[],
     ): Promise<SendMessageResult> {
-        const prepared = await this.prepareOutgoingMessage(sessionId, text, displayText, images, existingLocalId);
+        const attemptedLocalId = existingLocalId || randomUUID();
+        let prepared: PreparedOutgoingMessage | { error: string; localId: string };
+        try {
+            prepared = await this.prepareOutgoingMessage(sessionId, text, displayText, images, attemptedLocalId, attachments);
+        } catch (error) {
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : 'Unable to prepare message',
+                localId: attemptedLocalId,
+            };
+        }
         if ('error' in prepared) {
             return { success: false, error: prepared.error, localId: prepared.localId };
         }
 
-        const { localId, encryptedRawRecord, normalizedMessage } = prepared;
+        const { localId, encryptedRawRecord, normalizedMessage, attachmentIds } = prepared;
         const sendStartedAt = Date.now();
         log.log(`[SEND_DEBUG][SYNC] start sid=${sessionId} localId=${localId} textLen=${text.length} images=${images?.length || 0} existingLocalId=${existingLocalId ? 'yes' : 'no'}`);
 
@@ -1193,7 +1254,8 @@ class Sync {
                         messages: [{
                             content: encryptedRawRecord,
                             localId,
-                            trackCliDelivery: true
+                            trackCliDelivery: true,
+                            attachmentIds,
                         }]
                     })
                 }
@@ -1203,6 +1265,9 @@ class Sync {
                 const errorText = await response.text().catch(() => 'Unknown error');
                 log.log(`[SEND_DEBUG][SYNC] fail sid=${sessionId} localId=${localId} via=v3-http status=${response.status} error=${errorText}`);
                 this.pendingSendCallbacks.delete(localId);
+                if (isAttachmentLeaseErrorResponse(response.status, errorText)) {
+                    this.preparedAttachmentUploads.delete(localId);
+                }
                 return { success: false, error: `Send failed: ${response.status}`, localId };
             }
 
@@ -1294,6 +1359,7 @@ class Sync {
             }
 
             log.log(`[SEND_DEBUG][SYNC] success sid=${sessionId} localId=${localId} via=v3-http elapsedMs=${Date.now() - sendStartedAt}`);
+            this.preparedAttachmentUploads.delete(localId);
             return { success: true, localId };
         } catch (error) {
             log.log(`[SEND_DEBUG][SYNC] fail sid=${sessionId} localId=${localId} via=v3-exception error=${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -1308,14 +1374,25 @@ class Sync {
         displayText?: string,
         images?: LocalImage[],
         existingLocalId?: string,
-        onBeforeApply?: () => void
+        onBeforeApply?: () => void,
+        attachments?: LocalAttachment[],
     ): Promise<SendOrQueueResult> {
-        const prepared = await this.prepareOutgoingMessage(sessionId, text, displayText, images, existingLocalId);
+        const attemptedLocalId = existingLocalId || randomUUID();
+        let prepared: PreparedOutgoingMessage | { error: string; localId: string };
+        try {
+            prepared = await this.prepareOutgoingMessage(sessionId, text, displayText, images, attemptedLocalId, attachments);
+        } catch (error) {
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : 'Unable to prepare message',
+                localId: attemptedLocalId,
+            };
+        }
         if ('error' in prepared) {
             return { success: false, error: prepared.error, localId: prepared.localId };
         }
 
-        const { localId, encryptedRawRecord, normalizedMessage } = prepared;
+        const { localId, encryptedRawRecord, normalizedMessage, attachmentIds } = prepared;
         if (!this.credentials) {
             return { success: false, localId, error: 'Not authenticated' };
         }
@@ -1336,13 +1413,18 @@ class Sync {
                     body: JSON.stringify({
                         content: encryptedRawRecord,
                         localId,
-                        trackCliDelivery: true
+                        trackCliDelivery: true,
+                        attachmentIds,
                     })
                 }
             );
 
             if (!response.ok) {
                 this.pendingSendCallbacks.delete(localId);
+                const errorText = await response.text().catch(() => 'Unknown error');
+                if (isAttachmentLeaseErrorResponse(response.status, errorText)) {
+                    this.preparedAttachmentUploads.delete(localId);
+                }
                 return { success: false, localId, error: `Send failed: ${response.status}` };
             }
 
@@ -1353,6 +1435,7 @@ class Sync {
             }
 
             const responseData = parsed.data;
+            this.preparedAttachmentUploads.delete(localId);
             if (responseData.mode === 'queued') {
                 const pending = this.pendingSendCallbacks.get(localId);
                 if (pending) {
@@ -1878,47 +1961,65 @@ class Sync {
     }
 
 
-    public fetchSessionCapabilities = async (sessionId: string) => {
-        if (!this.credentials || !this.encryption) return null;
+    public fetchSessionCapabilities = async (sessionId: string): Promise<SessionCapabilities | null> => {
+        const cached = storage.getState().sessionCapabilities[sessionId]?.capabilities;
+        if (cached) return cached;
 
-        const sessionEncryption = this.encryption.getSessionEncryption(sessionId);
-        if (!sessionEncryption) {
-            return null;
-        }
+        const inFlight = this.sessionCapabilitiesFetches.get(sessionId);
+        if (inFlight) return inFlight;
 
-        const response = await fetch(`${getServerUrl()}/v1/sessions/${encodeURIComponent(sessionId)}/capabilities`, {
-            headers: {
-                'Authorization': `Bearer ${this.credentials.token}`,
-                'Content-Type': 'application/json'
+        const fetchPromise = (async (): Promise<SessionCapabilities | null> => {
+            if (!this.credentials || !this.encryption) return null;
+
+            const sessionEncryption = this.encryption.getSessionEncryption(sessionId);
+            if (!sessionEncryption) {
+                return null;
             }
-        });
 
-        if (response.status === 404) {
-            return null;
-        }
-        if (!response.ok) {
-            throw new Error(`Failed to fetch session capabilities: ${response.status}`);
-        }
+            const response = await fetch(`${getServerUrl()}/v1/sessions/${encodeURIComponent(sessionId)}/capabilities`, {
+                headers: {
+                    'Authorization': `Bearer ${this.credentials.token}`,
+                    'Content-Type': 'application/json'
+                }
+            });
 
-        const data = await response.json();
-        if (!data.capabilities?.payload) {
-            return null;
-        }
+            if (response.status === 404) {
+                return null;
+            }
+            if (!response.ok) {
+                throw new Error(`Failed to fetch session capabilities: ${response.status}`);
+            }
 
-        const decrypted = await sessionEncryption.decryptRaw(data.capabilities.payload);
-        const parsed = SessionCapabilitiesSchema.safeParse(decrypted);
-        if (!parsed.success) {
-            return null;
-        }
+            const data = await response.json();
+            if (!data.capabilities?.payload) {
+                return null;
+            }
 
-        storage.getState().applySessionCapabilities(
-            sessionId,
-            parsed.data,
-            data.capabilities.version,
-            data.capabilities.updatedAt
-        );
-        return parsed.data;
-    }
+            const decrypted = await sessionEncryption.decryptRaw(data.capabilities.payload);
+            const parsed = SessionCapabilitiesSchema.safeParse(decrypted);
+            if (!parsed.success) {
+                return null;
+            }
+
+            storage.getState().applySessionCapabilities(
+                sessionId,
+                parsed.data,
+                data.capabilities.version,
+                data.capabilities.updatedAt
+            );
+            return storage.getState().sessionCapabilities[sessionId]?.capabilities ?? parsed.data;
+        })();
+
+        this.sessionCapabilitiesFetches.set(sessionId, fetchPromise);
+        try {
+            return await fetchPromise;
+        } finally {
+            if (this.sessionCapabilitiesFetches.get(sessionId) === fetchPromise) {
+                this.sessionCapabilitiesFetches.delete(sessionId);
+            }
+        }
+    };
+
 
     public refreshMachines = async () => {
         return this.fetchMachines();
@@ -3363,7 +3464,10 @@ class Sync {
                         seq: item.seq,
                         text: normalized.content.text,
                         ...(normalized.meta?.displayText ? { displayText: normalized.meta.displayText } : {}),
-                        ...(normalized.content.type === 'mixed' ? { images: normalized.content.images } : {}),
+                        ...(normalized.content.type === 'mixed' ? {
+                            images: normalized.content.images,
+                            attachments: normalized.content.attachments,
+                        } : {}),
                         meta: normalized.meta,
                         sentBy: item.sentBy,
                         sentByName: item.sentByName,

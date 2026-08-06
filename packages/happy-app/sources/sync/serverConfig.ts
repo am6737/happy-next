@@ -55,7 +55,8 @@ export function getCustomServerUrl(): string | null {
 }
 
 function getConfiguredServerEntryUrl(): string | null {
-    return getCustomServerUrl()
+    return normalizeUrl(process.env.EXPO_PUBLIC_HAPPY_SERVER_URL_OVERRIDE)
+        || getCustomServerUrl()
         || normalizeUrl(process.env.EXPO_PUBLIC_HAPPY_SERVER_URL);
 }
 

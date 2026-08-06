@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { db } from "@/storage/db";
+import { commitAttachmentLeases } from '@/app/chat/chatAttachmentLease';
 
 export type PendingMessageContent = {
     t: "encrypted";
@@ -98,6 +99,7 @@ export async function enqueuePendingMessage(params: {
     sentBy: string | null;
     sentByName: string | null;
     trackCliDelivery: boolean;
+    attachmentIds?: string[];
 }): Promise<{ message: PendingMessageRecord; created: boolean }> {
     const existing = await findPendingMessageBySessionLocalId(params.sessionId, params.localId);
     if (existing) {
@@ -105,19 +107,27 @@ export async function enqueuePendingMessage(params: {
     }
 
     try {
-        const created = await db.sessionPendingMessage.create({
-            data: {
+        const created = await db.$transaction(async (tx) => {
+            await commitAttachmentLeases(tx, {
+                attachmentIds: params.attachmentIds ?? [],
+                accountId: params.sentBy ?? '',
                 sessionId: params.sessionId,
-                localId: params.localId,
-                content: {
-                    t: "encrypted",
-                    c: params.content,
+                messageLocalId: params.localId,
+            });
+            return tx.sessionPendingMessage.create({
+                data: {
+                    sessionId: params.sessionId,
+                    localId: params.localId,
+                    content: {
+                        t: "encrypted",
+                        c: params.content,
+                    },
+                    sentBy: params.sentBy,
+                    sentByName: params.sentByName,
+                    trackCliDelivery: params.trackCliDelivery,
                 },
-                sentBy: params.sentBy,
-                sentByName: params.sentByName,
-                trackCliDelivery: params.trackCliDelivery,
-            },
-            select: pendingMessageSelect,
+                select: pendingMessageSelect,
+            });
         });
 
         return {
@@ -229,41 +239,48 @@ export async function deletePendingMessage(sessionId: string, pendingId: string)
             return null;
         }
 
+        const sentMessage = await tx.sessionMessage.findUnique({
+            where: {
+                sessionId_localId: {
+                    sessionId,
+                    localId: message.localId,
+                },
+            },
+            select: { id: true },
+        });
+        if (!sentMessage) {
+            await tx.chatAttachment.updateMany({
+                where: {
+                    sessionId,
+                    messageLocalId: message.localId,
+                    committedAt: { not: null },
+                },
+                data: {
+                    committedAt: null,
+                    expiresAt: new Date(),
+                    cleanupStartedAt: null,
+                },
+            });
+        }
+
         return message as PendingMessageRecord;
     });
 }
 
-export async function takeNextPendingMessageForDispatch(sessionId: string): Promise<PendingMessageRecord | null> {
-    return db.$transaction(async (tx) => {
-        const candidate = await tx.sessionPendingMessage.findFirst({
-            where: {
-                sessionId,
-                // Paused messages are drafts: never auto-dispatched, never block
-                // the queue. Dispatch always picks the next non-paused message.
-                pausedAt: null,
-            },
-            orderBy: [
-                { pinnedAt: { sort: "desc", nulls: "last" } },
-                { createdAt: "asc" },
-            ],
-            select: pendingMessageSelect,
-        });
-
-        if (!candidate) {
-            return null;
-        }
-
-        const deleted = await tx.sessionPendingMessage.deleteMany({
-            where: {
-                id: candidate.id,
-                sessionId,
-            },
-        });
-
-        if (deleted.count === 0) {
-            return null;
-        }
-
-        return candidate as PendingMessageRecord;
+export async function findNextPendingMessageForDispatch(sessionId: string): Promise<PendingMessageRecord | null> {
+    const candidate = await db.sessionPendingMessage.findFirst({
+        where: {
+            sessionId,
+            // Paused messages are drafts: never auto-dispatched, never block
+            // the queue. Dispatch always picks the next non-paused message.
+            pausedAt: null,
+        },
+        orderBy: [
+            { pinnedAt: { sort: "desc", nulls: "last" } },
+            { createdAt: "asc" },
+        ],
+        select: pendingMessageSelect,
     });
+
+    return candidate as PendingMessageRecord | null;
 }

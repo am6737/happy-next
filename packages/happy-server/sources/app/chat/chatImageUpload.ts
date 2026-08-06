@@ -1,7 +1,7 @@
 import sharp from "sharp";
 import { randomKey } from "@/utils/randomKey";
 import { processImage } from "@/storage/processImage";
-import { s3bucket, s3client, s3public } from "@/storage/files";
+import { getPublicUrl, s3bucket, s3client } from "@/storage/files";
 import { db } from "@/storage/db";
 
 const MAX_DIMENSION = 1568;
@@ -100,7 +100,7 @@ export async function chatImageUpload(
     });
 
     return {
-        url: `${s3public}/${path}`,
+        url: getPublicUrl(path),
         path,
         width: compressed.width,
         height: compressed.height,

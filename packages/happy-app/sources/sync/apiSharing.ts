@@ -366,7 +366,7 @@ export interface PublicShareMessage {
 export async function getPublicShareMessages(
     serverUrl: string,
     token: string,
-    opts?: { consent?: boolean; beforeSeq?: number; limit?: number }
+    opts?: { consent?: boolean; beforeSeq?: number; limit?: number; resourceAccessToken?: string }
 ): Promise<{ messages: PublicShareMessage[]; hasMore: boolean }> {
     const url = new URL(`${serverUrl}/v1/public-share/${token}/messages`);
     if (opts?.consent) {
@@ -381,6 +381,9 @@ export async function getPublicShareMessages(
 
     const response = await fetch(url.toString(), {
         method: 'GET',
+        headers: opts?.resourceAccessToken
+            ? { 'X-Public-Share-Access': opts.resourceAccessToken }
+            : undefined,
     });
 
     if (!response.ok) {
@@ -398,6 +401,22 @@ export async function getPublicShareMessages(
 
     const data = await response.json();
     return { messages: data.messages as PublicShareMessage[], hasMore: data.hasMore ?? false };
+}
+
+export async function renewPublicShareAccess(
+    serverUrl: string,
+    token: string,
+    resourceAccessToken: string,
+): Promise<string> {
+    const response = await fetch(`${serverUrl}/v1/public-share/${token}/access-token`, {
+        method: 'POST',
+        headers: { 'X-Public-Share-Access': resourceAccessToken },
+    });
+    if (!response.ok) {
+        throw new PublicShareNotFoundError();
+    }
+    const data = await response.json() as { resourceAccessToken: string };
+    return data.resourceAccessToken;
 }
 
 /**

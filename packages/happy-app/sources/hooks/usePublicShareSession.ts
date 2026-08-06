@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { accessPublicShare, getPublicShareMessages, PublicShareMessage } from '@/sync/apiSharing';
+import { accessPublicShare, getPublicShareMessages, PublicShareMessage, renewPublicShareAccess } from '@/sync/apiSharing';
 import { decryptDataKeyFromPublicShare } from '@/sync/encryption/publicShareEncryption';
 import { AES256Encryption } from '@/sync/encryption/encryptor';
 import { decodeBase64 } from '@/encryption/base64';
@@ -15,6 +15,7 @@ export type PublicShareState = 'loading' | 'loaded' | 'error' | 'consent-require
 // Page size for the public share viewer. The server returns the newest page first, then we
 // page backwards through older messages with `before_seq` as the user scrolls up.
 const PAGE_SIZE = 100;
+const RESOURCE_ACCESS_RENEWAL_INTERVAL_MS = 10 * 60 * 1000;
 
 /**
  * Read-only public share session viewer with cursor pagination.
@@ -38,12 +39,33 @@ export function usePublicShareSession(token: string) {
     const [sessionId, setSessionId] = useState<string | null>(null);
     const [hasMore, setHasMore] = useState(false);
     const [isLoadingMore, setIsLoadingMore] = useState(false);
+    const [resourceAccessToken, setResourceAccessToken] = useState<string | null>(null);
 
     const consentRef = useRef(false);
     const decryptorRef = useRef<AES256Encryption | null>(null);
     const rawMessagesRef = useRef<NormalizedMessage[]>([]);
     const oldestSeqRef = useRef<number | null>(null);
     const loadingMoreRef = useRef(false);
+    const resourceAccessTokenRef = useRef<string | null>(null);
+    const renewalPromiseRef = useRef<Promise<string> | null>(null);
+
+    const renewResourceAccess = useCallback(async (): Promise<string> => {
+        if (renewalPromiseRef.current) return renewalPromiseRef.current;
+        const current = resourceAccessTokenRef.current;
+        if (!current) throw new Error('Public share resource access is unavailable');
+
+        const renewal = renewPublicShareAccess(getServerUrl(), token, current)
+            .then(next => {
+                resourceAccessTokenRef.current = next;
+                setResourceAccessToken(next);
+                return next;
+            })
+            .finally(() => {
+                renewalPromiseRef.current = null;
+            });
+        renewalPromiseRef.current = renewal;
+        return renewal;
+    }, [token]);
 
     // Decrypt a page of encrypted messages (server returns newest-first) into normalized messages
     // ordered oldest-first, and report the smallest seq in the page (the next pagination cursor).
@@ -84,6 +106,8 @@ export function usePublicShareSession(token: string) {
             // Reset pagination accumulators on every (re)load.
             rawMessagesRef.current = [];
             oldestSeqRef.current = null;
+            resourceAccessTokenRef.current = null;
+            setResourceAccessToken(null);
             setHasMore(false);
 
             const serverUrl = getServerUrl();
@@ -93,6 +117,8 @@ export function usePublicShareSession(token: string) {
             const shareData = await accessPublicShare(serverUrl, token, consent);
             setOwner(shareData.owner);
             setSessionId(shareData.session.id);
+            setResourceAccessToken(shareData.resourceAccessToken);
+            resourceAccessTokenRef.current = shareData.resourceAccessToken;
 
             // 2. Decrypt data key from token
             const dataKey = await decryptDataKeyFromPublicShare(shareData.encryptedDataKey, token);
@@ -124,6 +150,7 @@ export function usePublicShareSession(token: string) {
             const { messages: encryptedMessages, hasMore: more } = await getPublicShareMessages(serverUrl, token, {
                 consent,
                 limit: PAGE_SIZE,
+                resourceAccessToken: shareData.resourceAccessToken,
             });
 
             // 5. Decrypt + normalize + reduce
@@ -157,10 +184,12 @@ export function usePublicShareSession(token: string) {
         try {
             const serverUrl = getServerUrl();
             const consent = consentRef.current || undefined;
+            const accessToken = await renewResourceAccess();
             const { messages: encryptedMessages, hasMore: more } = await getPublicShareMessages(serverUrl, token, {
                 consent,
                 beforeSeq: before,
                 limit: PAGE_SIZE,
+                resourceAccessToken: accessToken,
             });
 
             const { normalized, minSeq } = await processPage(decryptor, encryptedMessages);
@@ -179,7 +208,15 @@ export function usePublicShareSession(token: string) {
             loadingMoreRef.current = false;
             setIsLoadingMore(false);
         }
-    }, [token, processPage, publishMessages]);
+    }, [token, processPage, publishMessages, renewResourceAccess]);
+
+    useEffect(() => {
+        if (!resourceAccessToken) return;
+        const timer = setInterval(() => {
+            void renewResourceAccess().catch(() => undefined);
+        }, RESOURCE_ACCESS_RENEWAL_INTERVAL_MS);
+        return () => clearInterval(timer);
+    }, [resourceAccessToken, renewResourceAccess]);
 
     useEffect(() => {
         load(false);
@@ -192,5 +229,5 @@ export function usePublicShareSession(token: string) {
         }
     }, [load]);
 
-    return { state, messages, metadata, owner, sessionId, hasMore, isLoadingMore, loadMore, giveConsent };
+    return { state, messages, metadata, owner, sessionId, hasMore, isLoadingMore, resourceAccessToken, loadMore, giveConsent };
 }

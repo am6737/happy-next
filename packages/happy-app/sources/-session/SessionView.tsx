@@ -18,6 +18,7 @@ import { PendingQueuePanel } from '@/components/PendingQueuePanel';
 import { VoiceAssistantStatusBar } from '@/components/VoiceAssistantStatusBar';
 import { useDraft } from '@/hooks/useDraft';
 import { useImagePicker } from '@/hooks/useImagePicker';
+import type { LocalAttachment } from '@/components/AttachmentPreview';
 import { Modal } from '@/modal';
 import { voiceHooks } from '@/realtime/hooks/voiceHooks';
 import { startRealtimeSession, stopRealtimeSession } from '@/realtime/RealtimeSession';
@@ -39,6 +40,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useHeaderHeight as useNavigationHeaderHeight } from '@react-navigation/elements';
 import { useFocusEffect, useIsFocused, useNavigation } from '@react-navigation/native';
 import { Stack, useRouter } from 'expo-router';
+import * as DocumentPicker from 'expo-document-picker';
+import { File as ExpoFile } from 'expo-file-system';
 import * as React from 'react';
 import { useMemo } from 'react';
 import { ActivityIndicator, Platform, Pressable, Text, useWindowDimensions, View } from 'react-native';
@@ -304,6 +307,8 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
     const router = useRouter();
     const safeArea = useSafeAreaInsets();
     const isFocused = useIsFocused();
+    const attachmentCapability = storage((state) => state.sessionCapabilities[sessionId]?.capabilities.attachments);
+    const supportsAttachments = attachmentCapability?.version === 2;
     const isLandscape = useIsLandscape();
     const deviceType = useDeviceType();
     const isIpad = Platform.OS === 'ios' && Platform.isPad;
@@ -492,6 +497,63 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
 
     const [isUploadingImages, setIsUploadingImages] = React.useState(false);
     const [isSending, setIsSending] = React.useState(false);
+    const [attachments, setAttachments] = React.useState<LocalAttachment[]>([]);
+    const attachmentsRef = React.useRef<LocalAttachment[]>([]);
+    const documentPickerCacheUrisRef = React.useRef(new Set<string>());
+
+    const releaseAttachment = React.useCallback((item: LocalAttachment) => {
+        if (Platform.OS === 'web') {
+            if (item.uri.startsWith('blob:')) URL.revokeObjectURL(item.uri);
+            return;
+        }
+        if (!documentPickerCacheUrisRef.current.delete(item.uri)) return;
+        try {
+            const file = new ExpoFile(item.uri);
+            if (file.exists) file.delete();
+        } catch (error) {
+            console.warn('Failed to delete document picker cache file:', error);
+        }
+    }, []);
+
+    const replaceAttachments = React.useCallback((next: LocalAttachment[]) => {
+        const removed = attachmentsRef.current.filter((item) => !next.some((candidate) => candidate.uri === item.uri));
+        removed.forEach(releaseAttachment);
+        attachmentsRef.current = next;
+        setAttachments(next);
+    }, [releaseAttachment]);
+
+    React.useEffect(() => () => {
+        attachmentsRef.current.forEach(releaseAttachment);
+    }, [releaseAttachment]);
+
+    React.useEffect(() => {
+        replaceAttachments([]);
+    }, [replaceAttachments, sessionId]);
+
+    React.useEffect(() => {
+        if (!supportsAttachments && attachmentsRef.current.length > 0) {
+            replaceAttachments([]);
+        }
+    }, [replaceAttachments, supportsAttachments]);
+
+    const appendAttachments = React.useCallback((candidates: LocalAttachment[]) => {
+        if (!attachmentCapability) {
+            candidates.forEach(releaseAttachment);
+            return;
+        }
+        const valid = candidates.filter((item) => {
+            if (item.size <= attachmentCapability.maxFileSize) return true;
+            Modal.alert(t('common.error'), t('session.fileTooLarge'));
+            releaseAttachment(item);
+            return false;
+        });
+        const available = Math.max(0, attachmentCapability.maxFiles - attachmentsRef.current.length);
+        if (valid.length > available) {
+            Modal.alert(t('common.error'), t('session.tooManyAttachments'));
+            valid.slice(available).forEach(releaseAttachment);
+        }
+        replaceAttachments([...attachmentsRef.current, ...valid.slice(0, available)]);
+    }, [attachmentCapability, releaseAttachment, replaceAttachments]);
 
     // Track failed message for retry with same localId
     const failedMessageRef = React.useRef<{ localId: string; content: string } | null>(null);
@@ -912,23 +974,45 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
     const imagePickerMenuItems: ActionMenuItem[] = React.useMemo(() => [
         { label: t('session.takePhoto'), onPress: pickFromCamera },
         { label: t('session.chooseFromLibrary'), onPress: pickFromGallery },
-    ], [pickFromCamera, pickFromGallery]);
+        ...(supportsAttachments ? [{ label: t('session.chooseFile'), onPress: async () => {
+            const result = await DocumentPicker.getDocumentAsync({ multiple: true, copyToCacheDirectory: true });
+            if (result.canceled) return;
+            result.assets.forEach((asset) => documentPickerCacheUrisRef.current.add(asset.uri));
+            appendAttachments(result.assets.map((asset) => ({
+                uri: asset.uri,
+                name: asset.name,
+                mimeType: asset.mimeType || 'application/octet-stream',
+                size: asset.size || 0,
+            })));
+        } }] : []),
+    ], [appendAttachments, pickFromCamera, pickFromGallery, supportsAttachments]);
 
     // Handle file input change (web only)
     const handleFileInputChange = React.useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
         const files = event.target.files;
         if (!files || files.length === 0) return;
 
+        const fileAttachments: LocalAttachment[] = [];
         Array.from(files).forEach(file => {
             if (file.type.startsWith('image/')) {
-                const url = URL.createObjectURL(file);
-                addImageFromUri(url, file.type);
+                if (canAddMore) {
+                    const url = URL.createObjectURL(file);
+                    addImageFromUri(url, file.type);
+                }
+            } else if (supportsAttachments) {
+                fileAttachments.push({
+                    uri: URL.createObjectURL(file),
+                    name: file.name,
+                    mimeType: file.type || 'application/octet-stream',
+                    size: file.size,
+                });
             }
         });
+        appendAttachments(fileAttachments);
 
         // Reset input so same file can be selected again
         event.target.value = '';
-    }, [addImageFromUri]);
+    }, [addImageFromUri, appendAttachments, canAddMore, supportsAttachments]);
 
     // Handle paste event for images (both web and native through input)
     const handlePaste = React.useCallback(async (event: ClipboardEvent) => {
@@ -943,10 +1027,8 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
         });
     }, [isFocused, canAddMore, supportsImages, addImageFromUri]);
 
-    // Handle image drop (web only) - passed to AgentInput
+    // Handle files dropped anywhere in the session window.
     const handleImageDrop = React.useCallback(async (files: File[]) => {
-        if (!canAddMore || !supportsImages) return;
-
         const imageFiles = files
             .filter((file) => file.type.startsWith('image/'))
             .slice(0, Math.max(0, MAX_SESSION_IMAGES - images.length));
@@ -954,7 +1036,27 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
             const url = URL.createObjectURL(file);
             await addImageFromUri(url, file.type);
         }
-    }, [addImageFromUri, canAddMore, images.length, supportsImages]);
+
+        const fileAttachments: LocalAttachment[] = [];
+        let hasUnsupportedFiles = false;
+        for (const file of files) {
+            if (file.type.startsWith('image/')) continue;
+            if (supportsAttachments) {
+                fileAttachments.push({
+                    uri: URL.createObjectURL(file),
+                    name: file.name,
+                    mimeType: file.type || 'application/octet-stream',
+                    size: file.size,
+                });
+            } else {
+                hasUnsupportedFiles = true;
+            }
+        }
+        appendAttachments(fileAttachments);
+        if (hasUnsupportedFiles) {
+            Modal.alert(t('common.error'), t('session.attachmentsUnsupported'));
+        }
+    }, [addImageFromUri, appendAttachments, images.length, supportsAttachments]);
 
     const [isImageDragging, setIsImageDragging] = React.useState(false);
     const imageDragDepthRef = React.useRef(0);
@@ -963,7 +1065,7 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
         if (Platform.OS !== 'web' || !isFocused) return;
 
         const hasFiles = (event: DragEvent) => event.dataTransfer?.types.includes('Files') === true;
-        const canAcceptImages = supportsImages && canAddMore;
+        const canAcceptFiles = supportsAttachments || (supportsImages && canAddMore);
         const resetDragState = () => {
             imageDragDepthRef.current = 0;
             setIsImageDragging(false);
@@ -971,7 +1073,7 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
         const handleDragEnter = (event: DragEvent) => {
             if (!hasFiles(event)) return;
             event.preventDefault();
-            if (!canAcceptImages) return;
+            if (!canAcceptFiles) return;
             imageDragDepthRef.current += 1;
             setIsImageDragging(true);
         };
@@ -984,15 +1086,15 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
         const handleDragOver = (event: DragEvent) => {
             if (!hasFiles(event)) return;
             event.preventDefault();
-            if (event.dataTransfer) event.dataTransfer.dropEffect = canAcceptImages ? 'copy' : 'none';
+            if (event.dataTransfer) event.dataTransfer.dropEffect = canAcceptFiles ? 'copy' : 'none';
         };
         const handleDrop = (event: DragEvent) => {
             if (!hasFiles(event)) return;
             event.preventDefault();
             resetDragState();
-            if (!canAcceptImages || !event.dataTransfer) return;
-            const images = Array.from(event.dataTransfer.files).filter((file) => file.type.startsWith('image/'));
-            if (images.length > 0) void handleImageDrop(images);
+            if (!canAcceptFiles || !event.dataTransfer) return;
+            const files = Array.from(event.dataTransfer.files);
+            if (files.length > 0) void handleImageDrop(files);
         };
 
         document.addEventListener('dragenter', handleDragEnter);
@@ -1008,7 +1110,7 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
             window.removeEventListener('blur', resetDragState);
             resetDragState();
         };
-    }, [canAddMore, handleImageDrop, isFocused, supportsImages]);
+    }, [canAddMore, handleImageDrop, isFocused, supportsAttachments, supportsImages]);
 
     // Handle loading more older messages when scrolling to top
     const [minimapItems, setMinimapItems] = React.useState<ConversationMinimapItem[]>([]);
@@ -1199,7 +1301,7 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
                 }
 
                 const messageToSend = (textSnapshot ?? message).trim();
-                if (messageToSend || images.length > 0) {
+                if (messageToSend || images.length > 0 || attachments.length > 0) {
                     const socketStatus = storage.getState().socketStatus;
                     log.log(`[SEND_DEBUG][UI] tap_send sid=${sessionId} hasText=${messageToSend.length > 0} images=${images.length} isSending=${isSending} socket=${socketStatus}`);
 
@@ -1212,7 +1314,8 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
                     }
 
                     const imagesToSend = images.length > 0 ? [...images] : undefined;
-                    const contentForRetry = messageToSend + JSON.stringify(imagesToSend || []);
+                    const attachmentsToSend = attachments.length > 0 ? [...attachments] : undefined;
+                    const contentForRetry = messageToSend + JSON.stringify(imagesToSend || []) + JSON.stringify(attachmentsToSend || []);
 
                     // Check if this is a retry of the same content
                     const existingLocalId = failedMessageRef.current?.content === contentForRetry
@@ -1221,7 +1324,7 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
 
                     // Set sending state
                     setIsSending(true);
-                    if (imagesToSend) {
+                    if (imagesToSend || attachmentsToSend) {
                         setIsUploadingImages(true);
                     }
 
@@ -1233,7 +1336,9 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
                                 setMessage('');
                                 clearDraft();
                                 clearImages();
-                            }
+                                replaceAttachments([]);
+                            },
+                            attachmentsToSend,
                         );
                         const mode = result.success ? result.mode : 'failed';
                         const errorText = result.success ? 'none' : (result.error || 'none');
@@ -1296,7 +1401,10 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
             }}
             onImageButtonPress={handleImageButtonPress}
             supportsImages={supportsImages}
+            supportsAttachments={supportsAttachments}
             isUploadingImages={isUploadingImages}
+            attachments={attachments}
+            onAttachmentsChange={replaceAttachments}
         />
     ) : null;
 
@@ -1308,7 +1416,7 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
                 <input
                     ref={fileInputRef as any}
                     type="file"
-                    accept="image/jpeg,image/png"
+                    accept={supportsAttachments ? undefined : 'image/jpeg,image/png'}
                     multiple
                     style={{ display: 'none' }}
                     onChange={handleFileInputChange as any}
@@ -1383,7 +1491,7 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
                     >
                         <Ionicons name="images-outline" size={36} color={theme.colors.text} />
                         <Text style={{ marginTop: 10, color: theme.colors.text, fontSize: 16, fontWeight: '600' }}>
-                            {t('session.dropImagesToAttach')}
+                            {t(supportsAttachments ? 'session.dropFilesToAttach' : 'session.dropImagesToAttach')}
                         </Text>
                     </View>
                 )}

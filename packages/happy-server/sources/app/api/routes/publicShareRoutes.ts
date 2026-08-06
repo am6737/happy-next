@@ -10,6 +10,17 @@ import { allocateUserSeq } from "@/storage/seq";
 import { createHash } from "crypto";
 import { decodeBase64 } from "privacy-kit";
 import { touchSession } from "@/app/session/sessionTouch";
+import { s3client, s3privateBucket } from '@/storage/files';
+import {
+    canAccessPublicShareResource,
+    signPublicShareResourceToken,
+    verifyPublicShareResourceRenewalToken,
+} from '@/app/share/publicShareResourceToken';
+
+function getResourceToken(headers: Record<string, string | string[] | undefined>): string | undefined {
+    const value = headers['x-public-share-access'];
+    return Array.isArray(value) ? value[0] : value;
+}
 
 /**
  * Public session sharing API routes
@@ -17,6 +28,97 @@ import { touchSession } from "@/app/session/sessionTouch";
  * Public shares are always view-only for security
  */
 export function publicShareRoutes(app: Fastify) {
+
+    app.post('/v1/public-share/:token/access-token', {
+        config: {
+            rateLimit: {
+                max: 20,
+                timeWindow: '1 minute'
+            }
+        },
+        schema: {
+            params: z.object({ token: z.string() })
+        }
+    }, async (request, reply) => {
+        const tokenHash = createHash('sha256').update(request.params.token, 'utf8').digest();
+        const publicShare = await db.publicSessionShare.findUnique({
+            where: { tokenHash },
+            select: { id: true, expiresAt: true }
+        });
+        if (!publicShare
+            || (publicShare.expiresAt && publicShare.expiresAt < new Date())
+            || !verifyPublicShareResourceRenewalToken({
+                resourceToken: getResourceToken(request.headers),
+                shareId: publicShare.id,
+                tokenHash,
+            })) {
+            return reply.code(404).send({ error: 'Public share not found or expired' });
+        }
+
+        return reply.send({
+            resourceAccessToken: signPublicShareResourceToken({ shareId: publicShare.id, tokenHash })
+        });
+    });
+
+    app.get('/v1/public-share/:token/attachments/:attachmentId/download', {
+        config: {
+            rateLimit: {
+                max: 240,
+                timeWindow: '1 minute'
+            }
+        },
+        schema: {
+            params: z.object({
+                token: z.string(),
+                attachmentId: z.string()
+            }),
+            querystring: z.object({
+                consent: z.coerce.boolean().optional()
+            }).optional()
+        }
+    }, async (request, reply) => {
+        const tokenHash = createHash('sha256').update(request.params.token, 'utf8').digest();
+        const publicShare = await db.publicSessionShare.findUnique({
+            where: { tokenHash },
+            select: {
+                id: true,
+                sessionId: true,
+                expiresAt: true,
+                maxUses: true,
+                isConsentRequired: true
+            }
+        });
+        if (!publicShare
+            || (publicShare.expiresAt && publicShare.expiresAt < new Date())) {
+            return reply.code(404).send({ error: 'Attachment not found' });
+        }
+        if (!canAccessPublicShareResource({
+            maxUses: publicShare.maxUses,
+            resourceToken: getResourceToken(request.headers),
+            shareId: publicShare.id,
+            tokenHash,
+        })) {
+            return reply.code(404).send({ error: 'Attachment not found' });
+        }
+        if (publicShare.isConsentRequired && !request.query?.consent) {
+            return reply.code(403).send({ error: 'Consent required', requiresConsent: true });
+        }
+
+        const attachment = await db.chatAttachment.findFirst({
+            where: {
+                id: request.params.attachmentId,
+                sessionId: publicShare.sessionId
+            }
+        });
+        if (!attachment) return reply.code(404).send({ error: 'Attachment not found' });
+
+        const stream = await s3client.getObject(s3privateBucket, attachment.path);
+        reply.header('Content-Type', 'application/octet-stream');
+        reply.header('Content-Length', String(attachment.size));
+        reply.header('Content-Disposition', 'attachment; filename="attachment.bin"');
+        reply.header('Cache-Control', 'private, max-age=300');
+        return reply.send(stream);
+    });
 
     /**
      * Create or update public share for a session
@@ -322,11 +424,18 @@ export function publicShareRoutes(app: Fastify) {
                 };
             }
 
-            // Increment use count atomically
-            await tx.publicSessionShare.update({
-                where: { id: publicShare.id },
+            // Claim one use with the limit in the update predicate so concurrent
+            // entry requests cannot both pass the preceding snapshot check.
+            const claimed = await tx.publicSessionShare.updateMany({
+                where: {
+                    id: publicShare.id,
+                    ...(publicShare.maxUses ? { useCount: { lt: publicShare.maxUses } } : {}),
+                },
                 data: { useCount: { increment: 1 } }
             });
+            if (claimed.count !== 1) {
+                return { error: 'Public share not found or expired' };
+            }
 
             return {
                 success: true,
@@ -405,7 +514,11 @@ export function publicShareRoutes(app: Fastify) {
             owner: toShareUserProfile(session.account),
             accessLevel: 'view',
             encryptedDataKey: Buffer.from(result.encryptedDataKey).toString('base64'),
-            isConsentRequired: result.isConsentRequired
+            isConsentRequired: result.isConsentRequired,
+            resourceAccessToken: signPublicShareResourceToken({
+                shareId: result.publicShareId,
+                tokenHash,
+            })
         });
     });
 
@@ -454,7 +567,6 @@ export function publicShareRoutes(app: Fastify) {
                 sessionId: true,
                 expiresAt: true,
                 maxUses: true,
-                useCount: true,
                 isConsentRequired: true,
                 blockedUsers: userId ? {
                     where: { userId },
@@ -472,8 +584,12 @@ export function publicShareRoutes(app: Fastify) {
             return reply.code(404).send({ error: 'Public share not found or expired' });
         }
 
-        // Check if max uses exceeded
-        if (publicShare.maxUses && publicShare.useCount >= publicShare.maxUses) {
+        if (!canAccessPublicShareResource({
+            maxUses: publicShare.maxUses,
+            resourceToken: getResourceToken(request.headers),
+            shareId: publicShare.id,
+            tokenHash,
+        })) {
             return reply.code(404).send({ error: 'Public share not found or expired' });
         }
 

@@ -6,7 +6,7 @@ import { copyFile, mkdir, stat } from 'node:fs/promises';
 import { ApiClient } from '@/api/api';
 import { logger } from '@/ui/logger';
 import { loop } from '@/claude/loop';
-import { AgentState, ImageContent, Metadata } from '@/api/types';
+import { AgentState, AttachmentContent, ImageContent, Metadata } from '@/api/types';
 import packageJson from '../../package.json';
 import { Credentials, readSettings } from '@/persistence';
 import { EnhancedMode, PermissionMode } from './loop';
@@ -47,7 +47,7 @@ export type JsRuntime = 'node' | 'bun'
 export type QueueMessageContent =
     | string
     | { type: 'text'; text: string }
-    | { type: 'mixed'; text: string; images: ImageContent[] };
+    | { type: 'mixed'; text: string; images?: ImageContent[]; attachments?: AttachmentContent[] };
 
 export interface StartOptions {
     model?: string
@@ -237,6 +237,10 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
     }
 
     logger.debug(`Session created: ${response.id}`);
+    api.sessionSyncClient(response).updateCapabilities((currentCapabilities) => ({
+        ...currentCapabilities,
+        attachments: { version: 2, maxFiles: 10, maxFileSize: 25 * 1024 * 1024 },
+    }));
 
     // Always report to daemon if it exists
     try {
@@ -258,6 +262,7 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
             // Update large autocomplete/capability data separately from session metadata.
             api.sessionSyncClient(response).updateCapabilities((currentCapabilities) => ({
                 ...currentCapabilities,
+                attachments: { version: 2, maxFiles: 10, maxFileSize: 25 * 1024 * 1024 },
                 tools: sdkMetadata.tools,
                 slashCommands: sdkMetadata.slashCommands,
                 slashCommandMetadata: sdkMetadata.slashCommandMetadata

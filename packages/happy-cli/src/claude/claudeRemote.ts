@@ -13,7 +13,9 @@ import { systemPrompt } from "./utils/systemPrompt";
 import { PermissionResult } from "./sdk/types";
 import type { JsRuntime } from "./runClaude";
 import { formatMessageForClaude, ClaudeContent } from '@/utils/formatImageMessage';
-import { ImageContent } from '@/api/types';
+import { AttachmentContent, ImageContent } from '@/api/types';
+import { readFile } from 'node:fs/promises';
+import { appendAttachmentManifest, resolveAttachments } from '@/utils/resolveAttachments';
 
 export async function claudeRemote(opts: {
 
@@ -30,9 +32,11 @@ export async function claudeRemote(opts: {
     hookSettingsPath: string,
     /** JavaScript runtime to use for spawning Claude Code (default: 'node') */
     jsRuntime?: JsRuntime,
+    happySessionId?: string,
+    attachmentToken?: string,
 
     // Dynamic parameters
-    nextMessage: () => Promise<{ message: string | { type: 'text'; text: string } | { type: 'mixed'; text: string; images: ImageContent[] }, mode: EnhancedMode } | null>,
+    nextMessage: () => Promise<{ message: string | { type: 'text'; text: string } | { type: 'mixed'; text: string; images?: ImageContent[]; attachments?: AttachmentContent[] }, mode: EnhancedMode } | null>,
     onReady: () => void,
     isAborted: (toolCallId: string) => boolean,
 
@@ -182,11 +186,32 @@ export async function claudeRemote(opts: {
 
     // Normalize queue message payloads into Claude SDK content format
     const toClaudeMessageContent = async (
-        message: string | { type: 'text'; text: string } | { type: 'mixed'; text: string; images: ImageContent[] }
+        message: string | { type: 'text'; text: string } | { type: 'mixed'; text: string; images?: ImageContent[]; attachments?: AttachmentContent[] }
     ): Promise<string | ClaudeContent[]> => {
         if (typeof message === 'object' && 'type' in message) {
             if (message.type === 'mixed') {
-                return formatMessageForClaude(message.text, message.images);
+                const content = await formatMessageForClaude(message.text, message.images ?? []);
+                if (message.attachments?.length) {
+                    if (!opts.happySessionId || !opts.attachmentToken) throw new Error('Attachment resolver is not configured');
+                    const resolved = await resolveAttachments({
+                        attachments: message.attachments,
+                        sessionId: opts.happySessionId,
+                        cwd: opts.path,
+                        token: opts.attachmentToken,
+                        signal: opts.signal,
+                    });
+                    const textBlock = content.find((block) => block.type === 'text');
+                    const text = appendAttachmentManifest(textBlock?.text ?? message.text, resolved);
+                    const images: ClaudeContent[] = await Promise.all(resolved
+                        .filter((item) => item.kind === 'image')
+                        .map(async (item) => ({ type: 'image' as const, source: {
+                            type: 'base64' as const,
+                            media_type: item.mimeType,
+                            data: (await readFile(item.path)).toString('base64'),
+                        } })));
+                    return [...content.filter((block) => block.type !== 'text'), ...images, { type: 'text', text }];
+                }
+                return content;
             }
             return message.text;
         }

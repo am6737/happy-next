@@ -4,6 +4,7 @@ import { eventRouter, buildDeleteSessionUpdate } from "@/app/events/eventRouter"
 import { allocateUserSeq } from "@/storage/seq";
 import { randomKeyNaked } from "@/utils/randomKeyNaked";
 import { log } from "@/utils/log";
+import { processAttachmentObjectDeletions, queueAttachmentObjectDeletions } from '@/app/chat/attachmentObjectDeletion';
 
 /**
  * Delete a session and all its related data.
@@ -36,6 +37,13 @@ export async function sessionDelete(ctx: Context, sessionId: string): Promise<bo
             }, `Session not found or not owned by user`);
             return false;
         }
+
+        const attachmentPaths = (await tx.chatAttachment.findMany({
+            where: { sessionId },
+            select: { path: true },
+        })).map((attachment) => attachment.path);
+
+        await queueAttachmentObjectDeletions(tx, attachmentPaths);
 
         // Delete all related data
         // Note: Order matters to avoid foreign key constraint violations
@@ -104,6 +112,9 @@ export async function sessionDelete(ctx: Context, sessionId: string): Promise<bo
 
         // Send notification after transaction commits
         afterTx(tx, async () => {
+            void processAttachmentObjectDeletions().catch((error) => {
+                log({ module: 'session-delete', sessionId, error }, 'Failed to process queued attachment deletions');
+            });
             const updSeq = await allocateUserSeq(ctx.uid);
             const updatePayload = buildDeleteSessionUpdate(sessionId, updSeq, randomKeyNaked(12));
             

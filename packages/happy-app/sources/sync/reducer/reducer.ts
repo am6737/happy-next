@@ -111,7 +111,7 @@
  */
 
 import { Message, ToolCall } from "../typesMessage";
-import { AgentEvent, ImageContent, NormalizedMessage, UsageData } from "../typesRaw";
+import { AgentEvent, AttachmentContent, ImageContent, NormalizedMessage, UsageData } from "../typesRaw";
 import { createTracer, traceMessages, TracerState } from "./reducerTracer";
 import { AgentState } from "../storageTypes";
 import { MessageMeta } from "../typesMessageMeta";
@@ -129,6 +129,7 @@ type ReducerMessage = {
     event: AgentEvent | null;
     tool: ToolCall | null;
     images?: ImageContent[];
+    attachments?: AttachmentContent[];
     meta?: MessageMeta;
     sentBy?: string | null;
     sentByName?: string | null;
@@ -576,6 +577,7 @@ export function reducer(state: ReducerState, messages: NormalizedMessage[], agen
                 tool: null,
                 event: null,
                 images: msg.content.type === 'mixed' ? msg.content.images : undefined,
+                attachments: msg.content.type === 'mixed' ? msg.content.attachments : undefined,
                 meta: msg.meta,
                 sentBy: msg.sentBy,
                 sentByName: msg.sentByName,
@@ -1131,6 +1133,7 @@ function convertReducerMessageToMessage(reducerMsg: ReducerMessage, state: Reduc
             text: reducerMsg.text,
             ...(reducerMsg.meta?.displayText && { displayText: reducerMsg.meta.displayText }),
             ...(reducerMsg.images && { images: reducerMsg.images }),
+            ...(reducerMsg.attachments && { attachments: reducerMsg.attachments }),
             meta: reducerMsg.meta,
             sentBy: reducerMsg.sentBy,
             sentByName: reducerMsg.sentByName,

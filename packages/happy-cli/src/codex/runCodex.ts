@@ -38,7 +38,9 @@ import { setupOfflineReconnection } from '@/utils/setupOfflineReconnection';
 import type { ApiSessionClient } from '@/api/apiSession';
 import { backfillCodexSessionHistory } from './utils/codexBackfill';
 import { downloadImage } from '@/utils/downloadImage';
-import type { ImageContent } from '@/api/types';
+import type { AttachmentContent, ImageContent } from '@/api/types';
+import { readFile } from 'node:fs/promises';
+import { appendAttachmentManifest, resolveAttachments } from '@/utils/resolveAttachments';
 import type { SendPromptOptions } from '@/agent/core';
 import type { AgentMessage } from '@/agent/core';
 import { handleConfigMetadataEvent } from '@/agent/acp/sessionUpdateHandlers';
@@ -135,6 +137,7 @@ export async function runCodex(opts: {
         model?: string;
         reasoningEffort?: string;
         images?: ImageContent[];
+        attachments?: AttachmentContent[];
     }
 
     //
@@ -197,6 +200,7 @@ export async function runCodex(opts: {
             const currentSkills = skills;
             session.updateCapabilities((currentCapabilities) => addBuiltinSlashCommands(addOrchestratorSlashCommands({
                 ...currentCapabilities,
+                attachments: { version: 2, maxFiles: 10, maxFileSize: 25 * 1024 * 1024 },
                 skills: currentSkills,
             })));
             if (permissionHandler) {
@@ -209,6 +213,7 @@ export async function runCodex(opts: {
     const initialSkills = skills;
     session.updateCapabilities((currentCapabilities) => addBuiltinSlashCommands(addOrchestratorSlashCommands({
         ...currentCapabilities,
+        attachments: { version: 2, maxFiles: 10, maxFileSize: 25 * 1024 * 1024 },
         skills: initialSkills,
     })));
 
@@ -225,6 +230,7 @@ export async function runCodex(opts: {
             lastSkillsSignature = nextSignature;
             session.updateCapabilities((currentCapabilities) => addBuiltinSlashCommands(addOrchestratorSlashCommands({
                 ...currentCapabilities,
+                attachments: { version: 2, maxFiles: 10, maxFileSize: 25 * 1024 * 1024 },
                 skills: nextSkills,
             })));
         } catch (error) {
@@ -368,7 +374,10 @@ export async function runCodex(opts: {
         const isMixedContent = message.content.type === 'mixed';
         const messageText = message.content.text;
         const images: ImageContent[] = isMixedContent && 'images' in message.content
-            ? message.content.images
+            ? message.content.images ?? []
+            : [];
+        const attachments = isMixedContent && 'attachments' in message.content
+            ? message.content.attachments ?? []
             : [];
 
         if (images.length > 0) {
@@ -380,6 +389,7 @@ export async function runCodex(opts: {
             model: messageModel,
             reasoningEffort: messageReasoningEffort,
             images: images.length > 0 ? images : undefined,
+            attachments: attachments.length > 0 ? attachments : undefined,
         };
         messageQueue.push(messageText, enhancedMode);
     });
@@ -1205,7 +1215,7 @@ Tokens used: ${goal.tokensUsed}${goal.tokenBudget ? ` / ${goal.tokenBudget}` : '
 
             const expandedOrchestratorCommand = expandOrchestratorSlashCommand(message.message);
             const expandedBuiltinCommand = expandedOrchestratorCommand ? null : expandBuiltinSlashCommand(message.message);
-            const promptText = expandedOrchestratorCommand?.prompt ?? expandedBuiltinCommand?.prompt ?? message.message;
+            let promptText = expandedOrchestratorCommand?.prompt ?? expandedBuiltinCommand?.prompt ?? message.message;
             if (expandedOrchestratorCommand) {
                 logger.debug(`[Codex] Expanded /orchestrator:${expandedOrchestratorCommand.provider} command`);
             } else if (expandedBuiltinCommand) {
@@ -1226,6 +1236,19 @@ Tokens used: ${goal.tokensUsed}${goal.tokenBudget ? ` / ${goal.tokenBudget}` : '
 
                 // Download images from URLs to base64 if present
                 let promptOptions: SendPromptOptions | undefined;
+                if (message.mode.attachments?.length) {
+                    const resolved = await resolveAttachments({
+                        attachments: message.mode.attachments,
+                        sessionId: session.sessionId,
+                        cwd: process.cwd(),
+                        token: opts.credentials.token,
+                    });
+                    promptText = appendAttachmentManifest(promptText, resolved);
+                    const privateImages = await Promise.all(resolved
+                        .filter((item) => item.kind === 'image')
+                        .map(async (item) => ({ data: (await readFile(item.path)).toString('base64'), mimeType: item.mimeType })));
+                    if (privateImages.length) promptOptions = { images: privateImages };
+                }
                 if (message.mode.images?.length) {
                     logger.debug(`[Codex] Downloading ${message.mode.images.length} image(s)...`);
                     const images = await Promise.all(
@@ -1237,7 +1260,7 @@ Tokens used: ${goal.tokensUsed}${goal.tokenBudget ? ` / ${goal.tokenBudget}` : '
                             };
                         })
                     );
-                    promptOptions = { images };
+                    promptOptions = { images: [...(promptOptions?.images ?? []), ...images] };
                     logger.debug(`[Codex] Downloaded ${images.length} image(s)`);
                 }
 

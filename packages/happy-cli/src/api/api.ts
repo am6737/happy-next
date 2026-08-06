@@ -24,6 +24,10 @@ export class ApiClient {
     this.pushClient = new PushNotificationClient(credential.token, configuration.serverUrl)
   }
 
+  getToken(): string {
+    return this.credential.token;
+  }
+
   /**
    * Create a new session or load existing one with the given tag
    */

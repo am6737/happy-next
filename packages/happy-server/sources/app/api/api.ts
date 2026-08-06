@@ -46,7 +46,8 @@ export async function startApi() {
     });
     app.register(import('@fastify/multipart'), {
         limits: {
-            fileSize: 10 * 1024 * 1024, // 10MB max file size
+            fileSize: 10 * 1024 * 1024,
+            files: 1,
         }
     });
     app.get('/', function (request, reply) {

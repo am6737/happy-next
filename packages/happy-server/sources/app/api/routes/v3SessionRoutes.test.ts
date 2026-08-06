@@ -291,6 +291,18 @@ const {
         return rows[0] ?? null;
     });
 
+    const sessionMessageFindUnique = vi.fn(async (args: any) => {
+        const key = args?.where?.sessionId_localId;
+        if (!key) return null;
+        const row = state.messages.find((message) => (
+            message.sessionId === key.sessionId && message.localId === key.localId
+        ));
+        return row ? selectFields(row as unknown as Record<string, unknown>, args?.select) : null;
+    });
+
+    const chatAttachmentFindMany = vi.fn(async () => []);
+    const chatAttachmentUpdateMany = vi.fn(async () => ({ count: 0 }));
+
     const sessionMessageCreate = vi.fn(async (args: any) => {
         const createdAt = new Date(state.nowMs);
         state.nowMs += 1;
@@ -483,7 +495,12 @@ const {
         sessionMessage: {
             findMany: sessionMessageFindMany,
             findFirst: sessionMessageFindFirst,
+            findUnique: sessionMessageFindUnique,
             create: sessionMessageCreate
+        },
+        chatAttachment: {
+            findMany: chatAttachmentFindMany,
+            updateMany: chatAttachmentUpdateMany,
         },
         sessionPendingMessage: {
             findMany: sessionPendingMessageFindMany,
@@ -517,7 +534,12 @@ const {
         sessionMessage: {
             findMany: sessionMessageFindMany,
             findFirst: sessionMessageFindFirst,
+            findUnique: sessionMessageFindUnique,
             create: sessionMessageCreate
+        },
+        chatAttachment: {
+            findMany: chatAttachmentFindMany,
+            updateMany: chatAttachmentUpdateMany,
         },
         sessionPendingMessage: {
             findMany: sessionPendingMessageFindMany,

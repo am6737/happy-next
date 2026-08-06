@@ -2,6 +2,7 @@ import { buildMessageDeliveryErrorEphemeral, buildNewMessageUpdate, eventRouter 
 import { db } from "@/storage/db";
 import { allocateSessionSeqBatch } from "@/storage/seq";
 import { randomKeyNaked } from "@/utils/randomKeyNaked";
+import { commitAttachmentLeases } from '@/app/chat/chatAttachmentLease';
 
 export type DispatchSessionMessageParams = {
     ownerId: string;
@@ -11,6 +12,8 @@ export type DispatchSessionMessageParams = {
     sentBy: string | null;
     sentByName: string | null;
     trackCliDelivery: boolean;
+    attachmentIds?: string[];
+    pendingMessageId?: string;
 };
 
 export type DispatchedSessionMessage = {
@@ -44,6 +47,25 @@ export async function dispatchSessionMessage(params: DispatchSessionMessageParam
         && hasReceiptCapableCliConnection(params.ownerId, params.sessionId);
 
     const createdMessage = await db.$transaction(async (tx) => {
+        if (params.pendingMessageId) {
+            const deleted = await tx.sessionPendingMessage.deleteMany({
+                where: {
+                    id: params.pendingMessageId,
+                    sessionId: params.sessionId,
+                    localId: params.localId,
+                },
+            });
+            if (deleted.count !== 1) {
+                throw new Error('Pending message is no longer available for dispatch');
+            }
+        }
+
+        await commitAttachmentLeases(tx, {
+            attachmentIds: params.attachmentIds ?? [],
+            accountId: params.sentBy ?? params.ownerId,
+            sessionId: params.sessionId,
+            messageLocalId: params.localId,
+        });
         const [seq] = await allocateSessionSeqBatch(params.sessionId, 1, tx);
         const created = await tx.sessionMessage.create({
             data: {

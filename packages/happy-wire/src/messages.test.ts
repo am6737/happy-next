@@ -9,11 +9,41 @@ import {
 } from './messages';
 import {
   AgentMessageSchema,
+  AttachmentContentSchema,
   LegacyMessageContentSchema,
   UserMessageSchema,
 } from './legacyProtocol';
 
 describe('shared wire message schemas', () => {
+  it('parses an end-to-end encrypted file attachment', () => {
+    expect(AttachmentContentSchema.safeParse({
+      v: 2,
+      id: 'attachment-1',
+      kind: 'file',
+      name: 'report.pdf',
+      mimeType: 'application/pdf',
+      size: 1024,
+      encryption: {
+        algorithm: 'secretbox',
+        key: 'a'.repeat(43),
+        nonce: 'b'.repeat(32),
+        plaintextSha256: 'a'.repeat(64),
+        ciphertextSize: 1040,
+      },
+    }).success).toBe(true);
+  });
+
+  it('keeps parsing legacy plaintext attachment records', () => {
+    expect(AttachmentContentSchema.safeParse({
+      v: 1,
+      id: 'attachment-legacy',
+      kind: 'file',
+      name: 'legacy.txt',
+      mimeType: 'text/plain',
+      size: 12,
+    }).success).toBe(true);
+  });
+
   it('parses a new-message update', () => {
     const parsed = ApiUpdateNewMessageSchema.safeParse({
       t: 'new-message',

@@ -14,6 +14,8 @@ import { loadFiles } from "./storage/files";
 import { startMessageDeliveryTimeoutWorker } from "./app/messageDelivery/timeout";
 import { startOrchestratorScheduler } from "./app/orchestrator/scheduler";
 import { backfillGitHubDisplayNames } from "./app/github/backfillGitHubDisplayNames";
+import { startAttachmentCleanupWorker } from './app/chat/chatAttachmentLease';
+import { startAttachmentObjectDeletionWorker } from './app/chat/attachmentObjectDeletion';
 
 async function main() {
 
@@ -44,6 +46,8 @@ async function main() {
     startTimeout();
     startMessageDeliveryTimeoutWorker();
     startOrchestratorScheduler();
+    startAttachmentCleanupWorker();
+    startAttachmentObjectDeletionWorker();
 
     //
     // Ready

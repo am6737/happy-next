@@ -26,6 +26,7 @@ import { log } from '@/log';
 import { AIBackendProfile, getProfileEnvironmentVariables, validateProfileForAgent } from '@/sync/settings';
 import { getBuiltInProfile } from '@/sync/profileUtils';
 import { ImagePreview, LocalImage } from '@/components/ImagePreview';
+import { AttachmentPreview, LocalAttachment } from '@/components/AttachmentPreview';
 import { Switch } from '@/components/Switch';
 import { Modal } from '@/modal';
 import {
@@ -114,8 +115,11 @@ interface AgentInputProps {
     onImagesChange?: (images: LocalImage[]) => void;
     onImageButtonPress?: () => void;
     supportsImages?: boolean;
+    supportsAttachments?: boolean;
     isUploadingImages?: boolean;
     onImageDrop?: (files: File[]) => void;
+    attachments?: LocalAttachment[];
+    onAttachmentsChange?: (attachments: LocalAttachment[]) => void;
 }
 
 const agentFlavorIcons = {
@@ -664,12 +668,13 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
 
     // Set up native drag event listeners for web
     React.useEffect(() => {
-        if (Platform.OS !== 'web' || !props.supportsImages || !props.onImageDrop) return;
+        if (Platform.OS !== 'web' || (!props.supportsImages && !props.supportsAttachments) || !props.onImageDrop) return;
 
         const element = dropZoneRef.current as unknown as HTMLElement | null;
         if (!element) return;
 
         const handleDragEnter = (e: DragEvent) => {
+            if (!e.dataTransfer?.types.includes('Files')) return;
             e.preventDefault();
             e.stopPropagation();
             dragCounterRef.current++;
@@ -686,6 +691,7 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
         };
 
         const handleDragOver = (e: DragEvent) => {
+            if (!e.dataTransfer?.types.includes('Files')) return;
             e.preventDefault();
             e.stopPropagation();
         };
@@ -697,7 +703,7 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
             dragCounterRef.current = 0;
 
             if (!e.dataTransfer) return;
-            const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+            const files = Array.from(e.dataTransfer.files);
             if (files.length > 0) {
                 props.onImageDrop!(files);
             }
@@ -714,7 +720,7 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
             element.removeEventListener('dragover', handleDragOver);
             element.removeEventListener('drop', handleDrop);
         };
-    }, [props.supportsImages, props.onImageDrop]);
+    }, [props.supportsImages, props.supportsAttachments, props.onImageDrop]);
 
     // Forward ref to the MultiTextInput
     React.useImperativeHandle(ref, () => inputRef.current!, []);
@@ -728,6 +734,7 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
     // Attached images alone are enough to send (e.g. an image-only chat message),
     // even when the text input is empty.
     const hasImages = (props.images?.length ?? 0) > 0;
+    const hasAttachments = (props.attachments?.length ?? 0) > 0;
 
     // Keep a latest text snapshot to avoid stale parent-state reads during fast click-after-type sends.
     const latestTextRef = React.useRef(props.value);
@@ -1674,6 +1681,13 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                             disabled={props.isUploadingImages}
                         />
                     )}
+                    {props.attachments && props.attachments.length > 0 && props.onAttachmentsChange && (
+                        <AttachmentPreview
+                            attachments={props.attachments}
+                            onRemove={(index) => props.onAttachmentsChange!(props.attachments!.filter((_, i) => i !== index))}
+                            disabled={props.isUploadingImages}
+                        />
+                    )}
 
                     {/* Input field */}
                     <View style={[styles.inputContainer, props.minHeight ? { minHeight: props.minHeight } : undefined]}>
@@ -1847,19 +1861,19 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                 {/* Image button */}
                                 {props.onImageButtonPress && (
                                     <Pressable
-                                        onPress={props.supportsImages !== false ? props.onImageButtonPress : () => {
-                                            Modal.alert('Not Supported', 'This AI does not support images');
+                                        onPress={(props.supportsImages !== false || props.supportsAttachments) ? props.onImageButtonPress : () => {
+                                            Modal.alert('Not Supported', 'This AI does not support attachments');
                                         }}
                                         style={[
                                             styles.iconButton,
-                                            props.supportsImages === false && styles.iconButtonDisabled
+                                            props.supportsImages === false && !props.supportsAttachments && styles.iconButtonDisabled
                                         ]}
                                         disabled={props.isUploadingImages}
                                     >
                                         <Ionicons
-                                            name="image-outline"
+                                            name="attach-outline"
                                             size={24}
-                                            color={props.supportsImages !== false ? theme.colors.text : theme.colors.textSecondary}
+                                            color={(props.supportsImages !== false || props.supportsAttachments) ? theme.colors.text : theme.colors.textSecondary}
                                         />
                                     </Pressable>
                                 )}
@@ -1868,7 +1882,7 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                 <View
                                     style={[
                                         styles.sendButton,
-                                        (hasText || hasImages || props.isSending || props.allowEmptySend || (props.onMicPress && !props.isMicActive))
+                                        (hasText || hasImages || hasAttachments || props.isSending || props.allowEmptySend || (props.onMicPress && !props.isMicActive))
                                             ? styles.sendButtonActive
                                             : styles.sendButtonInactive
                                     ]}
@@ -1885,7 +1899,7 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                         onPress={() => {
                                             const textSnapshot = resolveSendSnapshot();
                                             log.log(`[SEND_DEBUG][INPUT] press hasText=${hasText} latestLen=${latestTextRef.current.trim().length} stateLen=${inputState.text.trim().length} propLen=${props.value.trim().length} pickedLen=${textSnapshot.trim().length} mic=${props.onMicPress ? 'yes' : 'no'} disabled=${props.isSendDisabled || props.isSending ? 'yes' : 'no'}`);
-                                            if (textSnapshot.trim() || hasImages || props.allowEmptySend) {
+                                            if (textSnapshot.trim() || hasImages || hasAttachments || props.allowEmptySend) {
                                                 hapticsLight();
                                                 props.onSend(textSnapshot);
                                                 return;
@@ -1896,7 +1910,7 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                             }
                                         }}
                                         accessibilityState={{
-                                            disabled: !!(props.isSendDisabled || props.isSending || (!hasText && !hasImages && !props.onMicPress && !props.allowEmptySend)),
+                                            disabled: !!(props.isSendDisabled || props.isSending || (!hasText && !hasImages && !hasAttachments && !props.onMicPress && !props.allowEmptySend)),
                                         }}
                                         disabled={props.isSendDisabled || props.isSending}
                                     >
@@ -1905,7 +1919,7 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                                 size="small"
                                                 color={theme.colors.button.primary.tint}
                                             />
-                                        ) : (hasText || hasImages) ? (
+                                        ) : (hasText || hasImages || hasAttachments) ? (
                                             <Octicons
                                                 name="arrow-up"
                                                 size={16}

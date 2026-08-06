@@ -2,11 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('react-native-mmkv', () => ({
     MMKV: class {
-        getString() { return undefined; }
-        set() {}
-        delete() {}
+        getString(key: string) { return mmkvValues.get(key); }
+        set(key: string, value: string) { mmkvValues.set(key, value); }
+        delete(key: string) { mmkvValues.delete(key); }
     },
 }));
+
+const mmkvValues = new Map<string, string>();
 
 function appConfigResponse(apiBaseUrl: string) {
     return {
@@ -19,7 +21,9 @@ describe('serverConfig discovery', () => {
     beforeEach(() => {
         vi.useFakeTimers();
         vi.resetModules();
+        mmkvValues.clear();
         delete process.env.EXPO_PUBLIC_HAPPY_SERVER_URL;
+        delete process.env.EXPO_PUBLIC_HAPPY_SERVER_URL_OVERRIDE;
     });
 
     afterEach(() => {
@@ -52,5 +56,15 @@ describe('serverConfig discovery', () => {
         completeRequest(appConfigResponse('https://resolved.example'));
         await vi.advanceTimersByTimeAsync(0);
         expect(serverConfig.getServerUrl()).toBe('https://resolved.example');
+    });
+
+    it('lets an explicit runtime override take precedence over a stored custom URL', async () => {
+        mmkvValues.set('custom-server-url', 'https://stored.example');
+        process.env.EXPO_PUBLIC_HAPPY_SERVER_URL = 'https://configured.example';
+        process.env.EXPO_PUBLIC_HAPPY_SERVER_URL_OVERRIDE = 'http://127.0.0.1:3032';
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false } as Response));
+        const serverConfig = await import('./serverConfig');
+
+        expect(serverConfig.getServerEntryUrl()).toBe('http://127.0.0.1:3032');
     });
 });

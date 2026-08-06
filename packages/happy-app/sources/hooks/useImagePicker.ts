@@ -4,6 +4,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { Modal } from '@/modal';
 import { LocalImage } from '@/components/ImagePreview';
+import { appendImagesWithinLimit } from './imagePickerUtils';
 
 const MAX_DIMENSION = 1568;
 const MAX_SIZE_BYTES = 1.5 * 1024 * 1024;
@@ -140,7 +141,7 @@ export function useImagePicker(options: UseImagePickerOptions = {}): UseImagePic
             }
         }
 
-        setImages(prev => [...prev, ...processed]);
+        setImages(prev => appendImagesWithinLimit(prev, processed, maxImages));
     }, [images.length, maxImages, allowedTypes]);
 
     const pickFromGallery = React.useCallback(async () => {
@@ -228,29 +229,29 @@ export function useImagePicker(options: UseImagePickerOptions = {}): UseImagePic
             const height = img.naturalHeight;
 
             if (shouldPassthrough(mimeType, width, height)) {
-                setImages(prev => [...prev, {
+                setImages(prev => appendImagesWithinLimit(prev, [{
                     uri,
                     width,
                     height,
                     mimeType,
-                }]);
+                }], maxImages));
             } else {
                 const compressed = await compressImage(uri, width, height);
-                setImages(prev => [...prev, {
+                setImages(prev => appendImagesWithinLimit(prev, [{
                     uri: compressed.uri,
                     width: compressed.width,
                     height: compressed.height,
                     mimeType: 'image/jpeg',
-                }]);
+                }], maxImages));
             }
         } else {
             // For native, use a default size (will be properly sized during upload)
-            setImages(prev => [...prev, {
+            setImages(prev => appendImagesWithinLimit(prev, [{
                 uri,
                 width: 512,
                 height: 512,
                 mimeType,
-            }]);
+            }], maxImages));
         }
     }, [canAddMore, maxImages, allowedTypes]);
 

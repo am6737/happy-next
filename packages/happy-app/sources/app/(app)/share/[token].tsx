@@ -34,7 +34,7 @@ function OwnerCard({ owner, floating }: { owner: { username: string | null; firs
 export default memo(function PublicShareScreen() {
     const { token } = useLocalSearchParams<{ token: string }>();
     const { theme } = useUnistyles();
-    const { state, messages, metadata, owner, sessionId, hasMore, isLoadingMore, loadMore, giveConsent } = usePublicShareSession(token);
+    const { state, messages, metadata, owner, sessionId, hasMore, isLoadingMore, resourceAccessToken, loadMore, giveConsent } = usePublicShareSession(token);
 
     const keyExtractor = useCallback((item: Message) => item.id, []);
     const renderItem = useCallback(({ item }: { item: Message }) => (
@@ -43,8 +43,10 @@ export default memo(function PublicShareScreen() {
             metadata={metadata}
             sessionId={sessionId || ''}
             readOnly
+            publicShareToken={token}
+            publicShareAccessToken={resourceAccessToken ?? undefined}
         />
-    ), [metadata, sessionId]);
+    ), [metadata, resourceAccessToken, sessionId, token]);
 
     // Inverted list: reaching the "end" means scrolling to the top (oldest message).
     const onEndReached = useCallback(() => {

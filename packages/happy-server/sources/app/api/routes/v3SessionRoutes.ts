@@ -21,6 +21,10 @@ import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { type Fastify } from "../types";
 import { scheduleFirstMessageReplay } from "./firstMessageReplay";
+import { AttachmentLeaseError } from '@/app/chat/chatAttachmentLease';
+
+// A message may contain the advertised 10 files plus up to 4 image inputs.
+const attachmentIdsSchema = z.array(z.string().min(1)).max(14).optional().default([]);
 
 const getMessagesQuerySchema = z.object({
     after_seq: z.coerce.number().int().min(0).optional(),
@@ -33,6 +37,7 @@ const sendMessagesBodySchema = z.object({
         content: z.string(),
         localId: z.string().min(1),
         trackCliDelivery: z.boolean().optional().default(false),
+        attachmentIds: attachmentIdsSchema,
     })).min(1).max(200),
 });
 
@@ -40,6 +45,7 @@ const sendMessageBodySchema = z.object({
     content: z.string(),
     localId: z.string().min(1),
     trackCliDelivery: z.boolean().optional().default(false),
+    attachmentIds: attachmentIdsSchema,
 });
 
 const pendingMessageParamsSchema = z.object({
@@ -309,7 +315,7 @@ export function v3SessionRoutes(app: Fastify) {
 
         const sentByName = await getSenderName(userId);
 
-        const firstMessageByLocalId = new Map<string, { localId: string; content: string; trackCliDelivery: boolean }>();
+        const firstMessageByLocalId = new Map<string, { localId: string; content: string; trackCliDelivery: boolean; attachmentIds: string[] }>();
         for (const message of messages) {
             if (!firstMessageByLocalId.has(message.localId)) {
                 firstMessageByLocalId.set(message.localId, message);
@@ -347,15 +353,24 @@ export function v3SessionRoutes(app: Fastify) {
                 continue;
             }
 
-            const dispatched = await dispatchSessionMessage({
-                ownerId,
-                sessionId,
-                content: message.content,
-                localId: message.localId,
-                sentBy: userId,
-                sentByName,
-                trackCliDelivery: message.trackCliDelivery,
-            });
+            let dispatched: Awaited<ReturnType<typeof dispatchSessionMessage>>;
+            try {
+                dispatched = await dispatchSessionMessage({
+                    ownerId,
+                    sessionId,
+                    content: message.content,
+                    localId: message.localId,
+                    sentBy: userId,
+                    sentByName,
+                    trackCliDelivery: message.trackCliDelivery,
+                    attachmentIds: message.attachmentIds,
+                });
+            } catch (error) {
+                if (error instanceof AttachmentLeaseError) {
+                    return reply.code(400).send({ error: error.message });
+                }
+                throw error;
+            }
 
             if (dispatched.message.seq === 1 && dispatched.ownerSessionScopedDeliveries === 0) {
                 scheduleFirstMessageReplay({
@@ -417,7 +432,7 @@ export function v3SessionRoutes(app: Fastify) {
     }, async (request, reply) => {
         const userId = request.userId;
         const { sessionId } = request.params;
-        const { localId, content, trackCliDelivery } = request.body;
+        const { localId, content, trackCliDelivery, attachmentIds } = request.body;
 
         if (!await canSendMessages(userId, sessionId)) {
             return reply.code(404).send({ error: "Session not found" });
@@ -457,14 +472,24 @@ export function v3SessionRoutes(app: Fastify) {
         });
 
         if (mode === "queued") {
-            const { message: pendingMessage, created } = await enqueuePendingMessage({
-                sessionId,
-                localId,
-                content,
-                sentBy: userId,
-                sentByName,
-                trackCliDelivery,
-            });
+            let pendingResult: Awaited<ReturnType<typeof enqueuePendingMessage>>;
+            try {
+                pendingResult = await enqueuePendingMessage({
+                    sessionId,
+                    localId,
+                    content,
+                    sentBy: userId,
+                    sentByName,
+                    trackCliDelivery,
+                    attachmentIds,
+                });
+            } catch (error) {
+                if (error instanceof AttachmentLeaseError) {
+                    return reply.code(400).send({ error: error.message });
+                }
+                throw error;
+            }
+            const { message: pendingMessage, created } = pendingResult;
 
             if (created) {
                 await emitPendingUpsert(ownerId, sessionId, pendingMessage);
@@ -491,8 +516,12 @@ export function v3SessionRoutes(app: Fastify) {
                 sentBy: userId,
                 sentByName,
                 trackCliDelivery,
+                attachmentIds,
             });
         } catch (error) {
+            if (error instanceof AttachmentLeaseError) {
+                return reply.code(400).send({ error: error.message });
+            }
             // A concurrent request sharing this localId (e.g. hedged retries) may
             // have inserted the message between our existence check above and the
             // create. Treat the unique-constraint violation as idempotent and
