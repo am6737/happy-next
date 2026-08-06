@@ -773,6 +773,7 @@ export const pl: TranslationStructure = {
         takePhoto: 'Zrób zdjęcie',
         chooseFromLibrary: 'Wybierz z galerii',
         pasteFromClipboard: 'Wklej ze schowka',
+        dropImagesToAttach: 'Upuść obrazy, aby je załączyć',
         sharing: {
             title: 'Udostępnianie',
             directSharing: 'Udostępnianie bezpośrednie',

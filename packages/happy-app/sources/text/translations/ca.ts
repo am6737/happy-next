@@ -761,6 +761,7 @@ export const ca: TranslationStructure = {
         takePhoto: 'Fes una foto',
         chooseFromLibrary: 'Tria de la galeria',
         pasteFromClipboard: 'Enganxa des del porta-retalls',
+        dropImagesToAttach: 'Deixa anar les imatges per adjuntar-les',
         sharing: {
             title: 'Compartició',
             directSharing: 'Compartició directa',

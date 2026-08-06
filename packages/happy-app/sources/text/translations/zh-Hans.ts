@@ -763,6 +763,7 @@ export const zhHans: TranslationStructure = {
         takePhoto: '拍照',
         chooseFromLibrary: '从相册选择',
         pasteFromClipboard: '从剪贴板粘贴',
+        dropImagesToAttach: '松开以添加图片',
         sharing: {
             title: '共享',
             directSharing: '直接共享',

@@ -47,6 +47,7 @@ import { useUnistyles } from 'react-native-unistyles';
 
 const SILENT_REFRESH_INDICATOR_DELAY_MS = 3000;
 const SILENT_REFRESH_FAILED_TIMEOUT_MS = 12000;
+const MAX_SESSION_IMAGES = 4;
 
 // Gap between the leading header-right action (orchestrator / new-session) and the avatar.
 // Web (custom header) gets a roomier gap; native apps stay at the 4px baseline that
@@ -484,7 +485,7 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
         clearImages,
         initImages,
         canAddMore,
-    } = useImagePicker({ maxImages: 4 });
+    } = useImagePicker({ maxImages: MAX_SESSION_IMAGES });
 
     // Use draft hook for auto-saving message drafts
     const { clearDraft } = useDraft(sessionId, message, setMessage, images, initImages);
@@ -946,13 +947,68 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
     const handleImageDrop = React.useCallback(async (files: File[]) => {
         if (!canAddMore || !supportsImages) return;
 
-        for (const file of files) {
-            if (file.type.startsWith('image/') && canAddMore) {
-                const url = URL.createObjectURL(file);
-                await addImageFromUri(url, file.type);
-            }
+        const imageFiles = files
+            .filter((file) => file.type.startsWith('image/'))
+            .slice(0, Math.max(0, MAX_SESSION_IMAGES - images.length));
+        for (const file of imageFiles) {
+            const url = URL.createObjectURL(file);
+            await addImageFromUri(url, file.type);
         }
-    }, [canAddMore, supportsImages, addImageFromUri]);
+    }, [addImageFromUri, canAddMore, images.length, supportsImages]);
+
+    const [isImageDragging, setIsImageDragging] = React.useState(false);
+    const imageDragDepthRef = React.useRef(0);
+
+    React.useEffect(() => {
+        if (Platform.OS !== 'web' || !isFocused) return;
+
+        const hasFiles = (event: DragEvent) => event.dataTransfer?.types.includes('Files') === true;
+        const canAcceptImages = supportsImages && canAddMore;
+        const resetDragState = () => {
+            imageDragDepthRef.current = 0;
+            setIsImageDragging(false);
+        };
+        const handleDragEnter = (event: DragEvent) => {
+            if (!hasFiles(event)) return;
+            event.preventDefault();
+            if (!canAcceptImages) return;
+            imageDragDepthRef.current += 1;
+            setIsImageDragging(true);
+        };
+        const handleDragLeave = (event: DragEvent) => {
+            if (imageDragDepthRef.current === 0) return;
+            event.preventDefault();
+            imageDragDepthRef.current = Math.max(0, imageDragDepthRef.current - 1);
+            if (imageDragDepthRef.current === 0) setIsImageDragging(false);
+        };
+        const handleDragOver = (event: DragEvent) => {
+            if (!hasFiles(event)) return;
+            event.preventDefault();
+            if (event.dataTransfer) event.dataTransfer.dropEffect = canAcceptImages ? 'copy' : 'none';
+        };
+        const handleDrop = (event: DragEvent) => {
+            if (!hasFiles(event)) return;
+            event.preventDefault();
+            resetDragState();
+            if (!canAcceptImages || !event.dataTransfer) return;
+            const images = Array.from(event.dataTransfer.files).filter((file) => file.type.startsWith('image/'));
+            if (images.length > 0) void handleImageDrop(images);
+        };
+
+        document.addEventListener('dragenter', handleDragEnter);
+        document.addEventListener('dragleave', handleDragLeave);
+        document.addEventListener('dragover', handleDragOver);
+        document.addEventListener('drop', handleDrop);
+        window.addEventListener('blur', resetDragState);
+        return () => {
+            document.removeEventListener('dragenter', handleDragEnter);
+            document.removeEventListener('dragleave', handleDragLeave);
+            document.removeEventListener('dragover', handleDragOver);
+            document.removeEventListener('drop', handleDrop);
+            window.removeEventListener('blur', resetDragState);
+            resetDragState();
+        };
+    }, [canAddMore, handleImageDrop, isFocused, supportsImages]);
 
     // Handle loading more older messages when scrolling to top
     const [minimapItems, setMinimapItems] = React.useState<ConversationMinimapItem[]>([]);
@@ -1241,7 +1297,6 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
             onImageButtonPress={handleImageButtonPress}
             supportsImages={supportsImages}
             isUploadingImages={isUploadingImages}
-            onImageDrop={handleImageDrop}
         />
     ) : null;
 
@@ -1298,7 +1353,7 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
             {/* Main content area - no padding since header is overlay */}
             <View
                 onLayout={(event) => setContentAreaWidth(event.nativeEvent.layout.width)}
-                style={{ flexBasis: 0, flexGrow: 1, paddingBottom: safeArea.bottom + ((isRunningOnMac() || Platform.OS === 'web') ? 8 : 0) }}
+                style={{ flexBasis: 0, flexGrow: 1, position: 'relative', paddingBottom: safeArea.bottom + ((isRunningOnMac() || Platform.OS === 'web') ? 8 : 0) }}
             >
                 <AgentContentView
                     content={content}
@@ -1306,6 +1361,32 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
                     placeholder={placeholder}
                     betweenContentAndInput={pendingQueuePanel}
                 />
+                {isImageDragging && (
+                    <View
+                        pointerEvents="none"
+                        style={{
+                            position: 'absolute',
+                            top: 8,
+                            right: 8,
+                            bottom: 8,
+                            left: 8,
+                            zIndex: 1001,
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            borderWidth: 2,
+                            borderStyle: 'dashed',
+                            borderColor: theme.colors.button.primary.background,
+                            borderRadius: 8,
+                            backgroundColor: theme.colors.surface,
+                            opacity: 0.96,
+                        }}
+                    >
+                        <Ionicons name="images-outline" size={36} color={theme.colors.text} />
+                        <Text style={{ marginTop: 10, color: theme.colors.text, fontSize: 16, fontWeight: '600' }}>
+                            {t('session.dropImagesToAttach')}
+                        </Text>
+                    </View>
+                )}
             </View >
 
             <ConversationMinimap
