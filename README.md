@@ -10,7 +10,7 @@ Use Claude Code, Codex, or Gemini from anywhere with end-to-end encryption.
 
 <div align="center">
   
-[🖥️ **Web App**](https://app.happy-next.com/) • [📱 **TestFlight**](https://testflight.apple.com/join/XyjvbhXe) • [📦 **APK Download**](https://github.com/hitosea/happy-next/releases/latest) • [📚 **Documentation**](docs/README.md) • [🇨🇳 **中文**](README.zh-CN.md)
+[🖥️ **Web App**](https://app.happy-next.com/) • [📱 **App Store**](https://apps.apple.com/us/app/happy-next/id6758196715) • [📦 **APK Download**](https://github.com/hitosea/happy-next/releases/latest) • [📚 **Documentation**](docs/README.md) • [🇨🇳 **中文**](README.zh-CN.md)
 
 </div>
 
@@ -21,7 +21,7 @@ Step 1: Download App
 </h3>
 
 <div align="center">
-<a href="https://testflight.apple.com/join/XyjvbhXe"><img src="/.github/badge-testflight.svg" height="39" alt="Download on TestFlight" /></a>
+<a href="https://apps.apple.com/us/app/happy-next/id6758196715"><img src="https://tools.applemediaservices.com/api/badges/download-on-the-app-store/black/en-us?size=250x83" height="39" alt="Download on the App Store" /></a>
 &nbsp;&nbsp;
 <a href="https://github.com/hitosea/happy-next/releases/latest"><img src="/.github/badge-github-apk.svg" height="39" alt="Get it on GitHub" /></a>
 </div>

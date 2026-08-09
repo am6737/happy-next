@@ -10,7 +10,7 @@
 
 <div align="center">
 
-[🖥️ **Web 应用**](https://app.happy-next.com/) • [📱 **TestFlight**](https://testflight.apple.com/join/XyjvbhXe) • [📦 **APK 下载**](https://github.com/hitosea/happy-next/releases/latest) • [📚 **文档**](docs/README.md) • [🇬🇧 **English**](README.md)
+[🖥️ **Web 应用**](https://app.happy-next.com/) • [📱 **App Store**](https://apps.apple.com/us/app/happy-next/id6758196715) • [📦 **APK 下载**](https://github.com/hitosea/happy-next/releases/latest) • [📚 **文档**](docs/README.md) • [🇬🇧 **English**](README.md)
 
 </div>
 
@@ -21,10 +21,12 @@
 </h3>
 
 <div align="center">
-<a href="https://testflight.apple.com/join/XyjvbhXe"><img src="/.github/badge-testflight.svg" height="39" alt="Download on TestFlight" /></a>
+<a href="https://apps.apple.com/us/app/happy-next/id6758196715"><img src="https://tools.applemediaservices.com/api/badges/download-on-the-app-store/black/zh-cn?size=250x83" height="39" alt="从 App Store 下载" /></a>
 &nbsp;&nbsp;
 <a href="https://github.com/hitosea/happy-next/releases/latest"><img src="/.github/badge-github-apk.svg" height="39" alt="Download on GitHub" /></a>
 </div>
+
+<p align="center"><sub><strong>地区可用性：</strong>iOS 版暂未在中国大陆 App Store 上架。中国大陆用户可以使用 <a href="https://app.happy-next.com/">Web 应用</a>。</sub></p>
 
 <h3 align="center">
 第二步：在你的电脑上安装 CLI
