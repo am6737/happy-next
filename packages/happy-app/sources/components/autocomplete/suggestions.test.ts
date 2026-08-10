@@ -61,6 +61,37 @@ describe('getSuggestions', () => {
         expect(skillElement.props.showSkillCategory).toBe(true);
     });
 
+    it('only shows subcommands after a slash command and space', async () => {
+        searchCommands.mockResolvedValue([
+            { command: 'review base', description: 'Review against a base branch' },
+            { command: 'review commit', description: 'Review a commit' },
+        ]);
+        searchSkills.mockReturnValue([
+            {
+                name: 'review-helper',
+                description: 'Help with reviews',
+                scope: 'SYSTEM',
+                path: '/skills/review-helper/SKILL.md',
+            },
+        ]);
+
+        const suggestions = await getSuggestions('session', '/review ');
+
+        expect(suggestions.map((suggestion) => suggestion.text)).toEqual([
+            '/review base',
+            '/review commit',
+        ]);
+        expect(searchSkills).not.toHaveBeenCalled();
+    });
+
+    it('shows no suggestions for free-form command arguments without subcommands', async () => {
+        const suggestions = await getSuggestions('session', '/custom argument');
+
+        expect(suggestions).toEqual([]);
+        expect(searchCommands).toHaveBeenCalledWith('session', 'custom argument');
+        expect(searchSkills).not.toHaveBeenCalled();
+    });
+
     it('keeps dollar completion limited to skills with the scope label', async () => {
         searchSkills.mockReturnValue([
             {

@@ -125,10 +125,16 @@ export async function getSuggestions(sessionId: string, query: string): Promise<
     }
 
     if (query.startsWith('/')) {
-        const [commands, skills] = await Promise.all([
-            getCommandSuggestions(sessionId, query),
-            getSkillSuggestions(sessionId, query, { showSkillCategory: true }),
-        ]);
+        const commands = await getCommandSuggestions(sessionId, query);
+
+        // Once a root command has been followed by whitespace, command search owns
+        // the rest of the query: it may return that command's subcommands, or no
+        // suggestions when the command only accepts free-form arguments.
+        if (/\s/.test(query)) {
+            return commands;
+        }
+
+        const skills = await getSkillSuggestions(sessionId, query, { showSkillCategory: true });
         return [...commands, ...skills];
     }
 
