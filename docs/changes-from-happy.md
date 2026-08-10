@@ -259,7 +259,7 @@ Major reliability improvements to the real-time sync layer.
 
 Extensive improvements to the chat and session management experience.
 
-- **Image attachment** in new session wizard and during chat
+- **Image attachment** in the new-session wizard and during chat, including desktop drag-and-drop with a clear drop indicator
 - **Image paste from clipboard** on web
 - **Message pagination** for loading older messages
 - **Unread blue dot indicator** when tasks complete (synced across devices via metadata)
@@ -271,7 +271,7 @@ Extensive improvements to the chat and session management experience.
 - **Session preview** on history page
 - **`/duplicate` command** in chat input to fork a session from any message, including directly from an AI reply (with DuplicateSheet picker)
 - **Optimistic send status**: an immediate "Processing…" status after sending, plus a "refreshing" indicator while the message list reloads
-- **Slash-command autocomplete** shows each command's source scope (repo / user / plugin / system) and kind, including installed Codex skills; session capabilities are stored separately from metadata and sync live (atomic CAS write + socket broadcast) so command and skill lists stay fresh
+- **Slash-command autocomplete** shows each command's source scope (repo / user / plugin / system) and kind, including installed Codex skills; after selecting a root command, suggestions stay limited to its matching subcommands instead of mixing skills into free-form arguments; session capabilities are stored separately from metadata and sync live (atomic CAS write + socket broadcast) so command and skill lists stay fresh
 - **Per-message action bar**: copy, fork-from-here (with progress spinner), read-aloud (TTS), and full timestamp on web hover / native tap
 - **Options**: click-to-send and long-press-to-fill
 - **Context menu** improvements (web backdrop blur, mobile action sheets)

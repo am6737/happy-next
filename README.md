@@ -200,10 +200,10 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Session draft rewritten as a single source of truth — fewer cases of drafts vanishing or reappearing
 
 ### Chat & Session UX
-- Image attachment and clipboard paste (web), image support in drafts, high-quality pass-through up to 1568px preserving text sharpness in code/UI screenshots
+- Image attachment, clipboard paste (web), and desktop drag-and-drop in new or active sessions; image support in drafts and high-quality pass-through up to 1568px preserve text sharpness in code/UI screenshots
 - Session titles seeded from the first user message for new sessions (until an AI summary takes over)
 - Slash command results surface even when the agent emits no assistant message (e.g. unknown commands no longer blank out)
-- Slash-command autocomplete shows each command's source scope (repo / user / plugin / system) and kind; session capabilities are stored separately from metadata and sync live so command and skill lists stay fresh
+- Slash-command autocomplete shows each command's source scope (repo / user / plugin / system) and kind; after selecting a root command, suggestions stay limited to its matching subcommands instead of mixing in skills for free-form arguments; session capabilities are stored separately from metadata and sync live so command and skill lists stay fresh
 - `/duplicate` command to fork a session from any message, including directly from an AI reply, with more reliable user-message target resolution
 - Sending shows an optimistic "Processing…" status immediately, plus a "refreshing" indicator while the message list reloads
 - Message pagination, unread blue dot indicator, compact list view

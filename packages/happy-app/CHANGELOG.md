@@ -1,10 +1,13 @@
 # Changelog
 
-## Version 21 - 2026-08-06
+## Version 21 - 2026-08-11
 
-Sessions can now be labeled with seven color markers for quicker visual organization. This release also improves iOS image opening and duplicate-sheet behavior when the keyboard is visible, and centers the empty state in DooTask chats.
+Sessions can now be labeled with seven color markers for quicker visual organization. Desktop users can drag images directly into new or active sessions, slash-command completion stays focused on relevant subcommands after a command is selected, and iOS download links now point to the App Store. This release also improves iOS image opening and duplicate-sheet behavior when the keyboard is visible, and centers the empty state in DooTask chats.
 
 - Sessions: assign or clear one of seven color markers from the session menu, visible throughout session lists
+- Desktop images: drag images into the new-session composer or an active chat, with a clear drop indicator
+- Slash commands: after selecting a root command, autocomplete only shows its matching subcommands and no longer mixes skills into free-form arguments
+- iOS: download links now point to the App Store, with Web app guidance for users in mainland China
 - iOS: dismiss the keyboard before opening images to prevent presentation conflicts
 - iOS: prevent a white overlay when opening the duplicate-session sheet with the keyboard visible
 - DooTask: center the empty-chat state consistently
