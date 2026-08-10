@@ -112,6 +112,8 @@ describe('desktop security configuration', () => {
         const desktopCi = readFileSync(resolve(process.cwd(), '../../.github/workflows/desktop-ci.yml'), 'utf8');
         const release = readFileSync(resolve(process.cwd(), '../../.github/workflows/release.yml'), 'utf8');
         const dockerRelease = readFileSync(resolve(process.cwd(), '../../.github/workflows/docker-publish.yml'), 'utf8');
+        const webAppDockerfile = readFileSync(resolve(process.cwd(), '../../Dockerfile.webapp'), 'utf8');
+        const dockerCompose = readFileSync(resolve(process.cwd(), '../../docker-compose.yml'), 'utf8');
         const iosSubmit = readFileSync(resolve(process.cwd(), '../../.github/workflows/ios-submit.yml'), 'utf8');
 
         expect(desktopCi).toContain('Build unsigned macOS Universal bundles');
@@ -146,7 +148,11 @@ describe('desktop security configuration', () => {
         expect(dockerRelease).toContain('PUBLISH-DOCKER');
         expect(dockerRelease).toContain('ref: ${{ inputs.release_tag }}');
         expect(dockerRelease).toContain('value=${{ inputs.release_tag }}');
+        expect(dockerRelease).toContain('APP_VERSION=${{ inputs.release_tag }}');
         expect(dockerRelease).not.toMatch(/\n  push:\s*\n\s+tags:/);
+        expect(webAppDockerfile).toContain('ARG APP_VERSION="2.0.0"');
+        expect(webAppDockerfile).toContain('ENV APP_VERSION=$APP_VERSION');
+        expect(dockerCompose).toContain('APP_VERSION: ${APP_VERSION:-2.0.0}');
 
         expect(iosSubmit).toContain('SUBMIT-IOS');
         expect(iosSubmit).toContain('happy-next-${RELEASE_TAG}-ios.ipa');

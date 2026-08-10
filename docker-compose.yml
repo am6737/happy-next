@@ -3,6 +3,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.webapp
+      args:
+        APP_VERSION: ${APP_VERSION:-2.0.0}
     ports:
       - "3030:80"
     restart: unless-stopped
