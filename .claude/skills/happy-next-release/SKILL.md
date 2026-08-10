@@ -199,6 +199,8 @@ gh release view "{tag}" 2>/dev/null || true
 5. `docs/changes-from-happy.md`
 6. `docs/changes-from-happy.zh-CN.md`
 
+更新 changelog 前，询问用户沿用当前最高日志版本，还是新建下一个日志版本。
+
 先将 commit 按用户可感知的功能领域分类并展示草稿，等待用户确认。
 
 规则：
