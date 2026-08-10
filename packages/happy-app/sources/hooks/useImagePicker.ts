@@ -4,6 +4,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { Modal } from '@/modal';
 import { LocalImage } from '@/components/ImagePreview';
+import { appendWithinLimit } from '@/utils/imageSelection';
 
 const MAX_DIMENSION = 1568;
 const MAX_SIZE_BYTES = 1.5 * 1024 * 1024;
@@ -29,6 +30,7 @@ interface UseImagePickerReturn {
     pickFromGallery: () => Promise<void>;
     pickFromCamera: () => Promise<void>;
     addImageFromUri: (uri: string, mimeType: string) => Promise<void>;
+    addImagesFromFiles: (files: File[]) => Promise<void>;
     removeImage: (index: number) => void;
     clearImages: () => void;
     initImages: (images: LocalImage[]) => void;
@@ -90,6 +92,33 @@ async function compressImage(
     };
 }
 
+async function prepareImage(uri: string, mimeType: string, fileSize?: number): Promise<LocalImage> {
+    if (Platform.OS !== 'web') {
+        return { uri, width: 512, height: 512, mimeType };
+    }
+
+    const image = new Image();
+    image.src = uri;
+    await new Promise<void>((resolve, reject) => {
+        image.onload = () => resolve();
+        image.onerror = reject;
+    });
+
+    const width = image.naturalWidth;
+    const height = image.naturalHeight;
+    if (shouldPassthrough(mimeType, width, height, fileSize)) {
+        return { uri, width, height, mimeType };
+    }
+
+    const compressed = await compressImage(uri, width, height);
+    return {
+        uri: compressed.uri,
+        width: compressed.width,
+        height: compressed.height,
+        mimeType: 'image/jpeg',
+    };
+}
+
 export function useImagePicker(options: UseImagePickerOptions = {}): UseImagePickerReturn {
     const {
         maxImages = DEFAULT_MAX_IMAGES,
@@ -140,7 +169,7 @@ export function useImagePicker(options: UseImagePickerOptions = {}): UseImagePic
             }
         }
 
-        setImages(prev => [...prev, ...processed]);
+        setImages((previous) => appendWithinLimit(previous, processed, maxImages));
     }, [images.length, maxImages, allowedTypes]);
 
     const pickFromGallery = React.useCallback(async () => {
@@ -199,10 +228,6 @@ export function useImagePicker(options: UseImagePickerOptions = {}): UseImagePic
         }
     }, [canAddMore, maxImages, addImages]);
 
-    /**
-     * Add an image from a URI (used for clipboard paste and web file input).
-     * Supports both data URIs and blob URLs.
-     */
     const addImageFromUri = React.useCallback(async (uri: string, mimeType: string) => {
         if (!canAddMore) {
             Modal.alert('Limit Reached', `Maximum ${maxImages} images allowed`);
@@ -214,45 +239,29 @@ export function useImagePicker(options: UseImagePickerOptions = {}): UseImagePic
             return;
         }
 
-        // For web blob URLs or data URIs, we need to get dimensions
-        if (Platform.OS === 'web') {
-            // Create an image element to get dimensions
-            const img = new Image();
-            img.src = uri;
-            await new Promise<void>((resolve, reject) => {
-                img.onload = () => resolve();
-                img.onerror = reject;
-            });
-
-            const width = img.naturalWidth;
-            const height = img.naturalHeight;
-
-            if (shouldPassthrough(mimeType, width, height)) {
-                setImages(prev => [...prev, {
-                    uri,
-                    width,
-                    height,
-                    mimeType,
-                }]);
-            } else {
-                const compressed = await compressImage(uri, width, height);
-                setImages(prev => [...prev, {
-                    uri: compressed.uri,
-                    width: compressed.width,
-                    height: compressed.height,
-                    mimeType: 'image/jpeg',
-                }]);
-            }
-        } else {
-            // For native, use a default size (will be properly sized during upload)
-            setImages(prev => [...prev, {
-                uri,
-                width: 512,
-                height: 512,
-                mimeType,
-            }]);
-        }
+        const image = await prepareImage(uri, mimeType);
+        setImages((previous) => appendWithinLimit(previous, [image], maxImages));
     }, [canAddMore, maxImages, allowedTypes]);
+
+    const addImagesFromFiles = React.useCallback(async (files: File[]) => {
+        if (Platform.OS !== 'web') return;
+
+        const remaining = maxImages - images.length;
+        if (remaining <= 0) {
+            Modal.alert('Limit Reached', `Maximum ${maxImages} images allowed`);
+            return;
+        }
+
+        const selectedFiles = files
+            .filter((file) => allowedTypes.includes(file.type))
+            .slice(0, remaining);
+        const prepared = await Promise.all(selectedFiles.map((file) => {
+            const uri = URL.createObjectURL(file);
+            return prepareImage(uri, file.type, file.size);
+        }));
+
+        setImages((previous) => appendWithinLimit(previous, prepared, maxImages));
+    }, [allowedTypes, images.length, maxImages]);
 
     const removeImage = React.useCallback((index: number) => {
         setImages(prev => prev.filter((_, i) => i !== index));
@@ -271,6 +280,7 @@ export function useImagePicker(options: UseImagePickerOptions = {}): UseImagePic
         pickFromGallery,
         pickFromCamera,
         addImageFromUri,
+        addImagesFromFiles,
         removeImage,
         clearImages,
         initImages,

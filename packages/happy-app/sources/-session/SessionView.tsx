@@ -18,6 +18,7 @@ import { PendingQueuePanel } from '@/components/PendingQueuePanel';
 import { VoiceAssistantStatusBar } from '@/components/VoiceAssistantStatusBar';
 import { useDraft } from '@/hooks/useDraft';
 import { useImagePicker } from '@/hooks/useImagePicker';
+import { useWebImageDrop } from '@/hooks/useWebImageDrop';
 import { Modal } from '@/modal';
 import { voiceHooks } from '@/realtime/hooks/voiceHooks';
 import { startRealtimeSession, stopRealtimeSession } from '@/realtime/RealtimeSession';
@@ -479,7 +480,7 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
         images,
         pickFromGallery,
         pickFromCamera,
-        addImageFromUri,
+        addImagesFromFiles,
         removeImage,
         clearImages,
         initImages,
@@ -918,16 +919,11 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
         const files = event.target.files;
         if (!files || files.length === 0) return;
 
-        Array.from(files).forEach(file => {
-            if (file.type.startsWith('image/')) {
-                const url = URL.createObjectURL(file);
-                addImageFromUri(url, file.type);
-            }
-        });
+        void addImagesFromFiles(Array.from(files));
 
         // Reset input so same file can be selected again
         event.target.value = '';
-    }, [addImageFromUri]);
+    }, [addImagesFromFiles]);
 
     // Handle paste event for images (both web and native through input)
     const handlePaste = React.useCallback(async (event: ClipboardEvent) => {
@@ -935,24 +931,18 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
             isScreenFocused: isFocused,
             canAddMore,
             supportsImages,
-            onImageFile: async (file, mimeType) => {
-                const url = URL.createObjectURL(file);
-                await addImageFromUri(url, mimeType);
-            },
+            onImageFile: async (file) => addImagesFromFiles([file]),
         });
-    }, [isFocused, canAddMore, supportsImages, addImageFromUri]);
+    }, [isFocused, canAddMore, supportsImages, addImagesFromFiles]);
 
-    // Handle image drop (web only) - passed to AgentInput
     const handleImageDrop = React.useCallback(async (files: File[]) => {
-        if (!canAddMore || !supportsImages) return;
-
-        for (const file of files) {
-            if (file.type.startsWith('image/') && canAddMore) {
-                const url = URL.createObjectURL(file);
-                await addImageFromUri(url, file.type);
-            }
-        }
-    }, [canAddMore, supportsImages, addImageFromUri]);
+        if (!supportsImages) return;
+        await addImagesFromFiles(files);
+    }, [supportsImages, addImagesFromFiles]);
+    const { dropZoneRef, isDragging: isDraggingImage } = useWebImageDrop({
+        enabled: isFocused && supportsImages,
+        onImageDrop: handleImageDrop,
+    });
 
     // Handle loading more older messages when scrolling to top
     const [minimapItems, setMinimapItems] = React.useState<ConversationMinimapItem[]>([]);
@@ -1241,7 +1231,6 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
             onImageButtonPress={handleImageButtonPress}
             supportsImages={supportsImages}
             isUploadingImages={isUploadingImages}
-            onImageDrop={handleImageDrop}
         />
     ) : null;
 
@@ -1297,8 +1286,9 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
 
             {/* Main content area - no padding since header is overlay */}
             <View
+                ref={dropZoneRef}
                 onLayout={(event) => setContentAreaWidth(event.nativeEvent.layout.width)}
-                style={{ flexBasis: 0, flexGrow: 1, paddingBottom: safeArea.bottom + ((isRunningOnMac() || Platform.OS === 'web') ? 8 : 0) }}
+                style={{ flexBasis: 0, flexGrow: 1, position: 'relative', paddingBottom: safeArea.bottom + ((isRunningOnMac() || Platform.OS === 'web') ? 8 : 0) }}
             >
                 <AgentContentView
                     content={content}
@@ -1306,6 +1296,28 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
                     placeholder={placeholder}
                     betweenContentAndInput={pendingQueuePanel}
                 />
+                {isDraggingImage && (
+                    <View
+                        pointerEvents="none"
+                        style={{
+                            position: 'absolute',
+                            top: 8,
+                            left: 8,
+                            right: 8,
+                            bottom: 8,
+                            zIndex: 997,
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            borderWidth: 2,
+                            borderStyle: 'dashed',
+                            borderColor: '#007AFF',
+                            borderRadius: 8,
+                            backgroundColor: theme.dark ? 'rgba(0, 122, 255, 0.14)' : 'rgba(0, 122, 255, 0.08)',
+                        }}
+                    >
+                        <Ionicons name="images-outline" size={42} color="#007AFF" />
+                    </View>
+                )}
             </View >
 
             <ConversationMinimap

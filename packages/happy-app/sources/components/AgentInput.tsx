@@ -28,6 +28,7 @@ import { getBuiltInProfile } from '@/sync/profileUtils';
 import { ImagePreview, LocalImage } from '@/components/ImagePreview';
 import { Switch } from '@/components/Switch';
 import { Modal } from '@/modal';
+import { useWebImageDrop } from '@/hooks/useWebImageDrop';
 import {
     buildClaudeModelMode,
     buildCodexModelMode,
@@ -657,64 +658,10 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
     const shakerRef = React.useRef<ShakeInstance>(null);
     const inputRef = React.useRef<MultiTextInputHandle>(null);
 
-    // Drag and drop state (web only)
-    const [isDragging, setIsDragging] = React.useState(false);
-    const dragCounterRef = React.useRef(0);
-    const dropZoneRef = React.useRef<View>(null);
-
-    // Set up native drag event listeners for web
-    React.useEffect(() => {
-        if (Platform.OS !== 'web' || !props.supportsImages || !props.onImageDrop) return;
-
-        const element = dropZoneRef.current as unknown as HTMLElement | null;
-        if (!element) return;
-
-        const handleDragEnter = (e: DragEvent) => {
-            e.preventDefault();
-            e.stopPropagation();
-            dragCounterRef.current++;
-            setIsDragging(true);
-        };
-
-        const handleDragLeave = (e: DragEvent) => {
-            e.preventDefault();
-            e.stopPropagation();
-            dragCounterRef.current--;
-            if (dragCounterRef.current === 0) {
-                setIsDragging(false);
-            }
-        };
-
-        const handleDragOver = (e: DragEvent) => {
-            e.preventDefault();
-            e.stopPropagation();
-        };
-
-        const handleDrop = (e: DragEvent) => {
-            e.preventDefault();
-            e.stopPropagation();
-            setIsDragging(false);
-            dragCounterRef.current = 0;
-
-            if (!e.dataTransfer) return;
-            const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
-            if (files.length > 0) {
-                props.onImageDrop!(files);
-            }
-        };
-
-        element.addEventListener('dragenter', handleDragEnter);
-        element.addEventListener('dragleave', handleDragLeave);
-        element.addEventListener('dragover', handleDragOver);
-        element.addEventListener('drop', handleDrop);
-
-        return () => {
-            element.removeEventListener('dragenter', handleDragEnter);
-            element.removeEventListener('dragleave', handleDragLeave);
-            element.removeEventListener('dragover', handleDragOver);
-            element.removeEventListener('drop', handleDrop);
-        };
-    }, [props.supportsImages, props.onImageDrop]);
+    const { dropZoneRef, isDragging } = useWebImageDrop({
+        enabled: !!props.supportsImages && !!props.onImageDrop,
+        onImageDrop: props.onImageDrop,
+    });
 
     // Forward ref to the MultiTextInput
     React.useImperativeHandle(ref, () => inputRef.current!, []);

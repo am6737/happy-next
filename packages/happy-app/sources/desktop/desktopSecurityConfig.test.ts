@@ -34,6 +34,14 @@ describe('desktop security configuration', () => {
         );
     });
 
+    it('leaves file drag and drop to the HTML5 frontend in desktop builds', () => {
+        const production = readJson('src-tauri/tauri.conf.json');
+        const preview = readJson('src-tauri/tauri.preview.conf.json');
+
+        expect(production.app.windows[0].dragDropEnabled).toBe(false);
+        expect(preview.app.windows[0].dragDropEnabled).toBe(false);
+    });
+
     it('mounts the web code editor without CSP-blocked srcdoc scripts', () => {
         const editorSource = readFileSync(
             resolve(process.cwd(), 'sources/components/CodeEditor.web.tsx'),

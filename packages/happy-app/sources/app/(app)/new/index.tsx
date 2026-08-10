@@ -43,6 +43,7 @@ import { StatusDot } from '@/components/StatusDot';
 import { SearchableListSelector, SelectorConfig } from '@/components/SearchableListSelector';
 import { clearNewSessionDraft, loadNewSessionDraft, saveNewSessionDraft } from '@/sync/persistence';
 import { useImagePicker } from '@/hooks/useImagePicker';
+import { useWebImageDrop } from '@/hooks/useWebImageDrop';
 import { ActionMenuModal } from '@/components/ActionMenuModal';
 import type { ActionMenuItem } from '@/components/ActionMenu';
 import { MODEL_MODE_DEFAULT, isModelModeForAgent } from 'happy-wire';
@@ -562,7 +563,7 @@ function NewSessionWizard() {
         images,
         pickFromGallery,
         pickFromCamera,
-        addImageFromUri,
+        addImagesFromFiles,
         removeImage,
         clearImages,
         initImages,
@@ -598,26 +599,18 @@ function NewSessionWizard() {
     const handleFileInputChange = React.useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
         const files = event.target.files;
         if (!files || files.length === 0) return;
-        Array.from(files).forEach(file => {
-            if (file.type.startsWith('image/')) {
-                const url = URL.createObjectURL(file);
-                addImageFromUri(url, file.type);
-            }
-        });
+        void addImagesFromFiles(Array.from(files));
         event.target.value = '';
-    }, [addImageFromUri]);
+    }, [addImagesFromFiles]);
 
     const handlePaste = React.useCallback(async (event: ClipboardEvent) => {
         await handleImagePasteEvent(event, {
             isScreenFocused: isFocused,
             canAddMore,
             supportsImages,
-            onImageFile: async (file, mimeType) => {
-                const url = URL.createObjectURL(file);
-                await addImageFromUri(url, mimeType);
-            },
+            onImageFile: async (file) => addImagesFromFiles([file]),
         });
-    }, [isFocused, canAddMore, supportsImages, addImageFromUri]);
+    }, [isFocused, canAddMore, supportsImages, addImagesFromFiles]);
 
     // Add paste event listener for images (web only)
     React.useEffect(() => {
@@ -632,14 +625,13 @@ function NewSessionWizard() {
     }, [handlePaste]);
 
     const handleImageDrop = React.useCallback(async (files: File[]) => {
-        if (!canAddMore || !supportsImages) return;
-        for (const file of files) {
-            if (file.type.startsWith('image/') && canAddMore) {
-                const url = URL.createObjectURL(file);
-                await addImageFromUri(url, file.type);
-            }
-        }
-    }, [canAddMore, supportsImages, addImageFromUri]);
+        if (!supportsImages) return;
+        await addImagesFromFiles(files);
+    }, [supportsImages, addImagesFromFiles]);
+    const { dropZoneRef, isDragging: isDraggingImage } = useWebImageDrop({
+        enabled: isFocused && supportsImages,
+        onImageDrop: handleImageDrop,
+    });
 
     // Handle machineId route param from picker screens (main's navigation pattern)
     React.useEffect(() => {
@@ -1610,13 +1602,37 @@ function NewSessionWizard() {
         </View>
     ) : null;
 
+    const imageDropOverlay = isDraggingImage ? (
+        <View
+            pointerEvents="none"
+            style={{
+                position: 'absolute',
+                top: 8,
+                left: 8,
+                right: 8,
+                bottom: 8,
+                zIndex: 997,
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderWidth: 2,
+                borderStyle: 'dashed',
+                borderColor: '#007AFF',
+                borderRadius: 8,
+                backgroundColor: theme.dark ? 'rgba(0, 122, 255, 0.14)' : 'rgba(0, 122, 255, 0.08)',
+            }}
+        >
+            <Ionicons name="images-outline" size={42} color="#007AFF" />
+        </View>
+    ) : null;
+
     // ========================================================================
     // CONTROL A: Simpler AgentInput-driven layout (flag OFF)
     // Shows machine/path selection via chips that navigate to picker screens
     // ========================================================================
     if (!useEnhancedSessionWizard) {
         return (
-            <View style={[styles.container, Platform.OS !== 'web' && { paddingTop: 40 }]}>
+            <View ref={dropZoneRef} style={[styles.container, { position: 'relative' }, Platform.OS !== 'web' && { paddingTop: 40 }]}>
+                {imageDropOverlay}
                 <View style={{ flex: 1, justifyContent: 'flex-end' }}>
                     <Animated.View style={animatedInputStyle}>
                     {/* External context banner */}
@@ -1689,7 +1705,6 @@ function NewSessionWizard() {
                                 }}
                                 onImageButtonPress={handleImageButtonPress}
                                 supportsImages={supportsImages}
-                                onImageDrop={handleImageDrop}
                             />
                         </View>
                     </View>
@@ -1746,7 +1761,8 @@ function NewSessionWizard() {
     // Full wizard with numbered sections, profile management, CLI detection
     // ========================================================================
     return (
-        <View style={styles.container}>
+        <View ref={dropZoneRef} style={[styles.container, { position: 'relative' }]}>
+            {imageDropOverlay}
             <Animated.View style={[{ flex: 1 }, animatedInputStyle]}>
                 <ScrollView
                     ref={scrollViewRef}
@@ -2455,7 +2471,6 @@ function NewSessionWizard() {
                             }}
                             onImageButtonPress={handleImageButtonPress}
                             supportsImages={supportsImages}
-                            onImageDrop={handleImageDrop}
                         />
                     </View>
                 </View>
