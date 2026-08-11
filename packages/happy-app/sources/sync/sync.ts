@@ -21,6 +21,7 @@ import { ActivityUpdateAccumulator } from './reducer/activityUpdateAccumulator';
 import { randomUUID, getRandomBytes } from 'expo-crypto';
 import * as Notifications from 'expo-notifications';
 import { registerPushToken } from './apiPush';
+import { PushTokenRegistrationGate } from './pushTokenRegistrationGate';
 import { Platform, AppState } from 'react-native';
 import { isRunningOnMac } from '@/utils/platform';
 import { NormalizedMessage, normalizeRawMessage, RawRecord, RawRecordSchema, ImageContent } from './typesRaw';
@@ -253,6 +254,7 @@ class Sync {
     private profileSync: InvalidateSync;
     private machinesSync: InvalidateSync;
     private pushTokenSync: InvalidateSync;
+    private pushTokenRegistrationGate = new PushTokenRegistrationGate();
     private nativeUpdateSync: InvalidateSync;
     private artifactsSync: InvalidateSync;
     private friendsSync: InvalidateSync;
@@ -313,7 +315,9 @@ class Sync {
         const registerPushToken = async () => {
             // Keep push token registration enabled in dev builds too:
             // Android contributors often validate notifications on dev clients.
-            await this.registerPushToken();
+            await this.pushTokenRegistrationGate.run(
+                (signal, startMutation) => this.registerPushToken(signal, startMutation),
+            );
         }
         this.pushTokenSync = new InvalidateSync(registerPushToken);
         this.activityAccumulator = new ActivityUpdateAccumulator(this.flushActivityUpdates.bind(this), 2000);
@@ -4036,7 +4040,15 @@ class Sync {
     }
 
 
-    private registerPushToken = async () => {
+    public stopPushTokenRegistration = async () => {
+        this.pushTokenSync.stop();
+        await this.pushTokenRegistrationGate.stop();
+    }
+
+    private registerPushToken = async (
+        signal: AbortSignal,
+        startMutation: () => boolean,
+    ) => {
         log.log('registerPushToken');
         // Only register on mobile platforms
         if (Platform.OS === 'web') {
@@ -4045,11 +4057,17 @@ class Sync {
 
         // Request permission
         const { status: existingStatus } = await Notifications.getPermissionsAsync();
+        if (signal.aborted) {
+            return;
+        }
         let finalStatus = existingStatus;
         log.log('existingStatus: ' + JSON.stringify(existingStatus));
 
         if (existingStatus !== 'granted') {
             const { status } = await Notifications.requestPermissionsAsync();
+            if (signal.aborted) {
+                return;
+            }
             finalStatus = status;
         }
         log.log('finalStatus: ' + JSON.stringify(finalStatus));
@@ -4063,14 +4081,21 @@ class Sync {
         const projectId = Constants?.expoConfig?.extra?.eas?.projectId ?? Constants?.easConfig?.projectId;
 
         const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
+        if (signal.aborted) {
+            return;
+        }
         log.log('tokenData: ' + JSON.stringify(tokenData));
 
         // Register with server
+        if (!startMutation()) {
+            return;
+        }
         try {
             await registerPushToken(this.credentials, tokenData.data);
             log.log('Push token registered successfully');
         } catch (error) {
             log.log('Failed to register push token: ' + JSON.stringify(error));
+            throw error;
         }
     }
 
@@ -5441,6 +5466,10 @@ export async function syncRestore(credentials: AuthCredentials) {
     }
     isInitialized = true;
     await syncInit(credentials, true);
+}
+
+export async function stopPushTokenRegistration() {
+    await sync.stopPushTokenRegistration();
 }
 
 async function syncInit(credentials: AuthCredentials, restore: boolean) {

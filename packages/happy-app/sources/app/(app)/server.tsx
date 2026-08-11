@@ -146,9 +146,10 @@ export default function ServerConfigScreen() {
         );
 
         if (confirmed) {
-            setServerUrl(inputUrl);
-            await resolveServerConfig();
-            await logout();
+            await logout(async () => {
+                setServerUrl(inputUrl);
+                await resolveServerConfig();
+            });
             navigation.dispatch(
                 CommonActions.reset({
                     index: 0,
@@ -166,10 +167,11 @@ export default function ServerConfigScreen() {
         );
 
         if (confirmed) {
-            setServerUrl(null);
-            await resolveServerConfig();
-            setInputUrl('');
-            await logout();
+            await logout(async () => {
+                setServerUrl(null);
+                await resolveServerConfig();
+                setInputUrl('');
+            });
             navigation.dispatch(
                 CommonActions.reset({
                     index: 0,
