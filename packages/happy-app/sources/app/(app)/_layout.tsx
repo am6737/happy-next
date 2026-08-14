@@ -1,4 +1,4 @@
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import 'react-native-reanimated';
 import * as React from 'react';
 import { Typography } from '@/constants/Typography';
@@ -7,6 +7,10 @@ import { Platform, TouchableOpacity, Text } from 'react-native';
 import { isRunningOnMac } from '@/utils/platform';
 import { useUnistyles } from 'react-native-unistyles';
 import { t } from '@/text';
+import { Ionicons } from '@expo/vector-icons';
+import { isUsingCustomServer } from '@/sync/serverConfig';
+import { useAuth } from '@/auth/AuthContext';
+import { getDesktopPlatform } from '@/desktop/desktopWindowUtils';
 
 export const unstable_settings = {
     initialRouteName: 'index',
@@ -16,6 +20,10 @@ export default function RootLayout() {
     // Use custom header on Android and Mac Catalyst, native header on iOS (non-Catalyst)
     const shouldUseCustomHeader = Platform.OS === 'android' || isRunningOnMac() || Platform.OS === 'web';
     const { theme } = useUnistyles();
+    const router = useRouter();
+    const isCustomServer = isUsingCustomServer();
+    const { isAuthenticated } = useAuth();
+    const hideUnauthenticatedWindowsHeader = getDesktopPlatform() === 'windows' && !isAuthenticated;
 
     return (
         <Stack
@@ -71,6 +79,16 @@ export default function RootLayout() {
                 options={{
                     headerShown: true,
                     headerTitle: t('settings.title'),
+                    headerRight: isCustomServer
+                        ? () => (
+                            <TouchableOpacity
+                                onPress={() => router.push('/server')}
+                                style={{ paddingHorizontal: 16 }}
+                            >
+                                <Ionicons name="server-outline" size={24} color={theme.colors.header.tint} />
+                            </TouchableOpacity>
+                        )
+                        : undefined,
                 }}
             />
             <Stack.Screen
@@ -97,7 +115,7 @@ export default function RootLayout() {
                 name="session/[id]/files"
                 options={{
                     headerShown: true,
-                    headerTitle: t('common.files'),
+                    headerTitle: t('files.statusTitle'),
                 }}
             />
             <Stack.Screen
@@ -188,15 +206,15 @@ export default function RootLayout() {
                 }}
             />
             <Stack.Screen
-                name="settings/voice"
+                name="settings/software-update"
                 options={{
-                    headerTitle: t('settings.voiceAssistant'),
+                    headerTitle: t('desktopUpdate.title'),
                 }}
             />
             <Stack.Screen
-                name="settings/voice/happy-voice"
+                name="settings/voice"
                 options={{
-                    headerTitle: t('settingsVoice.happyVoiceTitle'),
+                    headerTitle: t('settings.voiceAssistant'),
                 }}
             />
             <Stack.Screen
@@ -232,14 +250,14 @@ export default function RootLayout() {
             <Stack.Screen
                 name="restore/index"
                 options={{
-                    headerShown: true,
+                    headerShown: !hideUnauthenticatedWindowsHeader,
                     headerTitle: t('navigation.linkNewDevice'),
                 }}
             />
             <Stack.Screen
                 name="restore/manual"
                 options={{
-                    headerShown: true,
+                    headerShown: !hideUnauthenticatedWindowsHeader,
                     headerTitle: t('navigation.restoreWithSecretKey'),
                 }}
             />
@@ -455,6 +473,12 @@ export default function RootLayout() {
                 name="dev/toast-demo"
                 options={{
                     headerTitle: 'Toast Demo',
+                }}
+            />
+            <Stack.Screen
+                name="dev/legend-chat-header"
+                options={{
+                    headerTitle: 'Legend Chat Header',
                 }}
             />
             <Stack.Screen

@@ -1,0 +1,47 @@
+---
+title: "预览 HTML"
+description: "用 /preview-html 生成自包含 HTML 页面并在应用内预览。"
+---
+
+`/preview-html` 是一个内置 slash 命令,让 agent 生成一份完整、自包含的 HTML 文档,并在 Happy 客户端
+应用内渲染预览。它是常驻工具 `preview_html` 的快捷入口——让这个能力可被发现,并稳定触发"渲染预览",
+而不是让 agent 只是把 HTML 当文本打印出来。
+
+## 用法
+
+```
+/preview-html <描述或 .html 文件路径>
+```
+
+- **描述** —— 描述你想要的页面。agent 会生成一份完整 HTML 文档(所有 CSS、JS 内联,不依赖外部网络
+  资源)并预览。
+- **文件路径** —— 指向一个已存在的 `.html` 文件,agent 读取后预览其内容。
+- **无参数** —— agent 使用当前对话上下文,或询问你要预览什么。
+
+该命令是模型中介式的:它会展开成一段提示,指示 agent 构建文档并调用 `preview_html` 工具。你输入的
+`/preview-html ...` 会原样保留在对话里;生成的 HTML 在应用的预览区渲染。
+
+## 示例
+
+```
+/preview-html 一个三档定价表,中间套餐高亮
+```
+
+```
+/preview-html 周活跃用户的 SVG 折线图,暗色主题
+```
+
+```
+/preview-html ./reports/summary.html
+```
+
+## 可用范围
+
+- 在 **Claude**、**Codex**、**Gemini** 会话中均可用。
+- 所有会话都可用——不需要 orchestrator 或 controller 模式。
+- 需要支持 HTML 预览的 Happy 客户端。
+
+<Note>
+HTML 必须是单份自包含文档。如果你打算保存或分享结果,请要求内联 CSS/JS——外部样式表、脚本或图片
+在预览中不会加载。
+</Note>

@@ -4,10 +4,10 @@ import {
     Modal,
     TouchableWithoutFeedback,
     Animated,
-    StyleSheet,
     KeyboardAvoidingView,
     Platform
 } from 'react-native';
+import { StyleSheet } from 'react-native-unistyles';
 
 interface CommandPaletteModalProps {
     visible: boolean;
@@ -26,6 +26,7 @@ export function CommandPaletteModal({
 
     useEffect(() => {
         if (visible) {
+            setIsModalVisible(true);
             // Opening animation
             Animated.parallel([
                 Animated.timing(fadeAnim, {
@@ -40,6 +41,19 @@ export function CommandPaletteModal({
                     useNativeDriver: true
                 })
             ]).start();
+        } else {
+            Animated.parallel([
+                Animated.timing(fadeAnim, {
+                    toValue: 0,
+                    duration: 150,
+                    useNativeDriver: true
+                }),
+                Animated.timing(scaleAnim, {
+                    toValue: 0.95,
+                    duration: 150,
+                    useNativeDriver: true
+                })
+            ]).start(() => setIsModalVisible(false));
         }
     }, [visible, fadeAnim, scaleAnim]);
 
@@ -116,21 +130,21 @@ export function CommandPaletteModal({
     );
 }
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create((theme) => ({
     container: {
         flex: 1,
         justifyContent: 'flex-start',
         alignItems: 'center',
         // Position at 30% from top of viewport
         ...(Platform.OS === 'web' ? {
-            paddingTop: '30vh',
+            paddingTop: '20vh',
         } as any : {
             paddingTop: 200, // Fallback for native
         })
     },
     backdrop: {
         ...StyleSheet.absoluteFillObject,
-        backgroundColor: 'rgba(15, 15, 15, 0.75)',
+        backgroundColor: theme.dark ? '#000000' : '#0F172A',
         // Remove blur for better performance - use darker overlay instead
         // Blur can be re-enabled if needed but with optimizations
         ...(Platform.OS === 'web' ? {
@@ -145,4 +159,4 @@ const styles = StyleSheet.create({
         width: '90%',
         maxWidth: 800, // Increased from 640
     }
-});
+}));

@@ -1,4 +1,5 @@
-import { getHappyVoiceGatewayUrl, getHappyVoicePublicKey } from './voiceConfig';
+import { getHappyVoiceGatewayUrl } from './voiceConfig';
+import { TokenStorage } from '@/auth/tokenStorage';
 import { getServerUrl } from './serverConfig';
 import { storage } from './storage';
 import { cleanForSpeech } from '@/realtime/happyVoiceProtocol';
@@ -40,29 +41,47 @@ export interface HappyVoiceStartResponse {
     expiresAt: string;
 }
 
-function getVoiceGatewayUrl() {
-    const baseUrl = getHappyVoiceGatewayUrl();
+interface VoiceAuthTokenResponse {
+    voiceBaseUrl: string;
+    token: string;
+    expiresAt: string;
+}
+
+async function getVoiceAuthToken(sessionId?: string): Promise<VoiceAuthTokenResponse> {
+    const credentials = await TokenStorage.getCredentials();
+    if (!credentials) {
+        throw new Error('Not authenticated');
+    }
+
+    const response = await fetch(`${getServerUrl()}/v1/voice/token`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${credentials.token}`,
+        },
+        body: JSON.stringify(sessionId ? { sessionId } : {}),
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to get voice token: ${response.status} ${errorText}`);
+    }
+
+    return await response.json();
+}
+
+function getVoiceGatewayUrlFromAuth(auth: VoiceAuthTokenResponse) {
+    const baseUrl = auth.voiceBaseUrl || getHappyVoiceGatewayUrl();
     if (!baseUrl) {
         throw new Error('voiceBaseUrl is not configured');
-    }
-    if (baseUrl.startsWith('/')) {
-        const origin = (globalThis as { location?: { origin?: unknown } }).location?.origin;
-        if (typeof origin === 'string' && origin) {
-            return `${origin}${baseUrl}`.replace(/\/+$/, '');
-        }
     }
     return baseUrl.replace(/\/+$/, '');
 }
 
-function getVoiceGatewayHeaders() {
-    const voicePublicKey = getHappyVoicePublicKey();
-    if (!voicePublicKey) {
-        throw new Error('voicePublicKey is not configured');
-    }
-
+function getVoiceGatewayHeaders(auth: VoiceAuthTokenResponse) {
     return {
         'Content-Type': 'application/json',
-        'x-voice-key': voicePublicKey,
+        'Authorization': `Bearer ${auth.token}`,
     };
 }
 
@@ -80,9 +99,10 @@ export async function startHappyVoiceSession(
     const toolBridgeBaseUrl = process.env.EXPO_PUBLIC_VOICE_TOOL_BRIDGE_BASE_URL || getServerUrl();
     const voicePrefs = getVoicePrefs();
 
-    const response = await fetch(`${getVoiceGatewayUrl()}/v1/voice/session/start`, {
+    const voiceAuth = await getVoiceAuthToken(sessionId);
+    const response = await fetch(`${getVoiceGatewayUrlFromAuth(voiceAuth)}/v1/voice/session/start`, {
         method: 'POST',
-        headers: getVoiceGatewayHeaders(),
+        headers: getVoiceGatewayHeaders(voiceAuth),
         body: JSON.stringify({
             userId,
             sessionId,
@@ -103,9 +123,10 @@ export async function startHappyVoiceSession(
 }
 
 export async function stopHappyVoiceSession(gatewaySessionId: string): Promise<void> {
-    const response = await fetch(`${getVoiceGatewayUrl()}/v1/voice/session/stop`, {
+    const voiceAuth = await getVoiceAuthToken();
+    const response = await fetch(`${getVoiceGatewayUrlFromAuth(voiceAuth)}/v1/voice/session/stop`, {
         method: 'POST',
-        headers: getVoiceGatewayHeaders(),
+        headers: getVoiceGatewayHeaders(voiceAuth),
         body: JSON.stringify({ gatewaySessionId }),
     });
 
@@ -126,9 +147,10 @@ export interface HappyVoiceTtsResponse {
 
 export async function synthesizeSpeech(text: string): Promise<HappyVoiceTtsResponse> {
     const { voiceType, speechRate } = getVoicePrefs();
-    const response = await fetch(`${getVoiceGatewayUrl()}/v1/voice/tts`, {
+    const voiceAuth = await getVoiceAuthToken();
+    const response = await fetch(`${getVoiceGatewayUrlFromAuth(voiceAuth)}/v1/voice/tts`, {
         method: 'POST',
-        headers: getVoiceGatewayHeaders(),
+        headers: getVoiceGatewayHeaders(voiceAuth),
         body: JSON.stringify({ text, voiceType, speechRate }),
     });
 
@@ -140,58 +162,27 @@ export async function synthesizeSpeech(text: string): Promise<HappyVoiceTtsRespo
     return await response.json();
 }
 
-export interface TtsStreamChunk {
-    seq: number;
-    text: string;
-    audioBase64: string;
-    mimeType: string;
-}
-
 /**
- * Streamed "read message aloud" (web): the gateway LLM-cleans + splits into
- * sentences and pushes audio chunks over SSE; onChunk fires per sentence so the
- * client can play progressively. Uses fetch ReadableStream (web only).
+ * Prepare "read message aloud": the gateway LLM-cleans the text and returns a
+ * short-lived capability URL serving one chunked audio/mpeg stream (no
+ * duration, not seekable, closed at end of synthesis). The URL embeds its own
+ * token — players GET it directly with no extra headers.
  */
-export async function streamSpeech(
-    text: string,
-    onChunk: (chunk: TtsStreamChunk) => void,
-    signal?: AbortSignal,
-    fetchImpl: typeof fetch = fetch,
-): Promise<void> {
+export async function prepareSpeechStream(text: string, signal?: AbortSignal): Promise<{ url: string }> {
     const { voiceType, speechRate } = getVoicePrefs();
-    const response = await fetchImpl(`${getVoiceGatewayUrl()}/v1/voice/tts/stream`, {
+    const voiceAuth = await getVoiceAuthToken();
+    const response = await fetch(`${getVoiceGatewayUrlFromAuth(voiceAuth)}/v1/voice/tts/stream/prepare`, {
         method: 'POST',
-        headers: getVoiceGatewayHeaders(),
+        headers: getVoiceGatewayHeaders(voiceAuth),
         body: JSON.stringify({ text, voiceType, speechRate }),
         signal,
     });
-    if (!response.ok || !response.body) {
-        throw new Error(`Failed to stream speech: ${response.status}`);
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to prepare speech stream: ${response.status} ${errorText}`);
     }
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buf = '';
-    for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buf += decoder.decode(value, { stream: true });
-        let idx: number;
-        while ((idx = buf.indexOf('\n\n')) !== -1) {
-            const evt = buf.slice(0, idx);
-            buf = buf.slice(idx + 2);
-            for (const line of evt.split('\n')) {
-                if (!line.startsWith('data:')) continue;
-                const data = line.slice(5).trim();
-                if (data === '[DONE]') return;
-                try {
-                    const obj = JSON.parse(data) as TtsStreamChunk;
-                    if (obj.audioBase64) onChunk(obj);
-                } catch {
-                    // ignore
-                }
-            }
-        }
-    }
+    const data = (await response.json()) as { streamId: string; url: string; expiresAt: string };
+    return { url: data.url };
 }
 
 /**
@@ -201,9 +192,10 @@ export async function streamSpeech(
  */
 export async function cleanSpeechText(text: string): Promise<string> {
     try {
-        const response = await fetch(`${getVoiceGatewayUrl()}/v1/voice/clean`, {
+        const voiceAuth = await getVoiceAuthToken();
+        const response = await fetch(`${getVoiceGatewayUrlFromAuth(voiceAuth)}/v1/voice/clean`, {
             method: 'POST',
-            headers: getVoiceGatewayHeaders(),
+            headers: getVoiceGatewayHeaders(voiceAuth),
             body: JSON.stringify({ text }),
         });
         if (!response.ok) {

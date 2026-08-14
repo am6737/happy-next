@@ -377,7 +377,7 @@ Messages are encrypted as `MessageContent` and then base64 encoded:
 ```json
 {
   "role": "agent",
-  "content": { "type": "output | codex | acp | event", "data": "..." },
+  "content": { "type": "output", "data": "..." },
   "meta": { }
 }
 ```

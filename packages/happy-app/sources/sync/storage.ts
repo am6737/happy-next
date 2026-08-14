@@ -31,6 +31,13 @@ import {
     type SessionModeConfigPatch,
 } from "./sessionModeConfig";
 import {
+    applySessionAppearancePatch,
+    createEmptySessionAppearance,
+    type SessionAppearanceDocument,
+    type SessionAppearancePatch,
+} from './sessionAppearance';
+import { emitDesktopPermissionRequest } from '@/desktop/desktopEvents';
+import {
     removePendingMessageFromQueue,
     sortPendingQueue,
     upsertPendingMessageInQueue,
@@ -98,6 +105,8 @@ interface StorageState {
     settingsVersion: number | null;
     sessionModeConfig: SessionModeConfigDocument;
     sessionModeConfigVersion: number;
+    sessionAppearance: SessionAppearanceDocument;
+    sessionAppearanceVersion: number;
     localSettings: LocalSettings;
     profile: Profile;
     sessions: Record<string, Session>;
@@ -183,6 +192,8 @@ interface StorageState {
     applySettingsLocal: (settings: Partial<Settings>) => void;
     applySessionModeConfigFromCloud: (doc: SessionModeConfigDocument, version: number) => void;
     applySessionModeConfigPatchLocal: (patch: SessionModeConfigPatch) => void;
+    applySessionAppearanceFromCloud: (doc: SessionAppearanceDocument, version: number) => void;
+    applySessionAppearancePatchLocal: (patch: SessionAppearancePatch) => void;
     applyLocalSettings: (settings: Partial<LocalSettings>) => void;
     applyProfile: (profile: Profile) => void;
     applyGitStatus: (sessionId: string, status: GitStatus | null) => void;
@@ -382,7 +393,6 @@ function areSessionsShallowEqual(a: Session, b: Session): boolean {
         a.awaitingResponseSince === b.awaitingResponseSince &&
         a.messageSyncing === b.messageSyncing &&
         a.presence === b.presence &&
-        a.todos === b.todos &&
         a.permissionMode === b.permissionMode &&
         a.modelMode === b.modelMode &&
         a.fastMode === b.fastMode &&
@@ -419,6 +429,8 @@ export const storage = create<StorageState>()((set, get) => {
         settingsVersion: version,
         sessionModeConfig: createEmptySessionModeConfig(),
         sessionModeConfigVersion: -1,
+        sessionAppearance: createEmptySessionAppearance(),
+        sessionAppearanceVersion: -1,
         localSettings,
         profile,
         sessions: {},
@@ -649,6 +661,18 @@ export const storage = create<StorageState>()((set, get) => {
                     // Check for NEW permission requests before processing
                     const currentRealtimeSessionId = getCurrentRealtimeSessionId();
                     const voiceSession = getVoiceSession();
+                    const oldRequests = oldSession?.agentState?.requests || {};
+                    const newRequests = newSession.agentState?.requests || {};
+
+                    for (const [requestId, request] of Object.entries(newRequests)) {
+                        if (!oldRequests[requestId]) {
+                            emitDesktopPermissionRequest({
+                                sessionId: session.id,
+                                requestId,
+                                toolName: request.tool,
+                            });
+                        }
+                    }
 
                     // console.log('[REALTIME DEBUG] Permission check:', {
                     //     currentRealtimeSessionId,
@@ -660,9 +684,6 @@ export const storage = create<StorageState>()((set, get) => {
                     // });
 
                     if (currentRealtimeSessionId === session.id && voiceSession) {
-                        const oldRequests = oldSession?.agentState?.requests || {};
-                        const newRequests = newSession.agentState?.requests || {};
-
                         // Find NEW permission requests only
                         for (const [requestId, request] of Object.entries(newRequests)) {
                             if (!oldRequests[requestId]) {
@@ -858,18 +879,17 @@ export const storage = create<StorageState>()((set, get) => {
                 const messagesArray = Object.values(mergedMessagesMap)
                     .sort((a, b) => b.createdAt - a.createdAt || (b.seq ?? 0) - (a.seq ?? 0));
 
-                // Update session with todos and latestUsage
+                // Update session with latestUsage
                 // IMPORTANT: We extract latestUsage from the mutable reducerState and copy it to the Session object
                 // This ensures latestUsage is available immediately on load, even before messages are fully loaded
                 let updatedSessions = state.sessions;
-                const needsUpdate = (reducerResult.todos !== undefined || existingSession.reducerState.latestUsage) && session;
+                const needsUpdate = existingSession.reducerState.latestUsage && session;
 
                 if (needsUpdate) {
                     updatedSessions = {
                         ...state.sessions,
                         [sessionId]: {
                             ...session,
-                            ...(reducerResult.todos !== undefined && { todos: reducerResult.todos }),
                             // Copy latestUsage from reducerState to make it immediately available
                             latestUsage: existingSession.reducerState.latestUsage ? {
                                 ...existingSession.reducerState.latestUsage
@@ -1253,6 +1273,19 @@ export const storage = create<StorageState>()((set, get) => {
                     : state.sessionListViewData,
             };
         }),
+        applySessionAppearanceFromCloud: (doc: SessionAppearanceDocument, version: number) => set((state) => {
+            if (version < state.sessionAppearanceVersion) return state;
+            if (version === state.sessionAppearanceVersion && doc === state.sessionAppearance) return state;
+            return {
+                ...state,
+                sessionAppearance: doc,
+                sessionAppearanceVersion: version,
+            };
+        }),
+        applySessionAppearancePatchLocal: (patch: SessionAppearancePatch) => set((state) => ({
+            ...state,
+            sessionAppearance: applySessionAppearancePatch(state.sessionAppearance, patch),
+        })),
         applyLocalSettings: (delta: Partial<LocalSettings>) => set((state) => {
             const updatedLocalSettings = applyLocalSettings(state.localSettings, delta);
             saveLocalSettings(updatedLocalSettings);
@@ -1345,7 +1378,10 @@ export const storage = create<StorageState>()((set, get) => {
         })),
         setOrchestratorActivityBatch: (activity: Record<string, Record<string, string[]>>, totalRunCounts?: Record<string, number>) => set((state) => ({
             ...state,
-            orchestratorActivity: { ...state.orchestratorActivity, ...activity },
+            // The batch endpoint returns the complete active-activity snapshot.
+            // Replace instead of merge so sessions omitted after their runs finish
+            // do not retain stale running-task badges after a foreground refresh.
+            orchestratorActivity: activity,
             ...(totalRunCounts && {
                 orchestratorTotalRunCount: { ...state.orchestratorTotalRunCount, ...totalRunCounts },
             }),
@@ -2351,6 +2387,10 @@ export function useSettings(): Settings {
 
 export function useSessionModeConfig(): SessionModeConfigDocument {
     return storage(useShallow((state) => state.sessionModeConfig));
+}
+
+export function useSessionMarkerColor(sessionId: string) {
+    return storage(useShallow((state) => state.sessionAppearance.sessions[sessionId]?.color ?? null));
 }
 
 export function useSessionModeLastUsed(agentType: SessionModeAgentType) {

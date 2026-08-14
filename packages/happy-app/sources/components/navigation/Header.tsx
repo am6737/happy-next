@@ -7,6 +7,10 @@ import { layout } from '../layout';
 import { useHeaderHeight, useIsTablet } from '@/utils/responsive';
 import { Typography } from '@/constants/Typography';
 import { StyleSheet } from 'react-native-unistyles';
+import { t } from '@/text';
+import { isTauriDesktop } from '@/utils/tauri';
+import { useAuth } from '@/auth/AuthContext';
+import { getDesktopPlatform, handleDesktopTitleBarMouseDown } from '@/desktop/desktopWindowUtils';
 
 interface HeaderProps {
     title?: React.ReactNode;
@@ -26,6 +30,14 @@ interface HeaderProps {
 
 export const Header = React.memo((props: HeaderProps) => {
     const styles = stylesheet;
+    const { isAuthenticated } = useAuth();
+    const desktopPlatform = getDesktopPlatform();
+    const needsMacOSWindowControlsInset = desktopPlatform === 'macos' && !isAuthenticated;
+    const desktopDragProps = desktopPlatform ? {
+        onMouseDown: (event: any) => {
+            handleDesktopTitleBarMouseDown(event, { allowMaximize: isAuthenticated });
+        },
+    } as any : {};
 
     const {
         title,
@@ -67,15 +79,29 @@ export const Header = React.memo((props: HeaderProps) => {
 
     return (
         <View style={[containerStyle]}>
-            <View style={styles.contentWrapper}>
+            <View {...desktopDragProps} style={styles.contentWrapper}>
                 <View style={[styles.content, { height: headerHeight }]}>
-                    <View style={[styles.leftContainer, leftAligned && styles.sideContainerHug]}>
+                    <View style={[
+                        styles.leftContainer,
+                        leftAligned && styles.sideContainerHug,
+                        needsMacOSWindowControlsInset && styles.macOSWindowControlsInset,
+                    ]}>
                         {headerLeft && headerLeft()}
                     </View>
 
                     <View style={[styles.centerContainer, leftAligned && styles.centerContainerLeft]}>
-                        {title}
-                        {subtitle && <Text style={subtitleStyle} numberOfLines={1}>{subtitle}</Text>}
+                        <View
+                            {...(desktopPlatform ? {
+                                'data-desktop-no-drag': true,
+                                onMouseDown: (event: any) => {
+                                    event.stopPropagation?.();
+                                },
+                            } as any : {})}
+                            style={[styles.selectableTitle, leftAligned && styles.selectableTitleLeft]}
+                        >
+                            {title}
+                            {subtitle && <Text style={subtitleStyle} numberOfLines={1}>{subtitle}</Text>}
+                        </View>
                     </View>
 
                     <View style={[styles.rightContainer, leftAligned && styles.sideContainerHug]}>
@@ -93,28 +119,43 @@ interface ExtendedNavigationOptions extends Partial<NativeStackHeaderProps['opti
     headerSubtitleStyle?: any;
 }
 
-// Default back button component
-const DefaultBackButton: React.FC<{ tintColor?: string; onPress: () => void }> = ({ tintColor = '#000', onPress }) => {
+export const HeaderBackButton = React.memo((props: { tintColor?: string; onPress: () => void }) => {
     return (
-        <Pressable onPress={onPress} hitSlop={15}>
+        <Pressable
+            onPress={props.onPress}
+            hitSlop={15}
+            accessibilityRole="button"
+            accessibilityLabel={t('common.back')}
+            style={{
+                width: 38,
+                height: 38,
+                alignItems: 'center',
+                justifyContent: 'center',
+            }}
+        >
             <Ionicons
                 name={Platform.OS === 'ios' ? 'chevron-back' : 'arrow-back'}
-                size={24}
-                color={tintColor}
+                size={Platform.OS === 'ios' ? 28 : 24}
+                color={props.tintColor ?? '#000'}
             />
         </Pressable>
     );
-};
+});
 
 // Component wrapper for navigation header
 const NavigationHeaderComponent: React.FC<NativeStackHeaderProps> = React.memo((props) => {
     const { options, route, back, navigation } = props;
     const extendedOptions = options as ExtendedNavigationOptions;
     const isTablet = useIsTablet();
+    const { isAuthenticated } = useAuth();
 
-    // Check if we should hide back button on tablet
+    // In the authenticated tablet master-detail layout, index 0 is the empty
+    // detail pane and index 1 is the first real screen selected from the
+    // permanent sidebar. Avoid offering a back action that only returns to the
+    // empty pane. Unauthenticated tablet screens do not have that sidebar and
+    // should retain their normal back navigation.
     const shouldHideBackButton = React.useMemo(() => {
-        if (!isTablet) return false;
+        if (!isTablet || !isAuthenticated || isTauriDesktop()) return false;
 
         // Get navigation state to check stack depth
         const state = navigation.getState();
@@ -123,7 +164,7 @@ const NavigationHeaderComponent: React.FC<NativeStackHeaderProps> = React.memo((
         // Hide back button if we're at the first or second screen in the stack
         // In tablet mode, index 0 is the empty screen, index 1 is the first real screen
         return currentIndex <= 1;
-    }, [isTablet, navigation]);
+    }, [isAuthenticated, isTablet, navigation]);
 
     // Extract title - handle both string and function types
     let title: React.ReactNode | null = null;
@@ -163,7 +204,7 @@ const NavigationHeaderComponent: React.FC<NativeStackHeaderProps> = React.memo((
         // Show default back button if can go back and not explicitly hidden
         // Also hide on tablet when at first or second screen
         headerLeftContent = () => (
-            <DefaultBackButton
+            <HeaderBackButton
                 tintColor={options.headerTintColor}
                 onPress={() => navigation.goBack()}
             />
@@ -226,6 +267,9 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
         alignItems: 'center',
         justifyContent: 'flex-start',
     },
+    macOSWindowControlsInset: {
+        transform: [{ translateX: 74 }],
+    },
     sideContainerHug: {
         flexGrow: 0,
         flexBasis: 'auto',
@@ -245,6 +289,16 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
         justifyContent: 'center',
         paddingHorizontal: 12,
         overflow: 'hidden',
+    },
+    selectableTitle: {
+        alignItems: 'center',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        maxWidth: '100%',
+        userSelect: Platform.select({ web: 'text', default: undefined }),
+    },
+    selectableTitleLeft: {
+        alignItems: 'flex-start',
     },
     rightContainer: {
         flexGrow: 1,

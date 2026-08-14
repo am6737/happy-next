@@ -1,13 +1,13 @@
 {
   "$schema": "../../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Happy Next",
-  "version": "0.1.0",
+  "version": "2.0.0",
   "identifier": "com.hitosea.happy",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:8081",
     "beforeDevCommand": "yarn start",
-    "beforeBuildCommand": "yarn expo export --platform web --output-dir dist"
+    "beforeBuildCommand": "yarn expo export --platform web --output-dir dist && node sources/scripts/patchDesktopHtml.cjs && yarn desktop:icon:macos"
   },
   "app": {
     "windows": [
@@ -15,23 +15,61 @@
         "title": "Happy Next",
         "width": 800,
         "height": 600,
-        "resizable": true,
-        "fullscreen": false
+        "minWidth": 480,
+        "minHeight": 480,
+        "center": true,
+        "preventOverflow": true,
+        "visible": false,
+        "resizable": false,
+        "fullscreen": false,
+        "decorations": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "dragDropEnabled": false,
+        "backgroundThrottling": "disabled"
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self' customprotocol: asset:; connect-src 'self' ipc: http://ipc.localhost blob: https: wss:; img-src 'self' asset: http://asset.localhost data: blob: https:; media-src 'self' asset: http://asset.localhost data: blob: https:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; frame-src 'self' https:; object-src 'none'; base-uri 'self'; form-action 'self' https:",
+      "dangerousDisableAssetCspModification": [
+        "style-src"
+      ]
     }
   },
   "bundle": {
     "active": true,
     "targets": "all",
+    "publisher": "Hitosea",
+    "copyright": "Copyright © 2026 Happy Next Contributors",
+    "category": "DeveloperTool",
+    "macOS": {
+      "minimumSystemVersion": "12.0",
+      "entitlements": "Entitlements.plist",
+      "files": {
+        "Resources/Assets.car": "icons/generated/Assets.car"
+      }
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "resources": {
+      "icons/128x128.png": "icons/notification.png"
+    },
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDdCMTMzREJFREU4REZFMkYKUldRdi9vM2V2ajBUZThNZW9lZTU3b05lN0d4cklGcWhFSGJDZUFRcklKaFpFTW45YiswdjBDVzUK",
+      "endpoints": [
+        "https://github.com/hitosea/happy-next/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

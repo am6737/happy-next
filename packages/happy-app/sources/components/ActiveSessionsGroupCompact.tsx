@@ -1,15 +1,15 @@
 import React from 'react';
-import { View, Pressable, Platform, ActivityIndicator } from 'react-native';
+import { View, Pressable, Platform, ActivityIndicator, Animated } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { Text } from '@/components/StyledText';
 import { router, useRouter } from 'expo-router';
-import { Session, Machine } from '@/sync/storageTypes';
+import { Session } from '@/sync/storageTypes';
 import { Ionicons } from '@expo/vector-icons';
-import { getSessionName, useSessionStatus, getSessionAvatarId, formatPathRelativeToHome } from '@/utils/sessionUtils';
+import { getSessionName, useSessionStatus, getSessionAvatarId } from '@/utils/sessionUtils';
 import { Avatar } from './Avatar';
 import { Typography } from '@/constants/Typography';
 import { StatusDot } from './StatusDot';
-import { useAllMachines, useSetting, useSessionHasDraft } from '@/sync/storage';
+import { useSetting, useSessionHasDraft } from '@/sync/storage';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { isMachineOnline } from '@/utils/machineUtils';
 import { machineSpawnNewSession, sessionKill } from '@/sync/ops';
@@ -24,6 +24,10 @@ import { HappyError } from '@/utils/errors';
 import { getWorktreeInfo, cleanupWorktree } from '@/utils/worktreeOps';
 import { ActionMenuModal } from '@/components/ActionMenuModal';
 import { ActionMenuItem } from '@/components/ActionMenu';
+import { sync } from '@/sync/sync';
+import { SessionContextMenu } from './SessionContextMenu';
+import { SessionColorMarkerForSession } from './SessionColorMarker';
+import { SessionProjectGroup, useCollapsedSessionProjectGroups, useSessionProjectGroups } from '@/hooks/useSessionProjectGroups';
 
 const stylesheet = StyleSheet.create((theme, runtime) => ({
     container: {
@@ -49,6 +53,20 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
+    },
+    sectionHeaderRight: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'flex-end',
+        gap: 8,
+        maxWidth: '52%',
+    },
+    sectionHeaderChevron: {
+        width: 16,
+        height: 16,
+        marginRight: 4,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     sectionHeaderLeft: {
         flexDirection: 'row',
@@ -173,91 +191,80 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
 interface ActiveSessionsGroupProps {
     sessions: Session[];
     selectedSessionId?: string;
+    registerSessionRowRef?: (sessionId: string, ref: View | null) => void;
+}
+
+function ProjectSectionHeader({
+    projectGroup,
+    collapsed,
+    onToggle,
+    avatar,
+    rightContent,
+}: {
+    projectGroup: SessionProjectGroup;
+    collapsed: boolean;
+    onToggle: () => void;
+    avatar: React.ReactNode;
+    rightContent: React.ReactNode;
+}) {
+    const styles = stylesheet;
+    const expansion = React.useRef(new Animated.Value(collapsed ? 0 : 1)).current;
+    React.useEffect(() => {
+        Animated.timing(expansion, {
+            toValue: collapsed ? 0 : 1,
+            duration: 140,
+            useNativeDriver: true,
+        }).start();
+    }, [collapsed, expansion]);
+
+    return (
+        <Pressable
+            style={styles.sectionHeader}
+            onPress={onToggle}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: !collapsed }}
+            accessibilityLabel={`${collapsed ? t('duplicate.expandText') : t('duplicate.collapseText')} ${projectGroup.displayPath}`}
+        >
+            <View style={styles.sectionHeaderLeft}>
+                <Animated.View
+                    style={[
+                        styles.sectionHeaderChevron,
+                        {
+                            transform: [{
+                                rotate: expansion.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '90deg'] }),
+                            }],
+                        },
+                    ]}
+                >
+                    <Ionicons name="chevron-forward" size={14} color={styles.sectionHeaderPath.color} />
+                </Animated.View>
+                {avatar && <View style={styles.sectionHeaderAvatar}>{avatar}</View>}
+                <Text
+                    style={styles.sectionHeaderPath}
+                    numberOfLines={1}
+                    ref={(el: any) => { if (el) el.title = projectGroup.displayPath; }}
+                >
+                    {projectGroup.displayPath}
+                </Text>
+            </View>
+            <View style={styles.sectionHeaderRight}>
+                {rightContent}
+            </View>
+        </Pressable>
+    );
 }
 
 
-export function ActiveSessionsGroupCompact({ sessions, selectedSessionId }: ActiveSessionsGroupProps) {
+export function ActiveSessionsGroupCompact({ sessions, selectedSessionId, registerSessionRowRef }: ActiveSessionsGroupProps) {
     const styles = stylesheet;
-    const machines = useAllMachines();
-
-    const machinesMap = React.useMemo(() => {
-        const map: Record<string, Machine> = {};
-        machines.forEach(machine => {
-            map[machine.id] = machine;
-        });
-        return map;
-    }, [machines]);
-
-    // Group sessions by project, then associate with machine
-    const projectGroups = React.useMemo(() => {
-        const groups = new Map<string, {
-            path: string;
-            displayPath: string;
-            machines: Map<string, {
-                machine: Machine | null;
-                machineName: string;
-                sessions: Session[];
-            }>;
-        }>();
-
-        sessions.forEach(session => {
-            const projectPath = session.metadata?.path || '';
-            const unknownText = t('status.unknown');
-            const machineId = session.metadata?.machineId || unknownText;
-
-            // Get machine info
-            const machine = machineId !== unknownText ? machinesMap[machineId] : null;
-            const machineName = machine?.metadata?.displayName ||
-                machine?.metadata?.host ||
-                (machineId !== unknownText ? machineId : `<${unknownText}>`);
-
-            // Get or create project group
-            let projectGroup = groups.get(projectPath);
-            if (!projectGroup) {
-                const displayPath = formatPathRelativeToHome(projectPath, session.metadata?.homeDir);
-                projectGroup = {
-                    path: projectPath,
-                    displayPath,
-                    machines: new Map()
-                };
-                groups.set(projectPath, projectGroup);
-            }
-
-            // Get or create machine group within project
-            let machineGroup = projectGroup.machines.get(machineId);
-            if (!machineGroup) {
-                machineGroup = {
-                    machine,
-                    machineName,
-                    sessions: []
-                };
-                projectGroup.machines.set(machineId, machineGroup);
-            }
-
-            // Add session to machine group
-            machineGroup.sessions.push(session);
-        });
-
-        // Sort sessions within each machine group by creation time (newest first)
-        groups.forEach(projectGroup => {
-            projectGroup.machines.forEach(machineGroup => {
-                machineGroup.sessions.sort((a, b) => b.createdAt - a.createdAt);
-            });
-        });
-
-        return groups;
-    }, [sessions, machinesMap]);
-
-    // Sort project groups by display path
-    const sortedProjectGroups = React.useMemo(() => {
-        return Array.from(projectGroups.entries()).sort(([, groupA], [, groupB]) => {
-            return groupA.displayPath.localeCompare(groupB.displayPath);
-        });
-    }, [projectGroups]);
+    const projectGroups = useSessionProjectGroups(sessions);
+    const { collapsedGroups, toggleGroup } = useCollapsedSessionProjectGroups(projectGroups, selectedSessionId);
 
     return (
         <View style={styles.container}>
-            {sortedProjectGroups.map(([projectPath, projectGroup]) => {
+            {projectGroups.map((projectGroup) => {
+                const projectPath = projectGroup.path;
+                const collapseKey = projectGroup.collapseKey;
                 const machineEntries = Array.from(projectGroup.machines.entries());
                 const firstSession = machineEntries[0]?.[1]?.sessions[0];
                 const avatarId = firstSession ? getSessionAvatarId(firstSession) : undefined;
@@ -267,38 +274,33 @@ export function ActiveSessionsGroupCompact({ sessions, selectedSessionId }: Acti
                 return (
                     <View key={projectPath}>
                         {/* Section header on grouped background */}
-                        <View style={styles.sectionHeader}>
-                            <View style={styles.sectionHeaderLeft}>
-                                {avatarId && (
-                                    <View style={styles.sectionHeaderAvatar}>
-                                        <Avatar id={avatarId} size={24} flavor={firstSession?.metadata?.flavor} sessionIcon={firstSession?.metadata?.sessionIcon} />
-                                    </View>
-                                )}
-                                <Text
-                                    style={styles.sectionHeaderPath}
-                                    numberOfLines={1}
-                                    ref={(el: any) => { if (el) el.title = projectGroup.displayPath; }}
-                                >
-                                    {projectGroup.displayPath}
-                                </Text>
-                            </View>
-                            {/* Only show git stats when this path maps to a single machine project key */}
-                            {singleMachineId && firstSession?.metadata?.path ? (
-                                <ProjectGitStatus
-                                    machineId={singleMachineId}
-                                    path={firstSession.metadata.path}
-                                    sessionId={firstSession.id}
-                                />
+                        <ProjectSectionHeader
+                            projectGroup={projectGroup}
+                            collapsed={!!collapsedGroups[collapseKey]}
+                            onToggle={() => toggleGroup(collapseKey)}
+                            avatar={avatarId && firstSession ? (
+                                <Avatar id={avatarId} size={24} flavor={firstSession.metadata?.flavor} sessionIcon={firstSession.metadata?.sessionIcon} />
                             ) : null}
-                            {!singleMachineEntry && (
-                                <Text style={styles.sectionHeaderMachine} numberOfLines={1}>
-                                    {`${projectGroup.machines.size} machines`}
-                                </Text>
+                            rightContent={(
+                                <>
+                                    {singleMachineId && firstSession?.metadata?.path ? (
+                                        <ProjectGitStatus
+                                            machineId={singleMachineId}
+                                            path={firstSession.metadata.path}
+                                            sessionId={firstSession.id}
+                                        />
+                                    ) : null}
+                                    {!singleMachineEntry && (
+                                        <Text style={styles.sectionHeaderMachine} numberOfLines={1}>
+                                            {`${projectGroup.machines.size} machines`}
+                                        </Text>
+                                    )}
+                                </>
                             )}
-                        </View>
+                        />
 
                         {/* Card with just the sessions */}
-                        <View style={styles.projectCard}>
+                        {!collapsedGroups[collapseKey] && <View style={styles.projectCard}>
                             {/* Sessions grouped by machine within the card */}
                             {Array.from(projectGroup.machines.entries())
                                 .sort(([, machineA], [, machineB]) => machineA.machineName.localeCompare(machineB.machineName))
@@ -309,13 +311,14 @@ export function ActiveSessionsGroupCompact({ sessions, selectedSessionId }: Acti
                                                 key={session.id}
                                                 session={session}
                                                 selected={selectedSessionId === session.id}
+                                                registerSessionRowRef={registerSessionRowRef}
                                                 showBorder={index < machineGroup.sessions.length - 1 ||
                                                     Array.from(projectGroup.machines.keys()).indexOf(machineId) < projectGroup.machines.size - 1}
                                             />
                                         ))}
                                     </View>
                                 ))}
-                        </View>
+                        </View>}
                     </View>
                 );
             })}
@@ -324,7 +327,12 @@ export function ActiveSessionsGroupCompact({ sessions, selectedSessionId }: Acti
 }
 
 // Compact session row component with status line
-const CompactSessionRow = React.memo(({ session, selected, showBorder }: { session: Session; selected?: boolean; showBorder?: boolean }) => {
+const CompactSessionRow = React.memo(({ session, selected, showBorder, registerSessionRowRef }: {
+    session: Session;
+    selected?: boolean;
+    showBorder?: boolean;
+    registerSessionRowRef?: (sessionId: string, ref: View | null) => void;
+}) => {
     const styles = stylesheet;
     const { theme } = useUnistyles();
     const sessionStatus = useSessionStatus(session);
@@ -333,6 +341,9 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder }: { sessi
     const navigateToSession = useNavigateToSession();
     const swipeableRef = React.useRef<Swipeable | null>(null);
     const swipeEnabled = Platform.OS !== 'web';
+    const setRowRef = React.useCallback((ref: View | null) => {
+        registerSessionRowRef?.(session.id, ref);
+    }, [registerSessionRowRef, session.id]);
 
     const [archivingSession, performArchive] = useHappyAction(async () => {
         const previousActive = storage.getState().sessions[session.id]?.active ?? session.active;
@@ -342,6 +353,7 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder }: { sessi
         const errorMessage = result.message || t('sessionInfo.failedToArchiveSession');
 
         if (!result.success && /RPC method not available/i.test(errorMessage)) {
+            await sync.clearSessionMessageCache(session.id);
             return;
         }
 
@@ -349,6 +361,8 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder }: { sessi
             storage.getState().updateSessionActivity(session.id, previousActive);
             throw new HappyError(errorMessage, false);
         }
+
+        await sync.clearSessionMessageCache(session.id);
     });
 
     const [archiveMenuVisible, setArchiveMenuVisible] = React.useState(false);
@@ -401,8 +415,9 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder }: { sessi
     }, [performArchive, session.metadata]);
 
     const itemContent = (
-        <Pressable
-            style={[
+        <SessionContextMenu session={session}>
+            <Pressable
+                style={[
                 styles.sessionRow,
                 selected && styles.sessionRowSelected
             ]}
@@ -466,13 +481,20 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder }: { sessi
                             styles.sessionTitle,
                             sessionStatus.isConnected ? styles.sessionTitleConnected : styles.sessionTitleDisconnected
                         ]}
-                        numberOfLines={2}
+                        numberOfLines={1}
+                        ref={(el: any) => {
+                            if (Platform.OS === 'web' && el) {
+                                el.title = sessionName;
+                            }
+                        }}
                     >
                         {sessionName}
                     </Text>
+                    <SessionColorMarkerForSession sessionId={session.id} />
                 </View>
             </View>
-        </Pressable>
+            </Pressable>
+        </SessionContextMenu>
     );
 
     const archiveModal = (
@@ -486,11 +508,11 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder }: { sessi
 
     if (!swipeEnabled) {
         return (
-            <>
+            <View ref={setRowRef}>
                 {itemContent}
                 {showBorder && <View style={styles.sessionDivider} />}
                 {archiveModal}
-            </>
+            </View>
         );
     }
 
@@ -508,7 +530,7 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder }: { sessi
     );
 
     return (
-        <>
+        <View ref={setRowRef}>
             <Swipeable
                 ref={swipeableRef}
                 renderRightActions={renderRightActions}
@@ -519,6 +541,6 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder }: { sessi
             </Swipeable>
             {showBorder && <View style={styles.sessionDivider} />}
             {archiveModal}
-        </>
+        </View>
     );
 });

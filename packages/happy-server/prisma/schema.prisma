@@ -91,11 +91,11 @@ model AccountPushToken {
   id        String   @id @default(cuid())
   accountId String
   account   Account  @relation(fields: [accountId], references: [id])
-  token     String
+  token     String   @unique
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([accountId, token])
+  @@index([accountId])
 }
 
 //

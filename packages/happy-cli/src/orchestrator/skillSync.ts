@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { logger } from '@/ui/logger';
+import { getCodexHomeDir } from '@/codex/utils/codexHome';
 import { shouldEnableOrchestratorTools } from './prompt';
 import {
   ORCHESTRATOR_SKILL_MD,
@@ -31,8 +32,8 @@ function writeIfChanged(filePath: string, content: string): void {
  * - Idempotent: each file is written only when its content differs (no churn).
  * - Best-effort: never throws — a failed write is logged and skipped so it cannot break startup.
  * - Worker sessions are skipped (they must not orchestrate / recurse).
- * - A provider's config dir is populated only if it already exists — we never create ~/.claude
- *   or ~/.codex for a tool the user has not set up.
+ * - A provider's config dir is populated only if it already exists — we never create ~/.claude,
+ *   $CLAUDE_CONFIG_DIR, or $CODEX_HOME for a tool the user has not set up.
  * - Runs once per process.
  *
  * Gemini is intentionally not synced yet: its CLI uses a different command/skill format and
@@ -54,9 +55,9 @@ export function syncOrchestratorAssets(): void {
     writeIfChanged(join(claudeRoot, 'commands', 'orchestrator', 'gemini.md'), ORCHESTRATOR_COMMAND_GEMINI);
   }
 
-  // Codex — ~/.codex/skills (matches discoverCodexSkills; same SKILL.md format).
-  // Only populate it if ~/.codex already exists.
-  const codexRoot = join(homedir(), '.codex');
+  // Codex — $CODEX_HOME/skills, defaulting to ~/.codex/skills.
+  // Only populate it if the configured Codex home already exists.
+  const codexRoot = getCodexHomeDir();
   if (existsSync(codexRoot)) {
     writeIfChanged(join(codexRoot, 'skills', 'orchestrator', 'SKILL.md'), ORCHESTRATOR_SKILL_MD);
   }

@@ -9,22 +9,24 @@ export function enableErrorHandlers(app: Fastify) {
         const url = request.url;
         const userAgent = request.headers['user-agent'] || 'unknown';
         const ip = request.ip || 'unknown';
+        const statusCode = error.statusCode || 500;
 
-        // Log the error with comprehensive context
+        // Client errors (4xx) — e.g. request validation failures — are expected and
+        // often high-volume; log them at warn without a stack trace to cut noise.
+        // Only server errors (5xx) are genuine faults worth an error-level stack.
+        const isClientError = statusCode >= 400 && statusCode < 500;
+
         log({
             module: 'fastify-error',
-            level: 'error',
+            level: isClientError ? 'warn' : 'error',
             method,
             url,
             userAgent,
             ip,
-            statusCode: error.statusCode || 500,
+            statusCode,
             errorCode: error.code,
-            stack: error.stack
-        }, `Unhandled error: ${error.message}`);
-
-        // Return appropriate error response
-        const statusCode = error.statusCode || 500;
+            ...(isClientError ? {} : { stack: error.stack }),
+        }, `${isClientError ? 'Client' : 'Unhandled'} error: ${error.message}`);
 
         if (statusCode >= 500) {
             // Internal server errors - don't expose details
@@ -54,14 +56,18 @@ export function enableErrorHandlers(app: Fastify) {
         const method = request.method;
         const url = request.url;
         const duration = (Date.now() - (request.startTime || Date.now())) / 1000;
+        // Prefer error.statusCode: when this hook fires for validation errors the
+        // reply code hasn't been set yet, so reply.statusCode is still the default 200.
+        const statusCode = error.statusCode || reply.statusCode || 500;
+        const isClientError = statusCode >= 400 && statusCode < 500;
 
         log({
             module: 'fastify-hook-error',
-            level: 'error',
+            level: isClientError ? 'warn' : 'error',
             method,
             url,
             duration,
-            statusCode: reply.statusCode || error.statusCode || 500,
+            statusCode,
             errorName: error.name,
             errorCode: error.code
         }, `Request error: ${error.message}`);

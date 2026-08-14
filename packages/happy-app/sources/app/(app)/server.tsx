@@ -10,9 +10,10 @@ import { RoundButton } from '@/components/RoundButton';
 import { Modal } from '@/modal';
 import { layout } from '@/components/layout';
 import { t } from '@/text';
-import { getServerUrl, setServerUrl, validateServerUrl, getServerInfo } from '@/sync/serverConfig';
+import { getCustomServerUrl, resolveServerConfig, setServerUrl, validateServerUrl, getServerInfo } from '@/sync/serverConfig';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { useAuth } from '@/auth/AuthContext';
+import { getDesktopPlatform } from '@/desktop/desktopWindowUtils';
 
 const stylesheet = StyleSheet.create((theme) => ({
     keyboardAvoidingView: {
@@ -81,9 +82,10 @@ export default function ServerConfigScreen() {
     const { theme } = useUnistyles();
     const styles = stylesheet;
     const navigation = useNavigation();
-    const { logout } = useAuth();
+    const { isAuthenticated, logout } = useAuth();
+    const hideUnauthenticatedWindowsHeader = getDesktopPlatform() === 'windows' && !isAuthenticated;
     const serverInfo = getServerInfo();
-    const [inputUrl, setInputUrl] = useState(serverInfo.isCustom ? getServerUrl() : '');
+    const [inputUrl, setInputUrl] = useState(getCustomServerUrl() ?? '');
     const [error, setError] = useState<string | null>(null);
     const [isValidating, setIsValidating] = useState(false);
 
@@ -144,8 +146,10 @@ export default function ServerConfigScreen() {
         );
 
         if (confirmed) {
-            setServerUrl(inputUrl);
-            await logout();
+            await logout(async () => {
+                setServerUrl(inputUrl);
+                await resolveServerConfig();
+            });
             navigation.dispatch(
                 CommonActions.reset({
                     index: 0,
@@ -163,9 +167,11 @@ export default function ServerConfigScreen() {
         );
 
         if (confirmed) {
-            setServerUrl(null);
-            setInputUrl('');
-            await logout();
+            await logout(async () => {
+                setServerUrl(null);
+                await resolveServerConfig();
+                setInputUrl('');
+            });
             navigation.dispatch(
                 CommonActions.reset({
                     index: 0,
@@ -179,7 +185,7 @@ export default function ServerConfigScreen() {
         <>
             <Stack.Screen
                 options={{
-                    headerShown: true,
+                    headerShown: !hideUnauthenticatedWindowsHeader,
                     headerTitle: t('server.serverConfiguration'),
                 }}
             />

@@ -31,6 +31,14 @@ import {
   type ApprovalPolicy,
   type SandboxMode,
   type ThreadTokenUsage,
+  type ReviewStartParams,
+  type ReviewTarget,
+  type ThreadCompactStartParams,
+  type ThreadGoalSetParams,
+  type ThreadGoalGetParams,
+  type ThreadGoalGetResponse,
+  type ThreadGoalClearParams,
+  type ThreadGoalStatus,
 } from './types';
 import type {
   AgentBackend,
@@ -58,7 +66,7 @@ export interface CodexAppServerBackendOptions {
   cwd: string;
   /** Executable command (e.g. 'npx') */
   command: string;
-  /** Arguments for the command (e.g. ['-y', '@openai/codex@0.133.0', 'app-server']) */
+  /** Arguments for the command (e.g. ['-y', '@openai/codex@0.145.0', 'app-server']) */
   args?: string[];
   /** Environment variables passed to the spawned process */
   env?: Record<string, string>;
@@ -113,9 +121,27 @@ const TURN_PROGRESS_NOTIFICATIONS = new Set<string>([
 interface PendingApproval {
   jsonRpcId: number | string;
   callId: string;
+  protocol: 'legacy' | 'v2';
 }
 
 type ApprovalParams = Record<string, unknown>;
+type StructuredDeniedReviewDecision = { denied: { rejection: string } };
+type LegacyApprovalResponseDecision = ReviewDecision | StructuredDeniedReviewDecision;
+
+const STRUCTURED_LEGACY_DENIAL_VERSION = [0, 145, 0] as const;
+
+function supportsStructuredLegacyDenials(userAgent: string): boolean {
+  const match = userAgent.match(/\/(\d+)\.(\d+)\.(\d+)(?:\b|[-+])/);
+  if (!match) return false;
+
+  const version = [Number(match[1]), Number(match[2]), Number(match[3])] as const;
+  for (let i = 0; i < STRUCTURED_LEGACY_DENIAL_VERSION.length; i++) {
+    if (version[i] !== STRUCTURED_LEGACY_DENIAL_VERSION[i]) {
+      return version[i] > STRUCTURED_LEGACY_DENIAL_VERSION[i];
+    }
+  }
+  return true;
+}
 
 // Servers bundled by happy-cli itself — approving the session implies approving these tools.
 // User-added MCPs (HAPPY_EXTRA_MCP_SERVERS) still go through normal approval.
@@ -158,6 +184,7 @@ export class CodexAppServerBackend implements AgentBackend {
   private pendingApprovals = new Map<string, PendingApproval>();
   private feedbackQueue: string[] = [];
   private disposed = false;
+  private structuredLegacyDenials = false;
 
   // Resolvers for waitForResponseComplete()
   private turnCompleteResolve: (() => void) | null = null;
@@ -199,13 +226,14 @@ export class CodexAppServerBackend implements AgentBackend {
     });
 
     // 3. Initialize handshake
-    await this.peer.request<InitializeResponse>(Methods.INITIALIZE, {
+    const initializeResult = await this.peer.request<InitializeResponse>(Methods.INITIALIZE, {
       clientInfo: {
         name: 'happy-codex-backend',
         version: '0.14.0',
       },
       capabilities: { experimentalApi: true },
     } satisfies InitializeParams);
+    this.structuredLegacyDenials = supportsStructuredLegacyDenials(initializeResult.userAgent ?? '');
 
     this.peer.notify(Methods.INITIALIZED);
 
@@ -297,6 +325,56 @@ export class CodexAppServerBackend implements AgentBackend {
     if (idx >= 0) this.listeners.splice(idx, 1);
   }
 
+
+  async compactThread(): Promise<void> {
+    if (!this.threadId) {
+      throw new Error('CodexAppServerBackend: no active thread');
+    }
+    await this.peer.request(Methods.THREAD_COMPACT_START, {
+      threadId: this.threadId,
+    } satisfies ThreadCompactStartParams);
+  }
+
+  async startReview(target: ReviewTarget): Promise<void> {
+    if (!this.threadId) {
+      throw new Error('CodexAppServerBackend: no active thread');
+    }
+    this.resetTurnComplete();
+    await this.peer.request(Methods.REVIEW_START, {
+      threadId: this.threadId,
+      target,
+      delivery: 'inline',
+    } satisfies ReviewStartParams);
+  }
+
+  async getGoal(): Promise<ThreadGoalGetResponse> {
+    if (!this.threadId) {
+      throw new Error('CodexAppServerBackend: no active thread');
+    }
+    return await this.peer.request<ThreadGoalGetResponse>(Methods.THREAD_GOAL_GET, {
+      threadId: this.threadId,
+    } satisfies ThreadGoalGetParams);
+  }
+
+  async setGoal(params: { objective?: string | null; status?: ThreadGoalStatus | null; tokenBudget?: number | null }): Promise<void> {
+    if (!this.threadId) {
+      throw new Error('CodexAppServerBackend: no active thread');
+    }
+    await this.peer.request(Methods.THREAD_GOAL_SET, {
+      threadId: this.threadId,
+      ...params,
+    } satisfies ThreadGoalSetParams);
+  }
+
+  async clearGoal(): Promise<void> {
+    if (!this.threadId) {
+      throw new Error('CodexAppServerBackend: no active thread');
+    }
+    await this.peer.request(Methods.THREAD_GOAL_CLEAR, {
+      threadId: this.threadId,
+    } satisfies ThreadGoalClearParams);
+  }
+
   async respondToPermission(requestId: string, approved: boolean): Promise<void> {
     const pending = this.pendingApprovals.get(requestId);
     if (!pending) {
@@ -306,7 +384,9 @@ export class CodexAppServerBackend implements AgentBackend {
 
     this.pendingApprovals.delete(requestId);
 
-    const decision: ReviewDecision = approved ? 'approved' : 'denied';
+    const decision = pending.protocol === 'v2'
+      ? (approved ? 'accept' : 'decline') satisfies V2ApprovalDecision
+      : this.formatLegacyDecision(approved ? 'approved' : 'denied');
 
     // Send the response back to Codex
     this.peer.respond(pending.jsonRpcId, { decision });
@@ -363,7 +443,10 @@ export class CodexAppServerBackend implements AgentBackend {
 
     // Reject all pending approvals
     for (const [, pending] of this.pendingApprovals) {
-      this.peer.respond(pending.jsonRpcId, { decision: 'abort' as ReviewDecision });
+      const decision = pending.protocol === 'v2'
+        ? 'cancel' satisfies V2ApprovalDecision
+        : 'abort' satisfies ReviewDecision;
+      this.peer.respond(pending.jsonRpcId, { decision });
     }
     this.pendingApprovals.clear();
 
@@ -580,6 +663,18 @@ export class CodexAppServerBackend implements AgentBackend {
       // ── Token usage ──
       case Methods.NOTIFY_THREAD_TOKEN_USAGE:
         this.handleTokenUsage(p.tokenUsage);
+        break;
+
+      case Methods.NOTIFY_THREAD_COMPACTED:
+        this.emit({ type: 'event', name: 'context_compacted', payload: p });
+        break;
+
+      case Methods.NOTIFY_THREAD_GOAL_UPDATED:
+        this.emit({ type: 'event', name: 'goal_updated', payload: p });
+        break;
+
+      case Methods.NOTIFY_THREAD_GOAL_CLEARED:
+        this.emit({ type: 'event', name: 'goal_cleared', payload: p });
         break;
 
       // ── Errors ──
@@ -874,7 +969,9 @@ export class CodexAppServerBackend implements AgentBackend {
     const callId = this.getApprovalCallId(rawParams);
     if (!callId) {
       logger.warn('[CodexBackend] applyPatchApproval missing callId/call_id; denying request');
-      this.peer.respond(jsonRpcId, { decision: 'denied' as ReviewDecision });
+      this.peer.respond(jsonRpcId, {
+        decision: this.formatLegacyDecision('denied', 'Approval request did not include a call ID.'),
+      });
       return;
     }
 
@@ -883,7 +980,7 @@ export class CodexAppServerBackend implements AgentBackend {
 
     if (this.options.permissionHandler) {
       // Store pending approval for respondToPermission()
-      this.pendingApprovals.set(callId, { jsonRpcId, callId });
+      this.pendingApprovals.set(callId, { jsonRpcId, callId, protocol: 'legacy' });
 
       // Delegate to permission handler
       this.options.permissionHandler
@@ -896,7 +993,9 @@ export class CodexAppServerBackend implements AgentBackend {
           if (this.pendingApprovals.has(callId)) {
             this.pendingApprovals.delete(callId);
             const decision = this.mapLegacyDecision(result.decision);
-            this.peer.respond(jsonRpcId, { decision });
+            this.peer.respond(jsonRpcId, {
+              decision: this.formatLegacyDecision(decision, result.reason ?? reason),
+            });
 
             // Queue feedback for denied/abort with reason
             if ((decision === 'denied' || decision === 'abort') && reason) {
@@ -908,7 +1007,9 @@ export class CodexAppServerBackend implements AgentBackend {
           // Permission handler error/cancel - deny
           if (this.pendingApprovals.has(callId)) {
             this.pendingApprovals.delete(callId);
-            this.peer.respond(jsonRpcId, { decision: 'denied' as ReviewDecision });
+            this.peer.respond(jsonRpcId, {
+              decision: this.formatLegacyDecision('denied', 'Permission handler rejected the request.'),
+            });
           }
         });
     } else {
@@ -922,7 +1023,9 @@ export class CodexAppServerBackend implements AgentBackend {
     const callId = this.getApprovalCallId(rawParams);
     if (!callId) {
       logger.warn('[CodexBackend] execCommandApproval missing callId/call_id; denying request');
-      this.peer.respond(jsonRpcId, { decision: 'denied' as ReviewDecision });
+      this.peer.respond(jsonRpcId, {
+        decision: this.formatLegacyDecision('denied', 'Approval request did not include a call ID.'),
+      });
       return;
     }
 
@@ -931,7 +1034,7 @@ export class CodexAppServerBackend implements AgentBackend {
     const cwd = this.getExecCwd(rawParams);
 
     if (this.options.permissionHandler) {
-      this.pendingApprovals.set(callId, { jsonRpcId, callId });
+      this.pendingApprovals.set(callId, { jsonRpcId, callId, protocol: 'legacy' });
 
       this.options.permissionHandler
         .handleToolCall(callId, 'CodexBash', {
@@ -943,7 +1046,9 @@ export class CodexAppServerBackend implements AgentBackend {
           if (this.pendingApprovals.has(callId)) {
             this.pendingApprovals.delete(callId);
             const decision = this.mapLegacyDecision(result.decision);
-            this.peer.respond(jsonRpcId, { decision });
+            this.peer.respond(jsonRpcId, {
+              decision: this.formatLegacyDecision(decision, result.reason ?? reason),
+            });
 
             // Queue feedback for denied/abort with reason
             if ((decision === 'denied' || decision === 'abort') && reason) {
@@ -954,7 +1059,9 @@ export class CodexAppServerBackend implements AgentBackend {
         .catch(() => {
           if (this.pendingApprovals.has(callId)) {
             this.pendingApprovals.delete(callId);
-            this.peer.respond(jsonRpcId, { decision: 'denied' as ReviewDecision });
+            this.peer.respond(jsonRpcId, {
+              decision: this.formatLegacyDecision('denied', 'Permission handler rejected the request.'),
+            });
           }
         });
     } else {
@@ -987,7 +1094,7 @@ export class CodexAppServerBackend implements AgentBackend {
     feedbackReason?: string | null,
   ): void {
     if (this.options.permissionHandler) {
-      this.pendingApprovals.set(callId, { jsonRpcId, callId });
+      this.pendingApprovals.set(callId, { jsonRpcId, callId, protocol: 'v2' });
 
       this.options.permissionHandler
         .handleToolCall(callId, toolName, args)
@@ -1076,6 +1183,21 @@ export class CodexAppServerBackend implements AgentBackend {
       default:
         return 'denied';
     }
+  }
+
+  private formatLegacyDecision(
+    decision: ReviewDecision,
+    rejection?: string | null,
+  ): LegacyApprovalResponseDecision {
+    if (decision !== 'denied' || !this.structuredLegacyDenials) {
+      return decision;
+    }
+
+    return {
+      denied: {
+        rejection: rejection?.trim() || 'User denied the request.',
+      },
+    };
   }
 
   private mapV2Decision(decision: string): V2ApprovalDecision {

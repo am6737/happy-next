@@ -16,10 +16,6 @@ import { findVoiceByType, getVoiceName } from '@/constants/Voices';
 import { t } from '@/text';
 import { Switch } from '@/components/Switch';
 import {
-    getHappyVoiceGatewayUrl,
-    hasCustomHappyVoiceGatewayUrl,
-    getHappyVoicePublicKey,
-    hasCustomHappyVoicePublicKey,
     getActionConfirmation,
     setActionConfirmation,
     getActionConfirmationSpeed,
@@ -33,10 +29,6 @@ function truncate(s: string, maxLen: number): string {
     return s.length > maxLen ? s.slice(0, maxLen) + '...' : s;
 }
 
-function configStatusLabel(value: string | undefined, isCustom: boolean): string {
-    if (isCustom) return t('settingsVoice.usingCustomConfig');
-    return value ? t('settingsVoice.usingDefaultConfig') : t('settingsVoice.notConfigured');
-}
 
 // On web, keep switch taps from bubbling to the row's onPress (which opens the speed picker).
 const stopPropagation = (e: { stopPropagation: () => void }) => e.stopPropagation();
@@ -56,8 +48,6 @@ export default function VoiceSettingsScreen() {
     const [speechRateLocal, setSpeechRateLocal] = useState(speechRate);
 
     // Local state that refreshes when returning from sub-pages
-    const [gatewayUrl, setGatewayUrl] = useState(() => getHappyVoiceGatewayUrl());
-    const [publicKey, setPublicKey] = useState(() => getHappyVoicePublicKey());
     const [sendConfirmationEnabled, setSendConfirmationEnabled] = useState(() => getActionConfirmation());
     const [confirmationSpeed, setConfirmationSpeed] = useState<ActionConfirmationSpeed>(() => getActionConfirmationSpeed());
     const [speedMenuVisible, setSpeedMenuVisible] = useState(false);
@@ -65,8 +55,6 @@ export default function VoiceSettingsScreen() {
 
     useFocusEffect(
         useCallback(() => {
-            setGatewayUrl(getHappyVoiceGatewayUrl());
-            setPublicKey(getHappyVoicePublicKey());
             setSendConfirmationEnabled(getActionConfirmation());
             setConfirmationSpeed(getActionConfirmationSpeed());
             setWelcomeMessageState(getWelcomeMessage());
@@ -99,27 +87,6 @@ export default function VoiceSettingsScreen() {
 
     return (
         <ItemList style={{ paddingTop: 0 }}>
-            {/* Happy Voice Configuration */}
-            <ItemGroup
-                title={t('settingsVoice.happyVoiceTitle')}
-                footer={t('settingsVoice.happyVoiceDescription')}
-            >
-                <Item
-                    title={t('settingsVoice.gatewayUrl')}
-                    icon={<Ionicons name="link-outline" size={29} color="#5856D6" />}
-                    detail={gatewayUrl ? truncate(gatewayUrl, 25) : t('settingsVoice.notConfigured')}
-                    subtitle={configStatusLabel(gatewayUrl, hasCustomHappyVoiceGatewayUrl())}
-                    onPress={() => router.push('/settings/voice/happy-voice')}
-                />
-                <Item
-                    title={t('settingsVoice.publicKey')}
-                    icon={<Ionicons name="shield-outline" size={29} color="#FF2D55" />}
-                    detail={publicKey ? '********' : t('settingsVoice.notConfigured')}
-                    subtitle={configStatusLabel(publicKey, hasCustomHappyVoicePublicKey())}
-                    onPress={() => router.push('/settings/voice/happy-voice')}
-                />
-            </ItemGroup>
-
             {/* Welcome Message */}
             <ItemGroup
                 title={t('settingsVoice.welcomeMessageTitle')}

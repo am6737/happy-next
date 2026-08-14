@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, Platform, Pressable, useWindowDimensions, ScrollView, TextInput } from 'react-native';
 import Constants from 'expo-constants';
 import { Typography } from '@/constants/Typography';
-import { useAllMachines, storage, useSessionModeLastUsed, useSetting, useSettingMutable, useSessions } from '@/sync/storage';
+import { useAllMachines, storage, useLocalSetting, useSessionModeLastUsed, useSetting, useSettingMutable, useSessions } from '@/sync/storage';
 import { Ionicons, Octicons } from '@expo/vector-icons';
 import { ItemGroup } from '@/components/ItemGroup';
 import { Item } from '@/components/Item';
@@ -43,6 +43,7 @@ import { StatusDot } from '@/components/StatusDot';
 import { SearchableListSelector, SelectorConfig } from '@/components/SearchableListSelector';
 import { clearNewSessionDraft, loadNewSessionDraft, saveNewSessionDraft } from '@/sync/persistence';
 import { useImagePicker } from '@/hooks/useImagePicker';
+import { useWebImageDrop } from '@/hooks/useWebImageDrop';
 import { ActionMenuModal } from '@/components/ActionMenuModal';
 import type { ActionMenuItem } from '@/components/ActionMenu';
 import { MODEL_MODE_DEFAULT, isModelModeForAgent } from 'happy-wire';
@@ -50,6 +51,7 @@ import { FolderPickerSheet } from '@/components/FolderPickerSheet';
 import { BottomSheetModal } from '@gorhom/bottom-sheet';
 import { handleImagePasteEvent } from '@/utils/imagePaste';
 import { getDooTaskProjectId, getRecentDooTaskProjectConfig } from '@/utils/dootaskSessionDefaults';
+import { openExternalUrl } from '@/utils/tauri';
 
 // Simple temporary state for passing selections back from picker screens
 let onMachineSelected: (machineId: string) => void = () => { };
@@ -78,6 +80,11 @@ const transformProfileToEnvironmentVars = (profile: AIBackendProfile, agentType:
     // getProfileEnvironmentVariables already returns ALL env vars from profile
     // including custom environmentVariables array and provider-specific configs
     return getProfileEnvironmentVariables(profile);
+};
+
+
+const isConcreteSessionMachineTab = (tab: string | null): tab is string => {
+    return !!tab && tab !== 'all' && tab !== 'shared' && tab !== 'sharedByMe';
 };
 
 // Helper function to get the most recent path for a machine
@@ -297,6 +304,7 @@ function NewSessionWizard() {
     // Settings and state
     const recentMachinePaths = useSetting('recentMachinePaths');
     const lastUsedAgent = useSetting('lastUsedAgent');
+    const sessionListSelectedTab = useLocalSetting('sessionListSelectedTab');
 
     // A/B Test Flag - determines which wizard UI to show
     // Control A (false): Simpler AgentInput-driven layout
@@ -405,6 +413,8 @@ function NewSessionWizard() {
     }, [agentType]);
 
     // Session details state
+    const tabDefaultSelectionRef = React.useRef(false);
+    const hasManualMachineOrPathSelectionRef = React.useRef(false);
     const [selectedMachineId, setSelectedMachineId] = React.useState<string | null>(() => {
         if (tempSessionData?.machineId && machines.find(m => m.id === tempSessionData.machineId)) {
             return tempSessionData.machineId;
@@ -415,7 +425,12 @@ function NewSessionWizard() {
         if (dooTaskProjectRecentConfig?.machineId) {
             return dooTaskProjectRecentConfig.machineId;
         }
-        // First try the persisted draft (saved immediately on selection)
+        // When launching from the session list, prefer the currently selected concrete machine tab.
+        if (!tempSessionData && isConcreteSessionMachineTab(sessionListSelectedTab) && machines.find(m => m.id === sessionListSelectedTab)) {
+            tabDefaultSelectionRef.current = true;
+            return sessionListSelectedTab;
+        }
+        // Then try the persisted draft (saved immediately on selection).
         if (!tempSessionData && persistedDraft?.selectedMachineId && machines.find(m => m.id === persistedDraft.selectedMachineId)) {
             return persistedDraft.selectedMachineId;
         }
@@ -482,7 +497,12 @@ function NewSessionWizard() {
         if (dooTaskProjectRecentConfig?.path) {
             return dooTaskProjectRecentConfig.path;
         }
-        // First try the persisted draft (saved immediately on selection)
+        // If the machine comes from the selected session-list tab, mirror manual machine selection:
+        // switch the path to that machine's most recent path instead of keeping a stale draft path.
+        if (!tempSessionData && isConcreteSessionMachineTab(sessionListSelectedTab) && machines.some(m => m.id === sessionListSelectedTab)) {
+            return getRecentPathForMachine(sessionListSelectedTab, recentMachinePaths);
+        }
+        // Then try the persisted draft (saved immediately on selection)
         if (!tempSessionData && persistedDraft?.selectedPath) {
             return persistedDraft.selectedPath;
         }
@@ -498,7 +518,10 @@ function NewSessionWizard() {
     React.useEffect(() => {
         if (selectedMachineId !== null || machines.length === 0) return;
         let pick: string | null = null;
-        if (persistedDraft?.selectedMachineId && machines.some(m => m.id === persistedDraft.selectedMachineId)) {
+        if (isConcreteSessionMachineTab(sessionListSelectedTab) && machines.some(m => m.id === sessionListSelectedTab)) {
+            pick = sessionListSelectedTab;
+            tabDefaultSelectionRef.current = true;
+        } else if (persistedDraft?.selectedMachineId && machines.some(m => m.id === persistedDraft.selectedMachineId)) {
             pick = persistedDraft.selectedMachineId;
         } else {
             for (const recent of recentMachinePaths) {
@@ -510,10 +533,11 @@ function NewSessionWizard() {
             if (!pick) pick = machines[0].id;
         }
         setSelectedMachineId(pick);
-        if (!selectedPath) {
+        const shouldMirrorTabMachinePath = pick === sessionListSelectedTab && isConcreteSessionMachineTab(sessionListSelectedTab);
+        if (!selectedPath || shouldMirrorTabMachinePath) {
             setSelectedPath(getRecentPathForMachine(pick, recentMachinePaths));
         }
-    }, [machines, selectedMachineId, selectedPath, recentMachinePaths, persistedDraft]);
+    }, [machines, selectedMachineId, selectedPath, recentMachinePaths, persistedDraft, sessionListSelectedTab]);
 
     React.useEffect(() => {
         if (!tempSessionData || tempSessionData.externalContext?.source !== 'dootask') return;
@@ -539,7 +563,7 @@ function NewSessionWizard() {
         images,
         pickFromGallery,
         pickFromCamera,
-        addImageFromUri,
+        addImagesFromFiles,
         removeImage,
         clearImages,
         initImages,
@@ -575,26 +599,18 @@ function NewSessionWizard() {
     const handleFileInputChange = React.useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
         const files = event.target.files;
         if (!files || files.length === 0) return;
-        Array.from(files).forEach(file => {
-            if (file.type.startsWith('image/')) {
-                const url = URL.createObjectURL(file);
-                addImageFromUri(url, file.type);
-            }
-        });
+        void addImagesFromFiles(Array.from(files));
         event.target.value = '';
-    }, [addImageFromUri]);
+    }, [addImagesFromFiles]);
 
     const handlePaste = React.useCallback(async (event: ClipboardEvent) => {
         await handleImagePasteEvent(event, {
             isScreenFocused: isFocused,
             canAddMore,
             supportsImages,
-            onImageFile: async (file, mimeType) => {
-                const url = URL.createObjectURL(file);
-                await addImageFromUri(url, mimeType);
-            },
+            onImageFile: async (file) => addImagesFromFiles([file]),
         });
-    }, [isFocused, canAddMore, supportsImages, addImageFromUri]);
+    }, [isFocused, canAddMore, supportsImages, addImagesFromFiles]);
 
     // Add paste event listener for images (web only)
     React.useEffect(() => {
@@ -609,14 +625,13 @@ function NewSessionWizard() {
     }, [handlePaste]);
 
     const handleImageDrop = React.useCallback(async (files: File[]) => {
-        if (!canAddMore || !supportsImages) return;
-        for (const file of files) {
-            if (file.type.startsWith('image/') && canAddMore) {
-                const url = URL.createObjectURL(file);
-                await addImageFromUri(url, file.type);
-            }
-        }
-    }, [canAddMore, supportsImages, addImageFromUri]);
+        if (!supportsImages) return;
+        await addImagesFromFiles(files);
+    }, [supportsImages, addImagesFromFiles]);
+    const { dropZoneRef, isDragging: isDraggingImage } = useWebImageDrop({
+        enabled: isFocused && supportsImages,
+        onImageDrop: handleImageDrop,
+    });
 
     // Handle machineId route param from picker screens (main's navigation pattern)
     React.useEffect(() => {
@@ -627,6 +642,8 @@ function NewSessionWizard() {
             return;
         }
         if (machineIdParam !== selectedMachineId) {
+            hasManualMachineOrPathSelectionRef.current = true;
+            tabDefaultSelectionRef.current = false;
             setSelectedMachineId(machineIdParam);
             const bestPath = getRecentPathForMachine(machineIdParam, recentMachinePaths);
             setSelectedPath(bestPath);
@@ -640,6 +657,8 @@ function NewSessionWizard() {
         }
         const trimmedPath = pathParam.trim();
         if (trimmedPath && trimmedPath !== selectedPath) {
+            hasManualMachineOrPathSelectionRef.current = true;
+            tabDefaultSelectionRef.current = false;
             setSelectedPath(trimmedPath);
         }
     }, [pathParam, selectedPath]);
@@ -823,7 +842,9 @@ function NewSessionWizard() {
         if (!selectedMachineId) return;
         const gitCheck = await machineBash(selectedMachineId, 'git rev-parse --git-dir', selectedPath);
         if (!gitCheck.success) {
-            Modal.alert(t('common.error'), t('newSession.worktree.notGitRepo'));
+            const stderr = gitCheck.stderr?.trim() || '';
+            const isNotRepo = !stderr || stderr.includes('not a git repository');
+            Modal.alert(t('common.error'), isNotRepo ? t('newSession.worktree.notGitRepo') : stderr);
             return;
         }
         const displayName = selectedPath.split('/').filter(Boolean).pop() || 'repo';
@@ -1531,10 +1552,11 @@ function NewSessionWizard() {
             clearTimeout(draftSaveTimerRef.current);
         }
         draftSaveTimerRef.current = setTimeout(() => {
+            const shouldKeepTabDefaultOutOfDraft = tabDefaultSelectionRef.current && !hasManualMachineOrPathSelectionRef.current;
             saveNewSessionDraft({
                 input: sessionPrompt,
-                selectedMachineId,
-                selectedPath,
+                selectedMachineId: shouldKeepTabDefaultOutOfDraft ? (persistedDraft?.selectedMachineId ?? null) : selectedMachineId,
+                selectedPath: shouldKeepTabDefaultOutOfDraft ? (persistedDraft?.selectedPath ?? null) : selectedPath,
                 agentType,
                 permissionMode,
                 sessionType,
@@ -1584,13 +1606,37 @@ function NewSessionWizard() {
         </View>
     ) : null;
 
+    const imageDropOverlay = isDraggingImage ? (
+        <View
+            pointerEvents="none"
+            style={{
+                position: 'absolute',
+                top: 8,
+                left: 8,
+                right: 8,
+                bottom: 8,
+                zIndex: 997,
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderWidth: 2,
+                borderStyle: 'dashed',
+                borderColor: '#007AFF',
+                borderRadius: 8,
+                backgroundColor: theme.dark ? 'rgba(0, 122, 255, 0.14)' : 'rgba(0, 122, 255, 0.08)',
+            }}
+        >
+            <Ionicons name="images-outline" size={42} color="#007AFF" />
+        </View>
+    ) : null;
+
     // ========================================================================
     // CONTROL A: Simpler AgentInput-driven layout (flag OFF)
     // Shows machine/path selection via chips that navigate to picker screens
     // ========================================================================
     if (!useEnhancedSessionWizard) {
         return (
-            <View style={[styles.container, Platform.OS !== 'web' && { paddingTop: 40 }]}>
+            <View ref={dropZoneRef} style={[styles.container, { position: 'relative' }, Platform.OS !== 'web' && { paddingTop: 40 }]}>
+                {imageDropOverlay}
                 <View style={{ flex: 1, justifyContent: 'flex-end' }}>
                     <Animated.View style={animatedInputStyle}>
                     {/* External context banner */}
@@ -1627,7 +1673,7 @@ function NewSessionWizard() {
                     )}
 
                     {/* AgentInput with inline chips - sticky at bottom */}
-                    <View style={{ paddingHorizontal: screenWidth > 700 ? 16 : 8, paddingBottom: safeArea.bottom }}>
+                    <View style={{ paddingHorizontal: screenWidth > 700 ? 16 : 8, paddingBottom: safeArea.bottom + (Platform.OS === 'web' ? 8 : 0) }}>
                         <View style={{ maxWidth: layout.maxWidth, width: '100%', alignSelf: 'center' }}>
                             <AgentInput
                                 value={sessionPrompt}
@@ -1663,7 +1709,6 @@ function NewSessionWizard() {
                                 }}
                                 onImageButtonPress={handleImageButtonPress}
                                 supportsImages={supportsImages}
-                                onImageDrop={handleImageDrop}
                             />
                         </View>
                     </View>
@@ -1720,7 +1765,8 @@ function NewSessionWizard() {
     // Full wizard with numbered sections, profile management, CLI detection
     // ========================================================================
     return (
-        <View style={styles.container}>
+        <View ref={dropZoneRef} style={[styles.container, { position: 'relative' }]}>
+            {imageDropOverlay}
             <Animated.View style={[{ flex: 1 }, animatedInputStyle]}>
                 <ScrollView
                     ref={scrollViewRef}
@@ -1839,11 +1885,7 @@ function NewSessionWizard() {
                                         <Text style={{ fontSize: 11, color: theme.colors.textSecondary, ...Typography.default() }}>
                                             {t('wizard.installClaude')} •
                                         </Text>
-                                        <Pressable onPress={() => {
-                                            if (Platform.OS === 'web') {
-                                                window.open('https://docs.anthropic.com/en/docs/claude-code/installation', '_blank');
-                                            }
-                                        }}>
+                                        <Pressable onPress={() => openExternalUrl('https://docs.anthropic.com/en/docs/claude-code/installation')}>
                                             <Text style={{ fontSize: 11, color: theme.colors.textLink, ...Typography.default() }}>
                                                 {t('wizard.viewInstallGuide')}
                                             </Text>
@@ -1911,11 +1953,7 @@ function NewSessionWizard() {
                                         <Text style={{ fontSize: 11, color: theme.colors.textSecondary, ...Typography.default() }}>
                                             {t('wizard.installCodex')} •
                                         </Text>
-                                        <Pressable onPress={() => {
-                                            if (Platform.OS === 'web') {
-                                                window.open('https://github.com/openai/openai-codex', '_blank');
-                                            }
-                                        }}>
+                                        <Pressable onPress={() => openExternalUrl('https://github.com/openai/openai-codex')}>
                                             <Text style={{ fontSize: 11, color: theme.colors.textLink, ...Typography.default() }}>
                                                 {t('wizard.viewInstallGuide')}
                                             </Text>
@@ -1983,11 +2021,7 @@ function NewSessionWizard() {
                                         <Text style={{ fontSize: 11, color: theme.colors.textSecondary, ...Typography.default() }}>
                                             {t('wizard.installGemini')} •
                                         </Text>
-                                        <Pressable onPress={() => {
-                                            if (Platform.OS === 'web') {
-                                                window.open('https://ai.google.dev/gemini-api/docs/get-started', '_blank');
-                                            }
-                                        }}>
+                                        <Pressable onPress={() => openExternalUrl('https://ai.google.dev/gemini-api/docs/get-started')}>
                                             <Text style={{ fontSize: 11, color: theme.colors.textLink, ...Typography.default() }}>
                                                 {t('wizard.viewGeminiDocs')}
                                             </Text>
@@ -2404,7 +2438,7 @@ function NewSessionWizard() {
                 </ScrollView>
 
                 {/* Section 5: AgentInput - Sticky at bottom */}
-                <View style={{ paddingHorizontal: screenWidth > 700 ? 16 : 8, paddingBottom: safeArea.bottom }}>
+                <View style={{ paddingHorizontal: screenWidth > 700 ? 16 : 8, paddingBottom: safeArea.bottom + (Platform.OS === 'web' ? 8 : 0) }}>
                     <View style={{ maxWidth: layout.maxWidth, width: '100%', alignSelf: 'center' }}>
                         <AgentInput
                             value={sessionPrompt}
@@ -2442,7 +2476,6 @@ function NewSessionWizard() {
                             }}
                             onImageButtonPress={handleImageButtonPress}
                             supportsImages={supportsImages}
-                            onImageDrop={handleImageDrop}
                         />
                     </View>
                 </View>

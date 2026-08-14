@@ -86,6 +86,24 @@ describe('listClaudeSessionsFromIndex', () => {
         expect(cache.lastRun.extra.indexFilesRead).toBe(1);
     });
 
+    it('keeps user messages on both sides of a compaction summary available for fork resolution', async () => {
+        const projectId = 'project-compacted';
+        const projectDir = join(claudeConfigDir, 'projects', projectId);
+        mkdirSync(projectDir, { recursive: true });
+        const lines = [
+            { type: 'user', uuid: 'before', timestamp: '2026-03-10T10:00:00.000Z', message: { role: 'user', content: [{ type: 'text', text: 'before compact' }] } },
+            { type: 'assistant', uuid: 'answer', timestamp: '2026-03-10T10:01:00.000Z', message: { role: 'assistant', content: [{ type: 'text', text: 'answer' }] } },
+            { type: 'summary', leafUuid: 'answer', summary: 'compacted context' },
+            { type: 'user', uuid: 'after', timestamp: '2026-03-10T10:02:00.000Z', message: { role: 'user', content: [{ type: 'text', text: 'after compact' }] } },
+        ];
+        writeFileSync(join(projectDir, 'session-compacted.jsonl'), lines.map((line) => JSON.stringify(line)).join('\n') + '\n');
+
+        vi.resetModules();
+        const { readAllClaudeSessionUserMessages } = await import('./claudeSessionIndex');
+        const messages = await readAllClaudeSessionUserMessages(projectId, 'session-compacted');
+        expect(messages.map((message) => message.uuid)).toEqual(['before', 'after']);
+    });
+
     it('falls back to first meaningful user message when no summary exists', async () => {
         const projectId = 'project-fallback';
         const projectDir = join(claudeConfigDir, 'projects', projectId);

@@ -13,6 +13,9 @@ import {
     messageHappyCodeParametersSchema,
     processPermissionRequestParametersSchema,
     switchSessionParametersSchema,
+    getVoicePermissionModesForAgent,
+    isVoicePermissionModeForAgent,
+    resolveVoicePermissionAgent,
 } from './voiceToolContracts';
 import { getActionConfirmation } from '@/sync/voiceConfig';
 import { showSendConfirmation, showCreateConfirmation, showDeleteConfirmation } from './ActionConfirmationModal';
@@ -347,11 +350,13 @@ export const realtimeClientTools = {
         }
 
         try {
-            const validModes = ['default', 'acceptEdits', 'auto', 'bypassPermissions', 'plan', 'read-only', 'on-failure', 'full-auto', 'auto_edit', 'yolo'] as const;
-            if (!validModes.includes(mode as any)) {
-                return `error (invalid permission mode. Valid modes: ${validModes.join(', ')})`;
+            const session = getSession(sessionId);
+            const agent = resolveVoicePermissionAgent(session?.metadata?.flavor);
+            const validModes = getVoicePermissionModesForAgent(agent);
+            if (!isVoicePermissionModeForAgent(agent, mode)) {
+                return `error (invalid permission mode for ${agent}. Valid modes: ${validModes.join(', ')})`;
             }
-            storage.getState().updateSessionPermissionMode(sessionId, mode as typeof validModes[number]);
+            storage.getState().updateSessionPermissionMode(sessionId, mode);
             return `Permission mode changed to "${mode}".`;
         } catch (error) {
             console.error('❌ Failed to change permission mode:', error);

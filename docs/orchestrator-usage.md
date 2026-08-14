@@ -21,7 +21,6 @@ monorepo 里改了共享类型，想同时跑多个包的测试。
 ```json
 {
   "title": "全包测试",
-  "mode": "blocking",
   "tasks": [
     {
       "taskKey": "test-server",
@@ -56,7 +55,6 @@ monorepo 里改了共享类型，想同时跑多个包的测试。
 ```json
 {
   "title": "多视角审查 orchestratorRoutes.ts",
-  "mode": "blocking",
   "tasks": [
     {
       "taskKey": "security",
@@ -88,7 +86,6 @@ monorepo 里改了共享类型，想同时跑多个包的测试。
 ```json
 {
   "title": "新增用户导出功能",
-  "mode": "blocking",
   "tasks": [
     {
       "taskKey": "design",
@@ -128,7 +125,6 @@ monorepo 里改了共享类型，想同时跑多个包的测试。
 ```json
 {
   "title": "数据库迁移",
-  "mode": "blocking",
   "tasks": [
     {
       "taskKey": "backup",
@@ -164,7 +160,6 @@ monorepo 里改了共享类型，想同时跑多个包的测试。
 ```json
 {
   "title": "批量升级认证 header",
-  "mode": "blocking",
   "tasks": [
     {
       "taskKey": "repo-server",
@@ -199,7 +194,6 @@ monorepo 里改了共享类型，想同时跑多个包的测试。
 ```json
 {
   "title": "WebSocket 方案选型与实施",
-  "mode": "blocking",
   "tasks": [
     {
       "taskKey": "research-socketio",
@@ -232,7 +226,6 @@ monorepo 里改了共享类型，想同时跑多个包的测试。
 ```json
 {
   "title": "批量生成 API 文档",
-  "mode": "blocking",
   "maxConcurrency": 3,
   "tasks": [
     {

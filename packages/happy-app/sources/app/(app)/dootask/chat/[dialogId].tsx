@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { View, Text, Pressable, useWindowDimensions, Platform } from 'react-native';
+import { ActivityIndicator, View, Text, Pressable, useWindowDimensions, Platform } from 'react-native';
 import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { t } from '@/text';
@@ -671,7 +671,7 @@ export default React.memo(function DooTaskChat() {
     const effectiveUserAvatars = isMock ? { ...userAvatars, ...MOCK_USER_AVATARS } : userAvatars;
     const effectiveUserDisabledAt = isMock ? {} : userDisabledAt;
 
-    const content = !(error && messages.length === 0) ? (
+    const content = displayMessages.length > 0 ? (
         <ChatMessageList
             messages={displayMessages}
             currentUserId={profile?.userId || 0}
@@ -679,7 +679,6 @@ export default React.memo(function DooTaskChat() {
             userAvatars={effectiveUserAvatars}
             userDisabledAt={effectiveUserDisabledAt}
             onLoadMore={handleLoadMore}
-            loading={loading}
             loadingMore={loadingMore}
             hasMore={hasMore}
             onMessageLongPress={handleMessageLongPress}
@@ -690,9 +689,17 @@ export default React.memo(function DooTaskChat() {
         />
     ) : null;
 
-    const placeholder = error && messages.length === 0 ? (
+    const placeholder = displayMessages.length === 0 ? (
         <View style={styles.center}>
-            <Text style={{ color: theme.colors.textDestructive }}>{error}</Text>
+            {loading ? (
+                <ActivityIndicator size="small" color={theme.colors.textSecondary} />
+            ) : error ? (
+                <Text style={{ color: theme.colors.textDestructive }}>{error}</Text>
+            ) : (
+                <Text style={{ color: theme.colors.textSecondary }}>
+                    {t('dootask.chatEmpty')}
+                </Text>
+            )}
         </View>
     ) : null;
 

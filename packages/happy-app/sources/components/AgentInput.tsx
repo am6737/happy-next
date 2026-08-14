@@ -1,6 +1,6 @@
 import { Ionicons, Octicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as React from 'react';
-import { View, Platform, useWindowDimensions, ViewStyle, Text, ActivityIndicator, TouchableWithoutFeedback, Image as RNImage, Pressable, Keyboard } from 'react-native';
+import { View, Platform, useWindowDimensions, ViewStyle, Text, ActivityIndicator, TouchableWithoutFeedback, Image as RNImage, Pressable, Keyboard, Modal as RNModal } from 'react-native';
 import { Image } from 'expo-image';
 import { layout } from './layout';
 import { MultiTextInput, KeyPressEvent } from './MultiTextInput';
@@ -28,10 +28,15 @@ import { getBuiltInProfile } from '@/sync/profileUtils';
 import { ImagePreview, LocalImage } from '@/components/ImagePreview';
 import { Switch } from '@/components/Switch';
 import { Modal } from '@/modal';
+import { useWebImageDrop } from '@/hooks/useWebImageDrop';
 import {
     buildClaudeModelMode,
     buildCodexModelMode,
     CLAUDE_MODEL_FAMILY_OPTIONS,
+    claudeAlways1M,
+    claudeBaseFamily,
+    claudeFamilyWith1M,
+    claudeHas1MOptIn,
     ClaudeModelFamily,
     ClaudeReasoningEffort,
     CODEX_MODEL_FAMILY_OPTIONS,
@@ -203,6 +208,24 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
         backgroundColor: theme.colors.divider,
         marginHorizontal: 16,
     },
+    overlayColumnDivider: {
+        width: 1,
+        backgroundColor: theme.colors.divider,
+        marginVertical: 8,
+    },
+    fastModeRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+    },
+    fastModeLabel: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: theme.colors.textSecondary,
+        ...Typography.default('semiBold'),
+    },
 
     // Selection styles
     selectionItem: {
@@ -348,17 +371,40 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
     },
 }));
 
+const formatCompactTokenCount = (value: number) => {
+    if (value >= 1000) {
+        return `${Math.round(value / 1000)}k`;
+    }
+    return value.toLocaleString();
+};
+
+const CONTEXT_DETAILS_TOOLTIP_WIDTH = 160;
+const CONTEXT_DETAILS_TOOLTIP_HEIGHT = 76;
+const CONTEXT_DETAILS_TOOLTIP_GAP = 20;
+const CONTEXT_DETAILS_SCREEN_MARGIN = 8;
+
 const getContextWarning = (contextSize: number, maxContextSize: number, alwaysShow: boolean = false, theme: Theme) => {
+    if (!maxContextSize || maxContextSize <= 0) {
+        return null;
+    }
     const percentageUsed = (contextSize / maxContextSize) * 100;
     const percentageRemaining = Math.max(0, Math.min(100, 100 - percentageUsed));
+    const roundedUsed = Math.max(0, Math.min(100, Math.round(percentageUsed)));
+    const roundedRemaining = Math.round(percentageRemaining);
+    const details = t('agentInput.context.details', {
+        usedPercent: roundedUsed,
+        remainingPercent: roundedRemaining,
+        usedTokens: formatCompactTokenCount(contextSize),
+        totalTokens: formatCompactTokenCount(maxContextSize),
+    });
 
     if (percentageRemaining <= 10) {
-        return { text: t('agentInput.context.remaining', { percent: Math.round(percentageRemaining) }), color: theme.colors.warningCritical };
+        return { text: t('agentInput.context.remaining', { percent: roundedRemaining }), color: theme.colors.warningCritical, details };
     } else if (percentageRemaining <= 30) {
-        return { text: t('agentInput.context.remaining', { percent: Math.round(percentageRemaining) }), color: theme.colors.warning };
+        return { text: t('agentInput.context.remaining', { percent: roundedRemaining }), color: theme.colors.warning, details };
     } else if (alwaysShow) {
         // Show context remaining in neutral color when not near limit
-        return { text: t('agentInput.context.remaining', { percent: Math.round(percentageRemaining) }), color: theme.colors.warning };
+        return { text: t('agentInput.context.remaining', { percent: roundedRemaining }), color: theme.colors.warning, details };
     }
     return null; // No display needed
 };
@@ -394,7 +440,9 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
             </Pressable>
         );
     });
-    const screenWidth = useWindowDimensions().width;
+    const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+    // Wide layout: show the reasoning-effort column beside the model list instead of below it.
+    const isWideModelLayout = screenWidth > 700;
 
     // Check if this is a Codex or Gemini session
     // Use metadata.flavor for existing sessions, agentType prop for new sessions
@@ -446,7 +494,15 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
     }, [codexSelection.family]);
     const handleCodexFamilyChange = React.useCallback((family: CodexModelFamily) => {
         if (!props.onModelModeChange) return;
-        props.onModelModeChange(buildCodexModelMode(family, codexSelection.effort || 'medium'));
+        if (family === MODEL_MODE_DEFAULT) {
+            props.onModelModeChange(MODEL_MODE_DEFAULT);
+            return;
+        }
+        // Clamp the carried-over effort to what the new family supports (e.g. switching
+        // from a Sol `ultra` selection to a family that only goes up to `xhigh`).
+        const validOptions = getCodexReasoningOptions(family);
+        const effort = codexSelection.effort && validOptions.includes(codexSelection.effort) ? codexSelection.effort : validOptions[0];
+        props.onModelModeChange(buildCodexModelMode(family, effort));
     }, [codexSelection.effort, props.onModelModeChange]);
     const handleCodexReasoningChange = React.useCallback((effort: CodexReasoningEffort) => {
         if (!props.onModelModeChange || codexSelection.family === MODEL_MODE_DEFAULT) return;
@@ -455,6 +511,11 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
     const claudeSelection = React.useMemo<{ family: ClaudeModelFamily; effort: ClaudeReasoningEffort | null }>(() => {
         return parseClaudeModelMode(selectedModelMode);
     }, [selectedModelMode]);
+    // The wire family may carry the [1m] suffix; the UI splits it into base family + 1M toggle.
+    const claudeBase = claudeBaseFamily(claudeSelection.family);
+    const claudeIs1M = claudeSelection.family.includes('[1m]');
+    const claudeShow1MToggle = claudeBase !== MODEL_MODE_DEFAULT && claudeHas1MOptIn(claudeBase);
+    const claudeShow1MBadge = claudeAlways1M(claudeBase);
     const claudeFamilyOptions = CLAUDE_MODEL_FAMILY_OPTIONS;
     const claudeReasoningOptions = React.useMemo<Array<{ value: ClaudeReasoningEffort; label: string }>>(() => {
         const options = getClaudeReasoningOptions(claudeSelection.family);
@@ -469,14 +530,28 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
             props.onModelModeChange(MODEL_MODE_DEFAULT);
             return;
         }
-        const validOptions = getClaudeReasoningOptions(family);
-        const effort = claudeSelection.effort && validOptions.includes(claudeSelection.effort) ? claudeSelection.effort : validOptions[0];
-        props.onModelModeChange(buildClaudeModelMode(family, effort));
-    }, [claudeSelection.effort, props.onModelModeChange]);
+        // 1M defaults to ON; only an explicit OFF on a toggle-capable family carries over.
+        const carry1M = claudeHas1MOptIn(claudeBase) ? claudeIs1M : true;
+        const target = claudeFamilyWith1M(family, carry1M);
+        const validOptions = getClaudeReasoningOptions(target);
+        // Default to High (not the list's top-of-order Max) when nothing compatible carries over.
+        const fallbackEffort = validOptions.includes('high') ? 'high' : validOptions[0];
+        const effort = claudeSelection.effort && validOptions.includes(claudeSelection.effort) ? claudeSelection.effort : fallbackEffort;
+        props.onModelModeChange(buildClaudeModelMode(target, effort));
+    }, [claudeSelection.effort, claudeBase, claudeIs1M, props.onModelModeChange]);
+    const handleClaude1MToggle = React.useCallback((enable1M: boolean) => {
+        if (!props.onModelModeChange || claudeSelection.family === MODEL_MODE_DEFAULT) return;
+        const target = claudeFamilyWith1M(claudeSelection.family, enable1M);
+        const validOptions = getClaudeReasoningOptions(target);
+        const fallbackEffort = validOptions.includes('high') ? 'high' : validOptions[0];
+        const effort = claudeSelection.effort && validOptions.includes(claudeSelection.effort) ? claudeSelection.effort : fallbackEffort;
+        props.onModelModeChange(buildClaudeModelMode(target, effort));
+    }, [claudeSelection, props.onModelModeChange]);
     const handleClaudeReasoningChange = React.useCallback((effort: ClaudeReasoningEffort) => {
         if (!props.onModelModeChange || claudeSelection.family === MODEL_MODE_DEFAULT) return;
-        props.onModelModeChange(buildClaudeModelMode(claudeSelection.family, effort));
-    }, [claudeSelection.family, props.onModelModeChange]);
+        // Canonicalize: always-1M families drop the redundant [1m] suffix.
+        props.onModelModeChange(buildClaudeModelMode(claudeFamilyWith1M(claudeSelection.family, claudeIs1M), effort));
+    }, [claudeSelection.family, claudeIs1M, props.onModelModeChange]);
     const modelOptions = React.useMemo<Array<{ value: ModelMode; label: string; shortLabel: string; description: string }>>(() => {
         if (isGemini) return [...GEMINI_MODEL_OPTIONS];
         return [{ value: MODEL_MODE_DEFAULT, label: 'Use CLI configured model', shortLabel: 'CLI', description: 'Use profile/CLI defaults' }];
@@ -487,9 +562,8 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
             return (codexFamilyOptions.find(o => o.value === codexSelection.family)?.shortLabel ?? '') + (codexSelection.family !== 'default' ? ` (${codexReasoningOptions.find(o => o.value === codexSelection.effort)?.label ?? codexSelection.effort})` : '');
         }
         if (isClaude && claudeSelection.family !== 'default') {
-            const base = claudeFamilyOptions.find(o => o.value === claudeSelection.family)?.shortLabel ?? '';
-            const is1m = typeof claudeSelection.family === 'string' && claudeSelection.family.includes('[1m]');
-            const parts = [is1m ? '1M' : '', claudeReasoningOptions.find(o => o.value === claudeSelection.effort)?.label ?? ''].filter(Boolean);
+            const base = claudeFamilyOptions.find(o => o.value === claudeBase)?.shortLabel ?? '';
+            const parts = [claudeIs1M ? '1M' : '', claudeReasoningOptions.find(o => o.value === claudeSelection.effort)?.label ?? ''].filter(Boolean);
             return base + (parts.length > 0 ? ` (${parts.join(', ')})` : '');
         }
         return modelOptions.find(o => o.value === selectedModelMode)?.shortLabel ?? '';
@@ -516,6 +590,67 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
         : null;
 
     const agentInputEnterToSend = useSetting('agentInputEnterToSend');
+    const [isContextDetailsHovered, setIsContextDetailsHovered] = React.useState(false);
+    const [isContextDetailsPinned, setIsContextDetailsPinned] = React.useState(false);
+    const [contextDetailsAnchor, setContextDetailsAnchor] = React.useState<{ x: number; y: number; width: number; height: number } | null>(null);
+    const contextDetailsAnchorRef = React.useRef<View>(null);
+    const contextDetailsHoverTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+    const isContextDetailsVisible = isContextDetailsHovered || isContextDetailsPinned;
+    const isContextDetailsInlineVisible = isContextDetailsHovered || (Platform.OS === 'web' && isContextDetailsPinned);
+
+    React.useEffect(() => {
+        return () => {
+            if (contextDetailsHoverTimerRef.current) {
+                clearTimeout(contextDetailsHoverTimerRef.current);
+            }
+        };
+    }, []);
+
+    React.useEffect(() => {
+        if (!contextWarning) {
+            setIsContextDetailsHovered(false);
+            setIsContextDetailsPinned(false);
+            setContextDetailsAnchor(null);
+        }
+    }, [contextWarning]);
+
+    const showContextDetailsFromPress = React.useCallback(() => {
+        setIsContextDetailsHovered(false);
+        if (isContextDetailsPinned) {
+            setIsContextDetailsPinned(false);
+            return;
+        }
+        if (Platform.OS === 'web') {
+            setIsContextDetailsPinned(true);
+            return;
+        }
+        contextDetailsAnchorRef.current?.measureInWindow((x, y, width, height) => {
+            setContextDetailsAnchor({ x, y, width, height });
+            setIsContextDetailsPinned(true);
+        });
+    }, [isContextDetailsPinned]);
+
+    React.useEffect(() => {
+        if (Platform.OS !== 'web' || !isContextDetailsPinned) {
+            return;
+        }
+
+        const handlePointerDown = (event: MouseEvent | TouchEvent) => {
+            const target = event.target as Node | null;
+            const node = contextDetailsAnchorRef.current as unknown as Node | null;
+            if (node && target && node.contains(target)) {
+                return;
+            }
+            setIsContextDetailsPinned(false);
+        };
+
+        document.addEventListener('mousedown', handlePointerDown);
+        document.addEventListener('touchstart', handlePointerDown);
+        return () => {
+            document.removeEventListener('mousedown', handlePointerDown);
+            document.removeEventListener('touchstart', handlePointerDown);
+        };
+    }, [isContextDetailsPinned]);
 
 
     // Abort button state
@@ -523,64 +658,10 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
     const shakerRef = React.useRef<ShakeInstance>(null);
     const inputRef = React.useRef<MultiTextInputHandle>(null);
 
-    // Drag and drop state (web only)
-    const [isDragging, setIsDragging] = React.useState(false);
-    const dragCounterRef = React.useRef(0);
-    const dropZoneRef = React.useRef<View>(null);
-
-    // Set up native drag event listeners for web
-    React.useEffect(() => {
-        if (Platform.OS !== 'web' || !props.supportsImages || !props.onImageDrop) return;
-
-        const element = dropZoneRef.current as unknown as HTMLElement | null;
-        if (!element) return;
-
-        const handleDragEnter = (e: DragEvent) => {
-            e.preventDefault();
-            e.stopPropagation();
-            dragCounterRef.current++;
-            setIsDragging(true);
-        };
-
-        const handleDragLeave = (e: DragEvent) => {
-            e.preventDefault();
-            e.stopPropagation();
-            dragCounterRef.current--;
-            if (dragCounterRef.current === 0) {
-                setIsDragging(false);
-            }
-        };
-
-        const handleDragOver = (e: DragEvent) => {
-            e.preventDefault();
-            e.stopPropagation();
-        };
-
-        const handleDrop = (e: DragEvent) => {
-            e.preventDefault();
-            e.stopPropagation();
-            setIsDragging(false);
-            dragCounterRef.current = 0;
-
-            if (!e.dataTransfer) return;
-            const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
-            if (files.length > 0) {
-                props.onImageDrop!(files);
-            }
-        };
-
-        element.addEventListener('dragenter', handleDragEnter);
-        element.addEventListener('dragleave', handleDragLeave);
-        element.addEventListener('dragover', handleDragOver);
-        element.addEventListener('drop', handleDrop);
-
-        return () => {
-            element.removeEventListener('dragenter', handleDragEnter);
-            element.removeEventListener('dragleave', handleDragLeave);
-            element.removeEventListener('dragover', handleDragOver);
-            element.removeEventListener('drop', handleDrop);
-        };
-    }, [props.supportsImages, props.onImageDrop]);
+    const { dropZoneRef, isDragging } = useWebImageDrop({
+        enabled: !!props.supportsImages && !!props.onImageDrop,
+        onImageDrop: props.onImageDrop,
+    });
 
     // Forward ref to the MultiTextInput
     React.useImperativeHandle(ref, () => inputRef.current!, []);
@@ -994,71 +1075,130 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
 
                                 {/* Model Section */}
                                 {showSettings === 'model' && <View style={{ paddingVertical: 8 }}>
-                                    {isCodex ? (
-                                        <>
-                                            {renderRadioOptions(codexFamilyOptions, codexSelection.family, handleCodexFamilyChange)}
-                                            {codexSelection.family !== 'default' && (
+                                    {isCodex ? (() => {
+                                        const hasEffort = codexSelection.family !== 'default';
+                                        const reasoningColumn = (
+                                            <>
+                                                <Text style={styles.overlaySectionTitle}>
+                                                    {t('agentInput.model.reasoningEffort')}
+                                                </Text>
+                                                {renderRadioOptions(codexReasoningOptions, codexSelection.effort, handleCodexReasoningChange)}
+                                            </>
+                                        );
+                                        const fastModeRow = (
+                                            <View style={styles.fastModeRow}>
+                                                <Text style={styles.fastModeLabel}>
+                                                    {t('agentInput.model.fastMode')}
+                                                </Text>
+                                                <Switch
+                                                    value={!!props.fastMode}
+                                                    onValueChange={(value) => {
+                                                        hapticsLight();
+                                                        props.onFastModeChange?.(value);
+                                                    }}
+                                                />
+                                            </View>
+                                        );
+                                        // Wide screens with a reasoning selection: show effort beside the model list.
+                                        if (hasEffort && isWideModelLayout) {
+                                            return (
                                                 <>
-                                                    <View style={[styles.overlayDivider, { marginTop: 4, marginBottom: 6 }]} />
-                                                    <Text style={{
-                                                        fontSize: 12,
-                                                        fontWeight: '600',
-                                                        color: theme.colors.textSecondary,
-                                                        paddingHorizontal: 16,
-                                                        paddingBottom: 4,
-                                                        ...Typography.default('semiBold')
-                                                    }}>
-                                                        {t('agentInput.model.reasoningEffort')}
-                                                    </Text>
-                                                    {renderRadioOptions(codexReasoningOptions, codexSelection.effort, handleCodexReasoningChange)}
-                                                    <View style={[styles.overlayDivider, { marginTop: 4, marginBottom: 6 }]} />
-                                                    <View style={{
-                                                        flexDirection: 'row',
-                                                        alignItems: 'center',
-                                                        justifyContent: 'space-between',
-                                                        paddingHorizontal: 16,
-                                                        paddingVertical: 8,
-                                                    }}>
-                                                        <Text style={{
-                                                            fontSize: 12,
-                                                            fontWeight: '600',
-                                                            color: theme.colors.textSecondary,
-                                                            ...Typography.default('semiBold')
-                                                        }}>
-                                                            {t('agentInput.model.fastMode')}
-                                                        </Text>
-                                                        <Switch
-                                                            value={!!props.fastMode}
-                                                            onValueChange={(value) => {
-                                                                hapticsLight();
-                                                                props.onFastModeChange?.(value);
-                                                            }}
-                                                        />
+                                                    <View style={{ flexDirection: 'row' }}>
+                                                        <View style={{ flex: 1 }}>
+                                                            {renderRadioOptions(codexFamilyOptions, codexSelection.family, handleCodexFamilyChange)}
+                                                        </View>
+                                                        <View style={styles.overlayColumnDivider} />
+                                                        <View style={{ flex: 1 }}>
+                                                            {reasoningColumn}
+                                                        </View>
                                                     </View>
-                                                </>
-                                            )}
-                                        </>
-                                    ) : isClaude ? (
-                                        <>
-                                            {renderRadioOptions(claudeFamilyOptions, claudeSelection.family, handleClaudeFamilyChange)}
-                                            {claudeSelection.family !== 'default' && claudeReasoningOptions.length > 0 && (
-                                                <>
                                                     <View style={[styles.overlayDivider, { marginTop: 4, marginBottom: 6 }]} />
-                                                    <Text style={{
-                                                        fontSize: 12,
-                                                        fontWeight: '600',
-                                                        color: theme.colors.textSecondary,
-                                                        paddingHorizontal: 16,
-                                                        paddingBottom: 4,
-                                                        ...Typography.default('semiBold')
-                                                    }}>
-                                                        {t('agentInput.model.reasoningEffort')}
-                                                    </Text>
-                                                    {renderRadioOptions(claudeReasoningOptions, claudeSelection.effort, handleClaudeReasoningChange)}
+                                                    {fastModeRow}
                                                 </>
-                                            )}
-                                        </>
-                                    ) : (
+                                            );
+                                        }
+                                        return (
+                                            <>
+                                                {renderRadioOptions(codexFamilyOptions, codexSelection.family, handleCodexFamilyChange)}
+                                                {hasEffort && (
+                                                    <>
+                                                        <View style={[styles.overlayDivider, { marginTop: 4, marginBottom: 6 }]} />
+                                                        {reasoningColumn}
+                                                        <View style={[styles.overlayDivider, { marginTop: 4, marginBottom: 6 }]} />
+                                                        {fastModeRow}
+                                                    </>
+                                                )}
+                                            </>
+                                        );
+                                    })() : isClaude ? (() => {
+                                        const hasEffort = claudeSelection.family !== 'default' && claudeReasoningOptions.length > 0;
+                                        const reasoningColumn = (
+                                            <>
+                                                <Text style={styles.overlaySectionTitle}>
+                                                    {t('agentInput.model.reasoningEffort')}
+                                                </Text>
+                                                {renderRadioOptions(claudeReasoningOptions, claudeSelection.effort, handleClaudeReasoningChange)}
+                                            </>
+                                        );
+                                        const oneMillionRow = claudeShow1MToggle ? (
+                                            <>
+                                                <View style={[styles.overlayDivider, { marginTop: 4, marginBottom: 6 }]} />
+                                                <View style={styles.fastModeRow}>
+                                                    <Text style={styles.fastModeLabel}>
+                                                        {t('agentInput.model.context1m')}
+                                                    </Text>
+                                                    <Switch
+                                                        value={claudeIs1M}
+                                                        onValueChange={(value) => {
+                                                            hapticsLight();
+                                                            handleClaude1MToggle(value);
+                                                        }}
+                                                    />
+                                                </View>
+                                            </>
+                                        ) : claudeShow1MBadge ? (
+                                            // Always-1M family (no 200K tier): informational row, no switch.
+                                            <>
+                                                <View style={[styles.overlayDivider, { marginTop: 4, marginBottom: 6 }]} />
+                                                <View style={styles.fastModeRow}>
+                                                    <Text style={styles.fastModeLabel}>
+                                                        {t('agentInput.model.context1m')}
+                                                    </Text>
+                                                    <Text style={styles.fastModeLabel}>
+                                                        {t('agentInput.model.context1mAlways')}
+                                                    </Text>
+                                                </View>
+                                            </>
+                                        ) : null;
+                                        if (hasEffort && isWideModelLayout) {
+                                            return (
+                                                <>
+                                                    <View style={{ flexDirection: 'row' }}>
+                                                        <View style={{ flex: 1 }}>
+                                                            {renderRadioOptions(claudeFamilyOptions, claudeBase, handleClaudeFamilyChange)}
+                                                        </View>
+                                                        <View style={styles.overlayColumnDivider} />
+                                                        <View style={{ flex: 1 }}>
+                                                            {reasoningColumn}
+                                                        </View>
+                                                    </View>
+                                                    {oneMillionRow}
+                                                </>
+                                            );
+                                        }
+                                        return (
+                                            <>
+                                                {renderRadioOptions(claudeFamilyOptions, claudeBase, handleClaudeFamilyChange)}
+                                                {hasEffort && (
+                                                    <>
+                                                        <View style={[styles.overlayDivider, { marginTop: 4, marginBottom: 6 }]} />
+                                                        {reasoningColumn}
+                                                    </>
+                                                )}
+                                                {oneMillionRow}
+                                            </>
+                                        );
+                                    })() : (
                                         renderRadioOptions(modelOptions, selectedModelMode, (v) => props.onModelModeChange?.(v))
                                     )}
                                 </View>}
@@ -1176,14 +1316,132 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                 </>
                             )}
                             {contextWarning && (
-                                <Text style={{
-                                    fontSize: 11,
-                                    color: contextWarning.color,
-                                    marginLeft: props.connectionStatus ? 8 : 0,
-                                    ...Typography.default()
-                                }}>
-                                    {props.connectionStatus ? '• ' : ''}{contextWarning.text}
-                                </Text>
+                                <>
+                                    <View
+                                        ref={contextDetailsAnchorRef}
+                                        style={{
+                                            position: 'relative',
+                                            marginLeft: props.connectionStatus ? 8 : 0,
+                                            zIndex: isContextDetailsVisible ? 1002 : 1,
+                                        }}
+                                    >
+                                        <Pressable
+                                            onPress={() => {
+                                                hapticsLight();
+                                                showContextDetailsFromPress();
+                                            }}
+                                            onHoverIn={() => {
+                                                if (contextDetailsHoverTimerRef.current) {
+                                                    clearTimeout(contextDetailsHoverTimerRef.current);
+                                                }
+                                                contextDetailsHoverTimerRef.current = setTimeout(() => {
+                                                    setIsContextDetailsHovered(true);
+                                                    contextDetailsHoverTimerRef.current = null;
+                                                }, 600);
+                                            }}
+                                            onHoverOut={() => {
+                                                if (contextDetailsHoverTimerRef.current) {
+                                                    clearTimeout(contextDetailsHoverTimerRef.current);
+                                                    contextDetailsHoverTimerRef.current = null;
+                                                }
+                                                setIsContextDetailsHovered(false);
+                                            }}
+                                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                        >
+                                            <Text style={{
+                                                fontSize: 11,
+                                                color: contextWarning.color,
+                                                ...Typography.default()
+                                            }}>
+                                                {props.connectionStatus ? '• ' : ''}{contextWarning.text}
+                                            </Text>
+                                        </Pressable>
+                                        {isContextDetailsInlineVisible && (
+                                            <View
+                                                style={{
+                                                    position: 'absolute',
+                                                    left: 0,
+                                                    bottom: CONTEXT_DETAILS_TOOLTIP_GAP,
+                                                    minWidth: CONTEXT_DETAILS_TOOLTIP_WIDTH,
+                                                    paddingHorizontal: 10,
+                                                    paddingVertical: 8,
+                                                    borderRadius: 10,
+                                                    backgroundColor: theme.colors.surface,
+                                                    borderWidth: 0.5,
+                                                    borderColor: theme.colors.modal.border,
+                                                    shadowColor: theme.colors.shadow.color,
+                                                    shadowOffset: { width: 0, height: 2 },
+                                                    shadowOpacity: theme.colors.shadow.opacity,
+                                                    shadowRadius: 6,
+                                                    elevation: 8,
+                                                }}
+                                            >
+                                                <Text style={{
+                                                    fontSize: 12,
+                                                    lineHeight: 20,
+                                                    color: theme.colors.text,
+                                                    ...Typography.default()
+                                                }}>
+                                                {contextWarning.details}
+                                            </Text>
+                                        </View>
+                                    )}
+                                    </View>
+                                    <RNModal
+                                        transparent
+                                        visible={Platform.OS !== 'web' && isContextDetailsPinned && !!contextDetailsAnchor}
+                                        animationType="none"
+                                        onRequestClose={() => setIsContextDetailsPinned(false)}
+                                    >
+                                        <Pressable
+                                            style={{ flex: 1, backgroundColor: 'transparent' }}
+                                            onPress={() => setIsContextDetailsPinned(false)}
+                                        >
+                                            <Pressable
+                                                onPress={(event) => event.stopPropagation()}
+                                                style={{
+                                                    position: 'absolute',
+                                                    left: contextDetailsAnchor
+                                                        ? Math.min(
+                                                            Math.max(contextDetailsAnchor.x, CONTEXT_DETAILS_SCREEN_MARGIN),
+                                                            Math.max(CONTEXT_DETAILS_SCREEN_MARGIN, screenWidth - CONTEXT_DETAILS_TOOLTIP_WIDTH - CONTEXT_DETAILS_SCREEN_MARGIN)
+                                                        )
+                                                        : CONTEXT_DETAILS_SCREEN_MARGIN,
+                                                    top: contextDetailsAnchor
+                                                        ? Math.min(
+                                                            Math.max(
+                                                                CONTEXT_DETAILS_SCREEN_MARGIN,
+                                                                contextDetailsAnchor.y + contextDetailsAnchor.height - CONTEXT_DETAILS_TOOLTIP_GAP - CONTEXT_DETAILS_TOOLTIP_HEIGHT
+                                                            ),
+                                                            Math.max(CONTEXT_DETAILS_SCREEN_MARGIN, screenHeight - CONTEXT_DETAILS_TOOLTIP_HEIGHT - CONTEXT_DETAILS_SCREEN_MARGIN)
+                                                        )
+                                                        : CONTEXT_DETAILS_SCREEN_MARGIN,
+                                                    minWidth: CONTEXT_DETAILS_TOOLTIP_WIDTH,
+                                                    paddingHorizontal: 10,
+                                                    paddingVertical: 8,
+                                                    borderRadius: 10,
+                                                    backgroundColor: theme.colors.surface,
+                                                    borderWidth: 0.5,
+                                                    borderColor: theme.colors.modal.border,
+                                                    shadowColor: theme.colors.shadow.color,
+                                                    shadowOffset: { width: 0, height: 2 },
+                                                    shadowOpacity: theme.colors.shadow.opacity,
+                                                    shadowRadius: 6,
+                                                    elevation: 8,
+                                                }}
+                                            >
+                                                <Text style={{
+                                                    fontSize: 12,
+                                                    lineHeight: 20,
+                                                    color: theme.colors.text,
+                                                    ...Typography.default()
+                                                }}>
+                                                    {contextWarning.details}
+                                                </Text>
+                                            </Pressable>
+                                        </Pressable>
+                                    </RNModal>
+                                </>
                             )}
                         </View>
                         <View style={{

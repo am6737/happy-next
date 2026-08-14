@@ -56,11 +56,15 @@ function toToolError(message: string, details?: unknown) {
 }
 
 // Factory function to create MCP server with tools
-function createMcpServer(client: ApiSessionClient, options: { enableOrchestratorTools: boolean }): McpServer {
+function createMcpServer(client: ApiSessionClient, options: { enableHappyTools: boolean; enableOrchestratorTools: boolean }): McpServer {
     const mcp = new McpServer({
         name: "Happy MCP",
         version: "1.0.0",
     });
+
+    if (!options.enableHappyTools) {
+        return mcp;
+    }
 
     // Handler that sends title updates via the client
     const handler = async (title: string) => {
@@ -291,10 +295,11 @@ export async function startHappyServer(client: ApiSessionClient) {
     // This is needed when switching between local and remote modes, as each mode
     // spawns a new Claude Code process that needs its own MCP session
     const transports: Map<string, StreamableHTTPServerTransport> = new Map();
-    const enableOrchestratorTools = shouldEnableOrchestratorTools();
-    const toolNames = enableOrchestratorTools
+    const enableHappyTools = shouldEnableOrchestratorTools();
+    const enableOrchestratorTools = enableHappyTools;
+    const toolNames = enableHappyTools
         ? ['change_title', 'preview_html', 'orchestrator_get_context', 'orchestrator_submit', 'orchestrator_pend', 'orchestrator_list', 'orchestrator_cancel', 'orchestrator_send_message']
-        : ['change_title', 'preview_html'];
+        : [];
 
     // Capture console.error from Hono to our logger
     const originalConsoleError = console.error;
@@ -348,7 +353,7 @@ export async function startHappyServer(client: ApiSessionClient) {
                     };
 
                     // Create and connect MCP server to this transport
-                    const mcp = createMcpServer(client, { enableOrchestratorTools });
+                    const mcp = createMcpServer(client, { enableHappyTools, enableOrchestratorTools });
                     await mcp.connect(transport);
 
                     // Handle the request with the parsed body

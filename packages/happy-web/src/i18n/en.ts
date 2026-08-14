@@ -81,8 +81,9 @@ export default {
     title: 'Get the App',
     subtitle: 'Available on every platform. Control your AI agents from anywhere.',
     web: { name: 'Web App', description: 'Open in your browser, no install needed.', cta: 'Open Web App' },
-    ios: { name: 'iOS', description: 'Download via TestFlight (beta).', cta: 'Join TestFlight' },
+    ios: { name: 'iOS', description: 'Download from the App Store.', cta: 'Open App Store' },
     android: { name: 'Android', description: 'Download the latest APK from GitHub.', cta: 'Download APK' },
+    availability: null,
   },
   selfHost: {
     title: 'Self-Host in One Command',
@@ -100,7 +101,7 @@ export default {
     links: {
       docs: 'Documentation',
       app: 'Web App',
-      testflight: 'TestFlight',
+      appStore: 'App Store',
       android: 'Android APK',
       github: 'GitHub',
       contributing: 'Contributing',

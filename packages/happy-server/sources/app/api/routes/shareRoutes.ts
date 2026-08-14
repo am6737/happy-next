@@ -99,7 +99,7 @@ export function shareRoutes(app: Fastify) {
 
         const session = await db.session.findUnique({
             where: { id: sessionId },
-            select: { id: true }
+            select: { id: true, accountId: true }
         });
         if (!session) {
             return reply.code(404).send({ error: 'Session not found' });
@@ -113,6 +113,11 @@ export function shareRoutes(app: Fastify) {
         // Cannot share with yourself
         if (userId === ownerId) {
             return reply.code(400).send({ error: 'Cannot share with yourself' });
+        }
+
+        // The session owner already has full access and must not be added as a share recipient.
+        if (userId === session.accountId) {
+            return reply.code(400).send({ error: 'Cannot share with session owner' });
         }
 
         // Verify target user exists
@@ -321,6 +326,68 @@ export function shareRoutes(app: Fastify) {
         );
         eventRouter.emitUpdate({
             userId: result.share.sharedWithUserId,
+            payload: updatePayload
+        });
+
+        return reply.send({ success: true });
+    });
+
+    /**
+     * Leave a session shared with the current user.
+     * This only removes the caller's own share and never deletes the session itself.
+     */
+    app.delete('/v1/sessions/:sessionId/share-self', {
+        preHandler: app.authenticate,
+        schema: {
+            params: z.object({
+                sessionId: z.string()
+            })
+        }
+    }, async (request, reply) => {
+        const userId = request.userId;
+        const { sessionId } = request.params;
+
+        const result = await db.$transaction(async (tx) => {
+            const share = await tx.sessionShare.findUnique({
+                where: {
+                    sessionId_sharedWithUserId: {
+                        sessionId,
+                        sharedWithUserId: userId
+                    }
+                }
+            });
+
+            if (!share) {
+                return { error: 'Share not found' as const };
+            }
+
+            await tx.sessionShare.delete({
+                where: {
+                    sessionId_sharedWithUserId: {
+                        sessionId,
+                        sharedWithUserId: userId
+                    }
+                }
+            });
+
+            await touchSession(tx, sessionId);
+
+            return { share };
+        });
+
+        if ('error' in result) {
+            return reply.code(404).send({ error: result.error });
+        }
+
+        const updateSeq = await allocateUserSeq(userId);
+        const updatePayload = buildSessionShareRevokedUpdate(
+            result.share.id,
+            result.share.sessionId,
+            updateSeq,
+            randomKeyNaked(12)
+        );
+        eventRouter.emitUpdate({
+            userId,
             payload: updatePayload
         });
 

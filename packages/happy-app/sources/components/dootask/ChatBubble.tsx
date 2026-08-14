@@ -5,7 +5,6 @@ import Svg, { Path, G } from 'react-native-svg';
 import { Image } from 'expo-image';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { Ionicons } from '@expo/vector-icons';
-import * as WebBrowser from 'expo-web-browser';
 import { t } from '@/text';
 import { Typography } from '@/constants/Typography';
 import { HtmlContent } from '@/components/dootask/HtmlContent';
@@ -13,6 +12,7 @@ import type { DooTaskDialogMsg, PendingMessageStatus, EmojiReaction } from '@/sy
 import { useDootaskAudioPlayer } from '@/hooks/useAudioPlayer';
 import { useWebHorizontalScroll } from '@/hooks/useWebHorizontalScroll';
 import { splitTableRow } from '@/components/markdown/parseMarkdownBlock';
+import { openExternalUrl } from '@/utils/tauri';
 
 // --- AI Assistant ---
 
@@ -666,7 +666,7 @@ function FileContent({ msg, serverUrl, theme, onImagePress, isSelf }: { msg: Doo
         const thumbUrl = msgData.thumb ? resolveUrl(msgData.thumb, serverUrl) : null;
         return (
             <Pressable
-                onPress={() => { if (fileUrl) WebBrowser.openBrowserAsync(fileUrl); }}
+                onPress={() => { if (fileUrl) void openExternalUrl(fileUrl, { nativeBrowser: 'in-app' }); }}
                 style={styles.imageWrapper}
             >
                 {thumbUrl ? (
@@ -697,7 +697,7 @@ function FileContent({ msg, serverUrl, theme, onImagePress, isSelf }: { msg: Doo
     return (
         <Pressable
             style={[styles.fileCard, { backgroundColor: isSelf ? theme.colors.surfaceHighest : theme.colors.surfaceHigh }]}
-            onPress={() => { if (fileUrl) WebBrowser.openBrowserAsync(fileUrl); }}
+            onPress={() => { if (fileUrl) void openExternalUrl(fileUrl, { nativeBrowser: 'in-app' }); }}
         >
             <View style={[styles.fileIconCircle, { backgroundColor: isSelf ? theme.colors.surfaceHigh : theme.colors.surfaceHighest }]}>
                 <Ionicons name="document-outline" size={20} color={theme.colors.textSecondary} />
@@ -716,7 +716,7 @@ function LongtextContent({ msg, theme, serverUrl, onImagePress, isSelf }: { msg:
         <View>
             <TextContent msg={msg} theme={theme} serverUrl={serverUrl} onImagePress={onImagePress} isSelf={isSelf} />
             {fileUrl ? (
-                <Pressable onPress={() => WebBrowser.openBrowserAsync(resolveUrl(fileUrl, serverUrl))} style={{ marginTop: 4 }}>
+                <Pressable onPress={() => openExternalUrl(resolveUrl(fileUrl, serverUrl), { nativeBrowser: 'in-app' })} style={{ marginTop: 4 }}>
                     <Text style={{ ...Typography.default('semiBold'), fontSize: 13, color: theme.colors.textLink }}>
                         {t('dootask.viewDetails')}
                     </Text>

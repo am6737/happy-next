@@ -3,11 +3,11 @@ title: "Sessions"
 description: "View, create, and control AI coding sessions from your phone."
 ---
 
-The sessions screen is the heart of the Happy app. It shows all your active and recent sessions across all your machines.
+The sessions screen is the heart of the Happy app. It shows your active sessions across all your machines, grouped by machine.
 
 ## Viewing sessions
 
-The home screen shows your sessions, with active sessions at the top. Each session card shows:
+The home screen lists your active sessions, grouped by machine. Each session card shows:
 
 - The agent type (Claude, Codex, or Gemini)
 - The model being used
@@ -16,6 +16,18 @@ The home screen shows your sessions, with active sessions at the top. Each sessi
 - An unread indicator for new messages
 
 Tap a session to open it.
+
+### Tabs
+
+When you have sessions on more than one machine — or any shared sessions — a tab bar appears above the list:
+
+- **All** — every session; always the first tab
+- **One tab per machine** — filter to a single machine's sessions
+- **Shared with me** / **Shared by me** — shown only when you have shared sessions
+
+A colored dot on a machine tab flags what needs attention there: **orange** = a session is waiting on a permission decision, **pulsing blue** = a session is actively working, **solid blue** = an unread completed response. The **All** tab never shows a dot.
+
+With a single machine and no shared sessions, no tab bar is shown — you just see the list.
 
 ## Sending messages
 
@@ -52,4 +64,14 @@ Long-press a session card or use the session menu for additional actions:
 
 ## Pending queue
 
-If the AI agent is busy processing a previous message, your new messages are queued. The pending queue shows queued messages with their status. Messages are dispatched automatically when the agent is ready.
+If the agent is busy processing a previous message, your new messages are queued and dispatched automatically when the agent is ready.
+
+Tap a queued message to open it, where you can:
+
+- **Edit** it before it's sent — editing pauses the message so it isn't dispatched mid-change
+- **Pause / Resume** — pausing turns the message into a **draft**: it stays in the queue and syncs across your devices, but is skipped by auto-dispatch until you resume or send it
+- **Send now** — dispatch it immediately, ahead of the queue
+- **Pin** — move an active message to the top of the queue
+- **Copy** or **Delete**
+
+Active messages sit at the top in send order (pinned first); paused drafts sink to the bottom.

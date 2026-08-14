@@ -845,6 +845,14 @@ export async function getClaudeSessionUserMessages(
     sessionId: string,
     limit: number = 50
 ): Promise<ClaudeUserMessageWithUuid[]> {
+    const allUserMessages = await readAllClaudeSessionUserMessages(projectId, sessionId);
+    return allUserMessages.slice(-limit);
+}
+
+export async function readAllClaudeSessionUserMessages(
+    projectId: string,
+    sessionId: string,
+): Promise<ClaudeUserMessageWithUuid[]> {
     const claudeConfigDir = process.env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude');
     const jsonlPath = join(claudeConfigDir, 'projects', projectId, `${sessionId}.jsonl`);
 
@@ -890,8 +898,7 @@ export async function getClaudeSessionUserMessages(
             }
         }
 
-        // Return last N messages (most recent first for display)
-        return allUserMessages.slice(-limit);
+        return allUserMessages;
     } catch {
         return [];
     }

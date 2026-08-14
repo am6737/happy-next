@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, ActivityIndicator, Linking, Pressable, Platform, ActionSheetIOS, RefreshControl } from 'react-native';
+import { View, ActivityIndicator, Pressable, Platform, ActionSheetIOS, RefreshControl } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Text } from '@/components/StyledText';
 import { useAuth } from '@/auth/AuthContext';
 import { getUserProfile, sendFriendRequest, removeFriend } from '@/sync/apiFriends';
-import { UserProfile, getDisplayName } from '@/sync/friendTypes';
+import { UserProfile, getDisplayName, getUsernameLabel } from '@/sync/friendTypes';
 import { Avatar } from '@/components/Avatar';
 import { ItemList } from '@/components/ItemList';
 import { ItemGroup } from '@/components/ItemGroup';
@@ -27,6 +27,7 @@ import { Session } from '@/sync/storageTypes';
 import { ActionMenuModal } from '@/components/ActionMenuModal';
 import type { ActionMenuItem } from '@/components/ActionMenu';
 import { loadSharedByMeCache, saveSharedByMeCache } from '@/sync/persistence';
+import { openExternalUrl } from '@/utils/tauri';
 
 function getAccessLevelLabel(accessLevel?: 'view' | 'edit' | 'admin') {
     switch (accessLevel) {
@@ -276,6 +277,7 @@ export default function UserProfileScreen() {
     }
 
     const displayName = getDisplayName(userProfile);
+    const usernameLabel = getUsernameLabel(userProfile);
     const avatarUrl = userProfile.avatar?.url;
 
     return (
@@ -303,12 +305,14 @@ export default function UserProfileScreen() {
             {/* User Info Header */}
             <View style={styles.headerContainer}>
                 <View style={styles.profileCard}>
-                    <Pressable
-                        style={styles.githubIconButton}
-                        onPress={() => Linking.openURL(`https://github.com/${userProfile.username}`)}
-                    >
-                        <Ionicons name="logo-github" size={24} color={theme.colors.text} />
-                    </Pressable>
+                    {userProfile.username && (
+                        <Pressable
+                            style={styles.githubIconButton}
+                            onPress={() => openExternalUrl(`https://github.com/${userProfile.username}`)}
+                        >
+                            <Ionicons name="logo-github" size={24} color={theme.colors.text} />
+                        </Pressable>
+                    )}
 
                     <View style={{ marginBottom: 16 }}>
                         <Avatar
@@ -321,7 +325,7 @@ export default function UserProfileScreen() {
 
                     <Text style={styles.displayName}>{displayName}</Text>
 
-                    <Text style={styles.username}>@{userProfile.username}</Text>
+                    {usernameLabel && <Text style={styles.username}>{usernameLabel}</Text>}
 
                     {/* Bio */}
                     {userProfile.bio && (

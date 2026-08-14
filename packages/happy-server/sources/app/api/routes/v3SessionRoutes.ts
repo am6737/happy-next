@@ -3,7 +3,7 @@ import {
     buildPendingMessageUpsertEphemeral,
     eventRouter,
 } from "@/app/events/eventRouter";
-import { canSendMessages } from "@/app/share/accessControl";
+import { canSendMessages, canViewSession } from "@/app/share/accessControl";
 import { isSessionBusy, markDispatched } from "@/app/presence/sessionTurnRuntime";
 import {
     deletePendingMessage,
@@ -269,6 +269,11 @@ export function v3SessionRoutes(app: Fastify) {
                 updatedAt: true,
             },
         });
+        const oldestMessage = await db.sessionMessage.findFirst({
+            where: { sessionId },
+            orderBy: { seq: "asc" },
+            select: { seq: true },
+        });
 
         const hasMore = messages.length > limit;
         const page = hasMore ? messages.slice(0, limit) : messages;
@@ -276,6 +281,7 @@ export function v3SessionRoutes(app: Fastify) {
         return reply.send({
             messages: page.map(toResponseMessage),
             hasMore,
+            oldestSeq: oldestMessage?.seq ?? null,
         });
     });
 
@@ -386,7 +392,11 @@ export function v3SessionRoutes(app: Fastify) {
         const userId = request.userId;
         const { sessionId } = request.params;
 
-        if (!await canSendMessages(userId, sessionId)) {
+        // Read access is enough to view the pending queue — mirror GET /messages,
+        // which only requires view-level access. Gating this behind edit access
+        // (canSendMessages) 404s view-only shared sessions, and the client then
+        // retries the "permanent" 404 forever. Mutations below still require edit.
+        if (!await canViewSession(userId, sessionId)) {
             return reply.code(404).send({ error: "Session not found" });
         }
 

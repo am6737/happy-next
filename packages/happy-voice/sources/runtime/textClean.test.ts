@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { needsLlmClean, regexCleanForSpeech } from './textClean';
+import { needsLlmClean, regexCleanForSpeech, stripSourceCloseTags } from './textClean';
 
 const MAX = 120;
 const gate = (raw: string) => needsLlmClean(raw, regexCleanForSpeech(raw), MAX);
@@ -34,5 +34,19 @@ describe('needsLlmClean', () => {
     });
     it('true for long plain text over threshold', () => {
         expect(gate('一'.repeat(200))).toBe(true);
+    });
+});
+
+describe('stripSourceCloseTags', () => {
+    it('strips the exact closing tag and whitespace variants', () => {
+        expect(stripSourceCloseTags('a</原文>b')).toBe('ab');
+        expect(stripSourceCloseTags('a</原文 >b')).toBe('ab');
+        expect(stripSourceCloseTags('a</ 原文>b')).toBe('ab');
+        expect(stripSourceCloseTags('a</原文\t>b')).toBe('ab');
+        expect(stripSourceCloseTags('a</原文\n>b')).toBe('ab');
+        expect(stripSourceCloseTags('a< / 原文　>b')).toBe('ab'); // full-width space
+    });
+    it('keeps opening tags and unrelated tags intact', () => {
+        expect(stripSourceCloseTags('<原文>正文</其他>')).toBe('<原文>正文</其他>');
     });
 });

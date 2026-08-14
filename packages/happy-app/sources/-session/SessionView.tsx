@@ -5,7 +5,10 @@ import { Avatar } from '@/components/Avatar';
 import { MultiTextInputHandle } from '@/components/MultiTextInput';
 import { getSuggestions } from '@/components/autocomplete/suggestions';
 import { ChatHeaderTitle } from '@/components/ChatHeaderTitle';
+import { HeaderBackButton } from '@/components/navigation/Header';
 import { ChatList, type ForkMessageRequest } from '@/components/ChatList';
+import { ConversationMinimap, type ConversationMinimapItem } from '@/components/ConversationMinimap';
+import type { UserTextMessage } from '@/sync/typesMessage';
 import { Deferred } from '@/components/Deferred';
 import { DuplicateSheet } from '@/components/DuplicateSheet';
 import { ActionMenuModal } from '@/components/ActionMenuModal';
@@ -15,10 +18,11 @@ import { PendingQueuePanel } from '@/components/PendingQueuePanel';
 import { VoiceAssistantStatusBar } from '@/components/VoiceAssistantStatusBar';
 import { useDraft } from '@/hooks/useDraft';
 import { useImagePicker } from '@/hooks/useImagePicker';
+import { useWebImageDrop } from '@/hooks/useWebImageDrop';
 import { Modal } from '@/modal';
 import { voiceHooks } from '@/realtime/hooks/voiceHooks';
 import { startRealtimeSession, stopRealtimeSession } from '@/realtime/RealtimeSession';
-import { sessionAbort, machineGetClaudeSessionUserMessages, machineDuplicateClaudeSession, machineForkClaudeSession, machineSpawnNewSession, machineGetGeminiSessionUserMessages, machineDuplicateGeminiSession, machineForkGeminiSession, machineGetCodexSessionUserMessages, machineDuplicateCodexSession, machineForkCodexSession, type UserMessageWithUuid } from '@/sync/ops';
+import { sessionAbort, machineGetClaudeSessionUserMessages, machineDuplicateClaudeSession, machineForkClaudeSession, machineSpawnNewSession, machineGetGeminiSessionUserMessages, machineDuplicateGeminiSession, machineForkGeminiSession, machineGetCodexSessionUserMessages, machineDuplicateCodexSession, machineForkCodexSession, machineResolveClaudeForkTarget, machineResolveGeminiForkTarget, machineResolveCodexForkTarget, machineGetClaudeSessionUserMessage, machineGetGeminiSessionUserMessage, machineGetCodexSessionUserMessage, type UserMessageWithUuid, type UserMessagePage, type ResolvedForkTarget } from '@/sync/ops';
 import { storage, useIsDataReady, useLocalSetting, useOrchestratorRunningTaskCount, useOrchestratorHasRuns, useRealtimeStatus, useSessionMessages, useSessionMessagesFetching, useSessionPendingMessages, useSessionUsage, useSetting } from '@/sync/storage';
 import { useSession } from '@/sync/storage';
 import { Session } from '@/sync/storageTypes';
@@ -31,7 +35,6 @@ import { useDeviceType, useIsLandscape, useIsTablet } from '@/utils/responsive';
 import { formatPathRelativeToHome, generateCopyTitle, getSessionAvatarId, getSessionName, useSessionStatus, copySessionMetadata, copySessionModeSettings } from '@/utils/sessionUtils';
 import { getNativeHeaderTitleWidth } from '@/utils/nativeHeaderTitleWidth';
 import { isVersionSupported, useLatestCliVersion } from '@/utils/versionUtils';
-import { matchForkUuid } from '@/utils/forkTarget';
 import { log } from '@/log';
 import { Ionicons } from '@expo/vector-icons';
 import { useHeaderHeight as useNavigationHeaderHeight } from '@react-navigation/elements';
@@ -237,7 +240,10 @@ export const SessionView = React.memo((props: { id: string }) => {
                         />
                     ),
                     headerLeft: Platform.OS === 'web' ? () => (
-                        <SessionHeaderBackButton onPress={handleBackPress} />
+                        <HeaderBackButton
+                            tintColor={theme.colors.header.tint}
+                            onPress={handleBackPress}
+                        />
                     ) : undefined,
                     headerRight: session ? () => (
                         <ChatHeaderRight
@@ -315,7 +321,8 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
     const latestCliVersion = useLatestCliVersion();
     const isCliOutdated = cliVersion && latestCliVersion && !isVersionSupported(cliVersion, latestCliVersion);
     const isAcknowledged = machineId && acknowledgedCliVersions[machineId] === cliVersion;
-    const shouldShowCliWarning = isCliOutdated && !isAcknowledged;
+    const isSessionOnline = session.presence === 'online';
+    const shouldShowCliWarning = isSessionOnline && isCliOutdated && !isAcknowledged;
     // Get permission mode from session object, default to 'default'
     const permissionMode = session.permissionMode || 'default';
     // Get model mode from session object. "default" means use CLI/profile configured model.
@@ -473,7 +480,7 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
         images,
         pickFromGallery,
         pickFromCamera,
-        addImageFromUri,
+        addImagesFromFiles,
         removeImage,
         clearImages,
         initImages,
@@ -493,8 +500,10 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
     const [duplicateSheetVisible, setDuplicateSheetVisible] = React.useState(false);
     const [duplicateMessages, setDuplicateMessages] = React.useState<UserMessageWithUuid[] | null>(null);
     const [duplicateLoading, setDuplicateLoading] = React.useState(false);
+    const [duplicateLoadingMore, setDuplicateLoadingMore] = React.useState(false);
+    const [duplicateHasMore, setDuplicateHasMore] = React.useState(false);
+    const [duplicateBeforeIndex, setDuplicateBeforeIndex] = React.useState<number | null>(null);
     const [duplicateConfirming, setDuplicateConfirming] = React.useState(false);
-    const duplicateProjectIdRef = React.useRef<string | null>(null);
     // Id of the user message whose per-message fork is in progress (drives the
     // in-icon spinner on its action bar).
     const [forkingMessageId, setForkingMessageId] = React.useState<string | null>(null);
@@ -537,6 +546,35 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
         storage.getState().setSessionFastMode(sessionId, enabled);
     }, [sessionId]);
 
+    const loadDuplicateMessagesPage = React.useCallback(async (beforeIndex?: number): Promise<UserMessagePage> => {
+        const flavor = session.metadata?.flavor;
+        const claudeSessionId = session.metadata?.claudeSessionId;
+        const codexSessionId = session.metadata?.codexSessionId;
+        if (!machineId) return { messages: [], hasMore: false, nextBeforeIndex: null };
+
+        if (flavor === 'gemini') {
+            return machineGetGeminiSessionUserMessages(machineId, session.id, { beforeIndex });
+        }
+        if (flavor === 'codex' && codexSessionId) {
+            return machineGetCodexSessionUserMessages(machineId, codexSessionId, { beforeIndex });
+        }
+        if (claudeSessionId) {
+            const result = await machineGetClaudeSessionUserMessages(machineId, claudeSessionId, { beforeIndex });
+            return result;
+        }
+        return { messages: [], hasMore: false, nextBeforeIndex: null };
+    }, [machineId, session.id, session.metadata?.flavor, session.metadata?.claudeSessionId, session.metadata?.codexSessionId]);
+
+    const applyDuplicatePage = React.useCallback((page: UserMessagePage, appendOlder: boolean) => {
+        setDuplicateMessages((current) => {
+            if (!appendOlder || !current) return page.messages;
+            const seen = new Set(current.map((message) => message.uuid));
+            return [...page.messages.filter((message) => !seen.has(message.uuid)), ...current];
+        });
+        setDuplicateHasMore(page.hasMore);
+        setDuplicateBeforeIndex(page.nextBeforeIndex);
+    }, []);
+
     // Handle opening the duplicate sheet - loads user messages from the session
     const handleOpenDuplicateSheet = React.useCallback(async () => {
         const flavor = session.metadata?.flavor;
@@ -554,19 +592,11 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
         setDuplicateSheetVisible(true);
         setDuplicateLoading(true);
         setDuplicateMessages(null);
+        setDuplicateHasMore(false);
+        setDuplicateBeforeIndex(null);
 
         try {
-            if (flavor === 'gemini') {
-                const result = await machineGetGeminiSessionUserMessages(machineId, session.id);
-                setDuplicateMessages(result.messages);
-            } else if (flavor === 'codex' && codexSessionId) {
-                const result = await machineGetCodexSessionUserMessages(machineId, codexSessionId);
-                setDuplicateMessages(result.messages);
-            } else if (claudeSessionId) {
-                const result = await machineGetClaudeSessionUserMessages(machineId, claudeSessionId);
-                setDuplicateMessages(result.messages);
-                duplicateProjectIdRef.current = result.projectId;
-            }
+            applyDuplicatePage(await loadDuplicateMessagesPage(), false);
         } catch (error) {
             console.error('Failed to load duplicate messages:', error);
             Modal.alert(t('common.error'), t('duplicate.loadFailed'));
@@ -574,11 +604,23 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
         } finally {
             setDuplicateLoading(false);
         }
-    }, [machineId, session.id, session.metadata?.flavor, session.metadata?.claudeSessionId, session.metadata?.codexSessionId]);
+    }, [machineId, session.metadata?.flavor, session.metadata?.claudeSessionId, session.metadata?.codexSessionId, loadDuplicateMessagesPage, applyDuplicatePage]);
+
+    const handleLoadMoreDuplicateMessages = React.useCallback(async () => {
+        if (duplicateLoadingMore || !duplicateHasMore || duplicateBeforeIndex == null) return;
+        setDuplicateLoadingMore(true);
+        try {
+            applyDuplicatePage(await loadDuplicateMessagesPage(duplicateBeforeIndex), true);
+        } catch (error) {
+            console.error('Failed to load older duplicate messages:', error);
+            Modal.alert(t('common.error'), t('duplicate.loadFailed'));
+        } finally {
+            setDuplicateLoadingMore(false);
+        }
+    }, [duplicateLoadingMore, duplicateHasMore, duplicateBeforeIndex, loadDuplicateMessagesPage, applyDuplicatePage]);
 
     // Core fork-and-spawn logic, shared by the duplicate sheet and the
-    // per-message fork icon. `userMessages` is the loaded CLI message list,
-    // used to recover the selected message's text for the new session draft.
+    // per-message fork icon.
     //
     // `uuid` is the CLI message to truncate before (the new session keeps
     // everything older than it). Passing `uuid: null` forks the WHOLE session
@@ -586,8 +628,8 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
     // no following user prompt to truncate at. `skipDraft` suppresses the draft
     // write (AI-message forks continue after the reply, so there's nothing to
     // pre-fill; user-message forks pre-fill the tapped prompt).
-    const forkSessionFromUuid = React.useCallback(async (opts: { uuid: string | null; userMessages: UserMessageWithUuid[]; skipDraft: boolean }) => {
-        const { uuid, userMessages, skipDraft } = opts;
+    const forkSessionFromUuid = React.useCallback(async (opts: { uuid: string | null; draftText?: string; skipDraft: boolean }) => {
+        const { uuid, draftText, skipDraft } = opts;
         const flavor = session.metadata?.flavor;
         const claudeSessionId = session.metadata?.claudeSessionId;
         const codexSessionId = session.metadata?.codexSessionId;
@@ -662,10 +704,9 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
 
                 // Save the selected message as a draft in the new session so it appears in the input box.
                 // Skipped for AI-message forks (the new session continues after the reply, nothing to pre-fill).
-                const selectedMessage = uuid ? userMessages.find(m => m.uuid === uuid) : undefined;
-                if (!skipDraft && selectedMessage?.content) {
+                if (!skipDraft && draftText) {
                     storage.getState().setDraft(spawnResult.sessionId, {
-                        text: selectedMessage.content,
+                        text: draftText,
                         images: [],
                     });
                 }
@@ -685,13 +726,46 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
         }
     }, [machineId, session.id, session.metadata?.flavor, session.metadata?.claudeSessionId, session.metadata?.codexSessionId, session.metadata?.path, router]);
 
-    // Handle selecting a message in the duplicate sheet
-    const handleDuplicateSelect = React.useCallback((uuid: string) => {
-        forkSessionFromUuid({ uuid, userMessages: duplicateMessages ?? [], skipDraft: false });
-    }, [forkSessionFromUuid, duplicateMessages]);
+    // Handle selecting a message in the duplicate sheet. Picker rows are previews,
+    // so fetch the full prompt by UUID before creating the new-session draft.
+    const handleDuplicateSelect = React.useCallback(async (uuid: string) => {
+        const flavor = session.metadata?.flavor;
+        const claudeSessionId = session.metadata?.claudeSessionId;
+        const codexSessionId = session.metadata?.codexSessionId;
+        if (!machineId) return;
+        setDuplicateConfirming(true);
+        try {
+            let selected: UserMessageWithUuid | null = null;
+            if (flavor === 'gemini') {
+                selected = await machineGetGeminiSessionUserMessage(machineId, session.id, uuid);
+            } else if (flavor === 'codex' && codexSessionId) {
+                selected = await machineGetCodexSessionUserMessage(machineId, codexSessionId, uuid);
+            } else if (claudeSessionId) {
+                selected = await machineGetClaudeSessionUserMessage(machineId, claudeSessionId, uuid);
+            }
+            if (!selected) {
+                setDuplicateConfirming(false);
+                Modal.alert(t('common.error'), t('duplicate.loadFailed'));
+                return;
+            }
+            await forkSessionFromUuid({ uuid, draftText: selected.content, skipDraft: false });
+        } catch (error) {
+            console.error('Failed to load selected duplicate message:', error);
+            // Compatibility fallback for older CLIs that do not expose the
+            // full-message lookup RPC yet. Their picker rows contain the best
+            // available content (full for Claude, preview for Codex/Gemini).
+            const selectedPreview = duplicateMessages?.find((message) => message.uuid === uuid);
+            if (selectedPreview) {
+                await forkSessionFromUuid({ uuid, draftText: selectedPreview.content, skipDraft: false });
+            } else {
+                setDuplicateConfirming(false);
+                Modal.alert(t('common.error'), t('duplicate.loadFailed'));
+            }
+        }
+    }, [machineId, session.id, session.metadata?.flavor, session.metadata?.claudeSessionId, session.metadata?.codexSessionId, forkSessionFromUuid, duplicateMessages]);
 
-    // Runs after the user confirms a per-message fork: load CLI user messages,
-    // match the tapped message to a UUID, then fork. The network load is
+    // Runs after the user confirms a per-message fork: ask the CLI to resolve
+    // the tapped message against the complete local JSONL, then fork. The RPC is
     // deferred to here (post-confirm) so tapping the fork icon shows the
     // confirm dialog instantly instead of waiting on an RPC round-trip.
     // Falls back to opening the sheet if the target can't be matched.
@@ -713,41 +787,41 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
             // No truncation target (forking from the latest AI reply): duplicate
             // the whole session, no draft.
             if (!request.target) {
-                await forkSessionFromUuid({ uuid: null, userMessages: [], skipDraft: true });
+                await forkSessionFromUuid({ uuid: null, skipDraft: true });
                 return;
             }
 
             const target = request.target;
-            let userMessages: UserMessageWithUuid[] = [];
+            let resolved: ResolvedForkTarget | null = null;
             try {
                 if (flavor === 'gemini') {
-                    userMessages = (await machineGetGeminiSessionUserMessages(machineId, session.id)).messages;
+                    resolved = await machineResolveGeminiForkTarget(machineId, session.id, target.text, target.createdAt);
                 } else if (flavor === 'codex' && codexSessionId) {
-                    userMessages = (await machineGetCodexSessionUserMessages(machineId, codexSessionId)).messages;
+                    resolved = await machineResolveCodexForkTarget(machineId, codexSessionId, target.text, target.createdAt);
                 } else if (claudeSessionId) {
-                    const result = await machineGetClaudeSessionUserMessages(machineId, claudeSessionId);
-                    userMessages = result.messages;
-                    duplicateProjectIdRef.current = result.projectId;
+                    resolved = await machineResolveClaudeForkTarget(machineId, claudeSessionId, target.text, target.createdAt);
                 }
             } catch (error) {
-                console.error('Failed to load fork messages:', error);
-                Modal.alert(t('common.error'), t('duplicate.loadFailed'));
+                console.warn('Failed to resolve fork target, falling back to picker:', error);
+                await handleOpenDuplicateSheet();
                 return;
             }
 
-            const uuid = matchForkUuid({ text: target.text, createdAt: target.createdAt }, userMessages);
-            if (!uuid) {
-                // Fallback: open the sheet so the user can pick manually.
-                setDuplicateMessages(userMessages);
-                setDuplicateSheetVisible(true);
+            if (!resolved) {
+                // Fallback: open the paginated sheet so the user can pick manually.
+                await handleOpenDuplicateSheet();
                 return;
             }
 
-            await forkSessionFromUuid({ uuid, userMessages, skipDraft: request.skipDraft });
+            await forkSessionFromUuid({
+                uuid: resolved.uuid,
+                draftText: request.skipDraft ? undefined : target.text,
+                skipDraft: request.skipDraft,
+            });
         } finally {
             setForkingMessageId(null);
         }
-    }, [machineId, session.id, session.metadata?.flavor, session.metadata?.claudeSessionId, session.metadata?.codexSessionId, forkSessionFromUuid]);
+    }, [machineId, session.id, session.metadata?.flavor, session.metadata?.claudeSessionId, session.metadata?.codexSessionId, forkSessionFromUuid, handleOpenDuplicateSheet]);
 
     // Handle the per-message fork icon: show the confirm dialog immediately,
     // then do the network work in performForkFromMessage once confirmed.
@@ -845,16 +919,11 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
         const files = event.target.files;
         if (!files || files.length === 0) return;
 
-        Array.from(files).forEach(file => {
-            if (file.type.startsWith('image/')) {
-                const url = URL.createObjectURL(file);
-                addImageFromUri(url, file.type);
-            }
-        });
+        void addImagesFromFiles(Array.from(files));
 
         // Reset input so same file can be selected again
         event.target.value = '';
-    }, [addImageFromUri]);
+    }, [addImagesFromFiles]);
 
     // Handle paste event for images (both web and native through input)
     const handlePaste = React.useCallback(async (event: ClipboardEvent) => {
@@ -862,26 +931,61 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
             isScreenFocused: isFocused,
             canAddMore,
             supportsImages,
-            onImageFile: async (file, mimeType) => {
-                const url = URL.createObjectURL(file);
-                await addImageFromUri(url, mimeType);
-            },
+            onImageFile: async (file) => addImagesFromFiles([file]),
         });
-    }, [isFocused, canAddMore, supportsImages, addImageFromUri]);
+    }, [isFocused, canAddMore, supportsImages, addImagesFromFiles]);
 
-    // Handle image drop (web only) - passed to AgentInput
     const handleImageDrop = React.useCallback(async (files: File[]) => {
-        if (!canAddMore || !supportsImages) return;
-
-        for (const file of files) {
-            if (file.type.startsWith('image/') && canAddMore) {
-                const url = URL.createObjectURL(file);
-                await addImageFromUri(url, file.type);
-            }
-        }
-    }, [canAddMore, supportsImages, addImageFromUri]);
+        if (!supportsImages) return;
+        await addImagesFromFiles(files);
+    }, [supportsImages, addImagesFromFiles]);
+    const { dropZoneRef, isDragging: isDraggingImage } = useWebImageDrop({
+        enabled: isFocused && supportsImages,
+        onImageDrop: handleImageDrop,
+    });
 
     // Handle loading more older messages when scrolling to top
+    const [minimapItems, setMinimapItems] = React.useState<ConversationMinimapItem[]>([]);
+    const [minimapActiveMessageIds, setMinimapActiveMessageIds] = React.useState<Set<string>>(() => new Set());
+    const [minimapCachedUserMessages, setMinimapCachedUserMessages] = React.useState<UserTextMessage[]>([]);
+    const [contentAreaWidth, setContentAreaWidth] = React.useState(0);
+    const minimapJumpRef = React.useRef<((message: UserTextMessage) => void) | null>(null);
+    const handleRegisterMinimapJump = React.useCallback((jump: ((message: UserTextMessage) => void) | null) => {
+        minimapJumpRef.current = jump;
+    }, []);
+    const handleMinimapJump = React.useCallback((message: UserTextMessage) => {
+        minimapJumpRef.current?.(message);
+    }, []);
+
+    // Tracks which session the cached minimap list currently belongs to, so we only blank it on a
+    // real session switch (not on every refocus of the same session, which would flicker the rail).
+    const cachedMinimapSessionRef = React.useRef<string | null>(null);
+    // Load all user prompts from the persistent offline cache so the minimap can display prompts
+    // that haven't been paged into the message list yet. Refreshed on focus / session change.
+    useFocusEffect(
+        React.useCallback(() => {
+            // The minimap is web-only (see ConversationMinimap); don't pay the scan+decrypt on native.
+            if (Platform.OS !== 'web') return;
+            let cancelled = false;
+            if (cachedMinimapSessionRef.current !== sessionId) {
+                cachedMinimapSessionRef.current = sessionId;
+                setMinimapCachedUserMessages([]);
+            }
+            void sync.getCachedUserMessagesForMinimap(sessionId)
+                .then((messages) => {
+                    if (!cancelled) {
+                        setMinimapCachedUserMessages(messages);
+                    }
+                })
+                .catch(() => {
+                    // Minimap simply falls back to loaded messages; never surface an error.
+                });
+            return () => {
+                cancelled = true;
+            };
+        }, [sessionId])
+    );
+
     const handleLoadMore = React.useCallback(() => {
         return sync.fetchOlderMessages(sessionId);
     }, [sessionId]);
@@ -918,7 +1022,17 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
         <>
             <Deferred>
                 {messages.length > 0 && (
-                    <ChatList session={session} onFillInput={handleFillInput} onForkMessage={handleForkFromMessage} forkingMessageId={forkingMessageId} onLoadMore={handleLoadMore} />
+                    <ChatList
+                        session={session}
+                        onFillInput={handleFillInput}
+                        onForkMessage={handleForkFromMessage}
+                        forkingMessageId={forkingMessageId}
+                        onLoadMore={handleLoadMore}
+                        minimapCachedUserMessages={minimapCachedUserMessages}
+                        onMinimapItemsChange={setMinimapItems}
+                        onActiveMessageIdsChange={setMinimapActiveMessageIds}
+                        onRegisterMinimapJump={handleRegisterMinimapJump}
+                    />
                 )}
             </Deferred>
         </>
@@ -1065,6 +1179,12 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
                         } else {
                             failedMessageRef.current = { localId: result.localId, content: contentForRetry };
                             log.log(`[SEND_DEBUG][UI] record_retry sid=${sessionId} localId=${result.localId}`);
+                            Modal.alert(
+                                t('common.error'),
+                                imagesToSend?.length
+                                    ? t('errors.imageUploadFailed')
+                                    : t('errors.messageSendFailed'),
+                            );
                         }
                     } finally {
                         setIsSending(false);
@@ -1111,7 +1231,6 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
             onImageButtonPress={handleImageButtonPress}
             supportsImages={supportsImages}
             isUploadingImages={isUploadingImages}
-            onImageDrop={handleImageDrop}
         />
     ) : null;
 
@@ -1166,14 +1285,47 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
             )}
 
             {/* Main content area - no padding since header is overlay */}
-            <View style={{ flexBasis: 0, flexGrow: 1, paddingBottom: safeArea.bottom + ((isRunningOnMac() || Platform.OS === 'web') ? 32 : 0) }}>
+            <View
+                ref={dropZoneRef}
+                onLayout={(event) => setContentAreaWidth(event.nativeEvent.layout.width)}
+                style={{ flexBasis: 0, flexGrow: 1, position: 'relative', paddingBottom: safeArea.bottom + ((isRunningOnMac() || Platform.OS === 'web') ? 8 : 0) }}
+            >
                 <AgentContentView
                     content={content}
                     input={input}
                     placeholder={placeholder}
                     betweenContentAndInput={pendingQueuePanel}
                 />
+                {isDraggingImage && (
+                    <View
+                        pointerEvents="none"
+                        style={{
+                            position: 'absolute',
+                            top: 8,
+                            left: 8,
+                            right: 8,
+                            bottom: 8,
+                            zIndex: 997,
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            borderWidth: 2,
+                            borderStyle: 'dashed',
+                            borderColor: '#007AFF',
+                            borderRadius: 8,
+                            backgroundColor: theme.dark ? 'rgba(0, 122, 255, 0.14)' : 'rgba(0, 122, 255, 0.08)',
+                        }}
+                    >
+                        <Ionicons name="images-outline" size={42} color="#007AFF" />
+                    </View>
+                )}
             </View >
+
+            <ConversationMinimap
+                userMessages={minimapItems}
+                activeMessageIds={minimapActiveMessageIds}
+                onJumpToMessage={handleMinimapJump}
+                contentWidth={contentAreaWidth}
+            />
 
             {/* Back button for landscape phone mode when header is hidden */}
             {
@@ -1218,9 +1370,12 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
                 visible={duplicateSheetVisible}
                 messages={duplicateMessages}
                 loading={duplicateLoading}
+                loadingMore={duplicateLoadingMore}
+                hasMore={duplicateHasMore}
                 confirming={duplicateConfirming}
                 onClose={handleCloseDuplicateSheet}
                 onSelect={handleDuplicateSelect}
+                onLoadMore={handleLoadMoreDuplicateMessages}
             />
 
             {/* Image Picker Sheet */}
@@ -1235,30 +1390,6 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
     )
 }
 
-
-const SessionHeaderBackButton = React.memo((props: { onPress: () => void }) => {
-    const { theme } = useUnistyles();
-    return (
-        <Pressable
-            onPress={props.onPress}
-            hitSlop={15}
-            accessibilityRole="button"
-            accessibilityLabel={t('common.back')}
-            style={{
-                width: 38,
-                height: 38,
-                alignItems: 'center',
-                justifyContent: 'center',
-            }}
-        >
-            <Ionicons
-                name={Platform.OS === 'ios' ? 'chevron-back' : 'arrow-back'}
-                size={Platform.OS === 'ios' ? 28 : 24}
-                color={theme.colors.header.tint}
-            />
-        </Pressable>
-    );
-});
 
 const ChatHeaderRight = React.memo((props: {
     avatarId?: string;
@@ -1340,10 +1471,10 @@ const ChatHeaderRight = React.memo((props: {
                     onPress={props.onAvatarPress}
                     hitSlop={15}
                     style={{
-                        width: 36,
-                        height: 36,
-                        borderRadius: 18,
-                        overflow: 'hidden',
+                        width: 38,
+                        height: 38,
+                        alignItems: 'center',
+                        justifyContent: 'center',
                     }}
                 >
                     <Avatar

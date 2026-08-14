@@ -1,33 +1,6 @@
 import { type DecryptedMessage } from '@/sync/storageTypes';
 import { type ToolCall } from '@/sync/typesMessage';
-
-/**
- * Extracts plain text from markdown by removing formatting
- */
-function stripMarkdown(text: string): string {
-  return text
-    // Remove headers
-    .replace(/^#{1,6}\s+/gm, '')
-    // Remove bold and italic
-    .replace(/\*\*([^*]+)\*\*/g, '$1')
-    .replace(/\*([^*]+)\*/g, '$1')
-    .replace(/__([^_]+)__/g, '$1')
-    .replace(/_([^_]+)_/g, '$1')
-    // Remove inline code
-    .replace(/`([^`]+)`/g, '$1')
-    // Remove code blocks
-    .replace(/```[\s\S]*?```/g, '[code]')
-    // Remove links
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-    // Remove horizontal rules
-    .replace(/^---+$/gm, '')
-    // Remove list markers
-    .replace(/^\s*[-*+]\s+/gm, '')
-    .replace(/^\s*\d+\.\s+/gm, '')
-    // Clean up multiple whitespace
-    .replace(/\s+/g, ' ')
-    .trim();
-}
+import { formatMessagePreviewText, truncateMessagePreviewText } from '@/utils/messagePreviewText';
 
 /**
  * Gets a readable summary of tool calls
@@ -195,10 +168,7 @@ export function getMessagePreview(message: DecryptedMessage | null, maxLength: n
   // User messages
   if (content.role === 'user') {
     if (content.content && content.content.type === 'text') {
-      const plainText = stripMarkdown(content.content.text);
-      return plainText.length > maxLength
-        ? plainText.substring(0, maxLength) + '...'
-        : plainText;
+      return truncateMessagePreviewText(formatMessagePreviewText(content.content.text), maxLength);
     }
     return 'User message';
   }
@@ -209,10 +179,7 @@ export function getMessagePreview(message: DecryptedMessage | null, maxLength: n
     // This handles: {role: 'agent', content: {type: 'text', text: '...'}}
     if (content.content && typeof content.content === 'object') {
       if (content.content.type === 'text' && content.content.text) {
-        const plainText = stripMarkdown(content.content.text);
-        return plainText.length > maxLength
-          ? plainText.substring(0, maxLength) + '...'
-          : plainText;
+        return truncateMessagePreviewText(formatMessagePreviewText(content.content.text), maxLength);
       }
       
       if (content.content.type === 'tool' && content.content.tools) {
@@ -223,10 +190,7 @@ export function getMessagePreview(message: DecryptedMessage | null, maxLength: n
     // SECOND: Try the complex DecryptedMessage format (nested structure)
     const textContent = extractClaudeTextContent(content.content);
     if (textContent) {
-      const plainText = stripMarkdown(textContent);
-      return plainText.length > maxLength
-        ? plainText.substring(0, maxLength) + '...'
-        : plainText;
+      return truncateMessagePreviewText(formatMessagePreviewText(textContent), maxLength);
     }
     
     // THIRD: Check for tool calls in DecryptedMessage format
@@ -248,4 +212,4 @@ export function getMessagePreview(message: DecryptedMessage | null, maxLength: n
 export function isMessageFromAssistant(message: DecryptedMessage | null): boolean {
   if (!message?.content) return false;
   return message.content.role === 'agent';
-} 
+}

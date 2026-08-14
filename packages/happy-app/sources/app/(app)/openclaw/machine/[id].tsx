@@ -546,7 +546,7 @@ export default function OpenClawMachineDetailPage() {
                     headerRight: () => (
                         <Pressable
                             onPress={handleMenuPress}
-                            style={{ width: 32, height: 32, alignItems: 'center', justifyContent: 'center' }}
+                            style={{ width: 38, height: 38, alignItems: 'center', justifyContent: 'center' }}
                             disabled={isUpdating}
                         >
                             <Ionicons

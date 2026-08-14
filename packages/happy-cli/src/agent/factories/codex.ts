@@ -15,6 +15,7 @@ import {
 import type { AgentBackend, McpServerConfig, AgentFactoryOptions } from '../core';
 import { agentRegistry } from '../core';
 import { logger } from '@/ui/logger';
+import { CODEX_PACKAGE } from '@/codex/package';
 
 /**
  * Options for creating a Codex app-server backend
@@ -53,8 +54,8 @@ export interface CodexBackendResult {
 /**
  * Create a Codex backend using the app-server JSON-RPC protocol.
  *
- * The Codex CLI must be installed and available in PATH.
- * Spawns `codex app-server` as a child process.
+ * Spawns the configured Codex npm package via `npx` in app-server mode.
+ * Set HAPPY_CODEX_PACKAGE to override the default package/version.
  *
  * If no model is specified, the Codex CLI will use its own default
  * (consistent with how Claude Code handles model selection).
@@ -66,7 +67,7 @@ export function createCodexBackend(options: CodexBackendOptions): CodexBackendRe
   const backendOptions: CodexAppServerBackendOptions = {
     cwd: options.cwd,
     command: 'npx',
-    args: ['-y', '@openai/codex@0.133.0', 'app-server'],
+    args: ['-y', CODEX_PACKAGE, 'app-server'],
     env: {
       ...options.env,
     },
@@ -89,6 +90,7 @@ export function createCodexBackend(options: CodexBackendOptions): CodexBackendRe
     sandbox: options.sandbox,
     mcpServerCount: options.mcpServers ? Object.keys(options.mcpServers).length : 0,
     hasResumeFile: !!options.resumeFile,
+    codexPackage: CODEX_PACKAGE,
   });
 
   return {

@@ -2,6 +2,8 @@ import { Platform } from 'react-native';
 import { LocalImage } from '@/components/ImagePreview';
 import { ImageContent } from './typesRaw';
 
+const IMAGE_UPLOAD_TIMEOUT_MS = 60_000;
+
 /**
  * Uploads a chat image to the server and returns the image content for message.
  *
@@ -35,13 +37,21 @@ export async function uploadChatImage(
 
     formData.append('sessionId', sessionId);
 
-    const response = await fetch(`${apiUrl}/v1/chat/upload-image`, {
-        method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${token}`,
-        },
-        body: formData,
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), IMAGE_UPLOAD_TIMEOUT_MS);
+    let response: Response;
+    try {
+        response = await fetch(`${apiUrl}/v1/chat/upload-image`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+            body: formData,
+            signal: controller.signal,
+        });
+    } finally {
+        clearTimeout(timeout);
+    }
 
     if (!response.ok) {
         throw new Error(`Upload failed: ${response.status}`);

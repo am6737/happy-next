@@ -1,5 +1,4 @@
 import * as React from 'react';
-import { Linking } from 'react-native';
 import { useAuth } from '@/auth/AuthContext';
 import { decodeBase64 } from '@/encryption/base64';
 import { encryptBox } from '@/encryption/libsodium';
@@ -11,6 +10,8 @@ import { t } from '@/text';
 import { hapticsLight } from '@/components/haptics';
 import { showToast } from '@/components/Toast';
 import { sync } from '@/sync/sync';
+import { openExternalUrl } from '@/utils/tauri';
+import { APP_REVIEW_DEMO_QR_URL } from '@/constants/reviewDemo';
 
 const URL_REGEX = /^https?:\/\//i;
 
@@ -19,7 +20,14 @@ export function useUnifiedScanner() {
     const [isLoading, setIsLoading] = React.useState(false);
 
     const processUrl = React.useCallback(async (url: string) => {
-        if (url.startsWith('happy://terminal?')) {
+        if (url === APP_REVIEW_DEMO_QR_URL) {
+            Modal.alert(
+                t('common.success'),
+                t('modals.reviewDemoQrScannedSuccessfully'),
+                [{ text: t('common.ok') }],
+            );
+            return true;
+        } else if (url.startsWith('happy://terminal?')) {
             if (!auth.credentials) {
                 Modal.alert(t('common.error'), t('errors.notAuthenticated'), [{ text: t('common.ok') }]);
                 return false;
@@ -64,7 +72,7 @@ export function useUnifiedScanner() {
                 setIsLoading(false);
             }
         } else if (URL_REGEX.test(url)) {
-            Linking.openURL(url);
+            await openExternalUrl(url);
             return true;
         } else {
             Modal.alert(t('common.error'), t('modals.unrecognizedQrCode', { content: url }), [{ text: t('common.ok') }]);

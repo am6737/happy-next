@@ -5,6 +5,7 @@ import { sessionLastViewedAt, sync } from '@/sync/sync';
 import { sessionUpdateMetadataFields } from '@/sync/ops';
 import { t } from '@/text';
 import { resolveDuplicatedModelMode } from '@/utils/duplicateModelMode';
+import { hasUnreadCompletionSince } from '@/utils/sessionAttention';
 
 export type SessionState = 'disconnected' | 'syncing' | 'thinking' | 'awaiting' | 'waiting' | 'permission_required';
 
@@ -43,16 +44,8 @@ export interface SessionStatus {
 }
 
 export function hasUnreadCompletion(session: Session): boolean {
-    const taskCompleted = session.agentState?.taskCompleted;
-    if (!taskCompleted) return false;
-    // Don't show for archived sessions
-    if (!session.active) return false;
-    // Don't show if older than 7 days
-    if (Date.now() - taskCompleted > 7 * 24 * 60 * 60 * 1000) return false;
     const localLastViewed = sessionLastViewedAt.get(session.id) ?? 0;
-    const syncedDismissedAt = session.metadata?.completionDismissedAt ?? 0;
-    const lastViewed = Math.max(localLastViewed, syncedDismissedAt);
-    return taskCompleted > lastViewed;
+    return hasUnreadCompletionSince(session, localLastViewed);
 }
 
 /**

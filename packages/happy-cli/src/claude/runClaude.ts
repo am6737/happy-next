@@ -31,6 +31,7 @@ import { startOfflineReconnection, connectionState } from '@/utils/serverConnect
 import { claudeLocal } from '@/claude/claudeLocal';
 import { cleanupStdinAfterInk } from '@/utils/terminalStdinCleanup';
 import { syncOrchestratorAssets } from '@/orchestrator/skillSync';
+import { syncBuiltinCommands } from '@/commands/builtinCommands';
 import { createSessionScanner } from '@/claude/utils/sessionScanner';
 import { Session } from './session';
 import { findClaudeProjectId } from '@/claude/utils/claudeSessionIndex';
@@ -144,6 +145,9 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
     // Install the orchestrator skill + /orchestrator:* commands for this controller session
     // (no-op for worker sessions and idempotent across runs).
     syncOrchestratorAssets();
+
+    // Install built-in slash commands (e.g. /preview-html) for all sessions.
+    syncBuiltinCommands();
 
     // Create session service
     const api = await ApiClient.create(credentials);

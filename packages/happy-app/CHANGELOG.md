@@ -1,5 +1,104 @@
 # Changelog
 
+## Version 21 - 2026-08-11
+
+Sessions can now be labeled with seven color markers for quicker visual organization. Desktop users can drag images directly into new or active sessions, slash-command completion stays focused on relevant subcommands after a command is selected, and iOS download links now point to the App Store. This release also improves iOS image opening and duplicate-sheet behavior when the keyboard is visible, and centers the empty state in DooTask chats.
+
+- Sessions: assign or clear one of seven color markers from the session menu, visible throughout session lists
+- Desktop images: drag images into the new-session composer or an active chat, with a clear drop indicator
+- Slash commands: after selecting a root command, autocomplete only shows its matching subcommands and no longer mixes skills into free-form arguments
+- iOS: download links now point to the App Store, with Web app guidance for users in mainland China
+- iOS: dismiss the keyboard before opening images to prevent presentation conflicts
+- iOS: prevent a white overlay when opening the duplicate-session sheet with the keyboard visible
+- DooTask: center the empty-chat state consistently
+
+## Version 20 - 2026-07-30
+
+Happy Next is now ready for direct desktop distribution on macOS and Windows, with a more native and reliable window experience, refreshed Claude and Gemini model support, easier HTML and Git workflows, collapsible session folders, refreshed branding, and further polish across notifications, session progress, iOS action menus, adaptive themes, message duplication, permissions, and the CLI.
+
+- Desktop apps: native-feeling desktop clients for macOS 12+ Universal, Windows x64, and Windows ARM64, distributed directly through GitHub Releases
+- Window experience: authentication-aware window sizing, native state restoration, frameless macOS title bar integration, reliable dragging, multi-monitor bounds protection, and theme-correct startup
+- Tray and notifications: close to tray, single-instance activation, native notifications that open the corresponding Session, and Dock/taskbar unread indicators
+- Desktop controls: native application menus, search and navigation shortcuts, optional launch at sign-in, and a global show/hide shortcut
+- Automatic updates: signed update packages download quietly in the background and expose an in-app Update button when ready; installation and restart remain user initiated
+- Reliability: desktop diagnostics, rotating native logs, upload failure recovery, persistent composer content, and significantly lower idle CPU usage
+- Security and permissions: restricted Tauri capabilities, hardened navigation and CSP boundaries, system-browser external links, and explicit microphone and camera support
+- Visual polish: refreshed logos, favicons, splash screens, notification assets, and platform-specific macOS and Windows icons, including the macOS 26 layered icon format and compatibility icons for older macOS versions
+- Session organization: sessions can be grouped into collapsible project folders, with folder state retained locally
+- Desktop polish: added a native startup logo and improved empty-state branding, title-bar interactions, fullscreen behavior, and native context menus
+- Windows desktop: added an integrated native-style title bar, refined sidebar and unauthenticated navigation, hid menus in child windows, improved taskbar unread indicators, and polished icon rendering
+- Desktop reliability: prevented long-running WebKit storage growth, stabilized macOS traffic-light positioning at startup, restored notification routing, and unified notification, attention, Dock, and taskbar unread behavior
+- HTML previews and editing: supported tool messages can open HTML previews directly, preview windows retain isolated theme-correct behavior, and code editing works under the desktop CSP
+- Sessions and Git: Codex in-progress plan steps remain visible, and opening Files from git status focuses the relevant changes
+- Models: added Claude Opus 5, Claude Sonnet 5, Gemini 3.6 Flash, and Gemini 3.5 Flash-Lite with updated reasoning options, context limits, fast-mode support, and Claude 5 cost calculation
+- Messages and iOS: duplicate/fork actions resolve the intended user-message target more reliably; action menus remain stable with the keyboard visible; scanner camera permissions are clearer and an unused motion permission is removed
+- Notifications and themes: notification previews use clean plain text, while adaptive system-theme changes apply reliably across app and desktop authentication windows
+- iOS privacy: the camera permission explanation now proceeds directly to the iOS system permission request without offering a cancel action
+- Desktop notifications: clicking macOS notifications reliably restores the app and opens the associated session
+- Desktop updates: automatic update checks now repeat periodically and when the app regains focus, while avoiding redundant requests
+- Windows notifications: native notifications now display the Happy Next app icon consistently
+- Windows navigation: clicking the title-bar logo now returns directly to the Sessions home screen
+- CLI: Happy CLI updated to v0.6.6 with refreshed model support and pricing, multiline skill-metadata parsing, enabled plugin-skill discovery, and more reliable message-target resolution
+
+## Version 19 - 2026-07-22
+
+Sessions gain convenient quick actions, Orchestrator runs become easier to inspect and navigate, Codex skills join slash-command autocomplete, navigation headers are more consistent, and chat reliability improves across web and smaller screens.
+
+- Sessions: quick actions in session info make common session tasks easier to access
+- Orchestrator: task pages now present execution history more clearly, run navigation is streamlined, and Orchestrator messages link directly to their corresponding runs
+- Codex skills: installed Codex skills now appear in slash-command autocomplete
+- Navigation: back buttons and header actions are aligned consistently across session and machine screens
+- Chat: the empty state adapts better to short screens, and the initial message is no longer clipped on web
+- Reliability: late tool results are retained after task completion, and stale Orchestrator activity badges are cleared correctly
+- CLI: Happy CLI updated to v0.6.4 with Codex 0.145.0, refined Orchestrator skill behavior, cleaner file-search results, and more accurate delegated-activity completion notifications
+
+## Version 18 - 2026-07-17
+
+Message read-aloud is rebuilt around true streaming TTS with a global playback queue and a draggable floating player, a new /preview-html CLI command renders self-contained HTML previews right inside the app, web conversation-list scrolling gets more polish, and the iOS status bar stays correct after the keyboard animates.
+
+- Voice: message read-aloud now streams audio as it's synthesized, so playback starts sooner and no longer dies mid-message or silently drops the tail
+- Voice: a global read-aloud queue with a draggable floating player lets you line up messages and control playback from anywhere
+- Voice: an improved text-cleanup prompt (v2) with a digest mode condenses long messages for smoother, more natural narration
+- Preview HTML: the CLI adds a built-in /preview-html slash command that generates a self-contained HTML document and previews it directly in the app
+- Web conversation list: scroll position is now preserved when returning from a covered screen, and the proxy scrollbar strip is sized to match the platform's native scrollbar width
+- iOS: the status bar is reapplied after keyboard animations so it no longer gets left in the wrong state
+- Server: background service-discovery retries are fixed so connection setup recovers more reliably
+- Docs: the documentation site is synced with the last five weeks of shipped features
+- CLI: Happy CLI updated to v0.6.3 — unknown commands are now rejected before launching Claude
+
+## Version 17 - 2026-07-12
+
+The web conversation list is rebuilt as a model-driven virtualized list with instant centered jumps and refined, stable scrolling, the minimap now fills in from the offline message cache, the model picker is streamlined to seven entries with side-by-side reasoning-effort presets, and the CLI updates to v0.6.2 with Codex 0.144.1.
+
+- Web conversation list: rebuilt as a model-driven virtualized list — jumping to a message centers instantly, with a subtle shake when you're already there; history now loads on demand as you scroll
+- Web scrolling: scroll geometry is frozen during gestures to stop scroll jumps, scroll-to-bottom now lands on the true bottom, jumps from far away teleport into place, and a proxy scrollbar replaces the distorted native one for an honest scroll position
+- Minimap: the conversation minimap now populates from the offline message cache, so the navigation overview is available even before messages finish loading or while offline
+- Models: the model picker is streamlined from 12 to 7 entries — Claude 1M-context variants collapse into a single toggle instead of separate rows
+- Models: on wide screens the reasoning-effort presets show side by side, and Claude now defaults to High effort
+- Codex: updated to Codex 0.144.1 with a refreshed model catalog
+- Sessions: mode settings now carry over when a session is restarted with the latest CLI, and the message cache is cleared after archiving a session
+- Fixes: sub-agent token usage no longer overwrites the main session's context-window indicator; the message outbox no longer overflows on large batches, and noisy 4xx server logs are reduced; a stale message-coverage retry loop that could leave sessions stuck loading is resolved; the iOS tab notification dot now renders correctly and is smaller; the update banner is removed from the sessions list
+- CLI: Happy CLI updated to v0.6.2 — the daemon now starts reliably after update and login
+
+## Version 16 - 2026-07-08
+
+Conversations gain a minimap for quick navigation, a context-usage tooltip, a persistent message cache for faster reopens, and a resizable sidebar on web; server connectivity is streamlined with service discovery, fastest-default API endpoint racing, and improved self-host deployment setup; shared-session lists and machine tabs update more reliably; voice auth is hardened with short-lived tokens; and the CLI updates to v0.6.0 with new Codex slash commands for compact review and goal-setting.
+
+- Minimap: tap the new minimap panel to jump to any part of a long conversation at a glance, with polished overlay placement for smoother navigation
+- Context usage: a tooltip on the context indicator shows token-count breakdown details
+- Message cache: session messages are persisted locally so reopening a conversation can show existing history faster with less blank loading time
+- Web sidebar: the sidebar is now resizable by dragging its edge
+- Settings: a shortcut button to configure a custom server is now visible on desktop settings
+- Breadcrumb: copy the current browser breadcrumb path directly from the navigation bar
+- Git: bulk git actions now show loading feedback while the operation runs
+- Voice: voice gateway auth now uses short-lived tokens for improved security
+- Server: service discovery for API and voice config endpoints is now supported; when no custom server or env override is configured, the app races the official default API endpoints and uses the fastest available config response
+- Self-hosting: Docker/self-host deployment setup and documentation were improved
+- Sessions: new session defaults now pick the best available machine automatically, and machine tabs remain visible when shared sessions are present
+- Sharing: the Shared by me list now updates after sharing changes
+- Fixes: user display name fallbacks improved; shared session permissions corrected; diff text selection enabled in the file viewer; pending-messages 404 loop resolved for view-only sessions
+- CLI: Happy CLI updated to v0.6.0 with Codex slash commands for compact review and goal-setting
+
 ## Version 15 - 2026-06-29
 
 Pending messages can now be edited and paused or saved as drafts before they send, machine tabs surface live status dots for sessions that need permission or are thinking, and the CLI orchestrator's activity count now includes queued tasks.

@@ -4,9 +4,10 @@ import { authAndSetupMachineIfNeeded } from '@/ui/auth';
 import { configuration } from '@/configuration';
 import { existsSync, rmSync } from 'node:fs';
 import { createInterface } from 'node:readline';
-import { stopDaemon, checkIfDaemonRunningAndCleanupStaleState } from '@/daemon/controlClient';
+import { stopDaemon, checkIfDaemonRunningAndCleanupStaleState, startDaemonDetachedAndAwaitReady } from '@/daemon/controlClient';
 import { logger } from '@/ui/logger';
 import os from 'node:os';
+import packageJson from '../../package.json';
 
 export async function handleAuthCommand(args: string[]): Promise<void> {
   const subcommand = args[0];
@@ -111,6 +112,18 @@ async function handleAuthLogin(args: string[]): Promise<void> {
   } catch (error) {
     console.error(chalk.red('Authentication failed:'), error instanceof Error ? error.message : 'Unknown error');
     process.exit(1);
+  }
+
+  console.log('Starting daemon...');
+  try {
+    const started = await startDaemonDetachedAndAwaitReady(packageJson.version);
+    if (started) {
+      console.log(chalk.green('✓ Daemon started'));
+    } else {
+      console.log(chalk.yellow('⚠ Daemon did not confirm startup. Check "happy daemon status" or run "happy daemon start".'));
+    }
+  } catch (error) {
+    console.log(chalk.yellow(`⚠ Failed to start daemon: ${error instanceof Error ? error.message : 'unknown error'}. Run "happy daemon start" manually.`));
   }
 }
 

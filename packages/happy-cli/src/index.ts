@@ -16,7 +16,7 @@ import { authAndSetupMachineIfNeeded } from './ui/auth'
 import packageJson from '../package.json'
 import { z } from 'zod'
 import { startDaemon } from './daemon/run'
-import { checkIfDaemonRunningAndCleanupStaleState, isDaemonRunningCurrentlyInstalledHappyVersion, stopDaemon } from './daemon/controlClient'
+import { isDaemonRunningCurrentlyInstalledHappyVersion, startDaemonDetached, startDaemonDetachedAndAwaitReady, stopDaemon } from './daemon/controlClient'
 import { getLatestDaemonLog } from './ui/logger'
 import { killRunawayHappyProcesses } from './daemon/doctor'
 import { install } from './daemon/install'
@@ -27,9 +27,9 @@ import { listDaemonSessions, stopDaemonSession } from './daemon/controlClient'
 import { handleAuthCommand } from './commands/auth'
 import { handleConnectCommand } from './commands/connect'
 import { handleUpdateCommand } from './commands/update'
-import { spawnHappyCLI } from './utils/spawnHappyCLI'
 import { claudeCliPath } from './claude/claudeLocal'
 import { execFileSync } from 'node:child_process'
+import { PUBLIC_DAEMON_SUBCOMMANDS, resolveCliInvocation, suggestClosestCommand } from './cli/commandRouting'
 
 // Give the process a distinctive title so it does not show up as a generic
 // `node ... dist/index.mjs ...` in `ps`/`pkill`. Otherwise tooling and AI agents that
@@ -39,27 +39,22 @@ import { execFileSync } from 'node:child_process'
 // We keep the `happy-next-cli` token (matched by daemon process discovery in
 // `daemon/doctor.ts`, and as the truncated `comm` matched by `name.includes('happy')`)
 // and the original args (used to classify daemon / session / version-check processes).
-process.title = ['happy-next-cli', ...process.argv.slice(2)].join(' ')
-
-/** Spawn a detached daemon process and poll until it writes its state file (up to 5s). */
-async function spawnAndWaitForDaemon(): Promise<boolean> {
-  const child = spawnHappyCLI(['daemon', 'start-sync'], {
-    detached: true,
-    stdio: 'ignore',
-  });
-  child.unref();
-
-  for (let i = 0; i < 50; i++) {
-    if (await checkIfDaemonRunningAndCleanupStaleState()) {
-      return true;
-    }
-    await new Promise(resolve => setTimeout(resolve, 100));
-  }
-  return false;
-}
+process.title = ['happy-next-cli', ...process.argv.slice(2)].join(' ');
 
 (async () => {
-  const args = process.argv.slice(2)
+  const rawArgs = process.argv.slice(2)
+  const invocation = resolveCliInvocation(rawArgs)
+
+  if (invocation.kind === 'unknown-command') {
+    console.error(chalk.red(`Error: unknown command "${invocation.command}"`))
+    if (invocation.suggestion) {
+      console.error(`\nDid you mean?\n  ${chalk.cyan(['happy', invocation.suggestion, ...rawArgs.slice(1)].join(' '))}`)
+    }
+    console.error(`\nTo pass these arguments to Claude, use:\n  ${chalk.cyan(['happy', 'claude', ...rawArgs].join(' '))}`)
+    process.exit(2)
+  }
+
+  const args = invocation.kind === 'claude' ? invocation.args : rawArgs
 
   // If --version is passed - do not log, its likely daemon inquiring about our version
   if (!args.includes('--version')) {
@@ -67,7 +62,7 @@ async function spawnAndWaitForDaemon(): Promise<boolean> {
   }
 
   // Check if first argument is a subcommand
-  const subcommand = args[0]
+  const subcommand = invocation.kind === 'happy-command' ? invocation.command : undefined
   
   // Log which subcommand was detected (for debugging)
   if (!args.includes('--version')) {
@@ -143,12 +138,8 @@ async function spawnAndWaitForDaemon(): Promise<boolean> {
       logger.debug('Ensuring Happy background service is running & matches our version...');
       if (!(await isDaemonRunningCurrentlyInstalledHappyVersion())) {
         logger.debug('Starting Happy background service...');
-        const daemonProcess = spawnHappyCLI(['daemon', 'start-sync'], {
-          detached: true,
-          stdio: 'ignore',
-          env: process.env
-        });
-        daemonProcess.unref();
+        startDaemonDetached();
+        // Give daemon a moment to write PID & port file
         await new Promise(resolve => setTimeout(resolve, 200));
       }
 
@@ -362,12 +353,8 @@ async function spawnAndWaitForDaemon(): Promise<boolean> {
       logger.debug('Ensuring Happy background service is running & matches our version...');
       if (!(await isDaemonRunningCurrentlyInstalledHappyVersion())) {
         logger.debug('Starting Happy background service...');
-        const daemonProcess = spawnHappyCLI(['daemon', 'start-sync'], {
-          detached: true,
-          stdio: 'ignore',
-          env: process.env
-        });
-        daemonProcess.unref();
+        startDaemonDetached();
+        // Give daemon a moment to write PID & port file
         await new Promise(resolve => setTimeout(resolve, 200));
       }
 
@@ -451,7 +438,7 @@ async function spawnAndWaitForDaemon(): Promise<boolean> {
       return
 
     } else if (daemonSubcommand === 'start') {
-      const started = await spawnAndWaitForDaemon();
+      const started = await startDaemonDetachedAndAwaitReady(packageJson.version);
       console.log(started ? 'Daemon started successfully' : 'Failed to start daemon');
       process.exit(started ? 0 : 1);
     } else if (daemonSubcommand === 'start-sync') {
@@ -462,7 +449,7 @@ async function spawnAndWaitForDaemon(): Promise<boolean> {
       process.exit(0)
     } else if (daemonSubcommand === 'restart') {
       await stopDaemon()
-      const started = await spawnAndWaitForDaemon();
+      const started = await startDaemonDetachedAndAwaitReady(packageJson.version);
       console.log(started ? 'Daemon restarted successfully' : 'Failed to restart daemon');
       process.exit(started ? 0 : 1)
     } else if (daemonSubcommand === 'status') {
@@ -494,7 +481,7 @@ async function spawnAndWaitForDaemon(): Promise<boolean> {
         process.exit(1)
       }
       process.exit(0)
-    } else {
+    } else if (!daemonSubcommand || daemonSubcommand === 'help' || daemonSubcommand === '--help' || daemonSubcommand === '-h') {
       console.log(`
 ${chalk.bold('happy daemon')} - Daemon management
 
@@ -514,24 +501,31 @@ ${chalk.bold('Note:')} The daemon runs in the background and manages Claude sess
 
 ${chalk.bold('To clean up runaway processes:')} Use ${chalk.cyan('happy doctor clean')}
 `)
+    } else {
+      const suggestion = suggestClosestCommand(daemonSubcommand, PUBLIC_DAEMON_SUBCOMMANDS)
+      console.error(chalk.red(`Error: unknown daemon command "${daemonSubcommand}"`))
+      if (suggestion) {
+        console.error(`\nDid you mean?\n  ${chalk.cyan(`happy daemon ${suggestion}`)}`)
+      }
+      process.exit(2)
     }
     return;
   } else {
-
-    // If the first argument is claude, remove it
-    if (args.length > 0 && args[0] === 'claude') {
-      args.shift()
-    }
-
     // Parse command line arguments for main command
     const options: StartOptions = {}
     let showHelp = false
     let showVersion = false
     let chromeOverride: boolean | undefined = undefined  // Track explicit --chrome or --no-chrome
     const unknownArgs: string[] = [] // Collect unknown args to pass through to claude
+    const passthrough = invocation.kind === 'claude' && invocation.passthrough
+    const argsToParse = passthrough ? [] : args
 
-    for (let i = 0; i < args.length; i++) {
-      const arg = args[i]
+    if (passthrough) {
+      options.claudeArgs = [...args]
+    }
+
+    for (let i = 0; i < argsToParse.length; i++) {
+      const arg = argsToParse[i]
 
       if (arg === '-h' || arg === '--help') {
         showHelp = true
@@ -542,14 +536,14 @@ ${chalk.bold('To clean up runaway processes:')} Use ${chalk.cyan('happy doctor c
         // Also pass through to claude (will show after our version)
         unknownArgs.push(arg)
       } else if (arg === '--happy-starting-mode') {
-        options.startingMode = z.enum(['local', 'remote']).parse(args[++i])
+        options.startingMode = z.enum(['local', 'remote']).parse(argsToParse[++i])
       } else if (arg === '--yolo') {
         // Shortcut for --dangerously-skip-permissions
         unknownArgs.push('--dangerously-skip-permissions')
       } else if (arg === '--started-by') {
-        options.startedBy = args[++i] as 'daemon' | 'terminal'
+        options.startedBy = argsToParse[++i] as 'daemon' | 'terminal'
       } else if (arg === '--js-runtime') {
-        const runtime = args[++i]
+        const runtime = argsToParse[++i]
         if (runtime !== 'node' && runtime !== 'bun') {
           console.error(chalk.red(`Invalid --js-runtime value: ${runtime}. Must be 'node' or 'bun'`))
           process.exit(1)
@@ -557,7 +551,7 @@ ${chalk.bold('To clean up runaway processes:')} Use ${chalk.cyan('happy doctor c
         options.jsRuntime = runtime
       } else if (arg === '--claude-env') {
         // Parse KEY=VALUE environment variable to pass to Claude
-        const envArg = args[++i]
+        const envArg = argsToParse[++i]
         if (envArg && envArg.includes('=')) {
           const eqIndex = envArg.indexOf('=')
           const key = envArg.substring(0, eqIndex)
@@ -576,7 +570,7 @@ ${chalk.bold('To clean up runaway processes:')} Use ${chalk.cyan('happy doctor c
         // Happy-specific flag to disable chrome even if default is on
       } else if (arg === '--settings') {
         // Intercept --settings flag - Happy uses this internally for session hooks
-        const settingsValue = args[++i] // consume the value
+        const settingsValue = argsToParse[++i] // consume the value
         console.warn(chalk.yellow(`⚠️  Warning: --settings is used internally by Happy for session tracking.`))
         console.warn(chalk.yellow(`   Your settings file "${settingsValue}" will be ignored.`))
         console.warn(chalk.yellow(`   To configure Claude, edit ~/.claude/settings.json instead.`))
@@ -585,8 +579,8 @@ ${chalk.bold('To clean up runaway processes:')} Use ${chalk.cyan('happy doctor c
         // Pass unknown arguments through to claude
         unknownArgs.push(arg)
         // Check if this arg expects a value (simplified check for common patterns)
-        if (i + 1 < args.length && !args[i + 1].startsWith('-')) {
-          unknownArgs.push(args[++i])
+        if (i + 1 < argsToParse.length && !argsToParse[i + 1].startsWith('-')) {
+          unknownArgs.push(argsToParse[++i])
         }
       }
     }
@@ -610,6 +604,8 @@ ${chalk.bold('happy')} - Claude Code On the Go
 
 ${chalk.bold('Usage:')}
   happy [options]         Start Claude with mobile control
+  happy claude [args]     Start Claude with explicit positional arguments
+  happy -- <args>         Pass positional arguments directly to Claude
   happy auth              Manage authentication
   happy codex             Start Codex mode
   happy gemini            Start Gemini mode (ACP)
@@ -691,15 +687,7 @@ ${chalk.bold.cyan('Claude Code Options (from `claude --help`):')}
 
     if (!(await isDaemonRunningCurrentlyInstalledHappyVersion())) {
       logger.debug('Starting Happy background service...');
-
-      // Use the built binary to spawn daemon
-      const daemonProcess = spawnHappyCLI(['daemon', 'start-sync'], {
-        detached: true,
-        stdio: 'ignore',
-        env: process.env
-      })
-      daemonProcess.unref();
-
+      startDaemonDetached();
       // Give daemon a moment to write PID & port file
       await new Promise(resolve => setTimeout(resolve, 200));
     }

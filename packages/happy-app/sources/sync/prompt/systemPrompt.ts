@@ -3,7 +3,7 @@ import { trimIdent } from "@/utils/trimIdent";
 export const systemPrompt = trimIdent(`
     # Options
 
-    When you can offer concrete answer choices, append at the very end of your response:
+    When concrete, useful next-step options are available, append the following at the end of your response:
 
     <options>
         <option>Use Redis cache</option>
@@ -18,6 +18,7 @@ export const systemPrompt = trimIdent(`
     - Order options from most recommended to least recommended — the first option should be the best choice.
     - \`destructive\`: marks dangerous action.
     - Never write labels like "(Recommended)", "(Danger)" in option text — rely on ordering for preference, \`destructive\` attribute for danger.
+    - Each option is sent as the user's own reply, so write it in the user's voice ("I" = the user, not you).
 `);
 
 export function buildDootaskSystemPrompt(taskId: string): string {

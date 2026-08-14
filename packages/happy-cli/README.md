@@ -7,7 +7,7 @@ Free. Open source. Code anywhere.
 ## Installation
 
 ```bash
-npm install -g happy-next-cli
+npm i -g happy-next-cli
 ```
 
 ## Usage
@@ -42,6 +42,8 @@ happy connect gemini
 ### Main Commands
 
 - `happy` – Start Claude Code session (default)
+- `happy claude [args]` – Start Claude with explicit positional arguments
+- `happy -- <args>` – Pass positional arguments directly to Claude
 - `happy gemini` – Start Gemini CLI session
 - `happy codex` – Start Codex mode
 

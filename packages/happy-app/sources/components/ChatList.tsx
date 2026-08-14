@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { useSession, useSessionMessages, useProfile } from "@/sync/storage";
+import { useSession, useSessionMessages, useProfile, storage } from "@/sync/storage";
 import { ActivityIndicator, FlatList, Platform, Pressable, Text, View } from 'react-native';
 import { useCallback, useRef, useState } from 'react';
 import { useHeaderHeight } from '@/utils/responsive';
@@ -7,11 +7,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useUnistyles } from 'react-native-unistyles';
 import { Ionicons } from '@expo/vector-icons';
 import { MessageView } from './MessageView';
+import { ConversationMinimapItem } from './ConversationMinimap';
 import { Metadata, Session } from '@/sync/storageTypes';
 import { ChatFooter } from './ChatFooter';
 import { Message, UserTextMessage } from '@/sync/typesMessage';
 import { layout } from './layout';
 import { createScrollButtonVisibilityController } from './scrollButtonVisibilityController';
+import { t } from '@/text';
 
 const LOCAL_COMMAND_STDOUT_PATTERN = /^<local-command-stdout>[\s\S]*<\/local-command-stdout>$/;
 
@@ -22,6 +24,17 @@ function isCompactionMarkerText(text: string): boolean {
 function shouldHideMessageInChatList(message: Message): boolean {
     return message.kind === 'user-text' && isCompactionMarkerText(message.displayText ?? message.text);
 }
+
+// Does a loaded list message correspond to the given minimap target (whose id may come from the
+// throwaway reducer and therefore not match the store's id)?
+function messageMatchesTarget(message: Message, target: UserTextMessage): boolean {
+    if (target.seq != null && message.seq === target.seq) return true;
+    if (target.localId && (message as { localId?: string | null }).localId === target.localId) return true;
+    return message.id === target.id;
+}
+
+// A loaded user message paired with its index in the inverted FlatList data (`visibleMessages`).
+type LoadedUserMessage = { message: UserTextMessage; index: number };
 
 // Describes a fork initiated from a message's inline fork icon.
 export interface ForkMessageRequest {
@@ -38,7 +51,7 @@ export interface ForkMessageRequest {
     skipDraft: boolean;
 }
 
-export const ChatList = React.memo((props: { session: Session; onFillInput?: (text: string, allOptions?: string[]) => void; onLoadMore?: () => void; onForkMessage?: (request: ForkMessageRequest) => void; forkingMessageId?: string | null }) => {
+export const ChatList = React.memo((props: { session: Session; onFillInput?: (text: string, allOptions?: string[]) => void; onLoadMore?: () => void; onForkMessage?: (request: ForkMessageRequest) => void; forkingMessageId?: string | null; minimapCachedUserMessages?: UserTextMessage[]; onMinimapItemsChange?: (items: ConversationMinimapItem[]) => void; onActiveMessageIdsChange?: (ids: Set<string>) => void; onRegisterMinimapJump?: (jump: ((message: UserTextMessage) => void) | null) => void }) => {
     const { messages, hasMore } = useSessionMessages(props.session.id);
     const profile = useProfile();
     const isSharedSession = !!(props.session.isShared || props.session.accessLevel);
@@ -55,6 +68,10 @@ export const ChatList = React.memo((props: { session: Session; onFillInput?: (te
             onForkMessage={props.onForkMessage}
             thinking={props.session.thinking}
             forkingMessageId={props.forkingMessageId}
+            minimapCachedUserMessages={props.minimapCachedUserMessages}
+            onMinimapItemsChange={props.onMinimapItemsChange}
+            onActiveMessageIdsChange={props.onActiveMessageIdsChange}
+            onRegisterMinimapJump={props.onRegisterMinimapJump}
         />
     )
 });
@@ -88,6 +105,10 @@ const ChatListInternal = React.memo((props: {
     onForkMessage?: (request: ForkMessageRequest) => void,
     thinking?: boolean,
     forkingMessageId?: string | null,
+    minimapCachedUserMessages?: UserTextMessage[],
+    onMinimapItemsChange?: (items: ConversationMinimapItem[]) => void,
+    onActiveMessageIdsChange?: (ids: Set<string>) => void,
+    onRegisterMinimapJump?: (jump: ((message: UserTextMessage) => void) | null) => void,
 }) => {
     const { theme } = useUnistyles();
     const flatListRef = useRef<FlatList>(null);
@@ -181,6 +202,213 @@ const ChatListInternal = React.memo((props: {
     }
 
     const keyExtractor = useCallback((item: any) => item.id, []);
+
+    // Loaded user messages in ascending (oldest→newest) order, carrying their FlatList data index
+    // (index into the inverted `visibleMessages`). Used for the active-marker nearest-neighbor
+    // computation while scrolling.
+    const loadedUserMessages = React.useMemo<LoadedUserMessage[]>(() => {
+        return visibleMessages
+            .map((message, index) => message.kind === 'user-text'
+                ? { message, index }
+                : null)
+            .filter((item): item is LoadedUserMessage => item !== null)
+            .reverse();
+    }, [visibleMessages]);
+    const loadedUserMessagesRef = useRef(loadedUserMessages);
+
+    // Merge offline-cached user messages with the loaded ones so the minimap can show prompts that
+    // live in the persistent cache but haven't been paged into the list yet. Loaded messages win on
+    // id (they carry an accurate scroll position); compaction markers are hidden to match the list.
+    const minimapItems = React.useMemo<ConversationMinimapItem[]>(() => {
+        // Loaded messages always win (they carry the store's id → accurate scroll position + active
+        // highlight). A cached entry is dropped if a loaded message matches it by EITHER seq OR
+        // localId: the same message can be represented differently on each side (e.g. loaded is the
+        // just-sent optimistic copy with a localId and no seq, cache has the acked copy with a seq),
+        // so a single-key match would leak duplicates.
+        const loadedBySeq = new Set<number>();
+        const loadedByLocalId = new Set<string>();
+        const merged: UserTextMessage[] = [];
+        for (const loaded of loadedUserMessages) {
+            merged.push(loaded.message);
+            if (loaded.message.seq != null) loadedBySeq.add(loaded.message.seq);
+            if (loaded.message.localId) loadedByLocalId.add(loaded.message.localId);
+        }
+        for (const cached of props.minimapCachedUserMessages ?? []) {
+            if (shouldHideMessageInChatList(cached)) continue;
+            if (cached.seq != null && loadedBySeq.has(cached.seq)) continue;
+            if (cached.localId && loadedByLocalId.has(cached.localId)) continue;
+            merged.push(cached);
+        }
+        // Order oldest→newest to match the list (which sorts by createdAt, seq as tiebreaker).
+        // createdAt must be primary: just-sent messages have no seq yet, so keying on seq would
+        // sort them as seq 0 and shove them to the very top instead of the bottom.
+        return merged
+            .sort((a, b) => a.createdAt - b.createdAt || (a.seq ?? 0) - (b.seq ?? 0))
+            .map((message) => ({ message }));
+    }, [props.minimapCachedUserMessages, loadedUserMessages]);
+    const activeMessageIdsRef = useRef<Set<string>>(new Set());
+
+    const scrollToLoadedMessage = useCallback((target: UserTextMessage, animated = true): boolean => {
+        const index = visibleMessagesRef.current.findIndex((m) => messageMatchesTarget(m, target));
+        if (index >= 0) {
+            flatListRef.current?.scrollToIndex({ index, animated, viewPosition: 0.5 });
+            return true;
+        }
+        return false;
+    }, []);
+
+    // Scroll to a just-paged-in target, retrying until the row is actually rendered. visibleMessagesRef
+    // only updates after React commits the re-render triggered by the store change, which a single tick
+    // doesn't guarantee — on a slow frame a one-shot scroll misses and the jump silently fails. Retry on
+    // a bounded schedule instead.
+    const scrollToTargetWithRetries = useCallback((target: UserTextMessage, animated: boolean) => {
+        let attempts = 0;
+        const MAX_ATTEMPTS = 20; // ~1s at 50ms
+        const attempt = () => {
+            if (scrollToLoadedMessage(target, animated)) return;
+            if (++attempts >= MAX_ATTEMPTS) return;
+            setTimeout(attempt, 50);
+        };
+        attempt();
+    }, [scrollToLoadedMessage]);
+
+    // Guards against a jump-triggered load-more racing with the scroll-driven one.
+    const isJumpingRef = useRef(false);
+    // The target of the in-flight jump. A second minimap click updates this so the running paging
+    // loop retargets instead of the click being silently dropped.
+    const activeJumpTargetRef = useRef<UserTextMessage | null>(null);
+    // Shows a bottom-centered hint while a minimap jump pages in older history before locating.
+    const [isLocating, setIsLocating] = useState(false);
+    const handleJumpToMessage = useCallback(async (target: UserTextMessage) => {
+        activeJumpTargetRef.current = target;
+        // A paging jump is already running — it will pick up the new target above. Keep the hint.
+        if (isJumpingRef.current) return;
+        // Already loaded → scroll straight away.
+        if (scrollToLoadedMessage(target)) return;
+        isJumpingRef.current = true;
+        setIsLocating(true);
+        try {
+            // Page older messages until the (possibly retargeted) message enters the list, there's
+            // nothing older left, or a load can't make progress.
+            const MAX_PAGES = 200;
+            for (let i = 0; i < MAX_PAGES; i++) {
+                const current = activeJumpTargetRef.current;
+                if (!current) break;
+                const state = storage.getState().sessionMessages[props.sessionId];
+                if (!state || !state.hasMore) break;
+                if (state.messages.some((m) => messageMatchesTarget(m, current))) break;
+                const beforeOldestSeq = state.oldestSeq;
+                await props.onLoadMore?.();
+                // Let the store subscription flush into visibleMessagesRef before re-checking.
+                await new Promise<void>((resolve) => setTimeout(resolve, 0));
+                const loaded = storage.getState().sessionMessages[props.sessionId];
+                if (!loaded) break;
+                const retargeted = activeJumpTargetRef.current ?? current;
+                if (loaded.messages.some((m) => messageMatchesTarget(m, retargeted))) break;
+                // Safety: if we've paged at/past the target's seq without finding it, stop.
+                if (retargeted.seq != null && loaded.oldestSeq != null && loaded.oldestSeq <= retargeted.seq) break;
+                // No progress (e.g. encryption briefly unavailable, or oldestSeq null) — stop instead
+                // of spinning through all MAX_PAGES iterations.
+                if (loaded.oldestSeq === beforeOldestSeq) break;
+            }
+        } finally {
+            isJumpingRef.current = false;
+            setIsLocating(false);
+        }
+        // Far target (just paged in): jump instantly (with retries). An animated scroll over a long
+        // distance would render/measure every intervening row frame-by-frame (janky); a direct jump
+        // only lays out around the target.
+        const finalTarget = activeJumpTargetRef.current;
+        if (finalTarget) {
+            scrollToTargetWithRetries(finalTarget, false);
+        }
+    }, [scrollToLoadedMessage, scrollToTargetWithRetries, props.onLoadMore, props.sessionId]);
+
+    const handleScrollToIndexFailed = useCallback((info: { index: number; averageItemLength: number }) => {
+        flatListRef.current?.scrollToOffset({
+            offset: Math.max(0, info.averageItemLength * info.index),
+            animated: false,
+        });
+        setTimeout(() => {
+            flatListRef.current?.scrollToIndex({ index: info.index, animated: false, viewPosition: 0.5 });
+        }, 120);
+    }, []);
+
+    React.useEffect(() => {
+        props.onRegisterMinimapJump?.(handleJumpToMessage);
+        return () => props.onRegisterMinimapJump?.(null);
+    }, [props.onRegisterMinimapJump, handleJumpToMessage]);
+
+    React.useEffect(() => {
+        props.onMinimapItemsChange?.(minimapItems);
+
+        const validIds = new Set(minimapItems.map((item) => item.message.id));
+        const stillValidActiveIds = Array.from(activeMessageIdsRef.current).filter((id) => validIds.has(id));
+        if (stillValidActiveIds.length > 0) {
+            const next = new Set(stillValidActiveIds);
+            activeMessageIdsRef.current = next;
+            props.onActiveMessageIdsChange?.(next);
+            return;
+        }
+
+        const fallback = minimapItems[minimapItems.length - 1];
+        const next = fallback ? new Set([fallback.message.id]) : new Set<string>();
+        activeMessageIdsRef.current = next;
+        props.onActiveMessageIdsChange?.(next);
+    }, [props.onMinimapItemsChange, props.onActiveMessageIdsChange, minimapItems]);
+
+    const handleViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: Array<{ item?: Message; index?: number | null }> }) => {
+        const next = new Set<string>();
+        const visibleIndexes: number[] = [];
+        for (const viewable of viewableItems) {
+            if (typeof viewable.index === 'number') {
+                visibleIndexes.push(viewable.index);
+            }
+            const item = viewable.item;
+            if (item?.kind === 'user-text') {
+                next.add(item.id);
+            }
+        }
+
+        // If the viewport is between two user prompts (e.g. only assistant/tool output is
+        // visible), keep the rail useful by highlighting the nearest loaded user prompt.
+        // During very fast scrolling, RN can briefly report no viewable indexes at all; in
+        // that case keep the previous active marker instead of jumping to an endpoint.
+        if (next.size === 0) {
+            const userItems = loadedUserMessagesRef.current;
+            if (userItems.length > 0 && visibleIndexes.length > 0) {
+                const centerIndex = visibleIndexes.reduce((sum, index) => sum + index, 0) / visibleIndexes.length;
+                let nearest = userItems[0];
+                let nearestDistance = Math.abs(nearest.index - centerIndex);
+                for (const userItem of userItems) {
+                    const distance = Math.abs(userItem.index - centerIndex);
+                    if (distance < nearestDistance) {
+                        nearest = userItem;
+                        nearestDistance = distance;
+                    }
+                }
+                next.add(nearest.message.id);
+            } else {
+                const validIds = new Set(userItems.map((item) => item.message.id));
+                for (const id of activeMessageIdsRef.current) {
+                    if (validIds.has(id)) {
+                        next.add(id);
+                    }
+                }
+            }
+        }
+
+        if (next.size > 0 || loadedUserMessagesRef.current.length === 0) {
+            activeMessageIdsRef.current = next;
+            props.onActiveMessageIdsChange?.(next);
+        }
+    }).current;
+
+    const viewabilityConfig = useRef({
+        itemVisiblePercentThreshold: 10,
+        minimumViewTime: 80,
+    }).current;
+
     const renderItem = useCallback(({ item, index }: { item: Message, index: number }) => {
         // Agent turns show the action bar only on their last text segment;
         // user messages always show it.
@@ -229,6 +457,10 @@ const ChatListInternal = React.memo((props: {
     React.useEffect(() => {
         visibleMessagesRef.current = visibleMessages;
     }, [visibleMessages]);
+
+    React.useEffect(() => {
+        loadedUserMessagesRef.current = loadedUserMessages;
+    }, [loadedUserMessages]);
 
     React.useEffect(() => {
         const controller = createScrollButtonVisibilityController({
@@ -307,7 +539,45 @@ const ChatListInternal = React.memo((props: {
                 scrollEventThrottle={16}
                 onEndReached={handleEndReached}
                 onEndReachedThreshold={0.5}
+                onViewableItemsChanged={handleViewableItemsChanged}
+                viewabilityConfig={viewabilityConfig}
+                onScrollToIndexFailed={handleScrollToIndexFailed}
             />
+
+            {/* Bottom-centered hint shown while a minimap jump is paging in older messages */}
+            {isLocating && (
+                <View
+                    pointerEvents="none"
+                    style={{
+                        position: 'absolute',
+                        bottom: 16,
+                        left: 0,
+                        right: 0,
+                        alignItems: 'center',
+                    }}
+                >
+                    <View
+                        style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            backgroundColor: theme.colors.surfaceHighest,
+                            borderRadius: 20,
+                            paddingHorizontal: 14,
+                            height: 36,
+                            shadowColor: theme.colors.shadow.color,
+                            shadowOffset: { width: 0, height: 2 },
+                            shadowOpacity: theme.colors.shadow.opacity,
+                            shadowRadius: 4,
+                            elevation: 4,
+                        }}
+                    >
+                        <ActivityIndicator size="small" color={theme.colors.textSecondary} />
+                        <Text style={{ marginLeft: 8, color: theme.colors.text, fontSize: 14 }}>
+                            {t('session.locatingMessage')}
+                        </Text>
+                    </View>
+                </View>
+            )}
 
             {/* Scroll to bottom button - positioned relative to content area */}
             {showScrollButton && (

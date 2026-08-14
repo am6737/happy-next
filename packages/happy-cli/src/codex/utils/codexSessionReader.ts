@@ -2,7 +2,7 @@
  * Codex Session Reader
  *
  * Reads user messages from Codex CLI's native JSONL session files.
- * Codex stores sessions at ~/.codex/sessions/{yyyy}/{mm}/{dd}/rollout-{datetime}-{conversationId}.jsonl
+ * Codex stores sessions under $CODEX_HOME/sessions/ (default: ~/.codex/sessions/), organized as\n * {yyyy}/{mm}/{dd}/rollout-{datetime}-{conversationId}.jsonl
  *
  * The JSONL format uses these line types:
  * - session_meta: session metadata
@@ -14,7 +14,6 @@
 
 import fs, { createReadStream } from 'node:fs';
 import { readFile, stat as statFile } from 'node:fs/promises';
-import os from 'node:os';
 import { basename, join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { createInterface } from 'node:readline';
@@ -26,6 +25,7 @@ import {
   updateSessionMetadataCacheDiagnostics,
 } from '@/cache/sessionMetadataCache';
 import type { SessionCacheRuntimeStats } from '@/cache/SessionCache';
+import { getCodexHomeDir } from './codexHome';
 
 export interface CodexUserMessage {
   uuid: string;
@@ -36,12 +36,12 @@ export interface CodexUserMessage {
 
 /**
  * Find Codex's native JSONL session file by conversationId.
- * Searches ~/.codex/sessions/ recursively for files ending with -{codexSessionId}.jsonl
+ * Searches $CODEX_HOME/sessions/ recursively for files ending with -{codexSessionId}.jsonl
  */
 export function findCodexSessionFile(codexSessionId: string): string | null {
   if (!codexSessionId) return null;
   try {
-    const codexHomeDir = process.env.CODEX_HOME || join(os.homedir(), '.codex');
+    const codexHomeDir = getCodexHomeDir();
     const rootDir = join(codexHomeDir, 'sessions');
 
     const query = codexSessionId.trim();
@@ -157,6 +157,13 @@ export async function readCodexSessionUserMessages(
   codexSessionId: string,
   limit: number = 50,
 ): Promise<CodexUserMessage[]> {
+  const messages = await readAllCodexSessionUserMessages(codexSessionId);
+  return messages.slice(-limit);
+}
+
+export async function readAllCodexSessionUserMessages(
+  codexSessionId: string,
+): Promise<CodexUserMessage[]> {
   const filePath = findCodexSessionFile(codexSessionId);
   if (!filePath) {
     logger.debug(`[CodexSessionReader] Session file not found for: ${codexSessionId}`);
@@ -191,7 +198,7 @@ export async function readCodexSessionUserMessages(
         const timestamp = parsed.timestamp || '';
         messages.push({
           uuid: generateStableUuid(timestamp, userIndex),
-          content: text.length > 500 ? text.substring(0, 500) + '...' : text,
+          content: text,
           timestamp,
           index: userIndex,
         });
@@ -202,7 +209,7 @@ export async function readCodexSessionUserMessages(
     }
   }
 
-  return messages.slice(-limit);
+  return messages;
 }
 
 export interface CodexSessionIndexEntry {
@@ -235,7 +242,7 @@ const CODEX_SESSION_METADATA_CACHE_VERSION = 1;
 const CODEX_SESSION_METADATA_CACHE_FILENAME = 'codex-session-metadata-cache.json';
 
 export async function saveCodexSessionCacheStats(sessionCache: SessionCacheRuntimeStats): Promise<void> {
-  const codexHomeDir = process.env.CODEX_HOME || join(os.homedir(), '.codex');
+  const codexHomeDir = getCodexHomeDir();
   const rootDir = join(codexHomeDir, 'sessions');
   await updateSessionMetadataCacheDiagnostics({
     cacheFileName: CODEX_SESSION_METADATA_CACHE_FILENAME,
@@ -323,11 +330,11 @@ async function parseCodexSessionMetadata(filePath: string): Promise<Omit<CodexSe
 
 /**
  * List all Codex sessions from the native session directory.
- * Scans ~/.codex/sessions/ recursively, reads first line (session_meta) and
+ * Scans $CODEX_HOME/sessions/ recursively, reads first line (session_meta) and
  * counts user messages for each JSONL file.
  */
 export async function listCodexSessions(): Promise<CodexSessionIndexEntry[]> {
-  const codexHomeDir = process.env.CODEX_HOME || join(os.homedir(), '.codex');
+  const codexHomeDir = getCodexHomeDir();
   const rootDir = join(codexHomeDir, 'sessions');
   const startedAt = new Date().toISOString();
   const startedAtMs = Date.now();

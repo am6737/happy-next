@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { View, ActivityIndicator, Text, Pressable, Platform } from 'react-native';
+import { View, ActivityIndicator, Text, Pressable, Platform, Image } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import TabView from './NativeBottomTabs';
 import { useFriendRequests, useSocketStatus, useRealtimeStatus, useDootaskProfile } from '@/sync/storage';
@@ -8,7 +8,7 @@ import { useInboxHasContent } from '@/hooks/useInboxHasContent';
 import { useIsTablet } from '@/utils/responsive';
 import { useRouter, Stack } from 'expo-router';
 import { EmptySessionsTablet } from './EmptySessionsTablet';
-import { SessionsList } from './SessionsList';
+import { SessionsList, SessionsSidebarTitle } from './SessionsList';
 import { FABWide } from './FABWide';
 import { TabBar, TabType } from './TabBar';
 import { InboxView } from './InboxView';
@@ -29,6 +29,7 @@ import { useProfile } from '@/sync/storage';
 import { useAuth } from '@/auth/AuthContext';
 import { prefetchGithubData } from '@/hooks/useGithubData';
 import { shouldProvideMainHeaderRight } from './mainHeaderOptions';
+import { getDesktopPlatform, handleDesktopTitleBarMouseDown } from '@/desktop/desktopWindowUtils';
 
 interface MainViewProps {
     variant: 'phone' | 'sidebar';
@@ -87,6 +88,21 @@ const styles = StyleSheet.create((theme) => ({
         flex: 1,
         flexBasis: 0,
         flexGrow: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    emptyDetailLogo: {
+        width: 92,
+        height: 92,
+        opacity: 0.11,
+    },
+    emptyDetailDragRegion: {
+        height: 48,
+        left: 0,
+        position: 'absolute',
+        right: 0,
+        top: 0,
+        zIndex: 1,
     },
     titleContainer: {
         alignItems: 'center',
@@ -306,6 +322,10 @@ export const MainView = React.memo(({ variant }: MainViewProps) => {
         }
     }, [showGithubTab, credentials]);
 
+    const desktopPlatform = getDesktopPlatform();
+    const isDesktopMacOS = desktopPlatform === 'macos';
+    const isDesktopWindows = desktopPlatform === 'windows';
+
     // Tab state management
     const [activeTab, setActiveTab] = React.useState<TabType>('sessions');
 
@@ -423,6 +443,7 @@ export const MainView = React.memo(({ variant }: MainViewProps) => {
         if (sessionListViewData === null) {
             return (
                 <View style={styles.sidebarContentContainer}>
+                    {isDesktopWindows && <SessionsSidebarTitle />}
                     <View style={styles.tabletLoadingContainer}>
                         <ActivityIndicator size="small" color={theme.colors.textSecondary} />
                     </View>
@@ -434,6 +455,7 @@ export const MainView = React.memo(({ variant }: MainViewProps) => {
         if (sessionListViewData.length === 0) {
             return (
                 <View style={styles.sidebarContentContainer}>
+                    {isDesktopWindows && <SessionsSidebarTitle />}
                     <View style={styles.emptyStateContainer}>
                         <EmptySessionsTablet />
                     </View>
@@ -459,7 +481,24 @@ export const MainView = React.memo(({ variant }: MainViewProps) => {
         return (
             <>
                 <Stack.Screen options={{ headerShown: false }} />
-                <View style={styles.emptyStateContentContainer} />
+                <View style={styles.emptyStateContentContainer}>
+                    <Image
+                        source={theme.dark
+                            ? require('@/assets/images/logo-white.png')
+                            : require('@/assets/images/logo-black.png')}
+                        resizeMode="contain"
+                        style={styles.emptyDetailLogo}
+                    />
+                    {isDesktopMacOS && (
+                        <View
+                            {...({
+                                'data-tauri-drag-region': true,
+                                onMouseDown: handleDesktopTitleBarMouseDown,
+                            } as any)}
+                            style={styles.emptyDetailDragRegion}
+                        />
+                    )}
+                </View>
             </>
         );
     }

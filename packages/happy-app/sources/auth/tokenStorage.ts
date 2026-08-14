@@ -44,7 +44,7 @@ export const TokenStorage = {
     },
 
     async removeCredentials(): Promise<boolean> {
-        if (Platform.OS === 'web') {    
+        if (Platform.OS === 'web') {
             localStorage.removeItem(AUTH_KEY);
             return true;
         }

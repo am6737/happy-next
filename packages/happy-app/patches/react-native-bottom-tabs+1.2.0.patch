@@ -1,0 +1,99 @@
+diff --git a/node_modules/react-native-bottom-tabs/ios/Extensions.swift b/node_modules/react-native-bottom-tabs/ios/Extensions.swift
+index fed3dd2..a7411f8 100644
+--- a/node_modules/react-native-bottom-tabs/ios/Extensions.swift
++++ b/node_modules/react-native-bottom-tabs/ios/Extensions.swift
+@@ -53,6 +53,32 @@ extension PlatformImage {
+   }
+ }
+ 
++#if os(iOS)
++extension UIImage {
++  func addingDotBadge(tintColor: UIColor?) -> UIImage {
++    let verticalInset: CGFloat = 6
++    let horizontalInset: CGFloat = 6
++    let canvasSize = CGSize(
++      width: size.width + horizontalInset * 2,
++      height: size.height + verticalInset * 2
++    )
++    let renderer = UIGraphicsImageRenderer(size: canvasSize)
++    let rendered = renderer.image { _ in
++      let baseImage = tintColor.map {
++        withTintColor($0, renderingMode: .alwaysOriginal)
++      } ?? self
++      baseImage.draw(at: CGPoint(x: horizontalInset, y: verticalInset))
++
++      UIColor.systemRed.setFill()
++      UIBezierPath(
++        ovalIn: CGRect(x: horizontalInset + size.width - 2, y: 0, width: 8, height: 8)
++      ).fill()
++    }
++    return rendered.withRenderingMode(.alwaysOriginal)
++  }
++}
++#endif
++
+ extension View {
+ #if os(macOS)
+   @MainActor
+diff --git a/node_modules/react-native-bottom-tabs/ios/TabView/LegacyTabView.swift b/node_modules/react-native-bottom-tabs/ios/TabView/LegacyTabView.swift
+index 5bfc58f..f0592a8 100644
+--- a/node_modules/react-native-bottom-tabs/ios/TabView/LegacyTabView.swift
++++ b/node_modules/react-native-bottom-tabs/ios/TabView/LegacyTabView.swift
+@@ -39,7 +39,17 @@ struct LegacyTabView: AnyTabView {
+       let isFocused = props.selectedPage == tabData.key
+ 
+       if !tabData.hidden || isFocused {
++        #if os(iOS)
++        let icon = tabData.badge == " "
++          ? props.icons[index]?.addingDotBadge(
++              tintColor: isFocused
++                ? (tabData.activeTintColor ?? props.activeTintColor)
++                : props.inactiveTintColor
++            )
++          : props.icons[index]
++        #else
+         let icon = props.icons[index]
++        #endif
+         let child = props.children[safe: index]?.view ?? PlatformView()
+         let context = TabAppearContext(
+           index: index,
+@@ -61,7 +71,7 @@ struct LegacyTabView: AnyTabView {
+             .accessibilityIdentifier(tabData.testID ?? "")
+           }
+           .tag(tabData.key)
+-          .tabBadge(tabData.badge)
++          .tabBadge(tabData.badge == " " ? nil : tabData.badge)
+           .tabAppear(using: context)
+       }
+     }
+diff --git a/node_modules/react-native-bottom-tabs/ios/TabView/NewTabView.swift b/node_modules/react-native-bottom-tabs/ios/TabView/NewTabView.swift
+index 22c52cd..db56078 100644
+--- a/node_modules/react-native-bottom-tabs/ios/TabView/NewTabView.swift
++++ b/node_modules/react-native-bottom-tabs/ios/TabView/NewTabView.swift
+@@ -28,7 +28,17 @@ struct NewTabView: AnyTabView {
+           let isFocused = props.selectedPage == tabData.key
+ 
+           if !tabData.hidden || isFocused {
++            #if os(iOS)
++            let icon = tabData.badge == " "
++              ? props.icons[index]?.addingDotBadge(
++                  tintColor: isFocused
++                    ? (tabData.activeTintColor ?? props.activeTintColor)
++                    : props.inactiveTintColor
++                )
++              : props.icons[index]
++            #else
+             let icon = props.icons[index]
++            #endif
+ 
+             let context = TabAppearContext(
+               index: index,
+@@ -52,7 +62,7 @@ struct NewTabView: AnyTabView {
+               )
+             }
+             #if !os(tvOS)
+-            .badge(tabData.badge.flatMap { !$0.isEmpty ? Text($0) : nil })
++            .badge(tabData.badge.flatMap { $0 == " " ? nil : Text($0) })
+             #endif
+             .accessibilityIdentifier(tabData.testID ?? "")
+           }

@@ -23,7 +23,23 @@ Orchestrator runs are created through the **mobile app** or the **API**. Each ru
 
 ## How to use
 
-Send a natural language prompt in any Happy session describing what you want to orchestrate. The AI will automatically call the Orchestrator to dispatch tasks. Key phrases:
+There are two ways to start orchestrating from a Happy session.
+
+### Slash commands
+
+Three commands are auto-installed the first time an orchestrating session starts (after upgrading the CLI). Invoke them from a **Claude** or **Codex** session:
+
+| Command | Delegates primarily to |
+|---------|------------------------|
+| `/orchestrator:claude [task]` | Claude |
+| `/orchestrator:codex [task]` | Codex |
+| `/orchestrator:gemini [task]` | Gemini |
+
+Pass the work to delegate as the argument, e.g. `/orchestrator:claude review auth.ts for security issues`. The named provider is only the default — a single run can still mix providers and add dependencies.
+
+### Natural language
+
+Or just describe what you want and the AI dispatches tasks automatically. Key phrases:
 
 | Intent | Keywords |
 |--------|----------|
@@ -32,6 +48,10 @@ Send a natural language prompt in any Happy session describing what you want to 
 | Use different agents | "dispatch to Claude/Codex/Gemini" |
 | Run in background | "async mode", "in the background" |
 | Specify model | "using opus", "with gpt-5.5" |
+
+<Note>
+Once started, delegation is a **sticky session mode**: the session keeps acting as the commander and delegating follow-up work on later turns until you explicitly end it (e.g. "stop delegating", "I'll take it from here").
+</Note>
 
 ## Examples
 

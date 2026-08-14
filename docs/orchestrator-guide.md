@@ -173,7 +173,7 @@
 - authRoutes.ts
 - sessionRoutes.ts
 - orchestratorRoutes.ts
-- projectRoutes.ts
+- machinesRoutes.ts
 每个文件派发一个任务，maxConcurrency 设为 3，每个任务带 retry。
 ```
 
@@ -198,7 +198,7 @@
 ```
 
 ```
-安排两个并行任务：派发给 Claude opus 审查认证流程的安全性，派发给 Gemini 3 Pro 调研业界最佳实践。
+安排两个并行任务：派发给 Claude opus 审查认证流程的安全性，派发给 Gemini 3.5 Pro 调研业界最佳实践。
 ```
 
 ### 20. 带重试的不稳定任务

@@ -61,6 +61,13 @@ export function sanitizeOrchestratorOutputSummary(summary: string | null | undef
     return cleaned.join(' ').trim();
 }
 
+export function resolveOrchestratorExecutionPrompt(
+    taskPrompt: string | null | undefined,
+    execution: Pick<OrchestratorExecutionRecord, 'resumeMessage'>,
+): string | null {
+    return execution.resumeMessage?.trim() || taskPrompt?.trim() || null;
+}
+
 export function resolveOrchestratorSummaryLineData(summary: OrchestratorRunSummary): Pick<OrchestratorRunSummary, 'total' | 'running' | 'completed' | 'failed' | 'cancelled'> {
     const running = summary.running + summary.queued;
     return {

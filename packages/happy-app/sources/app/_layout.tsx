@@ -21,12 +21,14 @@ import { PostHogProvider } from 'posthog-react-native';
 import { tracking } from '@/track/tracking';
 import { sync, syncRestore } from '@/sync/sync';
 import { resetBadgeCount } from '@/sync/apiPush';
+import { resolveServerConfig } from '@/sync/serverConfig';
 import { useTrackScreens } from '@/track/useTrackScreens';
 import { RealtimeProvider } from '@/realtime/RealtimeProvider';
 import { FaviconPermissionIndicator } from '@/components/web/FaviconPermissionIndicator';
 import { CommandPaletteProvider } from '@/components/CommandPalette/CommandPaletteProvider';
 import { StatusBarProvider } from '@/components/StatusBarProvider';
 import { ToastHost } from '@/components/Toast';
+import { TtsFloatingPlayer } from '@/components/TtsFloatingPlayer';
 // import * as SystemUI from 'expo-system-ui';
 import { monkeyPatchConsoleForRemoteLoggingForFasterAiAutoDebuggingOnlyInLocalBuilds } from '@/utils/remoteLogger';
 import { useUnistyles } from 'react-native-unistyles';
@@ -34,6 +36,12 @@ import { AsyncLock } from '@/utils/lock';
 import { storage } from '@/sync/storage';
 import { usePathname } from 'expo-router';
 import { useDootaskGlobalWebSocket } from '@/hooks/useDootaskGlobalWebSocket';
+import { isTauriDesktop } from '@/utils/tauri';
+import { DesktopBridge } from '@/desktop/DesktopBridge';
+import { DesktopWindowFrame } from '@/desktop/DesktopWindowFrame';
+import { DesktopAuthWindowSync } from '@/desktop/DesktopAuthWindowSync';
+import { ThemePreferenceSync } from '@/components/ThemePreferenceSync';
+import { ActionMenuOverlayProvider } from '@/components/ActionMenuOverlayProvider';
 
 let currentAppState: string = AppState.currentState;
 let currentSessionId: string | null = null;
@@ -194,9 +202,7 @@ async function loadFonts() {
         }
         loaded = true;
         // Check if running in Tauri
-        const isTauri = Platform.OS === 'web' &&
-            typeof window !== 'undefined' &&
-            (window as any).__TAURI_INTERNALS__ !== undefined;
+        const isTauri = isTauriDesktop();
 
         if (!isTauri) {
             // Handle slow networks where FontFaceObserver's 6s timeout may fire
@@ -269,6 +275,7 @@ export default function RootLayout() {
             try {
                 await loadFonts();
                 await sodium.ready;
+                await resolveServerConfig();
                 const credentials = await TokenStorage.getCredentials();
                 console.log('credentials', credentials);
                 if (credentials) {
@@ -287,6 +294,14 @@ export default function RootLayout() {
             setTimeout(() => {
                 SplashScreen.hideAsync();
             }, 100);
+
+            if (Platform.OS === 'web' && isTauriDesktop()) {
+                requestAnimationFrame(() => {
+                    void import('@tauri-apps/api/core')
+                        .then(({ invoke }) => invoke('dismiss_native_startup_logo'))
+                        .catch((error) => console.warn('Failed to dismiss native startup logo:', error));
+                });
+            }
         }
     }, [initState]);
 
@@ -315,17 +330,24 @@ export default function RootLayout() {
                 <GestureHandlerRootView style={{ flex: 1 }}>
                     <BottomSheetModalProvider>
                         <AuthProvider initialCredentials={initState.credentials}>
+                            <ThemePreferenceSync />
+                            <DesktopAuthWindowSync />
                             <ThemeProvider value={navigationTheme}>
                                 <StatusBarProvider>
                                     <ModalProvider>
                                         <CommandPaletteProvider>
                                             <RealtimeProvider>
-                                                <HorizontalSafeAreaWrapper>
-                                                    <SidebarNavigator />
-                                                </HorizontalSafeAreaWrapper>
+                                                <DesktopWindowFrame>
+                                                    <ActionMenuOverlayProvider>
+                                                        <HorizontalSafeAreaWrapper>
+                                                            <SidebarNavigator />
+                                                        </HorizontalSafeAreaWrapper>
+                                                    </ActionMenuOverlayProvider>
+                                                </DesktopWindowFrame>
                                             </RealtimeProvider>
                                         </CommandPaletteProvider>
                                     </ModalProvider>
+                                    <TtsFloatingPlayer />
                                     <ToastHost />
                                 </StatusBarProvider>
                             </ThemeProvider>
@@ -346,6 +368,7 @@ export default function RootLayout() {
     return (
         <>
             <FaviconPermissionIndicator />
+            <DesktopBridge />
             {providers}
         </>
     );

@@ -1,0 +1,18 @@
+{
+  "$schema": "../../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "Happy Next Update Test",
+  "identifier": "com.hitosea.happy.updatetest",
+  "bundle": {
+    "targets": [
+      "app"
+    ]
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "http://127.0.0.1:18765/latest.json"
+      ],
+      "dangerousInsecureTransportProtocol": true
+    }
+  }
+}

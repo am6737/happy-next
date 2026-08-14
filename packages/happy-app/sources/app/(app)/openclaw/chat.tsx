@@ -1201,7 +1201,7 @@ export default function OpenClawChatPage() {
                     headerRight: () => (
                         <Pressable
                             onPress={handleOpenInfo}
-                            style={{ width: 32, height: 32, alignItems: 'center', justifyContent: 'center' }}
+                            style={{ width: 38, height: 38, alignItems: 'center', justifyContent: 'center' }}
                             hitSlop={8}
                         >
                             <Ionicons name="information-circle-outline" size={24} color={theme.colors.header.tint} />

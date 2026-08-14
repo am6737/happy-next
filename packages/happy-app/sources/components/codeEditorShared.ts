@@ -1,6 +1,7 @@
 import codemirrorBundleSource from './codemirror-bundle-string';
 import { encodeBase64 } from '@/encryption/base64';
 import { encodeUTF8 } from '@/encryption/text';
+import { MONO_FONT_STACK } from '@/components/codeEditorConstants';
 
 export type EditorCommand =
     | { type: 'setValue'; value: string }
@@ -20,8 +21,6 @@ export type EditorEvent =
 export function encodeBase64Utf8(value: string): string {
     return encodeBase64(encodeUTF8(value));
 }
-
-export const MONO_FONT_STACK = 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
 
 export function buildEditorHtml(args: {
     initialValueBase64: string;

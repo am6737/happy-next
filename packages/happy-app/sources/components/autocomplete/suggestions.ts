@@ -58,7 +58,11 @@ export async function getCommandSuggestions(sessionId: string, query: string): P
     }
 }
 
-export async function getSkillSuggestions(sessionId: string, query: string): Promise<{
+export async function getSkillSuggestions(
+    sessionId: string,
+    query: string,
+    options: { showSkillCategory?: boolean } = {},
+): Promise<{
     key: string;
     text: string;
     component: React.ComponentType;
@@ -77,6 +81,7 @@ export async function getSkillSuggestions(sessionId: string, query: string): Pro
                 description: skill.shortDescription || skill.description,
                 scope: skill.scope,
                 displayName: skill.displayName,
+                showSkillCategory: options.showSkillCategory,
             })
         }));
     } catch (error) {
@@ -120,7 +125,17 @@ export async function getSuggestions(sessionId: string, query: string): Promise<
     }
 
     if (query.startsWith('/')) {
-        return getCommandSuggestions(sessionId, query);
+        const commands = await getCommandSuggestions(sessionId, query);
+
+        // Once a root command has been followed by whitespace, command search owns
+        // the rest of the query: it may return that command's subcommands, or no
+        // suggestions when the command only accepts free-form arguments.
+        if (/\s/.test(query)) {
+            return commands;
+        }
+
+        const skills = await getSkillSuggestions(sessionId, query, { showSkillCategory: true });
+        return [...commands, ...skills];
     }
 
     if (query.startsWith('$')) {

@@ -4,6 +4,7 @@ import {
     resolveTaskMachineId,
     resolveMachineName,
     resolveOrchestratorAttemptDisplay,
+    resolveOrchestratorExecutionPrompt,
     resolveOrchestratorSummaryLineData,
     sanitizeOrchestratorOutputSummary,
     shortenMachineId,
@@ -49,6 +50,12 @@ describe('orchestrator display helpers', () => {
             { executionId: 'e2', attempt: 2 },
         ] as any);
         expect(sorted.map((item) => item.executionId)).toEqual(['e3', 'e2', 'e1']);
+    });
+
+    it('uses resume message as the execution prompt when present', () => {
+        expect(resolveOrchestratorExecutionPrompt('initial prompt', { resumeMessage: 'follow up' })).toBe('follow up');
+        expect(resolveOrchestratorExecutionPrompt('initial prompt', { resumeMessage: null })).toBe('initial prompt');
+        expect(resolveOrchestratorExecutionPrompt(null, { resumeMessage: null })).toBeNull();
     });
 
     it('includes queued tasks in running summary line display', () => {

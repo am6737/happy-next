@@ -1,5 +1,5 @@
 import React from 'react';
-import { UserProfile, getDisplayName } from '@/sync/friendTypes';
+import { UserProfile, getDisplayName, getUsernameLabel } from '@/sync/friendTypes';
 import { Item } from '@/components/Item';
 import { Avatar } from '@/components/Avatar';
 
@@ -27,8 +27,7 @@ export function UserCard({
         />
     );
 
-    // Create subtitle
-    const subtitle = `@${user.username}`;
+    const subtitle = getUsernameLabel(user);
 
     return (
         <Item

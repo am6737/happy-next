@@ -16,6 +16,11 @@ import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { t } from '@/text';
 import { useInboxHasContent } from '@/hooks/useInboxHasContent';
 import { useDootaskProfile } from '@/sync/storage';
+import { Ionicons } from '@expo/vector-icons';
+import { requestCommandPalette } from './CommandPalette/events';
+import { getDesktopPlatform, handleDesktopTitleBarMouseDown } from '@/desktop/desktopWindowUtils';
+import { DesktopUpdateButton } from '@/desktop/DesktopUpdateButton';
+import { useDesktopWindowFullscreen } from '@/desktop/useDesktopWindowFullscreen';
 
 const stylesheet = StyleSheet.create((theme, runtime) => ({
     container: {
@@ -32,20 +37,40 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
         backgroundColor: theme.colors.groupped.background,
         position: 'relative',
     },
+    desktopTitleBar: {
+        alignItems: 'center',
+        backgroundColor: theme.colors.groupped.background,
+        flexDirection: 'row',
+        height: 48,
+        paddingRight: 12,
+    },
+    desktopTrafficLightSpacer: {
+        height: 48,
+        width: 88,
+    },
+    desktopTitleBarControls: {
+        alignItems: 'center',
+        flexDirection: 'row',
+        gap: 5,
+        transform: [{ translateY: -2 }],
+    },
+    desktopTitleBarSpacer: {
+        flex: 1,
+        height: 48,
+    },
+    desktopNavigationButton: {
+        alignItems: 'center',
+        borderRadius: 6,
+        height: 28,
+        justifyContent: 'center',
+        width: 28,
+    },
     logoContainer: {
         width: 32,
     },
     logo: {
         height: 24,
         width: 24,
-    },
-    titleContainer: {
-        position: 'absolute',
-        left: 0,
-        right: 0,
-        flexDirection: 'column',
-        alignItems: 'center',
-        pointerEvents: 'none',
     },
     titleContainerLeft: {
         flex: 1,
@@ -56,8 +81,9 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
     },
     titleText: {
         fontSize: 17,
-        fontWeight: '600',
+        fontWeight: '500',
         color: theme.colors.header.tint,
+        whiteSpace: Platform.select({ web: 'nowrap', default: undefined }),
         ...Typography.default('semiBold'),
     },
     statusContainer: {
@@ -130,7 +156,11 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
     },
 }));
 
-export const SidebarView = React.memo(() => {
+type SidebarViewProps = {
+    sidebarWidth?: number;
+};
+
+export const SidebarView = React.memo((props: SidebarViewProps) => {
     const styles = stylesheet;
     const { theme } = useUnistyles();
     const safeArea = useSafeAreaInsets();
@@ -141,6 +171,15 @@ export const SidebarView = React.memo(() => {
     const friendRequests = useFriendRequests();
     const inboxHasContent = useInboxHasContent();
     const dootaskProfile = useDootaskProfile();
+    const [isSearchHovered, setIsSearchHovered] = React.useState(false);
+    const desktopPlatform = getDesktopPlatform();
+    const isDesktopMacOS = desktopPlatform === 'macos';
+    const isDesktopWindows = desktopPlatform === 'windows';
+    const isDesktopFullscreen = useDesktopWindowFullscreen(isDesktopMacOS);
+    const desktopDragProps = isDesktopMacOS ? {
+        'data-tauri-drag-region': true,
+        onMouseDown: handleDesktopTitleBarMouseDown,
+    } as any : {};
     // Compute connection status once per render (theme-reactive, no stale memoization)
     const connectionStatus = (() => {
         const { status } = socketStatus;
@@ -183,12 +222,7 @@ export const SidebarView = React.memo(() => {
         }
     })();
 
-    // Calculate sidebar width and determine title positioning
-    // Uses same formula as SidebarNavigator.tsx:18 for consistency
     const { width: windowWidth, height: windowHeight } = useWindowDimensions();
-    const sidebarWidth = Math.min(Math.max(Math.floor(windowWidth * 0.3), 250), 360);
-    // 3 icons (108px total), threshold 328px → left-justify below ~340px
-    const shouldLeftJustify = sidebarWidth < 340 || !!dootaskProfile;
 
     // iPad Stage Manager / Mac Catalyst draws window controls (traffic lights)
     // at the top-left, OUTSIDE of safeAreaInsets — system chrome that overlays
@@ -216,7 +250,17 @@ export const SidebarView = React.memo(() => {
     // Title content used in both centered and left-justified modes (DRY)
     const titleContent = (
         <>
-            <Text style={styles.titleText}>{t('sidebar.sessionsTitle')}</Text>
+            <Text
+                style={styles.titleText}
+                numberOfLines={1}
+                ref={(el: any) => {
+                    if (Platform.OS === 'web' && el) {
+                        el.title = t('sidebar.sessionsTitle');
+                    }
+                }}
+            >
+                {t('sidebar.sessionsTitle')}
+            </Text>
             {connectionStatus.text && (
                 <View style={styles.statusContainer}>
                     <StatusDot
@@ -233,83 +277,133 @@ export const SidebarView = React.memo(() => {
         </>
     );
 
+    const navigationButtons = (
+        <>
+            <Pressable
+                accessibilityLabel={t('tabs.inbox')}
+                onPress={() => router.navigate('/(app)/inbox')}
+                hitSlop={10}
+                style={[
+                    styles.notificationButton,
+                    isDesktopMacOS && styles.desktopNavigationButton,
+                ]}
+            >
+                <Image
+                    source={require('@/assets/images/navigation/inbox.png')}
+                    contentFit="contain"
+                    style={{ width: 20, height: 20, margin: 4, opacity: isDesktopMacOS ? 0.62 : 1 }}
+                    tintColor={theme.colors.header.tint}
+                />
+                {friendRequests.length > 0 && (
+                    <View style={styles.badge}>
+                        <Text style={styles.badgeText}>
+                            {friendRequests.length > 99 ? '99+' : friendRequests.length}
+                        </Text>
+                    </View>
+                )}
+                {inboxHasContent && friendRequests.length === 0 && (
+                    <View style={styles.indicatorDot} />
+                )}
+            </Pressable>
+            {!!dootaskProfile && (
+                <Pressable
+                    accessibilityLabel={t('tabs.dootask')}
+                    onPress={() => router.navigate('/(app)/dootask')}
+                    hitSlop={10}
+                    style={isDesktopMacOS ? styles.desktopNavigationButton : undefined}
+                >
+                    <Image
+                        source={require('@/assets/images/navigation/todo.png')}
+                        contentFit="contain"
+                        style={{ width: 20, height: 20, margin: 4, opacity: isDesktopMacOS ? 0.62 : 1 }}
+                        tintColor={theme.colors.header.tint}
+                    />
+                </Pressable>
+            )}
+            <Pressable
+                accessibilityLabel={t('tabs.settings')}
+                onPress={() => router.navigate('/settings')}
+                hitSlop={10}
+                style={isDesktopMacOS ? styles.desktopNavigationButton : undefined}
+            >
+                <Image
+                    source={require('@/assets/images/navigation/setting.png')}
+                    contentFit="contain"
+                    style={{ width: 20, height: 20, margin: 4, opacity: isDesktopMacOS ? 0.62 : 1 }}
+                    tintColor={theme.colors.header.tint}
+                />
+            </Pressable>
+            <DesktopUpdateButton placement="titleBar" />
+        </>
+    );
+
     return (
         <>
             <View style={[styles.container, { paddingTop: safeArea.top }]}>
-                <View style={[styles.header, { height: headerHeight, paddingLeft: Math.max(safeArea.left, windowControlsInset) + 16 }]}>
-                    {/* Logo - always first */}
-                    <Pressable style={styles.logoContainer} onPress={handleGoHome}>
-                        <Image
-                            source={theme.dark ? require('@/assets/images/logo-white.png') : require('@/assets/images/logo-black.png')}
-                            contentFit="contain"
-                            style={[styles.logo, { height: 24, width: 24 }]}
+                {isDesktopMacOS && (
+                    <View style={styles.desktopTitleBar}>
+                        <View
+                            {...desktopDragProps}
+                            style={[
+                                styles.desktopTrafficLightSpacer,
+                                isDesktopFullscreen && { width: 12 },
+                            ]}
                         />
-                    </Pressable>
+                        <View style={styles.desktopTitleBarControls}>
+                            {navigationButtons}
+                        </View>
+                        <View
+                            {...desktopDragProps}
+                            style={styles.desktopTitleBarSpacer}
+                        />
+                    </View>
+                )}
+                {!isDesktopWindows && (
+                    <View
+                        {...desktopDragProps}
+                        style={[
+                            styles.header,
+                            {
+                                height: headerHeight,
+                                paddingLeft: isDesktopMacOS
+                                    ? Math.max(safeArea.left, 0) + 16
+                                    : Math.max(safeArea.left, windowControlsInset) + 16,
+                            },
+                        ]}
+                    >
+                        <Pressable style={styles.logoContainer} onPress={handleGoHome}>
+                            <Image
+                                source={theme.dark ? require('@/assets/images/logo-white.png') : require('@/assets/images/logo-black.png')}
+                                contentFit="contain"
+                                style={[styles.logo, { height: 24, width: 24 }]}
+                            />
+                        </Pressable>
 
-                    {/* Left-justified title - in document flow, prevents overlap */}
-                    {shouldLeftJustify && (
                         <View style={styles.titleContainerLeft}>
                             {titleContent}
                         </View>
-                    )}
 
-                    {/* Navigation icons */}
-                    <View style={styles.rightContainer}>
-                        <Pressable
-                            onPress={() => router.navigate('/(app)/inbox')}
-                            hitSlop={15}
-                            style={styles.notificationButton}
-                        >
-                            <Image
-                                source={require('@/assets/images/navigation/inbox.png')}
-                                contentFit="contain"
-                                style={[{ width: 24, height: 24, margin: 4 }]}
-                                tintColor={theme.colors.header.tint}
-                            />
-                            {friendRequests.length > 0 && (
-                                <View style={styles.badge}>
-                                    <Text style={styles.badgeText}>
-                                        {friendRequests.length > 99 ? '99+' : friendRequests.length}
-                                    </Text>
-                                </View>
-                            )}
-                            {inboxHasContent && friendRequests.length === 0 && (
-                                <View style={styles.indicatorDot} />
-                            )}
-                        </Pressable>
-                        {!!dootaskProfile && (
-                            <Pressable
-                                onPress={() => router.navigate('/(app)/dootask')}
-                                hitSlop={15}
-                            >
-                                <Image
-                                    source={require('@/assets/images/navigation/todo.png')}
-                                    contentFit="contain"
-                                    style={[{ width: 24, height: 24, margin: 4 }]}
-                                    tintColor={theme.colors.header.tint}
-                                />
-                            </Pressable>
-                        )}
-                        <Pressable
-                            onPress={() => router.navigate('/settings')}
-                            hitSlop={15}
-                        >
-                            <Image
-                                source={require('@/assets/images/navigation/setting.png')}
-                                contentFit="contain"
-                                style={[{ width: 24, height: 24, margin: 4 }]}
-                                tintColor={theme.colors.header.tint}
-                            />
-                        </Pressable>
-                    </View>
-
-                    {/* Centered title - absolute positioned over full header */}
-                    {!shouldLeftJustify && (
-                        <View style={styles.titleContainer}>
-                            {titleContent}
+                        <View style={styles.rightContainer}>
+                            {isDesktopMacOS ? (
+                                <Pressable
+                                    accessibilityLabel={t('commandPalette.placeholder')}
+                                    onPress={requestCommandPalette}
+                                    onHoverIn={() => setIsSearchHovered(true)}
+                                    onHoverOut={() => setIsSearchHovered(false)}
+                                    hitSlop={10}
+                                    style={styles.desktopNavigationButton}
+                                >
+                                    <Ionicons
+                                        name="search-outline"
+                                        size={20}
+                                        color={theme.colors.header.tint}
+                                        style={{ opacity: isSearchHovered ? 1 : 0.6 }}
+                                    />
+                                </Pressable>
+                            ) : navigationButtons}
                         </View>
-                    )}
-                </View>
+                    </View>
+                )}
                 {realtimeStatus !== 'disconnected' && (
                     <VoiceAssistantStatusBar variant="sidebar" />
                 )}

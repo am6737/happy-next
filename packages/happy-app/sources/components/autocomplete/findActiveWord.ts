@@ -145,6 +145,26 @@ export function findActiveWord(
         return undefined;
     }
 
+    // Slash commands are allowed to contain spaces for subcommand suggestions
+    // (for example `/goal ` -> `/goal clear`). Treat the active query as the
+    // current line from a leading `/` to the cursor instead of a single word.
+    if (prefixes.includes('/')) {
+        const lineStart = content.lastIndexOf('\n', selection.start - 1) + 1;
+        if (content.charAt(lineStart) === '/') {
+            const activeWordPart = content.substring(lineStart, selection.end);
+            const lineEnd = content.indexOf('\n', selection.end);
+            const endIndex = lineEnd >= 0 ? lineEnd : content.length;
+            return {
+                word: content.substring(lineStart, endIndex),
+                activeWord: activeWordPart,
+                offset: lineStart,
+                length: endIndex - lineStart,
+                activeLength: activeWordPart.length,
+                endOffset: endIndex,
+            };
+        }
+    }
+
     const startIndex = findActiveWordStart(content, selection, prefixes);
     const activeWordPart = content.substring(startIndex, selection.end);
 

@@ -25,12 +25,12 @@ POST /v1/sessions/:sessionId/shares
 |-------|------|-------------|
 | `userId` | string | Target user ID |
 | `accessLevel` | string | `view`, `edit`, or `admin` |
-| `encryptedKey` | string | Session key encrypted for the recipient |
+| `encryptedDataKey` | string | Session key encrypted for the recipient |
 
 ### Update access level
 
 ```
-PATCH /v1/sessions/:sessionId/shares/:userId
+PATCH /v1/sessions/:sessionId/shares/:shareId
 ```
 
 Change a user's access level.
@@ -38,7 +38,7 @@ Change a user's access level.
 ### Revoke share
 
 ```
-DELETE /v1/sessions/:sessionId/shares/:userId
+DELETE /v1/sessions/:sessionId/shares/:shareId
 ```
 
 Remove a user's access to a shared session.
@@ -55,22 +55,30 @@ POST /v1/sessions/:sessionId/public-share
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `expiresAt` | string | Optional expiration date (ISO 8601) |
-| `maxUses` | number | Optional maximum number of uses |
+| `expiresAt` | number | Optional expiration timestamp (milliseconds since epoch) |
+| `maxUses` | number | Optional maximum number of uses (positive integer) |
 
 **Response:**
 
 ```json
 {
-  "token": "abc123...",
-  "url": "https://app.happy-next.com/share/abc123..."
+  "publicShare": {
+    "id": "...",
+    "token": "abc123...",
+    "expiresAt": 1710000000000,
+    "maxUses": 10,
+    "useCount": 0,
+    "isConsentRequired": false,
+    "createdAt": 1709000000000,
+    "updatedAt": 1709000000000
+  }
 }
 ```
 
 ### Access public session
 
 ```
-GET /v1/public-sessions/:token
+GET /v1/public-share/:token
 ```
 
 Access a publicly shared session by token.

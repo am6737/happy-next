@@ -12,10 +12,10 @@ Happy supports two modes:
 ## Requirements
 
 - **Docker + Docker Compose**
-- **A LiveKit deployment** (not included in `docker-compose.yml`) — for voice features
-  - You'll need `LIVEKIT_URL`, `LIVEKIT_WS_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`
-- **API keys** for voice providers (if using voice)
-  - `OPENAI_API_KEY`, `CARTESIA_API_KEY`
+- **A Volcano Engine (火山引擎) RTC application** of the "AI agent" type — for voice features
+  - You'll need `VOLC_RTC_APP_ID`, `VOLC_RTC_APP_KEY`, plus IAM keys `VOLC_ACCESS_KEY_ID`, `VOLC_SECRET_ACCESS_KEY`
+- **Volcano/Doubao credentials** for speech (if using voice)
+  - Message-playback TTS uses `VOLC_TTS_APP_ID`, `VOLC_TTS_TOKEN`; optional pre-TTS text cleaning uses `ARK_API_KEY` (see `.env.example` for the full list)
 
 ## Quickstart
 
@@ -36,7 +36,7 @@ cp .env.example .env
    - `HANDY_MASTER_SECRET` — Generate a random 64+ character string
    - `POSTGRES_*` — Database credentials
    - `S3_*` — Or use the MinIO defaults
-   - `LIVEKIT_*` + voice API keys — If using voice features
+   - `VOLC_RTC_*`, `VOLC_ACCESS_KEY_ID`/`VOLC_SECRET_ACCESS_KEY`, `VOICE_AUTH_SECRET`, and `PUBLIC_VOICE_BASE_URL` — If using voice features
 
 4. Start the stack:
 
@@ -44,21 +44,23 @@ cp .env.example .env
 docker-compose up -d
 ```
 
-5. Apply database migrations (first run only):
+   On first start, `happy-server` runs `prisma migrate deploy` automatically, and the `minio-init` service creates the storage bucket and enables anonymous downloads — no manual database or bucket setup is required.
+
+5. Open the web app at `http://localhost:3030`.
+
+### Manual maintenance (optional)
+
+Migrations and the storage bucket are provisioned automatically, but you can re-run them by hand if needed:
 
 ```bash
+# Re-apply database migrations
 docker-compose exec happy-server yarn --cwd packages/happy-server prisma migrate deploy
-```
 
-6. Create the MinIO storage bucket and set it to public (first run only):
-
-```bash
-docker-compose exec minio mc alias set local http://localhost:9000 minioadmin minioadmin
+# Recreate the MinIO bucket (uses your S3_ACCESS_KEY / S3_SECRET_KEY values)
+docker-compose exec minio mc alias set local http://localhost:9000 "$S3_ACCESS_KEY" "$S3_SECRET_KEY"
 docker-compose exec minio mc mb local/happy-server
 docker-compose exec minio mc anonymous set download local/happy-server
 ```
-
-7. Open the web app at `http://localhost:3030`.
 
 ## Services
 
@@ -86,6 +88,10 @@ HAPPY_SERVER_URL=http://localhost:3031 HAPPY_WEBAPP_URL=http://localhost:3030 ha
 - **Development builds:** Set `EXPO_PUBLIC_HAPPY_SERVER_URL` when starting Expo, or use the in-app server settings screen
 - **Production builds:** Use the in-app server settings screen to set a custom server URL
 
+You only configure a single **base server URL**. On connect, the client fetches the real API and voice endpoints from that server's `/v1/app-config`, so your API server and voice gateway can live on different hosts without the app configuring each one separately. For discovery to advertise the right public origins, set `PUBLIC_API_BASE_URL` (and the voice config) on the server — see [Environment Variables](/advanced/env-vars).
+
+Changing the server from the app validates the URL, then signs you out so you can sign back in against the new server. A shortcut back to the server screen appears in Settings once a custom server is in use.
+
 ## S3 / MinIO notes
 
 `S3_PUBLIC_URL` must be reachable by clients (browser and mobile), not just Docker containers.
@@ -98,7 +104,8 @@ HAPPY_SERVER_URL=http://localhost:3031 HAPPY_WEBAPP_URL=http://localhost:3030 ha
 If accessing from another device (LAN or internet), avoid hard-coded `localhost` URLs:
 
 - Put the web app, API, and voice gateway behind domains with TLS
-- Set `EXPO_PUBLIC_HAPPY_SERVER_URL` and `EXPO_PUBLIC_VOICE_BASE_URL` to those public origins
+- Set `EXPO_PUBLIC_HAPPY_SERVER_URL` to the public web/API origin
+- On the server, set `PUBLIC_API_BASE_URL` and `PUBLIC_VOICE_BASE_URL` so `/v1/app-config` advertises the correct public API/voice endpoints (for docker-compose, also set `EXPO_PUBLIC_VOICE_TOOL_BRIDGE_BASE_URL` so the gateway can reach `happy-server`)
 - Set `APP_URL` to your web origin
 
 ## Troubleshooting

@@ -240,6 +240,30 @@ export async function deleteSessionShare(
 }
 
 /**
+ * Leave a session shared with the current user
+ */
+export async function leaveSharedSession(
+    credentials: AuthCredentials,
+    sessionId: string
+): Promise<void> {
+    const API_ENDPOINT = getServerUrl();
+
+    const response = await fetch(`${API_ENDPOINT}/v1/sessions/${sessionId}/share-self`, {
+        method: 'DELETE',
+        headers: {
+            'Authorization': `Bearer ${credentials.token}`,
+        }
+    });
+
+    if (!response.ok) {
+        if (response.status === 404) {
+            throw new ShareNotFoundError();
+        }
+        throw new Error(`Failed to leave shared session: ${response.status}`);
+    }
+}
+
+/**
  * Get public share info for a session
  */
 export async function getPublicShare(

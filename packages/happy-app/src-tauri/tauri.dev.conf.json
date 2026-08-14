@@ -2,11 +2,13 @@
   "$schema": "../../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Happy Next (dev)",
   "identifier": "com.hitosea.happy.dev",
+  "build": {
+    "devUrl": "http://localhost:8082",
+    "beforeDevCommand": "yarn start --port 8082"
+  },
   "app": {
-    "windows": [
-      {
-        "title": "Happy Next (dev)"
-      }
-    ]
+    "security": {
+      "csp": null
+    }
   }
 }

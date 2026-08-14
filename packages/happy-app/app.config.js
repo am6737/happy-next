@@ -204,9 +204,7 @@ export default {
                 projectId: "c25469ee-cbd3-483f-b673-d3538c469d9e"
             },
             app: {
-                postHogKey: process.env.EXPO_PUBLIC_POSTHOG_API_KEY,
-                voiceBaseUrl: process.env.EXPO_PUBLIC_VOICE_BASE_URL,
-                voicePublicKey: process.env.EXPO_PUBLIC_VOICE_PUBLIC_KEY
+                postHogKey: process.env.EXPO_PUBLIC_POSTHOG_API_KEY
             }
         },
         owner: "hitosea"

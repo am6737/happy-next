@@ -10,6 +10,7 @@ import type { DooTaskUser } from './dootask/types';
 const mmkv = new MMKV();
 const NEW_SESSION_DRAFT_KEY = 'new-session-draft-v1';
 const SESSIONS_CACHE_VERSION = 2;
+const savedSessionsCacheContent = new Map<string, string>();
 
 export type NewSessionAgentType = 'claude' | 'codex' | 'gemini';
 export type NewSessionSessionType = 'simple' | 'worktree';
@@ -450,19 +451,29 @@ function sessionsCacheKey(accountKey: string): string {
     return `sessions-cache-v${SESSIONS_CACHE_VERSION}:${accountKey}`;
 }
 
+function serializeSessionsCacheContent(data: Omit<SessionsCachePayload, 'version' | 'savedAt' | 'lastSessionsCursorMs'>): string {
+    return JSON.stringify(data);
+}
+
 function stripVolatileSessionFields(session: Session): Session {
+    // An online session's activeAt is a heartbeat timestamp. Persisting every heartbeat rewrites
+    // the entire session cache in WebKit LocalStorage without improving cold-start correctness.
+    const persistedActiveAt = session.active ? 0 : session.activeAt;
     return {
         ...session,
+        activeAt: persistedActiveAt,
         thinking: false,
         thinkingAt: 0,
         messageSyncing: false,
-        presence: session.active ? 'online' : session.activeAt,
+        presence: session.active ? 'online' : persistedActiveAt,
         upgrading: false,
     };
 }
 
 export function loadSessionsCache(accountKey: string): SessionsCachePayload | null {
-    const raw = mmkv.getString(sessionsCacheKey(accountKey));
+    const key = sessionsCacheKey(accountKey);
+    savedSessionsCacheContent.delete(key);
+    const raw = mmkv.getString(key);
     if (!raw) return null;
     try {
         const parsed = JSON.parse(raw);
@@ -479,7 +490,13 @@ export function loadSessionsCache(accountKey: string): SessionsCachePayload | nu
         ) {
             return null;
         }
-        return parsed as SessionsCachePayload;
+        const payload = parsed as SessionsCachePayload;
+        savedSessionsCacheContent.set(key, serializeSessionsCacheContent({
+            sessions: payload.sessions,
+            sharedSessions: payload.sharedSessions,
+            sessionDataKeys: payload.sessionDataKeys,
+        }));
+        return payload;
     } catch (e) {
         console.error('Failed to parse sessions cache', e);
         mmkv.delete(sessionsCacheKey(accountKey));
@@ -493,26 +510,39 @@ export function saveSessionsCache(accountKey: string, data: {
     sharedSessions: Record<string, Session>;
     sessionDataKeys: Record<string, string | null>;
 }): void {
+    const key = sessionsCacheKey(accountKey);
     const sessions = Object.fromEntries(
         Object.entries(data.sessions).map(([id, session]) => [id, stripVolatileSessionFields(session)])
     );
     const sharedSessions = Object.fromEntries(
         Object.entries(data.sharedSessions).map(([id, session]) => [id, stripVolatileSessionFields(session)])
     );
-    mmkv.set(sessionsCacheKey(accountKey), JSON.stringify({
-        version: SESSIONS_CACHE_VERSION,
-        savedAt: Date.now(),
+    const content = {
         lastSessionsCursorMs: data.lastSessionsCursorMs,
         sessions,
         sharedSessions,
         sessionDataKeys: data.sessionDataKeys,
+    };
+    const serializedContent = serializeSessionsCacheContent({ sessions, sharedSessions, sessionDataKeys: data.sessionDataKeys });
+    if (savedSessionsCacheContent.get(key) === serializedContent) {
+        return;
+    }
+
+    mmkv.set(key, JSON.stringify({
+        version: SESSIONS_CACHE_VERSION,
+        savedAt: Date.now(),
+        ...content,
     } satisfies SessionsCachePayload));
+    savedSessionsCacheContent.set(key, serializedContent);
 }
 
 export function clearSessionsCache(accountKey: string): void {
-    mmkv.delete(sessionsCacheKey(accountKey));
+    const key = sessionsCacheKey(accountKey);
+    savedSessionsCacheContent.delete(key);
+    mmkv.delete(key);
 }
 
 export function clearPersistence() {
+    savedSessionsCacheContent.clear();
     mmkv.clearAll();
 }

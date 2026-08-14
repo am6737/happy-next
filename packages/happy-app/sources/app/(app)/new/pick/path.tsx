@@ -272,9 +272,11 @@ export default function PathPickerScreen() {
                                 onPress={handleSelectPath}
                                 disabled={!customPath.trim()}
                                 style={({ pressed }) => ({
-                                    marginRight: 16,
+                                    width: 38,
+                                    height: 38,
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
                                     opacity: pressed ? 0.7 : 1,
-                                    padding: 4,
                                 })}
                             >
                                 <Ionicons
@@ -308,8 +310,11 @@ export default function PathPickerScreen() {
                             onPress={handleSelectPath}
                             disabled={!customPath.trim()}
                             style={({ pressed }) => ({
+                                width: 38,
+                                height: 38,
+                                alignItems: 'center',
+                                justifyContent: 'center',
                                 opacity: pressed ? 0.7 : 1,
-                                padding: 4,
                             })}
                         >
                             <Ionicons

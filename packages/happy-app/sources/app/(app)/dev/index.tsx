@@ -12,7 +12,7 @@ import { Modal } from '@/modal';
 import { hapticsLight } from '@/components/haptics';
 import { showToast } from '@/components/Toast';
 import { sync } from '@/sync/sync';
-import { getServerUrl, setServerUrl, validateServerUrl } from '@/sync/serverConfig';
+import { getServerUrl, resolveServerConfig, setServerUrl, validateServerUrl } from '@/sync/serverConfig';
 import { Switch } from '@/components/Switch';
 import { useUnistyles } from 'react-native-unistyles';
 import { setLastViewedVersion, getLatestVersion } from '@/changelog';
@@ -41,6 +41,7 @@ export default function DevScreen() {
             const validation = validateServerUrl(newUrl);
             if (validation.valid) {
                 setServerUrl(newUrl);
+                await resolveServerConfig();
                 hapticsLight(); showToast('Server URL updated. Please restart the app.');
             } else {
                 Modal.alert('Invalid URL', validation.error || 'Please enter a valid URL');
@@ -204,6 +205,12 @@ export default function DevScreen() {
                     subtitle="Test inverted FlatList with keyboard"
                     icon={<Ionicons name="swap-vertical-outline" size={28} color="#007AFF" />}
                     onPress={() => router.push('/dev/inverted-list')}
+                />
+                <Item
+                    title="Legend Chat Header"
+                    subtitle="Test non-inverted chat with iOS native scroll edge effect"
+                    icon={<Ionicons name="layers-outline" size={28} color="#007AFF" />}
+                    onPress={() => router.push('/dev/legend-chat-header')}
                 />
                 <Item
                     title="Tool Views"

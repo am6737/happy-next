@@ -47,6 +47,16 @@ export class ApiSocket {
         this.connect();
     }
 
+    updateEndpoint(endpoint: string) {
+        if (!this.config || this.config.endpoint === endpoint) {
+            return;
+        }
+
+        this.config = { ...this.config, endpoint };
+        this.disconnect();
+        this.connect();
+    }
+
     //
     // Connection Management
     //

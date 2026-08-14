@@ -211,6 +211,14 @@ export interface UserMessageWithUuid {
     index: number;
 }
 
+export interface UserMessagePage {
+    messages: UserMessageWithUuid[];
+    hasMore: boolean;
+    nextBeforeIndex: number | null;
+}
+
+export type ResolvedForkTarget = Pick<UserMessageWithUuid, 'uuid' | 'timestamp' | 'index'>;
+
 /** @deprecated Use UserMessageWithUuid instead */
 export type ClaudeUserMessageWithUuid = UserMessageWithUuid;
 
@@ -939,15 +947,15 @@ export async function sessionDelete(sessionId: string): Promise<{ success: boole
 export async function machineGetClaudeSessionUserMessages(
     machineId: string,
     claudeSessionId: string,
-    options?: { limit?: number; timeoutMs?: number }
-): Promise<{ messages: ClaudeUserMessageWithUuid[]; projectId: string }> {
+    options?: { limit?: number; beforeIndex?: number; timeoutMs?: number }
+): Promise<UserMessagePage & { projectId: string }> {
     const timeoutMs = options?.timeoutMs ?? 15000;
-    const limit = options?.limit ?? 50;
+    const limit = options?.limit ?? 100;
 
-    const rpcPromise = apiSocket.machineRPC<any, { sessionId: string; limit: number }>(
+    const rpcPromise = apiSocket.machineRPC<any, { sessionId: string; limit: number; beforeIndex?: number; preview: boolean }>(
         machineId,
         'claude-session-user-messages',
-        { sessionId: claudeSessionId, limit }
+        { sessionId: claudeSessionId, limit, beforeIndex: options?.beforeIndex, preview: true }
     );
 
     const timeoutPromise = new Promise<never>((_, reject) => {
@@ -963,9 +971,26 @@ export async function machineGetClaudeSessionUserMessages(
         throw new Error(result.error);
     }
     if (!Array.isArray(result.messages)) {
-        return { messages: [], projectId: result.projectId || '' };
+        return { messages: [], hasMore: false, nextBeforeIndex: null, projectId: result.projectId || '' };
     }
-    return { messages: result.messages, projectId: result.projectId };
+    return {
+        messages: result.messages,
+        hasMore: result.hasMore === true,
+        nextBeforeIndex: typeof result.nextBeforeIndex === 'number' ? result.nextBeforeIndex : null,
+        projectId: result.projectId,
+    };
+}
+
+export async function machineResolveClaudeForkTarget(machineId: string, claudeSessionId: string, text: string, createdAt: number): Promise<ResolvedForkTarget | null> {
+    const result = await apiSocket.machineRPC<any, { sessionId: string; text: string; createdAt: number }>(machineId, 'claude-resolve-fork-target', { sessionId: claudeSessionId, text, createdAt });
+    if (result?.error) throw new Error(result.error);
+    return result?.message ?? null;
+}
+
+export async function machineGetClaudeSessionUserMessage(machineId: string, claudeSessionId: string, uuid: string): Promise<UserMessageWithUuid | null> {
+    const result = await apiSocket.machineRPC<any, { sessionId: string; uuid: string }>(machineId, 'claude-session-user-message', { sessionId: claudeSessionId, uuid });
+    if (result?.error) throw new Error(result.error);
+    return result?.message ?? null;
 }
 
 /**
@@ -1064,15 +1089,15 @@ export async function machineForkClaudeSession(
 export async function machineGetGeminiSessionUserMessages(
     machineId: string,
     sessionId: string,
-    options?: { limit?: number; timeoutMs?: number }
-): Promise<{ messages: UserMessageWithUuid[] }> {
+    options?: { limit?: number; beforeIndex?: number; timeoutMs?: number }
+): Promise<UserMessagePage> {
     const timeoutMs = options?.timeoutMs ?? 15000;
-    const limit = options?.limit ?? 50;
+    const limit = options?.limit ?? 100;
 
-    const rpcPromise = apiSocket.machineRPC<any, { sessionId: string; limit: number }>(
+    const rpcPromise = apiSocket.machineRPC<any, { sessionId: string; limit: number; beforeIndex?: number; preview: boolean }>(
         machineId,
         'gemini-session-user-messages',
-        { sessionId, limit }
+        { sessionId, limit, beforeIndex: options?.beforeIndex, preview: true }
     );
 
     const timeoutPromise = new Promise<never>((_, reject) => {
@@ -1087,7 +1112,23 @@ export async function machineGetGeminiSessionUserMessages(
     if (result.error) {
         throw new Error(result.error);
     }
-    return { messages: Array.isArray(result.messages) ? result.messages : [] };
+    return {
+        messages: Array.isArray(result.messages) ? result.messages : [],
+        hasMore: result.hasMore === true,
+        nextBeforeIndex: typeof result.nextBeforeIndex === 'number' ? result.nextBeforeIndex : null,
+    };
+}
+
+export async function machineResolveGeminiForkTarget(machineId: string, sessionId: string, text: string, createdAt: number): Promise<ResolvedForkTarget | null> {
+    const result = await apiSocket.machineRPC<any, { sessionId: string; text: string; createdAt: number }>(machineId, 'gemini-resolve-fork-target', { sessionId, text, createdAt });
+    if (result?.error) throw new Error(result.error);
+    return result?.message ?? null;
+}
+
+export async function machineGetGeminiSessionUserMessage(machineId: string, sessionId: string, uuid: string): Promise<UserMessageWithUuid | null> {
+    const result = await apiSocket.machineRPC<any, { sessionId: string; uuid: string }>(machineId, 'gemini-session-user-message', { sessionId, uuid });
+    if (result?.error) throw new Error(result.error);
+    return result?.message ?? null;
 }
 
 /**
@@ -1183,15 +1224,15 @@ export async function machineForkGeminiSession(
 export async function machineGetCodexSessionUserMessages(
     machineId: string,
     codexSessionId: string,
-    options?: { limit?: number; timeoutMs?: number }
-): Promise<{ messages: UserMessageWithUuid[] }> {
+    options?: { limit?: number; beforeIndex?: number; timeoutMs?: number }
+): Promise<UserMessagePage> {
     const timeoutMs = options?.timeoutMs ?? 15000;
-    const limit = options?.limit ?? 50;
+    const limit = options?.limit ?? 100;
 
-    const rpcPromise = apiSocket.machineRPC<any, { codexSessionId: string; limit: number }>(
+    const rpcPromise = apiSocket.machineRPC<any, { codexSessionId: string; limit: number; beforeIndex?: number; preview: boolean }>(
         machineId,
         'codex-session-user-messages',
-        { codexSessionId, limit }
+        { codexSessionId, limit, beforeIndex: options?.beforeIndex, preview: true }
     );
 
     const timeoutPromise = new Promise<never>((_, reject) => {
@@ -1206,7 +1247,23 @@ export async function machineGetCodexSessionUserMessages(
     if (result.error) {
         throw new Error(result.error);
     }
-    return { messages: Array.isArray(result.messages) ? result.messages : [] };
+    return {
+        messages: Array.isArray(result.messages) ? result.messages : [],
+        hasMore: result.hasMore === true,
+        nextBeforeIndex: typeof result.nextBeforeIndex === 'number' ? result.nextBeforeIndex : null,
+    };
+}
+
+export async function machineResolveCodexForkTarget(machineId: string, codexSessionId: string, text: string, createdAt: number): Promise<ResolvedForkTarget | null> {
+    const result = await apiSocket.machineRPC<any, { codexSessionId: string; text: string; createdAt: number }>(machineId, 'codex-resolve-fork-target', { codexSessionId, text, createdAt });
+    if (result?.error) throw new Error(result.error);
+    return result?.message ?? null;
+}
+
+export async function machineGetCodexSessionUserMessage(machineId: string, codexSessionId: string, uuid: string): Promise<UserMessageWithUuid | null> {
+    const result = await apiSocket.machineRPC<any, { codexSessionId: string; uuid: string }>(machineId, 'codex-session-user-message', { codexSessionId, uuid });
+    if (result?.error) throw new Error(result.error);
+    return result?.message ?? null;
 }
 
 /**

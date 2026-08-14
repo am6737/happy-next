@@ -13,7 +13,7 @@ export type UserProfile = {
         height?: number;
         thumbhash?: string;
     } | null;
-    username: string;
+    username: string | null;
     bio: string | null;
     status: RelationshipStatus;
     publicKey: string;
@@ -55,7 +55,7 @@ export function buildUserProfile(
         firstName: account.firstName || '',
         lastName: account.lastName,
         avatar,
-        username: account.username || githubProfile?.login || '',
+        username: account.username || githubProfile?.login || null,
         bio: githubProfile?.bio || null,
         status,
         publicKey: account.publicKey,

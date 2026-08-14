@@ -15,10 +15,9 @@ POST /v1/auth
 
 | 字段 | 类型 | 说明 |
 |-------|------|-------------|
-| `publicKey` | string | 你的 Ed25519 公钥（十六进制） |
-| `signature` | string | 挑战值的签名（十六进制） |
-| `challenge` | string | 被签名的挑战字符串 |
-| `deviceInfo` | object | 可选的设备元数据 |
+| `publicKey` | string | 你的 Ed25519 公钥（base64） |
+| `signature` | string | 挑战值的签名（base64） |
+| `challenge` | string | 被签名的挑战字符串（base64） |
 
 **响应：**
 

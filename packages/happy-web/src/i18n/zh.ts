@@ -81,8 +81,13 @@ export default {
     title: '获取应用',
     subtitle: '全平台支持，随时随地控制你的 AI 编程助手。',
     web: { name: 'Web 应用', description: '在浏览器中直接打开，无需安装。', cta: '打开 Web 应用' },
-    ios: { name: 'iOS', description: '通过 TestFlight 下载测试版。', cta: '加入 TestFlight' },
+    ios: { name: 'iOS', description: '从 App Store 下载正式版。', cta: '打开 App Store' },
     android: { name: 'Android', description: '从 GitHub 下载最新 APK。', cta: '下载 APK' },
+    availability: {
+      label: '地区可用性：',
+      description: 'iOS 版暂未在中国大陆 App Store 上架。中国大陆用户可以使用 Web 应用。',
+      cta: '打开 Web 应用',
+    },
   },
   selfHost: {
     title: '一行命令，私有化部署',
@@ -100,7 +105,7 @@ export default {
     links: {
       docs: '文档',
       app: 'Web 应用',
-      testflight: 'TestFlight',
+      appStore: 'App Store',
       android: 'Android APK',
       github: 'GitHub',
       contributing: '参与贡献',

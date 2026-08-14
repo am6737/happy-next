@@ -5,7 +5,7 @@
  * Similar to iOS ActionSheet behavior.
  */
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useContext, useEffect, useRef, useState } from 'react';
 import {
     View,
     Modal,
@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
 import { ActionMenu, ActionMenuItem } from './ActionMenu';
+import { ActionMenuOverlayContext } from './ActionMenuOverlayProvider';
 
 // On web, stop events from propagating to expo-router's modal overlay
 const stopPropagation = (e: { stopPropagation: () => void }) => e.stopPropagation();
@@ -30,6 +31,9 @@ interface ActionMenuModalProps {
     deferItemPress?: boolean;
     /** Optional title displayed at the top of the menu */
     title?: string;
+    headerContent?: React.ReactNode;
+    footerContent?: React.ReactNode;
+    maxHeight?: number;
 }
 
 const ANIMATION_DURATION = 250;
@@ -51,7 +55,53 @@ const styles = StyleSheet.create({
     },
 });
 
-export function ActionMenuModal({ visible, items, onClose, deferItemPress, title }: ActionMenuModalProps) {
+function IOSActionMenuOverlay({ visible, items, onClose, deferItemPress, title, headerContent, footerContent, maxHeight }: ActionMenuModalProps) {
+    const overlay = useContext(ActionMenuOverlayContext);
+    const id = useRef(`action-menu-${Math.random().toString(36).slice(2)}`).current;
+    const propsRef = useRef({ items, onClose, deferItemPress, title, headerContent, footerContent, maxHeight });
+    const pendingActionRef = useRef<(() => void) | null>(null);
+    propsRef.current = { items, onClose, deferItemPress, title, headerContent, footerContent, maxHeight };
+
+    useEffect(() => {
+        if (!overlay) return;
+
+        if (!visible) {
+            overlay.dismiss(id);
+            return;
+        }
+
+        const current = propsRef.current;
+        const overlayItems = current.deferItemPress
+            ? current.items.map((item) => ({
+                ...item,
+                onPress: () => {
+                    pendingActionRef.current = item.onPress;
+                },
+            }))
+            : current.items;
+
+        overlay.present({
+            id,
+            items: overlayItems,
+            title: current.title,
+            headerContent: current.headerContent,
+            footerContent: current.footerContent,
+            maxHeight: current.maxHeight,
+            onClose: () => propsRef.current.onClose(),
+            onDismissed: () => {
+                const pendingAction = pendingActionRef.current;
+                pendingActionRef.current = null;
+                pendingAction?.();
+            },
+        });
+    }, [id, overlay, visible]);
+
+    useEffect(() => () => overlay?.dismiss(id), [id, overlay]);
+
+    return null;
+}
+
+function NativeActionMenuModal({ visible, items, onClose, deferItemPress, title, headerContent, footerContent, maxHeight }: ActionMenuModalProps) {
     // Track actual modal visibility (delayed hide for animation)
     const [modalVisible, setModalVisible] = useState(false);
     const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -158,9 +208,24 @@ export function ActionMenuModal({ visible, items, onClose, deferItemPress, title
                         },
                     ]}
                 >
-                    <ActionMenu items={wrappedItems} onClose={handleClose} title={title} />
+                    <ActionMenu
+                        items={wrappedItems}
+                        onClose={handleClose}
+                        title={title}
+                        headerContent={headerContent}
+                        footerContent={footerContent}
+                        maxHeight={maxHeight}
+                    />
                 </Animated.View>
             </View>
         </Modal>
     );
+}
+
+export function ActionMenuModal(props: ActionMenuModalProps) {
+    if (Platform.OS === 'ios') {
+        return <IOSActionMenuOverlay {...props} />;
+    }
+
+    return <NativeActionMenuModal {...props} />;
 }

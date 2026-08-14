@@ -40,7 +40,7 @@ This document describes how to deploy the Happy Next backend (`packages/happy-se
 - GitHub OAuth/App: `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `GITHUB_APP_ID`, `GITHUB_PRIVATE_KEY`, `GITHUB_WEBHOOK_SECRET`, plus redirect URL/URI.
   - Canonical: `GITHUB_REDIRECT_URL`
   - Backward-compatible alias: `GITHUB_REDIRECT_URI`
-- Voice: Voice is handled by the separate `happy-voice` service (LiveKit-based). See `docs/self-host.md` for configuration.
+- Voice: Voice is handled by the separate `happy-voice` service. The client discovers its public URL from `/v1/app-config` (`PUBLIC_VOICE_BASE_URL`), and API-signed short-lived voice tokens are validated with `VOICE_AUTH_SECRET`. See `docs/self-host.md` for configuration.
 - Debug logging: `DANGEROUSLY_LOG_TO_SERVER_FOR_AI_AUTO_DEBUGGING` (enables file logging + dev log endpoint).
 
 ## Docker image
@@ -69,7 +69,7 @@ The server package includes scripts for local infrastructure:
 Use `.env`/`.env.dev` to load local settings when running `yarn workspace happy-server dev`.
 
 ## Docker Compose (recommended)
-For a one-command deployment including all services (Web, API, Voice, Postgres, Redis, MinIO), see [self-host.md](self-host.md).
+For a one-command deployment including all services (Web, API, Voice, Postgres, Redis, MinIO), see [self-host.md](self-host.md). The root `docker-compose.yml` also runs Prisma migrations and initializes the MinIO bucket on startup.
 
 ## Implementation references
 - Entrypoint: `packages/happy-server/sources/main.ts`

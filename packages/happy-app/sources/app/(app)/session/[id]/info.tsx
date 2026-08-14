@@ -8,13 +8,14 @@ import { Item } from '@/components/Item';
 import { ItemGroup } from '@/components/ItemGroup';
 import { ItemList } from '@/components/ItemList';
 import { Avatar } from '@/components/Avatar';
-import { useSession, useIsDataReady, useMachine, storage } from '@/sync/storage';
+import { useSession, useIsDataReady, useMachine, useOrchestratorHasRuns, storage } from '@/sync/storage';
 import { generateCopyTitle, getSessionName, useSessionStatus, formatOSPlatform, formatPathRelativeToHome, getSessionAvatarId, copySessionMetadata, copySessionModeSettings } from '@/utils/sessionUtils';
 import * as Clipboard from 'expo-clipboard';
 import { Modal } from '@/modal';
 import { hapticsLight } from '@/components/haptics';
 import { showCopiedToast } from '@/components/Toast';
 import { sessionKill, sessionDelete, machineForkClaudeSession, machineForkGeminiSession, machineForkCodexSession, machineSpawnNewSession, sessionUpdateSummary, sessionUpdateMetadataFields } from '@/sync/ops';
+import { leaveSharedSession } from '@/sync/apiSharing';
 import { pushWorktreeBranch, mergeWorktreeBranch, createWorktreePR, cleanupWorktree, cleanupWorkspace, getLocalBranches, getCurrentBranch } from '@/utils/worktreeOps';
 import { getWorkspaceRepos } from '@/utils/workspaceRepos';
 import { RepoSelector } from '@/components/RepoSelector';
@@ -77,8 +78,10 @@ function SessionInfoContent({ session }: { session: Session }) {
     const devModeEnabled = __DEV__;
     const sessionName = getSessionName(session);
     const sessionStatus = useSessionStatus(session);
+    const hasOrchestratorRuns = useOrchestratorHasRuns(session.id);
     const isOwner = !session.accessLevel;
     const isAdmin = isOwner || session.accessLevel === 'admin';
+    const isSharedSession = !isOwner;
     const localModelDisplay = React.useMemo(() => resolveLocalModelDisplay(session.modelMode), [session.modelMode]);
     const modelSubtitle = React.useMemo(() => {
         const cliModel = session.metadata?.model;
@@ -119,6 +122,20 @@ function SessionInfoContent({ session }: { session: Session }) {
         await Clipboard.setStringAsync(value);
         hapticsLight(); showCopiedToast();
     }, []);
+
+    const handleNewSession = useCallback(() => {
+        const params = new URLSearchParams();
+        const machineId = session.metadata?.machineId;
+        const path = session.metadata?.path;
+        if (machineId) params.set('machineId', machineId);
+        if (path) params.set('path', path);
+        const query = params.toString();
+        router.push(query ? `/new?${query}` : '/new');
+    }, [router, session.metadata?.machineId, session.metadata?.path]);
+
+    const handleOpenOrchestratorRuns = useCallback(() => {
+        router.push(`/orchestrator?controllerSessionId=${encodeURIComponent(session.id)}`);
+    }, [router, session.id]);
 
     const handleCopySessionId = useCallback(async () => {
         if (!session) return;
@@ -197,6 +214,7 @@ function SessionInfoContent({ session }: { session: Session }) {
 
         // Archiving is idempotent: if RPC target is gone, session is effectively already archived.
         if (!result.success && /RPC method not available/i.test(errorMessage)) {
+            await sync.clearSessionMessageCache(session.id);
             navigateAfterArchive();
             return;
         }
@@ -205,6 +223,8 @@ function SessionInfoContent({ session }: { session: Session }) {
             storage.getState().updateSessionActivity(session.id, previousActive);
             throw new HappyError(errorMessage, false);
         }
+
+        await sync.clearSessionMessageCache(session.id);
 
         // Success - navigate back
         navigateAfterArchive();
@@ -292,6 +312,32 @@ function SessionInfoContent({ session }: { session: Session }) {
             ]
         );
     }, [performDelete]);
+
+    const [leavingSharedSession, performLeaveSharedSession] = useHappyAction(async () => {
+        const credentials = sync.getCredentials();
+        if (!credentials) {
+            throw new HappyError(t('common.error'), false);
+        }
+
+        await leaveSharedSession(credentials, session.id);
+        storage.getState().removeSharedSession(session.id);
+        navigateAfterArchive();
+    });
+
+    const handleLeaveSharedSession = useCallback(() => {
+        Modal.alert(
+            t('sessionInfo.leaveSharedSession'),
+            t('sessionInfo.leaveSharedSessionConfirm'),
+            [
+                { text: t('common.cancel'), style: 'cancel' },
+                {
+                    text: t('sessionInfo.leaveSharedSession'),
+                    style: 'destructive',
+                    onPress: performLeaveSharedSession
+                }
+            ]
+        );
+    }, [performLeaveSharedSession]);
 
     const [forkingSession, setForkingSession] = React.useState(false);
     const handleForkSession = useCallback(async () => {
@@ -436,7 +482,7 @@ function SessionInfoContent({ session }: { session: Session }) {
                 {
                     text: t('common.copy'),
                     onPress: async () => {
-                        const updateCommand = 'npm install -g happy-next-cli@latest';
+                        const updateCommand = 'happy update';
                         await Clipboard.setStringAsync(updateCommand);
                         hapticsLight();
                         showCopiedToast();
@@ -524,6 +570,7 @@ function SessionInfoContent({ session }: { session: Session }) {
             }
 
             await copySessionMetadata(session, result.sessionId).catch(e => console.warn('copySessionMetadata failed:', e));
+            copySessionModeSettings(session, result.sessionId);
 
             // Navigate to the new session: go back to root then push new session
             try { router.dismissAll(); } catch (_) { /* stack may already be at root */ }
@@ -795,7 +842,11 @@ function SessionInfoContent({ session }: { session: Session }) {
             <Stack.Screen
                 options={{
                     headerRight: () => (
-                        <Pressable onPress={handleRenameSession} hitSlop={10}>
+                        <Pressable
+                            onPress={handleRenameSession}
+                            hitSlop={10}
+                            style={{ width: 38, height: 38, alignItems: 'center', justifyContent: 'center' }}
+                        >
                             <AntDesign name="edit" size={22} color={theme.colors.text} />
                         </Pressable>
                     ),
@@ -943,17 +994,40 @@ function SessionInfoContent({ session }: { session: Session }) {
                     </ItemGroup>
                 )}
 
-                {/* Quick Actions - only show when user has admin/owner permissions */}
-                {isAdmin && (
-                    <ItemGroup title={t('sessionInfo.quickActions')}>
-                        {isAdmin && (
-                            <Item
-                                title={t('session.sharing.manageSharing')}
-                                subtitle={t('session.sharing.manageSharingSubtitle')}
-                                icon={<Ionicons name="share-outline" size={29} color="#007AFF" />}
-                                onPress={() => router.push(`/session/${session.id}/sharing`)}
-                            />
-                        )}
+                <ItemGroup title={t('sessionInfo.quickActions')}>
+                    <Item
+                        title={t('sessionInfo.newSession')}
+                        subtitle={t('sessionInfo.newSessionSubtitle')}
+                        icon={<Ionicons name="add-circle-outline" size={29} color="#007AFF" />}
+                        onPress={handleNewSession}
+                    />
+                    {hasOrchestratorRuns && (
+                        <Item
+                            title={t('sessionInfo.delegationHistory')}
+                            subtitle={t('sessionInfo.delegationHistorySubtitle')}
+                            icon={<Ionicons name="layers-outline" size={29} color="#007AFF" />}
+                            onPress={handleOpenOrchestratorRuns}
+                        />
+                    )}
+                    {isAdmin && (
+                        <Item
+                            title={t('session.sharing.manageSharing')}
+                            subtitle={t('session.sharing.manageSharingSubtitle')}
+                            icon={<Ionicons name="share-outline" size={29} color="#007AFF" />}
+                            onPress={() => router.push(`/session/${session.id}/sharing`)}
+                        />
+                    )}
+                    {isSharedSession && (
+                        <Item
+                            title={t('sessionInfo.leaveSharedSession')}
+                            subtitle={t('sessionInfo.leaveSharedSessionSubtitle')}
+                            icon={<Ionicons name="exit-outline" size={29} color="#FF3B30" />}
+                            onPress={handleLeaveSharedSession}
+                            disabled={leavingSharedSession}
+                            loading={leavingSharedSession}
+                            showChevron={!leavingSharedSession}
+                        />
+                    )}
                         {isOwner && session.metadata?.machineId && (
                             <Item
                                 title={t('sessionInfo.viewMachine')}
@@ -973,7 +1047,7 @@ function SessionInfoContent({ session }: { session: Session }) {
                                 showChevron={!forkingSession}
                             />
                         )}
-                        {isAdmin && sessionStatus.isConnected && (
+                        {isOwner && sessionStatus.isConnected && (
                             <Item
                                 title={t('sessionInfo.archiveSession')}
                                 subtitle={t('sessionInfo.archiveSessionSubtitle')}
@@ -989,8 +1063,7 @@ function SessionInfoContent({ session }: { session: Session }) {
                                 onPress={handleDeleteSession}
                             />
                         )}
-                    </ItemGroup>
-                )}
+                </ItemGroup>
 
                 {/* Worktree Info & Actions */}
                 {isMultiRepo && (
@@ -1030,7 +1103,7 @@ function SessionInfoContent({ session }: { session: Session }) {
                         )}
                     </ItemGroup>
                 )}
-                {isWorktree && worktreeMachineId && worktreeBranch && (
+                {isOwner && isWorktree && worktreeMachineId && worktreeBranch && (
                     <ItemGroup title={t('sessionInfo.worktree.actions')}>
                         <Item
                             title={t('sessionInfo.worktree.pushBranch')}

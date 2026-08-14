@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Pressable, FlatList, Platform, RefreshControl, ScrollView } from 'react-native';
+import { View, Pressable, FlatList, Platform, RefreshControl, ScrollView, NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { Text } from '@/components/StyledText';
 import { usePathname } from 'expo-router';
@@ -19,7 +19,6 @@ import { StatusDot } from './StatusDot';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { useIsTablet } from '@/utils/responsive';
 import { requestReview } from '@/utils/requestReview';
-import { UpdateBanner } from './UpdateBanner';
 import { layout } from './layout';
 import { useNavigateToSession } from '@/hooks/useNavigateToSession';
 import { t } from '@/text';
@@ -31,6 +30,9 @@ import { sessionDelete } from '@/sync/ops';
 import { HappyError } from '@/utils/errors';
 import { Modal } from '@/modal';
 import { sync } from '@/sync/sync';
+import { SessionContextMenu } from './SessionContextMenu';
+import { SessionColorMarkerForSession } from './SessionColorMarker';
+import { getDesktopPlatform } from '@/desktop/desktopWindowUtils';
 
 const stylesheet = StyleSheet.create((theme) => ({
     container: {
@@ -268,15 +270,27 @@ const stylesheet = StyleSheet.create((theme) => ({
         maxWidth: 160,
         ...Typography.default(),
     },
-    filterChipDot: {
-        width: 8,
-        height: 8,
-        borderRadius: 4,
-        backgroundColor: '#007AFF',
-        marginRight: 7,
+    filterChipCornerBadge: {
+        position: 'absolute',
+        top: -2,
+        right: -2,
+        width: 12,
+        height: 12,
+        borderRadius: 6,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
-    filterChipStatusDot: {
-        marginRight: 7,
+    sidebarTitleContainer: {
+        height: 44,
+        justifyContent: 'flex-end',
+        paddingBottom: 7,
+        paddingHorizontal: 16,
+    },
+    sidebarTitle: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: theme.colors.header.tint,
+        ...Typography.default('semiBold'),
     },
     emptyContainer: {
         alignItems: 'center',
@@ -297,6 +311,23 @@ type SessionTab = 'all' | 'shared' | 'sharedByMe' | (string & {});
 
 type TabDot = 'none' | 'attention' | 'thinking' | 'completed';
 type TabItem = { key: string; label: string; dot: TabDot; active: boolean };
+type SessionRowRef = View | null;
+type RegisterSessionRowRef = (sessionId: string, ref: SessionRowRef) => void;
+
+function collectSessions(items: SessionListViewItem[] | null): Session[] {
+    const sessions: Session[] = [];
+    if (!items) return sessions;
+    for (const item of items) {
+        if (item.type === 'active-sessions') sessions.push(...item.sessions);
+        else if (item.type === 'session') sessions.push(item.session);
+    }
+    return sessions;
+}
+
+function getSessionIdFromPathname(pathname: string): string | null {
+    if (!pathname.startsWith('/session/')) return null;
+    return pathname.split('/')[2] || null;
+}
 
 // Memoized so the tab bar is insulated from the session list's frequent re-renders.
 // `tabs` keeps a stable reference until its content changes (see tabItems below), so the
@@ -305,35 +336,39 @@ type TabItem = { key: string; label: string; dot: TabDot; active: boolean };
 const SessionTabBar = React.memo(function SessionTabBar({ tabs, onSelect }: { tabs: TabItem[]; onSelect: (key: SessionTab) => void }) {
     const styles = stylesheet;
     const { theme } = useUnistyles();
-    const chips = tabs.map((tab) => (
-        <Pressable
-            key={tab.key}
-            style={[
-                styles.filterChip,
-                { backgroundColor: tab.active ? theme.colors.button.primary.background : theme.colors.surface },
-            ]}
-            onPress={() => onSelect(tab.key)}
-        >
-            <View style={styles.filterChipInner}>
-                {tab.dot === 'attention' ? (
-                    <StatusDot color="#FF9500" isPulsing size={8} style={styles.filterChipStatusDot} />
-                ) : tab.dot === 'thinking' ? (
-                    <StatusDot color="#007AFF" isPulsing size={8} style={styles.filterChipStatusDot} />
-                ) : tab.dot === 'completed' ? (
-                    <View style={styles.filterChipDot} />
-                ) : null}
-                <Text
-                    numberOfLines={1}
-                    style={[
-                        styles.filterChipText,
-                        { color: tab.active ? theme.colors.button.primary.tint : theme.colors.text },
-                    ]}
-                >
-                    {tab.label}
-                </Text>
-            </View>
-        </Pressable>
-    ));
+    const chips = tabs.map((tab) => {
+        const backgroundColor = tab.active
+            ? theme.colors.button.primary.background
+            : (Platform.OS == 'web' ? (theme.dark ? '#2f2f2f' : '#e8e8e8'): theme.colors.surface);
+        return (
+            <Pressable
+                key={tab.key}
+                style={[styles.filterChip, { backgroundColor }]}
+                onPress={() => onSelect(tab.key)}
+            >
+                <View style={styles.filterChipInner}>
+                    <Text
+                        numberOfLines={1}
+                        style={[
+                            styles.filterChipText,
+                            { color: tab.active ? theme.colors.button.primary.tint : theme.colors.text },
+                        ]}
+                    >
+                        {tab.label}
+                    </Text>
+                </View>
+                {tab.dot !== 'none' && (
+                    <View style={[styles.filterChipCornerBadge, { backgroundColor: theme.colors.groupped.background }]}>
+                        <StatusDot
+                            color={tab.dot === 'attention' ? '#FF9500' : '#007AFF'}
+                            isPulsing={tab.dot === 'attention' || tab.dot === 'thinking'}
+                            size={8}
+                        />
+                    </View>
+                )}
+            </Pressable>
+        );
+    });
     // Web/desktop: wrap onto multiple lines (no touch gestures to scroll).
     // Mobile: horizontal scroll, swipeable by touch.
     return Platform.OS === 'web' ? (
@@ -350,6 +385,16 @@ const SessionTabBar = React.memo(function SessionTabBar({ tabs, onSelect }: { ta
     );
 });
 
+export const SessionsSidebarTitle = React.memo(function SessionsSidebarTitle() {
+    const styles = stylesheet;
+
+    return (
+        <View style={styles.sidebarTitleContainer}>
+            <Text style={styles.sidebarTitle}>{t('tabs.sessions')}</Text>
+        </View>
+    );
+});
+
 export function SessionsList() {
     const styles = stylesheet;
     const safeArea = useSafeAreaInsets();
@@ -357,15 +402,22 @@ export function SessionsList() {
     const sharedData = useSharedSessionListViewData();
     const sharedByMeData = useSharedByMeSessionListViewData();
     const machineNames = useMachineNameMap();
+    const isDesktopWindows = getDesktopPlatform() === 'windows';
     // Selected tab is persisted to disk so it survives app restarts.
     const [persistedTab, setPersistedTab] = useLocalSettingMutable('sessionListSelectedTab');
     // machineId -> name cache, so machine tabs keep their labels before machines sync.
     const [machineNameCache, setMachineNameCache] = useLocalSettingMutable('machineNameCache');
     const [activeTab, _setActiveTab] = React.useState<SessionTab>(persistedTab ?? 'all');
+    const [pendingSessionNavigationId, setPendingSessionNavigationId] = React.useState<string | null>(null);
     const setActiveTab = React.useCallback((tab: SessionTab) => {
         setPersistedTab(tab);
         _setActiveTab(tab);
     }, [setPersistedTab]);
+    const handleSessionTabSelect = React.useCallback((tab: SessionTab) => {
+        // A manual tab selection takes precedence over any pending automatic reveal.
+        setPendingSessionNavigationId(null);
+        setActiveTab(tab);
+    }, [setActiveTab]);
 
     // All active sessions live inside the single 'active-sessions' item produced by buildSessionListViewData.
     const allActiveSessions = React.useMemo(() => {
@@ -392,7 +444,8 @@ export function SessionsList() {
         }
         return Array.from(groups.values()).sort((a, b) => a.name.localeCompare(b.name));
     }, [allActiveSessions, machineNames, machineNameCache]);
-    const showMachineTabs = machineGroups.length >= 2;
+    const hasSharedSessions = (sharedData?.length ?? 0) > 0;
+    const showMachineTabs = machineGroups.length >= 2 || hasSharedSessions;
 
     // Persist live machine names so they survive app restarts (machines sync lazily).
     React.useEffect(() => {
@@ -407,6 +460,13 @@ export function SessionsList() {
         if (changed) setMachineNameCache(next);
     }, [machineNames, machineNameCache, setMachineNameCache]);
     const pathname = usePathname();
+    const selectedSessionId = React.useMemo(() => getSessionIdFromPathname(pathname), [pathname]);
+    const previousSelectedSessionIdRef = React.useRef<string | null>(null);
+    React.useEffect(() => {
+        if (previousSelectedSessionIdRef.current === selectedSessionId) return;
+        previousSelectedSessionIdRef.current = selectedSessionId;
+        setPendingSessionNavigationId(selectedSessionId);
+    }, [selectedSessionId]);
     const isTablet = useIsTablet();
     const navigateToSession = useNavigateToSession();
     const compactSessionView = useSetting('compactSessionView');
@@ -448,20 +508,39 @@ export function SessionsList() {
         return group ? [{ type: 'active-sessions' as const, sessions: group.sessions }] : data;
     }, [activeTab, sharedData, sharedByMeData, data, machineGroups]);
 
+    const sharedSessions = React.useMemo(() => collectSessions(sharedData), [sharedData]);
+    const sharedByMeSessions = React.useMemo(() => collectSessions(sharedByMeData), [sharedByMeData]);
+    const pendingActiveSession = React.useMemo(
+        () => pendingSessionNavigationId ? allActiveSessions.find(session => session.id === pendingSessionNavigationId) : undefined,
+        [allActiveSessions, pendingSessionNavigationId],
+    );
+    const pendingSessionTargetTab = React.useMemo<SessionTab | null>(() => {
+        if (!pendingSessionNavigationId) return null;
+        if (pendingActiveSession) {
+            const machineId = pendingActiveSession.metadata?.machineId;
+            if (showMachineTabs && machineId && machineGroups.some(group => group.id === machineId)) {
+                return machineId;
+            }
+            return 'all';
+        }
+        if (sharedSessions.some(session => session.id === pendingSessionNavigationId)) return 'shared';
+        if (sharedByMeSessions.some(session => session.id === pendingSessionNavigationId)) return 'sharedByMe';
+        if (collectSessions(data).some(session => session.id === pendingSessionNavigationId)) return 'all';
+        return null;
+    }, [pendingSessionNavigationId, pendingActiveSession, showMachineTabs, machineGroups, sharedSessions, sharedByMeSessions, data]);
+    const activeTabContainsPendingSession = React.useMemo(() => {
+        if (!pendingSessionNavigationId) return false;
+        if (activeTab === 'all') return collectSessions(data).some(session => session.id === pendingSessionNavigationId);
+        if (activeTab === 'shared') return sharedSessions.some(session => session.id === pendingSessionNavigationId);
+        if (activeTab === 'sharedByMe') return sharedByMeSessions.some(session => session.id === pendingSessionNavigationId);
+        return machineGroups.find(group => group.id === activeTab)?.sessions.some(session => session.id === pendingSessionNavigationId) ?? false;
+    }, [pendingSessionNavigationId, activeTab, data, sharedSessions, sharedByMeSessions, machineGroups]);
+
     // Per-tab dot indicator, mirroring useSessionStatus precedence:
     // 'attention' (needs permission, orange pulse) > 'thinking' (blue pulse) >
     // 'completed' (unread completion, static blue). All are online-only signals.
     // The 'all' tab is an aggregate and intentionally shows no dot.
     const tabDot = React.useMemo(() => {
-        const collectSessions = (items: SessionListViewItem[] | null): Session[] => {
-            const out: Session[] = [];
-            if (!items) return out;
-            for (const item of items) {
-                if (item.type === 'active-sessions') out.push(...item.sessions);
-                else if (item.type === 'session') out.push(item.session);
-            }
-            return out;
-        };
         const needsAttention = (s: Session) => s.presence === 'online'
             && !!s.agentState?.requests && Object.keys(s.agentState.requests).length > 0;
         const isThinking = (s: Session) => s.presence === 'online' && s.thinking === true;
@@ -486,9 +565,85 @@ export function SessionsList() {
     const dataWithSelected = selectable ? React.useMemo(() => {
         return tabData?.map(item => ({
             ...item,
-            selected: pathname.startsWith(`/session/${item.type === 'session' ? item.session.id : ''}`)
+            selected: selectedSessionId === (item.type === 'session' ? item.session.id : null)
         }));
-    }, [tabData, pathname]) : tabData;
+    }, [tabData, selectedSessionId]) : tabData;
+
+    const listRef = React.useRef<FlatList<SessionListViewItem & { selected?: boolean }> | null>(null);
+    const listViewportRef = React.useRef<View | null>(null);
+    const sessionRowRefs = React.useRef(new Map<string, View>());
+    const scrollOffsetRef = React.useRef(0);
+    const revealFrameRef = React.useRef<number | null>(null);
+    const registerSessionRowRef = React.useCallback<RegisterSessionRowRef>((sessionId, ref) => {
+        if (ref) sessionRowRefs.current.set(sessionId, ref);
+        else sessionRowRefs.current.delete(sessionId);
+    }, []);
+    const revealSessionRow = React.useCallback((sessionId: string): boolean => {
+        const row = sessionRowRefs.current.get(sessionId);
+        if (!row) return false;
+
+        if (Platform.OS === 'web' && typeof (row as any).scrollIntoView === 'function') {
+            (row as any).scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            return true;
+        }
+
+        const viewport = listViewportRef.current;
+        if (!viewport) return false;
+        row.measureInWindow((_rowX, rowY, _rowWidth, rowHeight) => {
+            viewport.measureInWindow((_viewportX, viewportY, _viewportWidth, viewportHeight) => {
+                const margin = 8;
+                const visibleTop = viewportY + margin;
+                const visibleBottom = viewportY + viewportHeight - margin;
+                const rowBottom = rowY + rowHeight;
+                let delta = 0;
+                if (rowY < visibleTop) delta = rowY - visibleTop;
+                else if (rowBottom > visibleBottom) delta = rowBottom - visibleBottom;
+                if (delta !== 0) {
+                    listRef.current?.scrollToOffset({
+                        offset: Math.max(0, scrollOffsetRef.current + delta),
+                        animated: true,
+                    });
+                }
+            });
+        });
+        return true;
+    }, []);
+    const scheduleRevealSelectedSession = React.useCallback((sessionId: string) => {
+        if (revealFrameRef.current !== null) cancelAnimationFrame(revealFrameRef.current);
+        revealFrameRef.current = requestAnimationFrame(() => {
+            revealFrameRef.current = null;
+            if (revealSessionRow(sessionId)) return;
+
+            const topLevelIndex = dataWithSelected?.findIndex(item =>
+                item.type === 'session'
+                    ? item.session.id === sessionId
+                    : item.type === 'active-sessions' && item.sessions.some(session => session.id === sessionId)
+            ) ?? -1;
+            if (topLevelIndex < 0) return;
+
+            listRef.current?.scrollToIndex({ index: topLevelIndex, animated: false, viewPosition: 0.5 });
+            revealFrameRef.current = requestAnimationFrame(() => {
+                revealFrameRef.current = null;
+                revealSessionRow(sessionId);
+            });
+        });
+    }, [dataWithSelected, revealSessionRow]);
+
+    // Process each route-driven session change once. Realtime list updates must not
+    // repeatedly reveal the same session after the user has manually scrolled away.
+    React.useEffect(() => {
+        if (!pendingSessionNavigationId || !pendingSessionTargetTab) return;
+        if (!activeTabContainsPendingSession) {
+            if (activeTab !== pendingSessionTargetTab) setActiveTab(pendingSessionTargetTab);
+            return;
+        }
+        scheduleRevealSelectedSession(pendingSessionNavigationId);
+        setPendingSessionNavigationId(null);
+    }, [pendingSessionNavigationId, pendingSessionTargetTab, activeTabContainsPendingSession, activeTab, setActiveTab, scheduleRevealSelectedSession]);
+
+    React.useEffect(() => () => {
+        if (revealFrameRef.current !== null) cancelAnimationFrame(revealFrameRef.current);
+    }, []);
 
     // Request review
     React.useEffect(() => {
@@ -527,16 +682,14 @@ export function SessionsList() {
             case 'active-sessions':
                 // Extract just the session ID from pathname (e.g., /session/abc123/file -> abc123)
                 let selectedId: string | undefined;
-                if (isTablet && pathname.startsWith('/session/')) {
-                    const parts = pathname.split('/');
-                    selectedId = parts[2]; // parts[0] is empty, parts[1] is 'session', parts[2] is the ID
-                }
+                if (isTablet && selectedSessionId) selectedId = selectedSessionId;
 
                 const ActiveComponent = compactSessionView ? ActiveSessionsGroupCompact : ActiveSessionsGroup;
                 return (
                     <ActiveComponent
                         sessions={item.sessions}
                         selectedSessionId={selectedId}
+                        registerSessionRowRef={registerSessionRowRef}
                     />
                 );
 
@@ -568,19 +721,21 @@ export function SessionsList() {
                         isFirst={isFirst}
                         isLast={isLast}
                         isSingle={isSingle}
+                        registerSessionRowRef={registerSessionRowRef}
                     />
                 );
         }
-    }, [pathname, dataWithSelected, compactSessionView]);
+    }, [isTablet, selectedSessionId, dataWithSelected, compactSessionView, registerSessionRowRef]);
 
 
     // Remove this section as we'll use FlatList for all items now
 
 
-    const hasSharedSessions = sharedData && sharedData.length > 0;
     const hasSharedByMeSessions = sharedByMeData && sharedByMeData.length > 0;
 
-    // Tab bar: one tab per machine (only when there are 2+ machines) preceded by an
+    // Tab bar: one tab per machine when there are 2+ machines, or when shared-with-me
+    // sessions are present so users can distinguish their own machine from shared sources.
+    // The tabs are preceded by an
     // "All" tab, then the sharing tabs. The "All" tab is also added when only sharing
     // tabs exist, so the user can always get back to the main active list.
     const visibleTabs = React.useMemo(() => {
@@ -614,12 +769,13 @@ export function SessionsList() {
 
     const HeaderComponent = React.useCallback(() => (
         <>
-            <UpdateBanner />
-            {tabItems.length > 1 && (
-                <SessionTabBar tabs={tabItems} onSelect={setActiveTab} />
-            )}
+            {tabItems.length > 1 ? (
+                <SessionTabBar tabs={tabItems} onSelect={handleSessionTabSelect} />
+            ) : isDesktopWindows ? (
+                <SessionsSidebarTitle />
+            ) : null}
         </>
-    ), [tabItems, setActiveTab]);
+    ), [tabItems, handleSessionTabSelect, isDesktopWindows]);
 
     const EmptyComponent = React.useCallback(() => (
         <View style={styles.emptyContainer}>
@@ -632,8 +788,9 @@ export function SessionsList() {
 
     return (
         <View style={styles.container}>
-            <View style={styles.contentContainer}>
+            <View ref={listViewportRef} style={styles.contentContainer}>
                 <FlatList
+                    ref={listRef}
                     contentInsetAdjustmentBehavior={Platform.OS === 'ios' ? 'automatic' : undefined}
                     data={dataWithSelected}
                     renderItem={renderItem}
@@ -642,6 +799,16 @@ export function SessionsList() {
                     ListHeaderComponent={HeaderComponent}
                     ListEmptyComponent={EmptyComponent}
                     removeClippedSubviews={true}
+                    onScroll={(event: NativeSyntheticEvent<NativeScrollEvent>) => {
+                        scrollOffsetRef.current = event.nativeEvent.contentOffset.y;
+                    }}
+                    scrollEventThrottle={16}
+                    onScrollToIndexFailed={({ index, averageItemLength }) => {
+                        listRef.current?.scrollToOffset({
+                            offset: Math.max(0, index * averageItemLength),
+                            animated: false,
+                        });
+                    }}
                     refreshControl={
                         <RefreshControl
                             refreshing={refreshing}
@@ -656,12 +823,13 @@ export function SessionsList() {
 }
 
 // Sub-component that handles session message logic
-const SessionItem = React.memo(({ session, selected, isFirst, isLast, isSingle }: {
+const SessionItem = React.memo(({ session, selected, isFirst, isLast, isSingle, registerSessionRowRef }: {
     session: Session;
     selected?: boolean;
     isFirst?: boolean;
     isLast?: boolean;
     isSingle?: boolean;
+    registerSessionRowRef?: RegisterSessionRowRef;
 }) => {
     const styles = stylesheet;
     const sessionStatus = useSessionStatus(session);
@@ -673,6 +841,9 @@ const SessionItem = React.memo(({ session, selected, isFirst, isLast, isSingle }
     const navigateToSession = useNavigateToSession();
     const swipeableRef = React.useRef<Swipeable | null>(null);
     const swipeEnabled = Platform.OS !== 'web';
+    const setRowRef = React.useCallback((ref: View | null) => {
+        registerSessionRowRef?.(session.id, ref);
+    }, [registerSessionRowRef, session.id]);
 
     const [deletingSession, performDelete] = useHappyAction(async () => {
         const result = await sessionDelete(session.id);
@@ -702,8 +873,9 @@ const SessionItem = React.memo(({ session, selected, isFirst, isLast, isSingle }
     }, [session]);
 
     const itemContent = (
-        <Pressable
-            style={[
+        <SessionContextMenu session={session}>
+            <Pressable
+                style={[
                 compactSessionView ? styles.sessionItemCompact : styles.sessionItem,
                 selected && styles.sessionItemSelected,
                 isSingle ? styles.sessionItemSingle :
@@ -737,9 +909,14 @@ const SessionItem = React.memo(({ session, selected, isFirst, isLast, isSingle }
                     <Text style={[
                         compactSessionView ? styles.sessionTitleCompact : styles.sessionTitle,
                         sessionStatus.isConnected ? styles.sessionTitleConnected : styles.sessionTitleDisconnected
-                    ]} numberOfLines={compactSessionView ? 2 : 1}> {/* {variant !== 'no-path' ? 1 : 2} - issue is we don't have anything to take this space yet and it looks strange - if summaries were more reliably generated, we can add this. While no summary - add something like "New session" or "Empty session", and extend summary to 2 lines once we have it */}
+                    ]} numberOfLines={1} ref={(el: any) => {
+                        if (Platform.OS === 'web' && el) {
+                            el.title = sessionName;
+                        }
+                    }}>
                         {sessionName}
                     </Text>
+                    <SessionColorMarkerForSession sessionId={session.id} />
                 </View>
 
                 {!compactSessionView && (
@@ -797,7 +974,8 @@ const SessionItem = React.memo(({ session, selected, isFirst, isLast, isSingle }
                     </>
                 )}
             </View>
-        </Pressable>
+            </Pressable>
+        </SessionContextMenu>
     );
 
     const containerStyles = [
@@ -814,7 +992,7 @@ const SessionItem = React.memo(({ session, selected, isFirst, isLast, isSingle }
 
     if (!swipeEnabled) {
         return (
-            <View style={containerStyles}>
+            <View ref={setRowRef} style={containerStyles}>
                 {itemContent}
                 {showDivider && <View style={dividerStyle} />}
             </View>
@@ -835,7 +1013,7 @@ const SessionItem = React.memo(({ session, selected, isFirst, isLast, isSingle }
     );
 
     return (
-        <View style={containerStyles}>
+        <View ref={setRowRef} style={containerStyles}>
             <Swipeable
                 ref={swipeableRef}
                 renderRightActions={renderRightActions}

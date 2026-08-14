@@ -528,9 +528,12 @@ describe('Zod Transform - WOLOG Content Normalization', () => {
         it('maps acp [Plan Update] message to TodoWrite tool call/result', () => {
             const planPayload = {
                 explanation: null,
+                threadId: 'thread-1',
+                turnId: 'turn-1',
                 plan: [
                     { step: 'Step A', status: 'completed' },
-                    { step: 'Step B', status: 'pending' }
+                    { step: 'Step B', status: 'inProgress' },
+                    { step: 'Step C', status: 'pending' }
                 ]
             };
             const raw = {
@@ -551,7 +554,16 @@ describe('Zod Transform - WOLOG Content Normalization', () => {
             expect(normalized?.role).toBe('agent');
             if (normalized && normalized.role === 'agent') {
                 expect(normalized.content).toHaveLength(2);
-                expect(normalized.content[0].type).toBe('tool-call');
+                const call = normalized.content[0];
+                expect(call.type).toBe('tool-call');
+                if (call.type === 'tool-call') {
+                    expect(call.input.todos).toHaveLength(3);
+                    expect(call.input.todos[1]).toEqual({
+                        id: 'plan_step_2',
+                        content: 'Step B',
+                        status: 'in_progress'
+                    });
+                }
                 expect(normalized.content[1].type).toBe('tool-result');
             }
         });

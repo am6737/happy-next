@@ -1,0 +1,65 @@
+import { createRequire } from 'node:module';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const require = createRequire(import.meta.url);
+const {
+    generateDesktopUpdateManifest,
+    normalizeReleaseTag,
+    normalizeVersion,
+} = require('../scripts/generateDesktopUpdateManifest.cjs') as {
+    normalizeVersion(value: string): string;
+    normalizeReleaseTag(value: string | undefined, version: string): string;
+    generateDesktopUpdateManifest(options: {
+        version: string;
+        releaseTag?: string;
+        repository: string;
+        artifactsDir: string;
+        outputPath: string;
+        notes?: string;
+        pubDate?: string;
+    }): any;
+};
+
+describe('desktop updater manifest generator', () => {
+    it('normalizes release tags and rejects invalid versions', () => {
+        expect(normalizeVersion('v2.3.4')).toBe('2.3.4');
+        expect(() => normalizeVersion('latest')).toThrow('Invalid desktop update version');
+        expect(normalizeReleaseTag(undefined, '2.3.4')).toBe('v2.3.4');
+        expect(normalizeReleaseTag('desktop-v2.3.4', '2.3.4')).toBe('desktop-v2.3.4');
+        expect(() => normalizeReleaseTag('../v2.3.4', '2.3.4')).toThrow('Invalid desktop release tag');
+    });
+
+    it('generates signed platform entries for universal macOS and both Windows architectures', () => {
+        const directory = mkdtempSync(join(tmpdir(), 'happy-desktop-update-'));
+        writeFileSync(join(directory, 'happy-next-v2.3.4-macos-universal.app.tar.gz'), 'mac');
+        writeFileSync(join(directory, 'happy-next-v2.3.4-macos-universal.app.tar.gz.sig'), 'mac-signature\n');
+        writeFileSync(join(directory, 'happy-next-v2.3.4-windows-x64-setup.exe'), 'windows-x64');
+        writeFileSync(join(directory, 'happy-next-v2.3.4-windows-x64-setup.exe.sig'), 'windows-x64-signature\n');
+        writeFileSync(join(directory, 'happy-next-v2.3.4-windows-arm64-setup.exe'), 'windows-arm64');
+        writeFileSync(join(directory, 'happy-next-v2.3.4-windows-arm64-setup.exe.sig'), 'windows-arm64-signature\n');
+        const outputPath = join(directory, 'latest.json');
+
+        const manifest = generateDesktopUpdateManifest({
+            version: 'v2.3.4',
+            releaseTag: 'v2.3.4',
+            repository: 'hitosea/happy-next',
+            artifactsDir: directory,
+            outputPath,
+            notes: 'Desktop update',
+            pubDate: '2026-07-23T00:00:00.000Z',
+        });
+
+        expect(manifest.platforms['darwin-aarch64']).toEqual(manifest.platforms['darwin-x86_64']);
+        expect(manifest.platforms['windows-x86_64'].signature).toBe('windows-x64-signature');
+        expect(manifest.platforms['windows-x86_64'].url).toContain('happy-next-v2.3.4-windows-x64-setup.exe');
+        expect(manifest.platforms['windows-aarch64'].signature).toBe('windows-arm64-signature');
+        expect(manifest.platforms['windows-aarch64'].url).toContain('happy-next-v2.3.4-windows-arm64-setup.exe');
+        expect(manifest.platforms['darwin-aarch64'].url).toContain('/releases/download/v2.3.4/');
+        expect(manifest.platforms['darwin-aarch64'].url).toContain('happy-next-v2.3.4-macos-universal.app.tar.gz');
+        expect(JSON.stringify(manifest)).not.toContain('%20');
+        expect(JSON.parse(readFileSync(outputPath, 'utf8'))).toEqual(manifest);
+    });
+});

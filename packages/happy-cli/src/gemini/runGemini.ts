@@ -30,6 +30,7 @@ import { connectionState } from '@/utils/serverConnectionErrors';
 import { setupOfflineReconnection } from '@/utils/setupOfflineReconnection';
 import type { ApiSessionClient } from '@/api/apiSession';
 import { parseClear } from '@/parsers/specialCommands';
+import { addBuiltinSlashCommands, expandBuiltinSlashCommand, syncBuiltinCommands } from '@/commands/builtinCommands';
 
 import { createGeminiBackend } from '@/agent/factories/gemini';
 import type { AgentBackend, AgentMessage } from '@/agent';
@@ -41,7 +42,9 @@ import { GeminiDiffProcessor } from '@/gemini/utils/diffProcessor';
 import type { GeminiMode, CodexMessagePayload } from '@/gemini/types';
 import type { ImageContent, PermissionMode } from '@/api/types';
 import { formatMessageForGemini } from '@/utils/formatImageMessage';
-import { GEMINI_MODEL_ENV, DEFAULT_GEMINI_MODEL, getFirstTurnInstruction } from '@/gemini/constants';
+import { GEMINI_MODEL_ENV, DEFAULT_GEMINI_MODEL } from '@/gemini/constants';
+import { getFirstTurnInstruction } from '@/orchestrator/firstTurnInstruction';
+import { buildGeminiFirstTurnPrompt } from '@/gemini/prompt';
 import {
   readGeminiLocalConfig,
   saveGeminiModelToConfig,
@@ -146,6 +149,11 @@ export async function runGemini(opts: {
   // (assigned later after Happy server setup)
   let permissionHandler: GeminiPermissionHandler;
 
+  // Register built-in slash commands (e.g. /preview-html) on a session; re-applied after swaps.
+  const registerBuiltinSlashCommands = (target: ApiSessionClient) => {
+    target.updateCapabilities((currentCapabilities) => addBuiltinSlashCommands(currentCapabilities));
+  };
+
   // Session swap synchronization to prevent race conditions during message processing
   // When a swap is requested during processing, it's queued and applied after the current cycle
   let isProcessingMessage = false;
@@ -162,6 +170,7 @@ export async function runGemini(opts: {
       if (permissionHandler) {
         permissionHandler.updateSession(pendingSessionSwap);
       }
+      registerBuiltinSlashCommands(session);
       pendingSessionSwap = null;
     }
   };
@@ -184,10 +193,15 @@ export async function runGemini(opts: {
         if (permissionHandler) {
           permissionHandler.updateSession(newSession);
         }
+        registerBuiltinSlashCommands(newSession);
       }
     }
   });
   session = initialSession;
+
+  // Install built-in slash commands (e.g. /preview-html) for all sessions.
+  syncBuiltinCommands();
+  registerBuiltinSlashCommands(session);
 
   // Set initial session title if provided (e.g. review sessions)
   const sessionTitle = process.env.HAPPY_SESSION_TITLE?.trim();
@@ -256,7 +270,7 @@ export async function runGemini(opts: {
 
   // Track if this is the first message to include system-level guidance once.
   let isFirstMessage = true;
-  const firstTurnInstruction = getFirstTurnInstruction();
+  const firstTurnInstruction = getFirstTurnInstruction(process.env, { includeOrchestrator: true });
 
   session.onUserMessage((message) => {
     // Resolve permission mode (validate) - same as Codex
@@ -320,15 +334,22 @@ export async function runGemini(opts: {
         logger.debug(`[Gemini] Received mixed message with ${images.length} image(s)`);
     }
 
-    // Build the full prompt: prepend system-level guidance on first message only
-    let fullPrompt = originalUserMessage;
+    // Expand built-in slash commands (e.g. /preview-html) into their tool-invoking prompt.
+    // Keep originalUserMessage raw for display/history; only what we send to the model changes.
+    const expandedBuiltinCommand = expandBuiltinSlashCommand(originalUserMessage);
+    const effectiveUserMessage = expandedBuiltinCommand?.prompt ?? originalUserMessage;
+    if (expandedBuiltinCommand) {
+      logger.debug(`[gemini] Expanded /${expandedBuiltinCommand.name} command`);
+    }
+
+    // Build the full prompt: put system-like guidance before the user message on first turn.
+    let fullPrompt = effectiveUserMessage;
     if (isFirstMessage) {
-      if (message.meta?.appendSystemPrompt) {
-        fullPrompt = message.meta.appendSystemPrompt + '\n\n' + fullPrompt;
-      }
-      if (firstTurnInstruction) {
-        fullPrompt = fullPrompt + '\n\n' + firstTurnInstruction;
-      }
+      fullPrompt = buildGeminiFirstTurnPrompt({
+        appendSystemPrompt: message.meta?.appendSystemPrompt,
+        firstTurnInstruction,
+        userMessage: effectiveUserMessage,
+      });
       isFirstMessage = false;
     }
 
@@ -354,7 +375,7 @@ export async function runGemini(opts: {
   const sendReady = () => {
     session.sendSessionEvent({ type: 'ready' });
     try {
-      api.push().sendToAllDevices(
+      api.push().sendCompletionToAllDevices(
         "It's ready!",
         'Gemini is waiting for your command',
         { sessionId: session.sessionId }

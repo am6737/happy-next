@@ -191,7 +191,7 @@ export default function OrchestratorRunsScreen() {
         }
     }, [isConversationScoped, navigation, theme]);
 
-    const [statusFilter, setStatusFilter] = React.useState<StatusFilter>('active');
+    const [statusFilter, setStatusFilter] = React.useState<StatusFilter>('all');
     const [runs, setRuns] = React.useState<RunListItem[]>([]);
     const [nextCursor, setNextCursor] = React.useState<string | undefined>(undefined);
     const [loading, setLoading] = React.useState(true);
@@ -281,7 +281,13 @@ export default function OrchestratorRunsScreen() {
         return (
             <Pressable
                 style={styles.card}
-                onPress={() => router.push(`/orchestrator/${item.runId}`)}
+                onPress={() => router.push({
+                    pathname: '/orchestrator/[runId]',
+                    params: {
+                        runId: item.runId,
+                        initialTitle: item.title,
+                    },
+                })}
             >
                 <View style={styles.cardHeader}>
                     <Text style={styles.title} numberOfLines={1}>{item.title}</Text>

@@ -14,6 +14,15 @@ export function regexCleanForSpeech(text: string): string {
         .trim();
 }
 
+/**
+ * Strip closing-tag lookalikes (`</原文 >`, `</ 原文>`, …) before wrapping source
+ * text in <原文>: the LLM matches tags as text, not via a parser, so near-miss
+ * variants would still break the "everything inside is data" boundary.
+ */
+export function stripSourceCloseTags(text: string): string {
+    return text.replace(/<\s*\/\s*原文\s*>/g, '');
+}
+
 const CODE_FENCE = /```|~~~/;
 const INLINE_CODE = /`[^`]+`/;
 const URL_RE = /https?:\/\//;

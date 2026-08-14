@@ -25,7 +25,7 @@ export function versionRoutes(app: Fastify) {
             if (semver.satisfies(version, IOS_UP_TO_DATE)) {
                 reply.send({ updateUrl: null });
             } else {
-                reply.send({ updateUrl: null }); // TODO: fill in App Store URL after publishing
+                reply.send({ updateUrl: 'https://apps.apple.com/us/app/happy-next/id6758196715' });
             }
             return;
         }

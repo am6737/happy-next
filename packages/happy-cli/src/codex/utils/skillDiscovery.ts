@@ -1,7 +1,9 @@
 import { execFileSync } from 'node:child_process';
-import { readdirSync, readFileSync, realpathSync } from 'node:fs';
+import { readdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import os from 'node:os';
 import { dirname, join, resolve } from 'node:path';
+import { isYamlRecord, parseMarkdownFrontmatter, parseYamlRecord, readYamlString } from '@/utils/yaml';
+import { getCodexHomeDir } from './codexHome';
 
 export type CodexSkillScope = 'REPO' | 'USER' | 'ADMIN' | 'SYSTEM';
 
@@ -64,34 +66,15 @@ function collectAncestors(from: string, until: string): string[] {
     return result;
 }
 
-function parseFrontmatter(markdown: string): Record<string, string> | null {
-    const match = markdown.match(/^---\r?\n([\s\S]*?)\r?\n---/);
-    if (!match) return null;
-
-    const values: Record<string, string> = {};
-    for (const line of match[1].split(/\r?\n/)) {
-        const colonIndex = line.indexOf(':');
-        if (colonIndex <= 0) continue;
-        const key = line.slice(0, colonIndex).trim();
-        let value = line.slice(colonIndex + 1).trim();
-        if (
-            (value.startsWith('"') && value.endsWith('"')) ||
-            (value.startsWith("'") && value.endsWith("'"))
-        ) {
-            value = value.slice(1, -1);
-        }
-        values[key] = value;
-    }
-    return values;
-}
-
 function parseOpenAiYaml(skillDir: string): Pick<CodexSkillMetadata, 'displayName' | 'shortDescription'> {
     const metadataPath = join(skillDir, 'agents', 'openai.yaml');
 
     try {
         const yaml = readFileSync(metadataPath, 'utf8');
-        const displayName = yaml.match(/^\s*display_name:\s*["']?(.+?)["']?\s*$/m)?.[1];
-        const shortDescription = yaml.match(/^\s*short_description:\s*["']?(.+?)["']?\s*$/m)?.[1];
+        const parsed = parseYamlRecord(yaml);
+        const values = parsed && isYamlRecord(parsed.interface) ? parsed.interface : parsed;
+        const displayName = readYamlString(values?.display_name, true);
+        const shortDescription = readYamlString(values?.short_description, true);
         const result: Pick<CodexSkillMetadata, 'displayName' | 'shortDescription'> = {};
         if (displayName) result.displayName = displayName;
         if (shortDescription) result.shortDescription = shortDescription;
@@ -106,9 +89,9 @@ function readSkill(skillDir: string, scope: CodexSkillScope): CodexSkillMetadata
 
     try {
         const markdown = readFileSync(skillPath, 'utf8');
-        const frontmatter = parseFrontmatter(markdown);
-        const name = frontmatter?.name?.trim();
-        const description = frontmatter?.description?.trim();
+        const frontmatter = parseMarkdownFrontmatter(markdown);
+        const name = readYamlString(frontmatter?.name);
+        const description = readYamlString(frontmatter?.description, true);
         if (!name || !description) return null;
 
         const uiMetadata = parseOpenAiYaml(skillDir);
@@ -151,9 +134,9 @@ function normalizePath(path: string): string {
     }
 }
 
-function readDisabledSkillPaths(homeDir: string): Set<string> {
+function readDisabledSkillPaths(codexHomeDir: string): Set<string> {
     const disabled = new Set<string>();
-    const configPath = join(homeDir, '.codex', 'config.toml');
+    const configPath = join(codexHomeDir, 'config.toml');
 
     try {
         const config = readFileSync(configPath, 'utf8');
@@ -171,6 +154,104 @@ function readDisabledSkillPaths(homeDir: string): Set<string> {
     return disabled;
 }
 
+interface EnabledPlugin {
+    name: string;
+    marketplace: string;
+}
+
+function readEnabledPlugins(codexHomeDir: string): EnabledPlugin[] {
+    const configPath = join(codexHomeDir, 'config.toml');
+
+    try {
+        const config = readFileSync(configPath, 'utf8');
+        const plugins: EnabledPlugin[] = [];
+        const sectionPattern = /^\s*\[plugins\."((?:\\.|[^"\\])+)"\]\s*$/gm;
+        const sections = [...config.matchAll(sectionPattern)];
+
+        for (let index = 0; index < sections.length; index++) {
+            const section = sections[index];
+            const pluginId = section[1].replace(/\\([\\"])/g, '$1');
+            const separator = pluginId.lastIndexOf('@');
+            if (separator <= 0 || separator === pluginId.length - 1) continue;
+
+            const bodyStart = (section.index ?? 0) + section[0].length;
+            const nextSection = config.slice(bodyStart).match(/^\s*\[[^\]]+\]\s*$/m);
+            const bodyEnd = nextSection?.index === undefined
+                ? config.length
+                : bodyStart + nextSection.index;
+            const body = config.slice(bodyStart, bodyEnd);
+            if (!/^\s*enabled\s*=\s*true\s*(?:#.*)?$/m.test(body)) continue;
+
+            plugins.push({
+                name: pluginId.slice(0, separator),
+                marketplace: pluginId.slice(separator + 1),
+            });
+        }
+
+        return plugins;
+    } catch {
+        return [];
+    }
+}
+
+function findPluginInstallDir(codexHomeDir: string, plugin: EnabledPlugin): string | null {
+    const pluginRoot = join(codexHomeDir, 'plugins', 'cache', plugin.marketplace, plugin.name);
+
+    try {
+        const candidates = readdirSync(pluginRoot, { withFileTypes: true })
+            .filter(entry => entry.isDirectory() || entry.isSymbolicLink())
+            .map(entry => join(pluginRoot, entry.name))
+            .filter(candidate => {
+                try {
+                    const manifest = JSON.parse(readFileSync(join(candidate, '.codex-plugin', 'plugin.json'), 'utf8')) as unknown;
+                    return typeof manifest === 'object'
+                        && manifest !== null
+                        && 'name' in manifest
+                        && manifest.name === plugin.name;
+                } catch {
+                    return false;
+                }
+            })
+            .sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs);
+
+        return candidates[0] ?? null;
+    } catch {
+        return null;
+    }
+}
+
+function discoverPluginSkills(codexHomeDir: string): CodexSkillMetadata[] {
+    const skills: CodexSkillMetadata[] = [];
+
+    for (const plugin of readEnabledPlugins(codexHomeDir)) {
+        const pluginDir = findPluginInstallDir(codexHomeDir, plugin);
+        if (!pluginDir) continue;
+
+        try {
+            const manifest = JSON.parse(readFileSync(join(pluginDir, '.codex-plugin', 'plugin.json'), 'utf8')) as {
+                skills?: unknown;
+            };
+            if (typeof manifest.skills !== 'string') continue;
+
+            const skillRoot = resolve(pluginDir, manifest.skills);
+            // Keep plugin skills in the USER scope for compatibility with Happy clients
+            // released before plugin discovery was added. Their skill schema does not accept
+            // PLUGIN even though slash-command metadata does.
+            for (const skill of scanSkillRoot(skillRoot, 'USER')) {
+                skills.push({
+                    ...skill,
+                    name: skill.name.startsWith(`${plugin.name}:`)
+                        ? skill.name
+                        : `${plugin.name}:${skill.name}`,
+                });
+            }
+        } catch {
+        }
+    }
+
+    return skills;
+}
+
 function pushUniqueRoot(roots: string[], root: string): void {
     try {
         const normalized = realpathSync(root);
@@ -181,9 +262,14 @@ function pushUniqueRoot(roots: string[], root: string): void {
     }
 }
 
-export function discoverCodexSkills(cwd = process.cwd(), homeDir = os.homedir()): CodexSkillMetadata[] {
+export function discoverCodexSkills(
+    cwd = process.cwd(),
+    homeDir = os.homedir(),
+    env: NodeJS.ProcessEnv = process.env,
+): CodexSkillMetadata[] {
     const skills: CodexSkillMetadata[] = [];
-    const disabledSkillPaths = readDisabledSkillPaths(homeDir);
+    const codexHomeDir = getCodexHomeDir(homeDir, env);
+    const disabledSkillPaths = readDisabledSkillPaths(codexHomeDir);
 
     const repoRoot = findGitRoot(cwd);
     const repoSkillRoots: string[] = [];
@@ -196,10 +282,15 @@ export function discoverCodexSkills(cwd = process.cwd(), homeDir = os.homedir())
     }
 
     skills.push(...scanSkillRoot(join(homeDir, '.agents', 'skills'), 'USER'));
-    skills.push(...scanSkillRoot(join(homeDir, '.codex', 'skills'), 'USER', false));
+    skills.push(...scanSkillRoot(join(codexHomeDir, 'skills'), 'USER', false));
+    skills.push(...discoverPluginSkills(codexHomeDir));
 
     skills.push(...scanSkillRoot('/etc/codex/skills', 'ADMIN'));
-    skills.push(...scanSkillRoot(join(homeDir, '.codex', 'skills', '.system'), 'SYSTEM'));
+    skills.push(...scanSkillRoot(join(codexHomeDir, 'skills', '.system'), 'SYSTEM'));
 
-    return skills.filter(skill => !disabledSkillPaths.has(normalizePath(dirname(skill.path))));
+    return skills.filter(skill => {
+        const skillPath = normalizePath(skill.path);
+        const skillDir = normalizePath(dirname(skill.path));
+        return !disabledSkillPaths.has(skillPath) && !disabledSkillPaths.has(skillDir);
+    });
 }

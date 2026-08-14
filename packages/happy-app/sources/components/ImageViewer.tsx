@@ -5,6 +5,7 @@ import { StyleSheet } from "react-native-unistyles";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
+import { KeyboardController } from "react-native-keyboard-controller";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -13,6 +14,7 @@ import Animated, {
   interpolate,
   SharedValue,
 } from "react-native-reanimated";
+import { clampImageViewerIndex } from "./imageViewerPosition";
 
 export type ImageViewerImage = {
   uri: string;
@@ -35,6 +37,8 @@ export function ImageViewer({ images, visible, initialIndex = 0, onClose }: Prop
   const insets = useSafeAreaInsets();
   const [currentIndex, setCurrentIndex] = React.useState(initialIndex);
   const flatListRef = React.useRef<FlatList>(null);
+  const [iosModalVisible, setIosModalVisible] = React.useState(false);
+  const modalVisible = Platform.OS === "ios" ? iosModalVisible : visible;
 
   // Shared value for background opacity (controlled by child)
   const dismissProgress = useSharedValue(0);
@@ -45,16 +49,43 @@ export function ImageViewer({ images, visible, initialIndex = 0, onClose }: Prop
   // Reset index when opening
   React.useEffect(() => {
     if (visible) {
-      const idx = Math.min(initialIndex, images.length - 1);
-      setCurrentIndex(idx);
+      const index = clampImageViewerIndex(initialIndex, images.length);
+      setCurrentIndex(index);
       dismissProgress.value = 0;
       setIsZoomed(false);
-      // Scroll to initial index
-      setTimeout(() => {
-        flatListRef.current?.scrollToIndex({ index: idx, animated: false });
-      }, 0);
     }
   }, [visible, initialIndex, images.length]);
+
+  React.useEffect(() => {
+    if (Platform.OS !== "ios") return;
+
+    if (!visible) {
+      setIosModalVisible(false);
+      return;
+    }
+
+    let cancelled = false;
+    const present = async () => {
+      if (KeyboardController.isVisible()) {
+        await KeyboardController.dismiss();
+      }
+      if (!cancelled) setIosModalVisible(true);
+    };
+
+    void present();
+    return () => {
+      cancelled = true;
+    };
+  }, [visible]);
+
+  React.useEffect(() => {
+    if (!modalVisible || images.length === 0) return;
+
+    flatListRef.current?.scrollToIndex({
+      index: clampImageViewerIndex(initialIndex, images.length),
+      animated: false,
+    });
+  }, [modalVisible, initialIndex, images.length]);
 
   const onViewableItemsChanged = React.useCallback(({ viewableItems }: { viewableItems: Array<{ index: number | null }> }) => {
     if (viewableItems.length > 0 && viewableItems[0].index !== null) {
@@ -88,11 +119,11 @@ export function ImageViewer({ images, visible, initialIndex = 0, onClose }: Prop
     />
   ), [width, height, onClose, dismissProgress, currentIndex]);
 
-  if (!visible || images.length === 0) return null;
+  if (!modalVisible || images.length === 0) return null;
 
   return (
     <Modal
-      visible={visible}
+      visible={modalVisible}
       transparent
       animationType="fade"
       onRequestClose={onClose}
@@ -118,7 +149,6 @@ export function ImageViewer({ images, visible, initialIndex = 0, onClose }: Prop
             horizontal
             pagingEnabled
             showsHorizontalScrollIndicator={false}
-            initialScrollIndex={Math.min(initialIndex, images.length - 1)}
             getItemLayout={getItemLayout}
             onViewableItemsChanged={onViewableItemsChanged}
             viewabilityConfig={viewabilityConfig}

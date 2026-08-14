@@ -1,6 +1,7 @@
 import { Platform, Linking } from 'react-native';
 import { Modal } from '@/modal';
 import { AudioModule } from 'expo-audio';
+import { isTauriDesktop } from '@/utils/tauri';
 
 export interface MicrophonePermissionResult {
   granted: boolean;
@@ -109,6 +110,17 @@ export function showMicrophonePermissionDeniedAlert(canAskAgain: boolean = false
     : 'Happy needs access to your microphone for voice chat. Please enable microphone access in your device settings.';
 
   if (Platform.OS === 'web') {
+    if (isTauriDesktop()) {
+      const isMac = typeof navigator !== 'undefined' && /Macintosh|Mac OS X/.test(navigator.userAgent);
+      Modal.alert(
+        title,
+        isMac
+          ? 'Open System Settings → Privacy & Security → Microphone, enable Happy Next, then restart the app.'
+          : 'Open Windows Settings → Privacy & security → Microphone, allow desktop apps to use the microphone, then restart Happy Next.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
     // Web: Show browser-specific instructions
     Modal.alert(
       title,

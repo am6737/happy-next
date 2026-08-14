@@ -3,14 +3,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { Item } from '@/components/Item';
 import { ItemGroup } from '@/components/ItemGroup';
 import { ItemList } from '@/components/ItemList';
-import { useSettingMutable, useLocalSettingMutable } from '@/sync/storage';
+import { useSettingMutable } from '@/sync/storage';
 import { Switch } from '@/components/Switch';
 import { t } from '@/text';
 
 export default function FeaturesSettingsScreen() {
     const [experiments, setExperiments] = useSettingMutable('experiments');
     const [agentInputEnterToSend, setAgentInputEnterToSend] = useSettingMutable('agentInputEnterToSend');
-    const [commandPaletteEnabled, setCommandPaletteEnabled] = useLocalSettingMutable('commandPaletteEnabled');
     const [useEnhancedSessionWizard, setUseEnhancedSessionWizard] = useSettingMutable('useEnhancedSessionWizard');
 
     return (
@@ -62,18 +61,6 @@ export default function FeaturesSettingsScreen() {
                             <Switch
                                 value={agentInputEnterToSend}
                                 onValueChange={setAgentInputEnterToSend}
-                            />
-                        }
-                        showChevron={false}
-                    />
-                    <Item
-                        title={t('settingsFeatures.commandPalette')}
-                        subtitle={commandPaletteEnabled ? t('settingsFeatures.commandPaletteEnabled') : t('settingsFeatures.commandPaletteDisabled')}
-                        icon={<Ionicons name="keypad-outline" size={29} color="#007AFF" />}
-                        rightElement={
-                            <Switch
-                                value={commandPaletteEnabled}
-                                onValueChange={setCommandPaletteEnabled}
                             />
                         }
                         showChevron={false}

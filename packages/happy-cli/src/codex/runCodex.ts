@@ -21,10 +21,13 @@ import { createMcpContext } from '@/agent/mcp';
 import { createSessionMetadata } from '@/utils/createSessionMetadata';
 import { discoverCodexSkills, getCodexSkillsSignature } from './utils/skillDiscovery';
 import { syncOrchestratorAssets } from '@/orchestrator/skillSync';
+import { addOrchestratorSlashCommands, expandOrchestratorSlashCommand } from '@/orchestrator/slashCommands';
+import { addBuiltinSlashCommands, expandBuiltinSlashCommand, syncBuiltinCommands } from '@/commands/builtinCommands';
+import { parseCodexSlashCommand, type CodexSlashCommand } from './slashCommands';
 import { MessageBuffer } from "@/ui/ink/messageBuffer";
 import { CodexDisplay } from "@/ui/ink/CodexDisplay";
 // trimIdent not currently used
-import { getFirstTurnInstruction } from '@/gemini/constants';
+import { getFirstTurnInstruction } from '@/orchestrator/firstTurnInstruction';
 import { notifyDaemonSessionStarted } from "@/daemon/controlClient";
 import { registerKillSessionHandler } from "@/claude/registerKillSessionHandler";
 import { inspect } from 'node:util';
@@ -171,6 +174,7 @@ export async function runCodex(opts: {
     // Install the orchestrator skill for this controller session before discovering skills
     // (no-op for worker sessions and idempotent across runs).
     syncOrchestratorAssets();
+    syncBuiltinCommands();
     let skills = discoverCodexSkills();
     const { state, metadata } = createSessionMetadata({
         flavor: 'codex',
@@ -191,10 +195,10 @@ export async function runCodex(opts: {
         onSessionSwap: (newSession) => {
             session = newSession;
             const currentSkills = skills;
-            session.updateCapabilities((currentCapabilities) => ({
+            session.updateCapabilities((currentCapabilities) => addBuiltinSlashCommands(addOrchestratorSlashCommands({
                 ...currentCapabilities,
                 skills: currentSkills,
-            }));
+            })));
             if (permissionHandler) {
                 permissionHandler.updateSession(newSession);
             }
@@ -203,10 +207,10 @@ export async function runCodex(opts: {
     session = initialSession;
 
     const initialSkills = skills;
-    session.updateCapabilities((currentCapabilities) => ({
+    session.updateCapabilities((currentCapabilities) => addBuiltinSlashCommands(addOrchestratorSlashCommands({
         ...currentCapabilities,
         skills: initialSkills,
-    }));
+    })));
 
     let lastSkillsSignature = getCodexSkillsSignature(skills);
     const skillRefreshInterval = setInterval(() => {
@@ -219,10 +223,10 @@ export async function runCodex(opts: {
 
             skills = nextSkills;
             lastSkillsSignature = nextSignature;
-            session.updateCapabilities((currentCapabilities) => ({
+            session.updateCapabilities((currentCapabilities) => addBuiltinSlashCommands(addOrchestratorSlashCommands({
                 ...currentCapabilities,
                 skills: nextSkills,
-            }));
+            })));
         } catch (error) {
             logger.debug('[codex] Failed to refresh skills capabilities:', error);
         }
@@ -351,7 +355,7 @@ export async function runCodex(opts: {
 
         // Capture session-level system prompt from first message.
         // Combines appendSystemPrompt (Options, DooTask) with first-turn tooling instructions
-        // (change_title + orchestrator guidance for controller sessions).
+        // (change_title for controller sessions; codex discovers orchestrator via the synced skill).
         // Both are passed as baseInstructions to Codex (true system prompt).
         if (sessionSystemPrompt === undefined) {
             const parts: string[] = [];
@@ -396,7 +400,7 @@ export async function runCodex(opts: {
     const sendReady = () => {
         session.sendSessionEvent({ type: 'ready' });
         try {
-            api.push().sendToAllDevices(
+            api.push().sendCompletionToAllDevices(
                 "It's ready!",
                 'Codex is waiting for your command',
                 { sessionId: session.sessionId }
@@ -889,6 +893,13 @@ export async function runCodex(opts: {
                         type: 'message',
                         message: `[Plan Update] ${JSON.stringify(msg.payload)}`,
                     });
+                } else if (msg.name === 'context_compacted') {
+                    messageBuffer.addMessage('Context compacted', 'status');
+                    session.sendSessionEvent({ type: 'message', message: 'Context compacted' });
+                } else if (msg.name === 'goal_updated') {
+                    logger.debug('[Codex] Goal updated', msg.payload);
+                } else if (msg.name === 'goal_cleared') {
+                    logger.debug('[Codex] Goal cleared');
                 } else if (msg.name === 'session_configured') {
                     const payload = msg.payload as { model?: string; reasoningEffort?: string };
                     if (payload.reasoningEffort !== undefined) {
@@ -949,6 +960,92 @@ export async function runCodex(opts: {
     }
 
     let first = true;
+
+    function formatGoalStatus(status: string): string {
+        switch (status) {
+            case 'active': return 'active';
+            case 'paused': return 'paused';
+            case 'blocked': return 'blocked';
+            case 'complete': return 'complete';
+            case 'usageLimited': return 'usage limited';
+            case 'budgetLimited': return 'budget limited';
+            default: return status;
+        }
+    }
+
+    async function ensureBackendStartedForCommand(message: { mode: EnhancedMode }, resumeFile: string | null): Promise<CodexAppServerBackend> {
+        if (backend?.isAlive) {
+            return backend as CodexAppServerBackend;
+        }
+
+        const approvalPolicy = mapApprovalPolicy(message.mode.permissionMode);
+        const sandbox = mapSandbox(message.mode.permissionMode);
+        await createBackend({
+            model: message.mode.model,
+            reasoningEffort: message.mode.reasoningEffort,
+            approvalPolicy,
+            sandbox,
+            resumeFile,
+            baseInstructions: sessionSystemPrompt,
+        });
+        await backend!.startSession();
+        const codexConvId = backend!.getSessionId?.();
+        if (codexConvId) {
+            session.updateMetadata((m: any) => ({ ...m, codexSessionId: codexConvId }));
+        }
+        return backend as CodexAppServerBackend;
+    }
+
+    async function executeCodexSlashCommand(command: CodexSlashCommand, codexBackend: CodexAppServerBackend): Promise<{ waitForTurn?: boolean }> {
+        switch (command.type) {
+            case 'compact': {
+                messageBuffer.addMessage('Compacting context…', 'status');
+                session.sendSessionEvent({ type: 'message', message: 'Compacting context…' });
+                await codexBackend.compactThread();
+                messageBuffer.addMessage('Context compaction requested', 'status');
+                session.sendSessionEvent({ type: 'message', message: 'Context compaction requested' });
+                return {};
+            }
+            case 'review': {
+                messageBuffer.addMessage('Starting code review…', 'status');
+                session.sendSessionEvent({ type: 'message', message: 'Starting code review…' });
+                await codexBackend.startReview(command.target as any);
+                return { waitForTurn: true };
+            }
+            case 'goal': {
+                if (command.action === 'get') {
+                    const result = await codexBackend.getGoal();
+                    const goal = result.goal;
+                    const text = goal
+                        ? `Goal: ${goal.objective}
+Status: ${formatGoalStatus(goal.status)}
+Tokens used: ${goal.tokensUsed}${goal.tokenBudget ? ` / ${goal.tokenBudget}` : ''}`
+                        : 'No goal is currently set.';
+                    messageBuffer.addMessage(text, 'status');
+                    session.sendSessionEvent({ type: 'message', message: text });
+                    return {};
+                }
+                if (command.action === 'clear') {
+                    await codexBackend.clearGoal();
+                    messageBuffer.addMessage('Goal cleared', 'status');
+                    session.sendSessionEvent({ type: 'message', message: 'Goal cleared' });
+                    return {};
+                }
+                if (command.action === 'set') {
+                    await codexBackend.setGoal({ objective: command.objective, status: 'active' });
+                    const text = `Goal set: ${command.objective}`;
+                    messageBuffer.addMessage(text, 'status');
+                    session.sendSessionEvent({ type: 'message', message: text });
+                    return {};
+                }
+                await codexBackend.setGoal({ status: command.status });
+                const text = `Goal status: ${formatGoalStatus(command.status)}`;
+                messageBuffer.addMessage(text, 'status');
+                session.sendSessionEvent({ type: 'message', message: text });
+                return {};
+            }
+        }
+    }
 
     // Backfill history from previous session (if resuming/copying)
     // Awaited so that replace-mode batch completes before the main loop processes new messages
@@ -1060,6 +1157,61 @@ export async function runCodex(opts: {
                 continue;
             }
 
+            const codexSlashCommand = parseCodexSlashCommand(message.message);
+            if (codexSlashCommand.matched) {
+                messageBuffer.addMessage(message.message, 'user');
+                currentModeHash = message.hash;
+
+                if ('error' in codexSlashCommand) {
+                    messageBuffer.addMessage(codexSlashCommand.error, 'status');
+                    session.sendSessionEvent({ type: 'message', message: codexSlashCommand.error });
+                    sendReady();
+                    continue;
+                }
+
+                try {
+                    let commandResumeFile: string | null = null;
+                    if (nextResumeFile) {
+                        commandResumeFile = nextResumeFile;
+                        nextResumeFile = null;
+                    } else if (first && envResumeFile) {
+                        commandResumeFile = envResumeFile;
+                        messageBuffer.addMessage('Resuming from previous session...', 'status');
+                    } else if (storedSessionIdForResume) {
+                        commandResumeFile = findCodexResumeFile(storedSessionIdForResume);
+                        storedSessionIdForResume = null;
+                    }
+                    thinking = true;
+                    sendRemoteKeepAlive(thinking);
+                    const codexBackend = await ensureBackendStartedForCommand(message, commandResumeFile);
+                    wasCreated = true;
+                    first = false;
+                    const result = await executeCodexSlashCommand(codexSlashCommand.command, codexBackend);
+                    if (result.waitForTurn) {
+                        await codexBackend.waitForResponseComplete!();
+                    }
+                } catch (error) {
+                    const errorMessage = formatUnknownCodexError(error);
+                    logger.debug('[Codex] Slash command failed:', error);
+                    messageBuffer.addMessage(`Command failed: ${errorMessage}`, 'status');
+                    session.sendSessionEvent({ type: 'message', message: `Command failed: ${errorMessage}` });
+                } finally {
+                    thinking = false;
+                    sendRemoteKeepAlive(thinking);
+                    sendReady();
+                }
+                continue;
+            }
+
+            const expandedOrchestratorCommand = expandOrchestratorSlashCommand(message.message);
+            const expandedBuiltinCommand = expandedOrchestratorCommand ? null : expandBuiltinSlashCommand(message.message);
+            const promptText = expandedOrchestratorCommand?.prompt ?? expandedBuiltinCommand?.prompt ?? message.message;
+            if (expandedOrchestratorCommand) {
+                logger.debug(`[Codex] Expanded /orchestrator:${expandedOrchestratorCommand.provider} command`);
+            } else if (expandedBuiltinCommand) {
+                logger.debug(`[Codex] Expanded /${expandedBuiltinCommand.name} command`);
+            }
+
             messageBuffer.addMessage(message.message, 'user');
             currentModeHash = message.hash;
 
@@ -1093,7 +1245,6 @@ export async function runCodex(opts: {
                     // Reset if backend was killed by abort
                     wasCreated = false;
                     // System prompt (Options, DooTask, change_title) is passed via baseInstructions
-                    const promptText = message.message;
 
                     // Determine resume file
                     let resumeFile: string | null = null;
@@ -1160,7 +1311,7 @@ export async function runCodex(opts: {
                     // Continue existing session with new prompt
                     await backend!.sendPrompt(
                         backend!.getConversationId()!,
-                        message.message,
+                        promptText,
                         promptOptions
                     );
 

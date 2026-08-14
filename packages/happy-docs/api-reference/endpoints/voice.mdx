@@ -3,7 +3,7 @@ title: "Voice"
 description: "Manage voice sessions through the Happy Voice gateway."
 ---
 
-These endpoints are served by the **Happy Voice gateway** (not the main Happy server). They require the `X-Voice-Key` header or `Authorization: Bearer` with the voice public key.
+These endpoints are served by the **Happy Voice gateway** (not the main Happy server). They require `Authorization: Bearer <token>`, where the token is a JWT signed with `VOICE_AUTH_SECRET`.
 
 ## Start session
 
@@ -30,10 +30,12 @@ Create a new voice session.
 {
   "allowed": true,
   "gatewaySessionId": "uuid",
-  "roomName": "happy_voice_...",
-  "roomUrl": "wss://livekit.example.com",
-  "participantIdentity": "human_...",
-  "participantToken": "jwt-token...",
+  "provider": "volc-rtc",
+  "appId": "volc-rtc-app-id",
+  "roomId": "happy_voice_...",
+  "uid": "human_...",
+  "agentUid": "bot_...",
+  "rtcToken": "rtc-token...",
   "expiresAt": "2026-03-26T01:00:00.000Z"
 }
 ```
@@ -59,33 +61,3 @@ GET /v1/voice/session/:gatewaySessionId/status
 ```
 
 Query the current status of a voice session.
-
-## Send text
-
-```
-POST /v1/voice/session/text
-```
-
-Inject a text message into the voice session.
-
-**Request body:**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `gatewaySessionId` | string | Session ID |
-| `text` | string | Text to inject |
-
-## Send context
-
-```
-POST /v1/voice/session/context
-```
-
-Send app context to the voice agent.
-
-**Request body:**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `gatewaySessionId` | string | Session ID |
-| `payload` | object | Context payload (session state, messages, etc.) |

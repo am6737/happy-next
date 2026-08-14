@@ -2,20 +2,14 @@
 
 [🇬🇧 English](self-host.md)
 
-本仓库支持两种模式：
+本指南说明如何使用根目录的 `docker-compose.yml` 私有化部署 Happy Next。
 
-- **托管（默认）：** 客户端开箱即用 `https://api.happy-next.com/`。
-- **自托管：** 使用根目录的 `docker-compose.yml` 运行你自己的 `happy-server`（API + WebSocket）和 `happy-voice`（语音网关）。
+包含服务：
 
-本指南文档化了**自托管**路径。
-
-## 前提条件
-
-- Docker + Docker Compose
-- LiveKit 部署（不包含在 `docker-compose.yml` 中）
-  - 在 `.env` 中设置 `LIVEKIT_URL`、`LIVEKIT_WS_URL`、`LIVEKIT_API_KEY`、`LIVEKIT_API_SECRET`
-- 语音网关的 API 密钥（用于本仓库的默认供应商）
-  - `OPENAI_API_KEY`、`CARTESIA_API_KEY`
+- `happy-app`：Web 应用，默认端口 `3030`
+- `happy-server`：API + WebSocket，默认端口 `3031`
+- `happy-voice`：语音网关，默认端口 `3040`
+- `postgres`、`redis`、`minio`
 
 ## 快速开始
 
@@ -25,79 +19,163 @@
 cp .env.example .env
 ```
 
-2. 编辑 `.env` 并填写必需的值。
+2. 编辑 `.env`。
 
-本地自托管最少需要：
-- `HANDY_MASTER_SECRET`
-- `POSTGRES_*`
-- `S3_*`（或使用 MinIO 默认值）
-- LiveKit + 语音密钥（`LIVEKIT_*`、`OPENAI_API_KEY`、`CARTESIA_API_KEY`）
+本地跑通最少需要设置：
 
-3. 启动 stack：
+```env
+HANDY_MASTER_SECRET=请改成随机值
+POSTGRES_PASSWORD=请改成随机值
+S3_SECRET_KEY=请改成随机值
+VOICE_AUTH_SECRET=请改成随机值
+```
+
+如果要使用语音功能，还需要填写火山引擎相关配置：
+
+```env
+VOLC_RTC_APP_ID=
+VOLC_RTC_APP_KEY=
+VOLC_ACCESS_KEY_ID=
+VOLC_SECRET_ACCESS_KEY=
+VOLC_TTS_APP_ID=
+VOLC_TTS_TOKEN=
+ARK_API_KEY=
+```
+
+3. 启动：
 
 ```bash
 docker-compose up -d
 ```
 
-4. 执行数据库迁移（仅首次运行）：
+首次启动会自动执行数据库迁移，并自动创建 MinIO bucket。
+
+4. 打开：
+
+- Web：`http://localhost:3030`
+- API：`http://localhost:3031`
+- Voice：`http://localhost:3040`
+- MinIO：`http://localhost:3050`
+
+## 地址配置逻辑
+
+前端启动时使用：
+
+```env
+EXPO_PUBLIC_HAPPY_SERVER_URL=http://localhost:3031
+```
+
+然后前端会请求 API 的 `/v1/app-config`，获取服务端返回的真实地址：
+
+```env
+PUBLIC_API_BASE_URL=
+PUBLIC_VOICE_BASE_URL=http://localhost:3040
+```
+
+说明：
+
+- `PUBLIC_API_BASE_URL` 留空时，前端继续使用入口 API 地址。
+- `PUBLIC_VOICE_BASE_URL` 留空时，语音功能不会自动启用。
+- `APP_URL` 是 Web 应用地址，用于部分回跳/连接流程。
+- `S3_PUBLIC_URL` 必须是浏览器/移动端能访问的资源地址。
+
+## 远程/公网部署
+
+如果不是本机访问，不要使用 `localhost`。需要改成你的公网域名：
+
+```env
+APP_URL=https://app.example.com
+EXPO_PUBLIC_HAPPY_SERVER_URL=https://api.example.com
+PUBLIC_API_BASE_URL=https://api.example.com
+PUBLIC_VOICE_BASE_URL=https://voice.example.com
+S3_PUBLIC_URL=https://s3.example.com/happy-server
+GITHUB_REDIRECT_URL=https://api.example.com/v1/connect/github/callback
+```
+
+同时确保这些端口或域名能访问：
+
+- Web：`3030`
+- API：`3031`
+- Voice：`3040`
+- MinIO/S3：`3050`
+
+## 语音说明
+
+语音不再支持前端自定义语音地址和 key。
+
+现在的链路是：
+
+1. 前端请求 API 获取临时语音 token。
+2. 前端用临时 token 请求 `happy-voice`。
+3. `happy-server` 和 `happy-voice` 通过同一个 `VOICE_AUTH_SECRET` 校验。
+
+所以：
+
+```env
+VOICE_AUTH_SECRET=必须在 happy-server 和 happy-voice 中一致
+```
+
+Docker Compose 已经自动把同一个环境变量传给两个服务。
+
+## GitHub 登录/连接
+
+如果不使用 GitHub 功能，可以留空。
+
+如果使用，需要配置：
+
+```env
+GITHUB_APP_ID=
+GITHUB_CLIENT_ID=
+GITHUB_CLIENT_SECRET=
+GITHUB_REDIRECT_URL=https://api.example.com/v1/connect/github/callback
+GITHUB_WEBHOOK_SECRET=
+GITHUB_PRIVATE_KEY=
+```
+
+## 常用命令
+
+查看状态：
+
+```bash
+docker-compose ps
+```
+
+查看日志：
+
+```bash
+docker-compose logs -f happy-server
+docker-compose logs -f happy-voice
+```
+
+手动执行数据库迁移：
 
 ```bash
 docker-compose exec happy-server yarn --cwd packages/happy-server prisma migrate deploy
 ```
 
-5. 创建 MinIO 存储桶并设置为公开访问（仅首次运行需要）：
+停止：
 
 ```bash
-docker-compose exec minio mc alias set local http://localhost:9000 minioadmin minioadmin
-docker-compose exec minio mc mb local/happy-server
-docker-compose exec minio mc anonymous set download local/happy-server
+docker-compose down
 ```
-
-6. 打开 Web 应用：
-
-- `http://localhost:3030`
-
-自托管使用独立源（无路径反向代理）。配置：
-- `EXPO_PUBLIC_HAPPY_SERVER_URL=http://localhost:3031`
-- `EXPO_PUBLIC_VOICE_BASE_URL=http://localhost:3040`
-
-## CLI：指向你的自托管服务器
-
-CLI 默认使用托管 API。自托管时，运行时设置环境变量：
-
-```bash
-HAPPY_SERVER_URL=http://localhost:3031 HAPPY_WEBAPP_URL=http://localhost:3030 happy
-```
-
-## 移动应用：指向你的自托管服务器
-
-- **开发构建：** 启动 Expo 时设置 `EXPO_PUBLIC_HAPPY_SERVER_URL`，或使用应用内服务器设置页面（如果可用）。
-- **生产构建：** 使用应用内服务器设置页面设置自定义服务器 URL。
-
-## S3 / MinIO 注意事项（重要）
-
-`S3_PUBLIC_URL` 必须能被客户端（浏览器/移动端）访问，而不仅仅是容器。
-
-- 本地 Docker Compose 中，MinIO 暴露在 `http://localhost:3050`，所以 `S3_PUBLIC_URL=http://localhost:3050` 可以正常工作。
-- 远程自托管时，你通常需要一个真正的 S3 兼容端点和一个与你的 TLS/主机配置匹配的公共 URL。
-
-## 远程访问
-
-如果你从其他设备（局域网或互联网）访问 Web 应用，避免硬编码 `localhost` URL。
-
-推荐做法：
-- 将 Web 应用、API 和语音网关放在域名后面（TLS）。
-- 将 `EXPO_PUBLIC_HAPPY_SERVER_URL` 和 `EXPO_PUBLIC_VOICE_BASE_URL` 设置为这些公共源。
-- 将 `APP_URL` 设置为你的 Web 源（用于某些连接流程）。
 
 ## 故障排查
 
-- 检查容器：`docker-compose ps`
-- 查看日志：
-  - `docker-compose logs -f happy-server`
-  - `docker-compose logs -f happy-voice`
-- 验证主机端口：
-  - Web：`3030`
-  - API：`3031`
-  - Voice：`3040`
-  - MinIO：`3050`
+验证 API 配置：
+
+```bash
+curl http://localhost:3031/v1/app-config
+```
+
+验证语音网关：
+
+```bash
+curl http://localhost:3040/healthz
+```
+
+如果浏览器提示跨域，优先检查：
+
+- 前端实际请求的 API 地址是否正确
+- 代理是否转发了 `OPTIONS`
+- 请求是否返回了 `502/500/重定向`
+- 是否带了 credentials/cookie

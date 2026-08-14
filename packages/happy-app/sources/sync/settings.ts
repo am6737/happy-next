@@ -276,8 +276,6 @@ export const SettingsSchema = z.object({
     voiceAssistantLanguage: z.string().nullable().describe('Preferred language for voice assistant (null for auto-detect)'),
     voiceAssistantVoice: z.string().nullable().describe('Preferred voice/timbre (VoiceType) for voice assistant (null for default)'),
     voiceAssistantSpeechRate: z.number().min(-50).max(100).describe('Voice assistant speech rate (-50..100, 0 = normal)'),
-    voiceAssistantGatewayUrl: z.string().nullable().describe('Custom Happy Voice gateway URL (null = use app default)'),
-    voiceAssistantPublicKey: z.string().nullable().describe('Custom Happy Voice public key / gateway credential (null = use app default)'),
     voiceAssistantActionConfirmation: z.boolean().describe('Whether to show a countdown confirmation before the voice assistant executes send/create/delete actions'),
     voiceAssistantActionConfirmationSpeed: z.enum(['fast', 'normal', 'slow']).describe('Countdown speed for the voice action confirmation prompt'),
     voiceAssistantWelcomeMessage: z.string().nullable().describe('Custom welcome message spoken when a voice session starts (null = gateway default)'),
@@ -350,8 +348,6 @@ export const settingsDefaults: Settings = {
     voiceAssistantLanguage: null,
     voiceAssistantVoice: null,
     voiceAssistantSpeechRate: 0,
-    voiceAssistantGatewayUrl: null,
-    voiceAssistantPublicKey: null,
     voiceAssistantActionConfirmation: true,
     voiceAssistantActionConfirmationSpeed: 'normal',
     voiceAssistantWelcomeMessage: null,
@@ -384,9 +380,11 @@ export function settingsParse(settings: unknown): Settings {
     if (!parsed.success) {
         // For invalid settings, preserve unknown fields but use defaults for known fields
         const unknownFields = { ...(settings as any) };
-        // Remove all known schema fields from unknownFields
+        // Remove all known schema fields and retired fields from unknownFields
         const knownFields = Object.keys(SettingsSchema.shape);
         knownFields.forEach(key => delete unknownFields[key]);
+        delete unknownFields.voiceAssistantGatewayUrl;
+        delete unknownFields.voiceAssistantPublicKey;
         return { ...settingsDefaults, ...unknownFields };
     }
 
@@ -400,6 +398,8 @@ export function settingsParse(settings: unknown): Settings {
     const unknownFields = { ...(settings as any) };
     // Remove known fields from unknownFields to preserve only the unknown ones
     Object.keys(parsed.data).forEach(key => delete unknownFields[key]);
+    delete unknownFields.voiceAssistantGatewayUrl;
+    delete unknownFields.voiceAssistantPublicKey;
 
     return { ...settingsDefaults, ...parsed.data, ...unknownFields };
 }

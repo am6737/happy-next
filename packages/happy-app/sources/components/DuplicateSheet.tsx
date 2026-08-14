@@ -23,6 +23,8 @@ import {
     TextStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { KeyboardController } from 'react-native-keyboard-controller';
+import { FullWindowOverlay } from 'react-native-screens';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
@@ -48,9 +50,12 @@ interface DuplicateSheetProps {
     visible: boolean;
     messages: ClaudeUserMessageWithUuid[] | null;
     loading: boolean;
+    loadingMore?: boolean;
+    hasMore?: boolean;
     confirming?: boolean;
     onClose: () => void;
     onSelect: (uuid: string) => void;
+    onLoadMore?: () => void;
     onClosed?: () => void;
 }
 
@@ -89,9 +94,12 @@ export function DuplicateSheet({
     visible,
     messages,
     loading,
+    loadingMore = false,
+    hasMore = false,
     confirming = false,
     onClose,
     onSelect,
+    onLoadMore,
     onClosed,
 }: DuplicateSheetProps) {
     const insets = useSafeAreaInsets();
@@ -117,6 +125,7 @@ export function DuplicateSheet({
     const dragStartY = useRef(0);
     const dragStartHeight = useRef(0);
     const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const restoreKeyboardRef = useRef(false);
     const messageInteractionManager = useRef(createSheetMessageInteractionManager()).current;
 
     const minHeight = windowHeight * MIN_HEIGHT_RATIO;
@@ -151,6 +160,13 @@ export function DuplicateSheet({
 
     useEffect(() => {
         if (visible) {
+            if (Platform.OS === 'ios') {
+                restoreKeyboardRef.current = KeyboardController.isVisible();
+                if (restoreKeyboardRef.current) {
+                    void KeyboardController.dismiss({ keepFocus: true });
+                }
+            }
+
             setModalVisible(true);
             setSelectedUuid(null);
             setExpandedIndices(new Set());
@@ -188,6 +204,10 @@ export function DuplicateSheet({
                 }),
             ]).start(() => {
                 setModalVisible(false);
+                if (restoreKeyboardRef.current) {
+                    restoreKeyboardRef.current = false;
+                    KeyboardController.setFocusTo('current');
+                }
                 onClosed?.();
             });
         }
@@ -350,14 +370,8 @@ export function DuplicateSheet({
         return null;
     }
 
-    return (
-        <Modal
-            visible={true}
-            transparent={true}
-            animationType="none"
-            onRequestClose={handleClose}
-        >
-            <View style={[styles.container as ViewStyle, Platform.OS === 'web' && { pointerEvents: 'auto' as const }]} {...webEventHandlers}>
+    const content = (
+        <View style={[styles.container as ViewStyle, Platform.OS === 'web' && { pointerEvents: 'auto' as const }]} {...webEventHandlers}>
                 <TouchableWithoutFeedback onPress={handleClose}>
                     <Animated.View
                         style={[
@@ -421,6 +435,13 @@ export function DuplicateSheet({
                             onScroll={handleMessageInteractionMove}
                             scrollEventThrottle={16}
                             onScrollBeginDrag={hideCopyMenu}
+                            onEndReached={hasMore && !loadingMore ? onLoadMore : undefined}
+                            onEndReachedThreshold={0.25}
+                            ListFooterComponent={loadingMore ? (
+                                <View style={styles.loadMoreContainer as ViewStyle}>
+                                    <ActivityIndicator size="small" color="#8E8E93" />
+                                </View>
+                            ) : null}
                             showsVerticalScrollIndicator={false}
                             keyExtractor={(msg, index) => `${msg.uuid}-${index}`}
                             renderItem={({ item: msg, index }: ListRenderItemInfo<ClaudeUserMessageWithUuid>) => {
@@ -616,7 +637,21 @@ export function DuplicateSheet({
                         <Text style={styles.localToastText as TextStyle}>{t('common.copied')}</Text>
                     </Animated.View>
                 )}
-            </View>
+        </View>
+    );
+
+    if (Platform.OS === 'ios') {
+        return <FullWindowOverlay>{content}</FullWindowOverlay>;
+    }
+
+    return (
+        <Modal
+            visible={true}
+            transparent={true}
+            animationType="none"
+            onRequestClose={handleClose}
+        >
+            {content}
         </Modal>
     );
 }
@@ -698,6 +733,11 @@ const styles = StyleSheet.create((theme) => ({
     contentContainer: {
         padding: 16,
         gap: 8,
+    },
+    loadMoreContainer: {
+        paddingVertical: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     loadingContainer: {
         alignItems: 'center',
