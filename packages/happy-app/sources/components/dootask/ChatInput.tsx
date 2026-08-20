@@ -15,6 +15,7 @@ import type { DooTaskDialogMsg } from '@/sync/dootask/types';
 type ChatInputProps = {
     onSendText: (text: string) => void;
     onSendImage: (base64DataUri: string) => void;
+    showAttachments?: boolean;
     onSendFile?: (file: { uri: string; name: string; mimeType: string }) => void;
     replyTo?: { msg: DooTaskDialogMsg; senderName: string } | null;
     onCancelReply?: () => void;
@@ -28,7 +29,7 @@ function getPreviewText(msg: DooTaskDialogMsg): string {
     return '[Message]';
 }
 
-export const ChatInput = React.memo(({ onSendText, onSendImage, onSendFile, replyTo, onCancelReply }: ChatInputProps) => {
+export const ChatInput = React.memo(({ onSendText, onSendImage, onSendFile, showAttachments = true, replyTo, onCancelReply }: ChatInputProps) => {
     const { theme } = useUnistyles();
     const insets = useSafeAreaInsets();
     const [text, setText] = React.useState('');
@@ -134,15 +135,17 @@ export const ChatInput = React.memo(({ onSendText, onSendImage, onSendFile, repl
                 </View>
             )}
             <View style={styles.inputRow}>
-                <Pressable
-                    onPress={() => setMenuVisible(true)}
-                    hitSlop={4}
-                    style={styles.addButton}
-                >
-                    <View style={[styles.addCircle, { backgroundColor: theme.colors.surfaceHighest }]}>
-                        <Ionicons name="add" size={24} color={theme.colors.textSecondary} />
-                    </View>
-                </Pressable>
+                {showAttachments ? (
+                    <Pressable
+                        onPress={() => setMenuVisible(true)}
+                        hitSlop={4}
+                        style={styles.addButton}
+                    >
+                        <View style={[styles.addCircle, { backgroundColor: theme.colors.surfaceHighest }]}>
+                            <Ionicons name="add" size={24} color={theme.colors.textSecondary} />
+                        </View>
+                    </Pressable>
+                ) : null}
                 <View style={[styles.inputGroup, { backgroundColor: theme.colors.surfaceHighest }]}>
                     <MultiTextInput
                         style={{ flex: 1, paddingVertical: 6 }}
@@ -169,12 +172,14 @@ export const ChatInput = React.memo(({ onSendText, onSendImage, onSendFile, repl
                     </Pressable>
                 </View>
             </View>
-            <ActionMenuModal
-                visible={menuVisible}
-                items={menuItems}
-                onClose={() => setMenuVisible(false)}
-                deferItemPress
-            />
+            {showAttachments ? (
+                <ActionMenuModal
+                    visible={menuVisible}
+                    items={menuItems}
+                    onClose={() => setMenuVisible(false)}
+                    deferItemPress
+                />
+            ) : null}
         </View>
     );
 });

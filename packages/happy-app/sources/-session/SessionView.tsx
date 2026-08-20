@@ -61,7 +61,7 @@ function shouldHideSessionHeaderForCompactLayout(shouldUseCompactLandscapeSessio
     return shouldUseCompactLandscapeSessionLayout && Platform.OS !== 'web';
 }
 
-export const SessionView = React.memo((props: { id: string }) => {
+export const SessionView = React.memo((props: { id: string; mock?: { onSend: (text: string) => void } }) => {
     const sessionId = props.id;
     const router = useRouter();
     const navigation = useNavigation();
@@ -196,13 +196,17 @@ export const SessionView = React.memo((props: { id: string }) => {
             title: getSessionName(session),
             subtitle: session.metadata?.path ? formatPathRelativeToHome(session.metadata.path, session.metadata?.homeDir) : undefined,
             avatarId: getSessionAvatarId(session),
-            onAvatarPress: () => router.push(`/session/${sessionId}/info`),
+            onAvatarPress: () => {
+                const deepLink = session.metadata?.externalContext?.deepLink;
+                if (props.mock && deepLink) router.push(deepLink as never);
+                else router.push(`/session/${sessionId}/info`);
+            },
             isConnected: isConnected,
             flavor: session.metadata?.flavor || null,
             sessionIcon: session.metadata?.sessionIcon || null,
             tintColor: isConnected ? '#000' : '#8E8E93'
         };
-    }, [session, isDataReady, sessionId, router, sessionNotFound]);
+    }, [session, isDataReady, sessionId, router, sessionNotFound, props.mock]);
 
     return (
         <>
@@ -293,7 +297,7 @@ export const SessionView = React.memo((props: { id: string }) => {
                     </View>
                 ) : session ? (
                     // Normal session view
-                    <SessionViewLoaded key={sessionId} sessionId={sessionId} session={session} />
+                    <SessionViewLoaded key={sessionId} sessionId={sessionId} session={session} mock={props.mock} />
                 ) : null}
             </View>
         </>
@@ -301,7 +305,7 @@ export const SessionView = React.memo((props: { id: string }) => {
 });
 
 
-function SessionViewLoaded({ sessionId, session }: { sessionId: string, session: Session }) {
+function SessionViewLoaded({ sessionId, session, mock }: { sessionId: string, session: Session, mock?: { onSend: (text: string) => void } }) {
     const { theme } = useUnistyles();
     const router = useRouter();
     const safeArea = useSafeAreaInsets();
@@ -1003,6 +1007,7 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
     // Trigger refresh whenever this session screen gets focus.
     useFocusEffect(
         React.useCallback(() => {
+            if (mock) return;
             sync.onSessionVisible(sessionId, true);
             startSilentRefreshTracking();
             // Keep the message-list refreshing indicator suppressed for the first 3s, matching
@@ -1013,7 +1018,7 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
                 // Silent refresh indicator handles delayed feedback if status stays stale.
             });
             return () => clearTimeout(gateTimer);
-        }, [sessionId, startSilentRefreshTracking])
+        }, [sessionId, startSilentRefreshTracking, mock])
     );
 
     // Add paste event listener for images (web only)
@@ -1144,6 +1149,13 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
 
                 const messageToSend = (textSnapshot ?? message).trim();
                 if (messageToSend || images.length > 0) {
+                    if (mock) {
+                        setMessage('');
+                        clearDraft();
+                        clearImages();
+                        if (messageToSend) mock.onSend(messageToSend);
+                        return;
+                    }
                     const socketStatus = storage.getState().socketStatus;
                     log.log(`[SEND_DEBUG][UI] tap_send sid=${sessionId} hasText=${messageToSend.length > 0} images=${images.length} isSending=${isSending} socket=${socketStatus}`);
 

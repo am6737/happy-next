@@ -1,0 +1,547 @@
+import * as React from 'react';
+import { FlatList, Platform, Pressable, View, useWindowDimensions } from 'react-native';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { Text } from '@/components/StyledText';
+import { ChatHeaderTitle } from '@/components/ChatHeaderTitle';
+import { AgentContentView } from '@/components/AgentContentView';
+import { ChatInput } from '@/components/dootask/ChatInput';
+import { StyleSheet, useUnistyles } from 'react-native-unistyles';
+import { AiGroupAvatar, AiIdentityAvatar, getAiAvatarColor } from '@/features/aiTeams/components';
+import { getAiTeamCopy } from '@/features/aiTeams/copy';
+import { findAiAgent, findAiWorkItem, getAiWorkSourcePath, type AiChatMessage } from '@/features/aiTeams/mockData';
+import { appendManagedAiMessages, saveManagedAiExecution, saveManagedAiWorkItem, useManagedAiTeamData } from '@/features/aiTeams/agentStore';
+import { layout } from '@/components/layout';
+import { Typography } from '@/constants/Typography';
+import { getNativeHeaderTitleWidth } from '@/utils/nativeHeaderTitleWidth';
+import { isRunningOnMac } from '@/utils/platform';
+import { useIsTablet } from '@/utils/responsive';
+
+const AVATAR_SIZE = 36;
+const AVATAR_GAP = 10;
+
+const stylesheet = StyleSheet.create((theme) => ({
+    body: {
+        flex: 1,
+        backgroundColor: theme.colors.surface,
+        maxWidth: layout.maxWidth,
+        alignSelf: 'center',
+        width: '100%',
+    },
+    list: { flex: 1 },
+    listContent: {
+        paddingVertical: theme.margins.sm,
+        flexGrow: 1,
+    },
+    itemWithAvatar: { marginBottom: 22 },
+    itemWithoutAvatar: { marginBottom: 10 },
+    otherRow: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        paddingHorizontal: theme.margins.lg,
+        paddingVertical: 1,
+    },
+    avatarColumn: {
+        width: AVATAR_SIZE,
+        marginRight: AVATAR_GAP,
+        alignItems: 'center',
+        justifyContent: 'flex-start',
+    },
+    otherContent: {
+        flex: 1,
+        flexShrink: 1,
+        minWidth: 0,
+        maxWidth: '100%',
+    },
+    headerRow: {
+        flexDirection: 'row',
+        alignItems: 'baseline',
+        gap: theme.margins.sm,
+        marginBottom: 2,
+        minHeight: 20,
+    },
+    senderName: {
+        ...Typography.default('semiBold'),
+        fontSize: 15,
+        lineHeight: 20,
+        flexShrink: 1,
+        minWidth: 0,
+    },
+    aiBadge: {
+        paddingHorizontal: 5,
+        paddingVertical: 1,
+        borderRadius: 4,
+        backgroundColor: theme.colors.surfaceHighest,
+    },
+    aiBadgeText: {
+        ...Typography.default('semiBold'),
+        color: theme.colors.textSecondary,
+        fontSize: 9,
+        lineHeight: 12,
+        letterSpacing: 0.4,
+    },
+    headerTime: {
+        ...Typography.default(),
+        color: theme.colors.textSecondary,
+        fontSize: 12,
+        lineHeight: 18,
+        flexShrink: 0,
+    },
+    selfRow: {
+        paddingHorizontal: theme.margins.lg,
+        alignItems: 'flex-end',
+    },
+    selfContent: {
+        alignItems: 'flex-end',
+        maxWidth: '78%',
+        minWidth: 0,
+    },
+    selfBubble: {
+        paddingHorizontal: 12,
+        paddingVertical: 9,
+        borderRadius: theme.borderRadius.md,
+        backgroundColor: theme.colors.surfaceHigh,
+    },
+    selfTime: {
+        ...Typography.default(),
+        color: theme.colors.textSecondary,
+        fontSize: 11,
+        marginTop: 2,
+    },
+    messageText: {
+        ...Typography.default(),
+        color: theme.colors.text,
+        fontSize: 15,
+        lineHeight: 22,
+        maxWidth: '100%',
+        flexShrink: 1,
+    },
+    decisionMessage: {
+        width: '100%',
+        maxWidth: 560,
+        marginTop: theme.margins.xs,
+    },
+    decisionOptions: {
+        marginTop: 6,
+        gap: 3,
+    },
+    decisionOptionText: {
+        ...Typography.default(),
+        color: theme.colors.textSecondary,
+        fontSize: 14,
+        lineHeight: 21,
+    },
+    decisionOptionSelected: {
+        color: theme.colors.text,
+        fontWeight: '600',
+    },
+    progressMessage: {
+        width: '100%',
+        maxWidth: 560,
+        marginTop: theme.margins.xs,
+        gap: 4,
+    },
+    progressDetail: {
+        ...Typography.default(),
+        color: theme.colors.textSecondary,
+        fontSize: 14,
+        lineHeight: 21,
+    },
+    assignmentMessage: {
+        width: '100%',
+        maxWidth: 560,
+        marginTop: theme.margins.xs,
+    },
+    assignmentHeader: {
+        minHeight: 32,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 7,
+    },
+    assignmentTitle: {
+        ...Typography.default('semiBold'),
+        color: theme.colors.text,
+        fontSize: 14,
+        flex: 1,
+    },
+    assignmentCount: {
+        ...Typography.default(),
+        color: theme.colors.textSecondary,
+        fontSize: 12,
+    },
+    assignmentList: { gap: 5, marginTop: 6 },
+    assignmentRow: { minHeight: 42, paddingHorizontal: 10, borderRadius: theme.borderRadius.sm, backgroundColor: theme.colors.surfaceHigh, flexDirection: 'row', alignItems: 'center', gap: theme.margins.sm },
+    assignmentDot: { width: 7, height: 7, borderRadius: 4 },
+    assignmentBody: { flex: 1, minWidth: 0 },
+    assignmentWork: { ...Typography.default('semiBold'), color: theme.colors.text, fontSize: 13 },
+    assignmentMeta: { ...Typography.default(), color: theme.colors.textSecondary, fontSize: 12, marginTop: 2 },
+    workAttachment: {
+        width: '100%',
+        maxWidth: 560,
+        marginTop: 12,
+    },
+    workLinkRow: {
+        minHeight: 28,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        marginBottom: 7,
+    },
+    workLinkText: {
+        ...Typography.default(),
+        color: theme.colors.textLink,
+        fontSize: 14,
+        lineHeight: 20,
+        flex: 1,
+    },
+    workMessage: {
+        borderRadius: theme.borderRadius.sm,
+        borderWidth: StyleSheet.hairlineWidth,
+        borderColor: theme.colors.divider,
+        backgroundColor: theme.colors.surface,
+        overflow: 'hidden',
+    },
+    workPreview: {
+        paddingHorizontal: theme.margins.md,
+        paddingTop: 12,
+        paddingBottom: 11,
+    },
+    workTopRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        minHeight: 20,
+    },
+    workSourceGroup: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        flexShrink: 1,
+        minWidth: 0,
+    },
+    workSourceLabel: {
+        ...Typography.default('semiBold'),
+        color: theme.colors.text,
+        fontSize: 13,
+        lineHeight: 19,
+        flexShrink: 1,
+        minWidth: 0,
+    },
+    workTitle: {
+        ...Typography.default('semiBold'),
+        color: theme.colors.text,
+        fontSize: 15,
+        lineHeight: 21,
+        marginTop: 8,
+    },
+    workSummary: {
+        ...Typography.default(),
+        color: theme.colors.textSecondary,
+        fontSize: 13,
+        lineHeight: 19,
+        marginTop: 5,
+    },
+    headerIconButton: {
+        width: 36,
+        height: 36,
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden',
+        borderRadius: 18,
+    },
+}));
+
+export default function AiConversationScreen() {
+    const { id } = useLocalSearchParams<{ id: string }>();
+    const router = useRouter();
+    const { theme } = useUnistyles();
+    const styles = stylesheet;
+    const copy = getAiTeamCopy();
+    const data = useManagedAiTeamData();
+    const conversation = data.conversations.find((item) => item.id === id);
+    const agent = conversation ? findAiAgent(data, conversation.agentId) : undefined;
+    const { width: screenWidth } = useWindowDimensions();
+    const isTablet = useIsTablet();
+    const messages = conversation ? data.messages[conversation.id] ?? [] : [];
+    const [expandedAssignmentId, setExpandedAssignmentId] = React.useState<string | null>('tl-assignment');
+
+    React.useEffect(() => {
+        setExpandedAssignmentId(conversation?.kind === 'group' ? 'tl-assignment' : null);
+    }, [conversation?.id]);
+
+    const handleSendText = React.useCallback((text: string) => {
+        const now = new Date();
+        const timeLabel = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+        if (!conversation) return;
+        const waitingExecution = [...data.executions].reverse().find((item) => item.conversationId === conversation.id && item.status === 'waiting_human');
+        appendManagedAiMessages(conversation.id, [
+            { id: `user-${Date.now()}`, kind: 'text', sender: 'user', text, timeLabel },
+            {
+                id: `agent-${Date.now() + 1}`,
+                kind: 'text',
+                sender: 'agent',
+                agentId: conversation.agentId,
+                text: waitingExecution
+                    ? copy.decisionRecorded
+                    : getCurrentLanguageIsChinese() ? '收到。我会先整理目标和下一步，再把需要你确认的事项发到这里。' : 'Got it. I will organize the goal and next steps, then bring decisions back here.',
+                timeLabel,
+            },
+        ]);
+        if (waitingExecution) {
+            saveManagedAiExecution({
+                ...waitingExecution,
+                status: 'running',
+                statusLabel: getCurrentLanguageIsChinese() ? '执行中' : 'Running',
+                events: [...waitingExecution.events, { id: `decision-${Date.now()}`, kind: 'comment', actor: 'human', title: getCurrentLanguageIsChinese() ? '真人已确认' : 'Decision confirmed', body: text, timeLabel, status: 'running' }],
+            });
+            const linkedWork = findAiWorkItem(data, waitingExecution.workItemId);
+            if (linkedWork) saveManagedAiWorkItem({ ...linkedWork, requiresDecision: false, status: 'working', statusLabel: getCurrentLanguageIsChinese() ? '进行中' : 'In progress' });
+        }
+    }, [conversation?.id, copy.decisionRecorded, data.executions]);
+
+    if (!conversation || !agent) {
+        return <View style={styles.body}><Text style={{ color: theme.colors.text, padding: 24 }}>{copy.notFound}</Text></View>;
+    }
+
+    const showWork = (workItemId: string) => {
+        const work = findAiWorkItem(data, workItemId);
+        if (!work) return;
+        const path = getAiWorkSourcePath(work);
+        if (path) router.push(path as never);
+    };
+
+    const listMessages = [...messages].reverse();
+
+    const renderAgentContent = (message: AiChatMessage): React.ReactNode => {
+        if (message.kind === 'text') return <Text style={styles.messageText}>{message.text}</Text>;
+
+        if (message.kind === 'decision') {
+            return (
+                <View style={styles.decisionMessage}>
+                    <Text style={styles.messageText}>{message.body}</Text>
+                    <View style={styles.decisionOptions}>
+                        {message.options.map((option, index) => {
+                            const selected = message.selectedOption === option;
+                            return (
+                                <Text key={option} style={[styles.decisionOptionText, selected && styles.decisionOptionSelected]}>
+                                    {selected ? '✓ ' : `${index + 1}. `}{option}
+                                </Text>
+                            );
+                        })}
+                    </View>
+                </View>
+            );
+        }
+
+        if (message.kind === 'progress') {
+            const isZh = getCurrentLanguageIsChinese();
+            return (
+                <View style={styles.progressMessage}>
+                    <Text style={styles.messageText}>
+                        {isZh ? `${message.title}目前大约完成了 ${message.progress}%。` : `${message.title} is about ${message.progress}% complete.`}
+                    </Text>
+                    {message.completed.length > 0 ? <Text style={styles.progressDetail}>{isZh ? `已经完成：${message.completed.join('、')}。` : `Completed: ${message.completed.join(', ')}.`}</Text> : null}
+                    {message.active.length > 0 ? <Text style={styles.progressDetail}>{isZh ? `现在在做：${message.active.join('、')}。` : `In progress: ${message.active.join(', ')}.`}</Text> : null}
+                    {message.pending.length > 0 ? <Text style={styles.progressDetail}>{isZh ? `接下来：${message.pending.join('、')}。` : `Next: ${message.pending.join(', ')}.`}</Text> : null}
+                </View>
+            );
+        }
+
+        if (message.kind === 'assignment') {
+            const works = message.workItemIds.map((workId) => findAiWorkItem(data, workId)).filter((work) => work !== undefined);
+            const expanded = expandedAssignmentId === message.id;
+            return (
+                <View style={styles.assignmentMessage}>
+                    <Pressable style={styles.assignmentHeader} onPress={() => setExpandedAssignmentId(expanded ? null : message.id)}>
+                        <Ionicons name="git-branch-outline" size={16} color={theme.colors.textSecondary} />
+                        <Text style={styles.assignmentTitle}>{message.title}</Text>
+                        <Text style={styles.assignmentCount}>{getCurrentLanguageIsChinese() ? `${works.length} 项` : `${works.length} items`}</Text>
+                        <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={15} color={theme.colors.textSecondary} />
+                    </Pressable>
+                    {expanded ? (
+                        <View style={styles.assignmentList}>
+                            {works.map((work) => {
+                                const assignee = findAiAgent(data, work.assigneeId);
+                                const dotColor = work.status === 'done' ? theme.colors.success : work.status === 'blocked' ? theme.colors.textDestructive : work.status === 'working' || work.status === 'review' ? theme.colors.textLink : theme.colors.textSecondary;
+                                return (
+                                    <Pressable key={work.id} style={styles.assignmentRow} onPress={() => showWork(work.id)}>
+                                        <View style={[styles.assignmentDot, { backgroundColor: dotColor }]} />
+                                        <View style={styles.assignmentBody}>
+                                            <Text style={styles.assignmentWork} numberOfLines={1}>{work.title}</Text>
+                                            <Text style={styles.assignmentMeta}>{assignee?.name ?? '-'} · {work.statusLabel}</Text>
+                                        </View>
+                                        <Ionicons name="chevron-forward" size={14} color={theme.colors.textSecondary} />
+                                    </Pressable>
+                                );
+                            })}
+                        </View>
+                    ) : null}
+                </View>
+            );
+        }
+
+        if (message.kind === 'work') {
+            const work = findAiWorkItem(data, message.workItemId);
+            if (!work) return null;
+            const githubSource = work.sourceType === 'github'
+                ? work.sourceResourceId.match(/^([^/]+)\/([^#]+)#(\d+)$/)
+                : null;
+            const sourceProvider = work.sourceType === 'github'
+                ? 'github.com'
+                : work.sourceType === 'dootask'
+                    ? 'DooTask'
+                    : work.sourceType === 'session'
+                        ? 'Session'
+                        : (getCurrentLanguageIsChinese() ? '执行记录' : 'Run');
+            const previewTitle = githubSource
+                ? `${work.title} · Issue #${githubSource[3]} · ${githubSource[1]}/${githubSource[2]}`
+                : `${work.title} · ${work.sourceLabel}`;
+            const sourceIcon = work.sourceType === 'github'
+                ? 'logo-github'
+                : work.sourceType === 'dootask'
+                    ? 'checkbox-outline'
+                    : work.sourceType === 'session'
+                        ? 'chatbubble-ellipses-outline'
+                        : 'terminal-outline';
+            return (
+                <View style={styles.workAttachment}>
+                    <Pressable style={styles.workLinkRow} onPress={() => showWork(work.id)}>
+                        <Ionicons name="link-outline" size={16} color={theme.colors.textLink} />
+                        <Text style={styles.workLinkText} numberOfLines={1}>{previewTitle}</Text>
+                    </Pressable>
+                    <View style={styles.workMessage}>
+                        <Pressable style={styles.workPreview} onPress={() => showWork(work.id)}>
+                            <View style={styles.workTopRow}>
+                                <View style={styles.workSourceGroup}>
+                                    <Ionicons name={sourceIcon} size={15} color={theme.colors.textLink} />
+                                    <Text style={styles.workSourceLabel} numberOfLines={1}>{sourceProvider}</Text>
+                                </View>
+                            </View>
+                            <Text style={styles.workTitle} numberOfLines={2}>{previewTitle}</Text>
+                            <Text style={styles.workSummary} numberOfLines={2}>{work.summary}</Text>
+                        </Pressable>
+                    </View>
+                </View>
+            );
+        }
+
+        return <Text style={styles.messageText}>{message.body}</Text>;
+    };
+
+    const renderMessage = ({ item, index }: { item: AiChatMessage; index: number }) => {
+        const olderMessage = index < listMessages.length - 1 ? listMessages[index + 1] : null;
+        const senderKey = item.sender === 'user' ? 'human:self' : `agent:${item.agentId ?? conversation.agentId}`;
+        const olderSenderKey = !olderMessage
+            ? null
+            : olderMessage.sender === 'user'
+                ? 'human:self'
+                : `agent:${olderMessage.agentId ?? conversation.agentId}`;
+        const messageAgent = item.sender === 'agent'
+            ? findAiAgent(data, item.agentId ?? conversation.agentId) ?? agent
+            : agent;
+        const showAvatar = item.sender === 'agent' && senderKey !== olderSenderKey;
+        const isConsecutiveSameSender = olderSenderKey === senderKey;
+
+        if (item.sender === 'user') {
+            return (
+                <View style={isConsecutiveSameSender ? styles.itemWithoutAvatar : styles.itemWithAvatar}>
+                    <View style={styles.selfRow}>
+                        <View style={styles.selfContent}>
+                            <View style={styles.selfBubble}>
+                                {item.kind === 'text' ? <Text style={styles.messageText}>{item.text}</Text> : null}
+                            </View>
+                            <Text style={styles.selfTime}>{item.timeLabel}</Text>
+                        </View>
+                    </View>
+                </View>
+            );
+        }
+
+        return (
+            <View style={isConsecutiveSameSender ? styles.itemWithoutAvatar : styles.itemWithAvatar}>
+                <View style={styles.otherRow}>
+                    <View style={styles.avatarColumn}>
+                        {showAvatar ? <AiIdentityAvatar id={messageAgent.id} name={messageAgent.name} size={AVATAR_SIZE} /> : null}
+                    </View>
+                    <View style={styles.otherContent}>
+                        {showAvatar ? (
+                            <View style={styles.headerRow}>
+                                <Text style={[styles.senderName, { color: getAiAvatarColor(messageAgent.id) }]} numberOfLines={1}>{messageAgent.name}</Text>
+                                <View style={styles.aiBadge}><Text style={styles.aiBadgeText}>AI</Text></View>
+                                <Text style={styles.headerTime}>{item.timeLabel}</Text>
+                            </View>
+                        ) : null}
+                        {renderAgentContent(item)}
+                    </View>
+                </View>
+            </View>
+        );
+    };
+
+    const groupMembers = data.agents.filter((member) => conversation.participantAgentIds.includes(member.id));
+    const openConversationDetails = () => {
+        if (conversation.kind === 'direct') {
+            router.push(`/settings/agents/${agent.id}` as never);
+            return;
+        }
+        router.push(`/inbox/ai/details/${conversation.id}` as never);
+    };
+
+    const headerTitleWidth = getNativeHeaderTitleWidth({ screenWidth, rightActionCount: 1 });
+    const isNarrowPhone = Platform.OS !== 'web' && !isRunningOnMac() && !isTablet;
+    const leftAlignTitleWidth = Math.max(140, Math.min(screenWidth, layout.headerMaxWidth) - 148);
+    const headerTitle = () => (
+        <ChatHeaderTitle
+            title={conversation.title}
+            subtitle={conversation.subtitle}
+            align={isNarrowPhone ? 'left' : 'center'}
+            width={isNarrowPhone ? (Platform.OS === 'ios' ? leftAlignTitleWidth : undefined) : headerTitleWidth}
+        />
+    );
+    const headerRight = () => (
+        <Pressable
+            style={styles.headerIconButton}
+            hitSlop={15}
+            onPress={openConversationDetails}
+        >
+            {conversation.kind === 'group' ? (
+                <AiGroupAvatar members={groupMembers} size={36} />
+            ) : (
+                <AiIdentityAvatar id={agent.id} name={agent.name} size={36} />
+            )}
+        </Pressable>
+    );
+
+    const content = (
+        <FlatList
+            data={listMessages}
+            inverted
+            keyExtractor={(item) => item.id}
+            renderItem={renderMessage}
+            style={styles.list}
+            contentContainerStyle={styles.listContent}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="interactive"
+            initialNumToRender={20}
+        />
+    );
+    const input = (
+        <ChatInput
+            onSendText={handleSendText}
+            onSendImage={() => {}}
+            showAttachments={false}
+        />
+    );
+
+    return (
+        <>
+            <Stack.Screen options={{ headerTitle, headerRight, headerTitleAlign: isNarrowPhone ? 'left' : 'center' }} />
+            <View style={styles.body}>
+                <AgentContentView content={content} input={input} />
+            </View>
+        </>
+    );
+}
+
+function getCurrentLanguageIsChinese(): boolean {
+    return getAiTeamCopy().send === '发送';
+}

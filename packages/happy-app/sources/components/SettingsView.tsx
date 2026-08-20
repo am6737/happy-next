@@ -29,6 +29,7 @@ import { Avatar } from '@/components/Avatar';
 import { t } from '@/text';
 import { useMainTabBottomPadding } from '@/hooks/useMainTabBottomPadding';
 import { openExternalUrl } from '@/utils/tauri';
+import { getAiTeamCopy } from '@/features/aiTeams/copy';
 
 export const SettingsView = React.memo(function SettingsView() {
     const { theme } = useUnistyles();
@@ -43,6 +44,7 @@ export const SettingsView = React.memo(function SettingsView() {
     const avatarUrl = getAvatarUrl(profile);
     const bio = getBio(profile);
     const tabBottomPadding = useMainTabBottomPadding();
+    const aiTeamCopy = getAiTeamCopy();
 
     const { launchScanner, connectWithUrl, isLoading } = useUnifiedScanner();
 
@@ -331,6 +333,21 @@ export const SettingsView = React.memo(function SettingsView() {
             )}
 
             {/* History */}
+            <ItemGroup title={aiTeamCopy.workspace} footer={aiTeamCopy.mockNotice}>
+                <Item
+                    title={aiTeamCopy.agents}
+                    subtitle={aiTeamCopy.agentsSubtitle}
+                    icon={<Ionicons name="people-circle-outline" size={29} color="#5856D6" />}
+                    onPress={() => router.push('/settings/agents')}
+                />
+                <Item
+                    title={aiTeamCopy.teams}
+                    subtitle={aiTeamCopy.teamsSubtitle}
+                    icon={<Ionicons name="git-network-outline" size={29} color="#34C759" />}
+                    onPress={() => router.push('/settings/teams')}
+                />
+            </ItemGroup>
+
             <ItemGroup title={t('settings.history')}>
                 <Item
                     title={t('sessionHistory.title')}

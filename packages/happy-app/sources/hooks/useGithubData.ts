@@ -380,25 +380,25 @@ export function useGithubIssues(owner: string, repo: string, state?: 'open' | 'c
     );
 }
 
-export function useGithubIssue(owner: string, repo: string, number: number) {
+export function useGithubIssue(owner: string, repo: string, number: number, enabled: boolean = true) {
     const { credentials } = useAuth();
-    const enabled = hasRepoCoordinates(owner, repo) && Number.isInteger(number) && number > 0;
+    const validCoordinates = hasRepoCoordinates(owner, repo) && Number.isInteger(number) && number > 0;
     return useGithubFetch<RepoIssue | null>(
         () => credentials ? fetchGithubIssue(credentials, owner, repo, number) : Promise.resolve(null),
         ['issue', credentials?.token, owner, repo, number],
         null,
-        enabled
+        enabled && validCoordinates
     );
 }
 
-export function useGithubIssueComments(owner: string, repo: string, number: number) {
+export function useGithubIssueComments(owner: string, repo: string, number: number, enabled: boolean = true) {
     const { credentials } = useAuth();
     return useGithubPaginatedFetch<RepoIssueComment>(
         (cursor) => credentials
             ? fetchGithubIssueComments(credentials, owner, repo, number, { cursor })
             : Promise.resolve({ items: [], nextCursor: null, hasMore: false }),
         ['issue-comments', credentials?.token, owner, repo, number],
-        hasRepoCoordinates(owner, repo) && Number.isInteger(number) && number > 0
+        enabled && hasRepoCoordinates(owner, repo) && Number.isInteger(number) && number > 0
     );
 }
 

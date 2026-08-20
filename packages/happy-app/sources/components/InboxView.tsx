@@ -1,9 +1,9 @@
 import * as React from 'react';
-import { View, Text, ScrollView, RefreshControl, Platform } from 'react-native';
+import { View, Text, ScrollView, RefreshControl, Platform, Pressable } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { useAcceptedFriends, useFriendRequests, useRequestedFriends, useFeedItems, useFeedLoaded, useFriendsLoaded, useRealtimeStatus, useDootaskProfile } from '@/sync/storage';
 import { UserCard } from '@/components/UserCard';
-import { t } from '@/text';
+import { getCurrentLanguage, t } from '@/text';
 import { trackFriendsProfileView } from '@/track';
 import { ItemGroup } from '@/components/ItemGroup';
 import { Item } from '@/components/Item';
@@ -21,6 +21,10 @@ import type { DooTaskProfile, DooTaskUser, DooTaskDialogListItem } from '@/sync/
 import { showToast } from './Toast';
 import { useMainTabBottomPadding } from '@/hooks/useMainTabBottomPadding';
 import { loadDooTaskInboxUsersCache, saveDooTaskInboxUsersCache } from '@/sync/persistence';
+import { AiGroupAvatar, AiIdentityAvatar } from '@/features/aiTeams/components';
+import { getAiTeamCopy } from '@/features/aiTeams/copy';
+import { useManagedAiTeamData } from '@/features/aiTeams/agentStore';
+import type { AiAgent, AiChatMessage, AiConversation } from '@/features/aiTeams/mockData';
 
 const styles = StyleSheet.create((theme) => ({
     container: {
@@ -59,7 +63,144 @@ const styles = StyleSheet.create((theme) => ({
         paddingBottom: 8,
         textTransform: 'uppercase',
     },
+    aiConversationRow: {
+        minHeight: 72,
+        paddingHorizontal: 16,
+        paddingVertical: 11,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+    },
+    aiConversationPressed: {
+        backgroundColor: theme.colors.surfacePressedOverlay,
+    },
+    aiConversationBody: {
+        flex: 1,
+        minWidth: 0,
+    },
+    aiConversationTop: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    aiConversationTitle: {
+        ...Typography.default('semiBold'),
+        color: theme.colors.text,
+        fontSize: 16,
+        lineHeight: 21,
+        flex: 1,
+        minWidth: 0,
+    },
+    aiConversationTitleUnread: {
+        fontWeight: '700',
+    },
+    aiConversationTime: {
+        ...Typography.default(),
+        color: theme.colors.textSecondary,
+        fontSize: 12,
+        lineHeight: 18,
+        flexShrink: 0,
+    },
+    aiConversationPreview: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 4,
+        minWidth: 0,
+    },
+    aiConversationSender: {
+        ...Typography.default('semiBold'),
+        color: theme.colors.textSecondary,
+        fontSize: 13,
+        lineHeight: 19,
+        flexShrink: 0,
+        maxWidth: 92,
+    },
+    aiConversationAiBadge: {
+        marginLeft: 5,
+        paddingHorizontal: 4,
+        paddingVertical: 1,
+        borderRadius: 4,
+        backgroundColor: theme.colors.surfaceHighest,
+    },
+    aiConversationAiText: {
+        ...Typography.default('semiBold'),
+        color: theme.colors.textLink,
+        fontSize: 9,
+        lineHeight: 12,
+    },
+    aiConversationPreviewText: {
+        ...Typography.default(),
+        color: theme.colors.textSecondary,
+        fontSize: 13,
+        lineHeight: 19,
+        flex: 1,
+        minWidth: 0,
+    },
+    aiConversationUnreadDot: {
+        width: 7,
+        height: 7,
+        borderRadius: 4,
+        marginLeft: 8,
+        backgroundColor: theme.colors.textLink,
+        flexShrink: 0,
+    },
+    aiConversationDivider: {
+        height: Platform.select({ ios: StyleSheet.hairlineWidth, default: 0 }),
+        marginLeft: 72,
+        backgroundColor: theme.colors.divider,
+    },
 }));
+
+type AiConversationListItemProps = {
+    conversation: AiConversation;
+    agents: AiAgent[];
+    messages: AiChatMessage[];
+    onPress: () => void;
+    showDivider?: boolean;
+};
+
+function AiConversationListItem({ conversation, agents, messages, onPress, showDivider = true }: AiConversationListItemProps) {
+    const latestMessage = messages.at(-1);
+    const latestIsAgent = latestMessage?.sender === 'agent';
+    const latestAgent = latestIsAgent
+        ? agents.find((agent) => agent.id === (latestMessage.agentId ?? conversation.agentId))
+        : undefined;
+    const members = agents.filter((agent) => conversation.participantAgentIds.includes(agent.id));
+    const senderName = latestIsAgent
+        ? latestAgent?.name ?? conversation.title
+        : getCurrentLanguage().startsWith('zh') ? '你' : 'You';
+
+    return (
+        <>
+            <Pressable style={({ pressed }) => [styles.aiConversationRow, pressed && styles.aiConversationPressed]} onPress={onPress}>
+                {conversation.kind === 'group' ? (
+                    <AiGroupAvatar members={members} size={44} />
+                ) : (
+                    <AiIdentityAvatar id={conversation.agentId} name={conversation.title} size={44} />
+                )}
+                <View style={styles.aiConversationBody}>
+                    <View style={styles.aiConversationTop}>
+                        <Text style={[styles.aiConversationTitle, conversation.unread && styles.aiConversationTitleUnread]} numberOfLines={1}>{conversation.title}</Text>
+                        <Text style={styles.aiConversationTime}>{conversation.timeLabel}</Text>
+                    </View>
+                    <View style={styles.aiConversationPreview}>
+                        {conversation.kind === 'group' && latestMessage ? (
+                            <>
+                                <Text style={styles.aiConversationSender} numberOfLines={1}>{senderName}</Text>
+                                {latestIsAgent ? <View style={styles.aiConversationAiBadge}><Text style={styles.aiConversationAiText}>AI</Text></View> : null}
+                                <Text style={styles.aiConversationPreviewText} numberOfLines={1}>：{conversation.lastMessage}</Text>
+                            </>
+                        ) : (
+                            <Text style={styles.aiConversationPreviewText} numberOfLines={1}>{conversation.lastMessage}</Text>
+                        )}
+                        {conversation.unread ? <View style={styles.aiConversationUnreadDot} /> : null}
+                    </View>
+                </View>
+            </Pressable>
+            {showDivider ? <View style={styles.aiConversationDivider} /> : null}
+        </>
+    );
+}
 
 interface InboxViewProps {
 }
@@ -135,6 +276,8 @@ export const InboxView = React.memo(({}: InboxViewProps) => {
     const realtimeStatus = useRealtimeStatus();
     const dootaskProfile = useDootaskProfile();
     const tabBottomPadding = useMainTabBottomPadding();
+    const aiTeamData = useManagedAiTeamData();
+    const aiTeamCopy = getAiTeamCopy();
 
     const [refreshing, setRefreshing] = React.useState(false);
     const [dootaskUsers, setDootaskUsers] = React.useState<DootaskMergedUser[]>([]);
@@ -262,7 +405,7 @@ export const InboxView = React.memo(({}: InboxViewProps) => {
     }, [dootaskProfile, openingDootaskUserId, router]);
 
     const dootaskInitialLoadPending = !!dootaskProfile && dootaskUsersLoading && dootaskUsers.length === 0;
-    const isEmpty = feedLoaded && friendsLoaded && !dootaskInitialLoadPending && friendRequests.length === 0 && requestedFriends.length === 0 && friends.length === 0 && feedItems.length === 0 && dootaskUsers.length === 0;
+    const isEmpty = feedLoaded && friendsLoaded && !dootaskInitialLoadPending && friendRequests.length === 0 && requestedFriends.length === 0 && friends.length === 0 && feedItems.length === 0 && dootaskUsers.length === 0 && aiTeamData.conversations.length === 0;
 
     const refreshControl = (
         <RefreshControl
@@ -316,6 +459,18 @@ export const InboxView = React.memo(({}: InboxViewProps) => {
                 refreshControl={refreshControl}
             >
                 <UpdateBanner />
+
+                <ItemGroup title={aiTeamCopy.inboxTitle}>
+                    {aiTeamData.conversations.map((conversation) => (
+                        <AiConversationListItem
+                            key={conversation.id}
+                            conversation={conversation}
+                            agents={aiTeamData.agents}
+                            messages={aiTeamData.messages[conversation.id] ?? []}
+                            onPress={() => router.push(`/inbox/ai/${conversation.id}` as never)}
+                        />
+                    ))}
+                </ItemGroup>
 
                 {feedItems.length > 0 && (
                     <>

@@ -4,14 +4,15 @@ import { iOSUIKit } from 'react-native-typography';
 import { Typography } from '@/constants/Typography';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
-export type RoundButtonSize = 'large' | 'normal' | 'small';
+export type RoundButtonSize = 'large' | 'medium' | 'normal' | 'small';
 const sizes: { [key in RoundButtonSize]: { height: number, fontSize: number, hitSlop: number, pad: number } } = {
     large: { height: 48, fontSize: 20, hitSlop: 0, pad: Platform.OS == 'ios' ? 0 : -1 },
+    medium: { height: 44, fontSize: 16, hitSlop: 4, pad: Platform.OS == 'ios' ? 1 : -1 },
     normal: { height: 32, fontSize: 16, hitSlop: 8, pad: Platform.OS == 'ios' ? 1 : -2 },
     small: { height: 24, fontSize: 14, hitSlop: 12, pad: Platform.OS == 'ios' ? -1 : -1 }
 }
 
-export type RoundButtonDisplay = 'default' | 'inverted';
+export type RoundButtonDisplay = 'default' | 'inverted' | 'outline';
 
 const stylesheet = StyleSheet.create((theme) => ({
     loadingContainer: {
@@ -26,6 +27,8 @@ const stylesheet = StyleSheet.create((theme) => ({
     contentContainer: {
         alignItems: 'center',
         justifyContent: 'center',
+        flexDirection: 'row',
+        gap: 8,
         minWidth: 64,
         paddingHorizontal: 16,
         borderRadius: 9999,
@@ -37,7 +40,7 @@ const stylesheet = StyleSheet.create((theme) => ({
     },
 }));
 
-export const RoundButton = React.memo((props: { size?: RoundButtonSize, display?: RoundButtonDisplay, title?: any, style?: StyleProp<ViewStyle>, textStyle?: StyleProp<TextStyle>, disabled?: boolean, loading?: boolean, onPress?: () => void, action?: () => Promise<any> }) => {
+export const RoundButton = React.memo((props: { size?: RoundButtonSize, display?: RoundButtonDisplay, title?: any, icon?: React.ReactNode, style?: StyleProp<ViewStyle>, textStyle?: StyleProp<TextStyle>, disabled?: boolean, loading?: boolean, onPress?: () => void, action?: () => Promise<any> }) => {
     const { theme } = useUnistyles();
     const styles = stylesheet;
     const [loading, setLoading] = React.useState(false);
@@ -71,6 +74,11 @@ export const RoundButton = React.memo((props: { size?: RoundButtonSize, display?
         inverted: {
             backgroundColor: 'transparent',
             borderColor: 'transparent',
+            textColor: theme.colors.text,
+        },
+        outline: {
+            backgroundColor: 'transparent',
+            borderColor: theme.colors.divider,
             textColor: theme.colors.text,
         }
     }
@@ -108,6 +116,7 @@ export const RoundButton = React.memo((props: { size?: RoundButtonSize, display?
                         <ActivityIndicator color={display.textColor} size='small' />
                     </View>
                 )}
+                {props.icon ? <View style={{ opacity: doLoading ? 0 : 1 }}>{props.icon}</View> : null}
                 <Text 
                     style={[
                         iOSUIKit.title3, 

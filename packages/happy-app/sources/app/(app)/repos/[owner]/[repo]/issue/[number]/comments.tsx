@@ -24,18 +24,38 @@ import { useProfile } from '@/sync/storage';
 import { t } from '@/text';
 import { getGithubCommentFallbackRoute } from '@/utils/githubCommentNavigation';
 import { CommentItem } from '@/components/repos/CommentItem';
+import { getAiMockGithubIssue } from '@/features/aiTeams/mockGithubIssues';
 
 export default React.memo(function IssueCommentsPage() {
     const styles = stylesheet;
     const { theme } = useUnistyles();
     const router = useRouter();
     const insets = useSafeAreaInsets();
-    const { owner, repo, number: numberStr, issueTitle, issueAuthor } = useLocalSearchParams<{ owner: string; repo: string; number: string; issueTitle?: string; issueAuthor?: string }>();
+    const { owner, repo, number: numberStr, issueTitle, issueAuthor, mockWorkId } = useLocalSearchParams<{ owner: string; repo: string; number: string; issueTitle?: string; issueAuthor?: string; mockWorkId?: string }>();
     const issueNumber = parseInt(numberStr, 10);
     const { credentials } = useAuth();
     const profile = useProfile();
     const githubLogin = profile.github?.login;
-    const { data: comments, loading, loadingMore, hasMore, loadMore, mutate } = useGithubIssueComments(owner!, repo!, issueNumber);
+    const mockIssueData = mockWorkId ? getAiMockGithubIssue(mockWorkId) : null;
+    const isMock = mockIssueData !== null;
+    const githubComments = useGithubIssueComments(owner!, repo!, issueNumber, !isMock);
+    const [mockComments, setMockComments] = React.useState<RepoIssueComment[]>(() => mockIssueData?.comments ?? []);
+    React.useEffect(() => {
+        setMockComments(mockIssueData?.comments ?? []);
+    }, [mockWorkId]);
+    const comments = isMock ? mockComments : githubComments.data;
+    const loading = isMock ? false : githubComments.loading;
+    const loadingMore = isMock ? false : githubComments.loadingMore;
+    const hasMore = isMock ? false : githubComments.hasMore;
+    const loadMore = githubComments.loadMore;
+    const mutate = React.useCallback((updater: (prev: RepoIssueComment[]) => RepoIssueComment[]) => {
+        if (isMock) {
+            setMockComments(updater);
+        } else {
+            githubComments.mutate(updater);
+        }
+    }, [isMock, githubComments.mutate]);
+    const mockAuthor = githubLogin || '你';
     const [draft, setDraft] = React.useState('');
 
     // Editing state
@@ -53,7 +73,29 @@ export default React.memo(function IssueCommentsPage() {
 
     const submit = React.useCallback(async () => {
         const body = draft.trim();
-        if (!body || !credentials) return;
+        if (!body) return;
+        if (isMock) {
+            if (editingComment) {
+                mutate((prev) => prev.map((comment) => comment.id === editingComment.id
+                    ? { ...comment, body, updatedAt: new Date().toISOString() }
+                    : comment));
+                setEditingComment(null);
+            } else {
+                const now = new Date().toISOString();
+                mutate((prev) => [...prev, {
+                    id: Date.now(),
+                    body,
+                    author: mockAuthor,
+                    authorAvatarUrl: '',
+                    authorAssociation: 'OWNER',
+                    createdAt: now,
+                    updatedAt: now,
+                }]);
+            }
+            setDraft('');
+            return;
+        }
+        if (!credentials) return;
         try {
             if (editingComment) {
                 const updated = await updateGithubIssueComment(credentials, owner!, repo!, editingComment.id, body);
@@ -75,7 +117,7 @@ export default React.memo(function IssueCommentsPage() {
             }
             throw e;
         }
-    }, [draft, credentials, owner, repo, issueNumber, mutate, editingComment]);
+    }, [draft, isMock, credentials, owner, repo, issueNumber, mutate, editingComment, mockAuthor]);
 
     const [submitting, doSubmit] = useHappyAction(submit);
     const canSubmit = draft.trim().length > 0 && !submitting;
@@ -106,13 +148,14 @@ export default React.memo(function IssueCommentsPage() {
     const [selectedComment, setSelectedComment] = React.useState<RepoIssueComment | null>(null);
 
     const handleCommentLongPress = React.useCallback((comment: RepoIssueComment) => {
-        if (!githubLogin || comment.author !== githubLogin) return;
+        const editableAuthor = isMock ? mockAuthor : githubLogin;
+        if (!editableAuthor || comment.author !== editableAuthor) return;
         setSelectedComment(comment);
         setCommentMenuVisible(true);
-    }, [githubLogin]);
+    }, [githubLogin, isMock, mockAuthor]);
 
     const handleDeleteComment = React.useCallback(async () => {
-        if (!selectedComment || !credentials) return;
+        if (!selectedComment) return;
         const commentToDelete = selectedComment;
         const confirmed = await Modal.confirm(
             t('issueComments.deleteConfirmTitle'),
@@ -121,13 +164,15 @@ export default React.memo(function IssueCommentsPage() {
         );
         if (!confirmed) return;
         mutate((prev) => prev.filter((c) => c.id !== commentToDelete.id));
+        if (isMock) return;
+        if (!credentials) return;
         try {
             await deleteGithubIssueComment(credentials, owner!, repo!, commentToDelete.id);
         } catch {
             mutate((prev) => [...prev, commentToDelete].sort((a, b) => a.id - b.id));
             Modal.alert(t('issueComments.errorTitle'), t('issueComments.deleteFailed'));
         }
-    }, [selectedComment, credentials, owner, repo, mutate]);
+    }, [selectedComment, isMock, credentials, owner, repo, mutate]);
 
     const commentMenuItems: ActionMenuItem[] = React.useMemo(() => [
         {
@@ -144,6 +189,10 @@ export default React.memo(function IssueCommentsPage() {
     ], [selectedComment, startEditing, handleDeleteComment]);
 
     const handlePickImage = React.useCallback(async (source: 'camera' | 'gallery') => {
+        if (isMock) {
+            Modal.alert('Mock Issue', '演示数据中的评论只保存在当前页面，不会上传图片或同步到 GitHub。');
+            return;
+        }
         if (!credentials) return;
         try {
             const picker = source === 'camera'
@@ -180,7 +229,7 @@ export default React.memo(function IssueCommentsPage() {
         } catch (error) {
             console.error('[IssueComments] Image pick failed:', error);
         }
-    }, [credentials]);
+    }, [credentials, isMock, owner, repo]);
 
     const menuItems: ActionMenuItem[] = React.useMemo(() => [
         { label: t('issueComments.takePhoto'), onPress: () => handlePickImage('camera') },
@@ -239,7 +288,7 @@ export default React.memo(function IssueCommentsPage() {
                         </View>
                     )}
                     <View style={styles.inputRow}>
-                        <Pressable
+                        {!isMock ? <Pressable
                             onPress={() => setMenuVisible(true)}
                             disabled={uploading || !!editingComment}
                             hitSlop={4}
@@ -252,7 +301,7 @@ export default React.memo(function IssueCommentsPage() {
                                     <Ionicons name="add" size={24} color={editingComment ? theme.colors.divider : theme.colors.textSecondary} />
                                 )}
                             </View>
-                        </Pressable>
+                        </Pressable> : null}
                         <View style={[styles.inputGroup, { backgroundColor: theme.colors.surfaceHighest }]}>
                             <MultiTextInput
                                 style={{ flex: 1, paddingVertical: 6 }}
@@ -292,12 +341,12 @@ export default React.memo(function IssueCommentsPage() {
                         </View>
                     </View>
                 </View>
-                <ActionMenuModal
+                {!isMock ? <ActionMenuModal
                     visible={menuVisible}
                     items={menuItems}
                     onClose={() => setMenuVisible(false)}
                     deferItemPress
-                />
+                /> : null}
                 <ActionMenuModal
                     visible={commentMenuVisible}
                     items={commentMenuItems}
