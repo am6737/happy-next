@@ -1,6 +1,7 @@
 export const ORCHESTRATOR_PROVIDERS = ['claude', 'codex', 'gemini'] as const;
 
 export type OrchestratorProvider = (typeof ORCHESTRATOR_PROVIDERS)[number];
+export type OrchestratorPermissionMode = 'read_only' | 'approval' | 'guarded_auto';
 
 export type OrchestratorFinishStatus = 'completed' | 'failed' | 'cancelled' | 'timeout';
 
@@ -16,6 +17,7 @@ export type OrchestratorDispatchPayload = {
   prompt: string;
   timeoutMs: number;
   workingDirectory?: string;
+  permissionMode?: OrchestratorPermissionMode;
 };
 
 export type OrchestratorCancelPayload = {
@@ -42,6 +44,7 @@ export const ORCHESTRATOR_ENV_KEYS = {
   promptB64: 'HAPPY_ORCH_PROMPT_B64',
   timeoutMs: 'HAPPY_ORCH_TIMEOUT_MS',
   workingDirectory: 'HAPPY_ORCH_WORKING_DIRECTORY',
+  permissionMode: 'HAPPY_ORCH_PERMISSION_MODE',
 } as const;
 
 export function isOrchestratorProvider(value: unknown): value is OrchestratorProvider {
@@ -87,6 +90,9 @@ export function buildOrchestratorEnv(payload: OrchestratorDispatchPayload): Reco
   }
   if (payload.model) {
     env[ORCHESTRATOR_ENV_KEYS.modelMode] = payload.model;
+  }
+  if (payload.permissionMode) {
+    env[ORCHESTRATOR_ENV_KEYS.permissionMode] = payload.permissionMode;
   }
   return env;
 }

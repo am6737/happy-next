@@ -46,6 +46,10 @@ model Account {
   Session             Session[]
   SessionDeletion     SessionDeletion[]
   OrchestratorRun     OrchestratorRun[]
+  AiAgent             AiAgent[]
+  AiTeam              AiTeam[]
+  AiConversation      AiConversation[]
+  AiWorkItem          AiWorkItem[]
   AccountPushToken    AccountPushToken[]
   TerminalAuthRequest TerminalAuthRequest[]
   AccountAuthRequest  AccountAuthRequest[]
@@ -167,11 +171,136 @@ model OrchestratorRun {
   updatedAt           DateTime                @updatedAt
   tasks               OrchestratorTask[]
   executions          OrchestratorExecution[]
+  aiWorkItem           AiWorkItem?
 
   @@unique([accountId, idempotencyKey])
   @@index([accountId, createdAt(sort: Desc)])
   @@index([accountId, status, updatedAt(sort: Desc)])
   @@index([controllerSessionId])
+}
+
+//
+// AI teams
+//
+
+model AiAgent {
+  id               String               @id @default(cuid())
+  accountId        String
+  account          Account              @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  name             String
+  role             String
+  description      String
+  emoji            String
+  instructions     String
+  skills           String[]             @default([])
+  responsibilities String[]             @default([])
+  settings         Json
+  enabled          Boolean              @default(true)
+  archivedAt       DateTime?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+  teamMemberships  AiTeamMember[]
+  ledTeams         AiTeam[]             @relation("AiTeamLeader")
+  conversations    AiConversation[]
+  messages         AiMessage[]
+  workItems        AiWorkItem[]
+
+  @@unique([accountId, name])
+  @@index([accountId, updatedAt(sort: Desc)])
+}
+
+model AiTeam {
+  id             String           @id @default(cuid())
+  accountId      String
+  account        Account          @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  name           String
+  description    String
+  emoji          String
+  instructions   String
+  currentGoal    String           @default("")
+  archivedAt     DateTime?
+  leaderId       String
+  leader         AiAgent          @relation("AiTeamLeader", fields: [leaderId], references: [id])
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  members        AiTeamMember[]
+  conversations  AiConversation[]
+  workItems      AiWorkItem[]
+
+  @@unique([accountId, name])
+  @@index([accountId, updatedAt(sort: Desc)])
+}
+
+model AiTeamMember {
+  teamId    String
+  team      AiTeam   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  agentId   String
+  agent     AiAgent  @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([teamId, agentId])
+  @@index([agentId])
+}
+
+model AiConversation {
+  id        String      @id @default(cuid())
+  accountId String
+  account   Account     @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  scopeKey  String
+  kind      String
+  agentId   String
+  agent     AiAgent     @relation(fields: [agentId], references: [id])
+  teamId    String?
+  team      AiTeam?     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  title     String
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  messages  AiMessage[]
+  workItems AiWorkItem[]
+
+  @@unique([accountId, scopeKey])
+  @@index([accountId, updatedAt(sort: Desc)])
+}
+
+model AiMessage {
+  id             String         @id @default(cuid())
+  conversationId String
+  conversation   AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         String
+  agentId        String?
+  agent          AiAgent?       @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  payload        Json
+  createdAt      DateTime       @default(now())
+
+  @@index([conversationId, createdAt])
+}
+
+model AiWorkItem {
+  id                String             @id @default(cuid())
+  accountId         String
+  account           Account            @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  title             String
+  summary           String
+  sourceType        String
+  sourceLabel       String
+  sourceResourceId  String
+  acceptanceStatus  String             @default("pending")
+  requiresDecision  Boolean            @default(false)
+  assigneeId        String
+  assignee          AiAgent            @relation(fields: [assigneeId], references: [id])
+  teamId            String?
+  team              AiTeam?            @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  conversationId    String
+  conversation      AiConversation     @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  orchestratorRunId String             @unique
+  orchestratorRun   OrchestratorRun    @relation(fields: [orchestratorRunId], references: [id], onDelete: Cascade)
+  orchestratorTaskId String            @unique
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  @@index([accountId, updatedAt(sort: Desc)])
+  @@index([assigneeId, updatedAt(sort: Desc)])
+  @@index([conversationId, createdAt])
 }
 
 model OrchestratorTask {
@@ -185,6 +314,7 @@ model OrchestratorTask {
   model             String?
   prompt            String
   workingDirectory  String?
+  permissionMode    String?
   timeoutMs         Int?
   targetMachineId   String?
   dependsOnTaskKeys String[]                @default([])

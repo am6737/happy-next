@@ -6,8 +6,9 @@ import { RoundButton } from '@/components/RoundButton';
 import { AgentDefinitionForm } from '@/features/aiTeams/AgentDefinitionForm';
 import { createEmptyAiAgentDraft } from '@/features/aiTeams/agentDefinition';
 import { createManagedAiAgent, saveManagedAiTeam, useManagedAiTeamData } from '@/features/aiTeams/agentStore';
-import { findAiTeam } from '@/features/aiTeams/mockData';
+import { findAiTeam } from '@/features/aiTeams/types';
 import { getCurrentLanguage } from '@/text';
+import { Modal } from '@/modal';
 
 const stylesheet = StyleSheet.create((theme) => ({
     screen: { flex: 1, backgroundColor: theme.colors.surface },
@@ -24,18 +25,25 @@ export default function CreateAiAgentPage() {
     const styles = stylesheet;
     const isZh = getCurrentLanguage().startsWith('zh');
     const [draft, setDraft] = React.useState(createEmptyAiAgentDraft);
+    const [creating, setCreating] = React.useState(false);
     const canCreate = Boolean(draft.name.trim() && draft.description.trim());
 
-    const create = () => {
-        if (!canCreate) return;
-        const agent = createManagedAiAgent({
-            ...draft,
-            name: draft.name.trim(),
-            description: draft.description.trim(),
-        }, isZh);
-        const sourceTeam = teamId ? findAiTeam(data, teamId) : undefined;
-        if (sourceTeam) saveManagedAiTeam({ ...sourceTeam, memberIds: Array.from(new Set([...sourceTeam.memberIds, agent.id])) });
-        router.replace(`/settings/agents/${agent.id}` as never);
+    const create = async () => {
+        if (!canCreate || creating) return;
+        setCreating(true);
+        try {
+            const agent = await createManagedAiAgent({
+                ...draft,
+                name: draft.name.trim(),
+                description: draft.description.trim(),
+            }, isZh);
+            const sourceTeam = teamId ? findAiTeam(data, teamId) : undefined;
+            if (sourceTeam) await saveManagedAiTeam({ ...sourceTeam, memberIds: Array.from(new Set([...sourceTeam.memberIds, agent.id])) });
+            router.replace(`/settings/agents/${agent.id}` as never);
+        } catch (error) {
+            Modal.alert(isZh ? '无法创建 Agent' : 'Could not create agent', error instanceof Error ? error.message : undefined);
+            setCreating(false);
+        }
     };
 
     return (
@@ -48,8 +56,8 @@ export default function CreateAiAgentPage() {
                 <View style={styles.footerContent}>
                     <RoundButton
                         size="large"
-                        title={isZh ? '创建并打开 Agent' : 'Create & open agent'}
-                        disabled={!canCreate}
+                        title={creating ? (isZh ? '正在创建…' : 'Creating…') : (isZh ? '创建并打开 Agent' : 'Create & open agent')}
+                        disabled={!canCreate || creating}
                         style={styles.footerButton}
                         onPress={create}
                     />

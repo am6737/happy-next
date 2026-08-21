@@ -1,14 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { applyAiAgentDraft, cloneAiAgentDraft, createEmptyAiAgentDraft } from './agentDefinition';
-import type { AiAgent } from './mockData';
+import type { AiAgent } from './types';
 
 describe('AI agent definitions', () => {
     it('creates a safe default draft', () => {
         const draft = createEmptyAiAgentDraft();
         expect(draft.enabled).toBe(true);
         expect(draft.settings.permissionMode).toBe('approval');
-        expect(draft.settings.visibility).toBe('private');
-        expect(draft.settings.enabledTools).toEqual(['files', 'terminal', 'git']);
+        expect(draft.settings.engine).toBe('claude-code');
     });
 
     it('clones nested configuration before editing', () => {
@@ -30,10 +29,10 @@ describe('AI agent definitions', () => {
 
         const cloned = cloneAiAgentDraft(agent);
         cloned.skills.push('Testing');
-        cloned.settings.enabledTools.push('github');
+        cloned.settings.instructions = 'Updated';
 
         expect(agent.skills).toEqual(['TypeScript']);
-        expect(agent.settings.enabledTools).toEqual(['files', 'terminal', 'git']);
+        expect(agent.settings.instructions).toBe('');
     });
 
     it('applies trimmed draft values without losing identity and history', () => {

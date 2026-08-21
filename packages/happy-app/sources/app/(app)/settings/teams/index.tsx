@@ -7,7 +7,7 @@ import { Text } from '@/components/StyledText';
 import { IconButton } from '@/components/IconButton';
 import { AiIdentityAvatar, AiTeamAvatar } from '@/features/aiTeams/components';
 import { useManagedAiTeamData } from '@/features/aiTeams/agentStore';
-import { findAiAgent } from '@/features/aiTeams/mockData';
+import { findAiAgent } from '@/features/aiTeams/types';
 import { getCurrentLanguage } from '@/text';
 
 const stylesheet = StyleSheet.create((theme) => ({

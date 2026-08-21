@@ -1,4 +1,4 @@
-import type { AiAgent, AiAgentSettings } from './mockData';
+import type { AiAgent, AiAgentSettings } from './types';
 
 export type AiAgentDraft = {
     name: string;
@@ -15,22 +15,9 @@ export const defaultAiAgentSettings: AiAgentSettings = {
     instructions: '',
     engine: 'claude-code',
     model: 'default',
-    reasoningLevel: 'medium',
-    runtime: 'local',
     workingDirectory: '',
-    maxConcurrentTasks: 1,
     permissionMode: 'approval',
-    workspaceAccess: 'read_write',
-    allowNetwork: true,
-    requireApprovalForExternalActions: true,
     allowDelegation: true,
-    allowGroupChat: true,
-    enabledTools: ['files', 'terminal', 'git'],
-    visibility: 'private',
-    serviceTier: 'default',
-    customArguments: [],
-    environmentVariables: [],
-    mcpServers: [],
 };
 
 export function createEmptyAiAgentDraft(): AiAgentDraft {
@@ -42,13 +29,7 @@ export function createEmptyAiAgentDraft(): AiAgentDraft {
         responsibilities: [],
         skills: [],
         enabled: true,
-        settings: {
-            ...defaultAiAgentSettings,
-            enabledTools: [...defaultAiAgentSettings.enabledTools],
-            customArguments: [],
-            environmentVariables: [],
-            mcpServers: [],
-        },
+        settings: { ...defaultAiAgentSettings },
     };
 }
 
@@ -64,10 +45,6 @@ export function cloneAiAgentDraft(agent: AiAgent): AiAgentDraft {
         settings: {
             ...defaultAiAgentSettings,
             ...agent.settings,
-            enabledTools: [...agent.settings.enabledTools],
-            customArguments: [...(agent.settings.customArguments ?? [])],
-            environmentVariables: [...(agent.settings.environmentVariables ?? [])],
-            mcpServers: [...(agent.settings.mcpServers ?? [])],
         },
     };
 }
@@ -82,12 +59,6 @@ export function applyAiAgentDraft(agent: AiAgent, draft: AiAgentDraft): AiAgent 
         responsibilities: [...draft.responsibilities],
         skills: [...draft.skills],
         enabled: draft.enabled,
-        settings: {
-            ...draft.settings,
-            enabledTools: [...draft.settings.enabledTools],
-            customArguments: [...(draft.settings.customArguments ?? [])],
-            environmentVariables: [...(draft.settings.environmentVariables ?? [])],
-            mcpServers: [...(draft.settings.mcpServers ?? [])],
-        },
+        settings: { ...draft.settings },
     };
 }

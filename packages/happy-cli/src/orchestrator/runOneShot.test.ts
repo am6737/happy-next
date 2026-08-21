@@ -70,4 +70,14 @@ describe('runOneShot spawn plan', () => {
     expect(plan.args).toContain('-p');
     expect(plan.args).toContain('continue');
   });
+
+  it('maps AI team permission modes to provider safety flags', () => {
+    expect(buildSpawnPlan('claude', 'read', undefined, undefined, 'initial', undefined, 'read_only').args)
+      .toEqual(expect.arrayContaining(['--permission-mode', 'plan']));
+    const codexArgs = buildSpawnPlan('codex', 'review', undefined, undefined, 'initial', undefined, 'approval').args;
+    expect(codexArgs).toEqual(expect.arrayContaining(['--sandbox', 'workspace-write', '--ask-for-approval', 'on-request']));
+    expect(codexArgs.indexOf('--ask-for-approval')).toBeLessThan(codexArgs.indexOf('exec'));
+    expect(buildSpawnPlan('gemini', 'edit', undefined, undefined, 'initial', undefined, 'guarded_auto').args)
+      .toEqual(expect.arrayContaining(['--approval-mode', 'auto_edit']));
+  });
 });

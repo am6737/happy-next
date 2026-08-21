@@ -3,7 +3,8 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('@/text', () => ({ getCurrentLanguage: () => 'zh-Hans' }));
 
 import { deriveAiAgentPresence, getAiAgentPresenceLabel } from './agentPresence';
-import { getAiTeamMockData, type AiWorkItem } from './mockData';
+import type { AiAgent, AiWorkItem } from './types';
+import { defaultAiAgentSettings } from './agentDefinition';
 
 function work(agentId: string, status: AiWorkItem['status']): AiWorkItem {
     return {
@@ -23,7 +24,11 @@ function work(agentId: string, status: AiWorkItem['status']): AiWorkItem {
 }
 
 describe('AI agent presence', () => {
-    const baseAgent = getAiTeamMockData().agents[0];
+    const baseAgent: AiAgent = {
+        id: 'agent-1', name: 'Agent', role: 'Engineer', description: '', status: 'idle', statusLabel: 'Idle',
+        emoji: '', skills: [], responsibilities: [], teamIds: [], currentWorkId: null,
+        settings: defaultAiAgentSettings, enabled: true, availability: 'online',
+    };
 
     it('treats disabled agents as archived', () => {
         expect(deriveAiAgentPresence({ ...baseAgent, enabled: false }, [work(baseAgent.id, 'working')])).toEqual({
@@ -31,7 +36,6 @@ describe('AI agent presence', () => {
             workload: 'idle',
             runningCount: 0,
             queuedCount: 0,
-            capacity: baseAgent.settings.maxConcurrentTasks,
         });
     });
 
@@ -41,7 +45,6 @@ describe('AI agent presence', () => {
             workload: 'working',
             runningCount: 1,
             queuedCount: 0,
-            capacity: baseAgent.settings.maxConcurrentTasks,
         });
     });
 

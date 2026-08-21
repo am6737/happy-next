@@ -5,13 +5,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@/components/StyledText';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { AiIdentityAvatar } from '@/features/aiTeams/components';
-import { findAiAgent, findAiExecution, findAiWorkItem, getAiWorkSourcePath, type AiExecutionEvent, type AiExecutionStatus } from '@/features/aiTeams/mockData';
-import { useManagedAiTeamData } from '@/features/aiTeams/agentStore';
+import { findAiAgent, findAiExecution, findAiWorkItem, getAiWorkSourcePath, type AiExecutionEvent, type AiExecutionStatus } from '@/features/aiTeams/types';
+import { setManagedAiWorkAcceptance, useManagedAiTeamData } from '@/features/aiTeams/agentStore';
 import { getCurrentLanguage } from '@/text';
 import { useNavigateToSession } from '@/hooks/useNavigateToSession';
 import { layout } from '@/components/layout';
 import { Typography } from '@/constants/Typography';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Modal } from '@/modal';
 
 const stylesheet = StyleSheet.create((theme) => ({
     container: { flex: 1, backgroundColor: theme.colors.surface },
@@ -52,6 +53,13 @@ const stylesheet = StyleSheet.create((theme) => ({
     eventText: { ...Typography.default(), color: theme.colors.textSecondary, fontSize: 13, lineHeight: 18, flex: 1, minWidth: 0 },
     eventActor: { ...Typography.default('semiBold'), color: theme.colors.textSecondary, fontSize: 13 },
     eventTime: { ...Typography.default(), color: theme.colors.textSecondary, fontSize: 12, flexShrink: 0 },
+    acceptance: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.colors.divider, paddingTop: 16, gap: 10 },
+    acceptanceTitle: { ...Typography.default('semiBold'), color: theme.colors.text, fontSize: 14 },
+    acceptanceActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 9 },
+    acceptanceSecondary: { minHeight: 38, paddingHorizontal: 14, borderRadius: 8, borderWidth: 1, borderColor: theme.colors.divider, alignItems: 'center', justifyContent: 'center' },
+    acceptancePrimary: { minHeight: 38, paddingHorizontal: 14, borderRadius: 8, backgroundColor: theme.colors.button.primary.background, alignItems: 'center', justifyContent: 'center' },
+    acceptanceSecondaryText: { ...Typography.default('semiBold'), color: theme.colors.text, fontSize: 13 },
+    acceptancePrimaryText: { ...Typography.default('semiBold'), color: theme.colors.button.primary.tint, fontSize: 13 },
 }));
 
 function statusColor(status: AiExecutionStatus): string {
@@ -89,6 +97,7 @@ export default function AiExecutionDetailScreen() {
     const execution = findAiExecution(data, id);
     const navigateToSession = useNavigateToSession();
     const [expanded, setExpanded] = React.useState(true);
+    const [reviewing, setReviewing] = React.useState(false);
 
     const agent = execution ? findAiAgent(data, execution.agentId) : undefined;
 
@@ -99,6 +108,35 @@ export default function AiExecutionDetailScreen() {
     const work = findAiWorkItem(data, execution.workItemId);
     const conversation = execution.conversationId ? data.conversations.find((item) => item.id === execution.conversationId) : undefined;
     const color = statusColor(execution.status);
+    const canReview = execution.status === 'completed' && work?.acceptanceStatus === 'pending';
+    const approve = async () => {
+        if (!work || reviewing) return;
+        setReviewing(true);
+        try {
+            await setManagedAiWorkAcceptance(work.id, 'approved', isZh ? '这版可以，通过验收。' : 'Approved.');
+        } catch (error) {
+            Modal.alert(isZh ? '无法提交验收' : 'Could not submit review', error instanceof Error ? error.message : undefined);
+        } finally {
+            setReviewing(false);
+        }
+    };
+    const requestChanges = async () => {
+        if (!work || reviewing) return;
+        const note = await Modal.prompt(
+            isZh ? '需要调整' : 'Request changes',
+            isZh ? '说明需要修改的内容。提交后会创建一次新的真实执行。' : 'Describe what should change. A new execution will be created.',
+            { placeholder: isZh ? '需要修改的内容' : 'Required changes', confirmText: isZh ? '提交' : 'Submit' },
+        );
+        if (note === null) return;
+        setReviewing(true);
+        try {
+            await setManagedAiWorkAcceptance(work.id, 'changes_requested', note.trim() || undefined);
+        } catch (error) {
+            Modal.alert(isZh ? '无法创建修订任务' : 'Could not create revision', error instanceof Error ? error.message : undefined);
+        } finally {
+            setReviewing(false);
+        }
+    };
 
     return (
         <View style={styles.container}>
@@ -166,6 +204,16 @@ export default function AiExecutionDetailScreen() {
                         </View>
                     )}
                 </View>
+
+                {canReview ? (
+                    <View style={styles.acceptance}>
+                        <Text style={styles.acceptanceTitle}>{isZh ? '真人验收' : 'Human review'}</Text>
+                        <View style={styles.acceptanceActions}>
+                            <Pressable style={styles.acceptanceSecondary} disabled={reviewing} onPress={requestChanges}><Text style={styles.acceptanceSecondaryText}>{isZh ? '需要调整' : 'Request changes'}</Text></Pressable>
+                            <Pressable style={styles.acceptancePrimary} disabled={reviewing} onPress={approve}><Text style={styles.acceptancePrimaryText}>{reviewing ? (isZh ? '提交中…' : 'Submitting…') : (isZh ? '通过' : 'Approve')}</Text></Pressable>
+                        </View>
+                    </View>
+                ) : null}
 
             </ScrollView>
             {execution.sessionId ? (

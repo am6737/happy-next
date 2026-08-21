@@ -7,9 +7,10 @@ import { Text } from '@/components/StyledText';
 import { RoundButton } from '@/components/RoundButton';
 import { AiIdentityAvatar } from '@/features/aiTeams/components';
 import { createManagedAiAssignment, useManagedAiTeamData } from '@/features/aiTeams/agentStore';
-import { findAiAgent } from '@/features/aiTeams/mockData';
+import { findAiAgent } from '@/features/aiTeams/types';
 import { getCurrentLanguage } from '@/text';
 import { Typography } from '@/constants/Typography';
+import { Modal } from '@/modal';
 
 const stylesheet = StyleSheet.create((theme) => ({
     screen: { flex: 1, backgroundColor: theme.colors.surface },
@@ -43,14 +44,21 @@ export default function AssignAgentWorkPage() {
     const [title, setTitle] = React.useState('');
     const [summary, setSummary] = React.useState('');
     const [teamId, setTeamId] = React.useState(availableTeams[0]?.id ?? '');
+    const [submitting, setSubmitting] = React.useState(false);
     const valid = Boolean(agent && title.trim() && summary.trim());
 
     if (!agent) return <View style={styles.screen}><Text style={{ color: theme.colors.textSecondary, padding: 24 }}>{isZh ? '没有找到这个 Agent' : 'Agent not found'}</Text></View>;
 
-    const submit = () => {
-        if (!valid) return;
-        const result = createManagedAiAssignment({ agent, teamId, title: title.trim(), summary: summary.trim(), isZh });
-        router.replace(`/inbox/ai/executions/${result.execution.id}` as never);
+    const submit = async () => {
+        if (!valid || submitting) return;
+        setSubmitting(true);
+        try {
+            const result = await createManagedAiAssignment({ agent, teamId, title: title.trim(), summary: summary.trim(), isZh });
+            router.replace(`/inbox/ai/executions/${result.execution.id}` as never);
+        } catch (error) {
+            Modal.alert(isZh ? '无法创建任务' : 'Could not create task', error instanceof Error ? error.message : undefined);
+            setSubmitting(false);
+        }
     };
 
     return (
@@ -68,7 +76,7 @@ export default function AssignAgentWorkPage() {
                 <View style={styles.section}>
                     <Text style={styles.label}>{isZh ? '要求与交付标准' : 'Requirements and delivery criteria'}</Text>
                     <TextInput value={summary} onChangeText={setSummary} multiline placeholder={isZh ? '说明需要解决的问题、约束条件和期望结果。' : 'Describe the problem, constraints, and expected result.'} placeholderTextColor={theme.colors.textSecondary} style={[styles.input, styles.summary]} />
-                    <Text style={styles.help}>{isZh ? '提交后会创建一项本地 Mock 工作、一次执行记录和对应 Session。' : 'Submitting creates a local mock work item, execution, and session.'}</Text>
+                    <Text style={styles.help}>{isZh ? '提交后会创建真实执行任务，并由在线 CLI runtime 领取。' : 'Submitting creates a real task for an online CLI runtime.'}</Text>
                 </View>
                 {availableTeams.length ? (
                     <View style={styles.section}>
@@ -80,7 +88,7 @@ export default function AssignAgentWorkPage() {
                     </View>
                 ) : null}
             </ScrollView>
-            <View style={styles.footer}><View style={styles.footerInner}><RoundButton size="large" title={isZh ? '创建并开始执行' : 'Create and start'} disabled={!valid} onPress={submit} /></View></View>
+            <View style={styles.footer}><View style={styles.footerInner}><RoundButton size="large" title={submitting ? (isZh ? '正在创建…' : 'Creating…') : (isZh ? '创建并开始执行' : 'Create and start')} disabled={!valid || submitting} onPress={submit} /></View></View>
         </KeyboardAvoidingView>
     );
 }

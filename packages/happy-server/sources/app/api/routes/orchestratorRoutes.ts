@@ -227,6 +227,7 @@ const submitTaskSchema = z.object({
     model: z.string().min(1).max(128).optional(),
     prompt: z.string().min(1).max(65536),
     workingDirectory: z.string().max(512).optional(),
+    permissionMode: z.enum(['read_only', 'approval', 'guarded_auto']).optional(),
     timeoutMs: z.coerce.number().int().min(1000).max(24 * 60 * 60 * 1000).optional(),
     dependsOn: z.array(z.string().min(1).max(128)).max(31).optional(),
     retry: z.object({
@@ -1036,6 +1037,7 @@ export function orchestratorRoutes(app: Fastify) {
                     model: normalizedTaskModels[index] ?? null,
                     prompt: task.prompt,
                     workingDirectory: task.workingDirectory,
+                    permissionMode: task.permissionMode,
                     timeoutMs: task.timeoutMs,
                     targetMachineId: task.target?.type === 'machine_id'
                         ? task.target.machineId

@@ -24,7 +24,7 @@ import {
     type AiExecutionEventKind,
     type AiWorkItem,
     type AiWorkStatus,
-} from '@/features/aiTeams/mockData';
+} from '@/features/aiTeams/types';
 import { deriveAiAgentPresence, getAiAgentPresenceLabel } from '@/features/aiTeams/agentPresence';
 import { Modal } from '@/modal';
 import { getCurrentLanguage } from '@/text';
@@ -118,9 +118,6 @@ export default function AiAgentDetailPage() {
     const permissionLabels = isZh
         ? { read_only: '只读', approval: '操作前确认', guarded_auto: '受控自动执行' }
         : { read_only: 'Read only', approval: 'Ask before actions', guarded_auto: 'Guarded autonomy' };
-    const accessLabel = (agent.settings.visibility ?? 'private') === 'workspace'
-        ? (isZh ? '整个工作区' : 'Entire workspace')
-        : (isZh ? '仅自己' : 'Only me');
 
     const activity = data.executions
         .filter((execution) => execution.agentId === agent.id)
@@ -133,8 +130,8 @@ export default function AiAgentDetailPage() {
         if (path) router.push(path as never);
     };
 
-    const openConversation = () => {
-        const nextConversation = conversation ?? ensureManagedAgentConversation(agent, isZh);
+    const openConversation = async () => {
+        const nextConversation = conversation ?? await ensureManagedAgentConversation(agent, isZh);
         router.push(`/inbox/ai/${nextConversation.id}` as never);
     };
 
@@ -142,19 +139,19 @@ export default function AiAgentDetailPage() {
 
     const toggleArchived = () => saveManagedAiAgent({ ...agent, enabled: !enabled });
 
-    const duplicate = () => {
-        const next = duplicateManagedAiAgent(agent, isZh);
+    const duplicate = async () => {
+        const next = await duplicateManagedAiAgent(agent, isZh);
         router.push(`/settings/agents/${next.id}` as never);
     };
 
     const remove = async () => {
         const confirmed = await Modal.confirm(
             isZh ? '删除 Agent？' : 'Delete agent?',
-            isZh ? `“${agent.name}”的本地定义将被删除。` : `The local definition for “${agent.name}” will be deleted.`,
+            isZh ? `“${agent.name}”将被归档，已有会话和执行历史会保留。` : `“${agent.name}” will be archived. Existing conversations and execution history will be retained.`,
             { confirmText: isZh ? '删除' : 'Delete', destructive: true },
         );
         if (!confirmed) return;
-        deleteManagedAiAgent(agent.id);
+        await deleteManagedAiAgent(agent.id);
         router.back();
     };
 
@@ -344,7 +341,6 @@ export default function AiAgentDetailPage() {
                         <View style={styles.definitionRows}>
                             <View style={styles.definitionRow}><View style={styles.definitionIcon}><Ionicons name="terminal-outline" size={18} color={theme.colors.textSecondary} /></View><Text style={styles.definitionLabel}>{isZh ? '执行引擎' : 'Engine'}</Text><Text style={styles.definitionValue}>{engineLabels[agent.settings.engine]}</Text></View>
                             <View style={styles.definitionRow}><View style={styles.definitionIcon}><Ionicons name="shield-checkmark-outline" size={18} color={theme.colors.textSecondary} /></View><Text style={styles.definitionLabel}>{isZh ? '安全策略' : 'Safety'}</Text><Text style={styles.definitionValue}>{permissionLabels[agent.settings.permissionMode]}</Text></View>
-                            <View style={styles.definitionRow}><View style={styles.definitionIcon}><Ionicons name="people-outline" size={18} color={theme.colors.textSecondary} /></View><Text style={styles.definitionLabel}>{isZh ? '访问范围' : 'Access'}</Text><Text style={styles.definitionValue}>{accessLabel}</Text></View>
                         </View>
                     </View>
                 </View>

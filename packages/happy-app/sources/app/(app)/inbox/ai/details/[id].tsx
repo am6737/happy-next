@@ -8,7 +8,7 @@ import { layout } from '@/components/layout';
 import { Typography } from '@/constants/Typography';
 import { AiGroupAvatar, AiIdentityAvatar } from '@/features/aiTeams/components';
 import { useManagedAiTeamData } from '@/features/aiTeams/agentStore';
-import { findAiAgent } from '@/features/aiTeams/mockData';
+import { findAiAgent } from '@/features/aiTeams/types';
 import { deriveAiAgentPresence, getAiAgentPresenceLabel } from '@/features/aiTeams/agentPresence';
 import { getCurrentLanguage } from '@/text';
 

@@ -33,15 +33,10 @@ import {
 } from '@/components/repos';
 import { IssueIcon } from '@/components/repos/IssueIcon';
 import { formatTimeAgo, formatAbsoluteTime, formatSessionAge, labelColors } from '@/data/repoUtils';
-import { getCurrentLanguage, t } from '@/text';
+import { t } from '@/text';
 import { useLinkedSessions } from '@/hooks/useLinkedSessions';
 import { useNavigateToSession } from '@/hooks/useNavigateToSession';
 import { getSessionName } from '@/utils/sessionUtils';
-import { getAiMockGithubIssue } from '@/features/aiTeams/mockGithubIssues';
-import { MockIssueActivityTimeline } from '@/features/aiTeams/MockIssueActivityTimeline';
-import { MockIssueExecutionLog } from '@/features/aiTeams/MockIssueExecutionLog';
-import { findAiExecutionsForWork, findAiWorkItem, type AiAcceptanceStatus } from '@/features/aiTeams/mockData';
-import { appendManagedAiMessages, saveManagedAiExecution, saveManagedAiWorkItem, useManagedAiTeamData } from '@/features/aiTeams/agentStore';
 
 function buildIssueDiscussionPrompt(
     owner: string,
@@ -77,43 +72,25 @@ function buildIssueDiscussionPrompt(
 function IssueDetailScreen() {
     const styles = stylesheet;
     const { theme } = useUnistyles();
-    const isZh = getCurrentLanguage().startsWith('zh');
     const router = useRouter();
-    const { owner, repo, number: numberStr, mockWorkId } = useLocalSearchParams<{ owner: string; repo: string; number: string; mockWorkId?: string }>();
+    const { owner, repo, number: numberStr } = useLocalSearchParams<{ owner: string; repo: string; number: string }>();
 
     const { credentials } = useAuth();
     const issueNumber = parseInt(numberStr, 10);
-    const aiTeamData = useManagedAiTeamData();
-    const mockIssueData = mockWorkId ? getAiMockGithubIssue(mockWorkId) : null;
-    const mockWork = mockWorkId ? findAiWorkItem(aiTeamData, mockWorkId) : undefined;
-    const mockExecutions = mockWorkId ? findAiExecutionsForWork(aiTeamData, mockWorkId) : [];
-    const [acceptanceStatus, setAcceptanceStatus] = React.useState<AiAcceptanceStatus>(mockWork?.acceptanceStatus ?? 'pending');
-    const isMock = mockIssueData !== null;
-    const githubIssue = useGithubIssue(owner!, repo!, issueNumber, !isMock);
-    const githubComments = useGithubIssueComments(owner!, repo!, issueNumber, !isMock);
-    const originalIssue = mockIssueData?.issue ?? githubIssue.data;
-    const comments = mockIssueData?.comments ?? githubComments.data;
-    const issueLoading = isMock ? false : githubIssue.loading;
-    const mutateIssue = githubIssue.mutate;
+    const { data: originalIssue, loading: issueLoading, mutate: mutateIssue } = useGithubIssue(owner!, repo!, issueNumber);
+    const { data: comments } = useGithubIssueComments(owner!, repo!, issueNumber);
     const linkedSessions = useLinkedSessions('github', `${owner}/${repo}#${issueNumber}`, 'issue');
     const navigateToSession = useNavigateToSession();
 
     const handleStartAiSession = React.useCallback(async () => {
-        if (!originalIssue) return;
-        if (isMock) {
-            const latestSessionId = mockExecutions.find((execution) => execution.sessionId)?.sessionId;
-            if (latestSessionId) navigateToSession(latestSessionId);
-            return;
-        }
+        if (!originalIssue || !credentials) return;
         let githubToken: string | undefined;
-        if (credentials && !isMock) {
-            try {
-                githubToken = await fetchGithubToken(credentials);
-            } catch {
-                // Proceed without GitHub MCP if token fetch fails
-            }
+        try {
+            githubToken = await fetchGithubToken(credentials);
+        } catch {
+            // Proceed without GitHub MCP if token fetch fails
         }
-        const prompt = buildIssueDiscussionPrompt(owner!, repo!, issueNumber, originalIssue, comments);
+        const prompt = buildIssueDiscussionPrompt(owner!, repo!, issueNumber, originalIssue, []);
         const dataId = storeTempData({
             prompt,
             sessionTitle: `Issue #${issueNumber}: ${originalIssue.title}`,
@@ -124,51 +101,12 @@ function IssueDetailScreen() {
                 resourceType: 'issue',
                 resourceId: `${owner}/${repo}#${issueNumber}`,
                 title: originalIssue.title,
-                deepLink: `/repos/${owner}/${repo}/issue/${issueNumber}${mockWorkId ? `?mockWorkId=${encodeURIComponent(mockWorkId)}` : ''}`,
+                deepLink: `/repos/${owner}/${repo}/issue/${issueNumber}`,
             },
             ...(githubToken ? { environmentVariables: { GITHUB_PERSONAL_ACCESS_TOKEN: githubToken } } : {}),
         } satisfies NewSessionData);
         router.push(`/new?dataId=${dataId}`);
-    }, [originalIssue, credentials, isMock, mockExecutions, comments, owner, repo, issueNumber, mockWorkId, router, navigateToSession]);
-
-    React.useEffect(() => {
-        setAcceptanceStatus(mockWork?.acceptanceStatus ?? 'pending');
-    }, [mockWork?.id]);
-
-    const approveDelivery = React.useCallback(() => {
-        setAcceptanceStatus('approved');
-        if (mockWork) saveManagedAiWorkItem({ ...mockWork, acceptanceStatus: 'approved', status: 'done', statusLabel: isZh ? '已完成' : 'Done' });
-        const latestExecution = mockExecutions[0];
-        if (latestExecution) {
-            saveManagedAiExecution({ ...latestExecution, status: 'completed', statusLabel: isZh ? '已完成' : 'Completed', events: [...latestExecution.events, { id: `accepted-${Date.now()}`, kind: 'result', actor: 'human', title: isZh ? '真人验收通过' : 'Approved by human', timeLabel: isZh ? '刚刚' : 'Now', status: 'completed' }] });
-            if (latestExecution.conversationId) {
-                const timestamp = Date.now();
-                appendManagedAiMessages(latestExecution.conversationId, [
-                    { id: `accepted-user-${timestamp}`, kind: 'text', sender: 'user', text: isZh ? '这版可以，通过验收。' : 'This version looks good. Approved.', timeLabel: isZh ? '刚刚' : 'Now' },
-                    { id: `accepted-agent-${timestamp + 1}`, kind: 'text', sender: 'agent', agentId: latestExecution.agentId, text: isZh ? '收到，这项工作就先完成了。有新的安排再发给我。' : 'Got it. I will mark this work complete. Send me the next item when it is ready.', timeLabel: isZh ? '刚刚' : 'Now' },
-                ]);
-            }
-        }
-        hapticsSuccess();
-    }, [isZh, mockExecutions, mockWork]);
-
-    const requestChanges = React.useCallback(async () => {
-        const note = await Modal.prompt(
-            isZh ? '需要调整' : 'Request changes',
-            isZh ? '说明需要修改的内容，意见会回到对应会话。' : 'Describe what should change. The note will be sent back to the conversation.',
-            { placeholder: isZh ? '例如：补充退出登录后的处理说明' : 'e.g. Clarify logout handling', confirmText: isZh ? '提交' : 'Submit' },
-        );
-        if (note === null) return;
-        const body = note.trim() || (isZh ? '请根据验收结果继续调整。' : 'Continue based on the acceptance result.');
-        setAcceptanceStatus('changes_requested');
-        if (mockWork) saveManagedAiWorkItem({ ...mockWork, acceptanceStatus: 'changes_requested', status: 'working', statusLabel: isZh ? '调整中' : 'Revising' });
-        const latestExecution = mockExecutions[0];
-        if (latestExecution) {
-            saveManagedAiExecution({ ...latestExecution, status: 'running', statusLabel: isZh ? '调整中' : 'Revising', events: [...latestExecution.events, { id: `changes-${Date.now()}`, kind: 'comment', actor: 'human', title: isZh ? '真人提出调整意见' : 'Changes requested', body, timeLabel: isZh ? '刚刚' : 'Now', status: 'running' }] });
-            if (latestExecution.conversationId) appendManagedAiMessages(latestExecution.conversationId, [{ id: `changes-chat-${Date.now()}`, kind: 'text', sender: 'user', text: body, timeLabel: isZh ? '刚刚' : 'Now' }]);
-        }
-        hapticsLight();
-    }, [isZh, mockExecutions, mockWork]);
+    }, [originalIssue, credentials, owner, repo, issueNumber, router]);
 
     const insets = useSafeAreaInsets();
     const [menuVisible, setMenuVisible] = React.useState(false);
@@ -201,32 +139,29 @@ function IssueDetailScreen() {
 
     const menuItems: ActionMenuItem[] = React.useMemo(() => {
         const isOpen = originalIssue?.state === 'open';
-        const items: ActionMenuItem[] = [];
-        if (!isMock) {
-            items.push(
-                {
-                    label: t('repository.copyIssueUrl'),
-                    onPress: () => {
-                        Clipboard.setStringAsync(`https://github.com/${owner}/${repo}/issues/${issueNumber}`);
-                        hapticsLight();
-                    },
+        const items: ActionMenuItem[] = [
+            {
+                label: t('repository.copyIssueUrl'),
+                onPress: () => {
+                    Clipboard.setStringAsync(`https://github.com/${owner}/${repo}/issues/${issueNumber}`);
+                    hapticsLight();
                 },
-                {
-                    label: t('repository.openInGithub'),
-                    onPress: () => {
-                        WebBrowser.openBrowserAsync(`https://github.com/${owner}/${repo}/issues/${issueNumber}`);
-                    },
-                },
-            );
-        }
-        items.push({
-            label: t('repository.copyIssueNumber'),
-            onPress: () => {
-                Clipboard.setStringAsync(`#${issueNumber}`);
-                hapticsLight();
             },
-        });
-        if (!isMock && originalIssue && credentials) {
+            {
+                label: t('repository.openInGithub'),
+                onPress: () => {
+                    WebBrowser.openBrowserAsync(`https://github.com/${owner}/${repo}/issues/${issueNumber}`);
+                },
+            },
+            {
+                label: t('repository.copyIssueNumber'),
+                onPress: () => {
+                    Clipboard.setStringAsync(`#${issueNumber}`);
+                    hapticsLight();
+                },
+            },
+        ];
+        if (originalIssue && credentials) {
             items.push({
                 label: isOpen ? t('repository.closeIssue') : t('repository.reopenIssue'),
                 destructive: isOpen,
@@ -244,7 +179,7 @@ function IssueDetailScreen() {
             });
         }
         return items;
-    }, [owner, repo, issueNumber, originalIssue, credentials, isMock, mutateIssue]);
+    }, [owner, repo, issueNumber, originalIssue, credentials, mutateIssue]);
 
     const headerTitle = React.useCallback(() => (
         <Pressable style={{ alignItems: 'center', justifyContent: 'center', maxWidth: 220 }}>
@@ -340,7 +275,6 @@ function IssueDetailScreen() {
 
     const issue = originalIssue;
     const isOpen = issue.state === 'open';
-    const commentsPath = `/repos/${owner}/${repo}/issue/${issueNumber}/comments?issueTitle=${encodeURIComponent(issue.title)}&issueAuthor=${encodeURIComponent(issue.author)}${mockWorkId ? `&mockWorkId=${encodeURIComponent(mockWorkId)}` : ''}`;
 
     return (
         <View style={styles.container}>
@@ -408,57 +342,6 @@ function IssueDetailScreen() {
                     )}
                 </View>
 
-                {mockIssueData && (
-                    <>
-                        <View style={styles.sectionDivider} />
-                        <View style={styles.activitySection}>
-                            <MockIssueExecutionLog
-                                executions={mockExecutions}
-                                onOpenExecution={(executionId) => router.push(`/inbox/ai/executions/${executionId}` as never)}
-                            />
-                        </View>
-                        {mockWork?.acceptanceStatus ? (
-                            <>
-                                <View style={styles.sectionDivider} />
-                                <View style={styles.acceptanceSection}>
-                                    <View style={styles.acceptanceHeader}>
-                                        <View>
-                                            <Text style={styles.sectionTitle}>{isZh ? '真人验收' : 'Human acceptance'}</Text>
-                                            <Text style={styles.acceptanceHint}>
-                                                {acceptanceStatus === 'approved'
-                                                    ? (isZh ? '你已确认本次交付。' : 'You approved this delivery.')
-                                                    : acceptanceStatus === 'changes_requested'
-                                                        ? (isZh ? '已退回调整，Agent 可根据意见继续执行。' : 'Returned for changes. The agent can continue from your feedback.')
-                                                        : (isZh ? 'Agent 已提交结果，等待你最终确认。' : 'The agent submitted results and is waiting for your decision.')}
-                                            </Text>
-                                        </View>
-                                        <View style={[styles.acceptanceStatus, acceptanceStatus === 'approved' && styles.acceptanceApproved, acceptanceStatus === 'changes_requested' && styles.acceptanceChanges]}>
-                                            <Text style={styles.acceptanceStatusText}>{acceptanceStatus === 'approved' ? (isZh ? '已通过' : 'Approved') : acceptanceStatus === 'changes_requested' ? (isZh ? '需要调整' : 'Changes requested') : (isZh ? '等待验收' : 'Pending')}</Text>
-                                        </View>
-                                    </View>
-                                    {acceptanceStatus === 'pending' ? (
-                                        <View style={styles.acceptanceActions}>
-                                            <Pressable style={styles.acceptanceSecondary} onPress={requestChanges}><Text style={styles.acceptanceSecondaryText}>{isZh ? '需要调整' : 'Request changes'}</Text></Pressable>
-                                            <Pressable style={styles.acceptancePrimary} onPress={approveDelivery}><Ionicons name="checkmark" size={16} color={theme.colors.button.primary.tint} /><Text style={styles.acceptancePrimaryText}>{isZh ? '通过' : 'Approve'}</Text></Pressable>
-                                        </View>
-                                    ) : null}
-                                </View>
-                            </>
-                        ) : null}
-                        <View style={styles.sectionDivider} />
-                        <View style={styles.activitySection}>
-                            <View style={styles.activityHeader}>
-                                <Text style={styles.sectionTitle}>{isZh ? '动态' : 'Activity'}</Text>
-                            </View>
-                            <MockIssueActivityTimeline
-                                entries={mockIssueData.timeline}
-                                comments={comments}
-                                onOpenComments={() => router.push(commentsPath as never)}
-                            />
-                        </View>
-                    </>
-                )}
-
                 {linkedSessions.length > 0 && (
                     <>
                         <View style={styles.sectionDivider} />
@@ -492,7 +375,7 @@ function IssueDetailScreen() {
             <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 12) }]}>
                 <Pressable
                     style={[styles.btnChat, { borderColor: theme.colors.divider }]}
-                    onPress={() => router.push(commentsPath as never)}
+                    onPress={() => router.push(`/repos/${owner}/${repo}/issue/${issueNumber}/comments?issueTitle=${encodeURIComponent(issue.title)}&issueAuthor=${encodeURIComponent(issue.author)}`)}
                 >
                     <View style={styles.bottomButtonInner}>
                         <Ionicons name="chatbubbles-outline" size={17} color={theme.colors.text} />
@@ -508,7 +391,7 @@ function IssueDetailScreen() {
                     <View style={styles.bottomButtonInner}>
                         <Ionicons name="sparkles" size={17} color={theme.colors.button.primary.tint} />
                         <Text style={[styles.bottomButtonText, { color: theme.colors.button.primary.tint }]} numberOfLines={1}>
-                            {isMock ? (isZh ? '打开最近 Session' : 'Open latest session') : t('issueDetail.aiSession')}
+                            {t('issueDetail.aiSession')}
                         </Text>
                     </View>
                 </Pressable>
@@ -576,26 +459,6 @@ const stylesheet = StyleSheet.create((theme) => ({
         backgroundColor: theme.colors.divider,
     },
     section: {
-        gap: 6,
-    },
-    acceptanceSection: { gap: 14 },
-    acceptanceHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 14 },
-    acceptanceHint: { ...Typography.default(), color: theme.colors.textSecondary, fontSize: 13, lineHeight: 19, marginTop: 5, maxWidth: 520 },
-    acceptanceStatus: { paddingHorizontal: 9, paddingVertical: 5, borderRadius: 7, backgroundColor: theme.colors.surfaceHigh },
-    acceptanceApproved: { backgroundColor: '#E8F7ED' },
-    acceptanceChanges: { backgroundColor: '#FFF3E5' },
-    acceptanceStatusText: { ...Typography.default('semiBold'), color: theme.colors.textSecondary, fontSize: 12 },
-    acceptanceActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 9 },
-    acceptanceSecondary: { minHeight: 38, paddingHorizontal: 14, borderRadius: 9, borderWidth: 1, borderColor: theme.colors.divider, alignItems: 'center', justifyContent: 'center' },
-    acceptanceSecondaryText: { ...Typography.default('semiBold'), color: theme.colors.text, fontSize: 13 },
-    acceptancePrimary: { minHeight: 38, paddingHorizontal: 15, borderRadius: 9, backgroundColor: theme.colors.button.primary.background, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5 },
-    acceptancePrimaryText: { ...Typography.default('semiBold'), color: theme.colors.button.primary.tint, fontSize: 13 },
-    activitySection: {
-        gap: 12,
-    },
-    activityHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
         gap: 6,
     },
     sectionTitle: {

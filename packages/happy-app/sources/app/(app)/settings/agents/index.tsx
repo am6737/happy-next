@@ -14,7 +14,7 @@ import {
     saveManagedAiAgent,
     useManagedAiTeamData,
 } from '@/features/aiTeams/agentStore';
-import type { AiAgent } from '@/features/aiTeams/mockData';
+import type { AiAgent } from '@/features/aiTeams/types';
 import { deriveAiAgentPresence, getAiAgentPresenceLabel } from '@/features/aiTeams/agentPresence';
 import { Modal } from '@/modal';
 import { getCurrentLanguage } from '@/text';
@@ -68,8 +68,8 @@ export default function AiAgentsSettingsPage() {
         { label: isZh ? '打开' : 'Open', onPress: () => router.push(`/settings/agents/${menuAgent.id}` as never) },
         {
             label: isZh ? '复制' : 'Duplicate',
-            onPress: () => {
-                const copy = duplicateManagedAiAgent(menuAgent, isZh);
+            onPress: async () => {
+                const copy = await duplicateManagedAiAgent(menuAgent, isZh);
                 router.push(`/settings/agents/${copy.id}` as never);
             },
         },
@@ -86,7 +86,7 @@ export default function AiAgentsSettingsPage() {
                     isZh ? `“${menuAgent.name}”的本地定义将被删除。` : `The local definition for “${menuAgent.name}” will be deleted.`,
                     { confirmText: isZh ? '删除' : 'Delete', destructive: true },
                 );
-                if (confirmed) deleteManagedAiAgent(menuAgent.id);
+                if (confirmed) await deleteManagedAiAgent(menuAgent.id);
             },
         },
     ] : [];
@@ -145,9 +145,6 @@ export default function AiAgentsSettingsPage() {
                                             <View style={styles.agentText}>
                                                 <View style={styles.nameLine}>
                                                     <Text style={styles.name} numberOfLines={1}>{agent.name}</Text>
-                                                    {agent.managedLocally ? (
-                                                        <View style={styles.localBadge}><Text style={styles.localBadgeText}>{isZh ? '我的' : 'Mine'}</Text></View>
-                                                    ) : null}
                                                 </View>
                                                 <Text style={styles.description} numberOfLines={1}>{agent.description || agent.role}</Text>
                                             </View>

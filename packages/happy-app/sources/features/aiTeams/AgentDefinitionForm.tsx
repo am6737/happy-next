@@ -5,7 +5,7 @@ import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { Text } from '@/components/StyledText';
 import { AiIdentityAvatar } from './components';
 import type { AiAgentDraft } from './agentDefinition';
-import type { AiAgentEngine, AiAgentPermissionMode, AiAgentVisibility } from './mockData';
+import type { AiAgentEngine, AiAgentPermissionMode } from './types';
 import { Modal } from '@/modal';
 
 const stylesheet = StyleSheet.create((theme) => ({
@@ -26,14 +26,6 @@ const stylesheet = StyleSheet.create((theme) => ({
     selectIcon: { width: 36, height: 36, borderRadius: 10, backgroundColor: theme.colors.surfaceHigh, alignItems: 'center', justifyContent: 'center' },
     selectText: { flex: 1 },
     selectValue: { color: theme.colors.text, fontSize: 16, fontWeight: '600' },
-    accessCard: { padding: { xs: 10, md: 14 } },
-    accessOption: { paddingHorizontal: { xs: 13, md: 16 }, paddingVertical: 17, flexDirection: 'row', alignItems: 'flex-start', gap: 13, borderRadius: 14 },
-    accessSelected: { backgroundColor: theme.colors.surfaceHigh },
-    radio: { width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, borderColor: theme.colors.groupped.chevron, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
-    radioSelected: { borderColor: theme.colors.text },
-    radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: theme.colors.text },
-    accessText: { flex: 1 },
-    accessTitle: { color: theme.colors.text, fontSize: 16, fontWeight: '600' },
 }));
 
 export function AgentDefinitionForm({
@@ -84,8 +76,6 @@ export function AgentDefinitionForm({
         description,
         role: description.length > 72 ? `${description.slice(0, 72)}…` : description,
     });
-
-    const visibility = draft.settings.visibility ?? 'private';
 
     return (
         <>
@@ -158,6 +148,18 @@ export function AgentDefinitionForm({
                         </Pressable>
                     </View>
                     <View style={[styles.field, styles.fieldDivider]}>
+                        <Text style={styles.label}>{isZh ? '工作目录' : 'Working directory'}</Text>
+                        <TextInput
+                            value={draft.settings.workingDirectory}
+                            onChangeText={(workingDirectory) => patchSettings({ workingDirectory })}
+                            placeholder={isZh ? '例如：/home/user/project' : 'e.g. /home/user/project'}
+                            placeholderTextColor={theme.colors.input.placeholder}
+                            style={styles.input}
+                            autoCapitalize="none"
+                            autoCorrect={false}
+                        />
+                    </View>
+                    <View style={[styles.field, styles.fieldDivider]}>
                         <Text style={styles.label}>{isZh ? '安全策略' : 'Safety policy'}</Text>
                         <Pressable style={({ pressed }) => [styles.select, pressed && styles.selectPressed]} onPress={() => choose<AiAgentPermissionMode>(isZh ? '选择安全策略' : 'Choose safety policy', Object.entries(safetyLabels).map(([value, label]) => ({ value: value as AiAgentPermissionMode, label })), (permissionMode) => patchSettings({ permissionMode }))}>
                             <View style={styles.selectIcon}><Ionicons name="shield-checkmark-outline" size={20} color={theme.colors.textSecondary} /></View>
@@ -170,25 +172,6 @@ export function AgentDefinitionForm({
                 </View>
             </View>
 
-            <View style={styles.section}>
-                <Text style={styles.sectionTitle}>{isZh ? '访问范围' : 'Access'}</Text>
-                <View style={[styles.card, styles.accessCard]}>
-                    {([
-                        { value: 'private' as const, title: isZh ? '仅自己' : 'Only me' },
-                        { value: 'workspace' as const, title: isZh ? '整个工作区' : 'Entire workspace' },
-                    ]).map((option) => {
-                        const selected = visibility === option.value;
-                        return (
-                            <Pressable key={option.value} style={[styles.accessOption, selected && styles.accessSelected]} onPress={() => patchSettings({ visibility: option.value as AiAgentVisibility })}>
-                                <View style={[styles.radio, selected && styles.radioSelected]}>{selected ? <View style={styles.radioDot} /> : null}</View>
-                                <View style={styles.accessText}>
-                                    <Text style={styles.accessTitle}>{option.title}</Text>
-                                </View>
-                            </Pressable>
-                        );
-                    })}
-                </View>
-            </View>
         </>
     );
 }

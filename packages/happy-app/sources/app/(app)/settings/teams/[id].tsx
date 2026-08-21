@@ -6,7 +6,7 @@ import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { Text } from '@/components/StyledText';
 import { AiAgentPresencePill, AiIdentityAvatar, AiTeamAvatar } from '@/features/aiTeams/components';
 import { ensureManagedTeamConversation, useManagedAiTeamData } from '@/features/aiTeams/agentStore';
-import { findAiAgent, findAiTeam, getAiWorkSourcePath } from '@/features/aiTeams/mockData';
+import { findAiAgent, findAiTeam, getAiWorkSourcePath } from '@/features/aiTeams/types';
 import { deriveAiAgentPresence } from '@/features/aiTeams/agentPresence';
 import { getCurrentLanguage } from '@/text';
 
@@ -94,7 +94,7 @@ export default function AiTeamDetailPage() {
     const members = team.memberIds.map((memberId) => findAiAgent(data, memberId)).filter((member) => member !== undefined);
 
     const editTeam = () => router.push(`/settings/teams/edit/${team.id}` as never);
-    const openGroupChat = () => { const conversation = ensureManagedTeamConversation(team, isZh); router.push(`/inbox/ai/${conversation.id}` as never); };
+    const openGroupChat = async () => { const conversation = await ensureManagedTeamConversation(team, isZh); router.push(`/inbox/ai/${conversation.id}` as never); };
     const teamWork = data.workItems.filter((work) => work.teamId === team.id);
 
 

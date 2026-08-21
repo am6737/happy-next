@@ -7,7 +7,7 @@ import { RoundButton } from '@/components/RoundButton';
 import { AgentDefinitionForm } from '@/features/aiTeams/AgentDefinitionForm';
 import { applyAiAgentDraft, cloneAiAgentDraft, type AiAgentDraft } from '@/features/aiTeams/agentDefinition';
 import { saveManagedAiAgent, useManagedAiTeamData } from '@/features/aiTeams/agentStore';
-import { findAiAgent } from '@/features/aiTeams/mockData';
+import { findAiAgent } from '@/features/aiTeams/types';
 import { Modal } from '@/modal';
 import { getCurrentLanguage } from '@/text';
 
@@ -25,13 +25,7 @@ function cloneDraft(draft: AiAgentDraft): AiAgentDraft {
         ...draft,
         responsibilities: [...draft.responsibilities],
         skills: [...draft.skills],
-        settings: {
-            ...draft.settings,
-            enabledTools: [...draft.settings.enabledTools],
-            customArguments: [...(draft.settings.customArguments ?? [])],
-            environmentVariables: [...(draft.settings.environmentVariables ?? [])],
-            mcpServers: [...(draft.settings.mcpServers ?? [])],
-        },
+        settings: { ...draft.settings },
     };
 }
 
@@ -44,6 +38,7 @@ export default function EditAiAgentPage() {
     const agent = findAiAgent(data, id);
     const [draft, setDraft] = React.useState<AiAgentDraft | null>(() => agent ? cloneAiAgentDraft(agent) : null);
     const [savedDraft, setSavedDraft] = React.useState<AiAgentDraft | null>(() => agent ? cloneAiAgentDraft(agent) : null);
+    const [saving, setSaving] = React.useState(false);
 
     React.useEffect(() => {
         const nextAgent = findAiAgent(data, id);
@@ -57,14 +52,21 @@ export default function EditAiAgentPage() {
     const dirty = JSON.stringify(draft) !== JSON.stringify(savedDraft);
     const canSave = Boolean(dirty && draft.name.trim() && draft.description.trim());
 
-    const save = () => {
+    const save = async () => {
         if (!draft.name.trim() || !draft.description.trim()) {
             Modal.alert(isZh ? '请完善基本信息' : 'Complete the profile', isZh ? '名称和描述不能为空。' : 'Name and description are required.');
             return;
         }
-        saveManagedAiAgent(applyAiAgentDraft(agent, draft));
-        setSavedDraft(cloneDraft(draft));
-        router.back();
+        if (saving) return;
+        setSaving(true);
+        try {
+            await saveManagedAiAgent(applyAiAgentDraft(agent, draft));
+            setSavedDraft(cloneDraft(draft));
+            router.back();
+        } catch (error) {
+            Modal.alert(isZh ? '无法保存 Agent' : 'Could not save agent', error instanceof Error ? error.message : undefined);
+            setSaving(false);
+        }
     };
 
     return (
@@ -77,8 +79,8 @@ export default function EditAiAgentPage() {
                 <View style={styles.footerContent}>
                     <RoundButton
                         size="large"
-                        title={isZh ? '保存修改' : 'Save changes'}
-                        disabled={!canSave}
+                        title={saving ? (isZh ? '正在保存…' : 'Saving…') : (isZh ? '保存修改' : 'Save changes')}
+                        disabled={!canSave || saving}
                         style={styles.footerButton}
                         onPress={save}
                     />

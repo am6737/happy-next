@@ -143,6 +143,7 @@ type MachineRpcHandlers = {
         prompt: string;
         timeoutMs: number;
         workingDirectory?: string;
+        permissionMode?: 'read_only' | 'approval' | 'guarded_auto';
     }) => Promise<{
         accepted: boolean;
         duplicate?: boolean;
@@ -376,7 +377,7 @@ export class ApiMachineClient {
 
         // Register orchestrator dispatch handler
         this.rpcHandlerManager.registerHandler('orchestrator-dispatch', async (params: any) => {
-            const { executionId, runId, taskId, dispatchToken, provider, executionType, childSessionId, model, prompt, timeoutMs, workingDirectory } = params || {};
+            const { executionId, runId, taskId, dispatchToken, provider, executionType, childSessionId, model, prompt, timeoutMs, workingDirectory, permissionMode } = params || {};
 
             if (!executionId || typeof executionId !== 'string') {
                 throw new Error('executionId is required');
@@ -417,6 +418,9 @@ export class ApiMachineClient {
             if (model !== undefined && (typeof model !== 'string' || model.length === 0 || model.length > 128)) {
                 throw new Error('model must be a non-empty string with max length 128');
             }
+            if (permissionMode !== undefined && !['read_only', 'approval', 'guarded_auto'].includes(permissionMode)) {
+                throw new Error('permissionMode is invalid');
+            }
 
             return orchestratorDispatch({
                 executionId,
@@ -430,6 +434,7 @@ export class ApiMachineClient {
                 prompt,
                 timeoutMs: Math.floor(timeoutMs),
                 workingDirectory,
+                permissionMode,
             });
         });
 

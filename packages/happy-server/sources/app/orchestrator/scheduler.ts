@@ -45,6 +45,7 @@ export type SchedulerAction =
             prompt: string;
             timeoutMs: number;
             workingDirectory?: string;
+            permissionMode?: 'read_only' | 'approval' | 'guarded_auto';
         };
     }
     | {
@@ -406,6 +407,7 @@ async function buildRunActions(run: {
                         model: true,
                         prompt: true,
                         workingDirectory: true,
+                        permissionMode: true,
                         timeoutMs: true,
                         targetMachineId: true,
                         nextAttemptAt: true,
@@ -676,6 +678,7 @@ async function buildRunActions(run: {
                             prompt: execution.resumeMessage ?? task.prompt,
                             timeoutMs,
                             workingDirectory: task.workingDirectory ?? undefined,
+                            permissionMode: task.permissionMode as 'read_only' | 'approval' | 'guarded_auto' | undefined,
                         },
                     });
                 }

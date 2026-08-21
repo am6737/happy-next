@@ -9,8 +9,8 @@ import { ChatInput } from '@/components/dootask/ChatInput';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { AiGroupAvatar, AiIdentityAvatar, getAiAvatarColor } from '@/features/aiTeams/components';
 import { getAiTeamCopy } from '@/features/aiTeams/copy';
-import { findAiAgent, findAiWorkItem, getAiWorkSourcePath, type AiChatMessage } from '@/features/aiTeams/mockData';
-import { appendManagedAiMessages, saveManagedAiExecution, saveManagedAiWorkItem, useManagedAiTeamData } from '@/features/aiTeams/agentStore';
+import { findAiAgent, findAiWorkItem, getAiWorkSourcePath, type AiChatMessage } from '@/features/aiTeams/types';
+import { sendManagedAiMessage, useManagedAiTeamData } from '@/features/aiTeams/agentStore';
 import { layout } from '@/components/layout';
 import { Typography } from '@/constants/Typography';
 import { getNativeHeaderTitleWidth } from '@/utils/nativeHeaderTitleWidth';
@@ -269,34 +269,9 @@ export default function AiConversationScreen() {
     }, [conversation?.id]);
 
     const handleSendText = React.useCallback((text: string) => {
-        const now = new Date();
-        const timeLabel = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
         if (!conversation) return;
-        const waitingExecution = [...data.executions].reverse().find((item) => item.conversationId === conversation.id && item.status === 'waiting_human');
-        appendManagedAiMessages(conversation.id, [
-            { id: `user-${Date.now()}`, kind: 'text', sender: 'user', text, timeLabel },
-            {
-                id: `agent-${Date.now() + 1}`,
-                kind: 'text',
-                sender: 'agent',
-                agentId: conversation.agentId,
-                text: waitingExecution
-                    ? copy.decisionRecorded
-                    : getCurrentLanguageIsChinese() ? '收到。我会先整理目标和下一步，再把需要你确认的事项发到这里。' : 'Got it. I will organize the goal and next steps, then bring decisions back here.',
-                timeLabel,
-            },
-        ]);
-        if (waitingExecution) {
-            saveManagedAiExecution({
-                ...waitingExecution,
-                status: 'running',
-                statusLabel: getCurrentLanguageIsChinese() ? '执行中' : 'Running',
-                events: [...waitingExecution.events, { id: `decision-${Date.now()}`, kind: 'comment', actor: 'human', title: getCurrentLanguageIsChinese() ? '真人已确认' : 'Decision confirmed', body: text, timeLabel, status: 'running' }],
-            });
-            const linkedWork = findAiWorkItem(data, waitingExecution.workItemId);
-            if (linkedWork) saveManagedAiWorkItem({ ...linkedWork, requiresDecision: false, status: 'working', statusLabel: getCurrentLanguageIsChinese() ? '进行中' : 'In progress' });
-        }
-    }, [conversation?.id, copy.decisionRecorded, data.executions]);
+        void sendManagedAiMessage(conversation.id, text).catch((error) => console.warn('Failed to send AI team message', error));
+    }, [conversation?.id]);
 
     if (!conversation || !agent) {
         return <View style={styles.body}><Text style={{ color: theme.colors.text, padding: 24 }}>{copy.notFound}</Text></View>;

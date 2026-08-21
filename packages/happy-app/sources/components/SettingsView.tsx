@@ -333,7 +333,7 @@ export const SettingsView = React.memo(function SettingsView() {
             )}
 
             {/* History */}
-            <ItemGroup title={aiTeamCopy.workspace} footer={aiTeamCopy.mockNotice}>
+            <ItemGroup title={aiTeamCopy.workspace}>
                 <Item
                     title={aiTeamCopy.agents}
                     subtitle={aiTeamCopy.agentsSubtitle}

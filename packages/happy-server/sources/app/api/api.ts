@@ -29,6 +29,7 @@ import { publicShareRoutes } from "./routes/publicShareRoutes";
 import { orchestratorRoutes } from "./routes/orchestratorRoutes";
 import { appConfigRoutes } from "./routes/appConfigRoutes";
 import { githubRoutes } from "./routes/githubRoutes";
+import { aiTeamRoutes } from "./routes/aiTeamRoutes";
 
 export async function startApi() {
 
@@ -87,6 +88,7 @@ export async function startApi() {
     publicShareRoutes(typed);
     orchestratorRoutes(typed);
     githubRoutes(typed);
+    aiTeamRoutes(typed);
 
     // Start HTTP
     const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 3005;

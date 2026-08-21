@@ -46,22 +46,6 @@ const stylesheet = StyleSheet.create((theme) => ({
         fontSize: 12,
         color: theme.colors.textSecondary,
     },
-    prototype: {
-        flexDirection: 'row',
-        gap: 8,
-        alignItems: 'flex-start',
-        backgroundColor: theme.colors.surfaceHighest,
-        borderRadius: 12,
-        padding: 12,
-        marginHorizontal: 16,
-        marginBottom: 12,
-    },
-    prototypeText: {
-        flex: 1,
-        color: theme.colors.textSecondary,
-        fontSize: 13,
-        lineHeight: 18,
-    },
     teamAvatar: {
         alignItems: 'center',
         justifyContent: 'center',
@@ -142,17 +126,6 @@ export function AiAgentPresencePill({ presence, isZh }: { presence: AiAgentPrese
         <View style={styles.status}>
             <AiAgentPresenceDot availability={presence.availability} size={7} />
             <Text style={styles.statusText}>{getAiAgentPresenceLabel(presence, isZh)}</Text>
-        </View>
-    );
-}
-
-export function AiPrototypeNotice({ text }: { text: string }) {
-    const { theme } = useUnistyles();
-    const styles = stylesheet;
-    return (
-        <View style={styles.prototype}>
-            <Ionicons name="information-circle-outline" size={18} color={theme.colors.textSecondary} />
-            <Text style={styles.prototypeText}>{text}</Text>
         </View>
     );
 }

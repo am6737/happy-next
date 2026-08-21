@@ -7,6 +7,7 @@ import { MODEL_MODE_DEFAULT, isModelModeForAgent, parseCodexModelMode, parseClau
 import {
   ORCHESTRATOR_ENV_KEYS,
   type OrchestratorProvider,
+  type OrchestratorPermissionMode,
   decodePromptFromBase64,
   isOrchestratorProvider,
 } from './common';
@@ -65,6 +66,11 @@ function readChildSessionIdFromEnv(): string | undefined {
   return value;
 }
 
+function readPermissionModeFromEnv(): OrchestratorPermissionMode | undefined {
+  const value = process.env[ORCHESTRATOR_ENV_KEYS.permissionMode];
+  return value === 'read_only' || value === 'approval' || value === 'guarded_auto' ? value : undefined;
+}
+
 export function buildSpawnPlan(
   provider: OrchestratorProvider,
   prompt: string,
@@ -72,6 +78,7 @@ export function buildSpawnPlan(
   modelMode?: string,
   executionType: 'initial' | 'resume' = 'initial',
   childSessionId?: string,
+  permissionMode?: OrchestratorPermissionMode,
 ): SpawnPlan {
   if (executionType === 'resume' && !childSessionId) {
     throw new Error('childSessionId is required for resume execution');
@@ -79,7 +86,9 @@ export function buildSpawnPlan(
   const normalizedModelMode = modelMode === MODEL_MODE_DEFAULT ? undefined : modelMode;
   switch (provider) {
     case 'claude': {
-      const baseArgs = [claudeCliPath, '--dangerously-skip-permissions'];
+      const baseArgs = [claudeCliPath];
+      if (!permissionMode) baseArgs.push('--dangerously-skip-permissions');
+      else baseArgs.push('--permission-mode', permissionMode === 'read_only' ? 'plan' : permissionMode === 'approval' ? 'default' : 'acceptEdits');
       if (executionType === 'resume') {
         baseArgs.push('--resume', childSessionId!, '-p', prompt);
       } else {
@@ -110,7 +119,11 @@ export function buildSpawnPlan(
       };
     }
     case 'codex': {
-      const codexArgs = ['-y', CODEX_PACKAGE, 'exec', '--dangerously-bypass-approvals-and-sandbox'];
+      const codexArgs = ['-y', CODEX_PACKAGE];
+      if (!permissionMode) codexArgs.push('--dangerously-bypass-approvals-and-sandbox');
+      else codexArgs.push('--ask-for-approval', permissionMode === 'approval' ? 'on-request' : 'never');
+      codexArgs.push('exec');
+      if (permissionMode) codexArgs.push('--sandbox', permissionMode === 'read_only' ? 'read-only' : 'workspace-write');
       if (executionType === 'resume') {
         codexArgs.push('resume', childSessionId!, prompt);
       } else {
@@ -137,7 +150,9 @@ export function buildSpawnPlan(
       };
     }
     case 'gemini': {
-      const geminiArgs = ['--yolo'];
+      const geminiArgs: string[] = [];
+      if (!permissionMode) geminiArgs.push('--yolo');
+      else geminiArgs.push('--approval-mode', permissionMode === 'read_only' ? 'plan' : permissionMode === 'approval' ? 'default' : 'auto_edit');
       if (executionType === 'resume') {
         geminiArgs.push('--resume', childSessionId!, '-p', prompt);
       } else {
@@ -202,8 +217,9 @@ export async function runOrchestratorOneShot(args: string[]): Promise<number> {
   const modelMode = readModelModeFromEnv();
   const executionType = readExecutionTypeFromEnv();
   const childSessionId = readChildSessionIdFromEnv();
+  const permissionMode = readPermissionModeFromEnv();
   logger.debug(`[ORCHESTRATOR ONESHOT] Starting ${provider} one-shot`);
 
-  const plan = buildSpawnPlan(provider, prompt, workingDirectory, modelMode, executionType, childSessionId);
+  const plan = buildSpawnPlan(provider, prompt, workingDirectory, modelMode, executionType, childSessionId, permissionMode);
   return spawnAndWait(plan);
 }

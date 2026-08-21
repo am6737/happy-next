@@ -1,4 +1,4 @@
-import type { AiAgent, AiWorkItem } from './mockData';
+import type { AiAgent, AiWorkItem } from './types';
 
 export type AiAgentAvailability = 'online' | 'unstable' | 'offline' | 'archived';
 export type AiAgentWorkload = 'working' | 'queued' | 'idle';
@@ -8,19 +8,17 @@ export type AiAgentPresence = {
     workload: AiAgentWorkload;
     runningCount: number;
     queuedCount: number;
-    capacity: number;
 };
 
 const queuedWorkStatuses = new Set<AiWorkItem['status']>(['todo', 'blocked', 'review']);
 
 export function deriveAiAgentPresence(agent: AiAgent, workItems: AiWorkItem[] = []): AiAgentPresence {
-    const capacity = agent.settings.maxConcurrentTasks;
-    const archived = agent.enabled === false || agent.availability === 'archived';
+    const archived = agent.enabled === false || agent.availability === 'unavailable';
     if (archived) {
-        return { availability: 'archived', workload: 'idle', runningCount: 0, queuedCount: 0, capacity };
+        return { availability: 'archived', workload: 'idle', runningCount: 0, queuedCount: 0 };
     }
 
-    const availability = agent.availability ?? 'online';
+    const availability: AiAgentAvailability = agent.availability === 'unavailable' ? 'archived' : agent.availability ?? 'offline';
     const assignedWork = workItems.filter((work) => work.assigneeId === agent.id);
     const runningCount = assignedWork.filter((work) => work.status === 'working').length;
     const queuedCount = assignedWork.filter((work) => queuedWorkStatuses.has(work.status)).length;
@@ -38,7 +36,7 @@ export function deriveAiAgentPresence(agent: AiAgent, workItems: AiWorkItem[] = 
         workload = 'idle';
     }
 
-    return { availability, workload, runningCount, queuedCount, capacity };
+    return { availability, workload, runningCount, queuedCount };
 }
 
 export function getAiAgentAvailabilityLabel(availability: AiAgentAvailability, isZh: boolean): string {

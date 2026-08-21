@@ -6,6 +6,7 @@ import { Text } from '@/components/StyledText';
 import { TeamDefinitionForm, type AiTeamDraft } from '@/features/aiTeams/TeamDefinitionForm';
 import { createManagedAiTeam, useManagedAiTeamData } from '@/features/aiTeams/agentStore';
 import { getCurrentLanguage } from '@/text';
+import { Modal } from '@/modal';
 
 const stylesheet = StyleSheet.create((theme) => ({
     screen: { flex: 1, backgroundColor: theme.colors.surface },
@@ -21,16 +22,23 @@ export default function NewAiTeamPage() {
     const isZh = getCurrentLanguage().startsWith('zh');
     const firstAgentId = data.agents[0]?.id ?? '';
     const [draft, setDraft] = React.useState<AiTeamDraft>({ name: '', description: '', leaderId: firstAgentId, memberIds: firstAgentId ? [firstAgentId] : [], instructions: '' });
+    const [saving, setSaving] = React.useState(false);
     const valid = draft.name.trim().length > 0 && draft.memberIds.length > 0 && draft.memberIds.includes(draft.leaderId);
-    const save = () => {
-        if (!valid) return;
-        const team = createManagedAiTeam({ ...draft, name: draft.name.trim(), description: draft.description.trim(), instructions: draft.instructions.trim(), emoji: '✨', currentGoal: '', progress: 0 });
-        router.replace(`/settings/teams/${team.id}` as never);
+    const save = async () => {
+        if (!valid || saving) return;
+        setSaving(true);
+        try {
+            const team = await createManagedAiTeam({ ...draft, name: draft.name.trim(), description: draft.description.trim(), instructions: draft.instructions.trim(), emoji: '✨', currentGoal: '', progress: 0 });
+            router.replace(`/settings/teams/${team.id}` as never);
+        } catch (error) {
+            Modal.alert(isZh ? '无法创建团队' : 'Could not create team', error instanceof Error ? error.message : undefined);
+            setSaving(false);
+        }
     };
 
     return (
         <View style={stylesheet.screen}>
-            <Stack.Screen options={{ headerTitle: isZh ? '创建团队' : 'Create team', headerRight: () => <Pressable style={[stylesheet.save, !valid && stylesheet.disabled]} disabled={!valid} onPress={save}><Text style={stylesheet.saveText}>{isZh ? '创建' : 'Create'}</Text></Pressable> }} />
+            <Stack.Screen options={{ headerTitle: isZh ? '创建团队' : 'Create team', headerRight: () => <Pressable style={[stylesheet.save, (!valid || saving) && stylesheet.disabled]} disabled={!valid || saving} onPress={save}><Text style={stylesheet.saveText}>{saving ? (isZh ? '创建中…' : 'Creating…') : (isZh ? '创建' : 'Create')}</Text></Pressable> }} />
             <ScrollView contentContainerStyle={stylesheet.content} keyboardShouldPersistTaps="handled">
                 <TeamDefinitionForm draft={draft} agents={data.agents} onChange={setDraft} isZh={isZh} />
             </ScrollView>

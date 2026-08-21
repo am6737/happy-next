@@ -24,7 +24,7 @@ import { loadDooTaskInboxUsersCache, saveDooTaskInboxUsersCache } from '@/sync/p
 import { AiGroupAvatar, AiIdentityAvatar } from '@/features/aiTeams/components';
 import { getAiTeamCopy } from '@/features/aiTeams/copy';
 import { useManagedAiTeamData } from '@/features/aiTeams/agentStore';
-import type { AiAgent, AiChatMessage, AiConversation } from '@/features/aiTeams/mockData';
+import type { AiAgent, AiChatMessage, AiConversation } from '@/features/aiTeams/types';
 
 const styles = StyleSheet.create((theme) => ({
     container: {

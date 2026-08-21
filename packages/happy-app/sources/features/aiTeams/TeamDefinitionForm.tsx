@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { Text } from '@/components/StyledText';
 import { AiIdentityAvatar } from './components';
-import type { AiAgent, AiTeam } from './mockData';
+import type { AiAgent, AiTeam } from './types';
 
 export type AiTeamDraft = Pick<AiTeam, 'name' | 'description' | 'leaderId' | 'memberIds' | 'instructions'>;
 
