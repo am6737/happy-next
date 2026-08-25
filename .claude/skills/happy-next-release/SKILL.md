@@ -44,6 +44,15 @@ git pull --ff-only origin main
 
 如果不干净，提供“先提交指定改动 / 用户自行处理”选项，不要自作主张。
 
+## 发布前更新
+
+进入发布流程前：
+
+1. 查询 `@openai/codex` 最新稳定版，更新 `packages/happy-cli/src/codex/package.ts` 及相关版本引用。
+2. 根据官方最新资料，更新 `packages/happy-wire/src/modelCatalog.ts` 中 Codex、Claude Code、Gemini 的模型，以及对应的 reasoning effort、上下文窗口、Fast Mode 和定价等关联配置。
+3. 更新相关测试；修改 `happy-wire` 后先运行 `yarn build`，并运行受影响包规定的类型检查和测试。
+4. 展示改动和验证结果。有改动时先让用户确认提交并推送，重新通过共用前置检查后再继续发布；没有改动则直接继续。
+
 ## 发布入口选择
 
 询问用户：
