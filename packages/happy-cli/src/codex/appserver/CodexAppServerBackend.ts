@@ -26,6 +26,8 @@ import {
   type ExecCommandApprovalParams,
   type CommandExecutionApprovalParams,
   type FileChangeApprovalParams,
+  type ToolRequestUserInputParams,
+  type PermissionsRequestApprovalParams,
   type V2ApprovalDecision,
   type ReviewDecision,
   type ApprovalPolicy,
@@ -58,7 +60,7 @@ export interface CodexPermissionHandler {
     toolCallId: string,
     toolName: string,
     args: Record<string, unknown>,
-  ): Promise<{ decision: string; reason?: string }>;
+  ): Promise<{ decision: string; reason?: string; answers?: Record<string, string> }>;
 }
 
 export interface CodexAppServerBackendOptions {
@@ -945,6 +947,14 @@ export class CodexAppServerBackend implements AgentBackend {
         this.handleFileChangeApproval(params as FileChangeApprovalParams, id);
         break;
 
+      case Methods.TOOL_REQUEST_USER_INPUT:
+        this.handleToolRequestUserInput(params as ToolRequestUserInputParams, id);
+        break;
+
+      case Methods.PERMISSIONS_APPROVAL:
+        this.handlePermissionsApproval(params as PermissionsRequestApprovalParams, id);
+        break;
+
       case Methods.MCP_ELICITATION:
         this.handleMcpElicitation(params, id);
         break;
@@ -1072,10 +1082,14 @@ export class CodexAppServerBackend implements AgentBackend {
   // ─── V2 Approval Handlers ──────────────────────────────────────
 
   private handleCommandExecutionApproval(params: CommandExecutionApprovalParams, jsonRpcId: number | string): void {
-    this.dispatchV2Approval(params.itemId, jsonRpcId, 'CodexBash', {
+    const callId = params.approvalId ?? params.itemId;
+    this.dispatchV2Approval(callId, jsonRpcId, 'CodexBash', {
       command: params.command ? [params.command] : [],
       cwd: params.cwd ?? '',
       reason: params.reason,
+      kind: params.kind ?? 'command',
+      approvalId: params.approvalId,
+      parsed_cmd: params.commandActions ?? undefined,
     }, params.reason);
   }
 
@@ -1118,6 +1132,112 @@ export class CodexAppServerBackend implements AgentBackend {
     } else {
       this.peer.respond(jsonRpcId, { decision: 'accept' as V2ApprovalDecision });
     }
+  }
+
+  private handleToolRequestUserInput(params: ToolRequestUserInputParams, jsonRpcId: number | string): void {
+    const questions = params.questions.map((question) => ({
+      id: question.id,
+      header: question.header,
+      question: question.question,
+      options: question.options ?? [],
+      multiSelect: false,
+      isOther: question.isOther ?? false,
+      isSecret: question.isSecret ?? false,
+    }));
+    const input = {
+      questions,
+      isBlocking: params.isBlocking,
+    };
+
+    this.emit({
+      type: 'tool-call',
+      toolName: 'AskUserQuestion',
+      callId: params.itemId,
+      args: input,
+    });
+
+    if (!this.options.permissionHandler) {
+      this.peer.respond(jsonRpcId, { answers: {} });
+      this.emit({
+        type: 'tool-result',
+        toolName: 'AskUserQuestion',
+        callId: params.itemId,
+        result: { answers: {} },
+      });
+      return;
+    }
+
+    this.options.permissionHandler
+      .handleToolCall(params.itemId, 'AskUserQuestion', input)
+      .then((result) => {
+        const answers = result.decision === 'approved' || result.decision === 'approved_for_session'
+          ? result.answers ?? {}
+          : {};
+        const protocolAnswers = Object.fromEntries(params.questions.map((question) => [
+          question.id,
+          { answers: answers[question.id] ? [answers[question.id]] : [] },
+        ]));
+        const displayAnswers = Object.fromEntries(params.questions.map((question) => [
+          question.id,
+          question.isSecret && answers[question.id] ? '********' : answers[question.id] ?? '',
+        ]));
+
+        this.peer.respond(jsonRpcId, { answers: protocolAnswers });
+        this.emit({
+          type: 'tool-result',
+          toolName: 'AskUserQuestion',
+          callId: params.itemId,
+          result: { answers: displayAnswers },
+        });
+      })
+      .catch((err) => {
+        logger.warn('[CodexBackend] User input permission handler rejected', err);
+        this.peer.respond(jsonRpcId, { answers: {} });
+        this.emit({
+          type: 'tool-result',
+          toolName: 'AskUserQuestion',
+          callId: params.itemId,
+          result: { answers: {} },
+        });
+      });
+  }
+
+  private handlePermissionsApproval(params: PermissionsRequestApprovalParams, jsonRpcId: number | string): void {
+    const callId = `codex-permissions-${String(jsonRpcId)}`;
+    const input = {
+      cwd: params.cwd,
+      reason: params.reason,
+      permissions: params.permissions,
+    };
+
+    this.emit({ type: 'tool-call', toolName: 'CodexPermissions', callId, args: input });
+
+    if (!this.options.permissionHandler) {
+      this.peer.respond(jsonRpcId, { permissions: params.permissions, scope: 'turn' });
+      this.emit({ type: 'tool-result', toolName: 'CodexPermissions', callId, result: { approved: true } });
+      return;
+    }
+
+    this.options.permissionHandler
+      .handleToolCall(callId, 'CodexPermissions', input)
+      .then((result) => {
+        const approved = result.decision === 'approved' || result.decision === 'approved_for_session';
+        this.peer.respond(jsonRpcId, {
+          permissions: approved ? params.permissions : {},
+          scope: result.decision === 'approved_for_session' ? 'session' : 'turn',
+        });
+        this.emit({
+          type: 'tool-result',
+          toolName: 'CodexPermissions',
+          callId,
+          result: { approved },
+        });
+      })
+      .catch((err) => {
+        logger.warn('[CodexBackend] Permissions approval handler rejected', err);
+        this.peer.respond(jsonRpcId, { permissions: {}, scope: 'turn' });
+        this.emit({ type: 'tool-result', toolName: 'CodexPermissions', callId, result: { approved: false } });
+      });
   }
 
   // ─── MCP Elicitation / Tool Approval ───────────────────────────

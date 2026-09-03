@@ -19,6 +19,7 @@ export interface PermissionResponse {
     id: string;
     approved: boolean;
     decision?: 'approved' | 'approved_for_session' | 'denied' | 'abort';
+    answers?: Record<string, string>;
 }
 
 /**
@@ -36,6 +37,7 @@ export interface PendingRequest {
  */
 export interface PermissionResult {
     decision: 'approved' | 'approved_for_session' | 'denied' | 'abort';
+    answers?: Record<string, string>;
 }
 
 /**
@@ -95,7 +97,10 @@ export abstract class BasePermissionHandler {
 
                 // Resolve the permission request
                 const result: PermissionResult = response.approved
-                    ? { decision: response.decision === 'approved_for_session' ? 'approved_for_session' : 'approved' }
+                    ? {
+                        decision: response.decision === 'approved_for_session' ? 'approved_for_session' : 'approved',
+                        ...(response.answers ? { answers: response.answers } : {})
+                    }
                     : { decision: response.decision === 'denied' ? 'denied' : 'abort' };
 
                 pending.resolve(result);

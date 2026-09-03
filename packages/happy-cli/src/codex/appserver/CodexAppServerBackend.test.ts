@@ -668,6 +668,123 @@ describe('CodexAppServerBackend approval request parsing', () => {
     expect(respond).toHaveBeenCalledWith(201, { decision: 'decline' });
   });
 
+  it('uses approvalId for writeStdin approvals', async () => {
+    const permissionHandler = {
+      handleToolCall: vi.fn().mockResolvedValue({ decision: 'approved' }),
+    };
+    const backend = new CodexAppServerBackend({
+      cwd: process.cwd(),
+      command: 'codex',
+      permissionHandler,
+    });
+    const anyBackend = backend as any;
+    const respond = vi.fn();
+    anyBackend.peer = { respond };
+
+    anyBackend.handleServerRequest(Methods.COMMAND_EXECUTION_APPROVAL, {
+      threadId: 't1', turnId: 'turn-1', itemId: 'terminal-1',
+      approvalId: 'stdin-approval-1', kind: 'writeStdin',
+      command: 'yes', cwd: '/home', startedAtMs: 1,
+    }, 202);
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(permissionHandler.handleToolCall).toHaveBeenCalledWith(
+      'stdin-approval-1',
+      'CodexBash',
+      expect.objectContaining({ kind: 'writeStdin', approvalId: 'stdin-approval-1' }),
+    );
+    expect(respond).toHaveBeenCalledWith(202, { decision: 'accept' });
+  });
+
+  it('maps Codex user questions to the app and returns answers by question id', async () => {
+    const permissionHandler = {
+      handleToolCall: vi.fn().mockResolvedValue({
+        decision: 'approved',
+        answers: { environment: 'Staging', token: 'secret-value' },
+      }),
+    };
+    const backend = new CodexAppServerBackend({
+      cwd: process.cwd(),
+      command: 'codex',
+      permissionHandler,
+    });
+    const messages: any[] = [];
+    backend.onMessage((message) => messages.push(message));
+    const respond = vi.fn();
+    (backend as any).peer = { respond };
+
+    (backend as any).handleServerRequest(Methods.TOOL_REQUEST_USER_INPUT, {
+      threadId: 't1', turnId: 'turn-1', itemId: 'question-item-1', isBlocking: true,
+      questions: [
+        {
+          id: 'environment', header: 'Environment', question: 'Choose an environment',
+          options: [{ label: 'Staging', description: 'Use staging' }], isOther: false,
+        },
+        {
+          id: 'token', header: 'Token', question: 'Enter the token', options: null,
+          isOther: true, isSecret: true,
+        },
+      ],
+    }, 203);
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(permissionHandler.handleToolCall).toHaveBeenCalledWith(
+      'question-item-1',
+      'AskUserQuestion',
+      {
+        isBlocking: true,
+        questions: [
+          expect.objectContaining({ id: 'environment', multiSelect: false, isOther: false }),
+          expect.objectContaining({ id: 'token', options: [], isSecret: true }),
+        ],
+      },
+    );
+    expect(respond).toHaveBeenCalledWith(203, {
+      answers: {
+        environment: { answers: ['Staging'] },
+        token: { answers: ['secret-value'] },
+      },
+    });
+    expect(messages).toContainEqual(expect.objectContaining({
+      type: 'tool-result',
+      callId: 'question-item-1',
+      result: { answers: { environment: 'Staging', token: '********' } },
+    }));
+  });
+
+  it('returns the requested permission profile with the selected scope', async () => {
+    const permissionHandler = {
+      handleToolCall: vi.fn().mockResolvedValue({ decision: 'approved_for_session' }),
+    };
+    const backend = new CodexAppServerBackend({
+      cwd: process.cwd(),
+      command: 'codex',
+      permissionHandler,
+    });
+    const respond = vi.fn();
+    (backend as any).peer = { respond };
+    const permissions = { network: { enabled: true } };
+
+    (backend as any).handleServerRequest(Methods.PERMISSIONS_APPROVAL, {
+      threadId: 't1', turnId: 'turn-1', itemId: 'permission-item-1',
+      cwd: '/repo', permissions, reason: 'Download dependencies', startedAtMs: 1,
+    }, 204);
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(permissionHandler.handleToolCall).toHaveBeenCalledWith(
+      'codex-permissions-204',
+      'CodexPermissions',
+      { cwd: '/repo', permissions, reason: 'Download dependencies' },
+    );
+    expect(respond).toHaveBeenCalledWith(204, { permissions, scope: 'session' });
+  });
+
   // Elicitation payloads: Codex 0.121 puts `_meta` at top level; older shapes nest it in `request`.
   describe('MCP elicitation', () => {
     function setup(permissionHandler?: { handleToolCall: ReturnType<typeof vi.fn> }) {

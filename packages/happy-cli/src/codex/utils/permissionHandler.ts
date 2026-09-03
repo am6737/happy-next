@@ -42,6 +42,11 @@ export class CodexPermissionHandler extends BasePermissionHandler {
     }
 
     private shouldAutoApprove(toolName: string, toolCallId: string): boolean {
+        // User-input requests always need an explicit answer, even in full-auto mode.
+        if (toolName === 'AskUserQuestion') {
+            return false;
+        }
+
         const alwaysAutoApproveNames = ['change_title', 'happy__change_title', 'preview_html', 'happy__preview_html', 'CodexReasoning', 'think', 'save_memory'];
         const alwaysAutoApproveIds = ['change_title', 'preview_html', 'save_memory'];
 

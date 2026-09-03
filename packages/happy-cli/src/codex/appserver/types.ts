@@ -251,10 +251,49 @@ export interface CommandExecutionApprovalParams {
   turnId: string;
   itemId: string;
   approvalId?: string | null;
+  kind?: 'command' | 'writeStdin';
   command?: string | null;
   commandActions?: unknown[] | null;
   cwd?: string | null;
   reason?: string | null;
+}
+
+export interface ToolRequestUserInputOption {
+  label: string;
+  description: string;
+}
+
+export interface ToolRequestUserInputQuestion {
+  id: string;
+  header: string;
+  question: string;
+  options?: ToolRequestUserInputOption[] | null;
+  isOther?: boolean;
+  isSecret?: boolean;
+}
+
+export interface ToolRequestUserInputParams {
+  threadId: string;
+  turnId: string;
+  itemId: string;
+  questions: ToolRequestUserInputQuestion[];
+  isBlocking: boolean;
+  autoResolutionMs?: number | null;
+}
+
+export interface RequestPermissionProfile {
+  fileSystem?: Record<string, unknown> | null;
+  network?: Record<string, unknown> | null;
+}
+
+export interface PermissionsRequestApprovalParams {
+  threadId: string;
+  turnId: string;
+  itemId: string;
+  cwd: string;
+  permissions: RequestPermissionProfile;
+  reason?: string | null;
+  startedAtMs: number;
 }
 
 export interface FileChangeApprovalParams {
@@ -367,6 +406,8 @@ export const Methods = {
   // Server → Client (v2 approval requests)
   COMMAND_EXECUTION_APPROVAL: 'item/commandExecution/requestApproval',
   FILE_CHANGE_APPROVAL: 'item/fileChange/requestApproval',
+  TOOL_REQUEST_USER_INPUT: 'item/tool/requestUserInput',
+  PERMISSIONS_APPROVAL: 'item/permissions/requestApproval',
   MCP_ELICITATION: 'mcpServer/elicitation/request',
   TOOL_CALL: 'item/tool/call',
 

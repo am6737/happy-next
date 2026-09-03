@@ -15,10 +15,13 @@ interface QuestionOption {
 }
 
 interface Question {
+    id?: string;
     question: string;
     header: string;
     options: QuestionOption[];
     multiSelect: boolean;
+    isOther?: boolean;
+    isSecret?: boolean;
 }
 
 interface AskUserQuestionInput {
@@ -34,7 +37,8 @@ const getAnswerForQuestion = (answers: Record<string, string> | undefined, quest
         return undefined;
     }
 
-    return answers[question.question] || answers[question.header];
+    const answer = (question.id ? answers[question.id] : undefined) || answers[question.question] || answers[question.header];
+    return question.isSecret && answer ? '********' : answer;
 };
 
 // Styles MUST be defined outside the component to prevent infinite re-renders
@@ -225,6 +229,9 @@ export const AskUserQuestionView = React.memo<ToolViewProps>(({ tool, sessionId 
 
     // Check if all questions have at least one valid selection
     const allQuestionsAnswered = questions.every((q, qIndex) => {
+        if (q.options.length === 0) {
+            return Boolean(otherTexts.get(qIndex)?.trim());
+        }
         const selected = selections.get(qIndex);
         if (!selected || selected.size === 0) return false;
         // If "Other" is selected, require non-empty text
@@ -279,10 +286,13 @@ export const AskUserQuestionView = React.memo<ToolViewProps>(({ tool, sessionId 
         // captured the values above. TODO: Revisit this logic.
         setIsSubmitted(true);
 
-        // Build answers as Record<string, string> keyed by full question text —
-        // Claude Code's AskUserQuestion implementation looks up answers by `question`, not `header`.
+        // Codex uses stable question IDs; Claude looks answers up by full question text.
         const answers: Record<string, string> = {};
         questions.forEach((q, qIndex) => {
+            if (q.options.length === 0) {
+                answers[q.id || q.question] = otherTexts.get(qIndex)?.trim() || '';
+                return;
+            }
             const selected = selections.get(qIndex);
             if (selected && selected.size > 0) {
                 const otherIndex = getOtherIndex(q);
@@ -296,12 +306,12 @@ export const AskUserQuestionView = React.memo<ToolViewProps>(({ tool, sessionId 
                     const customText = otherTexts.get(qIndex)?.trim() || '';
                     if (predefinedLabels.length > 0) {
                         // Multi-select: combine predefined labels with custom text
-                        answers[q.question] = [...predefinedLabels, customText].join(', ');
+                        answers[q.id || q.question] = [...predefinedLabels, customText].join(', ');
                     } else {
-                        answers[q.question] = customText;
+                        answers[q.id || q.question] = customText;
                     }
                 } else {
-                    answers[q.question] = predefinedLabels.join(', ');
+                    answers[q.id || q.question] = predefinedLabels.join(', ');
                 }
             }
         });
@@ -351,6 +361,9 @@ export const AskUserQuestionView = React.memo<ToolViewProps>(({ tool, sessionId 
                         } else {
                             displayLabel = getAnswerForQuestion(persistedAnswers, q) || '-';
                         }
+                        if (q.isSecret && displayLabel !== '-') {
+                            displayLabel = '********';
+                        }
                         return (
                             <View key={qIndex} style={styles.submittedItem}>
                                 <Text style={styles.submittedHeader}>{q.header}:</Text>
@@ -370,6 +383,7 @@ export const AskUserQuestionView = React.memo<ToolViewProps>(({ tool, sessionId 
                     const selectedOptions = selections.get(qIndex) || new Set();
                     const otherIndex = getOtherIndex(question);
                     const isOtherSelected = selectedOptions.has(otherIndex);
+                    const isFreeForm = question.options.length === 0;
 
                     return (
                         <View key={qIndex} style={styles.questionSection}>
@@ -426,53 +440,67 @@ export const AskUserQuestionView = React.memo<ToolViewProps>(({ tool, sessionId 
                                     );
                                 })}
 
-                                {/* "Other" option */}
-                                <View>
-                                    <TouchableOpacity
-                                        style={[
-                                            styles.optionButton,
-                                            isOtherSelected && styles.optionButtonSelected,
-                                            !canInteract && styles.optionButtonDisabled,
-                                        ]}
-                                        onPress={() => handleOptionToggle(qIndex, otherIndex, question.multiSelect)}
-                                        disabled={!canInteract}
-                                        activeOpacity={0.7}
-                                    >
-                                        {question.multiSelect ? (
-                                            <View style={[
-                                                styles.checkboxOuter,
-                                                isOtherSelected && styles.checkboxOuterSelected,
-                                            ]}>
-                                                {isOtherSelected && (
-                                                    <Ionicons name="checkmark" size={14} color="#fff" />
-                                                )}
+                                {isFreeForm ? (
+                                    <TextInput
+                                        style={styles.otherTextInput}
+                                        value={otherTexts.get(qIndex) || ''}
+                                        onChangeText={(text) => handleOtherTextChange(qIndex, text)}
+                                        placeholder={t('tools.askUserQuestion.otherPlaceholder')}
+                                        placeholderTextColor={theme.colors.textSecondary}
+                                        multiline={!question.isSecret}
+                                        secureTextEntry={question.isSecret}
+                                        editable={canInteract}
+                                        textAlignVertical="top"
+                                    />
+                                ) : question.isOther !== false ? (
+                                    <View>
+                                        <TouchableOpacity
+                                            style={[
+                                                styles.optionButton,
+                                                isOtherSelected && styles.optionButtonSelected,
+                                                !canInteract && styles.optionButtonDisabled,
+                                            ]}
+                                            onPress={() => handleOptionToggle(qIndex, otherIndex, question.multiSelect)}
+                                            disabled={!canInteract}
+                                            activeOpacity={0.7}
+                                        >
+                                            {question.multiSelect ? (
+                                                <View style={[
+                                                    styles.checkboxOuter,
+                                                    isOtherSelected && styles.checkboxOuterSelected,
+                                                ]}>
+                                                    {isOtherSelected && (
+                                                        <Ionicons name="checkmark" size={14} color="#fff" />
+                                                    )}
+                                                </View>
+                                            ) : (
+                                                <View style={[
+                                                    styles.radioOuter,
+                                                    isOtherSelected && styles.radioOuterSelected,
+                                                ]}>
+                                                    {isOtherSelected && <View style={styles.radioInner} />}
+                                                </View>
+                                            )}
+                                            <View style={styles.optionContent}>
+                                                <Text style={styles.optionLabel}>{t('tools.askUserQuestion.other')}</Text>
                                             </View>
-                                        ) : (
-                                            <View style={[
-                                                styles.radioOuter,
-                                                isOtherSelected && styles.radioOuterSelected,
-                                            ]}>
-                                                {isOtherSelected && <View style={styles.radioInner} />}
-                                            </View>
+                                        </TouchableOpacity>
+                                        {isOtherSelected && (
+                                            <TextInput
+                                                style={styles.otherTextInput}
+                                                value={otherTexts.get(qIndex) || ''}
+                                                onChangeText={(text) => handleOtherTextChange(qIndex, text)}
+                                                placeholder={t('tools.askUserQuestion.otherPlaceholder')}
+                                                placeholderTextColor={theme.colors.textSecondary}
+                                                multiline={!question.isSecret}
+                                                secureTextEntry={question.isSecret}
+                                                editable={canInteract}
+                                                autoFocus
+                                                textAlignVertical="top"
+                                            />
                                         )}
-                                        <View style={styles.optionContent}>
-                                            <Text style={styles.optionLabel}>{t('tools.askUserQuestion.other')}</Text>
-                                        </View>
-                                    </TouchableOpacity>
-                                    {isOtherSelected && (
-                                        <TextInput
-                                            style={styles.otherTextInput}
-                                            value={otherTexts.get(qIndex) || ''}
-                                            onChangeText={(text) => handleOtherTextChange(qIndex, text)}
-                                            placeholder={t('tools.askUserQuestion.otherPlaceholder')}
-                                            placeholderTextColor={theme.colors.textSecondary}
-                                            multiline
-                                            editable={canInteract}
-                                            autoFocus
-                                            textAlignVertical="top"
-                                        />
-                                    )}
-                                </View>
+                                    </View>
+                                ) : null}
                             </View>
                         </View>
                     );

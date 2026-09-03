@@ -1004,13 +1004,16 @@ export const knownTools = {
         noStatus: true,
         input: z.object({
             questions: z.array(z.object({
+                id: z.string().optional().describe('Stable question identifier'),
                 question: z.string().describe('The question to ask'),
                 header: z.string().describe('Short label for the question'),
                 options: z.array(z.object({
                     label: z.string().describe('Option label'),
                     description: z.string().describe('Option description')
                 })).describe('Available choices'),
-                multiSelect: z.boolean().describe('Allow multiple selections')
+                multiSelect: z.boolean().describe('Allow multiple selections'),
+                isOther: z.boolean().optional().describe('Allow a custom answer'),
+                isSecret: z.boolean().optional().describe('Mask custom answer input')
             })).describe('Questions to ask the user')
         }).partial().passthrough(),
         extractSubtitle: (opts: { metadata: Metadata | null, tool: ToolCall }) => {
