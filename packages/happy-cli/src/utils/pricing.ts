@@ -6,6 +6,12 @@ import { Usage } from '../api/types';
  */
 export const PRICING = {
     // --- Claude 5 ---
+    'claude-fable-5-1': {
+        input: 10.0,
+        output: 50.0,
+        cache_write: 12.50,
+        cache_read: 0.25
+    },
     'claude-fable-5': {
         input: 10.0,
         output: 50.0,
@@ -127,7 +133,9 @@ export function calculateCost(usage: Usage, modelId?: string): { total: number, 
     if (!pricing) {
         // Try fuzzy matching for common aliases
         if (modelId?.includes('fable-5')) {
-            pricing = PRICING['claude-fable-5'];
+            pricing = modelId.includes('fable-5-1')
+                ? PRICING['claude-fable-5-1']
+                : PRICING['claude-fable-5'];
         }
         else if (modelId?.includes('opus')) {
             if (modelId.includes('opus-5')) pricing = PRICING['claude-opus-5'];

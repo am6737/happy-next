@@ -5,6 +5,7 @@ export const MODEL_MODE_DEFAULT = 'default' as const;
 export type CodexReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
 export type CodexModelFamily =
     | typeof MODEL_MODE_DEFAULT
+    | 'gpt-6-astra'
     | 'gpt-5.6-sol'
     | 'gpt-5.6-terra'
     | 'gpt-5.6-luna'
@@ -15,6 +16,7 @@ export type CodexModelFamily =
 export type ClaudeReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 export type ClaudeModelFamily =
     | typeof MODEL_MODE_DEFAULT
+    | 'claude-fable-5-1'
     | 'claude-fable-5'
     | 'claude-fable-5[1m]'
     | 'claude-opus-5'
@@ -31,6 +33,7 @@ export type ClaudeModelFamily =
 
 export const MODEL_MODES = [
     MODEL_MODE_DEFAULT,
+    'claude-fable-5-1',
     'claude-fable-5',
     'claude-fable-5[1m]',
     'claude-opus-5',
@@ -44,6 +47,11 @@ export const MODEL_MODES = [
     'claude-sonnet-4-6',
     'claude-sonnet-4-6[1m]',
     'claude-haiku-4-5',
+    'claude-fable-5-1-low',
+    'claude-fable-5-1-medium',
+    'claude-fable-5-1-high',
+    'claude-fable-5-1-xhigh',
+    'claude-fable-5-1-max',
     'claude-fable-5-low',
     'claude-fable-5-medium',
     'claude-fable-5-high',
@@ -100,6 +108,11 @@ export const MODEL_MODES = [
     'claude-sonnet-4-6[1m]-medium',
     'claude-sonnet-4-6[1m]-high',
     'claude-sonnet-4-6[1m]-max',
+    'gpt-6-astra-low',
+    'gpt-6-astra-medium',
+    'gpt-6-astra-high',
+    'gpt-6-astra-xhigh',
+    'gpt-6-astra-max',
     'gpt-5.6-sol-low',
     'gpt-5.6-sol-medium',
     'gpt-5.6-sol-high',
@@ -133,6 +146,8 @@ export const MODEL_MODES = [
     'gpt-5.2-medium',
     'gpt-5.2-high',
     'gpt-5.2-xhigh',
+    'gemini-3.8-flash',
+    'gemini-3.7-flash',
     'gemini-3.1-pro-preview',
     'gemini-3.6-flash',
     'gemini-3.5-flash',
@@ -146,6 +161,7 @@ export type ModelMode = typeof MODEL_MODES[number];
 
 export const CLAUDE_MODEL_MODES = [
     MODEL_MODE_DEFAULT,
+    'claude-fable-5-1',
     'claude-fable-5',
     'claude-fable-5[1m]',
     'claude-opus-5',
@@ -159,6 +175,11 @@ export const CLAUDE_MODEL_MODES = [
     'claude-sonnet-4-6',
     'claude-sonnet-4-6[1m]',
     'claude-haiku-4-5',
+    'claude-fable-5-1-low',
+    'claude-fable-5-1-medium',
+    'claude-fable-5-1-high',
+    'claude-fable-5-1-xhigh',
+    'claude-fable-5-1-max',
     'claude-fable-5-low',
     'claude-fable-5-medium',
     'claude-fable-5-high',
@@ -219,6 +240,8 @@ export const CLAUDE_MODEL_MODES = [
 
 export const GEMINI_MODEL_MODES = [
     MODEL_MODE_DEFAULT,
+    'gemini-3.8-flash',
+    'gemini-3.7-flash',
     'gemini-3.1-pro-preview',
     'gemini-3.6-flash',
     'gemini-3.5-flash',
@@ -230,6 +253,11 @@ export const GEMINI_MODEL_MODES = [
 
 export const CODEX_MODEL_MODES = [
     MODEL_MODE_DEFAULT,
+    'gpt-6-astra-low',
+    'gpt-6-astra-medium',
+    'gpt-6-astra-high',
+    'gpt-6-astra-xhigh',
+    'gpt-6-astra-max',
     'gpt-5.6-sol-low',
     'gpt-5.6-sol-medium',
     'gpt-5.6-sol-high',
@@ -289,7 +317,8 @@ export function getValidModelModesForAgent(agent: AgentFlavor): readonly ModelMo
 
 export const CLAUDE_MODEL_OPTIONS = [
     { value: MODEL_MODE_DEFAULT, label: 'Use CLI configured model', shortLabel: 'CLI', description: 'Use profile/CLI defaults' },
-    { value: 'claude-fable-5', label: 'Fable 5', shortLabel: 'Fable 5', description: 'Most powerful, most intelligent' },
+    { value: 'claude-fable-5-1', label: 'Fable 5.1', shortLabel: 'Fable 5.1', description: 'Most capable for long-horizon agentic work' },
+    { value: 'claude-fable-5', label: 'Fable 5', shortLabel: 'Fable 5', description: 'Previous generation Fable' },
     { value: 'claude-opus-5', label: 'Opus 5', shortLabel: 'Opus 5', description: 'Best for complex agentic coding' },
     { value: 'claude-sonnet-5', label: 'Sonnet 5', shortLabel: 'Sonnet 5', description: 'Best balance of speed and intelligence' },
     { value: 'claude-opus-4-8', label: 'Opus 4.8', shortLabel: 'Opus 4.8', description: 'Previous generation Opus' },
@@ -303,7 +332,8 @@ export const CLAUDE_MODEL_OPTIONS = [
 // combined back into the `family[1m]` wire value via claudeFamilyWith1M.
 export const CLAUDE_MODEL_FAMILY_OPTIONS = [
     { value: MODEL_MODE_DEFAULT, label: 'Use CLI configured model', shortLabel: 'CLI', description: 'Use profile/CLI defaults' },
-    { value: 'claude-fable-5', label: 'Fable 5', shortLabel: 'Fable 5', description: 'Most powerful, most intelligent' },
+    { value: 'claude-fable-5-1', label: 'Fable 5.1', shortLabel: 'Fable 5.1', description: 'Most capable for long-horizon agentic work' },
+    { value: 'claude-fable-5', label: 'Fable 5', shortLabel: 'Fable 5', description: 'Previous generation Fable' },
     { value: 'claude-opus-5', label: 'Opus 5', shortLabel: 'Opus 5', description: 'Best for complex agentic coding' },
     { value: 'claude-sonnet-5', label: 'Sonnet 5', shortLabel: 'Sonnet 5', description: 'Best balance of speed and intelligence' },
     { value: 'claude-opus-4-8', label: 'Opus 4.8', shortLabel: 'Opus 4.8', description: 'Previous generation Opus' },
@@ -314,6 +344,11 @@ export const CLAUDE_MODEL_FAMILY_OPTIONS = [
 ] as const satisfies readonly { value: ClaudeModelFamily; label: string; shortLabel: string; description: string }[];
 
 const CLAUDE_MODE_TO_SELECTION: Partial<Record<ModelMode, { family: ClaudeModelFamily; effort: ClaudeReasoningEffort }>> = {
+    'claude-fable-5-1-low': { family: 'claude-fable-5-1', effort: 'low' },
+    'claude-fable-5-1-medium': { family: 'claude-fable-5-1', effort: 'medium' },
+    'claude-fable-5-1-high': { family: 'claude-fable-5-1', effort: 'high' },
+    'claude-fable-5-1-xhigh': { family: 'claude-fable-5-1', effort: 'xhigh' },
+    'claude-fable-5-1-max': { family: 'claude-fable-5-1', effort: 'max' },
     'claude-fable-5-low': { family: 'claude-fable-5', effort: 'low' },
     'claude-fable-5-medium': { family: 'claude-fable-5', effort: 'medium' },
     'claude-fable-5-high': { family: 'claude-fable-5', effort: 'high' },
@@ -374,7 +409,9 @@ const CLAUDE_MODE_TO_SELECTION: Partial<Record<ModelMode, { family: ClaudeModelF
 
 export const GEMINI_MODEL_OPTIONS = [
     { value: MODEL_MODE_DEFAULT, label: 'Use CLI configured model', shortLabel: 'CLI', description: 'Use profile/CLI defaults' },
-    { value: 'gemini-3.6-flash', label: '3.6 Flash', shortLabel: '3.6 Flash', description: 'Latest balance of speed and intelligence' },
+    { value: 'gemini-3.8-flash', label: '3.8 Flash', shortLabel: '3.8 Flash', description: 'Latest balance of speed and intelligence' },
+    { value: 'gemini-3.7-flash', label: '3.7 Flash', shortLabel: '3.7 Flash', description: 'Previous generation Flash' },
+    { value: 'gemini-3.6-flash', label: '3.6 Flash', shortLabel: '3.6 Flash', description: 'Previous generation Flash' },
     { value: 'gemini-3.1-pro-preview', label: '3.1 Pro (Preview)', shortLabel: '3.1 Pro', description: 'Previous generation Pro' },
     { value: 'gemini-3.5-flash', label: '3.5 Flash', shortLabel: '3.5 Flash', description: 'Fast frontier agentic and coding model' },
     { value: 'gemini-3.5-flash-lite', label: '3.5 Flash-Lite', shortLabel: '3.5 Flash-Lite', description: 'Fastest, most cost-effective 3.5 model' },
@@ -385,6 +422,7 @@ export const GEMINI_MODEL_OPTIONS = [
 
 export const CODEX_MODEL_FAMILY_OPTIONS = [
     { value: MODEL_MODE_DEFAULT, label: 'Use CLI configured model', shortLabel: 'CLI', description: 'Use profile/CLI defaults' },
+    { value: 'gpt-6-astra', label: 'GPT-6-Astra', shortLabel: '6-Astra', description: 'Most capable model for complex end-to-end work' },
     { value: 'gpt-5.6-sol', label: 'GPT-5.6-Sol', shortLabel: '5.6-Sol', description: 'Latest frontier agentic coding model' },
     { value: 'gpt-5.6-terra', label: 'GPT-5.6-Terra', shortLabel: '5.6-Terra', description: 'Balanced agentic coding model for everyday work' },
     { value: 'gpt-5.6-luna', label: 'GPT-5.6-Luna', shortLabel: '5.6-Luna', description: 'Fast and affordable agentic coding model' },
@@ -396,6 +434,11 @@ export const CODEX_MODEL_FAMILY_OPTIONS = [
 
 export const CODEX_MODEL_OPTIONS = [
     { value: MODEL_MODE_DEFAULT, label: 'Default', description: 'Use CLI default model' },
+    { value: 'gpt-6-astra-low', label: 'GPT-6-Astra (Low)', description: 'Fast responses' },
+    { value: 'gpt-6-astra-medium', label: 'GPT-6-Astra (Medium)', description: 'Balanced responses' },
+    { value: 'gpt-6-astra-high', label: 'GPT-6-Astra (High)', description: 'Strong quality' },
+    { value: 'gpt-6-astra-xhigh', label: 'GPT-6-Astra (XHigh)', description: 'Extra reasoning depth' },
+    { value: 'gpt-6-astra-max', label: 'GPT-6-Astra (Max)', description: 'Maximum reasoning depth' },
     { value: 'gpt-5.6-sol-low', label: 'GPT-5.6-Sol (Low)', description: 'Fast responses' },
     { value: 'gpt-5.6-sol-medium', label: 'GPT-5.6-Sol (Medium)', description: 'Balanced responses' },
     { value: 'gpt-5.6-sol-high', label: 'GPT-5.6-Sol (High)', description: 'Strong quality' },
@@ -432,6 +475,11 @@ export const CODEX_MODEL_OPTIONS = [
 ] as const satisfies readonly { value: ModelMode; label: string; description: string }[];
 
 const CODEX_MODE_TO_SELECTION: Partial<Record<ModelMode, { family: CodexModelFamily; effort: CodexReasoningEffort }>> = {
+    'gpt-6-astra-low': { family: 'gpt-6-astra', effort: 'low' },
+    'gpt-6-astra-medium': { family: 'gpt-6-astra', effort: 'medium' },
+    'gpt-6-astra-high': { family: 'gpt-6-astra', effort: 'high' },
+    'gpt-6-astra-xhigh': { family: 'gpt-6-astra', effort: 'xhigh' },
+    'gpt-6-astra-max': { family: 'gpt-6-astra', effort: 'max' },
     'gpt-5.6-sol-low': { family: 'gpt-5.6-sol', effort: 'low' },
     'gpt-5.6-sol-medium': { family: 'gpt-5.6-sol', effort: 'medium' },
     'gpt-5.6-sol-high': { family: 'gpt-5.6-sol', effort: 'high' },
@@ -475,7 +523,8 @@ export function parseClaudeModelMode(mode: ModelMode): { family: ClaudeModelFami
 }
 
 export function getClaudeReasoningOptions(family: ClaudeModelFamily): readonly ClaudeReasoningEffort[] {
-    if (family === 'claude-fable-5' || family === 'claude-fable-5[1m]'
+    if (family === 'claude-fable-5-1'
+        || family === 'claude-fable-5' || family === 'claude-fable-5[1m]'
         || family === 'claude-opus-5' || family === 'claude-sonnet-5'
         || family === 'claude-opus-4-8' || family === 'claude-opus-4-8[1m]'
         || family === 'claude-opus-4-7' || family === 'claude-opus-4-7[1m]') return ['max', 'xhigh', 'high', 'medium', 'low'];
@@ -507,7 +556,7 @@ export function claudeHas1MOptIn(family: ClaudeModelFamily): boolean {
 /** Families whose context window is 1M by default with no 200K tier — the [1m] suffix is a no-op. */
 export function claudeAlways1M(family: ClaudeModelFamily): boolean {
     const base = claudeBaseFamily(family);
-    return base === 'claude-fable-5' || base === 'claude-opus-5'
+    return base === 'claude-fable-5-1' || base === 'claude-fable-5' || base === 'claude-opus-5'
         || base === 'claude-sonnet-5' || base === 'claude-opus-4-8';
 }
 
@@ -534,6 +583,7 @@ export function parseCodexModelMode(mode: ModelMode): { family: CodexModelFamily
 
 export function getCodexReasoningOptions(family: CodexModelFamily): readonly CodexReasoningEffort[] {
     if (family === MODEL_MODE_DEFAULT) return ['high', 'medium', 'low'];
+    if (family === 'gpt-6-astra') return ['max', 'xhigh', 'high', 'medium', 'low'];
     // GPT-5.6 Sol/Terra add the top-tier `max` and `ultra` (auto multi-agent delegation) efforts.
     if (family === 'gpt-5.6-sol' || family === 'gpt-5.6-terra') return ['ultra', 'max', 'xhigh', 'high', 'medium', 'low'];
     // GPT-5.6 Luna adds `max` but not `ultra`.
@@ -555,6 +605,7 @@ export type ModelSelection = {
 };
 
 const MODEL_NAME_LABELS: Record<string, string> = {
+    'gpt-6-astra': 'GPT-6-Astra',
     'gpt-5.6-sol': 'GPT-5.6-Sol',
     'gpt-5.6-terra': 'GPT-5.6-Terra',
     'gpt-5.6-luna': 'GPT-5.6-Luna',
@@ -562,6 +613,7 @@ const MODEL_NAME_LABELS: Record<string, string> = {
     'gpt-5.4': 'GPT-5.4',
     'gpt-5.4-mini': 'GPT-5.4-Mini',
     'gpt-5.2': 'GPT-5.2',
+    'claude-fable-5-1': 'Claude Fable 5.1',
     'claude-fable-5': 'Claude Fable 5',
     'claude-opus-5': 'Claude Opus 5',
     'claude-sonnet-5': 'Claude Sonnet 5',
@@ -570,6 +622,8 @@ const MODEL_NAME_LABELS: Record<string, string> = {
     'claude-opus-4-6': 'Claude Opus 4.6',
     'claude-sonnet-4-6': 'Claude Sonnet 4.6',
     'claude-haiku-4-5': 'Claude Haiku 4.5',
+    'gemini-3.8-flash': 'Gemini 3.8 Flash',
+    'gemini-3.7-flash': 'Gemini 3.7 Flash',
     'gemini-3.1-pro-preview': 'Gemini 3.1 Pro (Preview)',
     'gemini-3.6-flash': 'Gemini 3.6 Flash',
     'gemini-3.5-flash': 'Gemini 3.5 Flash',
@@ -678,6 +732,7 @@ const AGENT_DEFAULT_CONTEXT_WINDOWS: Record<AgentFlavor, number> = {
 
 const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
     // Claude models (newer families are native 1M; older supported families opt in via [1m])
+    'claude-fable-5-1': 1_000_000,
     'claude-fable-5': 1_000_000, // Fable 5 defaults to 1M; base name resolves to 1M
     'claude-fable-5[1m]': 1_000_000,
     'claude-opus-5': 1_000_000,
@@ -692,6 +747,7 @@ const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
     'claude-sonnet-4-6[1m]': 1_000_000,
     'claude-haiku-4-5': 200_000,
     // Codex models (fallback; actual value comes from CLI via context_window_size)
+    'gpt-6-astra': 1_050_000,
     'gpt-5.6-sol': 272_000,
     'gpt-5.6-terra': 272_000,
     'gpt-5.6-luna': 272_000,
@@ -700,6 +756,8 @@ const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
     'gpt-5.4-mini': 272_000,
     'gpt-5.2': 272_000,
     // Gemini models
+    'gemini-3.8-flash': 1_048_576,
+    'gemini-3.7-flash': 1_048_576,
     'gemini-3.6-flash': 1_000_000,
     'gemini-3.1-pro-preview': 1_000_000,
     'gemini-3.5-flash': 1_000_000,
