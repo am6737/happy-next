@@ -37,7 +37,7 @@ This document summarizes what changed in Happy Next compared to the original Hap
 Happy Next now ships as a native-feeling desktop client instead of requiring a browser tab.
 
 - **Cross-platform distribution**: macOS 12+ Universal, Windows x64, and Windows ARM64 installers are published directly through GitHub Releases
-- **Native window lifecycle**: authentication-aware sizing, state restoration, refined fullscreen/title-bar interactions, multi-monitor bounds protection, theme-correct startup with a native startup logo, macOS title-bar integration, an integrated Windows title bar whose logo returns to Sessions, and reliable custom drag regions
+- **Native window lifecycle**: authentication-aware sizing, state restoration, refined fullscreen/title-bar interactions, multi-monitor bounds protection, theme-correct startup with a native startup logo, macOS title-bar integration with stable traffic-light placement and a refined sidebar header, an integrated Windows title bar whose logo returns to Sessions, and reliable custom drag regions
 - **Resident experience**: close to tray, explicit Quit, single-instance activation, optional launch at sign-in, and a global show/hide shortcut
 - **Notifications and unread state**: clean plain-text native notifications use consistent app icons, reliably restore the app and open the associated Session, return hidden windows to the foreground, and expose unified unread state on the Dock or Windows taskbar
 - **Desktop controls**: native application menus plus search, navigation, new-session, inbox, DooTask, and settings shortcuts
@@ -88,15 +88,17 @@ The original Happy only supported Claude Code. Happy Next treats Claude Code, Co
 - **`/duplicate` slash command**: opens a message picker to fork a session from any point in the conversation — including directly from an AI reply — creating a new session with history up to the selected message and reliably resolving the corresponding user-message target
 - **Per-agent model selection** cached independently, with context window display
 - **Claude Opus 4.8** added to the model catalog
-- **Claude Fable 5** added to the model catalog, with 1M-context variant and low / medium / high / xhigh / max reasoning effort presets
+- **Claude Fable 5.1 and Fable 5** added to the model catalog, with 1M context and low / medium / high / xhigh / max reasoning effort presets
 - **Claude Opus 5 and Claude Sonnet 5** added with 1M context, current reasoning-effort presets, fast-mode capability detection, and updated cost tracking
-- **Refreshed Gemini catalog** adds Gemini 3.6 Flash and Gemini 3.5 Flash-Lite alongside Gemini 3.1 Pro and Gemini 3.5 Flash
+- **Refreshed Gemini catalog** adds Gemini 3.8 Flash and Gemini 3.7 Flash alongside the existing Gemini models
 - **Streamlined model picker**: Claude 1M-context variants collapse into a single toggle (7 models instead of 12); reasoning-effort presets show side by side on wide screens and Claude defaults to High effort
-- **Codex v0.145.0**: bundled Codex CLI updated with a refreshed model catalog
+- **GPT-6 Astra and GPT-5.6 catalog support**: current model families include their reasoning-effort and context settings
+- **Codex v0.153.2**: bundled Codex CLI updated with current App-Server interaction support
 - **Cost tracking** with accurate token usage for Claude models (cache tokens, reasoning tokens)
 - **Codex reasoning effort** configuration (low / medium / high / xhigh)
 - **ACP (Agent Client Protocol) backend**: JSON-RPC agent protocol (originally introduced for Codex to replace the MCP client approach, now used for Gemini)
 - **Codex App-Server backend**: Codex's primary backend, using the `codex app-server` JSON-RPC protocol over stdin/stdout for improved session management and reliability
+- **Codex interactive requests**: app-native questions support choices, custom Other values, free-form text, and masked sensitive answers; current command and permission approval requests are also handled
 - **Gemini session persistence** with JSONL storage
 - **Per-provider slash commands**: `/clear` for all agents, `/compact` Claude-only
 - **Model/mode switching** per session with live metadata sync
@@ -250,6 +252,7 @@ Major reliability improvements to the real-time sync layer.
 - **HTTP outbox** for reliable message delivery when WebSocket is unavailable
 - **Server-confirmed message sending** with retry on failure
 - **Fixes**: cursor skip on first push, outbox concurrent flush race, message duplication, seq gap message loss, syncing cursor reset, outbox drain on close, out-of-order completed-permission synthesis
+- **Account-safe push tokens**: a device token belongs to only the active account and is cleaned up reliably during logout
 - **Message loss prevention** when CLI is offline
 - **Message receipt tracking**: CLI confirms message receipt with legacy compatibility
 - **happy-wire** shared protocol types package to deduplicate schemas across CLI/app/server
@@ -259,7 +262,7 @@ Major reliability improvements to the real-time sync layer.
 
 Extensive improvements to the chat and session management experience.
 
-- **Image attachment** in the new-session wizard and during chat, including desktop drag-and-drop with a clear drop indicator
+- **Image attachment** in the new-session wizard and during chat, including desktop drag-and-drop with a clear drop indicator; multi-image previews remain on the selected image
 - **Image paste from clipboard** on web
 - **Message pagination** for loading older messages
 - **Unread blue dot indicator** when tasks complete (synced across devices via metadata)
@@ -284,7 +287,7 @@ Extensive improvements to the chat and session management experience.
 - **Inset dividers** for cleaner list layouts
 - **Agent tool display** with robot icon in known tools list
 - **Tool input/output** formatted as key-value pairs instead of raw JSON
-- **AskUserQuestion** "Other" custom input option with markdown preview
+- **AskUserQuestion** supports choices, custom "Other" values, free-form text, masked sensitive answers, and markdown preview
 - **In-memory SWR cache** and search for agent session history
 - **Real-time friend request updates** via socket events
 - **Swipe-to-delete** for feed notifications
@@ -343,7 +346,7 @@ The CLI (`happy-next-cli`) received substantial upgrades.
 - **Latest CLI version** fetched from npm instead of hardcoded minimum
 - **Daemon auto-start on boot**: `happy daemon enable` / `happy daemon disable`
 - **Daemon restart command**: restart the daemon without manual kill
-- **Codex v0.145.0 with fast mode**: upgraded Codex with fast mode support
+- **Codex v0.153.2 with fast mode**: upgraded Codex with current App-Server interaction support
 - **Attribution setting**: new setting to control commit attribution, default off
 - **Unified system prompt injection**: shared prompt injection for Codex and Gemini
 - **Orchestrator guidance**: first-turn prompts include orchestrator usage guidance

@@ -1,5 +1,17 @@
 # Changelog
 
+## Version 22 - 2026-09-04
+
+Codex sessions now support interactive questions and richer approval requests, while the model picker is ready for the newest Codex, Claude, and Gemini model families. This release also keeps push tokens tied to the active account, improves multi-image viewing, polishes the macOS sidebar and window controls, and updates Happy CLI to v0.6.7.
+
+- Codex: answer interactive questions with choices, custom Other values, free-form text, and masked sensitive responses
+- Codex permissions: handle current command and permission approval requests from the App-Server protocol
+- Models: add catalog support for GPT-6 Astra, Claude Fable 5.1, Gemini 3.8 Flash, and Gemini 3.7 Flash with their current reasoning and context settings
+- Push notifications: keep each device token bound to only the active account and clean it up reliably during logout
+- Desktop images: keep the selected image in view while browsing multi-image previews
+- macOS: refine the sidebar header and stabilize traffic-light button placement across startup and window changes
+- CLI: Happy CLI v0.6.7 bundles Codex v0.153.2 and the latest interaction support
+
 ## Version 21 - 2026-08-11
 
 Sessions can now be labeled with seven color markers for quicker visual organization. Desktop users can drag images directly into new or active sessions, slash-command completion stays focused on relevant subcommands after a command is selected, and iOS download links now point to the App Store. This release also improves iOS image opening and duplicate-sheet behavior when the keyboard is visible, and centers the empty state in DooTask chats.

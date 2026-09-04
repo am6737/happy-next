@@ -87,7 +87,7 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 
 ### Desktop Apps (macOS + Windows)
 - Direct-download clients for macOS 12+ Universal, Windows x64, and Windows ARM64
-- Native window sizing and restoration, frameless macOS title-bar integration, an integrated Windows title bar whose logo returns to Sessions, refined fullscreen/title-bar interactions, multi-monitor bounds protection, and theme-correct startup with a native startup logo
+- Native window sizing and restoration, frameless macOS title-bar integration with stable traffic-light placement and a refined sidebar header, an integrated Windows title bar whose logo returns to Sessions, refined fullscreen/title-bar interactions, multi-monitor bounds protection, and theme-correct startup with a native startup logo
 - Tray residency, close-to-tray behavior, single-instance activation, clean plain-text native notifications with consistent app icons that reliably restore the app and open the corresponding session, and unified Dock/taskbar unread indicators
 - Native application menus, search and navigation shortcuts, optional launch at sign-in, and a global show/hide shortcut
 - Signed automatic updates are checked periodically and when the app regains focus, download quietly in the background, and wait for the user to install and restart
@@ -113,14 +113,15 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - All three agents are first-class citizens with session resume, duplicate/fork, and history
 - Multi-agent history page with per-provider tabs, device and agent filter dropdowns
 - Per-agent model selection, cost tracking, and context window display
-- ACP and App-Server (JSON-RPC) backends for Codex, Codex v0.145.0 with fast mode
+- ACP and App-Server (JSON-RPC) backends for Codex, with Codex v0.153.2 and fast mode
+- Codex interactive questions and approval requests render in the app, including choices, custom Other values, free-form text, and masked sensitive answers
 - AI backend profiles with presets for DeepSeek, Z.AI, OpenAI, Azure, and Google AI
 - Claude Opus 4.8 support with empty thinking block filtering for clean 4.x rendering
-- Claude Fable 5 (with 1M-context variant) in the Claude model catalog, with low / medium / high / xhigh / max reasoning effort presets
+- Claude Fable 5.1 and Fable 5 in the Claude model catalog, with 1M context and low / medium / high / xhigh / max reasoning effort presets
 - Claude Opus 5 and Claude Sonnet 5 with 1M context, current reasoning-effort presets, fast-mode capability detection, and updated cost tracking
 - Streamlined model picker: Claude 1M-context variants collapse into a single toggle (7 models instead of 12), reasoning-effort presets show side by side on wide screens, and Claude defaults to High effort
-- GPT-5.5 support for Codex with low/medium/high/xhigh reasoning levels
-- Gemini 3.6 Flash and Gemini 3.5 Flash-Lite join the refreshed Gemini catalog alongside Gemini 3.1 Pro and Gemini 3.5 Flash
+- GPT-6 Astra catalog support plus GPT-5.6 Sol, Terra, and Luna with their current reasoning-effort and context settings
+- Gemini 3.8 Flash and Gemini 3.7 Flash join the refreshed Gemini catalog alongside the existing Gemini models
 
 ### Voice Assistant (Happy Voice)
 - Voice gateway auth now uses short-lived tokens for improved security
@@ -200,7 +201,7 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Session draft rewritten as a single source of truth — fewer cases of drafts vanishing or reappearing
 
 ### Chat & Session UX
-- Image attachment, clipboard paste (web), and desktop drag-and-drop in new or active sessions; image support in drafts and high-quality pass-through up to 1568px preserve text sharpness in code/UI screenshots
+- Image attachment, clipboard paste (web), and desktop drag-and-drop in new or active sessions; image support in drafts and high-quality pass-through up to 1568px preserve text sharpness in code/UI screenshots, while multi-image previews stay on the selected image
 - Session titles seeded from the first user message for new sessions (until an AI summary takes over)
 - Slash command results surface even when the agent emits no assistant message (e.g. unknown commands no longer blank out)
 - Slash-command autocomplete shows each command's source scope (repo / user / plugin / system) and kind; after selecting a root command, suggestions stay limited to its matching subcommands instead of mixing in skills for free-form arguments; session capabilities are stored separately from metadata and sync live so command and skill lists stay fresh
@@ -237,6 +238,7 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Consistent back-button and header-action alignment across session and machine screens
 - Long user messages (>20k characters) collapse to a preview with a Show More toggle; text selection inside messages on web is fixed
 - Installed Codex skills appear in slash-command autocomplete; short-screen empty states and initial web-message layout are more reliable
+- Codex interactive questions support choices, custom Other values, free-form text, and masked sensitive answers
 
 ### CLI
 - `happy update` self-upgrade, `happy --version` with all agent versions
@@ -248,9 +250,11 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Switching model or toggling plan mode hot-swaps on the already-warm Claude subprocess instead of cold-restarting, so changes apply instantly mid-session
 - Switching a session from remote back to local cleans up terminal stdin so leftover raw-mode input no longer leaks into the terminal
 - Multiline skill metadata parses correctly, and enabled Codex plugin skills are discovered consistently
+- Happy CLI v0.6.7 bundles Codex v0.153.2 with current App-Server interaction support
 
 ### Bug Fixes & Stability
 - 255+ bug fixes: message sending reliability, session lifecycle, Markdown rendering, navigation, voice, DooTask, sharing
+- Push tokens remain bound to only the active account and are cleaned up reliably during logout
 - Security: shell command injection fix, plan mode permission handling
 - Performance: payload trimming for mobile, lazy-load diffs, rendering optimization, incremental session catch-up on open
 

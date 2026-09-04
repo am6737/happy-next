@@ -37,7 +37,7 @@
 Happy Next 现在提供原生体验的桌面客户端，不再要求用户一直打开浏览器标签页。
 
 - **跨平台分发**：通过 GitHub Releases 直接提供 macOS 12+ Universal、Windows x64 和 Windows ARM64 安装包
-- **原生窗口生命周期**：登录状态自适应尺寸、窗口状态恢复、优化的全屏/标题栏交互、多显示器边界保护、带原生启动 Logo 的主题无闪烁启动、macOS 标题栏集成、Logo 可返回会话首页的集成式 Windows 标题栏和可靠的自定义拖动区域
+- **原生窗口生命周期**：登录状态自适应尺寸、窗口状态恢复、优化的全屏/标题栏交互、多显示器边界保护、带原生启动 Logo 的主题无闪烁启动、交通灯位置稳定且侧栏 header 更协调的 macOS 标题栏集成、Logo 可返回会话首页的集成式 Windows 标题栏和可靠的自定义拖动区域
 - **常驻体验**：关闭到托盘、明确退出、单实例激活、可选开机启动和全局显示/隐藏快捷键
 - **通知和未读状态**：干净的纯文本系统通知使用一致的应用图标，可可靠恢复应用并打开对应会话、让隐藏窗口回到前台，并在程序坞或 Windows 任务栏显示统一的未读状态
 - **桌面控制**：原生应用菜单，以及搜索、导航、新建会话、收件箱、DooTask 和设置快捷键
@@ -88,15 +88,17 @@ CLI 繁忙时发送的消息现在会自动排队并投递。
 - **`/duplicate` 斜杠命令**：打开消息选择器，从对话中任意位置分叉会话（包括直接从 AI 回复分叉），创建一个包含截至选定消息历史的新会话，并可靠解析对应的用户消息目标
 - **按 Agent 模型选择**，独立缓存，显示上下文窗口
 - **模型目录新增 Claude Opus 4.8**
-- **模型目录新增 Claude Fable 5**，含 1M 上下文变体，提供 low / medium / high / xhigh / max 五档推理强度
+- **模型目录新增 Claude Fable 5.1 和 Fable 5**，提供 1M 上下文及 low / medium / high / xhigh / max 五档推理强度
 - **模型目录新增 Claude Opus 5 和 Claude Sonnet 5**，支持 1M 上下文、当前推理强度预设、快速模式能力识别和更新后的费用追踪
-- **刷新 Gemini 模型目录**，加入 Gemini 3.6 Flash 和 Gemini 3.5 Flash-Lite，并保留 Gemini 3.1 Pro 与 Gemini 3.5 Flash
+- **刷新 Gemini 模型目录**，加入 Gemini 3.8 Flash 和 Gemini 3.7 Flash，并保留现有 Gemini 模型
 - **精简模型选择器**：Claude 1M 上下文变体收进单个开关（模型从 12 个减到 7 个）；宽屏下推理强度并排显示，Claude 默认 High 强度
-- **Codex v0.145.0**：内置 Codex CLI 升级，刷新模型目录
+- **GPT-6 Astra 与 GPT-5.6 模型目录支持**：当前模型家族包含对应的推理强度和上下文配置
+- **Codex v0.153.2**：内置 Codex CLI 升级，并支持当前 App-Server 交互
 - **费用追踪**，Claude 模型的精确 token 用量（缓存 token、推理 token）
 - **Codex 推理强度**配置（low / medium / high / xhigh）
 - **ACP（Agent Client Protocol）后端**：JSON-RPC Agent 协议（最初为 Codex 引入以替代 MCP 客户端方案，现用于 Gemini）
 - **Codex App-Server 后端**：Codex 的主要后端,使用 `codex app-server` JSON-RPC 协议,通过 stdin/stdout 通信,改进会话管理和可靠性
+- **Codex 交互式请求**：应用内问题支持选项、自定义“其他”、自由文本和敏感回答掩码，并处理当前命令及权限审批请求
 - **Gemini 会话持久化**，JSONL 存储
 - **按供应商斜杠命令**：`/clear` 全部 Agent 可用，`/compact` 仅 Claude
 - **模型/模式切换**，按会话，实时元数据同步
@@ -250,6 +252,7 @@ Happy Next 添加了一等自托管路径。
 - **HTTP 发件箱**，WebSocket 不可用时的可靠消息投递
 - **服务端确认消息发送**，失败时重试
 - **修复**：首次推送游标跳过、发件箱并发刷新竞争、消息重复、seq 间隙消息丢失、同步游标重置、关闭时发件箱排空、乱序 completed-permission 合成
+- **账号安全的推送令牌**：设备令牌只属于当前账号，并在退出登录时可靠清理
 - **消息丢失防护**，CLI 离线时
 - **消息接收追踪**：CLI 确认消息接收，兼容旧版本
 - **happy-wire** 共享协议类型包，去重 CLI/app/server 中的 schema
@@ -259,7 +262,7 @@ Happy Next 添加了一等自托管路径。
 
 聊天和会话管理体验的大量改进。
 
-- **图片附件**，新建会话向导和聊天中均支持，桌面端可直接拖放并显示清晰的投放区域
+- **图片附件**，新建会话向导和聊天中均支持，桌面端可直接拖放并显示清晰的投放区域；多图预览时保持当前选中图片
 - **剪贴板粘贴图片**，Web 端
 - **消息分页**，加载旧消息
 - **未读蓝点指示器**，任务完成时（通过元数据跨设备同步）
@@ -284,7 +287,7 @@ Happy Next 添加了一等自托管路径。
 - **内嵌分隔线**，更清晰的列表布局
 - **Agent tool 展示**，已知工具列表中显示机器人图标
 - **工具输入/输出**，格式化为 key-value 对（替代原始 JSON）
-- **AskUserQuestion** "其他"自定义输入选项，支持 markdown 预览
+- **AskUserQuestion** 支持选项、自定义“其他”、自由文本、敏感回答掩码和 markdown 预览
 - **内存 SWR 缓存**和 Agent 会话历史搜索
 - **实时好友请求更新**，通过 socket 事件
 - **滑动删除**，动态通知
@@ -343,7 +346,7 @@ CLI（`happy-next-cli`）收到了大量升级。
 - **最新 CLI 版本**，从 npm 获取而非硬编码最低版本
 - **守护进程开机自启动**：`happy daemon enable` / `happy daemon disable`
 - **守护进程重启命令**：无需手动 kill 即可重启守护进程
-- **Codex v0.145.0 + fast mode**：升级 Codex 并支持快速模式
+- **Codex v0.153.2 + fast mode**：升级 Codex，并支持当前 App-Server 交互
 - **归因设置**：新设置控制提交归因，默认关闭
 - **统一系统提示注入**：Codex 和 Gemini 共享提示注入
 - **编排器引导**：首轮提示包含编排器使用指南

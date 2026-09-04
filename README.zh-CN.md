@@ -89,7 +89,7 @@ Happy Next 是原版 Happy 的重大演进，以下是亮点：
 
 ### 桌面客户端（macOS + Windows）
 - 提供 macOS 12+ Universal、Windows x64 和 Windows ARM64 直接下载版本
-- 登录状态自适应窗口尺寸与原生状态恢复、macOS 无边框标题栏、Logo 可返回会话首页的集成式 Windows 标题栏、优化的全屏/标题栏交互、多显示器边界保护，以及带原生启动 Logo 的主题无闪烁启动
+- 登录状态自适应窗口尺寸与原生状态恢复、交通灯位置稳定且侧栏 header 更协调的 macOS 无边框标题栏、Logo 可返回会话首页的集成式 Windows 标题栏、优化的全屏/标题栏交互、多显示器边界保护，以及带原生启动 Logo 的主题无闪烁启动
 - 托盘常驻、关闭到托盘、单实例激活、带一致应用图标且可可靠恢复应用并打开对应会话的纯文本系统通知，以及统一的程序坞/任务栏未读提示
 - 原生应用菜单、搜索与导航快捷键、可选开机启动和全局显示/隐藏快捷键
 - 签名更新包会定期以及在应用重新获得焦点时检查，在后台静默下载，并由用户点击更新按钮后安装并重启
@@ -115,14 +115,15 @@ Happy Next 是原版 Happy 的重大演进，以下是亮点：
 - 三个 Agent 均为一等公民，支持会话恢复、复制/分叉和历史记录
 - 多 Agent 历史页面，按供应商分标签页，支持设备和 Agent 类型筛选
 - 按 Agent 选择模型、费用追踪和上下文窗口显示
-- Codex 支持 ACP 和 App-Server（JSON-RPC）两种后端，Codex v0.145.0 支持 fast mode
+- Codex 支持 ACP 和 App-Server（JSON-RPC）两种后端，内置 Codex v0.153.2 并支持 fast mode
+- Codex 交互式问题和审批请求可直接在应用中处理，支持选项、自定义“其他”、自由文本和敏感回答掩码
 - AI 后端配置文件，内置 DeepSeek、Z.AI、OpenAI、Azure 和 Google AI 预设
 - 新增 Claude Opus 4.8 支持，过滤 4.x 模型的空 thinking 块以保证渲染干净
-- 模型目录新增 Claude Fable 5（含 1M 上下文变体），提供 low / medium / high / xhigh / max 五档推理强度
+- 模型目录支持 Claude Fable 5.1 和 Fable 5，提供 1M 上下文及 low / medium / high / xhigh / max 五档推理强度
 - 新增 Claude Opus 5 和 Claude Sonnet 5，支持 1M 上下文、当前推理强度预设、快速模式能力识别和更新后的费用追踪
 - 精简模型选择器：Claude 1M 上下文变体收进单个开关（模型从 12 个减到 7 个），宽屏下推理强度并排显示，Claude 默认 High 强度
-- 新增 GPT-5.5 Codex 支持，提供 low/medium/high/xhigh 四档推理强度
-- 刷新 Gemini 模型目录，加入 Gemini 3.6 Flash 和 Gemini 3.5 Flash-Lite，并保留 Gemini 3.1 Pro 与 Gemini 3.5 Flash
+- 模型目录支持 GPT-6 Astra，并更新 GPT-5.6 Sol、Terra、Luna 的推理强度和上下文配置
+- 刷新 Gemini 模型目录，加入 Gemini 3.8 Flash 和 Gemini 3.7 Flash，并保留现有 Gemini 模型
 
 ### 语音助手（Happy Voice）
 - 语音网关认证改用短效 token，安全性提升
@@ -202,7 +203,7 @@ Happy Next 是原版 Happy 的重大演进，以下是亮点：
 - 会话草稿重写为单一数据源 — 草稿消失/重现的情况减少
 
 ### 聊天和会话体验
-- 新建或现有会话支持图片附件、剪贴板粘贴（Web）和桌面拖放，草稿支持图片；上传最大尺寸提升到 1568px 并跳过冗余压缩，保留代码截图和 UI 截图的文字清晰度
+- 新建或现有会话支持图片附件、剪贴板粘贴（Web）和桌面拖放，草稿支持图片；上传最大尺寸提升到 1568px 并跳过冗余压缩，保留代码截图和 UI 截图的文字清晰度，多图预览时保持当前选中图片
 - 新会话标题以第一条用户消息播种（AI 摘要生成后再接管），不再使用目录名兜底
 - 即使 Agent 没有 assistant 消息（如未知斜杠命令），CLI 的 result 文本也会呈现到手机端，不再出现空白回复
 - 斜杠命令自动补全显示每个命令的来源 scope（仓库 / 用户 / 插件 / 系统）与类型；选择根命令后，建议只保留匹配的子命令，不再为自由文本参数混入 skill；会话能力独立于 metadata 存储并实时同步，命令与技能列表始终保持最新
@@ -239,6 +240,7 @@ Happy Next 是原版 Happy 的重大演进，以下是亮点：
 - 会话与机器页面的返回按钮和 header 操作保持一致对齐
 - 超长用户消息（>20k 字符）折叠为带"展开更多"按钮的预览；Web 端消息内文本选择修复
 - 已安装的 Codex skills 会出现在斜杠命令自动补全中；短屏空状态和 Web 首条消息布局更加可靠
+- Codex 交互式问题支持选项、自定义“其他”、自由文本和敏感回答掩码
 
 ### CLI
 - `happy update` 自更新、`happy --version` 显示所有 Agent 版本
@@ -250,9 +252,11 @@ Happy Next 是原版 Happy 的重大演进，以下是亮点：
 - 切换模型或开关 plan 模式时，在已 warm 的 Claude 子进程上原地热切换，不再冷重启，改动会话中途立即生效
 - 会话从 remote 切回 local 时清理终端 stdin，残留的 raw-mode 输入不再泄漏到终端
 - 正确解析多行 skill metadata，并稳定发现已启用的 Codex plugin skills
+- Happy CLI v0.6.7 内置 Codex v0.153.2，并支持当前 App-Server 交互
 
 ### Bug 修复和稳定性
 - 255+ Bug 修复：消息发送可靠性、会话生命周期、Markdown 渲染、导航、语音、DooTask、共享
+- 推送令牌只绑定当前账号，并在退出登录时可靠清理
 - 安全：Shell 命令注入修复、计划模式权限处理
 - 性能：移动端载荷精简、延迟加载 diff、渲染优化、打开会话增量追赶
 
