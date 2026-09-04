@@ -55,6 +55,8 @@ const LIGHT_BACKGROUND_RGB: (u8, u8, u8) = (245, 245, 245);
 const DARK_BACKGROUND_RGB: (u8, u8, u8) = (30, 30, 30);
 const HTML_PREVIEW_MAX_AGE: Duration = Duration::from_secs(24 * 60 * 60);
 #[cfg(target_os = "macos")]
+const TRAFFIC_LIGHT_CONSTRAINT_PREFIX: &str = "happy.traffic-lights.";
+#[cfg(target_os = "macos")]
 const AUTHENTICATED_TRAFFIC_LIGHT_Y: f64 = 26.0;
 #[cfg(target_os = "macos")]
 const UNAUTHENTICATED_TRAFFIC_LIGHT_Y: f64 = 30.0;
@@ -1195,6 +1197,34 @@ fn set_desktop_background(window: &tauri::WebviewWindow, preference: DesktopThem
 }
 
 #[cfg(target_os = "macos")]
+unsafe fn add_macos_traffic_light_constraint(
+    identifier: &str,
+    constraint: objc2::rc::Retained<objc2_app_kit::NSLayoutConstraint>,
+) {
+    let identifier = objc2_foundation::NSString::from_str(identifier);
+    constraint.setIdentifier(Some(&identifier));
+    constraint.setActive(true);
+}
+
+#[cfg(target_os = "macos")]
+unsafe fn remove_macos_traffic_light_constraints(owner: &objc2_app_kit::NSView) {
+    let constraints = owner.constraints();
+    let matching = constraints
+        .iter()
+        .filter(|constraint| {
+            constraint.identifier().is_some_and(|identifier| {
+                identifier
+                    .to_string()
+                    .starts_with(TRAFFIC_LIGHT_CONSTRAINT_PREFIX)
+            })
+        })
+        .collect::<Vec<_>>();
+    for constraint in matching {
+        constraint.setActive(false);
+    }
+}
+
+#[cfg(target_os = "macos")]
 unsafe fn apply_macos_traffic_light_position(
     ns_window: &objc2_app_kit::NSWindow,
     authenticated: bool,
@@ -1219,9 +1249,30 @@ unsafe fn apply_macos_traffic_light_position(
     };
     let zoom = ns_window.standardWindowButton(NSWindowButton::ZoomButton);
 
-    let Some(title_bar_view) = close.superview().and_then(|view| view.superview()) else {
+    let Some(button_parent) = close.superview() else {
         return;
     };
+    let Some(title_bar_view) = button_parent.superview() else {
+        return;
+    };
+    let Some(title_bar_parent) = title_bar_view.superview() else {
+        return;
+    };
+    if authenticated && !title_bar_view.translatesAutoresizingMaskIntoConstraints() {
+        return;
+    }
+    if !authenticated && !title_bar_view.translatesAutoresizingMaskIntoConstraints() {
+        remove_macos_traffic_light_constraints(&title_bar_parent);
+        remove_macos_traffic_light_constraints(&title_bar_view);
+        remove_macos_traffic_light_constraints(&button_parent);
+        title_bar_view.setTranslatesAutoresizingMaskIntoConstraints(true);
+        close.setTranslatesAutoresizingMaskIntoConstraints(true);
+        miniaturize.setTranslatesAutoresizingMaskIntoConstraints(true);
+        if let Some(zoom) = zoom.as_ref() {
+            zoom.setTranslatesAutoresizingMaskIntoConstraints(true);
+        }
+    }
+
     title_bar_view.layoutSubtreeIfNeeded();
     let close_rect = NSView::frame(&close);
     let title_bar_height = close_rect.size.height + y;
@@ -1234,18 +1285,62 @@ unsafe fn apply_macos_traffic_light_position(
     title_bar_rect.size.height = title_bar_height;
     title_bar_rect.origin.y = ns_window.frame().size.height - title_bar_height;
     title_bar_view.setFrame(title_bar_rect);
-
     let spacing = NSView::frame(&miniaturize).origin.x - close_rect.origin.x;
-    for (index, button) in [Some(close), Some(miniaturize), zoom]
-        .into_iter()
-        .flatten()
-        .enumerate()
-    {
-        let mut origin = NSView::frame(&button).origin;
-        origin.x = x + index as f64 * spacing;
-        button.setFrameOrigin(origin);
+
+    if authenticated {
+        title_bar_view.layoutSubtreeIfNeeded();
+        title_bar_view.setTranslatesAutoresizingMaskIntoConstraints(false);
+        add_macos_traffic_light_constraint(
+            "happy.traffic-lights.title.leading",
+            title_bar_view
+                .leadingAnchor()
+                .constraintEqualToAnchor(&title_bar_parent.leadingAnchor()),
+        );
+        add_macos_traffic_light_constraint(
+            "happy.traffic-lights.title.trailing",
+            title_bar_view
+                .trailingAnchor()
+                .constraintEqualToAnchor(&title_bar_parent.trailingAnchor()),
+        );
+        add_macos_traffic_light_constraint(
+            "happy.traffic-lights.title.top",
+            title_bar_view
+                .topAnchor()
+                .constraintEqualToAnchor(&title_bar_parent.topAnchor()),
+        );
+        add_macos_traffic_light_constraint(
+            "happy.traffic-lights.title.height",
+            title_bar_view
+                .heightAnchor()
+                .constraintEqualToConstant(title_bar_height),
+        );
+        for (index, button) in [Some(&close), Some(&miniaturize), zoom.as_ref()]
+            .into_iter()
+            .flatten()
+            .enumerate()
+        {
+            button.setTranslatesAutoresizingMaskIntoConstraints(false);
+            add_macos_traffic_light_constraint(
+                &format!("happy.traffic-lights.button.{index}.leading"),
+                button.leadingAnchor().constraintEqualToAnchor_constant(
+                    &button_parent.leadingAnchor(),
+                    x + index as f64 * spacing,
+                ),
+            );
+        }
+        title_bar_parent.layoutSubtreeIfNeeded();
+    } else {
+        ns_window.displayIfNeeded();
+        for (index, button) in [Some(&close), Some(&miniaturize), zoom.as_ref()]
+            .into_iter()
+            .flatten()
+            .enumerate()
+        {
+            let mut origin = NSView::frame(&button).origin;
+            origin.x = x + index as f64 * spacing;
+            button.setFrameOrigin(origin);
+        }
     }
-    ns_window.displayIfNeeded();
 }
 
 #[cfg(target_os = "macos")]
@@ -2093,13 +2188,6 @@ pub fn run() {
                 tauri::WindowEvent::Resized(_) | tauri::WindowEvent::ScaleFactorChanged { .. }
             ) {
                 native_startup_logo::resize_windows(window);
-            }
-            #[cfg(target_os = "macos")]
-            if matches!(
-                event,
-                tauri::WindowEvent::Resized(_) | tauri::WindowEvent::ScaleFactorChanged { .. }
-            ) {
-                reconcile_macos_traffic_light_position(window.app_handle());
             }
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 let state = window.state::<DesktopState>();
