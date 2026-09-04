@@ -270,7 +270,25 @@ export const SidebarView = React.memo((props: SidebarViewProps) => {
     );
 
     const titleContent = isDesktopMacOS ? (
-        <View style={styles.desktopMacTitleContent}>
+        <Pressable
+            {...({ 'data-desktop-no-drag': true } as any)}
+            accessibilityLabel={t('tabs.sessions')}
+            accessibilityRole="button"
+            hitSlop={6}
+            onPress={handleGoHome}
+            ref={(element: any) => {
+                if (element && typeof element === 'object') {
+                    element.title = t('tabs.sessions');
+                }
+            }}
+            style={({ hovered, pressed }: any) => [
+                styles.desktopMacTitleContent,
+                {
+                    cursor: 'pointer',
+                    opacity: hovered || pressed ? 0.9 : 1,
+                },
+            ]}
+        >
             {titleText}
             {socketStatus.status === 'disconnected' && (
                 <StatusDot
@@ -279,7 +297,7 @@ export const SidebarView = React.memo((props: SidebarViewProps) => {
                     size={6}
                 />
             )}
-        </View>
+        </Pressable>
     ) : (
         <>
             {titleText}
