@@ -2034,7 +2034,9 @@ pub fn run() {
 
             build_tray(app.handle())?;
             #[cfg(target_os = "macos")]
-            macos_notification_delegate::install(app.handle())?;
+            if !tauri::is_dev() {
+                macos_notification_delegate::install(app.handle())?;
+            }
             #[cfg(target_os = "windows")]
             {
                 if let Err(error) = register_windows_notification_protocol(app.handle()) {

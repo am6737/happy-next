@@ -79,6 +79,14 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
         marginLeft: 4,
         justifyContent: 'center',
     },
+    desktopMacTitleContainerLeft: {
+        marginLeft: 0,
+    },
+    desktopMacTitleContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+    },
     titleText: {
         fontSize: 17,
         fontWeight: '500',
@@ -247,20 +255,34 @@ export const SidebarView = React.memo((props: SidebarViewProps) => {
         }
     }, [router]);
 
-    // Title content used in both centered and left-justified modes (DRY)
-    const titleContent = (
+    const titleText = (
+        <Text
+            style={styles.titleText}
+            numberOfLines={1}
+            ref={(el: any) => {
+                if (Platform.OS === 'web' && el) {
+                    el.title = t('sidebar.sessionsTitle');
+                }
+            }}
+        >
+            {t('sidebar.sessionsTitle')}
+        </Text>
+    );
+
+    const titleContent = isDesktopMacOS ? (
+        <View style={styles.desktopMacTitleContent}>
+            {titleText}
+            {socketStatus.status === 'disconnected' && (
+                <StatusDot
+                    color={styles.statusDisconnected.color}
+                    isPulsing={false}
+                    size={6}
+                />
+            )}
+        </View>
+    ) : (
         <>
-            <Text
-                style={styles.titleText}
-                numberOfLines={1}
-                ref={(el: any) => {
-                    if (Platform.OS === 'web' && el) {
-                        el.title = t('sidebar.sessionsTitle');
-                    }
-                }}
-            >
-                {t('sidebar.sessionsTitle')}
-            </Text>
+            {titleText}
             {connectionStatus.text && (
                 <View style={styles.statusContainer}>
                     <StatusDot
@@ -364,22 +386,27 @@ export const SidebarView = React.memo((props: SidebarViewProps) => {
                         style={[
                             styles.header,
                             {
-                                height: headerHeight,
+                                height: isDesktopMacOS ? 36 : headerHeight,
                                 paddingLeft: isDesktopMacOS
                                     ? Math.max(safeArea.left, 0) + 16
                                     : Math.max(safeArea.left, windowControlsInset) + 16,
                             },
                         ]}
                     >
-                        <Pressable style={styles.logoContainer} onPress={handleGoHome}>
-                            <Image
-                                source={theme.dark ? require('@/assets/images/logo-white.png') : require('@/assets/images/logo-black.png')}
-                                contentFit="contain"
-                                style={[styles.logo, { height: 24, width: 24 }]}
-                            />
-                        </Pressable>
+                        {!isDesktopMacOS && (
+                            <Pressable style={styles.logoContainer} onPress={handleGoHome}>
+                                <Image
+                                    source={theme.dark ? require('@/assets/images/logo-white.png') : require('@/assets/images/logo-black.png')}
+                                    contentFit="contain"
+                                    style={[styles.logo, { height: 24, width: 24 }]}
+                                />
+                            </Pressable>
+                        )}
 
-                        <View style={styles.titleContainerLeft}>
+                        <View style={[
+                            styles.titleContainerLeft,
+                            isDesktopMacOS && styles.desktopMacTitleContainerLeft,
+                        ]}>
                             {titleContent}
                         </View>
 
@@ -395,7 +422,7 @@ export const SidebarView = React.memo((props: SidebarViewProps) => {
                                 >
                                     <Ionicons
                                         name="search-outline"
-                                        size={20}
+                                        size={18}
                                         color={theme.colors.header.tint}
                                         style={{ opacity: isSearchHovered ? 1 : 0.6 }}
                                     />
