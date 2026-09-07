@@ -1,30 +1,13 @@
-import { App } from "octokit";
 import { Webhooks } from "@octokit/webhooks";
 import type { EmitterWebhookEvent } from "@octokit/webhooks";
 import { log } from "@/utils/log";
 
-let app: App | null = null;
 let webhooks: Webhooks | null = null;
 
 export async function initGithub() {
-    const redirectUrl = process.env.GITHUB_REDIRECT_URL || process.env.GITHUB_REDIRECT_URI;
-    if (
-        process.env.GITHUB_APP_ID &&
-        process.env.GITHUB_PRIVATE_KEY &&
-        process.env.GITHUB_CLIENT_ID &&
-        process.env.GITHUB_CLIENT_SECRET &&
-        redirectUrl &&
-        process.env.GITHUB_WEBHOOK_SECRET
-    ) {
-        app = new App({
-            appId: process.env.GITHUB_APP_ID,
-            privateKey: process.env.GITHUB_PRIVATE_KEY,
-            webhooks: {
-                secret: process.env.GITHUB_WEBHOOK_SECRET
-            }
-        });
-        
-        // Initialize standalone webhooks handler for type-safe event processing
+    webhooks = null;
+    // Optional repository webhooks are independent of OAuth user authorization.
+    if (process.env.GITHUB_WEBHOOK_SECRET) {
         webhooks = new Webhooks({
             secret: process.env.GITHUB_WEBHOOK_SECRET
         });
@@ -78,8 +61,4 @@ function registerWebhookHandlers() {
 
 export function getWebhooks(): Webhooks | null {
     return webhooks;
-}
-
-export function getApp(): App | null {
-    return app;
 }

@@ -124,13 +124,30 @@ Leave these blank if you do not use GitHub features.
 If enabled, configure:
 
 ```env
-GITHUB_APP_ID=
 GITHUB_CLIENT_ID=
 GITHUB_CLIENT_SECRET=
 GITHUB_REDIRECT_URL=https://api.example.com/v1/connect/github/callback
-GITHUB_WEBHOOK_SECRET=
-GITHUB_PRIVATE_KEY=
 ```
+
+Create an **OAuth App**, not a GitHub App, under GitHub Settings > Developer settings > OAuth Apps.
+Set Homepage URL to your Happy web URL and Authorization callback URL to `GITHUB_REDIRECT_URL` above.
+Use that OAuth App's Client ID and client secret, restart the API service, then connect GitHub in Happy.
+Existing GitHub App connections must authorize again; account/profile data does not need to be deleted.
+Enable **Expire user access tokens** when registering the OAuth App. Access and refresh tokens are
+stored encrypted; Happy refreshes access tokens shortly before expiry and retries once after a 401.
+Expired/revoked refresh credentials require authorization again. Non-expiring OAuth tokens also work.
+
+The integration requests `read:user,user:email,read:org,repo`. Private repository access uses the broad
+`repo` scope, and organizations may require OAuth App approval. Codespaces access is not requested.
+OAuth credentials are encrypted on the server; starting an AI session from an issue/PR also passes
+the token to the selected execution environment. Only use trusted machines for these sessions.
+This token is refreshed before handoff when near expiry, but an already running AI process's environment
+is not updated automatically; long-running sessions may need to be restarted with fresh credentials.
+
+`GITHUB_APP_ID` and `GITHUB_PRIVATE_KEY` are no longer used. Optional repository webhooks can be
+configured separately at `/v1/connect/github/webhook` with `GITHUB_WEBHOOK_SECRET`; OAuth does not install them.
+Existing database refresh-token fields/migrations are reused. Reauthorization replaces refresh metadata;
+connecting a non-expiring token clears the previous refresh token and expiry.
 
 ## Common commands
 

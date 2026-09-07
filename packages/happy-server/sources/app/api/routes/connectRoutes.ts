@@ -6,6 +6,8 @@ import { eventRouter } from "@/app/events/eventRouter";
 import { decryptString, encryptString } from "@/modules/encrypt";
 import { githubConnect } from "@/app/github/githubConnect";
 import { githubDisconnect } from "@/app/github/githubDisconnect";
+import { getUserGithubToken, GitHubNotConnectedError } from "@/app/github/githubApi";
+import { GITHUB_OAUTH_SCOPE, isGitHubOAuthToken, GitHubReauthorizationRequiredError } from "@/app/github/githubOAuth";
 import { Context } from "@/context";
 import { db } from "@/storage/db";
 
@@ -65,9 +67,9 @@ export function connectRoutes(app: Fastify) {
         }
     }, async (request, reply) => {
         const clientId = process.env.GITHUB_CLIENT_ID;
-        const redirectUri = process.env.GITHUB_REDIRECT_URL;
+        const redirectUri = process.env.GITHUB_REDIRECT_URL || process.env.GITHUB_REDIRECT_URI;
 
-        if (!clientId || !redirectUri) {
+        if (!clientId || !process.env.GITHUB_CLIENT_SECRET || !redirectUri) {
             return reply.code(400).send({ error: 'GitHub OAuth not configured' });
         }
 
@@ -78,7 +80,7 @@ export function connectRoutes(app: Fastify) {
         const params = new URLSearchParams({
             client_id: clientId,
             redirect_uri: redirectUri,
-            scope: 'read:user,user:email,read:org,codespace',
+            scope: GITHUB_OAUTH_SCOPE,
             state: state
         });
 
@@ -132,15 +134,20 @@ export function connectRoutes(app: Fastify) {
 
             const tokenResponseData = await tokenResponse.json() as {
                 access_token?: string;
+                refresh_token?: string;
+                expires_in?: number;
                 error?: string;
                 error_description?: string;
             };
 
-            if (tokenResponseData.error) {
-                return reply.redirect(`${baseUrl}?error=${encodeURIComponent(tokenResponseData.error)}`);
+            if (!tokenResponse.ok || tokenResponseData.error) {
+                return reply.redirect(`${baseUrl}?error=${encodeURIComponent(tokenResponseData.error || 'github_token_exchange_failed')}`);
             }
 
             const accessToken = tokenResponseData.access_token;
+            if (!isGitHubOAuthToken(accessToken)) {
+                return reply.redirect(`${baseUrl}?error=github_oauth_app_required`);
+            }
 
             // Get user info from GitHub
             const userResponse = await fetch('https://api.github.com/user', {
@@ -158,7 +165,10 @@ export function connectRoutes(app: Fastify) {
 
             // Use the new githubConnect operation
             const ctx = Context.create(userId);
-            await githubConnect(ctx, userData, accessToken!);
+            await githubConnect(ctx, userData, accessToken, {
+                refreshToken: tokenResponseData.refresh_token,
+                expiresIn: tokenResponseData.expires_in,
+            });
 
             // Redirect to app with success
             return reply.redirect(`${baseUrl}?github=connected&user=${encodeURIComponent(userData.login)}`);
@@ -166,6 +176,30 @@ export function connectRoutes(app: Fastify) {
         } catch (error) {
             log({ module: 'github-oauth' }, `Error in GitHub GET callback: ${error}`);
             return reply.redirect(`${appUrl}?error=server_error`);
+        }
+    });
+
+    // GitHub token endpoint
+    app.get('/v1/connect/github/token', {
+        preHandler: app.authenticate,
+        schema: {
+            response: {
+                200: z.object({ token: z.string() }),
+                401: z.object({ error: z.string() }),
+                404: z.object({ error: z.string() }),
+            }
+        }
+    }, async (request, reply) => {
+        try {
+            return reply.send({ token: await getUserGithubToken(request.userId) });
+        } catch (error) {
+            if (error instanceof GitHubNotConnectedError) {
+                return reply.code(404).send({ error: 'GitHub account not connected' });
+            }
+            if (error instanceof GitHubReauthorizationRequiredError) {
+                return reply.code(401).send({ error: 'github_token_expired' });
+            }
+            throw error;
         }
     });
 

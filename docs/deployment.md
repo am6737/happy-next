@@ -37,9 +37,11 @@ This document describes how to deploy the Happy Next backend (`packages/happy-se
 - `S3_USE_SSL`: `true`/`false` (default `true`).
 
 **Optional integrations**
-- GitHub OAuth/App: `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `GITHUB_APP_ID`, `GITHUB_PRIVATE_KEY`, `GITHUB_WEBHOOK_SECRET`, plus redirect URL/URI.
+- GitHub OAuth App (not GitHub App): `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, plus redirect URL/URI. No App ID or private key is required.
   - Canonical: `GITHUB_REDIRECT_URL`
   - Backward-compatible alias: `GITHUB_REDIRECT_URI`
+  - Existing GitHub App connections must authorize again. See [GitHub OAuth setup](self-host.md#github-loginconnect).
+  - `GITHUB_WEBHOOK_SECRET` is only needed for separately configured repository webhooks, not OAuth authorization.
 - Voice: Voice is handled by the separate `happy-voice` service. The client discovers its public URL from `/v1/app-config` (`PUBLIC_VOICE_BASE_URL`), and API-signed short-lived voice tokens are validated with `VOICE_AUTH_SECRET`. See `docs/self-host.md` for configuration.
 - Debug logging: `DANGEROUSLY_LOG_TO_SERVER_FOR_AI_AUTO_DEBUGGING` (enables file logging + dev log endpoint).
 
