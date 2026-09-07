@@ -84,6 +84,7 @@ describe('listCodexSessions', () => {
     const sessions = await listCodexSessions();
     expect(sessions).toHaveLength(1);
     expect(sessions[0].sessionId).toBe('555555');
+    expect(sessions[0].sessionFile).toBe(filePath);
     expect(sessions[0].originalPath).toBe('/workspace/happy');
     expect(sessions[0].title).toBe('Please optimize Codex session listing speed');
     expect(sessions[0].messageCount).toBe(1);
@@ -97,6 +98,69 @@ describe('listCodexSessions', () => {
     expect(cache.lastRun.filesReparsed).toBe(1);
     expect(cache.lastRun.resultCount).toBe(1);
   });
+
+  it.each([false, true])(
+    'keeps cross-directory sessions scoped to metadata (selectMostRecent=%s)',
+    async (selectMostRecent) => {
+      const sessionUuid = '11111111-2222-3333-4444-555555555555';
+      const sessionsDir = join(codexHomeDir, 'sessions');
+      mkdirSync(sessionsDir, { recursive: true });
+      const filePath = join(sessionsDir, `rollout-2026-03-11T000000-${sessionUuid}.jsonl`);
+      const originalCwd = join(tempRoot, 'original');
+      const latestCwd = join(tempRoot, 'latest');
+      const records = [
+        { type: 'session_meta', payload: { id: sessionUuid, cwd: originalCwd } },
+        { type: 'response_item', payload: {
+          role: 'user', content: [{ type: 'input_text', text: 'Continue in another directory' }],
+        } },
+        { type: 'turn_context', payload: { cwd: join(tempRoot, 'intermediate') } },
+        { type: 'turn_context', payload: { cwd: latestCwd } },
+      ];
+      writeFileSync(filePath, records.map(record => JSON.stringify(record)).join('\n') + '\n');
+
+      vi.resetModules();
+      const { listCodexSessions } = await import('./codexSessionReader');
+      const { resolveCodexResumeFile } = await import('../cli');
+      const { readCodexResumeDirectory } = await import('../resumeDirectory');
+      const invocation = { kind: 'resume' as const, includeAllDirectories: false, selectMostRecent };
+
+      // Exercise both a fresh index and its cached representation.
+      for (let pass = 0; pass < 2; pass++) {
+        const sessions = await listCodexSessions();
+        expect(sessions).toHaveLength(1);
+        expect(sessions[0].originalPath).toBe(originalCwd);
+        const cache = JSON.parse(readFileSync(join(happyHomeDir, 'codex-session-metadata-cache.json'), 'utf8'));
+        expect(cache.entries[filePath].originalPath).toBe(originalCwd);
+
+        const selectSession = vi.fn(async () => sessions[0]);
+        const dependencies = {
+          findSessionFile: () => filePath,
+          listSessions: async () => sessions,
+          isInteractive: () => true,
+          selectSession,
+        };
+        await expect(resolveCodexResumeFile(invocation, originalCwd, dependencies)).resolves.toBe(filePath);
+        if (selectMostRecent) {
+          expect(selectSession).not.toHaveBeenCalled();
+        } else {
+          expect(selectSession).toHaveBeenCalledWith(sessions);
+        }
+        selectSession.mockClear();
+        await expect(resolveCodexResumeFile(invocation, latestCwd, dependencies))
+          .rejects.toThrow('No resumable Codex session found');
+        expect(selectSession).not.toHaveBeenCalled();
+        await expect(resolveCodexResumeFile(
+          { ...invocation, includeAllDirectories: true }, latestCwd, dependencies,
+        )).resolves.toBe(filePath);
+        await expect(resolveCodexResumeFile(
+          { ...invocation, sessionId: sessions[0].sessionId }, latestCwd, dependencies,
+        )).resolves.toBe(filePath);
+      }
+
+      // List membership does not determine the working directory used after selection.
+      expect(await readCodexResumeDirectory(filePath)).toBe(latestCwd);
+    },
+  );
 
   it('keeps user messages on both sides of a compacted record', async () => {
     const sessionUuid = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
