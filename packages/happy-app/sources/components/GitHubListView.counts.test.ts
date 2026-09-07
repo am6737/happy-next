@@ -1,0 +1,29 @@
+import { describe, expect, test } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+const source = readFileSync(join(__dirname, 'GitHubListView.tsx'), 'utf8');
+
+describe('GitHub global count wiring', () => {
+    test('forwards explicit refresh through the paginated hook to the API', () => {
+        const hook = readFileSync(join(__dirname, '../hooks/useGithubData.ts'), 'utf8');
+        const api = readFileSync(join(__dirname, '../sync/apiGithubData.ts'), 'utf8');
+        expect(hook).toContain('fetcher(undefined, force)');
+        expect(hook).toContain('fetchGithubWorkIssues(credentials, { ...options, cursor, refresh })');
+        expect(hook).toContain('fetchGithubWorkPulls(credentials, { ...options, cursor, refresh })');
+        expect(api).toContain("if (options.refresh) params.set('refresh', 'true')");
+    });
+    test('loads both global totals before the first tab switch', () => {
+        expect(source.match(/enabled: isGlobal,/g)).toHaveLength(2);
+        expect(source).not.toContain("enabled: isGlobal && activeTab === 'issues'");
+        expect(source).not.toContain("enabled: isGlobal && activeTab === 'pulls'");
+        expect(source).toContain("reposLoading || (activeTab === 'issues' ? issueResult.loading : pullResult.loading)");
+    });
+
+    test('uses server totals and hides counts when a request fails', () => {
+        expect(source).toContain('workIssues.error ? undefined : workIssues.totalCount');
+        expect(source).toContain('workPulls.error ? undefined : workPulls.totalCount');
+        expect(source).not.toContain('workIssues.totalCount ??');
+        expect(source).not.toContain('workPulls.totalCount ??');
+    });
+});

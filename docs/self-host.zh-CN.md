@@ -124,13 +124,23 @@ Docker Compose 已经自动把同一个环境变量传给两个服务。
 如果使用，需要配置：
 
 ```env
-GITHUB_APP_ID=
 GITHUB_CLIENT_ID=
 GITHUB_CLIENT_SECRET=
 GITHUB_REDIRECT_URL=https://api.example.com/v1/connect/github/callback
-GITHUB_WEBHOOK_SECRET=
-GITHUB_PRIVATE_KEY=
 ```
+
+在 GitHub Settings > Developer settings > OAuth Apps 中创建 **OAuth App**，不是 GitHub App。
+Homepage URL 填 Happy 网页地址，Authorization callback URL 填上面的 `GITHUB_REDIRECT_URL`。
+配置该 OAuth App 的 Client ID 和 Client Secret，重启 API 服务，再在 Happy 中连接 GitHub。
+已有 GitHub App 连接需要重新授权，不需要删除 Happy 账号或资料。注册 OAuth App 时可以保留勾选 **Expire user access tokens**。
+Access Token 和 Refresh Token 均加密保存；到期前自动刷新，API 返回 401 时刷新后重试一次。Refresh Token 失效或撤销后才需要重新授权，也兼容未开启过期的 OAuth Token。
+
+当前申请 `read:user,user:email,read:org,repo` 权限。私有仓库使用较宽的 `repo` scope，组织可能要求管理员批准 OAuth App；不再申请 Codespaces 权限。
+Token 在服务端加密保存；从 Issue/PR 启动 AI 会话时，也会传入所选执行环境，因此只应选择可信机器。
+传入前会刷新即将到期的 Token，但已运行 AI 进程的环境变量不会自动更新；长时间运行的会话可能需要重新启动以获取新凭证。
+
+不再使用 `GITHUB_APP_ID` 和 `GITHUB_PRIVATE_KEY`。如需仓库 webhook，可单独配置 `/v1/connect/github/webhook` 和 `GITHUB_WEBHOOK_SECRET`；OAuth 授权不会自动安装 webhook。
+复用已有数据库刷新字段和迁移。重新连接会替换刷新信息；连接未开启过期的 Token 时，清空上一次的 Refresh Token 和到期时间。
 
 ## 常用命令
 

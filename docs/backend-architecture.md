@@ -83,7 +83,7 @@ Startup sequence:
 2. Init activity cache (presence) and Redis connection check (`redis.ping()`).
 3. Initialize crypto modules:
    - `initEncrypt()` derives a KeyTree from `HANDY_MASTER_SECRET`.
-   - `initGithub()` configures GitHub App/webhooks if env vars exist.
+   - `initGithub()` configures optional repository webhooks from `GITHUB_WEBHOOK_SECRET`, independently of OAuth App user authorization.
    - `loadFiles()` verifies S3 bucket access.
    - `auth.init()` prepares token generator/verifier.
 4. Start API server (`startApi()`), metrics server, database metrics updater, and presence timeout loop.

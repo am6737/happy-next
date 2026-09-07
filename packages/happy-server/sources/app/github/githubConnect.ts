@@ -9,6 +9,7 @@ import { buildUpdateAccountUpdate, eventRouter } from "@/app/events/eventRouter"
 import { randomKeyNaked } from "@/utils/randomKeyNaked";
 import { githubDisconnect } from "./githubDisconnect";
 import { getNameFromGitHubProfile } from "./githubName";
+import { isGitHubOAuthToken, GitHubReauthorizationRequiredError } from "./githubOAuth";
 
 /**
  * Connects a GitHub account to a user profile.
@@ -27,8 +28,10 @@ import { getNameFromGitHubProfile } from "./githubName";
 export async function githubConnect(
     ctx: Context,
     githubProfile: GitHubProfile,
-    accessToken: string
+    accessToken: string,
+    tokenMeta?: { refreshToken?: string; expiresIn?: number }
 ): Promise<void> {
+    if (!isGitHubOAuthToken(accessToken)) throw new GitHubReauthorizationRequiredError();
     const userId = ctx.uid;
     const githubUserId = githubProfile.id.toString();
 
@@ -64,16 +67,26 @@ export async function githubConnect(
     await db.$transaction(async (tx) => {
 
         // Upsert GitHub user record with encrypted token
+        const meta = {
+            refreshToken: tokenMeta?.refreshToken
+                ? encryptString(['user', userId, 'github', 'refreshToken'], tokenMeta.refreshToken)
+                : null,
+            expiresAt: tokenMeta?.expiresIn && Number.isFinite(tokenMeta.expiresIn) && tokenMeta.expiresIn > 0
+                ? new Date(Date.now() + tokenMeta.expiresIn * 1000)
+                : null,
+        };
         await tx.githubUser.upsert({
             where: { id: githubUserId },
             update: {
                 profile: githubProfile,
-                token: encryptString(['user', userId, 'github', 'token'], accessToken)
+                token: encryptString(['user', userId, 'github', 'token'], accessToken),
+                ...meta,
             },
             create: {
                 id: githubUserId,
                 profile: githubProfile,
-                token: encryptString(['user', userId, 'github', 'token'], accessToken)
+                token: encryptString(['user', userId, 'github', 'token'], accessToken),
+                ...meta,
             }
         });
 
