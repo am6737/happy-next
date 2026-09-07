@@ -44,6 +44,7 @@ import type { AgentMessage } from '@/agent/core';
 import { handleConfigMetadataEvent } from '@/agent/acp/sessionUpdateHandlers';
 import { findCodexSessionFile } from './utils/codexSessionReader';
 import { summarizeBashToolOutput } from '@/modules/common/loadableToolOutput';
+import { cleanupStdinAfterInk } from '@/utils/terminalStdinCleanup';
 
 type ReadyEventOptions = {
     pending: unknown;
@@ -95,6 +96,22 @@ function formatUnknownCodexError(error: unknown): string {
     }
 }
 
+export function formatCodexProcessExitMessage(error: unknown): string {
+    const errorMessage = error instanceof Error
+        ? error.message
+        : (typeof error === 'string' ? error : null);
+
+    if (errorMessage?.includes('already has an active writer')) {
+        return [
+            'Cannot resume this Codex session because it is still running in another process.',
+            'Exit the original Codex or Happy session, then try again.',
+            `Codex error: ${errorMessage}`,
+        ].join('\n');
+    }
+
+    return `Process exited unexpectedly: ${formatUnknownCodexError(error)}`;
+}
+
 /**
  * Map Happy permission mode to Codex approval policy
  */
@@ -128,6 +145,7 @@ function mapSandbox(permissionMode: string): SandboxMode {
 export async function runCodex(opts: {
     credentials: Credentials;
     startedBy?: 'daemon' | 'terminal';
+    resumeFile?: string;
 }): Promise<void> {
     // Use shared PermissionMode type for cross-agent compatibility
     interface EnhancedMode {
@@ -149,7 +167,7 @@ export async function runCodex(opts: {
     const api = await ApiClient.create(opts.credentials);
 
     // Log startup options
-    logger.debug(`[codex] Starting with options: startedBy=${opts.startedBy || 'terminal'}`);
+    logger.debug(`[codex] Starting with options: startedBy=${opts.startedBy || 'terminal'}, resume=${opts.resumeFile ? 'yes' : 'no'}`);
 
     //
     // Machine
@@ -440,8 +458,8 @@ export async function runCodex(opts: {
     let abortFeedbackSent = false;
     let storedSessionIdForResume: string | null = null;
 
-    // Resume file from App-side resume/duplicate (passed via daemon env var)
-    const envResumeFile = process.env.HAPPY_CODEX_RESUME_FILE || null;
+    // Resume file from the CLI or App-side resume/duplicate (passed via daemon env var)
+    const initialResumeFile = opts.resumeFile || process.env.HAPPY_CODEX_RESUME_FILE || null;
     // Current backend instance (re-created on mode change)
     // Typed as any to prevent TS narrowing issues (assigned inside createBackend())
     let backend: any = null;
@@ -510,7 +528,58 @@ export async function runCodex(opts: {
         clearInterval(keepAliveInterval);
         messageQueue.reset();
 
+        // Restore the terminal before any asynchronous cleanup. If a backend
+        // or network close stalls, leaving Ink mounted keeps the shell in raw
+        // mode and the user sees an indefinitely frozen exit screen.
+        if (inkInstance) {
+            inkInstance.unmount();
+            inkInstance = null;
+        }
+        await cleanupStdinAfterInk({
+            stdin: process.stdin,
+            drainMs: 0,
+            leaveRawMode: false,
+        });
+
+        const forcedExitTimer = setTimeout(() => {
+            logger.debug('[Codex] Timed out during session termination, forcing exit');
+            process.exit(0);
+        }, 12_000);
+
+        const runCleanupStep = async (
+            label: string,
+            cleanup: () => Promise<unknown>,
+            timeoutMs: number,
+        ): Promise<void> => {
+            let timeout: ReturnType<typeof setTimeout> | undefined;
+            try {
+                await Promise.race([
+                    cleanup(),
+                    new Promise<never>((_, reject) => {
+                        timeout = setTimeout(
+                            () => reject(new Error(`${label} timed out after ${timeoutMs}ms`)),
+                            timeoutMs,
+                        );
+                    }),
+                ]);
+            } catch (error) {
+                logger.debug(`[Codex] ${label} failed during termination`, error);
+            } finally {
+                if (timeout) clearTimeout(timeout);
+            }
+        };
+
         try {
+            // Kill the Codex process group before doing any network cleanup.
+            // This ensures a stalled flush cannot leave app-server orphaned
+            // when the forced-exit watchdog fires.
+            await handleAbort();
+            await runCleanupStep('backend.dispose', async () => backend?.dispose(), 6_000);
+            backend = null;
+
+            stopCaffeinate();
+            mcp.stop();
+
             if (session) {
                 session.updateMetadata((currentMetadata) => ({
                     ...currentMetadata,
@@ -520,34 +589,20 @@ export async function runCodex(opts: {
                     archiveReason: 'User terminated'
                 }));
                 session.sendSessionDeath();
-                await session.flush();
-                await session.close();
+                await runCleanupStep('session.flush', () => session.flush(), 2_000);
+                await runCleanupStep('session.close', () => session.close(), 2_000);
             }
         } catch (error) {
             logger.debug('[Codex] Error while ending session during termination', error);
         }
 
         try {
-            await handleAbort();
-            logger.debug('[Codex] Abort completed, proceeding with backend disposal');
-        } catch (error) {
-            logger.debug('[Codex] Error during abort in termination flow', error);
-        }
-
-        try {
-            try {
-                await backend?.dispose();
-            } catch (e) {
-                logger.debug('[Codex] Error while disposing backend during termination', e);
-            }
-
-            stopCaffeinate();
-            mcp.stop();
-
             logger.debug('[Codex] Session termination complete, exiting');
+            clearTimeout(forcedExitTimer);
             process.exit(0);
         } catch (error) {
             logger.debug('[Codex] Error during session termination:', error);
+            clearTimeout(forcedExitTimer);
             process.exit(1);
         }
     };
@@ -571,8 +626,7 @@ export async function runCodex(opts: {
             logPath: isDebug() ? logger.getLogPath() : undefined,
             onExit: async () => {
                 logger.debug('[codex]: Exiting agent via Ctrl-C');
-                shouldExit = true;
-                await handleAbort();
+                await handleKillSession();
             }
         }), {
             exitOnCtrlC: false,
@@ -1049,7 +1103,9 @@ Tokens used: ${goal.tokensUsed}${goal.tokenBudget ? ` / ${goal.tokenBudget}` : '
 
     // Backfill history from previous session (if resuming/copying)
     // Awaited so that replace-mode batch completes before the main loop processes new messages
-    if (envResumeFile && ['1', 'true', 'yes'].includes(String(process.env.HAPPY_CODEX_BACKFILL).toLowerCase())) {
+    const shouldBackfillResume = !!opts.resumeFile
+        || ['1', 'true', 'yes'].includes(String(process.env.HAPPY_CODEX_BACKFILL).toLowerCase());
+    if (initialResumeFile && shouldBackfillResume) {
         try {
             // Wait briefly for socket connection to avoid dropping backfill messages
             for (let i = 0; i < 15 && !session.isConnected(); i++) {
@@ -1057,7 +1113,7 @@ Tokens used: ${goal.tokensUsed}${goal.tokenBudget ? ` / ${goal.tokenBudget}` : '
             }
             if (session.isConnected()) {
                 await backfillCodexSessionHistory({
-                    sessionIdOrPath: envResumeFile,
+                    sessionIdOrPath: initialResumeFile,
                     sendBatch: async (messages) => {
                         await session.sendBackfillBatch(messages, 'replace');
                     },
@@ -1174,8 +1230,8 @@ Tokens used: ${goal.tokensUsed}${goal.tokenBudget ? ` / ${goal.tokenBudget}` : '
                     if (nextResumeFile) {
                         commandResumeFile = nextResumeFile;
                         nextResumeFile = null;
-                    } else if (first && envResumeFile) {
-                        commandResumeFile = envResumeFile;
+                    } else if (first && initialResumeFile) {
+                        commandResumeFile = initialResumeFile;
                         messageBuffer.addMessage('Resuming from previous session...', 'status');
                     } else if (storedSessionIdForResume) {
                         commandResumeFile = findCodexResumeFile(storedSessionIdForResume);
@@ -1252,8 +1308,8 @@ Tokens used: ${goal.tokensUsed}${goal.tokenBudget ? ` / ${goal.tokenBudget}` : '
                         resumeFile = nextResumeFile;
                         nextResumeFile = null;
                         logger.debug('[Codex] Using resume file from mode change:', resumeFile);
-                    } else if (first && envResumeFile) {
-                        resumeFile = envResumeFile;
+                    } else if (first && initialResumeFile) {
+                        resumeFile = initialResumeFile;
                         logger.debug('[Codex] Using resume file from App-side resume:', resumeFile);
                         messageBuffer.addMessage('Resuming from previous session...', 'status');
                     } else if (storedSessionIdForResume) {
@@ -1333,6 +1389,7 @@ Tokens used: ${goal.tokensUsed}${goal.tokenBudget ? ` / ${goal.tokenBudget}` : '
                 }
             } catch (error) {
                 const errMsg = formatUnknownCodexError(error);
+                const processExitMessage = formatCodexProcessExitMessage(error);
                 logger.warn('Error in codex session:', errMsg);
                 const isAbortError = error instanceof Error && error.name === 'AbortError';
                 const isUserAbort = isAbortError || abortRequested;
@@ -1346,8 +1403,8 @@ Tokens used: ${goal.tokensUsed}${goal.tokenBudget ? ` / ${goal.tokenBudget}` : '
                         id: randomUUID(),
                     });
                 } else if (!isUserAbort) {
-                    messageBuffer.addMessage(`Process exited unexpectedly: ${errMsg}`, 'status');
-                    session.sendSessionEvent({ type: 'message', message: `Process exited unexpectedly: ${errMsg}` });
+                    messageBuffer.addMessage(processExitMessage, 'status');
+                    session.sendSessionEvent({ type: 'message', message: processExitMessage });
                     // Store session for potential recovery
                     if (backend && backend.isAlive) {
                         storedSessionIdForResume = backend.getSessionId();
@@ -1379,6 +1436,11 @@ Tokens used: ${goal.tokensUsed}${goal.tokenBudget ? ` / ${goal.tokenBudget}` : '
     } finally {
         logger.debug('[codex]: Final cleanup start');
         logActiveHandles('cleanup-start');
+
+        if (isTerminating) {
+            logger.debug('[codex]: Final cleanup is owned by the termination handler');
+            return;
+        }
 
         if (reconnectionHandle) {
             logger.debug('[codex]: Cancelling offline reconnection');
