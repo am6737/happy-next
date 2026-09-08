@@ -8,6 +8,8 @@ import { Methods } from '../appserver/types';
 import { CODEX_PACKAGE } from '../package';
 
 const peer = vi.hoisted(() => ({ spawn: vi.fn(), request: vi.fn(), notify: vi.fn(), close: vi.fn() }));
+const restore = vi.hoisted(() => vi.fn());
+vi.mock('@/daemon/executeSessionArchive', () => ({ restoreCodexSession: restore }));
 vi.mock('../appserver/CodexJsonRpcPeer', () => ({ CodexJsonRpcPeer: vi.fn(() => peer) }));
 
 const sourceId = '11111111-2222-4333-8444-555555555555';
@@ -70,6 +72,52 @@ describe('Codex session fork', () => {
     expect(await readFile(sourcePath, 'utf-8')).toBe(sourceContent);
     expect(await readdir(join(home, 'sessions'))).toHaveLength(2);
     expect(peer.close).toHaveBeenCalledOnce();
+    expect(restore).not.toHaveBeenCalled();
+  });
+
+  it('restores archived history before native fork using the original Codex home', async () => {
+    const originalHome = join(home, 'original-home');
+    await mkdir(join(originalHome, 'sessions'), { recursive: true });
+    const restoredPath = join(originalHome, 'sessions', sourcePath.split('/').pop()!);
+    await rm(sourcePath);
+    restore.mockImplementation(async () => {
+      await writeFile(restoredPath, sourceContent);
+      return originalHome;
+    });
+    expect(await forkCodexSession(sourceId, true)).toEqual({ success: true, newFilePath: forkPath });
+    expect(restore).toHaveBeenCalledWith(sourceId);
+    expect(peer.spawn).toHaveBeenCalledWith('npx', ['-y', CODEX_PACKAGE, 'app-server'], {
+      cwd: process.cwd(), env: { CODEX_HOME: originalHome },
+    });
+    expect(restore.mock.invocationCallOrder[0]).toBeLessThan(peer.spawn.mock.invocationCallOrder[0]);
+    expect(peer.request).toHaveBeenCalledWith(Methods.THREAD_FORK, { threadId: sourceId, excludeTurns: true });
+  });
+
+  it('does not fork when native restore fails', async () => {
+    await rm(sourcePath);
+    restore.mockRejectedValue(new Error('native failure'));
+    expect(await forkCodexSession(sourceId, true)).toMatchObject({
+      success: false, errorMessage: expect.stringContaining('Could not restore'),
+    });
+    expect(peer.spawn).not.toHaveBeenCalled();
+  });
+
+  it('does not fork when restored history is still missing', async () => {
+    await rm(sourcePath);
+    restore.mockResolvedValue(home);
+    expect((await forkCodexSession(sourceId, true)).success).toBe(false);
+    expect(restore).toHaveBeenCalledWith(sourceId);
+    expect(peer.spawn).not.toHaveBeenCalled();
+  });
+
+  it('does not restore missing history for ordinary or message-level forks', async () => {
+    await rm(sourcePath);
+    expect(await forkCodexSession(sourceId)).toMatchObject({
+      success: false, errorMessage: expect.stringContaining('Restore the session'),
+    });
+    expect((await forkAndTruncateCodexSession(sourceId, 'message-1', true)).success).toBe(false);
+    expect(restore).not.toHaveBeenCalled();
+    expect(peer.spawn).not.toHaveBeenCalled();
   });
 
   it('resolves display suffixes to the full native thread ID', async () => {

@@ -180,7 +180,10 @@ export function rpcHandler(userId: string, socket: Socket, rpcListeners: Map<str
 
             // Forward the RPC request to the target socket using emitWithAck
             try {
-                const response = await targetSocket.timeout(30000).emitWithAck('rpc-request', {
+                // Codex native history operations may include process shutdown and app-server startup.
+                const nativeHistory = [':codex-archive-session', ':codex-fork-session', ':codex-duplicate-session']
+                    .some(suffix => method.endsWith(suffix));
+                const response = await targetSocket.timeout(nativeHistory ? 110000 : 30000).emitWithAck('rpc-request', {
                     method,
                     params
                 });

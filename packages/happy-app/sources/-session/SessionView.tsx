@@ -33,6 +33,7 @@ import { handleImagePasteEvent } from '@/utils/imagePaste';
 import { isRunningOnMac } from '@/utils/platform';
 import { useDeviceType, useIsLandscape, useIsTablet } from '@/utils/responsive';
 import { formatPathRelativeToHome, generateCopyTitle, getSessionAvatarId, getSessionName, useSessionStatus, copySessionMetadata, copySessionModeSettings } from '@/utils/sessionUtils';
+import { canEditSession, canForkSession } from '@/utils/sessionLifecycle';
 import { getNativeHeaderTitleWidth } from '@/utils/nativeHeaderTitleWidth';
 import { isVersionSupported, useLatestCliVersion } from '@/utils/versionUtils';
 import { log } from '@/log';
@@ -577,6 +578,7 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
 
     // Handle opening the duplicate sheet - loads user messages from the session
     const handleOpenDuplicateSheet = React.useCallback(async () => {
+        if (!canForkSession(storage.getState().sessions[session.id])) return;
         const flavor = session.metadata?.flavor;
         const claudeSessionId = session.metadata?.claudeSessionId;
         const codexSessionId = session.metadata?.codexSessionId;
@@ -604,7 +606,7 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
         } finally {
             setDuplicateLoading(false);
         }
-    }, [machineId, session.metadata?.flavor, session.metadata?.claudeSessionId, session.metadata?.codexSessionId, loadDuplicateMessagesPage, applyDuplicatePage]);
+    }, [machineId, session.id, session.metadata?.flavor, session.metadata?.claudeSessionId, session.metadata?.codexSessionId, loadDuplicateMessagesPage, applyDuplicatePage]);
 
     const handleLoadMoreDuplicateMessages = React.useCallback(async () => {
         if (duplicateLoadingMore || !duplicateHasMore || duplicateBeforeIndex == null) return;
@@ -629,6 +631,10 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
     // write (AI-message forks continue after the reply, so there's nothing to
     // pre-fill; user-message forks pre-fill the tapped prompt).
     const forkSessionFromUuid = React.useCallback(async (opts: { uuid: string | null; draftText?: string; skipDraft: boolean }) => {
+        if (!canForkSession(storage.getState().sessions[session.id])) {
+            setDuplicateConfirming(false);
+            return;
+        }
         const { uuid, draftText, skipDraft } = opts;
         const flavor = session.metadata?.flavor;
         const claudeSessionId = session.metadata?.claudeSessionId;
@@ -729,6 +735,7 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
     // Handle selecting a message in the duplicate sheet. Picker rows are previews,
     // so fetch the full prompt by UUID before creating the new-session draft.
     const handleDuplicateSelect = React.useCallback(async (uuid: string) => {
+        if (!canForkSession(storage.getState().sessions[session.id])) return;
         const flavor = session.metadata?.flavor;
         const claudeSessionId = session.metadata?.claudeSessionId;
         const codexSessionId = session.metadata?.codexSessionId;
@@ -775,6 +782,7 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
     // (so the reply is kept); when the reply has no following prompt it's null,
     // meaning fork the whole session with no truncation.
     const performForkFromMessage = React.useCallback(async (request: ForkMessageRequest) => {
+        if (!canForkSession(storage.getState().sessions[session.id])) return;
         const flavor = session.metadata?.flavor;
         const claudeSessionId = session.metadata?.claudeSessionId;
         const codexSessionId = session.metadata?.codexSessionId;
@@ -826,6 +834,7 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
     // Handle the per-message fork icon: show the confirm dialog immediately,
     // then do the network work in performForkFromMessage once confirmed.
     const handleForkFromMessage = React.useCallback((request: ForkMessageRequest) => {
+        if (!canForkSession(storage.getState().sessions[session.id])) return;
         const flavor = session.metadata?.flavor;
         const claudeSessionId = session.metadata?.claudeSessionId;
         const codexSessionId = session.metadata?.codexSessionId;
@@ -846,7 +855,7 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
                 { text: t('duplicate.confirm'), onPress: () => { performForkFromMessage(request); } },
             ]
         );
-    }, [machineId, session.metadata?.flavor, session.metadata?.claudeSessionId, session.metadata?.codexSessionId, performForkFromMessage]);
+    }, [machineId, session.id, session.metadata?.flavor, session.metadata?.claudeSessionId, session.metadata?.codexSessionId, performForkFromMessage]);
 
     // Handle closing the duplicate sheet (prevent closing while confirming)
     const handleCloseDuplicateSheet = React.useCallback(() => {
@@ -1025,7 +1034,7 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
                     <ChatList
                         session={session}
                         onFillInput={handleFillInput}
-                        onForkMessage={handleForkFromMessage}
+                        onForkMessage={canForkSession(session) ? handleForkFromMessage : undefined}
                         forkingMessageId={forkingMessageId}
                         onLoadMore={handleLoadMore}
                         minimapCachedUserMessages={minimapCachedUserMessages}
@@ -1047,7 +1056,7 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
         </>
     ) : null;
 
-    const canEdit = !session.accessLevel || session.accessLevel !== 'view';
+    const canEdit = canEditSession(session);
 
     const handleSendNowPending = React.useCallback(async (pendingId: string) => {
         try {
@@ -1367,7 +1376,7 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
 
             {/* Duplicate Sheet */}
             <DuplicateSheet
-                visible={duplicateSheetVisible}
+                visible={canForkSession(session) && duplicateSheetVisible}
                 messages={duplicateMessages}
                 loading={duplicateLoading}
                 loadingMore={duplicateLoadingMore}

@@ -952,6 +952,7 @@ export const ca: TranslationStructure = {
         failedToCopyMetadata: 'Ha fallat copiar les metadades',
         failedToKillSession: 'Ha fallat finalitzar la sessió',
         failedToArchiveSession: 'Ha fallat arxivar la sessió',
+        codexArchiveFailed: 'Codex native archive failed. The session may already be stopped. Retry archiving',
         colorMarker: 'Marcador de color',
         clearColorMarker: 'Treu el marcador de color',
         markerRed: 'Marcador vermell',

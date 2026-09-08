@@ -1,3 +1,4 @@
+import { recordSessionBinding } from '@/daemon/sessionBinding';
 import { logger } from '@/ui/logger'
 import { EventEmitter } from 'node:events'
 import { io, Socket } from 'socket.io-client'
@@ -147,6 +148,7 @@ export class ApiSessionClient extends EventEmitter {
         this.token = token;
         this.sessionId = session.id;
         this.metadata = session.metadata;
+        recordSessionBinding(session.id, session.metadata);
         this.metadataVersion = session.metadataVersion;
         this.agentState = session.agentState;
         this.agentStateVersion = session.agentStateVersion;
@@ -1081,6 +1083,7 @@ export class ApiSessionClient extends EventEmitter {
         this.metadataLock.inLock(async () => {
             await backoff(async () => {
                 let updated = stripCapabilitiesFromMetadata(handler(this.metadata!)); // Weird state if metadata is null - should never happen but here we are
+                recordSessionBinding(this.sessionId, updated);
                 const answer = await this.socket.emitWithAck('update-metadata', { sid: this.sessionId, expectedVersion: this.metadataVersion, metadata: encodeBase64(encrypt(this.encryptionKey, this.encryptionVariant, updated)) });
                 if (answer.result === 'success') {
                     this.metadata = decrypt(this.encryptionKey, this.encryptionVariant, decodeBase64(answer.metadata));

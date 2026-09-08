@@ -59,6 +59,10 @@ export const MetadataSchema = z.object({
     happyHomeDir: z.string().optional(), // Happy configuration directory 
     hostPid: z.number().optional(), // Process ID of the session
     flavor: z.string().nullish(), // Session flavor/variant identifier
+    lifecycleState: z.string().optional(),
+    lifecycleStateSince: z.number().optional(),
+    archivedBy: z.string().optional(),
+    archiveReason: z.string().optional(),
     isWorktree: z.boolean().optional(), // Whether this session uses a git worktree
     worktreeBasePath: z.string().optional(), // Original repository path before worktree
     worktreeBranchName: z.string().optional(), // Branch name created for the worktree

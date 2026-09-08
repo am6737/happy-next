@@ -10,6 +10,7 @@
  */
 
 import { CodexJsonRpcPeer } from './CodexJsonRpcPeer';
+import { recordNativeThreadEmpty } from '@/daemon/sessionBinding';
 import {
   Methods,
   type InitializeParams,
@@ -253,6 +254,7 @@ export class CodexAppServerBackend implements AgentBackend {
         resumeParams
       );
       threadId = resumeResult.thread.id;
+      recordNativeThreadEmpty(threadId, false);
       this.handleSessionConfigured({
         sessionId: threadId,
         model: resumeResult.model,
@@ -264,6 +266,7 @@ export class CodexAppServerBackend implements AgentBackend {
         this.buildThreadParams()
       );
       threadId = newResult.thread.id;
+      recordNativeThreadEmpty(threadId, true);
       logger.info(`[CodexBackend] New thread: id=${threadId}, model=${newResult.model}`);
       this.handleSessionConfigured({
         sessionId: threadId,
@@ -332,6 +335,7 @@ export class CodexAppServerBackend implements AgentBackend {
     if (!this.threadId) {
       throw new Error('CodexAppServerBackend: no active thread');
     }
+    recordNativeThreadEmpty(this.threadId, false);
     await this.peer.request(Methods.THREAD_COMPACT_START, {
       threadId: this.threadId,
     } satisfies ThreadCompactStartParams);
@@ -342,6 +346,7 @@ export class CodexAppServerBackend implements AgentBackend {
       throw new Error('CodexAppServerBackend: no active thread');
     }
     this.resetTurnComplete();
+    recordNativeThreadEmpty(this.threadId, false);
     await this.peer.request(Methods.REVIEW_START, {
       threadId: this.threadId,
       target,
@@ -362,6 +367,7 @@ export class CodexAppServerBackend implements AgentBackend {
     if (!this.threadId) {
       throw new Error('CodexAppServerBackend: no active thread');
     }
+    recordNativeThreadEmpty(this.threadId, false);
     await this.peer.request(Methods.THREAD_GOAL_SET, {
       threadId: this.threadId,
       ...params,
@@ -372,6 +378,7 @@ export class CodexAppServerBackend implements AgentBackend {
     if (!this.threadId) {
       throw new Error('CodexAppServerBackend: no active thread');
     }
+    recordNativeThreadEmpty(this.threadId, false);
     await this.peer.request(Methods.THREAD_GOAL_CLEAR, {
       threadId: this.threadId,
     } satisfies ThreadGoalClearParams);
@@ -523,6 +530,7 @@ export class CodexAppServerBackend implements AgentBackend {
       text: prompt,
     });
 
+    recordNativeThreadEmpty(this.threadId, false);
     const result = await this.peer.request<TurnStartResponse>(Methods.TURN_START, {
       threadId: this.threadId,
       input,

@@ -1,4 +1,5 @@
 import { Session } from '@/sync/storageTypes';
+import { canArchiveSession } from '@/utils/sessionLifecycle';
 
 export type SessionQuickActionKind =
     | 'details'
@@ -34,7 +35,7 @@ export function getSessionQuickActionKinds({
     if (!isOwner) actions.push('leaveSharedSession');
     if (isOwner && session.metadata?.machineId) actions.push('viewMachine');
     if (isOwner && isForkable) actions.push('forkSession');
-    if (isOwner && isConnected) actions.push('archiveSession');
+    if (canArchiveSession(session, isConnected)) actions.push('archiveSession');
     if (isOwner && !isConnected && !session.active) actions.push('deleteSession');
     return actions;
 }

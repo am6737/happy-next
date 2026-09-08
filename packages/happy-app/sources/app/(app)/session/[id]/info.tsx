@@ -10,11 +10,12 @@ import { ItemList } from '@/components/ItemList';
 import { Avatar } from '@/components/Avatar';
 import { useSession, useIsDataReady, useMachine, useOrchestratorHasRuns, storage } from '@/sync/storage';
 import { generateCopyTitle, getSessionName, useSessionStatus, formatOSPlatform, formatPathRelativeToHome, getSessionAvatarId, copySessionMetadata, copySessionModeSettings } from '@/utils/sessionUtils';
+import { canArchiveSession } from '@/utils/sessionLifecycle';
 import * as Clipboard from 'expo-clipboard';
 import { Modal } from '@/modal';
 import { hapticsLight } from '@/components/haptics';
 import { showCopiedToast } from '@/components/Toast';
-import { sessionKill, sessionDelete, machineForkClaudeSession, machineForkGeminiSession, machineForkCodexSession, machineSpawnNewSession, sessionUpdateSummary, sessionUpdateMetadataFields } from '@/sync/ops';
+import { sessionArchive, sessionKill, sessionDelete, machineForkClaudeSession, machineForkGeminiSession, machineForkCodexSession, machineSpawnNewSession, sessionUpdateSummary, sessionUpdateMetadataFields } from '@/sync/ops';
 import { leaveSharedSession } from '@/sync/apiSharing';
 import { pushWorktreeBranch, mergeWorktreeBranch, createWorktreePR, cleanupWorktree, cleanupWorkspace, getLocalBranches, getCurrentBranch } from '@/utils/worktreeOps';
 import { getWorkspaceRepos } from '@/utils/workspaceRepos';
@@ -209,7 +210,7 @@ function SessionInfoContent({ session }: { session: Session }) {
         const previousActive = storage.getState().sessions[session.id]?.active ?? session.active;
         storage.getState().updateSessionActivity(session.id, false);
 
-        const result = await sessionKill(session.id);
+        const result = await sessionArchive(session.id);
         const errorMessage = result.message || t('sessionInfo.failedToArchiveSession');
 
         // Archiving is idempotent: if RPC target is gone, session is effectively already archived.
@@ -225,6 +226,7 @@ function SessionInfoContent({ session }: { session: Session }) {
         }
 
         await sync.clearSessionMessageCache(session.id);
+        if (result.nativeArchiveError) throw new HappyError(t('sessionInfo.codexArchiveFailed') + ': ' + result.nativeArchiveError, false);
 
         // Success - navigate back
         navigateAfterArchive();
@@ -381,7 +383,7 @@ function SessionInfoContent({ session }: { session: Session }) {
                 resumeSessionId = forkResult.newSessionId;
                 agent = 'gemini';
             } else if (flavor === 'codex' && codexSessionId) {
-                const forkResult = await machineForkCodexSession(machineId, codexSessionId);
+                const forkResult = await machineForkCodexSession(machineId, codexSessionId, { restoreArchived: !isOnline });
                 if (!forkResult.success || !forkResult.newFilePath) {
                     Modal.alert(t('common.error'), forkResult.errorMessage || t('claudeHistory.resumeFailed'));
                     return;
@@ -1047,7 +1049,7 @@ function SessionInfoContent({ session }: { session: Session }) {
                                 showChevron={!forkingSession}
                             />
                         )}
-                        {isOwner && sessionStatus.isConnected && (
+                        {canArchiveSession(session, sessionStatus.isConnected) && (
                             <Item
                                 title={t('sessionInfo.archiveSession')}
                                 subtitle={t('sessionInfo.archiveSessionSubtitle')}

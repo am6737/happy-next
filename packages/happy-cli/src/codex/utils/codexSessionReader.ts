@@ -39,10 +39,9 @@ export interface CodexUserMessage {
  * Find Codex's native JSONL session file by conversationId.
  * Searches $CODEX_HOME/sessions/ recursively for files ending with -{codexSessionId}.jsonl
  */
-export function findCodexSessionFile(codexSessionId: string): string | null {
+export function findCodexSessionFile(codexSessionId: string, codexHomeDir = getCodexHomeDir()): string | null {
   if (!codexSessionId) return null;
   try {
-    const codexHomeDir = getCodexHomeDir();
     const rootDir = join(codexHomeDir, 'sessions');
 
     const query = codexSessionId.trim();

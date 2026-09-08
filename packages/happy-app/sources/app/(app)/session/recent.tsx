@@ -482,7 +482,7 @@ function SessionHistory() {
                 resumeSessionId = forkResult.newSessionId;
                 agent = 'gemini';
             } else if (flavor === 'codex' && codexSessionId) {
-                const forkResult = await machineForkCodexSession(machineId, codexSessionId);
+                const forkResult = await machineForkCodexSession(machineId, codexSessionId, { restoreArchived: mode !== 'copy' });
                 if (!forkResult.success || !forkResult.newFilePath) {
                     Modal.alert(t('common.error'), forkResult.errorMessage || t('claudeHistory.resumeFailed'));
                     return;
