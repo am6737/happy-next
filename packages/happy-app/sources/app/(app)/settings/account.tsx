@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { View, Text, Pressable, Platform } from 'react-native';
 import { useNavigation, CommonActions } from '@react-navigation/native';
 import { useAuth } from '@/auth/AuthContext';
@@ -30,6 +30,8 @@ export default React.memo(() => {
     const auth = useAuth();
     const navigation = useNavigation();
     const [showSecret, setShowSecret] = useState(false);
+    const [isLoggingOut, setIsLoggingOut] = useState(false);
+    const logoutPending = useRef(false);
     const [copiedRecently, setCopiedRecently] = useState(false);
     const [analyticsOptOut, setAnalyticsOptOut] = useSettingMutable('analyticsOptOut');
     const { launchScanner, isLoading: isConnecting } = useUnifiedScanner();
@@ -93,12 +95,21 @@ export default React.memo(() => {
     };
 
     const handleLogout = async () => {
-        const confirmed = await Modal.confirm(
-            t('common.logout'),
-            t('settingsAccount.logoutConfirm'),
-            { confirmText: t('common.logout'), destructive: true }
-        );
-        if (confirmed) {
+        // Lock synchronously, including while the confirmation dialog is open.
+        if (logoutPending.current) {
+            return;
+        }
+        logoutPending.current = true;
+        try {
+            const confirmed = await Modal.confirm(
+                t('common.logout'),
+                t('settingsAccount.logoutConfirm'),
+                { confirmText: t('common.logout'), destructive: true }
+            );
+            if (!confirmed) {
+                return;
+            }
+            setIsLoggingOut(true);
             await auth.logout();
             navigation.dispatch(
                 CommonActions.reset({
@@ -106,6 +117,11 @@ export default React.memo(() => {
                     routes: [{ name: 'index' }],
                 })
             );
+        } catch {
+            Modal.alert(t('common.error'), t('errors.networkError'));
+        } finally {
+            logoutPending.current = false;
+            setIsLoggingOut(false);
         }
     };
 
@@ -307,9 +323,11 @@ export default React.memo(() => {
                 <ItemGroup title={t('settingsAccount.dangerZone')}>
                     <Item
                         title={t('settingsAccount.logout')}
-                        subtitle={t('settingsAccount.logoutSubtitle')}
+                        subtitle={isLoggingOut ? t('common.loading') : t('settingsAccount.logoutSubtitle')}
                         icon={<Ionicons name="log-out-outline" size={29} color="#FF3B30" />}
                         destructive
+                        loading={isLoggingOut}
+                        disabled={isLoggingOut}
                         onPress={handleLogout}
                     />
                 </ItemGroup>

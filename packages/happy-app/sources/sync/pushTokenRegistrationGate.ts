@@ -1,5 +1,3 @@
-const STOP_TIMEOUT_MS = 3_000;
-
 export class PushTokenRegistrationGate {
     private stopped = false;
     private activeController: AbortController | null = null;
@@ -36,7 +34,7 @@ export class PushTokenRegistrationGate {
         }
     }
 
-    async stop(timeoutMs: number = STOP_TIMEOUT_MS): Promise<void> {
+    async stop(): Promise<void> {
         this.stopped = true;
 
         const activeTask = this.activeTask;
@@ -51,20 +49,9 @@ export class PushTokenRegistrationGate {
             return;
         }
 
+        // No Happy server binding has started. Marking the gate stopped above
+        // makes every later startMutation() fail, even if native token lookup
+        // ignores abort. Logout need not wait for that lookup to settle.
         this.activeController?.abort();
-
-        let timeout: ReturnType<typeof setTimeout> | undefined;
-        try {
-            await Promise.race([
-                activeTask.catch(() => {}),
-                new Promise<void>((resolve) => {
-                    timeout = setTimeout(resolve, timeoutMs);
-                }),
-            ]);
-        } finally {
-            if (timeout) {
-                clearTimeout(timeout);
-            }
-        }
     }
 }

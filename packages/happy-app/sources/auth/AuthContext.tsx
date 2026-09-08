@@ -2,11 +2,12 @@ import { createContext, useContext, useState, useEffect, ReactNode } from 'react
 import { Platform } from 'react-native';
 import { reloadAppAsync } from 'expo';
 import { TokenStorage, AuthCredentials } from '@/auth/tokenStorage';
-import { stopPushTokenRegistration, syncCreate } from '@/sync/sync';
+import { resumePushTokenRegistration, syncCreate } from '@/sync/sync';
 import { clearPersistence } from '@/sync/persistence';
 import { messageRepository } from '@/sync/messagesStore/messageRepository';
 import { trackLogout } from '@/track';
-import { unregisterCurrentPushToken } from '@/sync/pushTokenLogout';
+import { measureLogoutStage } from './logoutTiming';
+import { preparePushTokensForLogout } from './pushTokenLogoutFlow';
 
 interface AuthContextType {
     isAuthenticated: boolean;
@@ -41,19 +42,25 @@ export function AuthProvider({ children, initialCredentials }: { children: React
     const logout = async (afterPushCleanup?: () => void | Promise<void>) => {
         trackLogout();
         if (credentials) {
-            await stopPushTokenRegistration();
-            await unregisterCurrentPushToken(credentials).catch(() => {});
+            await measureLogoutStage('push-cleanup', () => preparePushTokensForLogout(credentials));
+            try {
+                await measureLogoutStage('after-push-cleanup', async () => { await afterPushCleanup?.(); });
+            } catch (error) {
+                resumePushTokenRegistration();
+                throw error;
+            }
+        } else {
+            await measureLogoutStage('after-push-cleanup', async () => { await afterPushCleanup?.(); });
         }
-        await afterPushCleanup?.();
-        clearPersistence();
-        await messageRepository.clearAll().catch(() => {});
-        await TokenStorage.removeCredentials();
+        await measureLogoutStage('clear-persistence', async () => { clearPersistence(); });
+        await measureLogoutStage('clear-messages', () => messageRepository.clearAll()).catch(() => {});
+        await measureLogoutStage('remove-credentials', () => TokenStorage.removeCredentials());
 
         // Reload the entire JS bundle to reset all in-memory state (singletons, Zustand, socket, etc.)
         if (Platform.OS === 'web') {
             window.location.href = '/';
         } else {
-            await reloadAppAsync('Logout');
+            await measureLogoutStage('reload-app', () => reloadAppAsync('Logout'));
         }
     };
 
