@@ -908,6 +908,7 @@ export const zhHans: TranslationStructure = {
         failedToCopyMetadata: '复制元数据失败',
         failedToKillSession: '终止会话失败',
         failedToArchiveSession: '归档会话失败',
+        codexArchiveFailed: 'Codex 原生归档失败，会话可能已停止。请重试归档',
         colorMarker: '颜色标记',
         clearColorMarker: '清除颜色标记',
         markerRed: '红色标记',

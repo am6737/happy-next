@@ -511,6 +511,7 @@ export async function runCodex(opts: {
         messageQueue.reset();
 
         try {
+            await handleAbort();
             if (session) {
                 session.updateMetadata((currentMetadata) => ({
                     ...currentMetadata,
@@ -525,13 +526,6 @@ export async function runCodex(opts: {
             }
         } catch (error) {
             logger.debug('[Codex] Error while ending session during termination', error);
-        }
-
-        try {
-            await handleAbort();
-            logger.debug('[Codex] Abort completed, proceeding with backend disposal');
-        } catch (error) {
-            logger.debug('[Codex] Error during abort in termination flow', error);
         }
 
         try {
@@ -555,6 +549,7 @@ export async function runCodex(opts: {
     // Register abort handler
     session.rpcHandlerManager.registerHandler('abort', () => handleAbort({ graceful: true }));
     registerKillSessionHandler(session.rpcHandlerManager, handleKillSession);
+    process.on('SIGTERM', handleKillSession);
 
     //
     // Initialize Ink UI

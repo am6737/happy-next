@@ -23,7 +23,7 @@ import {
     machineForkGeminiSession,
     machineSpawnNewSession,
     sessionDelete,
-    sessionKill,
+    sessionArchive,
 } from '@/sync/ops';
 import { cleanupWorkspace, cleanupWorktree } from '@/utils/worktreeOps';
 import { getWorkspaceRepos } from '@/utils/workspaceRepos';
@@ -98,7 +98,7 @@ function useSessionQuickActions(session: Session) {
     const [, performArchive] = useHappyAction(async () => {
         const previousActive = storage.getState().sessions[session.id]?.active ?? session.active;
         storage.getState().updateSessionActivity(session.id, false);
-        const result = await sessionKill(session.id);
+        const result = await sessionArchive(session.id);
         const errorMessage = result.message || t('sessionInfo.failedToArchiveSession');
         if (!result.success && /RPC method not available/i.test(errorMessage)) {
             await sync.clearSessionMessageCache(session.id);
@@ -109,6 +109,7 @@ function useSessionQuickActions(session: Session) {
             throw new HappyError(errorMessage, false);
         }
         await sync.clearSessionMessageCache(session.id);
+        if (result.nativeArchiveError) throw new HappyError(t('sessionInfo.codexArchiveFailed') + ': ' + result.nativeArchiveError, false);
     });
 
     const [, performDelete] = useHappyAction(async () => {

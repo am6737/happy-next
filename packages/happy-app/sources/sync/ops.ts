@@ -5,6 +5,7 @@
 
 import { apiSocket } from './apiSocket';
 import { sync } from './sync';
+import { storage } from './storage';
 import type { MachineMetadata, Metadata } from './storageTypes';
 
 // Strict type definitions for all operations
@@ -911,6 +912,27 @@ export async function sessionKill(sessionId: string): Promise<SessionKillRespons
     }
 }
 
+/** Keep Happy's stop-based archive behavior, then synchronize Codex's native history. */
+export async function sessionArchive(sessionId: string): Promise<{ success: boolean; message?: string; nativeArchiveError?: string }> {
+    const metadata = storage.getState().sessions[sessionId]?.metadata;
+    const stopped = await sessionKill(sessionId);
+    if (metadata?.flavor !== 'codex') return stopped;
+    if (!stopped.success && !/RPC method not available/i.test(stopped.message ?? '')) return stopped;
+
+    // Native failures must not roll back Happy's stop or be mistaken for a missing session RPC.
+    try {
+        if (!metadata.machineId) throw new Error('machine-id-unavailable');
+        const result = await apiSocket.machineRPC<{ success: boolean; error?: string }, { sessionId: string; nativeSessionId?: string }>(
+            metadata.machineId, 'codex-archive-session',
+            { sessionId, nativeSessionId: metadata.codexSessionId ?? undefined }, 120_000,
+        );
+        if (!result?.success) throw new Error(result?.error ?? 'native-archive-failed');
+        return { success: true };
+    } catch (error) {
+        return { success: true, nativeArchiveError: error instanceof Error ? error.message : 'native-archive-failed' };
+    }
+}
+
 /**
  * Permanently delete a session from the server
  * This will remove the session and all its associated data (messages, usage reports, access keys)
@@ -1275,20 +1297,15 @@ export async function machineDuplicateCodexSession(
     truncateBeforeUuid: string,
     options?: { timeoutMs?: number }
 ): Promise<{ success: boolean; newFilePath?: string; errorMessage?: string }> {
-    const timeoutMs = options?.timeoutMs ?? 90000;
+    const timeoutMs = options?.timeoutMs ?? 120000;
 
     try {
-        const rpcPromise = apiSocket.machineRPC<any, { codexSessionId: string; truncateBeforeUuid: string }>(
+        const result = await apiSocket.machineRPC<any, { codexSessionId: string; truncateBeforeUuid: string }>(
             machineId,
             'codex-duplicate-session',
-            { codexSessionId, truncateBeforeUuid }
+            { codexSessionId, truncateBeforeUuid },
+            timeoutMs
         );
-
-        const timeoutPromise = new Promise<never>((_, reject) => {
-            setTimeout(() => reject(new Error('Request timed out')), timeoutMs);
-        });
-
-        const result = await Promise.race([rpcPromise, timeoutPromise]);
 
         if (!result) {
             return { success: false, errorMessage: 'RPC returned empty response' };
@@ -1317,20 +1334,15 @@ export async function machineForkCodexSession(
     codexSessionId: string,
     options?: { timeoutMs?: number }
 ): Promise<{ success: boolean; newFilePath?: string; errorMessage?: string }> {
-    const timeoutMs = options?.timeoutMs ?? 90000;
+    const timeoutMs = options?.timeoutMs ?? 120000;
 
     try {
-        const rpcPromise = apiSocket.machineRPC<any, { codexSessionId: string }>(
+        const result = await apiSocket.machineRPC<any, { codexSessionId: string }>(
             machineId,
             'codex-fork-session',
-            { codexSessionId }
+            { codexSessionId },
+            timeoutMs
         );
-
-        const timeoutPromise = new Promise<never>((_, reject) => {
-            setTimeout(() => reject(new Error('Request timed out')), timeoutMs);
-        });
-
-        const result = await Promise.race([rpcPromise, timeoutPromise]);
 
         if (!result) {
             return { success: false, errorMessage: 'RPC returned empty response' };

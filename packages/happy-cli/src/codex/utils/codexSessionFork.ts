@@ -13,6 +13,7 @@ import { copyFile, readFile, writeFile, unlink as unlinkAsync } from 'node:fs/pr
 import { dirname, join, basename } from 'node:path';
 import { logger } from '@/ui/logger';
 import { findCodexSessionFile, generateStableUuid, extractUserText, isSystemMessage } from './codexSessionReader';
+import { restoreCodexSession } from '@/daemon/executeSessionArchive';
 
 export interface CodexForkResult {
   success: boolean;
@@ -39,7 +40,16 @@ export async function forkAndTruncateCodexSession(
   codexSessionId: string,
   truncateBeforeUuid?: string,
 ): Promise<CodexForkResult> {
-  const originalPath = findCodexSessionFile(codexSessionId);
+  let originalPath = findCodexSessionFile(codexSessionId);
+  if (!originalPath) {
+    try {
+      const codexHome = await restoreCodexSession(codexSessionId);
+      originalPath = findCodexSessionFile(codexSessionId, codexHome);
+    } catch (error) {
+      logger.debug('[CodexSessionFork] Native restore failed', error);
+      return { success: false, errorMessage: 'Could not restore the native Codex session. Check that its original machine and Codex installation are available.' };
+    }
+  }
   if (!originalPath) {
     return { success: false, errorMessage: `Codex session file not found for: ${codexSessionId}` };
   }

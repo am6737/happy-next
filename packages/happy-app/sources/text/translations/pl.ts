@@ -918,6 +918,7 @@ export const pl: TranslationStructure = {
         failedToCopyMetadata: 'Nie udało się skopiować metadanych',
         failedToKillSession: 'Nie udało się zakończyć sesji',
         failedToArchiveSession: 'Nie udało się zarchiwizować sesji',
+        codexArchiveFailed: 'Codex native archive failed. The session may already be stopped. Retry archiving',
         colorMarker: 'Znacznik koloru',
         clearColorMarker: 'Usuń znacznik koloru',
         markerRed: 'Czerwony znacznik',

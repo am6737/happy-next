@@ -14,6 +14,7 @@
 import { spawn, execSync, type ChildProcess } from 'node:child_process';
 import { createInterface, type Interface as ReadlineInterface } from 'node:readline';
 import { logger } from '@/ui/logger';
+import { recordManagedProcess } from '@/daemon/sessionBinding';
 
 export interface SpawnOptions {
   cwd: string;
@@ -72,6 +73,7 @@ export class CodexJsonRpcPeer {
       detached: true,  // Create new process group so we can kill all children
     });
 
+    recordManagedProcess(this.process.pid);
     this.exitPromise = new Promise<number | null>((resolve) => {
       this.process!.on('close', (code) => {
         this.exited = true;
