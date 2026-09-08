@@ -16,6 +16,8 @@ import { readGeminiSessionLog, listGeminiSessions, getGeminiSessionPreview, save
 import { forkGeminiSession, forkAndTruncateGeminiSession } from '@/gemini/utils/sessionFork';
 import { readAllCodexSessionUserMessages, listCodexSessions, getCodexSessionPreview, saveCodexSessionCacheStats } from '@/codex/utils/codexSessionReader';
 import { forkCodexSession, forkAndTruncateCodexSession } from '@/codex/utils/codexSessionFork';
+import { executeSessionArchive } from '@/daemon/executeSessionArchive';
+import { AsyncLock } from '@/utils/lock';
 import { SessionCache, matchFields, type SessionCacheRuntimeStats } from '@/cache/SessionCache';
 import { encodeBase64, decodeBase64, encrypt, decrypt } from './encryption';
 import { backoff } from '@/utils/time';
@@ -181,6 +183,8 @@ export class ApiMachineClient {
         matchFn: (s, q) => matchFields(q, [s.sessionId, s.title]),
         onStatsChanged: createSessionCacheStatsReporter(saveCodexSessionCacheStats, 'codex'),
     });
+
+    private codexArchiveLock = new AsyncLock();
 
     constructor(
         private token: string,
@@ -634,6 +638,22 @@ export class ApiMachineClient {
 
         // --- Codex session handlers ---
 
+        this.rpcHandlerManager.registerHandler('codex-archive-session', async (params: unknown) => {
+            const request = params as { sessionId?: unknown; nativeSessionId?: unknown } | null;
+            if (!request || typeof request.sessionId !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(request.sessionId)) {
+                throw new Error('sessionId is required');
+            }
+            if (request.nativeSessionId !== undefined && typeof request.nativeSessionId !== 'string') {
+                throw new Error('nativeSessionId must be a string');
+            }
+            const sessionId = request.sessionId;
+            const nativeSessionId = request.nativeSessionId as string | undefined;
+            return this.codexArchiveLock.inLock(async () => {
+                try { return await executeSessionArchive({ sessionId, nativeSessionId }); }
+                finally { this.codexCache.invalidate(); }
+            });
+        });
+
         // Get user messages from a Codex session JSONL
         this.rpcHandlerManager.registerHandler('codex-session-user-messages', async (params: any) => {
             const { codexSessionId, limit = 100, beforeIndex } = params || {};
@@ -671,7 +691,10 @@ export class ApiMachineClient {
             if (!truncateBeforeUuid || typeof truncateBeforeUuid !== 'string') {
                 throw new Error('truncateBeforeUuid is required');
             }
-            return await forkAndTruncateCodexSession(codexSessionId, truncateBeforeUuid);
+            return this.codexArchiveLock.inLock(async () => {
+                try { return await forkAndTruncateCodexSession(codexSessionId, truncateBeforeUuid); }
+                finally { this.codexCache.invalidate(); }
+            });
         });
 
         // Fork a Codex session without truncation (resume)
@@ -680,7 +703,10 @@ export class ApiMachineClient {
             if (!codexSessionId || typeof codexSessionId !== 'string') {
                 throw new Error('codexSessionId is required');
             }
-            return await forkCodexSession(codexSessionId);
+            return this.codexArchiveLock.inLock(async () => {
+                try { return await forkCodexSession(codexSessionId, params.restoreArchived === true); }
+                finally { this.codexCache.invalidate(); }
+            });
         });
 
         // --- Gemini session listing & preview ---

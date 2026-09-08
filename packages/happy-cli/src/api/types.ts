@@ -370,6 +370,7 @@ export type Metadata = {
   summaryPinned?: boolean,
   machineId?: string,
   claudeSessionId?: string, // Claude Code session ID
+  codexSessionId?: string,
   tools?: string[],
   slashCommands?: string[],
   slashCommandMetadata?: Array<{

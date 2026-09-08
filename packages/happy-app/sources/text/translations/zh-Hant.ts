@@ -954,6 +954,7 @@ export const zhHant: TranslationStructure = {
         failedToCopyMetadata: '複製中繼資料失敗',
         failedToKillSession: '終止工作階段失敗',
         failedToArchiveSession: '封存工作階段失敗',
+        codexArchiveFailed: 'Codex 原生封存失敗，工作階段可能已停止。請重試封存',
         colorMarker: '顏色標記',
         clearColorMarker: '清除顏色標記',
         markerRed: '紅色標記',

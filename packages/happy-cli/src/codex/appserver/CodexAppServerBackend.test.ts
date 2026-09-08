@@ -2,6 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CodexAppServerBackend, resolveModel } from './CodexAppServerBackend';
 import { Methods } from './types';
 import { logger } from '@/ui/logger';
+import { recordNativeThreadEmpty } from '@/daemon/sessionBinding';
+
+vi.mock('@/daemon/sessionBinding', () => ({ recordNativeThreadEmpty: vi.fn(), recordManagedProcess: vi.fn() }));
 
 function createBackend(): CodexAppServerBackend {
   return new CodexAppServerBackend({
@@ -64,6 +67,7 @@ describe('CodexAppServerBackend.startSession resume routing', () => {
       })
     );
     expect(request).not.toHaveBeenCalledWith(Methods.THREAD_START, expect.anything());
+    expect(recordNativeThreadEmpty).toHaveBeenCalledWith('thread-resumed', false);
   });
 
   it('uses thread/start when neither resumeThreadId nor resumeFile is provided', async () => {
@@ -97,6 +101,39 @@ describe('CodexAppServerBackend.startSession resume routing', () => {
 
     expect(request).toHaveBeenCalledWith(Methods.THREAD_START, expect.anything());
     expect(request).not.toHaveBeenCalledWith(Methods.THREAD_RESUME, expect.anything());
+    expect(recordNativeThreadEmpty).toHaveBeenCalledWith('thread-new', true);
+  });
+
+  it('clears empty-thread evidence before a turn RPC even if the request fails', async () => {
+    const backend = createBackend();
+    const anyBackend = backend as any;
+    anyBackend.threadId = 'empty';
+    const request = vi.fn().mockRejectedValue(new Error('disconnected'));
+    anyBackend.peer = { request };
+    await expect(anyBackend.doSendMessage('hello')).rejects.toThrow('disconnected');
+    expect(recordNativeThreadEmpty).toHaveBeenCalledWith('empty', false);
+    expect(vi.mocked(recordNativeThreadEmpty).mock.invocationCallOrder.at(-1)).toBeLessThan(request.mock.invocationCallOrder[0]);
+  });
+
+  it('does not submit a turn if clearing durable empty-thread evidence fails', async () => {
+    const backend = createBackend();
+    const anyBackend = backend as any;
+    anyBackend.threadId = 'empty';
+    const request = vi.fn();
+    anyBackend.peer = { request };
+    vi.mocked(recordNativeThreadEmpty).mockImplementationOnce(() => { throw new Error('disk full'); });
+    await expect(anyBackend.doSendMessage('hello')).rejects.toThrow('disk full');
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it.each(['compactThread', 'startReview', 'setGoal', 'clearGoal'])('clears empty-thread evidence before %s can persist history', async method => {
+    const backend = createBackend() as any;
+    backend.threadId = 'empty';
+    const request = vi.fn().mockResolvedValue({});
+    backend.peer = { request };
+    await backend[method]({ type: 'uncommittedChanges' });
+    expect(recordNativeThreadEmpty).toHaveBeenCalledWith('empty', false);
+    expect(vi.mocked(recordNativeThreadEmpty).mock.invocationCallOrder.at(-1)).toBeLessThan(request.mock.invocationCallOrder[0]);
   });
 
   it('detects the structured legacy denial format from Codex 0.145.0', async () => {

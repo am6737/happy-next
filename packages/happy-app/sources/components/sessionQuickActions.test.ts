@@ -51,4 +51,21 @@ describe('getSessionQuickActionKinds', () => {
             isConnected: true,
         })).toEqual(['details', 'newSession', 'leaveSharedSession']);
     });
+
+    it('retains native archive after stopping Codex and rebuilding the menu', () => {
+        const current = session();
+        current.metadata = { ...current.metadata!, flavor: 'codex', codexSessionId: 'native-1' };
+        expect(getSessionQuickActionKinds({ session: current, hasOrchestratorRuns: false, isConnected: true })).toContain('archiveSession');
+        current.active = false;
+        current.metadata.lifecycleState = 'archived';
+        const actions = getSessionQuickActionKinds({ session: current, hasOrchestratorRuns: false, isConnected: false });
+        expect(actions).toContain('archiveSession');
+        expect(actions).toContain('deleteSession');
+    });
+
+    it.each(['view', 'edit', 'admin'] as const)('does not offer native retry to shared %s users', accessLevel => {
+        const current = session({ active: false, accessLevel });
+        current.metadata = { ...current.metadata!, flavor: 'codex' };
+        expect(getSessionQuickActionKinds({ session: current, hasOrchestratorRuns: false, isConnected: false })).not.toContain('archiveSession');
+    });
 });

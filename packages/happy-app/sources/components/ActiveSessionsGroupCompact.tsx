@@ -12,7 +12,7 @@ import { StatusDot } from './StatusDot';
 import { useSetting, useSessionHasDraft } from '@/sync/storage';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { isMachineOnline } from '@/utils/machineUtils';
-import { machineSpawnNewSession, sessionKill } from '@/sync/ops';
+import { machineSpawnNewSession, sessionArchive } from '@/sync/ops';
 import { resolveAbsolutePath } from '@/utils/pathUtils';
 import { storage } from '@/sync/storage';
 import { Modal } from '@/modal';
@@ -349,7 +349,7 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder, registerS
         const previousActive = storage.getState().sessions[session.id]?.active ?? session.active;
         storage.getState().updateSessionActivity(session.id, false);
 
-        const result = await sessionKill(session.id);
+        const result = await sessionArchive(session.id);
         const errorMessage = result.message || t('sessionInfo.failedToArchiveSession');
 
         if (!result.success && /RPC method not available/i.test(errorMessage)) {
@@ -363,6 +363,7 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder, registerS
         }
 
         await sync.clearSessionMessageCache(session.id);
+        if (result.nativeArchiveError) throw new HappyError(t('sessionInfo.codexArchiveFailed') + ': ' + result.nativeArchiveError, false);
     });
 
     const [archiveMenuVisible, setArchiveMenuVisible] = React.useState(false);

@@ -3,6 +3,7 @@
 import { stat } from 'node:fs/promises';
 import { basename, isAbsolute } from 'node:path';
 import { z } from 'zod';
+import { restoreCodexSession } from '@/daemon/executeSessionArchive';
 import { logger } from '@/ui/logger';
 import { CODEX_PACKAGE } from '@/codex/package';
 import { CodexJsonRpcPeer } from '../appserver/CodexJsonRpcPeer';
@@ -92,18 +93,32 @@ async function findPreviousTurn(peer: CodexJsonRpcPeer, threadId: string, target
   throw new Error('Selected Codex turn is no longer present in the session');
 }
 
-export async function forkCodexSession(codexSessionId: string): Promise<CodexForkResult> {
-  return forkAndTruncateCodexSession(codexSessionId);
+export async function forkCodexSession(codexSessionId: string, restoreArchived = false): Promise<CodexForkResult> {
+  return forkAndTruncateCodexSession(codexSessionId, undefined, restoreArchived);
 }
 
 /** Preserve history before the selected user message, never mutating the source thread. */
 export async function forkAndTruncateCodexSession(
   codexSessionId: string,
   truncateBeforeUuid?: string,
+  restoreArchived = false,
 ): Promise<CodexForkResult> {
   let peer: CodexJsonRpcPeer | undefined;
   try {
-    const originalPath = findCodexSessionFile(codexSessionId);
+    let originalPath = findCodexSessionFile(codexSessionId);
+    let codexHome: string | undefined;
+    if (!originalPath) {
+      if (!restoreArchived || truncateBeforeUuid) {
+        throw new Error('Session history is unavailable. Restore the session before forking.');
+      }
+      try {
+        codexHome = await restoreCodexSession(codexSessionId);
+        originalPath = findCodexSessionFile(codexSessionId, codexHome);
+      } catch (error) {
+        logger.debug('[CodexSessionFork] Native restore failed', error);
+        throw new Error('Could not restore the native Codex session. Check that its original machine and Codex installation are available.');
+      }
+    }
     if (!originalPath) throw new Error(`Codex session file not found for: ${codexSessionId}`);
     const { threadId, targetTurnId } = readForkSource(await readCodexSessionContent(originalPath), truncateBeforeUuid);
     // Old Happy copies kept the source ID inside a renamed rollout. Do not silently fork the original instead.
@@ -112,7 +127,10 @@ export async function forkAndTruncateCodexSession(
     }
 
     peer = new CodexJsonRpcPeer();
-    await peer.spawn('npx', ['-y', CODEX_PACKAGE, 'app-server'], { cwd: process.cwd() });
+    await peer.spawn('npx', ['-y', CODEX_PACKAGE, 'app-server'], {
+      cwd: process.cwd(),
+      ...(codexHome ? { env: { CODEX_HOME: codexHome } } : {}),
+    });
     await peer.request(Methods.INITIALIZE, {
       clientInfo: { name: 'happy-codex-fork', version: '1.0.0' },
       capabilities: { experimentalApi: true },

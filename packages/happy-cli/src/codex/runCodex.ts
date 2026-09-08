@@ -610,6 +610,7 @@ export async function runCodex(opts: {
     // Register abort handler
     session.rpcHandlerManager.registerHandler('abort', () => handleAbort({ graceful: true }));
     registerKillSessionHandler(session.rpcHandlerManager, handleKillSession);
+    process.on('SIGTERM', handleKillSession);
 
     //
     // Initialize Ink UI
