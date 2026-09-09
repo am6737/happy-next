@@ -14,6 +14,7 @@ import { ChatFooter } from './ChatFooter';
 import { Message, UserTextMessage } from '@/sync/typesMessage';
 import { layout as appLayout } from './layout';
 import { createScrollButtonVisibilityController } from './scrollButtonVisibilityController';
+import { createProxyScrollIntent } from './proxyScrollIntent';
 import { t } from '@/text';
 import {
     buildLayoutModel,
@@ -944,6 +945,7 @@ const ChatListInternal = React.memo((props: {
     // While the user holds the proxy (thumb drag), the proxy owns the
     // position and its ghost height is frozen — release resyncs.
     const proxyDraggingRef = useRef(false);
+    const proxyScrollIntentRef = useRef(createProxyScrollIntent(GESTURE_QUIET_MS));
     const proxySelfWriteRef = useRef<{ topPx: number; atMs: number } | null>(null);
 
     // Real → proxy: mirror the content-space position onto the proxy's
@@ -991,6 +993,12 @@ const ChatListInternal = React.memo((props: {
             && Math.abs(top - selfWrite.topPx) <= 1) {
             return;
         }
+        if (!proxyScrollIntentRef.current.acceptScroll(performance.now())) {
+            // Safari can deliver an old proxy offset after a jump. The real
+            // list remains authoritative unless the user operated the proxy.
+            syncProxyFromRealRef.current();
+            return;
+        }
         lastUserInputAtRef.current = performance.now();
         userInputTokenRef.current += 1;
         pendingRestoreRef.current = null;
@@ -1015,6 +1023,8 @@ const ChatListInternal = React.memo((props: {
         // Grabbing the proxy's scrollbar fires pointerdown with the proxy
         // itself as the target (scrollbars belong to the element).
         const onPointerDown = () => {
+            proxyScrollIntentRef.current.pointerDown(performance.now());
+            proxySelfWriteRef.current = null;
             proxyDraggingRef.current = true;
             isPointerDownRef.current = true;
             lastUserInputAtRef.current = performance.now();
@@ -1024,18 +1034,32 @@ const ChatListInternal = React.memo((props: {
         };
         const onPointerUp = () => {
             if (!proxyDraggingRef.current) return;
+            proxyScrollIntentRef.current.pointerUp(performance.now());
+            handleProxyScrollRef.current();
             proxyDraggingRef.current = false;
             isPointerDownRef.current = false;
             syncProxyFromRealRef.current();
             if (isRenormDirty()) ensureRenormLoop();
         };
+        const onWheel = () => {
+            proxyScrollIntentRef.current.input(performance.now());
+            proxySelfWriteRef.current = null;
+        };
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (SCROLL_KEYS.has(event.key)) onWheel();
+        };
         el.addEventListener('scroll', onScroll, { passive: true });
         el.addEventListener('pointerdown', onPointerDown, { passive: true });
+        el.addEventListener('wheel', onWheel, { passive: true });
+        el.addEventListener('keydown', onKeyDown);
         window.addEventListener('pointerup', onPointerUp, { passive: true });
         window.addEventListener('pointercancel', onPointerUp, { passive: true });
         detachProxyListenersRef.current = () => {
             el.removeEventListener('scroll', onScroll);
             el.removeEventListener('pointerdown', onPointerDown);
+            el.removeEventListener('wheel', onWheel);
+            el.removeEventListener('keydown', onKeyDown);
+            proxyScrollIntentRef.current.cancel();
             window.removeEventListener('pointerup', onPointerUp);
             window.removeEventListener('pointercancel', onPointerUp);
         };
@@ -1611,6 +1635,7 @@ const ChatListInternal = React.memo((props: {
     // loop retargets instead of the click being silently dropped.
     const activeJumpTargetRef = useRef<UserTextMessage | null>(null);
     const handleJumpToMessage = useCallback(async (target: UserTextMessage) => {
+        proxyScrollIntentRef.current.cancel();
         activeJumpTargetRef.current = target;
         // A paging jump is already running — it will pick up the new target above. Keep the hint.
         if (isJumpingRef.current) return;
