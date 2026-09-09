@@ -2,7 +2,7 @@ import { Usage } from '../api/types';
 
 /**
  * Pricing rates per million tokens for different models
- * Source: https://platform.claude.com/docs/en/about-claude/pricing (as of July 2026)
+ * Source: https://platform.claude.com/docs/en/about-claude/pricing (as of September 2026)
  */
 export const PRICING = {
     // --- Claude 5 ---
@@ -24,7 +24,7 @@ export const PRICING = {
         cache_write: 6.25,
         cache_read: 0.50
     },
-    // Introductory pricing through August 31, 2026.
+    // The launch price is now the standard price; the September increase was cancelled.
     'claude-sonnet-5': {
         input: 2.0,
         output: 10.0,
@@ -139,8 +139,8 @@ export function calculateCost(usage: Usage, modelId?: string): { total: number, 
         }
         else if (modelId?.includes('opus')) {
             if (modelId.includes('opus-5')) pricing = PRICING['claude-opus-5'];
-            else if (modelId.includes('4.5')) pricing = PRICING['claude-4.5-opus'];
-            else if (modelId.includes('4.1')) pricing = PRICING['claude-4.1-opus'];
+            else if (/opus-4-[5-8](?:\D|$)|4\.[5-8](?:\D|$)/.test(modelId)) pricing = PRICING['claude-4.5-opus'];
+            else if (modelId.includes('opus-4-1') || modelId.includes('4.1')) pricing = PRICING['claude-4.1-opus'];
             else if (modelId.includes('4')) pricing = PRICING['claude-4-opus'];
             else pricing = PRICING['claude-3-opus-20240229'];
         }
@@ -152,8 +152,8 @@ export function calculateCost(usage: Usage, modelId?: string): { total: number, 
             else pricing = PRICING['claude-3-5-sonnet-20241022'];
         }
         else if (modelId?.includes('haiku')) {
-            if (modelId.includes('4.5')) pricing = PRICING['claude-4.5-haiku'];
-            else if (modelId.includes('3.5')) pricing = PRICING['claude-3-5-haiku-20241022'];
+            if (modelId.includes('haiku-4-5') || modelId.includes('4.5')) pricing = PRICING['claude-4.5-haiku'];
+            else if (modelId.includes('3-5-haiku') || modelId.includes('3.5')) pricing = PRICING['claude-3-5-haiku-20241022'];
             else pricing = PRICING['claude-3-haiku-20240307'];
         }
         else pricing = PRICING[DEFAULT_MODEL];
