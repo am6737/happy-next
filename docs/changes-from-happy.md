@@ -12,6 +12,7 @@ This document summarizes what changed in Happy Next compared to the original Hap
 | Orchestrator | Multi-agent DAG task scheduling with per-task model, working directory, real-time monitoring, execution history, and linked run navigation |
 | Pending queue | Server-side message queue with auto-dispatch, queue panel UI, send-now, plus edit and pause/draft of queued messages |
 | Multi-agent | Claude Code, Codex, and Gemini are all first-class agents |
+| GitHub | Connected repositories, issue and pull request workflows, comments, and linked AI sessions |
 | Voice | Volcano (Doubao) real-time voice gateway with streaming speech, native iOS voice calls, selectable timbre/speech rate, E2E-encrypted settings sync, plus streaming read-aloud (TTS) of AI replies with a global playback queue and floating player |
 | Workspaces | Multi-repo worktree creation, switching, archiving, and PR flows |
 | Code browser | File browser, Monaco editor, commit history, git stage/commit/discard, image preview |
@@ -37,6 +38,7 @@ This document summarizes what changed in Happy Next compared to the original Hap
 Happy Next now ships as a native-feeling desktop client instead of requiring a browser tab.
 
 - **Cross-platform distribution**: macOS 12+ Universal, Windows x64, and Windows ARM64 installers are published directly through GitHub Releases
+- **macOS home navigation**: click the sidebar title to return to the session home screen
 - **Native window lifecycle**: authentication-aware sizing, state restoration, refined fullscreen/title-bar interactions, multi-monitor bounds protection, theme-correct startup with a native startup logo, macOS title-bar integration with stable traffic-light placement and a refined sidebar header, an integrated Windows title bar whose logo returns to Sessions, and reliable custom drag regions
 - **Resident experience**: close to tray, explicit Quit, single-instance activation, optional launch at sign-in, and a global show/hide shortcut
 - **Notifications and unread state**: clean plain-text native notifications use consistent app icons, reliably restore the app and open the associated Session, return hidden windows to the foreground, and expose unified unread state on the Dock or Windows taskbar
@@ -85,6 +87,8 @@ The original Happy only supported Claude Code. Happy Next treats Claude Code, Co
 
 - **Multi-agent history page** with per-provider tabs (Claude / Codex / Gemini)
 - **Session resume and duplicate/fork** for all three agents
+- **Codex archive synchronization**: archive actions update native Codex history, keep archived state consistent in the app, and support restoring archived sessions when continuing work
+- **Reliable Codex forks**: improved duplication and forking with clear active-session conflict errors
 - **`/duplicate` slash command**: opens a message picker to fork a session from any point in the conversation — including directly from an AI reply — creating a new session with history up to the selected message and reliably resolving the corresponding user-message target
 - **Per-agent model selection** cached independently, with context window display
 - **Claude Opus 4.8** added to the model catalog
@@ -93,7 +97,7 @@ The original Happy only supported Claude Code. Happy Next treats Claude Code, Co
 - **Refreshed Gemini catalog** adds Gemini 3.8 Flash and Gemini 3.7 Flash alongside the existing Gemini models
 - **Streamlined model picker**: Claude 1M-context variants collapse into a single toggle (7 models instead of 12); reasoning-effort presets show side by side on wide screens and Claude defaults to High effort
 - **GPT-6 Astra and GPT-5.6 catalog support**: current model families include their reasoning-effort and context settings
-- **Codex v0.153.2**: bundled Codex CLI updated with current App-Server interaction support
+- **Codex v0.153.4**: bundled Codex CLI updated with current App-Server interaction support
 - **Cost tracking** with accurate token usage for Claude models (cache tokens, reasoning tokens)
 - **Codex reasoning effort** configuration (low / medium / high / xhigh)
 - **ACP (Agent Client Protocol) backend**: JSON-RPC agent protocol (originally introduced for Codex to replace the MCP client approach, now used for Gemini)
@@ -110,6 +114,12 @@ The original Happy only supported Claude Code. Happy Next treats Claude Code, Co
 - **Dynamic permission mode**: permission mode changes via RPC during active sessions
 - **Codex context restore**: `/duplicate` restores context using `thread/resume` with path
 - **Tool name normalization**: `normalizeToolName` aligns MCP tool names with Codex convention
+
+## GitHub Integration
+
+- **Connected repositories**: connect your GitHub account and browse repositories, issues, and pull requests
+- **Issue and pull request workflows**: create, comment on, close, and reopen work items from the app
+- **Linked AI sessions**: start a session with issue or pull request context, then return to associated sessions from the detail page
 
 ## Voice Assistant (Happy Voice)
 
@@ -253,6 +263,7 @@ Major reliability improvements to the real-time sync layer.
 - **Server-confirmed message sending** with retry on failure
 - **Fixes**: cursor skip on first push, outbox concurrent flush race, message duplication, seq gap message loss, syncing cursor reset, outbox drain on close, out-of-order completed-permission synthesis
 - **Account-safe push tokens**: a device token belongs to only the active account and is cleaned up reliably during logout
+- **DooPush mobile notifications**: push registration cleanup when switching accounts or signing out
 - **Message loss prevention** when CLI is offline
 - **Message receipt tracking**: CLI confirms message receipt with legacy compatibility
 - **happy-wire** shared protocol types package to deduplicate schemas across CLI/app/server
@@ -335,7 +346,7 @@ The CLI (`happy-next-cli`) received substantial upgrades.
 - **Payload optimization**: trim redundant fields, lazy-load diffs on demand
 - **MCP config centralization** with per-agent adapter pattern (Claude HTTP, Codex stdio, Gemini HTTP)
 - **Worktree detection** using native git instead of hardcoded path matching
-- **Accurate cost calculation** for Claude models
+- **Accurate cost calculation** for Claude models, including corrected rate matching for Opus 4.5-4.8 and Haiku model IDs
 - **Shell command injection fix** with unified escaping
 - **Settings persistence**: "don't ask again" for tool approvals saved to `settings.local.json`
 - **Session title management**: `change_title` tool with lock support
@@ -346,7 +357,9 @@ The CLI (`happy-next-cli`) received substantial upgrades.
 - **Latest CLI version** fetched from npm instead of hardcoded minimum
 - **Daemon auto-start on boot**: `happy daemon enable` / `happy daemon disable`
 - **Daemon restart command**: restart the daemon without manual kill
-- **Codex v0.153.2 with fast mode**: upgraded Codex with current App-Server interaction support
+- **Happy CLI v0.7.0 with Codex v0.153.4**: current App-Server interaction support and fast mode
+- **Codex session resume**: select from a scrolling session picker, resume by ID or continue the latest session, and choose the working directory
+- **Clean Codex exit**: avoid leaving the terminal hanging when a session ends
 - **Attribution setting**: new setting to control commit attribution, default off
 - **Unified system prompt injection**: shared prompt injection for Codex and Gemini
 - **Orchestrator guidance**: first-turn prompts include orchestrator usage guidance

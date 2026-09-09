@@ -87,6 +87,7 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 
 ### Desktop Apps (macOS + Windows)
 - Direct-download clients for macOS 12+ Universal, Windows x64, and Windows ARM64
+- Click the macOS sidebar title to return to the session home screen
 - Native window sizing and restoration, frameless macOS title-bar integration with stable traffic-light placement and a refined sidebar header, an integrated Windows title bar whose logo returns to Sessions, refined fullscreen/title-bar interactions, multi-monitor bounds protection, and theme-correct startup with a native startup logo
 - Tray residency, close-to-tray behavior, single-instance activation, clean plain-text native notifications with consistent app icons that reliably restore the app and open the corresponding session, and unified Dock/taskbar unread indicators
 - Native application menus, search and navigation shortcuts, optional launch at sign-in, and a global show/hide shortcut
@@ -113,7 +114,9 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - All three agents are first-class citizens with session resume, duplicate/fork, and history
 - Multi-agent history page with per-provider tabs, device and agent filter dropdowns
 - Per-agent model selection, cost tracking, and context window display
-- ACP and App-Server (JSON-RPC) backends for Codex, with Codex v0.153.2 and fast mode
+- ACP and App-Server (JSON-RPC) backends for Codex, with Codex v0.153.4 and fast mode
+- Codex archive actions synchronize with native history, show archived state consistently, and support restoring archived sessions when continuing work
+- Reliable Codex duplication and forking, with clear active-session conflict errors
 - Codex interactive questions and approval requests render in the app, including choices, custom Other values, free-form text, and masked sensitive answers
 - AI backend profiles with presets for DeepSeek, Z.AI, OpenAI, Azure, and Google AI
 - Claude Opus 4.8 support with empty thinking block filtering for clean 4.x rendering
@@ -134,6 +137,11 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Context-aware voice: app state is injected into the voice LLM automatically
 - Read any AI reply aloud with a one-tap voice button in the message footer — true streaming text-to-speech starts playback as audio is synthesized, backed by a global read-aloud queue and a draggable floating player so you can line up messages and control playback from anywhere; a v2 text-cleanup prompt with a digest mode condenses long messages for smoother narration
 - Manage sessions by voice — start, switch, and message a session through dedicated voice tools with a single session-settings mode parameter, clearer titles, and an auto-close countdown on the session-picker cancel button
+
+### GitHub Integration
+- Connect your GitHub account and browse repositories, issues, and pull requests
+- Create, comment on, close, and reopen issues and pull requests from the app
+- Start an AI session with issue or pull request context, and return to linked sessions from the detail page
 
 ### Multi-Repo Worktree Workspaces
 - Create, switch, and archive multi-repo workspaces from the app
@@ -250,11 +258,15 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Switching model or toggling plan mode hot-swaps on the already-warm Claude subprocess instead of cold-restarting, so changes apply instantly mid-session
 - Switching a session from remote back to local cleans up terminal stdin so leftover raw-mode input no longer leaks into the terminal
 - Multiline skill metadata parses correctly, and enabled Codex plugin skills are discovered consistently
-- Happy CLI v0.6.7 bundles Codex v0.153.2 with current App-Server interaction support
+- Happy CLI v0.7.0 bundles Codex v0.153.4 with current App-Server interaction support
+- Resume Codex sessions from a scrolling picker, by session ID, or from the latest session, with working-directory selection
+- Codex exits cleanly without leaving the terminal hanging
 
 ### Bug Fixes & Stability
 - 255+ bug fixes: message sending reliability, session lifecycle, Markdown rendering, navigation, voice, DooTask, sharing
 - Push tokens remain bound to only the active account and are cleaned up reliably during logout
+- DooPush mobile notifications with registration cleanup when switching accounts or signing out
+- Correct cost estimates for Claude Opus 4.5-4.8 and Haiku model IDs
 - Security: shell command injection fix, plan mode permission handling
 - Performance: payload trimming for mobile, lazy-load diffs, rendering optimization, incremental session catch-up on open
 

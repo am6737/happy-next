@@ -1,5 +1,19 @@
 # Changelog
 
+## Version 23 - 2026-09-09
+
+Happy Next v2.9.0 brings GitHub repositories, issues, and pull requests into the app, with linked AI sessions for follow-up work. Codex sessions are easier to resume and archive, mobile notifications gain DooPush support, and macOS navigation and Claude cost estimates are more reliable. Happy CLI is updated to v0.7.0 with Codex v0.153.4.
+
+- GitHub: connect your account, browse repositories, and view, create, comment on, close, and reopen issues and pull requests
+- GitHub sessions: start an AI session from an issue or pull request with its context, and return to linked sessions from the detail page
+- Codex resume: choose a session from a scrolling list, resume by ID or continue the latest session, and select the working directory
+- Codex archive: synchronize archive actions with native Codex history, show archived state consistently, and restore archived sessions when continuing work
+- Codex reliability: improve session duplication and forking, report active-session conflicts clearly, and prevent terminal exit from hanging
+- Push notifications: add DooPush support and improve push registration cleanup when switching accounts or signing out
+- macOS: click the sidebar title to return to the session home screen
+- Cost estimates: correct rate matching for Claude Opus 4.5-4.8 and Haiku model IDs
+- CLI: Happy CLI v0.7.0 bundles Codex v0.153.4
+
 ## Version 22 - 2026-09-04
 
 Codex sessions now support interactive questions and richer approval requests, while the model picker is ready for the newest Codex, Claude, and Gemini model families. This release also keeps push tokens tied to the active account, improves multi-image viewing, polishes the macOS sidebar and window controls, and updates Happy CLI to v0.6.7.
