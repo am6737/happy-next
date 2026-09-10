@@ -25,6 +25,7 @@ interface DiffDetailResponse {
  */
 const UnifiedDiffContent = React.memo<{ diff: string }>(({ diff }) => {
     const { theme } = useUnistyles();
+    const selectable = useCopySelectable();
     const colors = theme.colors.diff;
 
     const lines = diff.split('\n');
@@ -46,6 +47,7 @@ const UnifiedDiffContent = React.memo<{ diff: string }>(({ diff }) => {
                 return (
                     <Text
                         key={i}
+                        selectable={selectable}
                         numberOfLines={1}
                         style={{
                             ...Typography.mono(),
