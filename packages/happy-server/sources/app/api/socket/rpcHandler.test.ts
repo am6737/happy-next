@@ -21,6 +21,9 @@ describe('RPC native history timeouts', () => {
         ['machine:claude-fork-session', 30000],
         ['session:openFilePreview', 60000],
         ['session:readFilePreviewChunk', 30000],
+        ['session:openFileDownload', 60000],
+        ['session:readFileDownloadChunk', 30000],
+        ['session:closeFileDownload', 30000],
     ])('uses the scoped timeout for %s', async (method, timeout) => {
         const handlers = new Map<string, (...args: any[]) => unknown>();
         const socket = { on: (name: string, handler: (...args: any[]) => unknown) => handlers.set(name, handler) } as unknown as Socket;
@@ -35,10 +38,26 @@ describe('RPC native history timeouts', () => {
 });
 
 describe('shared-session preview permissions', () => {
+    it('rejects download requests without session access', async () => {
+        vi.mocked(checkSessionAccess).mockResolvedValue(null);
+        vi.mocked(getOrCreateUserRpcListeners).mockClear();
+        const handlers = new Map<string, (...args: any[]) => unknown>();
+        const socket = { on: (name: string, handler: (...args: any[]) => unknown) => handlers.set(name, handler) } as unknown as Socket;
+        rpcHandler('outsider', socket, new Map());
+        const callback = vi.fn();
+        await handlers.get('rpc-call')!({ method: 'shared-session:openFileDownload', params: 'encrypted' }, callback);
+        expect(callback).toHaveBeenCalledWith({ ok: false, error: 'RPC method not available' });
+        expect(getOrCreateUserRpcListeners).not.toHaveBeenCalled();
+    });
     it.each([
         ['view', 'openFilePreview', true],
         ['view', 'readFilePreviewChunk', true],
         ['view', 'closeFilePreview', true],
+        ['view', 'openFileDownload', true],
+        ['view', 'readFileDownloadChunk', true],
+        ['view', 'closeFileDownload', true],
+        ['edit', 'openFileDownload', true],
+        ['admin', 'openFileDownload', true],
         ['edit', 'openFilePreview', true],
         ['admin', 'openFilePreview', true],
         ['view', 'writeFile', false],

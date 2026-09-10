@@ -12,6 +12,9 @@ const VIEW_SHARED_SESSION_RPC_METHODS = new Set([
     'openFilePreview',
     'readFilePreviewChunk',
     'closeFilePreview',
+    'openFileDownload',
+    'readFileDownloadChunk',
+    'closeFileDownload',
     'listDirectory',
     'getDirectoryTree',
     'ripgrep',
@@ -186,7 +189,7 @@ export function rpcHandler(userId: string, socket: Socket, rpcListeners: Map<str
                 // Codex native history operations may include process shutdown and app-server startup.
                 const nativeHistory = [':codex-archive-session', ':codex-fork-session', ':codex-duplicate-session']
                     .some(suffix => method.endsWith(suffix));
-                const filePreview = method.endsWith(':openFilePreview');
+                const filePreview = method.endsWith(':openFilePreview') || method.endsWith(':openFileDownload');
                 const response = await targetSocket.timeout(nativeHistory ? 110000 : filePreview ? 60000 : 30000).emitWithAck('rpc-request', {
                     method,
                     params

@@ -33,6 +33,8 @@ import { ImageViewer } from '@/components/ImageViewer';
 import type { ImageViewerImage } from '@/components/ImageViewer';
 import { getFilePreviewType } from 'happy-wire';
 import { FilePreviewScreen } from '@/components/FilePreview/FilePreviewScreen';
+import { useFileDownload } from '@/components/FilePreview/useFileDownload';
+import { FileDownloadProgress } from '@/components/FilePreview/FileDownloadProgress';
 
 function getRepoRelativePath(filePath: string, repoPath: string): string {
     if (repoPath && filePath.startsWith(`${repoPath}/`)) {
@@ -175,6 +177,13 @@ function LegacyFileScreen() {
         }
         return filePath;
     }, [filePath, gitCwd, sessionPath]);
+    const download = useFileDownload(sessionId!, {
+        path: filePath,
+        repoPath: gitCwd || sessionPath,
+        version: ref ? 'commit' : isStaged ? 'index' : 'worktree',
+        revision: ref,
+        compare: preferredView === 'diff' || !!ref || isStaged,
+    });
 
     const shareImage = React.useCallback(async (base64: string, mimeType: string) => {
         const ext = getExtensionFromMimeType(mimeType);
@@ -229,6 +238,11 @@ function LegacyFileScreen() {
     // Menu items
     const menuItems: ActionMenuItem[] = React.useMemo(() => {
         const items: ActionMenuItem[] = [
+            {
+                label: t('files.preview.download'),
+                onPress: download.start,
+                disabled: download.downloading,
+            },
             {
                 label: t('files.copyRelativePath'),
                 onPress: async () => {
@@ -301,7 +315,7 @@ function LegacyFileScreen() {
         }
 
         return items;
-    }, [relativePath, fileName, fileContent, diffContent, ref, sessionPath, gitCwd, sessionId, filePath, router, isPreviewImageFile, handleShare]);
+    }, [relativePath, fileName, fileContent, diffContent, ref, sessionPath, gitCwd, sessionId, filePath, router, isPreviewImageFile, handleShare, download.start, download.downloading]);
 
     // Determine file language from extension
     const getFileLanguage = React.useCallback((path: string): string | null => {
@@ -594,6 +608,19 @@ function LegacyFileScreen() {
         [currentContent, handleLongPress]
     );
 
+    const fileActions = <>
+        <Stack.Screen options={{
+            headerRight: () => (
+                <Pressable onPress={() => setMenuVisible(true)} accessibilityRole="button" accessibilityLabel={t('files.file')}
+                    style={{ paddingHorizontal: 8, paddingVertical: 4 }}>
+                    <Ionicons name="ellipsis-horizontal" size={22} color={theme.colors.header.tint} />
+                </Pressable>
+            ),
+        }} />
+        <ActionMenuModal visible={menuVisible} items={menuItems} onClose={() => setMenuVisible(false)} />
+        <FileDownloadProgress progress={download.progress} onCancel={download.cancel} />
+    </>;
+
     if (isLoading) {
         return (
             <View style={{
@@ -602,6 +629,7 @@ function LegacyFileScreen() {
                 justifyContent: 'center',
                 alignItems: 'center'
             }}>
+                {fileActions}
                 <ActivityIndicator size="small" color={theme.colors.textSecondary} />
                 <Text style={{
                     marginTop: 16,
@@ -624,6 +652,7 @@ function LegacyFileScreen() {
                 alignItems: 'center',
                 padding: 20
             }}>
+                {fileActions}
                 <Text style={{
                     fontSize: 18,
                     fontWeight: 'bold',
@@ -654,6 +683,7 @@ function LegacyFileScreen() {
                 alignItems: 'center',
                 padding: 20
             }}>
+                {fileActions}
                 <Text style={{
                     fontSize: 18,
                     fontWeight: 'bold',
@@ -686,23 +716,7 @@ function LegacyFileScreen() {
 
     return (
         <View style={[styles.container, { backgroundColor: theme.colors.surface }]}>
-            <Stack.Screen
-                options={{
-                    headerRight: () => (
-                        <Pressable
-                            onPress={() => setMenuVisible(true)}
-                            style={{ paddingHorizontal: 8, paddingVertical: 4 }}
-                        >
-                            <Ionicons name="ellipsis-horizontal" size={22} color={theme.colors.header.tint} />
-                        </Pressable>
-                    ),
-                }}
-            />
-            <ActionMenuModal
-                visible={menuVisible}
-                items={menuItems}
-                onClose={() => setMenuVisible(false)}
-            />
+            {fileActions}
 
             {/* File path header - single line, scrollable, long press to copy */}
             <View style={{

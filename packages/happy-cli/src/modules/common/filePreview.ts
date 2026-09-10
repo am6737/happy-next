@@ -8,12 +8,14 @@ import {
     FILE_PREVIEW_BINARY_LIMIT,
     FILE_PREVIEW_TEXT_LIMIT,
     FILE_PREVIEW_CHUNK_SIZE,
+    FILE_DOWNLOAD_LIMIT,
     openFilePreviewRequestSchema,
     filePreviewChunkRequestSchema,
     getFilePreviewType,
     type OpenFilePreviewResponse,
     type FilePreviewChunkResponse,
     type FilePreviewFailure,
+    type OpenFileDownloadResponse,
 } from 'happy-wire';
 
 const execFileAsync = promisify(execFile);
@@ -97,6 +99,26 @@ export function parsePreviewChanges(output: string): Change[] {
 
 // Each handler instance belongs to one session. Snapshots are immutable and never shared across sessions.
 export function createFilePreviewHandlers(workingDirectory: string) {
+    return createFileTransferHandlers(workingDirectory, false);
+}
+
+export function createFileDownloadHandlers(workingDirectory: string) {
+    return createFileTransferHandlers(workingDirectory, true);
+}
+
+type TransferHandlers<Response> = {
+    open: (input: unknown) => Promise<Response>;
+    chunk: (input: unknown) => Promise<FilePreviewChunkResponse>;
+    close: (input: unknown) => Promise<{ success: boolean }>;
+};
+
+function createFileTransferHandlers(workingDirectory: string, download: false): TransferHandlers<OpenFilePreviewResponse>;
+function createFileTransferHandlers(workingDirectory: string, download: true): TransferHandlers<OpenFileDownloadResponse>;
+function createFileTransferHandlers(workingDirectory: string, download: boolean): TransferHandlers<OpenFileDownloadResponse> {
+    const getType = (path: string) => getFilePreviewType(path) || (
+        download ? { kind: 'file' as const, mimeType: 'application/octet-stream' } : null
+    );
+    let opening = false;
     const snapshots = new Map<
         string,
         { data: Buffer; timer: ReturnType<typeof setTimeout> }
@@ -112,13 +134,17 @@ export function createFilePreviewHandlers(workingDirectory: string) {
     }
 
     return {
-        async open(input: unknown): Promise<OpenFilePreviewResponse> {
+        async open(input: unknown): Promise<OpenFileDownloadResponse> {
+            // Do not evict an active download or allocate multiple 100 MiB snapshots.
+            if (download && (opening || snapshots.size))
+                return failure(new PreviewError('unavailable', 'A download is already active; retry after it completes'));
+            opening = true;
             try {
                 const parsed = openFilePreviewRequestSchema.safeParse(input);
                 if (!parsed.success)
                     throw new PreviewError('denied', 'Invalid preview request');
                 const request = parsed.data;
-                let type = getFilePreviewType(request.path);
+                let type = getType(request.path);
                 if (!type)
                     throw new PreviewError(
                         'unavailable',
@@ -204,14 +230,14 @@ export function createFilePreviewHandlers(workingDirectory: string) {
                         );
                         if (change) {
                             path = change.path;
-                            type = getFilePreviewType(path);
+                            type = getType(path);
                             if (!type)
                                 throw new PreviewError(
                                     'unavailable',
                                     'Unsupported renamed file type'
                                 );
                             deleted = change.status === 'D';
-                            if (type.kind !== 'pdf' && type.kind !== 'image') {
+                            if (!download && type.kind !== 'pdf' && type.kind !== 'image') {
                                 diff = (
                                     await git(repo, [
                                         ...comparison,
@@ -226,7 +252,8 @@ export function createFilePreviewHandlers(workingDirectory: string) {
                                 ).toString('utf8');
                             }
                         }
-                    } catch {
+                    } catch (error) {
+                        if (download) throw error;
                         diffUnavailable = true;
                     }
                 }
@@ -259,13 +286,13 @@ export function createFilePreviewHandlers(workingDirectory: string) {
                     }
                 }
 
-                type = getFilePreviewType(path);
+                type = getType(path);
                 if (!type)
                     throw new PreviewError(
                         'unavailable',
                         'Unsupported preview type'
                     );
-                const limit =
+                const limit = download ? FILE_DOWNLOAD_LIMIT :
                     type.kind === 'pdf' || type.kind === 'image'
                         ? FILE_PREVIEW_BINARY_LIMIT
                         : FILE_PREVIEW_TEXT_LIMIT;
@@ -305,7 +332,9 @@ export function createFilePreviewHandlers(workingDirectory: string) {
                             if (!result.bytesRead) break;
                             offset += result.bytesRead;
                         }
-                        if (offset > info.size)
+                        const after = await handle.stat();
+                        if (offset !== info.size || after.size !== info.size ||
+                            after.mtimeMs !== info.mtimeMs || after.ctimeMs !== info.ctimeMs)
                             throw new PreviewError(
                                 'unavailable',
                                 'File changed while being read; retry'
@@ -378,7 +407,7 @@ export function createFilePreviewHandlers(workingDirectory: string) {
                         'File exceeds the preview size limit'
                     );
                 while (
-                    cachedBytes + data.length > CACHE_LIMIT &&
+                    cachedBytes + data.length > (download ? FILE_DOWNLOAD_LIMIT : CACHE_LIMIT) &&
                     snapshots.size
                 )
                     release(snapshots.keys().next().value!);
@@ -402,6 +431,8 @@ export function createFilePreviewHandlers(workingDirectory: string) {
                 };
             } catch (error) {
                 return failure(error);
+            } finally {
+                opening = false;
             }
         },
         async chunk(input: unknown): Promise<FilePreviewChunkResponse> {

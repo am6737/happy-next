@@ -11,8 +11,7 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { Asset } from 'expo-asset';
-import { File, Paths } from 'expo-file-system';
-import * as Sharing from 'expo-sharing';
+import { File } from 'expo-file-system';
 import * as Clipboard from 'expo-clipboard';
 import { useUnistyles } from 'react-native-unistyles';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -43,6 +42,8 @@ import {
 } from './loadFilePreview';
 import { buildStaticDocument, buildSvgDocument } from './staticDocument';
 import { SandboxDocument } from './SandboxDocument';
+import { useFileDownload } from './useFileDownload';
+import { FileDownloadProgress } from './FileDownloadProgress';
 
 export function FilePreviewScreen({ filePath }: { filePath: string }) {
     const params = useLocalSearchParams<{
@@ -81,8 +82,16 @@ export function FilePreviewScreen({ filePath }: { filePath: string }) {
     const [darkBackground, setDarkBackground] = React.useState(false);
     const [svgZoom, setSvgZoom] = React.useState(1);
     const [menuVisible, setMenuVisible] = React.useState(false);
-    const [exporting, setExporting] = React.useState(false);
     const [pdfTemplate, setPdfTemplate] = React.useState<string | null>(null);
+    const download = useFileDownload(sessionId, {
+        path: filePath,
+        repoPath,
+        version: ref ? 'commit' : staged === '1' ? 'index' : 'worktree',
+        revision: ref,
+        compare,
+    }, loaded);
+    const handleExport = download.start;
+    const exporting = download.downloading;
 
     React.useEffect(() => {
         const controller = new AbortController();
@@ -148,50 +157,6 @@ export function FilePreviewScreen({ filePath }: { filePath: string }) {
         attempt,
     ]);
 
-    const handleExport = React.useCallback(async () => {
-        if (!loaded || exporting) return;
-        setExporting(true);
-        const outputFileName =
-            loaded.metadata.path.split('/').pop() || fileName;
-        try {
-            if (Platform.OS === 'web') {
-                const url = URL.createObjectURL(
-                    new Blob([new Uint8Array(loaded.data)], {
-                        type: loaded.metadata.mimeType,
-                    })
-                );
-                const anchor = document.createElement('a');
-                anchor.href = url;
-                anchor.download = outputFileName;
-                document.body.appendChild(anchor);
-                anchor.click();
-                anchor.remove();
-                setTimeout(() => URL.revokeObjectURL(url), 1000);
-            } else {
-                if (!(await Sharing.isAvailableAsync()))
-                    throw new Error('Sharing unavailable');
-                const file = new File(
-                    Paths.cache,
-                    `preview-${Date.now()}-${outputFileName}`
-                );
-                try {
-                    file.create({ overwrite: true });
-                    file.write(loaded.data);
-                    await Sharing.shareAsync(file.uri, {
-                        mimeType: loaded.metadata.mimeType,
-                        dialogTitle: fileName,
-                    });
-                } finally {
-                    if (file.exists) file.delete();
-                }
-            }
-        } catch {
-            Modal.alert(t('common.error'), t('files.preview.unavailable'));
-        } finally {
-            setExporting(false);
-        }
-    }, [loaded, fileName, exporting]);
-
     const menuItems: ActionMenuItem[] = [
         {
             label: t('files.preview.retry'),
@@ -212,14 +177,11 @@ export function FilePreviewScreen({ filePath }: { filePath: string }) {
             },
         },
     ];
-    if (loaded)
-        menuItems.push({
-            label:
-                Platform.OS === 'web'
-                    ? t('files.preview.download')
-                    : t('files.share'),
-            onPress: handleExport,
-        });
+    menuItems.push({
+        label: t('files.preview.download'),
+        onPress: handleExport,
+        disabled: exporting,
+    });
     if (!ref)
         menuItems.push({
             label: t('files.fileHistory'),
@@ -503,6 +465,7 @@ export function FilePreviewScreen({ filePath }: { filePath: string }) {
                 items={menuItems}
                 onClose={() => setMenuVisible(false)}
             />
+            {!fullscreen && <FileDownloadProgress progress={download.progress} onCancel={download.cancel} />}
             <View
                 style={{
                     paddingHorizontal: 16,
@@ -756,6 +719,7 @@ export function FilePreviewScreen({ filePath }: { filePath: string }) {
                         )}
                     </View>
                     {fullscreen && preview}
+                    {fullscreen && <FileDownloadProgress progress={download.progress} onCancel={download.cancel} />}
                 </View>
             </NativeModal>
             {imageUri && kind === 'image' && (

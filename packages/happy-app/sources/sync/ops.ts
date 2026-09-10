@@ -8,6 +8,19 @@ import { sync } from './sync';
 import { storage } from './storage';
 import type { MachineMetadata, Metadata } from './storageTypes';
 import type { OpenFilePreviewRequest, OpenFilePreviewResponse, FilePreviewChunkResponse } from 'happy-wire';
+import type { OpenFileDownloadRequest, OpenFileDownloadResponse } from 'happy-wire';
+
+export async function sessionOpenFileDownload(sessionId: string, request: OpenFileDownloadRequest) {
+    return apiSocket.sessionRPC<OpenFileDownloadResponse, OpenFileDownloadRequest>(sessionId, 'openFileDownload', request, 65000);
+}
+
+export async function sessionReadFileDownloadChunk(sessionId: string, token: string, offset: number) {
+    return apiSocket.sessionRPC<FilePreviewChunkResponse, { token: string; offset: number }>(sessionId, 'readFileDownloadChunk', { token, offset });
+}
+
+export async function sessionCloseFileDownload(sessionId: string, token: string) {
+    return apiSocket.sessionRPC(sessionId, 'closeFileDownload', { token, offset: 0 });
+}
 
 export async function sessionOpenFilePreview(sessionId: string, request: OpenFilePreviewRequest) {
     return apiSocket.sessionRPC<OpenFilePreviewResponse, OpenFilePreviewRequest>(sessionId, 'openFilePreview', request, 65000);
