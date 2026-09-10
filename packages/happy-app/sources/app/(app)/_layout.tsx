@@ -68,6 +68,13 @@ export default function RootLayout() {
                 }}
             />
             <Stack.Screen
+                name="github/index"
+                options={{
+                    headerShown: true,
+                    headerTitle: t('tabs.github'),
+                }}
+            />
+            <Stack.Screen
                 name="inbox/notice/[id]"
                 options={{
                     headerShown: true,
