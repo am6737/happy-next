@@ -1204,6 +1204,7 @@ export const zhHans: TranslationStructure = {
             replaceAll: '全部替换',
         },
         names: {
+            viewImage: "查看图片",
             task: '任务',
             terminal: '终端',
             searchFiles: '搜索文件',
@@ -1252,6 +1253,9 @@ export const zhHans: TranslationStructure = {
 
     files: {
         preview: {
+            imageNotRegistered: "此调用没有图片读取记录，旧调用可能不支持预览。",
+            imageMissing: "原图片已不存在。",
+            imageChanged: "图片文件或路径已被替换，无法继续预览。",
             reload: "重新加载",
             shareContent: "分享内容…",
             downloadTooLarge: "文件超过下载上限（100 MiB）。",

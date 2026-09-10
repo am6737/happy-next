@@ -3,6 +3,7 @@ import {
     FILE_PREVIEW_TEXT_LIMIT,
     FILE_PREVIEW_CHUNK_SIZE,
     type OpenFilePreviewRequest,
+    type OpenToolImagePreviewRequest,
     type OpenFilePreviewResponse,
     type FilePreviewChunkResponse,
     type FilePreviewErrorCode,
@@ -14,15 +15,15 @@ export class FilePreviewLoadError extends Error {
     }
 }
 
-type Rpc = {
-    open: (request: OpenFilePreviewRequest) => Promise<OpenFilePreviewResponse>;
+type Rpc<Request> = {
+    open: (request: Request) => Promise<OpenFilePreviewResponse>;
     chunk: (token: string, offset: number) => Promise<FilePreviewChunkResponse>;
     close: (token: string) => Promise<unknown>;
 };
 
-export async function loadFilePreview(
-    request: OpenFilePreviewRequest,
-    rpc: Rpc,
+export async function loadFilePreview<Request extends OpenFilePreviewRequest | OpenToolImagePreviewRequest = OpenFilePreviewRequest>(
+    request: Request,
+    rpc: Rpc<Request>,
     signal: AbortSignal
 ) {
     const metadata = await rpc.open(request);

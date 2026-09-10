@@ -5,6 +5,7 @@ import * as z from 'zod';
 import { Ionicons, Octicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import React from 'react';
 import { t } from '@/text';
+import { getViewImageDisplayPath } from './viewImageInput';
 
 // Icon factory functions
 const ICON_TASK = (size: number = 24, color: string = '#000') => <Octicons name="rocket" size={size} color={color} />;
@@ -21,6 +22,13 @@ const ICON_SKILL = (size: number = 24, color: string = '#000') => <Ionicons name
 const ICON_ROBOT = (size: number = 24, color: string = '#000') => <MaterialCommunityIcons name="robot-outline" size={size} color={color} />;
 
 export const knownTools = {
+    'view_image': {
+        title: () => t('tools.names.viewImage'),
+        extractSubtitle: (opts: { metadata: Metadata | null, tool: ToolCall }) => getViewImageDisplayPath(opts.tool.input, opts.metadata?.homeDir),
+        icon: (size: number, color: string) => <Ionicons name="image-outline" size={size} color={color} />,
+        minimal: true,
+        isMutable: false,
+    },
     'Task': {
         title: (opts: { metadata: Metadata | null, tool: ToolCall }) => {
             // Check for description field at runtime

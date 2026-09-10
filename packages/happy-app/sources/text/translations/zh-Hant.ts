@@ -1204,6 +1204,7 @@ export const zhHant: TranslationStructure = {
             replaceAll: '全部替換',
         },
         names: {
+            viewImage: "檢視圖片",
             task: '任務',
             terminal: '終端機',
             searchFiles: '搜尋檔案',
@@ -1252,6 +1253,9 @@ export const zhHant: TranslationStructure = {
 
     files: {
         preview: {
+            imageNotRegistered: "此呼叫沒有圖片讀取記錄，舊呼叫可能不支援預覽。",
+            imageMissing: "原圖片已不存在。",
+            imageChanged: "圖片檔案或路徑已被替換，無法繼續預覽。",
             reload: "重新載入",
             shareContent: "分享內容…",
             downloadTooLarge: "檔案超過下載上限（100 MiB）。",

@@ -1202,6 +1202,7 @@ export const pt: TranslationStructure = {
             replaceAll: 'Substituir tudo',
         },
         names: {
+            viewImage: "Ver imagem",
             task: 'Tarefa',
             terminal: 'Terminal',
             searchFiles: 'Buscar arquivos',
@@ -1250,6 +1251,9 @@ export const pt: TranslationStructure = {
 
     files: {
         preview: {
+            imageNotRegistered: "Esta chamada não tem uma imagem registrada. Chamadas antigas podem não permitir a prévia.",
+            imageMissing: "A imagem original não existe mais.",
+            imageChanged: "O arquivo de imagem ou o caminho foi substituído. Acesso à prévia negado.",
             reload: "Recarregar",
             shareContent: "Compartilhar conteúdo...",
             downloadTooLarge: "File exceeds the download limit (100 MiB).",

@@ -2,6 +2,7 @@ import { AgentEvent, ImageContent } from "./typesRaw";
 import { MessageMeta } from "./typesMessageMeta";
 
 export type ToolCall = {
+    callId?: string;
     name: string;
     state: 'running' | 'completed' | 'error';
     input: any;

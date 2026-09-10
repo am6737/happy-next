@@ -1241,6 +1241,7 @@ export const ja: TranslationStructure = {
             replaceAll: 'すべて置換',
         },
         names: {
+            viewImage: "画像を表示",
             task: 'タスク',
             terminal: 'ターミナル',
             searchFiles: 'ファイル検索',
@@ -1282,6 +1283,9 @@ export const ja: TranslationStructure = {
 
     files: {
         preview: {
+            imageNotRegistered: "この呼び出しには画像の登録がありません。古い呼び出しはプレビューに対応していない場合があります。",
+            imageMissing: "元の画像が見つかりません。",
+            imageChanged: "画像ファイルまたはパスが置き換えられたため、プレビューできません。",
             reload: "再読み込み",
             shareContent: "内容を共有…",
             downloadTooLarge: "File exceeds the download limit (100 MiB).",

@@ -11,6 +11,7 @@ import { validatePath } from './pathSecurity';
 import { getDiffDetail } from './diffStore';
 import { getToolOutputRecord } from './toolOutputStore';
 import { createFilePreviewHandlers, createFileDownloadHandlers } from './filePreview';
+import { createToolImagePreviewHandlers } from './toolImagePreview';
 
 const execAsync = promisify(exec);
 
@@ -181,6 +182,10 @@ export type SpawnSessionResult =
  * Register all RPC handlers with the session
  */
 export function registerCommonHandlers(rpcHandlerManager: RpcHandlerManager, workingDirectory: string, sessionId?: string) {
+    const toolImages = createToolImagePreviewHandlers(sessionId);
+    rpcHandlerManager.registerHandler('openToolImagePreview', toolImages.open);
+    rpcHandlerManager.registerHandler('readToolImagePreviewChunk', toolImages.chunk);
+    rpcHandlerManager.registerHandler('closeToolImagePreview', toolImages.close);
     const previews = createFilePreviewHandlers(workingDirectory);
     rpcHandlerManager.registerHandler('openFilePreview', previews.open);
     rpcHandlerManager.registerHandler('readFilePreviewChunk', previews.chunk);

@@ -1213,6 +1213,7 @@ export const pl: TranslationStructure = {
             replaceAll: 'Zamień wszystkie',
         },
         names: {
+            viewImage: "Wyświetl obraz",
             task: 'Zadanie',
             terminal: 'Terminal',
             searchFiles: 'Wyszukaj pliki',
@@ -1261,6 +1262,9 @@ export const pl: TranslationStructure = {
 
     files: {
         preview: {
+            imageNotRegistered: "To wywołanie nie ma zarejestrowanego obrazu. Starsze wywołania mogą nie obsługiwać podglądu.",
+            imageMissing: "Oryginalny obraz już nie istnieje.",
+            imageChanged: "Plik obrazu lub jego ścieżka zostały zastąpione. Odmowa dostępu do podglądu.",
             reload: "Wczytaj ponownie",
             shareContent: "Udostępnij treść...",
             downloadTooLarge: "File exceeds the download limit (100 MiB).",

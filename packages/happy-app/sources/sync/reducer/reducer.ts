@@ -653,6 +653,7 @@ export function reducer(state: ReducerState, messages: NormalizedMessage[], agen
                             message.realID = msg.id;
                             message.localId = msg.localId ?? message.localId ?? null;
                             message.tool.description = c.description;
+                            if (c.name === 'view_image') message.tool.callId = c.id;
                             message.tool.startedAt = msg.createdAt;
                             // If permission was approved and shown as completed (no tool), now it's running
                             if (message.tool.permission?.status === 'approved' && message.tool.state === 'completed') {
@@ -671,6 +672,7 @@ export function reducer(state: ReducerState, messages: NormalizedMessage[], agen
 
                         let toolCall: ToolCall = {
                             name: c.name,
+                            ...(c.name === 'view_image' ? { callId: c.id } : {}),
                             state: 'running' as const,
                             input: c.input ?? (permission ? permission.arguments : undefined),  // Prefer the tool call's own input; permission args are a legacy fallback
                             createdAt: permission ? permission.createdAt : msg.createdAt,  // Use permission timestamp if available
@@ -873,6 +875,7 @@ export function reducer(state: ReducerState, messages: NormalizedMessage[], agen
                     let mid = allocateId();
                     let toolCall: ToolCall = {
                         name: c.name,
+                        ...(c.name === 'view_image' ? { callId: c.id } : {}),
                         state: 'running' as const,
                         input: c.input,
                         createdAt: msg.createdAt,

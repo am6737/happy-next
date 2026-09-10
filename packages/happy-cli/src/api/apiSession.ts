@@ -15,6 +15,7 @@ import { trimToolUseResult, trimToolResultContent, trimToolUseInput } from './tr
 import { RpcHandlerManager } from './rpc/RpcHandlerManager';
 
 import { registerCommonHandlers } from '../modules/common/registerCommonHandlers';
+import { registerToolImage } from '../modules/common/toolImageStore';
 import { calculateCost } from '@/utils/pricing';
 import { isDebug } from '@/utils/env';
 
@@ -864,6 +865,9 @@ export class ApiSessionClient extends EventEmitter {
      * @param body - The message payload (type: 'message' | 'reasoning' | 'tool-call' | 'tool-result')
      */
     sendAgentMessage(provider: 'gemini' | 'codex' | 'claude' | 'opencode', body: ACPMessageData) {
+        if (body.type === 'tool-call' && body.name === 'view_image' && this.metadata) {
+            registerToolImage(this.sessionId, this.metadata.path, body.callId, body.input);
+        }
         if (body.type === 'token_count' && typeof body.model === 'string') {
             this.updateModelMetadata(body.model);
         }

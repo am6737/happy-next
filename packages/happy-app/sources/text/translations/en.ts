@@ -1219,6 +1219,7 @@ export const en: TranslationStructure = {
             replaceAll: 'Replace All',
         },
         names: {
+            viewImage: "View Image",
             task: 'Task',
             terminal: 'Terminal',
             searchFiles: 'Search Files',
@@ -1267,6 +1268,9 @@ export const en: TranslationStructure = {
 
     files: {
         preview: {
+            imageNotRegistered: "This call has no registered image. Older calls may not support preview.",
+            imageMissing: "The original image no longer exists.",
+            imageChanged: "The image file or its path has been replaced. Preview access was denied.",
             reload: "Reload",
             shareContent: "Share content...",
             downloadTooLarge: "File exceeds the download limit (100 MiB).",

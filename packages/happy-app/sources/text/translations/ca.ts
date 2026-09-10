@@ -1202,6 +1202,7 @@ export const ca: TranslationStructure = {
             replaceAll: 'Reemplaça tot',
         },
         names: {
+            viewImage: "Mostra la imatge",
             task: 'Tasca',
             terminal: 'Terminal',
             searchFiles: 'Cerca fitxers',
@@ -1250,6 +1251,9 @@ export const ca: TranslationStructure = {
 
     files: {
         preview: {
+            imageNotRegistered: "Aquesta crida no té cap imatge registrada. Les crides antigues poden no admetre la previsualització.",
+            imageMissing: "La imatge original ja no existeix.",
+            imageChanged: "El fitxer d'imatge o el camí s'ha substituït. S'ha denegat la previsualització.",
             reload: "Torna a carregar",
             shareContent: "Comparteix el contingut...",
             downloadTooLarge: "File exceeds the download limit (100 MiB).",

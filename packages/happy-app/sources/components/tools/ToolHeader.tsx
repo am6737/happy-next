@@ -43,7 +43,7 @@ export function ToolHeader({ tool, maxWidth }: ToolHeaderProps) {
     
     // Extract subtitle using the same logic as ToolView
     let subtitle = null;
-    if (knownTool && typeof knownTool.extractSubtitle === 'function') {
+    if (tool.name !== 'view_image' && knownTool && typeof knownTool.extractSubtitle === 'function') {
         const extractedSubtitle = knownTool.extractSubtitle({ tool, metadata: null });
         if (typeof extractedSubtitle === 'string' && extractedSubtitle) {
             subtitle = extractedSubtitle;

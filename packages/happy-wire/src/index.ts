@@ -5,3 +5,4 @@ export * from './modelCatalog';
 export * from './permissionModes';
 export * from './filePreview';
 export * from './fileDownload';
+export * from './toolImagePreview';

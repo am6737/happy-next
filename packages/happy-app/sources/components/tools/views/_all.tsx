@@ -18,6 +18,7 @@ import { AskUserQuestionView } from './AskUserQuestionView';
 import { GeminiEditView } from './GeminiEditView';
 import { GeminiExecuteView } from './GeminiExecuteView';
 import { PreviewHtmlViewFull } from './PreviewHtmlViewFull';
+import { ViewImageViewFull } from './ViewImageViewFull';
 
 export type ToolViewProps = {
     tool: ToolCall;
@@ -50,6 +51,7 @@ export const toolViewRegistry: Record<string, ToolViewComponent> = {
 };
 
 export const toolFullViewRegistry: Record<string, ToolViewComponent> = {
+    view_image: ViewImageViewFull,
     Bash: BashViewFull,
     Edit: EditViewFull,
     MultiEdit: MultiEditViewFull,

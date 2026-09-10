@@ -1213,6 +1213,7 @@ export const ru: TranslationStructure = {
             replaceAll: 'Заменить все',
         },
         names: {
+            viewImage: "Просмотр изображения",
             task: 'Задача',
             terminal: 'Терминал',
             searchFiles: 'Поиск файлов',
@@ -1261,6 +1262,9 @@ export const ru: TranslationStructure = {
 
     files: {
         preview: {
+            imageNotRegistered: "Для этого вызова изображение не зарегистрировано. Старые вызовы могут не поддерживать предпросмотр.",
+            imageMissing: "Исходное изображение больше не существует.",
+            imageChanged: "Файл изображения или путь были заменены. Доступ к предпросмотру запрещён.",
             reload: "Перезагрузить",
             shareContent: "Поделиться содержимым...",
             downloadTooLarge: "File exceeds the download limit (100 MiB).",

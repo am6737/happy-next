@@ -3,6 +3,7 @@ import { ApiSessionClient } from './apiSession';
 import * as trimToolUseResultModule from './trimToolUseResult';
 import * as toolOutputStoreModule from '../modules/common/toolOutputStore';
 import * as encryptionModule from './encryption';
+import * as toolImageStoreModule from '../modules/common/toolImageStore';
 
 // Use vi.hoisted to ensure mock function is available when vi.mock factory runs
 const { mockIo } = vi.hoisted(() => ({
@@ -139,6 +140,20 @@ describe('ApiSessionClient v3 outbox', () => {
         // The sendSync field should exist (it's private, but we can verify
         // indirectly by ensuring close() doesn't throw)
         expect(() => client.close()).not.toThrow();
+    });
+
+    it('registers only view_image calls before sending them to the app', () => {
+        const client = new ApiSessionClient('fake-token', mockSession);
+        const register = vi.spyOn(toolImageStoreModule, 'registerToolImage').mockImplementation(() => {});
+        const enqueue = vi.spyOn(client as any, 'enqueueMessage').mockImplementation(() => {});
+        const body = { type: 'tool-call' as const, callId: 'image-call', name: 'view_image', input: { path: '/outside/image.png' }, id: 'message-1' };
+        client.sendAgentMessage('codex', body);
+        expect(register).toHaveBeenCalledWith('test-session-id', '/tmp', 'image-call', body.input);
+        expect(register.mock.invocationCallOrder[0]).toBeLessThan(enqueue.mock.invocationCallOrder[0]);
+        client.sendAgentMessage('codex', { ...body, name: 'Read' });
+        client.sendAgentMessage('codex', { type: 'tool-result', callId: 'image-call', output: {}, id: 'result-1' });
+        expect(register).toHaveBeenCalledTimes(1);
+        client.close();
     });
 
     it('should NOT emit via socket when sending a Claude session message (v3 outbox only)', () => {

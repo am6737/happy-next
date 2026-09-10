@@ -8,6 +8,7 @@ import { ToolFullView } from '@/components/tools/ToolFullView';
 import { ToolHeader } from '@/components/tools/ToolHeader';
 import { ToolStatusIndicator } from '@/components/tools/ToolStatusIndicator';
 import { Message } from '@/sync/typesMessage';
+import type { Metadata } from '@/sync/storageTypes';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { Typography } from '@/constants/Typography';
 import { Ionicons } from '@expo/vector-icons';
@@ -104,18 +105,18 @@ export default React.memo(() => {
                 />
             )}
             <Deferred>
-                <FullView message={message} />
+                <FullView message={message} sessionId={sessionId} metadata={session.metadata} />
             </Deferred>
         </>
     );
 });
 
-function FullView(props: { message: Message }) {
+function FullView(props: { message: Message; sessionId: string; metadata: Metadata | null }) {
     const styles = stylesheet;
     const selectable = useCopySelectable();
 
     if (props.message.kind === 'tool-call') {
-        return <ToolFullView tool={props.message.tool} messages={props.message.children} />
+        return <ToolFullView tool={props.message.tool} messages={props.message.children} sessionId={props.sessionId} metadata={props.message.tool.name === 'view_image' ? props.metadata : undefined} />
     }
     if (props.message.kind === 'agent-text') {
         return (

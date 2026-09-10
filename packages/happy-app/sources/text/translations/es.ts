@@ -1202,6 +1202,7 @@ export const es: TranslationStructure = {
             replaceAll: 'Reemplazar todo',
         },
         names: {
+            viewImage: "Ver imagen",
             task: 'Tarea',
             terminal: 'Terminal',
             searchFiles: 'Buscar archivos',
@@ -1250,6 +1251,9 @@ export const es: TranslationStructure = {
 
     files: {
         preview: {
+            imageNotRegistered: "Esta llamada no tiene una imagen registrada. Las llamadas antiguas pueden no admitir vista previa.",
+            imageMissing: "La imagen original ya no existe.",
+            imageChanged: "El archivo de imagen o su ruta se ha reemplazado. Se ha denegado la vista previa.",
             reload: "Volver a cargar",
             shareContent: "Compartir contenido...",
             downloadTooLarge: "File exceeds the download limit (100 MiB).",
