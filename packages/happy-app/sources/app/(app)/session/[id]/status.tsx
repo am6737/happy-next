@@ -219,7 +219,7 @@ export default function StatusScreen() {
             new TextEncoder().encode(file.fullPath).reduce((s, b) => s + String.fromCharCode(b), '')
         );
         const stagedParam = staged ? '&staged=1' : '';
-        router.push(`/session/${sessionId}/file?path=${encodeURIComponent(encodedPath)}${stagedParam}`);
+        router.push(`/session/${sessionId}/file?path=${encodeURIComponent(encodedPath)}${stagedParam}&view=diff`);
     }, [router, sessionId]);
 
     // Long press menu

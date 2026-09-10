@@ -270,7 +270,7 @@ export default function FilesScreen() {
             : file.fullPath;
         const encodedPath = btoa(new TextEncoder().encode(absolutePath).reduce((s, b) => s + String.fromCharCode(b), ''));
         const stagedParam = staged ? '&staged=1' : '';
-        router.push(`/session/${sessionId}/file?path=${encodeURIComponent(encodedPath)}${stagedParam}`);
+        router.push(`/session/${sessionId}/file?path=${encodeURIComponent(encodedPath)}${stagedParam}&view=diff`);
     }, [router, sessionId, selectedRepo, repoBaseCwd]);
 
     const renderFileIcon = (file: GitFileStatus) => {

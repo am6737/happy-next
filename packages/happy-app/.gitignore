@@ -8,6 +8,7 @@ expo-env.d.ts
 android/
 ios/
 build-*
+sources/components/FilePreview/generated/
 
 # Compiled by Xcode actool from src-tauri/icons/HappyNext.icon during builds.
 src-tauri/icons/generated/

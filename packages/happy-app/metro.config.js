@@ -2,6 +2,9 @@ const { getDefaultConfig } = require("expo/metro-config");
 const path = require("path");
 const fs = require("fs");
 
+// Bundle the offline PDF reader for both web and native builds before Metro resolves it.
+require('./sources/scripts/buildFilePreview.cjs')();
+
 const config = getDefaultConfig(__dirname, {
   // Enable CSS support for web
   isCSSEnabled: true,
@@ -10,6 +13,7 @@ const config = getDefaultConfig(__dirname, {
 // Add support for .wasm files (required by Skia for all platforms)
 // Source: https://shopify.github.io/react-native-skia/docs/getting-started/installation/
 config.resolver.assetExts.push('wasm');
+config.resolver.assetExts.push('html');
 
 // Force libsodium-wrappers to use CJS version instead of ESM
 // The ESM version requires top-level await and ./libsodium.mjs which Metro can't resolve

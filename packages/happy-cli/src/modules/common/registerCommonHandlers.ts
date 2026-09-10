@@ -10,6 +10,7 @@ import { RpcHandlerManager } from '../../api/rpc/RpcHandlerManager';
 import { validatePath } from './pathSecurity';
 import { getDiffDetail } from './diffStore';
 import { getToolOutputRecord } from './toolOutputStore';
+import { createFilePreviewHandlers } from './filePreview';
 
 const execAsync = promisify(exec);
 
@@ -180,6 +181,10 @@ export type SpawnSessionResult =
  * Register all RPC handlers with the session
  */
 export function registerCommonHandlers(rpcHandlerManager: RpcHandlerManager, workingDirectory: string, sessionId?: string) {
+    const previews = createFilePreviewHandlers(workingDirectory);
+    rpcHandlerManager.registerHandler('openFilePreview', previews.open);
+    rpcHandlerManager.registerHandler('readFilePreviewChunk', previews.chunk);
+    rpcHandlerManager.registerHandler('closeFilePreview', previews.close);
 
     // Shell command handler - executes commands in the default shell
     rpcHandlerManager.registerHandler<BashRequest, BashResponse>('bash', async (data) => {

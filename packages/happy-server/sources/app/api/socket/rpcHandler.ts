@@ -9,6 +9,9 @@ import { dispatchNextPendingIfPossible } from "@/app/session/pendingMessageAutoD
 
 const VIEW_SHARED_SESSION_RPC_METHODS = new Set([
     'readFile',
+    'openFilePreview',
+    'readFilePreviewChunk',
+    'closeFilePreview',
     'listDirectory',
     'getDirectoryTree',
     'ripgrep',
@@ -183,7 +186,8 @@ export function rpcHandler(userId: string, socket: Socket, rpcListeners: Map<str
                 // Codex native history operations may include process shutdown and app-server startup.
                 const nativeHistory = [':codex-archive-session', ':codex-fork-session', ':codex-duplicate-session']
                     .some(suffix => method.endsWith(suffix));
-                const response = await targetSocket.timeout(nativeHistory ? 110000 : 30000).emitWithAck('rpc-request', {
+                const filePreview = method.endsWith(':openFilePreview');
+                const response = await targetSocket.timeout(nativeHistory ? 110000 : filePreview ? 60000 : 30000).emitWithAck('rpc-request', {
                     method,
                     params
                 });

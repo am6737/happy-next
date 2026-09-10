@@ -31,6 +31,8 @@ import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { ImageViewer } from '@/components/ImageViewer';
 import type { ImageViewerImage } from '@/components/ImageViewer';
+import { getFilePreviewType } from 'happy-wire';
+import { FilePreviewScreen } from '@/components/FilePreview/FilePreviewScreen';
 
 function getRepoRelativePath(filePath: string, repoPath: string): string {
     if (repoPath && filePath.startsWith(`${repoPath}/`)) {
@@ -101,6 +103,14 @@ const DiffDisplay: React.FC<{ diffContent: string; selectable?: boolean }> = ({ 
 };
 
 export default function FileScreen() {
+    const { path } = useLocalSearchParams<{ path?: string }>();
+    let decoded = '';
+    try { decoded = new TextDecoder().decode(Uint8Array.from(atob(path || ''), char => char.charCodeAt(0))); } catch { /* Preserve legacy path error handling. */ }
+    if (getFilePreviewType(decoded)) return <FilePreviewScreen key={decoded} filePath={decoded} />;
+    return <LegacyFileScreen />;
+}
+
+function LegacyFileScreen() {
     const route = useRoute();
     const router = useRouter();
     const { theme } = useUnistyles();
