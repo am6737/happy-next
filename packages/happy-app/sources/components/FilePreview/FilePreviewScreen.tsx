@@ -5,6 +5,7 @@ import {
     Platform,
     Pressable,
     ScrollView,
+    Share,
     View,
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
@@ -21,10 +22,9 @@ import { ImageViewer } from '@/components/ImageViewer';
 import { FileIcon } from '@/components/FileIcon';
 import { layout } from '@/components/layout';
 import { ActionMenuModal } from '@/components/ActionMenuModal';
-import type { ActionMenuItem } from '@/components/ActionMenu';
 import { Modal } from '@/modal';
 import { t } from '@/text';
-import { getSession } from '@/sync/storage';
+import { useSession } from '@/sync/storage';
 import {
     sessionBash,
     sessionOpenFilePreview,
@@ -44,6 +44,7 @@ import { buildStaticDocument, buildSvgDocument } from './staticDocument';
 import { SandboxDocument } from './SandboxDocument';
 import { useFileDownload } from './useFileDownload';
 import { FileDownloadProgress } from './FileDownloadProgress';
+import { buildFileMenuItems, canMutateFile, canShareFileText } from '@/utils/fileMenu';
 
 export function FilePreviewScreen({ filePath }: { filePath: string }) {
     const params = useLocalSearchParams<{
@@ -58,7 +59,7 @@ export function FilePreviewScreen({ filePath }: { filePath: string }) {
     const { theme } = useUnistyles();
     const insets = useSafeAreaInsets();
     const router = useRouter();
-    const session = getSession(sessionId);
+    const session = useSession(sessionId);
     const sessionPath = session?.metadata?.path || '';
     const repoPath =
         getWorkspaceRepos(session?.metadata)
@@ -157,56 +158,62 @@ export function FilePreviewScreen({ filePath }: { filePath: string }) {
         attempt,
     ]);
 
-    const menuItems: ActionMenuItem[] = [
-        {
-            label: t('files.preview.retry'),
-            onPress: () => setAttempt((value) => value + 1),
-        },
-        {
+    const canModify = canMutateFile(session,
+        ref ? 'commit' : staged === '1' ? 'index' : 'worktree',
+        !!loaded && loaded.metadata.version === 'worktree' && !loaded.metadata.deleted);
+    const shareText = loaded?.text || loaded?.metadata.diff || '';
+    const canShare = canShareFileText(shareText, Platform.OS,
+        typeof navigator !== 'undefined' && typeof navigator.share === 'function');
+    const menuItems = buildFileMenuItems({
+        copyRelativePath: {
             label: t('files.copyRelativePath'),
             onPress: async () => {
                 await Clipboard.setStringAsync(relativePath);
                 showCopiedToast();
             },
         },
-        {
+        copyFileName: {
             label: t('files.copyFileName'),
             onPress: async () => {
                 await Clipboard.setStringAsync(fileName);
                 showCopiedToast();
             },
         },
-    ];
-    menuItems.push({
-        label: t('files.preview.download'),
-        onPress: handleExport,
-        disabled: exporting,
-    });
-    if (!ref)
-        menuItems.push({
+        history: !ref && repoPath ? {
             label: t('files.fileHistory'),
             onPress: () =>
                 router.push(
                     `/session/${sessionId}/commits?file=${encodeURIComponent(relativePath)}`
                 ),
-        });
-    if (
-        loaded?.text !== null &&
-        loaded &&
-        !ref &&
-        staged !== '1' &&
-        !loaded.metadata.deleted
-    ) {
-        menuItems.push({
+        } : undefined,
+        edit: canModify && loaded?.text !== null ? {
             label: t('files.editFile'),
             onPress: () =>
                 router.push(
                     `/session/${sessionId}/edit?path=${encodeURIComponent(btoa(new TextEncoder().encode(filePath).reduce((s, b) => s + String.fromCharCode(b), '')))}`
                 ),
-        });
-    }
-    if (!ref && loaded && !loaded.metadata.deleted)
-        menuItems.push({
+        } : undefined,
+        share: canShare ? {
+            label: t('files.preview.shareContent'),
+            onPress: async () => {
+                try {
+                    await Share.share({ title: fileName, message: shareText });
+                } catch (cause) {
+                    if (cause instanceof Error && cause.name === 'AbortError') return;
+                    Modal.alert(t('common.error'), t('files.preview.unavailable'));
+                }
+            },
+        } : undefined,
+        download: {
+            label: t('files.preview.download'),
+            onPress: handleExport,
+            disabled: exporting,
+        },
+        reload: {
+            label: error || renderError ? t('files.preview.retry') : t('files.preview.reload'),
+            onPress: () => setAttempt((value) => value + 1),
+        },
+        delete: canModify ? {
             label: t('files.deleteFile'),
             destructive: true,
             onPress: async () => {
@@ -227,7 +234,8 @@ export function FilePreviewScreen({ filePath }: { filePath: string }) {
                 else
                     Modal.alert(t('common.error'), t('files.deleteFileFailed'));
             },
-        });
+        } : undefined,
+    });
 
     const kind = loaded?.metadata.kind;
     React.useEffect(() => {

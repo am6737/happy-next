@@ -1252,6 +1252,8 @@ export const zhHans: TranslationStructure = {
 
     files: {
         preview: {
+            reload: "重新加载",
+            shareContent: "分享内容…",
             downloadTooLarge: "文件超过下载上限（100 MiB）。",
             downloadFailed: "下载失败，请检查连接、更新 CLI 后重试；如有其他下载，请等待其完成。",
             title: "预览",

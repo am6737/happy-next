@@ -27,6 +27,17 @@ Both app and CLI need the download RPCs; shared sessions need the server update.
 
 ## Rendering and Security
 
+- File menus share one order: copy relative path, copy filename, edit, history,
+  share content, download, reload/retry, delete. Unavailable actions are omitted
+  without changing the remaining order. Only preview pages offer reload (retry
+  after a load/render error); preview toolbar download remains a shortcut.
+- Edit/delete are offered only for confirmed existing worktree files in an
+  unarchived session owned by the user or shared with admin access. Shared edit
+  access does not grant file-write or shell permission. Editing also requires
+  readable text. Index, commit, deleted and unknown file states hide mutations.
+  Share content requires nonempty text and platform sharing support; it is
+  separate from downloading original bytes.
+
 - Download is available in file-page overflow menus, including binary, loading
   and error states, and in preview/full-screen toolbars. Existing text sharing
   remains separate. Files too large to preview can still be downloaded.

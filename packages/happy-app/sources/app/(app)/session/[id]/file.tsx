@@ -7,10 +7,9 @@ import { SimpleSyntaxHighlighter } from '@/components/SimpleSyntaxHighlighter';
 import { CodeEditor } from '@/components/CodeEditor';
 import { Typography } from '@/constants/Typography';
 import { Ionicons } from '@expo/vector-icons';
-import { sessionReadFile, sessionBash, sessionWriteFile } from '@/sync/ops';
+import { sessionReadFile, sessionBash, sessionWriteFile, sessionListDirectory } from '@/sync/ops';
 import { ActionMenuModal } from '@/components/ActionMenuModal';
-import type { ActionMenuItem } from '@/components/ActionMenu';
-import { getSession, useSetting } from '@/sync/storage';
+import { getSession, useSession, useSetting } from '@/sync/storage';
 import { Modal } from '@/modal';
 import { useUnistyles, StyleSheet } from 'react-native-unistyles';
 import { layout } from '@/components/layout';
@@ -35,6 +34,7 @@ import { getFilePreviewType } from 'happy-wire';
 import { FilePreviewScreen } from '@/components/FilePreview/FilePreviewScreen';
 import { useFileDownload } from '@/components/FilePreview/useFileDownload';
 import { FileDownloadProgress } from '@/components/FilePreview/FileDownloadProgress';
+import { buildFileMenuItems, canMutateFile, canShareFileText } from '@/utils/fileMenu';
 
 function getRepoRelativePath(filePath: string, repoPath: string): string {
     if (repoPath && filePath.startsWith(`${repoPath}/`)) {
@@ -109,7 +109,7 @@ export default function FileScreen() {
     let decoded = '';
     try { decoded = new TextDecoder().decode(Uint8Array.from(atob(path || ''), char => char.charCodeAt(0))); } catch { /* Preserve legacy path error handling. */ }
     if (getFilePreviewType(decoded)) return <FilePreviewScreen key={decoded} filePath={decoded} />;
-    return <LegacyFileScreen />;
+    return <LegacyFileScreen key={decoded} />;
 }
 
 function LegacyFileScreen() {
@@ -141,7 +141,7 @@ function LegacyFileScreen() {
         filePath = encodedPath || ''; // Fallback to original path if decoding fails
     }
 
-    const session = getSession(sessionId!);
+    const session = useSession(sessionId!);
     const displayPath = formatPathRelativeToHome(filePath, session?.metadata?.homeDir);
 
     const sessionPath = session?.metadata?.path || '';
@@ -160,6 +160,7 @@ function LegacyFileScreen() {
     const [isLoading, setIsLoading] = React.useState(true);
     const [error, setError] = React.useState<string | null>(null);
     const [menuVisible, setMenuVisible] = React.useState(false);
+    const [worktreeExists, setWorktreeExists] = React.useState(false);
     const wordWrap = useSetting('wrapLinesInDiffs');
 
     const fileName = filePath.split('/').pop() || filePath;
@@ -230,92 +231,81 @@ function LegacyFileScreen() {
             }
             await Share.share({ title: fileName, message: payload.text });
         } catch (shareError) {
+            if (shareError instanceof Error && shareError.name === 'AbortError') return;
             console.error('Failed to share content:', shareError);
             Modal.alert(t('common.error'), 'Failed to share file');
         }
     }, [imageBase64, imageMimeType, fileContent, diffContent, fileName, shareImage]);
 
-    // Menu items
-    const menuItems: ActionMenuItem[] = React.useMemo(() => {
-        const items: ActionMenuItem[] = [
-            {
-                label: t('files.preview.download'),
-                onPress: download.start,
-                disabled: download.downloading,
+    const canModify = canMutateFile(session, ref ? 'commit' : isStaged ? 'index' : 'worktree',
+        worktreeExists && !isLoading && !error);
+    const sharePayload = selectFileViewerSharePayload({ platform: Platform.OS, imageBase64, imageMimeType, fileContent, diffContent });
+    const canShare = !isLoading && sharePayload.kind === 'text' && canShareFileText(sharePayload.text, Platform.OS,
+        typeof navigator !== 'undefined' && typeof navigator.share === 'function');
+    const menuItems = buildFileMenuItems({
+        copyRelativePath: {
+            label: t('files.copyRelativePath'),
+            onPress: async () => {
+                await Clipboard.setStringAsync(relativePath);
+                hapticsLight(); showCopiedToast();
             },
-            {
-                label: t('files.copyRelativePath'),
-                onPress: async () => {
-                    await Clipboard.setStringAsync(relativePath);
-                    hapticsLight(); showCopiedToast();
-                },
+        },
+        copyFileName: {
+            label: t('files.copyFileName'),
+            onPress: async () => {
+                await Clipboard.setStringAsync(fileName);
+                hapticsLight(); showCopiedToast();
             },
-            {
-                label: t('files.copyFileName'),
-                onPress: async () => {
-                    await Clipboard.setStringAsync(fileName);
-                    hapticsLight(); showCopiedToast();
-                },
+        },
+        history: !ref && (gitCwd || sessionPath) ? {
+            label: t('files.fileHistory'),
+            onPress: () => {
+                router.push(`/session/${sessionId}/commits?file=${encodeURIComponent(relativePath)}`);
             },
-            {
-                label: t('files.share'),
-                onPress: handleShare,
+        } : undefined,
+        edit: canModify && fileContent && !fileContent.isBinary && !isPreviewImageFile ? {
+            label: t('files.editFile'),
+            onPress: () => {
+                const encodedPath = btoa(
+                    new TextEncoder().encode(filePath).reduce((s, b) => s + String.fromCharCode(b), '')
+                );
+                router.push(`/session/${sessionId}/edit?path=${encodeURIComponent(encodedPath)}`);
             },
-        ];
-
-        // History: only for non-ref views (viewing current file, not a specific commit)
-        if (!ref && (gitCwd || sessionPath)) {
-            items.push({
-                label: t('files.fileHistory'),
-                onPress: () => {
-                    router.push(`/session/${sessionId}/commits?file=${encodeURIComponent(relativePath)}`);
-                },
-            });
-        }
-
-        // Edit: only for non-ref, non-binary files
-        if (!ref && fileContent && !fileContent.isBinary && !isPreviewImageFile) {
-            items.push({
-                label: t('files.editFile'),
-                onPress: () => {
-                    const encodedPath = btoa(
-                        new TextEncoder().encode(filePath).reduce((s, b) => s + String.fromCharCode(b), '')
-                    );
-                    router.push(`/session/${sessionId}/edit?path=${encodeURIComponent(encodedPath)}`);
-                },
-            });
-        }
-
-        // Delete: only for non-ref views
-        if (!ref && (gitCwd || sessionPath)) {
-            items.push({
-                label: t('files.deleteFile'),
-                destructive: true,
-                onPress: async () => {
-                    const confirmed = await Modal.confirm(
-                        t('files.deleteFile'),
-                        t('files.deleteFileConfirm', { fileName }),
-                        { destructive: true },
-                    );
-                    if (!confirmed) return;
-                    const escapedPath = shellEscape(filePath);
-                    const result = await sessionBash(sessionId!, {
-                        command: `rm -- ${escapedPath}`,
-                        cwd: gitCwd || sessionPath,
-                        timeout: 5000,
-                    });
-                    if (result.success) {
-                        Modal.alert(t('common.success'), t('files.deleteFileSuccess'));
-                        router.back();
-                    } else {
-                        Modal.alert(t('common.error'), t('files.deleteFileFailed'));
-                    }
-                },
-            });
-        }
-
-        return items;
-    }, [relativePath, fileName, fileContent, diffContent, ref, sessionPath, gitCwd, sessionId, filePath, router, isPreviewImageFile, handleShare, download.start, download.downloading]);
+        } : undefined,
+        share: canShare ? {
+            label: t('files.preview.shareContent'),
+            onPress: handleShare,
+        } : undefined,
+        download: {
+            label: t('files.preview.download'),
+            onPress: download.start,
+            disabled: download.downloading,
+        },
+        delete: canModify ? {
+            label: t('files.deleteFile'),
+            destructive: true,
+            onPress: async () => {
+                const confirmed = await Modal.confirm(
+                    t('files.deleteFile'),
+                    t('files.deleteFileConfirm', { fileName }),
+                    { destructive: true },
+                );
+                if (!confirmed) return;
+                const escapedPath = shellEscape(filePath);
+                const result = await sessionBash(sessionId!, {
+                    command: `rm -- ${escapedPath}`,
+                    cwd: gitCwd || sessionPath,
+                    timeout: 5000,
+                });
+                if (result.success) {
+                    Modal.alert(t('common.success'), t('files.deleteFileSuccess'));
+                    router.back();
+                } else {
+                    Modal.alert(t('common.error'), t('files.deleteFileFailed'));
+                }
+            },
+        } : undefined,
+    });
 
     // Determine file language from extension
     const getFileLanguage = React.useCallback((path: string): string | null => {
@@ -398,6 +388,9 @@ function LegacyFileScreen() {
             try {
                 setIsLoading(true);
                 setError(null);
+                setWorktreeExists(false);
+                setFileContent(null);
+                setDiffContent(null);
                 setImageBase64(null);
                 setImageViewerVisible(false);
 
@@ -409,6 +402,7 @@ function LegacyFileScreen() {
                     const response = await sessionReadFile(sessionId!, filePath);
                     if (!isCancelled) {
                         if (response && response.success && response.content) {
+                            setWorktreeExists(true);
                             const mimeType = getImageMimeType(filePath) || 'image/png';
                             setFileContent({
                                 content: '',
@@ -426,6 +420,14 @@ function LegacyFileScreen() {
 
                 // Check if file is likely binary before trying to read
                 if (isBinaryFile(filePath)) {
+                    // Binary previews skip reads; check the directory entry before offering deletion.
+                    if (!ref && !isStaged) {
+                        const fullPath = filePath.startsWith('/') ? filePath : `${gitCwd}/${filePath}`;
+                        const parent = fullPath.slice(0, fullPath.lastIndexOf('/')) || '/';
+                        const listing = await sessionListDirectory(sessionId!, parent);
+                        if (!isCancelled)
+                            setWorktreeExists(!!listing.success && !!listing.entries?.some(entry => entry.name === fileName && entry.type === 'file'));
+                    }
                     if (!isCancelled) {
                         setFileContent({
                             content: '',
@@ -489,7 +491,8 @@ function LegacyFileScreen() {
                     const response = await sessionReadFile(sessionId, filePath);
 
                     if (!isCancelled) {
-                        if (response && response.success && response.content) {
+                        if (response && response.success && response.content !== undefined) {
+                            setWorktreeExists(true);
                             // Decode base64 content to UTF-8 string
                             let decodedContent: string;
                             try {
@@ -544,7 +547,7 @@ function LegacyFileScreen() {
         return () => {
             isCancelled = true;
         };
-    }, [sessionId, filePath, ref, isStaged, isBinaryFile]);
+    }, [sessionId, filePath, ref, isStaged, isBinaryFile, gitCwd, isPreviewImageFile, fileName]);
 
     // Show error modal if there's an error
     React.useEffect(() => {

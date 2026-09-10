@@ -1264,6 +1264,8 @@ export const en = {
 
     files: {
         preview: {
+            reload: "Reload",
+            shareContent: "Share content...",
             downloadTooLarge: "File exceeds the download limit (100 MiB).",
             downloadFailed: "Download failed. Check the connection and CLI version, and retry after any other download completes.",
             title: "Preview",

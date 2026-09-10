@@ -1282,6 +1282,8 @@ export const ja: TranslationStructure = {
 
     files: {
         preview: {
+            reload: "再読み込み",
+            shareContent: "内容を共有…",
             downloadTooLarge: "File exceeds the download limit (100 MiB).",
             downloadFailed: "Download failed. Check the connection and CLI version, and retry after any other download completes.",
             title: "Preview",

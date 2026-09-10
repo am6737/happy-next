@@ -1261,6 +1261,8 @@ export const pl: TranslationStructure = {
 
     files: {
         preview: {
+            reload: "Wczytaj ponownie",
+            shareContent: "Udostępnij treść...",
             downloadTooLarge: "File exceeds the download limit (100 MiB).",
             downloadFailed: "Download failed. Check the connection and CLI version, and retry after any other download completes.",
             title: "Preview",
