@@ -30,7 +30,8 @@ describe('GitHub reconnect state wiring', () => {
         expect(source.match(/contentInsetAdjustmentBehavior=\{Platform.OS === 'ios' \? 'automatic' : undefined\}/g)).toHaveLength(2);
         expect(source).not.toContain('refreshing={isLoading &&');
         expect(source).toContain('if (isPullRefreshing) return null;');
-        expect(source).toContain("await (activeTab === 'issues' ? issueResult.refresh() : pullResult.refresh())");
+        expect(source).toContain('await Promise.all([refreshRepos(), workIssues.refresh(), workPulls.refresh()]);');
+        expect(source).toContain("activeTab === 'issues' ? issueResult.refresh() : pullResult.refresh(),");
     });
 
     test('keeps the title row and switch geometry stable across tabs and count loading', () => {
@@ -44,7 +45,7 @@ describe('GitHub reconnect state wiring', () => {
 
     test('shows switch count loading, zero and unavailable states in the same badge', () => {
         expect(source).toContain("activeTab === 'issues' ? workPulls.loading : workIssues.loading");
-        expect(source).toContain('{otherTabCountLoading ? (');
+        expect(source).toContain("{otherTabCountLoading && typeof otherTabCount !== 'number' ? (");
         expect(source).toContain("size={Platform.OS === 'ios' ? 'small' : 12}");
         expect(source).toContain("style={Platform.OS === 'ios' ? { transform: [{ scale: 0.6 }] } : undefined}");
         expect(source).toContain("typeof otherTabCount === 'number' ? otherTabCount : '\\u2014'");

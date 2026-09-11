@@ -2,6 +2,7 @@ import { AuthCredentials } from '@/auth/tokenStorage';
 import { HappyError } from '@/utils/errors';
 import { backoff } from '@/utils/time';
 import { getServerUrl } from './serverConfig';
+import { clearGithubSession } from './github/client';
 
 export interface GitHubOAuthParams {
     url: string;
@@ -103,5 +104,6 @@ export async function disconnectGitHub(credentials: AuthCredentials): Promise<vo
         if (!data.success) {
             throw new Error('Failed to disconnect GitHub account');
         }
+        clearGithubSession();
     });
 }

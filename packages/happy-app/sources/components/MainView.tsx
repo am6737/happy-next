@@ -309,19 +309,17 @@ export const MainView = React.memo(({ variant }: MainViewProps) => {
     const { credentials } = useAuth();
 
     const [githubRepo, setGithubRepo] = React.useState<string | null>(null);
+    const [activeTab, setActiveTab] = React.useState<TabType>('sessions');
     const githubRepoPickerTriggerRef = React.useRef<(() => void) | null>(null);
     const handleOpenRepoPicker = React.useCallback(() => {
         githubRepoPickerTriggerRef.current?.();
     }, []);
 
     React.useEffect(() => {
-        if (showGithubTab && credentials) {
+        if (showGithubTab && credentials && activeTab === 'github') {
             prefetchGithubData(credentials);
         }
-    }, [showGithubTab, credentials]);
-
-    // Tab state management
-    const [activeTab, setActiveTab] = React.useState<TabType>('sessions');
+    }, [showGithubTab, credentials, activeTab]);
 
     // If user is on a tab that becomes unavailable, snap back to sessions
     React.useEffect(() => {

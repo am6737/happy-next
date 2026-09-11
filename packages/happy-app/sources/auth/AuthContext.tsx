@@ -8,6 +8,7 @@ import { messageRepository } from '@/sync/messagesStore/messageRepository';
 import { trackLogout } from '@/track';
 import { measureLogoutStage } from './logoutTiming';
 import { preparePushTokensForLogout } from './pushTokenLogoutFlow';
+import { clearGithubSession } from '@/sync/github/client';
 
 interface AuthContextType {
     isAuthenticated: boolean;
@@ -31,6 +32,7 @@ export function AuthProvider({ children, initialCredentials }: { children: React
         const newCredentials: AuthCredentials = { token, secret };
         const success = await TokenStorage.setCredentials(newCredentials);
         if (success) {
+            clearGithubSession();
             await syncCreate(newCredentials);
             setCredentials(newCredentials);
             setIsAuthenticated(true);
@@ -52,6 +54,9 @@ export function AuthProvider({ children, initialCredentials }: { children: React
         } else {
             await measureLogoutStage('after-push-cleanup', async () => { await afterPushCleanup?.(); });
         }
+        setCredentials(null);
+        setIsAuthenticated(false);
+        clearGithubSession();
         await measureLogoutStage('clear-persistence', async () => { clearPersistence(); });
         await measureLogoutStage('clear-messages', () => messageRepository.clearAll()).catch(() => {});
         await measureLogoutStage('remove-credentials', () => TokenStorage.removeCredentials());

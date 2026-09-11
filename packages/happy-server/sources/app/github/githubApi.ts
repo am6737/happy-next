@@ -29,6 +29,10 @@ export async function getUserOctokit(userId: string): Promise<Octokit> {
 }
 
 export async function getUserGithubToken(userId: string): Promise<string> {
+    return (await getUserGithubAuthorization(userId)).token;
+}
+
+export async function getUserGithubAuthorization(userId: string): Promise<{ token: string; expiresAt: string | null }> {
     const account = await db.account.findUniqueOrThrow({
         where: { id: userId },
         select: { githubUser: { select: { token: true, expiresAt: true } } }
@@ -41,9 +45,12 @@ export async function getUserGithubToken(userId: string): Promise<string> {
     const accessToken = decryptString(['user', userId, 'github', 'token'], account.githubUser.token);
     if (!isGitHubOAuthToken(accessToken)) throw new GitHubReauthorizationRequiredError();
     if (account.githubUser.expiresAt && account.githubUser.expiresAt.getTime() <= Date.now() + REFRESH_BUFFER_MS) {
-        return refreshGithubToken(userId, accessToken);
+        const token = await refreshGithubToken(userId, accessToken);
+        // The old expiration no longer describes this token. Clients revalidate
+        // unknown expirations on a short TTL instead of retaining them forever.
+        return { token, expiresAt: null };
     }
-    return accessToken;
+    return { token: accessToken, expiresAt: account.githubUser.expiresAt?.toISOString() ?? null };
 }
 
 export class GitHubNotConnectedError extends Error {

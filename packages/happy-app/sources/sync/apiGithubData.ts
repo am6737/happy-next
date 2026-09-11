@@ -1,14 +1,15 @@
 import { Platform } from 'react-native';
 import { AuthCredentials } from '@/auth/tokenStorage';
 import { getServerUrl } from './serverConfig';
+import { githubSession, githubToken, invalidateGithubReads } from './github/client';
+export { readRepos as fetchGithubRepos, readRepo as fetchGithubRepo, readIssues as fetchGithubIssues,
+    readIssue as fetchGithubIssue, readPulls as fetchGithubPulls, readPull as fetchGithubPull,
+    readComments as fetchGithubIssueComments } from './github/reads';
+export { readWorkIssues as fetchGithubWorkIssues, readWorkPulls as fetchGithubWorkPulls } from './github/workItems';
 import type {
-    RepoInfo,
     RepoIssue,
     RepoIssueComment,
     RepoPR,
-    RepoCommit,
-    RepoContributor,
-    RepoFileContent,
 } from '@/data/mockRepos';
 
 export interface PaginatedResponse<T> {
@@ -41,18 +42,6 @@ class PermanentError extends Error {
     }
 }
 
-async function fetchJson<T>(credentials: AuthCredentials, path: string): Promise<T> {
-    const url = `${API()}${path}`;
-    if (__DEV__) console.log('[github-api] GET', url);
-    const res = await fetch(url, { headers: headers(credentials) });
-    if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        console.warn('[github-api] Error', res.status, body.error, path);
-        throw new PermanentError(body.error ?? `Request failed: ${res.status}`, res.status, body.error ?? '');
-    }
-    return (await res.json()) as T;
-}
-
 async function postJson<T>(credentials: AuthCredentials, path: string, body: unknown): Promise<T> {
     if (__DEV__) console.log('[github-api] POST', `${API()}${path}`);
     const res = await fetch(`${API()}${path}`, {
@@ -65,7 +54,9 @@ async function postJson<T>(credentials: AuthCredentials, path: string, body: unk
         console.warn('[github-api] Error', res.status, data.error, path);
         throw new PermanentError(data.error ?? `Request failed: ${res.status}`, res.status, data.error ?? '');
     }
-    return (await res.json()) as T;
+    const result = await res.json() as T;
+    invalidateGithubReads(credentials);
+    return result;
 }
 
 async function patchJson<T>(credentials: AuthCredentials, path: string, body: unknown): Promise<T> {
@@ -80,7 +71,9 @@ async function patchJson<T>(credentials: AuthCredentials, path: string, body: un
         console.warn('[github-api] Error', res.status, data.error, path);
         throw new PermanentError(data.error ?? `Request failed: ${res.status}`, res.status, data.error ?? '');
     }
-    return (await res.json()) as T;
+    const result = await res.json() as T;
+    invalidateGithubReads(credentials);
+    return result;
 }
 
 async function deleteJson(credentials: AuthCredentials, path: string): Promise<void> {
@@ -93,112 +86,14 @@ async function deleteJson(credentials: AuthCredentials, path: string): Promise<v
         const data = await res.json().catch(() => ({}));
         throw new PermanentError(data.error ?? `Request failed: ${res.status}`, res.status, data.error ?? '');
     }
+    invalidateGithubReads(credentials);
 }
 
 function repoPath(owner: string, repo: string): string {
     return `/v1/github/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
 }
 
-// Repos
-
-export async function fetchGithubRepos(
-    credentials: AuthCredentials,
-    opts?: { sort?: string; cursor?: string; limit?: number; search?: string }
-): Promise<PaginatedResponse<RepoInfo>> {
-    const params = new URLSearchParams();
-    if (opts?.sort) params.set('sort', opts.sort);
-    if (opts?.cursor) params.set('cursor', opts.cursor);
-    if (opts?.limit) params.set('limit', String(opts.limit));
-    if (opts?.search) params.set('search', opts.search);
-    const qs = params.toString();
-    return fetchJson(credentials, `/v1/github/repos${qs ? `?${qs}` : ''}`);
-}
-
-export async function fetchGithubRepo(
-    credentials: AuthCredentials,
-    owner: string,
-    repo: string,
-    branch?: string
-): Promise<RepoInfo> {
-    const qs = branch ? `?branch=${encodeURIComponent(branch)}` : '';
-    return fetchJson(credentials, `${repoPath(owner, repo)}${qs}`);
-}
-
-function workItemsPath(options: {
-    refresh?: boolean;
-    type: 'issues' | 'pulls';
-    state?: 'open' | 'closed' | 'merged' | 'all';
-    scope?: GithubIssueScope | GithubPullScope;
-    repository?: string;
-    search?: string;
-    cursor?: string;
-    limit?: number;
-}): string {
-    const params = new URLSearchParams({ type: options.type });
-    if (options.refresh) params.set('refresh', 'true');
-    if (options.state) params.set('state', options.state);
-    if (options.scope) params.set('scope', options.scope);
-    if (options.repository) params.set('repository', options.repository);
-    if (options.search) params.set('search', options.search);
-    if (options.cursor) params.set('cursor', options.cursor);
-    if (options.limit) params.set('limit', String(options.limit));
-    return `/v1/github/work-items?${params.toString()}`;
-}
-
-export async function fetchGithubWorkIssues(
-    credentials: AuthCredentials,
-    options: {
-        refresh?: boolean;
-        state?: 'open' | 'closed' | 'all';
-        scope?: GithubIssueScope;
-        repository?: string;
-        search?: string;
-        cursor?: string;
-        limit?: number;
-    }
-): Promise<PaginatedResponse<RepoIssue>> {
-    return fetchJson(credentials, workItemsPath({ type: 'issues', ...options }));
-}
-
-export async function fetchGithubWorkPulls(
-    credentials: AuthCredentials,
-    options: {
-        refresh?: boolean;
-        state?: 'open' | 'closed' | 'merged' | 'all';
-        scope?: GithubPullScope;
-        repository?: string;
-        search?: string;
-        cursor?: string;
-        limit?: number;
-    }
-): Promise<PaginatedResponse<RepoPR>> {
-    return fetchJson(credentials, workItemsPath({ type: 'pulls', ...options }));
-}
-
 // Issues
-
-export async function fetchGithubIssues(
-    credentials: AuthCredentials,
-    owner: string,
-    repo: string,
-    opts?: { state?: 'open' | 'closed' | 'all'; cursor?: string; limit?: number }
-): Promise<PaginatedResponse<RepoIssue>> {
-    const params = new URLSearchParams();
-    if (opts?.state) params.set('state', opts.state);
-    if (opts?.cursor) params.set('cursor', opts.cursor);
-    if (opts?.limit) params.set('limit', String(opts.limit));
-    const qs = params.toString();
-    return fetchJson(credentials, `${repoPath(owner, repo)}/issues${qs ? `?${qs}` : ''}`);
-}
-
-export async function fetchGithubIssue(
-    credentials: AuthCredentials,
-    owner: string,
-    repo: string,
-    number: number
-): Promise<RepoIssue> {
-    return fetchJson(credentials, `${repoPath(owner, repo)}/issues/${number}`);
-}
 
 export async function createGithubIssue(
     credentials: AuthCredentials,
@@ -231,20 +126,6 @@ export async function updateGithubPull(
 
 // Issue / PR Comments
 
-export async function fetchGithubIssueComments(
-    credentials: AuthCredentials,
-    owner: string,
-    repo: string,
-    number: number,
-    opts?: { cursor?: string; limit?: number }
-): Promise<PaginatedResponse<RepoIssueComment>> {
-    const params = new URLSearchParams();
-    if (opts?.cursor) params.set('cursor', opts.cursor);
-    if (opts?.limit) params.set('limit', String(opts.limit));
-    const qs = params.toString();
-    return fetchJson(credentials, `${repoPath(owner, repo)}/issues/${number}/comments${qs ? `?${qs}` : ''}`);
-}
-
 export async function createGithubIssueComment(
     credentials: AuthCredentials,
     owner: string,
@@ -276,20 +157,6 @@ export async function deleteGithubIssueComment(
 
 // Pull Requests
 
-export async function fetchGithubPulls(
-    credentials: AuthCredentials,
-    owner: string,
-    repo: string,
-    opts?: { state?: 'open' | 'closed' | 'all'; cursor?: string; limit?: number }
-): Promise<PaginatedResponse<RepoPR>> {
-    const params = new URLSearchParams();
-    if (opts?.state) params.set('state', opts.state);
-    if (opts?.cursor) params.set('cursor', opts.cursor);
-    if (opts?.limit) params.set('limit', String(opts.limit));
-    const qs = params.toString();
-    return fetchJson(credentials, `${repoPath(owner, repo)}/pulls${qs ? `?${qs}` : ''}`);
-}
-
 export async function createGithubPull(
     credentials: AuthCredentials,
     owner: string,
@@ -299,20 +166,10 @@ export async function createGithubPull(
     return postJson(credentials, `${repoPath(owner, repo)}/pulls`, data);
 }
 
-export async function fetchGithubPull(
-    credentials: AuthCredentials,
-    owner: string,
-    repo: string,
-    number: number
-): Promise<RepoPR> {
-    return fetchJson(credentials, `${repoPath(owner, repo)}/pulls/${number}`);
-}
-
 // Token
 
 export async function fetchGithubToken(credentials: AuthCredentials): Promise<string> {
-    const { token } = await fetchJson<{ token: string }>(credentials, '/v1/connect/github/token');
-    return token;
+    return githubToken(githubSession(credentials));
 }
 
 // Image Upload
