@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useAuth } from '@/auth/AuthContext';
 import type { AuthCredentials } from '@/auth/tokenStorage';
+import { getServerUrl } from '@/sync/serverConfig';
+import { clearGithubSession, githubRevision, onGithubReset } from '@/sync/github/client';
 import {
     fetchGithubRepos,
     fetchGithubRepo,
@@ -22,6 +24,13 @@ import type {
 
 const MAX_CACHE_SIZE = 100;
 const dataCache = new Map<string, unknown>();
+// Share requests between concurrently mounted screens/hooks. Without this,
+// navigation transitions can issue the same GitHub query several times.
+const inFlight = new Map<string, Promise<unknown>>();
+onGithubReset(() => {
+    dataCache.clear();
+    inFlight.clear();
+});
 
 function cacheSet(key: string, value: unknown): void {
     if (dataCache.has(key)) {
@@ -34,11 +43,30 @@ function cacheSet(key: string, value: unknown): void {
 }
 
 function cacheKey(deps: unknown[]): string {
-    return JSON.stringify(deps);
+    return JSON.stringify([getServerUrl(), githubRevision(), ...deps]);
 }
 
 export function clearGithubCache(): void {
     dataCache.clear();
+    inFlight.clear();
+    clearGithubSession();
+}
+
+function requestOnce<T>(key: string, fetcher: () => Promise<T>, force = false): Promise<T> {
+    const pending = inFlight.get(key);
+    if (pending && !force) return pending as Promise<T>;
+
+    // A forced refresh must run after an existing request for this key. This
+    // prevents the older request from completing after the refresh and
+    // overwriting its newer result in the shared cache.
+    const promise = (pending && force
+        ? pending.catch(() => undefined).then(fetcher)
+        : fetcher()
+    ).finally(() => {
+        if (inFlight.get(key) === promise) inFlight.delete(key);
+    });
+    inFlight.set(key, promise);
+    return promise;
 }
 
 function useGithubFetch<T>(
@@ -47,6 +75,7 @@ function useGithubFetch<T>(
     initial: T,
     enabled: boolean = true
 ): { data: T; loading: boolean; refresh: () => void; mutate: (updater: (prev: T) => T) => void; tokenExpired: boolean } {
+    useSyncExternalStore(onGithubReset, githubRevision, githubRevision);
     const key = cacheKey(deps);
     const [data, setData] = useState<T>(() => {
         const cached = dataCache.get(key);
@@ -56,6 +85,7 @@ function useGithubFetch<T>(
     const [tokenExpired, setTokenExpired] = useState(false);
     const mountedRef = useRef(true);
     const prevKeyRef = useRef(key);
+    const requestIdRef = useRef(0);
 
     if (prevKeyRef.current !== key) {
         prevKeyRef.current = key;
@@ -71,25 +101,27 @@ function useGithubFetch<T>(
 
     const load = useCallback(async (force?: boolean) => {
         if (!enabled) return;
+        const requestId = ++requestIdRef.current;
+        const isCurrent = () => mountedRef.current && prevKeyRef.current === key && requestIdRef.current === requestId;
         setTokenExpired(false);
         if (force || !dataCache.has(key)) {
             setLoading(true);
         }
         try {
-            const result = await fetcher();
-            if (mountedRef.current) {
+            const result = await requestOnce(key, fetcher, force);
+            if (isCurrent()) {
                 setData(result);
                 cacheSet(key, result);
                 setTokenExpired(false);
             }
         } catch (e) {
             const code = (e as any)?.code;
-            if (mountedRef.current && (code === 'github_token_expired' || code === 'github_not_connected')) {
+            if (isCurrent() && (code === 'github_token_expired' || code === 'github_not_connected')) {
                 setTokenExpired(true);
             }
             console.warn('[useGithubFetch] fetch failed:', e);
         } finally {
-            if (mountedRef.current) {
+            if (isCurrent()) {
                 setLoading(false);
             }
         }
@@ -98,7 +130,7 @@ function useGithubFetch<T>(
     useEffect(() => {
         mountedRef.current = true;
         load();
-        return () => { mountedRef.current = false; };
+        return () => { mountedRef.current = false; requestIdRef.current++; };
     }, [load]);
 
     const refresh = useCallback(() => { load(true); }, [load]);
@@ -132,6 +164,7 @@ function useGithubPaginatedFetch<T>(
     tokenExpired: boolean;
     error: Error | null;
 } {
+    useSyncExternalStore(onGithubReset, githubRevision, githubRevision);
     const key = cacheKey(deps);
     const [data, setData] = useState<T[]>(() => {
         const cached = dataCache.get(key);
@@ -147,6 +180,8 @@ function useGithubPaginatedFetch<T>(
     const cursorRef = useRef<string | null>(null);
     const prevKeyRef = useRef(key);
     const loadingMoreRef = useRef(false);
+    const requestIdRef = useRef(0);
+    const moreIdRef = useRef(0);
 
     if (prevKeyRef.current !== key) {
         prevKeyRef.current = key;
@@ -166,6 +201,11 @@ function useGithubPaginatedFetch<T>(
 
     const loadFirst = useCallback(async (force?: boolean) => {
         if (!enabled) return;
+        const requestId = ++requestIdRef.current;
+        const isCurrent = () => mountedRef.current && prevKeyRef.current === key && requestIdRef.current === requestId;
+        moreIdRef.current++;
+        loadingMoreRef.current = false;
+        setLoadingMore(false);
         setTokenExpired(false);
         cursorRef.current = null;
         if (force || !dataCache.has(key)) {
@@ -173,8 +213,10 @@ function useGithubPaginatedFetch<T>(
         }
         setError(null);
         try {
-            const result = await fetcher(undefined, force);
-            if (mountedRef.current) {
+            // Use the data key for the first page so prefetches and mounted
+            // lists share the same in-flight request.
+            const result = await requestOnce(key, () => fetcher(undefined, force), force);
+            if (isCurrent()) {
                 setData(result.items);
                 cacheSet(key, result.items);
                 cursorRef.current = result.nextCursor;
@@ -184,7 +226,7 @@ function useGithubPaginatedFetch<T>(
             }
         } catch (e) {
             const code = (e as any)?.code;
-            if (mountedRef.current) {
+            if (isCurrent()) {
                 setError(e instanceof Error ? e : new Error(String(e)));
                 if (code === 'github_token_expired' || code === 'github_not_connected') {
                     setTokenExpired(true);
@@ -192,7 +234,7 @@ function useGithubPaginatedFetch<T>(
             }
             console.warn('[useGithubPaginatedFetch] fetch failed:', e);
         } finally {
-            if (mountedRef.current) {
+            if (isCurrent()) {
                 setLoading(false);
             }
         }
@@ -201,17 +243,24 @@ function useGithubPaginatedFetch<T>(
     useEffect(() => {
         mountedRef.current = true;
         loadFirst();
-        return () => { mountedRef.current = false; };
+        return () => {
+            mountedRef.current = false;
+            requestIdRef.current++;
+            moreIdRef.current++;
+        };
     }, [loadFirst]);
 
     const loadMore = useCallback(() => {
-        if (loadingMoreRef.current || !cursorRef.current) return;
+        if (!enabled || loadingMoreRef.current || !cursorRef.current) return;
+        const requestId = requestIdRef.current;
+        const moreId = ++moreIdRef.current;
+        const isCurrent = () => mountedRef.current && prevKeyRef.current === key && requestIdRef.current === requestId && moreIdRef.current === moreId;
         loadingMoreRef.current = true;
         setLoadingMore(true);
 
-        fetcher(cursorRef.current)
+        requestOnce(`${key}:page:${cursorRef.current}`, () => fetcher(cursorRef.current!))
             .then((result) => {
-                if (mountedRef.current) {
+                if (isCurrent()) {
                     setData((prev) => {
                         const next = [...prev, ...result.items];
                         cacheSet(key, next);
@@ -222,11 +271,15 @@ function useGithubPaginatedFetch<T>(
                 }
             })
             .catch((e) => {
+                if (isCurrent()) {
+                    setError(e instanceof Error ? e : new Error(String(e)));
+                    if (e?.code === 'github_token_expired' || e?.code === 'github_not_connected') setTokenExpired(true);
+                }
                 console.warn('[useGithubPaginatedFetch] loadMore failed:', e);
             })
             .finally(() => {
-                loadingMoreRef.current = false;
-                if (mountedRef.current) {
+                if (isCurrent()) {
+                    loadingMoreRef.current = false;
                     setLoadingMore(false);
                 }
             });
@@ -373,7 +426,9 @@ export async function prefetchGithubData(credentials: AuthCredentials): Promise<
     try {
         const reposKey = cacheKey(['repos', credentials.token, undefined, undefined]);
         if (!dataCache.has(reposKey)) {
-            const result = await fetchGithubRepos(credentials);
+            // Keep the prefetch on the same key as useGithubRepos so an
+            // already-mounted list can share its in-flight request.
+            const result = await requestOnce(reposKey, () => fetchGithubRepos(credentials));
             cacheSet(reposKey, result.items);
         }
         const repos = dataCache.get(reposKey) as RepoInfo[];
@@ -387,13 +442,19 @@ export async function prefetchGithubData(credentials: AuthCredentials): Promise<
             const pending: Promise<void>[] = [];
             if (!dataCache.has(issuesKey)) {
                 pending.push(
-                    fetchGithubIssues(credentials, owner, repo, { state: 'open' })
+                    requestOnce(
+                        `${issuesKey}:first`,
+                        () => fetchGithubIssues(credentials, owner, repo, { state: 'open' })
+                    )
                         .then((d) => { cacheSet(issuesKey, d.items); })
                 );
             }
             if (!dataCache.has(pullsKey)) {
                 pending.push(
-                    fetchGithubPulls(credentials, owner, repo, { state: 'open' })
+                    requestOnce(
+                        `${pullsKey}:first`,
+                        () => fetchGithubPulls(credentials, owner, repo, { state: 'open' })
+                    )
                         .then((d) => { cacheSet(pullsKey, d.items); })
                 );
             }

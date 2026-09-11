@@ -40,6 +40,7 @@ import { loadPendingSettings, savePendingSettings, loadSessionLastViewedAt, save
 import { initializeTracking, tracking } from '@/track';
 import { parseToken } from '@/utils/parseToken';
 import { getServerUrl, onServerUrlChanged } from './serverConfig';
+import { clearGithubSession } from './github/client';
 import { log } from '@/log';
 import { signContentPublicKey } from './directShareEncryption';
 import { uploadContentPublicKey, fetchSharedSessions as apiFetchSharedSessions } from './apiSharing';
@@ -3207,6 +3208,9 @@ class Sync {
             hasGitHub: !!parsedProfile.github
         }));
 
+        if (storage.getState().profile.github?.id !== parsedProfile.github?.id) {
+            clearGithubSession();
+        }
         // Apply profile to storage
         storage.getState().applyProfile(parsedProfile);
     }
@@ -4407,6 +4411,9 @@ class Sync {
         } else if (updateData.body.t === 'update-account') {
             const accountUpdate = updateData.body;
             const currentProfile = storage.getState().profile;
+            if (accountUpdate.github !== undefined) {
+                clearGithubSession();
+            }
 
             // Build updated profile with new data
             const updatedProfile: Profile = {
@@ -5593,6 +5600,7 @@ async function syncInit(credentials: AuthCredentials, restore: boolean) {
     const API_ENDPOINT = getServerUrl();
     apiSocket.initialize({ endpoint: API_ENDPOINT, token: credentials.token }, encryption);
     onServerUrlChanged((serverUrl) => {
+        clearGithubSession();
         apiSocket.updateEndpoint(serverUrl);
     });
 

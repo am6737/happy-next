@@ -2,13 +2,15 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { connectRoutes } from './connectRoutes';
 import { auth } from '@/app/auth/auth';
 import { githubConnect } from '@/app/github/githubConnect';
-import { getUserGithubToken } from '@/app/github/githubApi';
+import { getUserGithubAuthorization } from '@/app/github/githubApi';
+import { refreshGithubToken } from '@/app/github/githubTokenRefresh';
 import { GitHubReauthorizationRequiredError } from '@/app/github/githubOAuth';
 
 vi.mock('@/app/auth/auth', () => ({ auth: { createGithubToken: vi.fn(), verifyGithubToken: vi.fn() } }));
 vi.mock('@/app/github/githubConnect', () => ({ githubConnect: vi.fn() }));
 vi.mock('@/app/github/githubDisconnect', () => ({ githubDisconnect: vi.fn() }));
-vi.mock('@/app/github/githubApi', () => ({ getUserGithubToken: vi.fn(), GitHubNotConnectedError: class extends Error {} }));
+vi.mock('@/app/github/githubApi', () => ({ getUserGithubAuthorization: vi.fn(), GitHubNotConnectedError: class extends Error {} }));
+vi.mock('@/app/github/githubTokenRefresh', () => ({ refreshGithubToken: vi.fn() }));
 vi.mock('@/storage/db', () => ({ db: {} }));
 vi.mock('@/modules/encrypt', () => ({ decryptString: vi.fn(), encryptString: vi.fn() }));
 vi.mock('@/app/events/eventRouter', () => ({ eventRouter: {} }));
@@ -16,7 +18,7 @@ vi.mock('@/utils/log', () => ({ log: vi.fn() }));
 
 describe('GitHub OAuth App connection routes', () => {
     const handlers = new Map<string, any>();
-    const reply = { send: vi.fn(), code: vi.fn().mockReturnThis(), redirect: vi.fn() };
+    const reply = { send: vi.fn(), code: vi.fn().mockReturnThis(), redirect: vi.fn(), header: vi.fn().mockReturnThis() };
     const fetchMock = vi.fn();
 
     beforeEach(() => {
@@ -32,7 +34,7 @@ describe('GitHub OAuth App connection routes', () => {
         connectRoutes({
             authenticate: vi.fn(), addContentTypeParser: vi.fn(),
             get: (path: string, _opts: unknown, handler: unknown) => handlers.set(path, handler),
-            post: vi.fn(), delete: vi.fn(),
+            post: (path: string, _opts: unknown, handler: unknown) => handlers.set(`POST ${path}`, handler), delete: vi.fn(),
         } as any);
     });
 
@@ -85,8 +87,31 @@ describe('GitHub OAuth App connection routes', () => {
     });
 
     test('does not expose an old GitHub App token to AI sessions', async () => {
-        vi.mocked(getUserGithubToken).mockRejectedValueOnce(new GitHubReauthorizationRequiredError());
+        vi.mocked(getUserGithubAuthorization).mockRejectedValueOnce(new GitHubReauthorizationRequiredError());
         await handlers.get('/v1/connect/github/token')({ userId: 'user' }, reply);
+        expect(reply.code).toHaveBeenCalledWith(401);
+        expect(reply.send).toHaveBeenCalledWith({ error: 'github_token_expired' });
+    });
+
+    test('returns only access credentials with no-store', async () => {
+        vi.mocked(getUserGithubAuthorization).mockResolvedValueOnce({ token: 'gho_user', expiresAt: null });
+        await handlers.get('/v1/connect/github/token')({ userId: 'user' }, reply);
+        expect(reply.header).toHaveBeenCalledWith('Cache-Control', 'no-store');
+        expect(reply.send).toHaveBeenCalledWith({ token: 'gho_user', expiresAt: null });
+    });
+
+    test('coordinates refresh using the authenticated user and rejected token', async () => {
+        vi.mocked(refreshGithubToken).mockResolvedValueOnce('gho_new');
+        vi.mocked(getUserGithubAuthorization).mockResolvedValueOnce({ token: 'gho_new', expiresAt: null });
+        await handlers.get('POST /v1/connect/github/token/refresh')({ userId: 'user', body: { previousToken: 'gho_old' } }, reply);
+        expect(refreshGithubToken).toHaveBeenCalledWith('user', 'gho_old');
+        expect(reply.header).toHaveBeenCalledWith('Cache-Control', 'no-store');
+        expect(reply.send).toHaveBeenCalledWith({ token: 'gho_new', expiresAt: null });
+    });
+
+    test('returns reauthorization errors without exposing refresh credentials', async () => {
+        vi.mocked(refreshGithubToken).mockRejectedValueOnce(new GitHubReauthorizationRequiredError());
+        await handlers.get('POST /v1/connect/github/token/refresh')({ userId: 'user', body: { previousToken: 'gho_old' } }, reply);
         expect(reply.code).toHaveBeenCalledWith(401);
         expect(reply.send).toHaveBeenCalledWith({ error: 'github_token_expired' });
     });

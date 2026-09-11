@@ -271,17 +271,28 @@ export const GitHubListView = React.memo(({ onRepoChange, repoPickerTriggerRef }
         return filteredPulls.filter((p) => p.title.toLowerCase().includes(q) || `#${p.number}`.includes(q));
     }, [filteredPulls, searchQuery]);
 
-    const isLoading = reposLoading || (activeTab === 'issues' ? issueResult.loading : pullResult.loading);
+    // Keep rendered items visible while a refresh/background query is running.
+    // The repository picker and the active list load independently.
+    const activeItems = activeTab === 'issues' ? issues : filteredPRs;
+    const isLoading = activeItems.length === 0 && (activeTab === 'issues' ? issueResult.loading : pullResult.loading);
 
     const [isPullRefreshing, setIsPullRefreshing] = React.useState(false);
     const handleRefresh = React.useCallback(async () => {
         setIsPullRefreshing(true);
         try {
-            await (activeTab === 'issues' ? issueResult.refresh() : pullResult.refresh());
+            if (isGlobal) {
+                // Refresh both global queries so a failed switcher count can be retried.
+                await Promise.all([refreshRepos(), workIssues.refresh(), workPulls.refresh()]);
+            } else {
+                await Promise.all([
+                    refreshRepos(),
+                    activeTab === 'issues' ? issueResult.refresh() : pullResult.refresh(),
+                ]);
+            }
         } finally {
             setIsPullRefreshing(false);
         }
-    }, [activeTab, issueResult.refresh, pullResult.refresh]);
+    }, [activeTab, isGlobal, issueResult.refresh, pullResult.refresh, refreshRepos, workIssues.refresh, workPulls.refresh]);
 
     const handleIssuePress = React.useCallback((item: RepoIssue) => {
         const repository = item.repositoryFullName ?? selectedRepo;
@@ -418,14 +429,14 @@ export const GitHubListView = React.memo(({ onRepoChange, repoPickerTriggerRef }
 
     const otherTab = activeTab === 'issues' ? 'pulls' : 'issues';
     const otherTabLabel = activeTab === 'issues' ? t('github.prs') : t('github.issues');
-    // Global counts must come from the search total, never a partially loaded page.
-    // Single-repository previews use the repository's aggregate open counts.
+    // Global counts come from each search's totalCount; repository counts are
+    // already included in the repository list response.
     const selectedRepoInfo = repos.find((r) => r.fullName === selectedRepo);
-    const issuesCount: number | undefined = isGlobal
-        ? (workIssues.error ? undefined : workIssues.totalCount)
+    const issuesCount = isGlobal
+        ? workIssues.totalCount
         : (selectedRepoInfo?.openIssuesCount ?? issues.length);
-    const pullsCount: number | undefined = isGlobal
-        ? (workPulls.error ? undefined : workPulls.totalCount)
+    const pullsCount = isGlobal
+        ? workPulls.totalCount
         : (selectedRepoInfo?.openPRsCount ?? filteredPulls.length);
     const otherTabCount = isGlobal
         ? (activeTab === 'issues' ? pullsCount : issuesCount)
@@ -464,7 +475,7 @@ export const GitHubListView = React.memo(({ onRepoChange, repoPickerTriggerRef }
                         {otherTabLabel}
                     </Text>
                     <View style={[styles.swapPillBadge, { backgroundColor: theme.colors.divider }]}>
-                        {otherTabCountLoading ? (
+                        {otherTabCountLoading && typeof otherTabCount !== 'number' ? (
                             <ActivityIndicator
                                 size={Platform.OS === 'ios' ? 'small' : 12}
                                 color={theme.colors.textSecondary}

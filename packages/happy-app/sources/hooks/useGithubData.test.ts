@@ -6,6 +6,7 @@ import { clearGithubCache, useGithubRepo, useGithubRepos } from './useGithubData
 import { fetchGithubRepo, fetchGithubRepos } from '@/sync/apiGithubData';
 
 vi.mock('@/auth/AuthContext', () => ({ useAuth: () => ({ credentials: { token: 'test' } }) }));
+vi.mock('@/sync/serverConfig', () => ({ getServerUrl: () => 'https://happy.test' }));
 vi.mock('@/sync/apiGithubData', () => ({ fetchGithubRepo: vi.fn(), fetchGithubRepos: vi.fn() }));
 
 describe('GitHub authorization state during refresh', () => {
@@ -51,5 +52,56 @@ describe('GitHub authorization state during refresh', () => {
         await act(async () => state!.refresh());
         expect(state!.loading).toBe(false);
         expect(state!.tokenExpired).toBe(true);
+    });
+
+    test('old filter responses cannot overwrite the current repository search', async () => {
+        let resolveOld!: (value: any) => void;
+        vi.mocked(fetchGithubRepos).mockImplementationOnce(() => new Promise((resolve) => { resolveOld = resolve; }));
+        vi.mocked(fetchGithubRepos).mockResolvedValueOnce({ items: [{ fullName: 'org/new' }], hasMore: false, nextCursor: null } as any);
+        let state: ReturnType<typeof useGithubRepos>;
+        function Harness({ search }: { search: string }) { state = useGithubRepos({ search }); return null; }
+        await act(async () => { root = create(React.createElement(Harness, { search: 'old' })); });
+        await act(async () => root.update(React.createElement(Harness, { search: 'new' })));
+        await act(async () => resolveOld({ items: [{ fullName: 'org/old' }], hasMore: true, nextCursor: 'old-next' }));
+        expect(state!.data).toEqual([{ fullName: 'org/new' }]);
+        expect(state!.hasMore).toBe(false);
+    });
+
+    test('refresh prevents a stale load-more response from appending to the new first page', async () => {
+        vi.mocked(fetchGithubRepos).mockResolvedValueOnce({ items: [{ fullName: 'org/one' }], hasMore: true, nextCursor: 'next' } as any);
+        let resolveMore!: (value: any) => void;
+        vi.mocked(fetchGithubRepos).mockImplementationOnce(() => new Promise((resolve) => { resolveMore = resolve; }));
+        vi.mocked(fetchGithubRepos).mockResolvedValueOnce({ items: [{ fullName: 'org/fresh' }], hasMore: false, nextCursor: null } as any);
+        let state: ReturnType<typeof useGithubRepos>;
+        function Harness() { state = useGithubRepos(); return null; }
+        await act(async () => { root = create(React.createElement(Harness)); });
+        await act(async () => state!.loadMore());
+        await act(async () => state!.refresh());
+        await act(async () => resolveMore({ items: [{ fullName: 'org/old-page' }], hasMore: false, nextCursor: null }));
+        expect(state!.data).toEqual([{ fullName: 'org/fresh' }]);
+        expect(state!.loadingMore).toBe(false);
+    });
+
+    test('forced refresh cannot be overwritten by an older shared request', async () => {
+        let resolveOld!: (value: any) => void;
+        vi.mocked(fetchGithubRepos).mockImplementationOnce(() => new Promise((resolve) => { resolveOld = resolve; }));
+        vi.mocked(fetchGithubRepos).mockResolvedValueOnce({ items: [{ fullName: 'org/fresh' }], hasMore: false, nextCursor: null } as any);
+        let first!: ReturnType<typeof useGithubRepos>;
+        let second!: ReturnType<typeof useGithubRepos>;
+        function Harness() {
+            first = useGithubRepos();
+            second = useGithubRepos();
+            return null;
+        }
+
+        await act(async () => { root = create(React.createElement(Harness)); });
+        await act(async () => { void second.refresh(); });
+        await act(async () => resolveOld({ items: [{ fullName: 'org/old' }], hasMore: false, nextCursor: null }));
+        expect(second!.data).toEqual([{ fullName: 'org/fresh' }]);
+
+        let mounted!: ReturnType<typeof useGithubRepos>;
+        function LaterHarness() { mounted = useGithubRepos(); return null; }
+        await act(async () => root!.update(React.createElement(LaterHarness)));
+        expect(mounted!.data).toEqual([{ fullName: 'org/fresh' }]);
     });
 });

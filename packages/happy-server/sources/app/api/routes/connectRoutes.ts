@@ -6,7 +6,8 @@ import { eventRouter } from "@/app/events/eventRouter";
 import { decryptString, encryptString } from "@/modules/encrypt";
 import { githubConnect } from "@/app/github/githubConnect";
 import { githubDisconnect } from "@/app/github/githubDisconnect";
-import { getUserGithubToken, GitHubNotConnectedError } from "@/app/github/githubApi";
+import { getUserGithubAuthorization, GitHubNotConnectedError } from "@/app/github/githubApi";
+import { refreshGithubToken } from '@/app/github/githubTokenRefresh';
 import { GITHUB_OAUTH_SCOPE, isGitHubOAuthToken, GitHubReauthorizationRequiredError } from "@/app/github/githubOAuth";
 import { Context } from "@/context";
 import { db } from "@/storage/db";
@@ -184,17 +185,44 @@ export function connectRoutes(app: Fastify) {
         preHandler: app.authenticate,
         schema: {
             response: {
-                200: z.object({ token: z.string() }),
+                200: z.object({ token: z.string(), expiresAt: z.string().nullable() }),
                 401: z.object({ error: z.string() }),
                 404: z.object({ error: z.string() }),
             }
         }
     }, async (request, reply) => {
+        reply.header('Cache-Control', 'no-store');
         try {
-            return reply.send({ token: await getUserGithubToken(request.userId) });
+            return reply.send(await getUserGithubAuthorization(request.userId));
         } catch (error) {
             if (error instanceof GitHubNotConnectedError) {
                 return reply.code(404).send({ error: 'GitHub account not connected' });
+            }
+            if (error instanceof GitHubReauthorizationRequiredError) {
+                return reply.code(401).send({ error: 'github_token_expired' });
+            }
+            throw error;
+        }
+    });
+
+    app.post('/v1/connect/github/token/refresh', {
+        preHandler: app.authenticate,
+        schema: {
+            body: z.object({ previousToken: z.string().min(1).max(512) }),
+            response: {
+                200: z.object({ token: z.string(), expiresAt: z.string().nullable() }),
+                401: z.object({ error: z.string() }),
+                404: z.object({ error: z.string() }),
+            },
+        },
+    }, async (request, reply) => {
+        reply.header('Cache-Control', 'no-store');
+        try {
+            await refreshGithubToken(request.userId, request.body.previousToken);
+            return reply.send(await getUserGithubAuthorization(request.userId));
+        } catch (error) {
+            if (error instanceof GitHubNotConnectedError) {
+                return reply.code(404).send({ error: 'github_not_connected' });
             }
             if (error instanceof GitHubReauthorizationRequiredError) {
                 return reply.code(401).send({ error: 'github_token_expired' });
