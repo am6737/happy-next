@@ -8,7 +8,7 @@ import { useUnistyles } from 'react-native-unistyles';
 
 import { useAuth } from '@/auth/AuthContext';
 import { useInboxHasContent } from '@/hooks/useInboxHasContent';
-import { useDootaskProfile, useFriendRequests, useSocketStatus } from '@/sync/storage';
+import { useDootaskProfile, useFriendRequests, useProfile, useSocketStatus } from '@/sync/storage';
 import { getServerInfo } from '@/sync/serverConfig';
 import { t } from '@/text';
 import { StatusDot } from '@/components/StatusDot';
@@ -135,6 +135,7 @@ function WindowsTitleBarNavigation() {
     const friendRequests = useFriendRequests();
     const inboxHasContent = useInboxHasContent();
     const dootaskProfile = useDootaskProfile();
+    const profile = useProfile();
     const { width: windowWidth } = useWindowDimensions();
     const showConnectionText = windowWidth >= 720;
 
@@ -218,6 +219,19 @@ function WindowsTitleBarNavigation() {
                 >
                     <Image
                         source={require('@/assets/images/navigation/todo.png')}
+                        contentFit="contain"
+                        style={{ height: 18, width: 18 }}
+                        tintColor={theme.colors.header.tint}
+                    />
+                </WindowsNavigationButton>
+            )}
+            {!!profile.github && (
+                <WindowsNavigationButton
+                    accessibilityLabel={t('tabs.github')}
+                    onPress={() => router.navigate('/(app)/github')}
+                >
+                    <Image
+                        source={require('@/assets/images/navigation/github.png')}
                         contentFit="contain"
                         style={{ height: 18, width: 18 }}
                         tintColor={theme.colors.header.tint}

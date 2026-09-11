@@ -15,7 +15,7 @@ import { Image } from 'expo-image';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { t } from '@/text';
 import { useInboxHasContent } from '@/hooks/useInboxHasContent';
-import { useDootaskProfile } from '@/sync/storage';
+import { useDootaskProfile, useProfile } from '@/sync/storage';
 import { Ionicons } from '@expo/vector-icons';
 import { requestCommandPalette } from './CommandPalette/events';
 import { getDesktopPlatform, handleDesktopTitleBarMouseDown } from '@/desktop/desktopWindowUtils';
@@ -74,6 +74,7 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
     },
     titleContainerLeft: {
         flex: 1,
+        minWidth: 0,
         flexDirection: 'column',
         alignItems: 'flex-start',
         marginLeft: 4,
@@ -88,6 +89,7 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
         gap: 6,
     },
     titleText: {
+        maxWidth: '100%',
         fontSize: 17,
         fontWeight: '500',
         color: theme.colors.header.tint,
@@ -103,6 +105,7 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
         marginRight: 4,
     },
     statusText: {
+        flexShrink: 1,
         fontSize: 11,
         fontWeight: '500',
         lineHeight: 16,
@@ -179,6 +182,7 @@ export const SidebarView = React.memo((props: SidebarViewProps) => {
     const friendRequests = useFriendRequests();
     const inboxHasContent = useInboxHasContent();
     const dootaskProfile = useDootaskProfile();
+    const profile = useProfile();
     const [isSearchHovered, setIsSearchHovered] = React.useState(false);
     const desktopPlatform = getDesktopPlatform();
     const isDesktopMacOS = desktopPlatform === 'macos';
@@ -309,7 +313,7 @@ export const SidebarView = React.memo((props: SidebarViewProps) => {
                         size={6}
                         style={styles.statusDot}
                     />
-                    <Text style={[styles.statusText, { color: connectionStatus.textColor }]}>
+                    <Text numberOfLines={1} style={[styles.statusText, { color: connectionStatus.textColor }]}>
                         {connectionStatus.text}
                     </Text>
                 </View>
@@ -354,6 +358,27 @@ export const SidebarView = React.memo((props: SidebarViewProps) => {
                 >
                     <Image
                         source={require('@/assets/images/navigation/todo.png')}
+                        contentFit="contain"
+                        style={{ width: 20, height: 20, margin: 4, opacity: isDesktopMacOS ? 0.62 : 1 }}
+                        tintColor={theme.colors.header.tint}
+                    />
+                </Pressable>
+            )}
+            {!!profile.github && (
+                <Pressable
+                    accessibilityLabel={t('tabs.github')}
+                    accessibilityRole="button"
+                    onPress={() => router.navigate('/(app)/github')}
+                    hitSlop={10}
+                    ref={(element: any) => {
+                        if (element && typeof element === 'object') {
+                            element.title = t('tabs.github');
+                        }
+                    }}
+                    style={isDesktopMacOS ? styles.desktopNavigationButton : undefined}
+                >
+                    <Image
+                        source={require('@/assets/images/navigation/github.png')}
                         contentFit="contain"
                         style={{ width: 20, height: 20, margin: 4, opacity: isDesktopMacOS ? 0.62 : 1 }}
                         tintColor={theme.colors.header.tint}
