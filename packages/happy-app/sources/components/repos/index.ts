@@ -10,5 +10,7 @@ export { SkeletonBlock, RepoListSkeleton, RepoDetailSkeleton, IssueListSkeleton 
 export { RepoCard, type RepoCardData } from './RepoCard';
 export { IssueCard, type IssueCardData } from './IssueCard';
 export { IssueIcon } from './IssueIcon';
+export { GitHubOcticon, type GitHubOcticonName } from './GitHubOcticon';
+export { PullRequestIcon, type PullRequestIconState } from './PullRequestIcon';
 export { PullCard, type PullCardData } from './PullCard';
 export { CommentItem } from './CommentItem';

@@ -18,7 +18,7 @@ import { useHappyAction } from '@/hooks/useHappyAction';
 import { getGitHubOAuthParams } from '@/sync/apiGithub';
 import { Image } from 'expo-image';
 import { useMainTabBottomPadding } from '@/hooks/useMainTabBottomPadding';
-import { FilterChipRow } from '@/components/repos';
+import { FilterChipRow, IssueIcon, PullRequestIcon } from '@/components/repos';
 import type { GithubIssueScope, GithubPullScope } from '@/sync/apiGithubData';
 
 const SheetTextInput = Platform.OS === 'web' ? TextInput : BottomSheetTextInput;
@@ -46,46 +46,56 @@ function getStateColor(state: string, theme: ReturnType<typeof useUnistyles>['th
 }
 
 const IssueRow = React.memo(({ item, onPress, theme }: { item: RepoIssue; onPress: () => void; theme: any }) => (
-    <Pressable style={issueStyles.row} onPress={onPress}>
-        <View style={[issueStyles.dot, { backgroundColor: getStateColor(item.state, theme) }]} />
-        <View style={issueStyles.content}>
-            <Text style={[issueStyles.title, item.state === 'closed' && { color: theme.colors.textSecondary }]}>
-                {item.title}
-            </Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}>
-                <Text style={[issueStyles.meta, { color: theme.colors.textSecondary, marginTop: 0 }]}>
-                    {item.repositoryFullName ? `${item.repositoryFullName} · ` : ''}#{item.number} · {formatTimeAgo(item.createdAt)} · @{item.author}
-                </Text>
+    <View style={issueStyles.item}>
+        <Pressable style={issueStyles.row} onPress={onPress}>
+            <View style={issueStyles.icon}>
+                <IssueIcon size={18} color={getStateColor(item.state, theme)} state={item.state} />
             </View>
-            {item.labels.length > 0 && (
-                <View style={issueStyles.labelsRow}>
-                    {item.labels.map((label) => {
-                        const lc = labelColors(label.color);
-                        return (
-                            <View key={label.name} style={[issueStyles.labelPill, { backgroundColor: lc.bg }]}>
-                                <Text style={[issueStyles.labelText, { color: lc.text }]}>{label.name}</Text>
-                            </View>
-                        );
-                    })}
+            <View style={issueStyles.content}>
+                <Text style={[issueStyles.title, item.state === 'closed' && { color: theme.colors.textSecondary }]}>
+                    {item.title}
+                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                    <Text style={[issueStyles.meta, { color: theme.colors.textSecondary, marginTop: 0 }]}>
+                        {item.repositoryFullName ? `${item.repositoryFullName} · ` : ''}#{item.number} · {formatTimeAgo(item.createdAt)} · @{item.author}
+                    </Text>
                 </View>
-            )}
-        </View>
-    </Pressable>
+                {item.labels.length > 0 && (
+                    <View style={issueStyles.labelsRow}>
+                        {item.labels.map((label) => {
+                            const lc = labelColors(label.color);
+                            return (
+                                <View key={label.name} style={[issueStyles.labelPill, { backgroundColor: lc.bg }]}>
+                                    <Text style={[issueStyles.labelText, { color: lc.text }]}>{label.name}</Text>
+                                </View>
+                            );
+                        })}
+                    </View>
+                )}
+            </View>
+        </Pressable>
+        <View style={issueStyles.divider} />
+    </View>
 ));
 
 const PRRow = React.memo(({ item, onPress, theme }: { item: RepoPR; onPress: () => void; theme: any }) => (
-    <Pressable style={issueStyles.row} onPress={onPress}>
-        <View style={[issueStyles.dot, { backgroundColor: getStateColor(item.status, theme) }]} />
-        <View style={issueStyles.content}>
-            <Text style={[issueStyles.title, item.status !== 'open' && { color: theme.colors.textSecondary }]}>
-                {item.title}
-            </Text>
-            <Text style={[issueStyles.meta, { color: theme.colors.textSecondary }]}>
-                {item.repositoryFullName ? `${item.repositoryFullName} · ` : ''}#{item.number} · {formatTimeAgo(item.createdAt)} · @{item.author}
-                {item.headRefName ? ` → ${item.headRefName}` : ''}
-            </Text>
-        </View>
-    </Pressable>
+    <View style={issueStyles.item}>
+        <Pressable style={issueStyles.row} onPress={onPress}>
+            <View style={issueStyles.icon}>
+                <PullRequestIcon state={item.status} size={18} color={getStateColor(item.status, theme)} />
+            </View>
+            <View style={issueStyles.content}>
+                <Text style={[issueStyles.title, item.status !== 'open' && { color: theme.colors.textSecondary }]}>
+                    {item.title}
+                </Text>
+                <Text style={[issueStyles.meta, { color: theme.colors.textSecondary }]}>
+                    {item.repositoryFullName ? `${item.repositoryFullName} · ` : ''}#{item.number} · {formatTimeAgo(item.createdAt)} · @{item.author}
+                    {item.headRefName ? ` → ${item.headRefName}` : ''}
+                </Text>
+            </View>
+        </Pressable>
+        <View style={issueStyles.divider} />
+    </View>
 ));
 
 const TokenExpiredCard = React.memo(({ onReconnect, loading }: { onReconnect: () => void; loading: boolean }) => {
@@ -1013,19 +1023,25 @@ const styles = StyleSheet.create((theme) => ({
 }));
 
 const issueStyles = StyleSheet.create((theme) => ({
+    item: {
+        marginHorizontal: -16,
+    },
     row: {
         flexDirection: 'row',
         alignItems: 'flex-start',
         gap: 10,
         paddingVertical: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: theme.colors.divider,
+        paddingHorizontal: 16,
     },
-    dot: {
-        width: 10,
-        height: 10,
-        borderRadius: 5,
-        marginTop: 5,
+    divider: {
+        height: StyleSheet.hairlineWidth,
+        marginLeft: 44,
+        backgroundColor: theme.colors.divider,
+    },
+    icon: {
+        width: 18,
+        alignItems: 'center',
+        marginTop: 1,
     },
     content: {
         flex: 1,
