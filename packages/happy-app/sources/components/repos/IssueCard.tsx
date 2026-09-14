@@ -36,10 +36,7 @@ export const IssueCard = React.memo<IssueCardProps>(({ data, onPress, rightActio
         <PressableCard onPress={onPress} style={styles.pressable}>
             <View style={styles.row}>
                 <View style={styles.iconCol}>
-                    {data.state === 'open'
-                        ? <IssueIcon size={16} color={iconColor} />
-                        : <Ionicons name="checkmark-circle-outline" size={18} color={iconColor} allowFontScaling={false} />
-                    }
+                    <IssueIcon size={16} color={iconColor} state={data.state} />
                 </View>
                 <View style={styles.body}>
                     <View style={styles.titleRow}>
@@ -157,7 +154,7 @@ const stylesheet = StyleSheet.create((theme) => ({
         marginLeft: 4,
     },
     divider: {
-        height: Platform.select({ ios: 0.33, default: 1 }),
+        height: StyleSheet.hairlineWidth,
         backgroundColor: theme.colors.divider,
         marginLeft: 44,
     },

@@ -8,6 +8,7 @@ import { PressableCard } from './PressableCard';
 import { formatTimeAgo } from '@/data/repoUtils';
 import { Avatar } from '@/components/Avatar';
 import type { RepoState } from './StatePill';
+import { PullRequestIcon } from './PullRequestIcon';
 
 export interface PullCardData {
     number: number;
@@ -32,11 +33,6 @@ export const PullCard = React.memo<PullCardProps>(({ data, onPress, showDivider 
     const { theme } = useUnistyles();
 
     const state: RepoState = data.isDraft ? 'draft' : data.status;
-    const iconName: React.ComponentProps<typeof Ionicons>['name'] =
-        state === 'merged' ? 'git-merge'
-        : state === 'closed' ? 'close-circle'
-        : state === 'draft' ? 'git-pull-request-outline'
-        : 'git-pull-request';
     const iconColor =
         state === 'merged' ? theme.colors.repo.stateMerged
         : state === 'closed' ? theme.colors.repo.stateClosed
@@ -47,7 +43,7 @@ export const PullCard = React.memo<PullCardProps>(({ data, onPress, showDivider 
         <PressableCard onPress={onPress} style={styles.pressable}>
             <View style={styles.row}>
                 <View style={styles.iconCol}>
-                    <Ionicons name={iconName} size={16} color={iconColor} allowFontScaling={false} />
+                    <PullRequestIcon state={state} size={16} color={iconColor} />
                 </View>
                 <View style={styles.body}>
                     <Text style={styles.title} numberOfLines={2}>{data.title}</Text>
@@ -124,7 +120,7 @@ const stylesheet = StyleSheet.create((theme) => ({
         fontFamily: Platform.select({ ios: 'Menlo', default: 'monospace' }),
     },
     divider: {
-        height: Platform.select({ ios: 0.33, default: 1 }),
+        height: StyleSheet.hairlineWidth,
         backgroundColor: theme.colors.divider,
         marginLeft: 44,
     },

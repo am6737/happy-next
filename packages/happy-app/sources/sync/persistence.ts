@@ -11,6 +11,22 @@ const mmkv = new MMKV();
 const NEW_SESSION_DRAFT_KEY = 'new-session-draft-v1';
 const SESSIONS_CACHE_VERSION = 2;
 const savedSessionsCacheContent = new Map<string, string>();
+const GITHUB_DATA_CACHE_KEY = 'github-data-cache-v1';
+
+export function loadGithubDataCache(): Record<string, unknown> {
+    try {
+        const raw = mmkv.getString(GITHUB_DATA_CACHE_KEY);
+        if (!raw) return {};
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch { return {}; }
+}
+
+export function saveGithubDataCache(cache: Record<string, unknown>): void {
+    try { mmkv.set(GITHUB_DATA_CACHE_KEY, JSON.stringify(cache)); } catch { /* best effort */ }
+}
+
+export function clearGithubDataCache(): void { mmkv.delete(GITHUB_DATA_CACHE_KEY); }
 
 export type NewSessionAgentType = 'claude' | 'codex' | 'gemini';
 export type NewSessionSessionType = 'simple' | 'worktree';

@@ -21,14 +21,21 @@ import type {
     RepoIssueComment,
     RepoPR,
 } from '@/data/mockRepos';
+// Loaded lazily so Vitest/web consumers do not parse the native MMKV module.
+function githubPersistence() {
+    if (process.env.NODE_ENV === 'test') return null;
+    return require('@/sync/persistence') as typeof import('@/sync/persistence');
+}
 
 const MAX_CACHE_SIZE = 100;
 const dataCache = new Map<string, unknown>();
+for (const [key, value] of Object.entries(githubPersistence()?.loadGithubDataCache() ?? {})) dataCache.set(key, value);
 // Share requests between concurrently mounted screens/hooks. Without this,
 // navigation transitions can issue the same GitHub query several times.
 const inFlight = new Map<string, Promise<unknown>>();
 onGithubReset(() => {
     dataCache.clear();
+    githubPersistence()?.clearGithubDataCache();
     inFlight.clear();
 });
 
@@ -40,6 +47,7 @@ function cacheSet(key: string, value: unknown): void {
         dataCache.delete(firstKey);
     }
     dataCache.set(key, value);
+    githubPersistence()?.saveGithubDataCache(Object.fromEntries(dataCache));
 }
 
 function cacheKey(deps: unknown[]): string {
@@ -48,6 +56,7 @@ function cacheKey(deps: unknown[]): string {
 
 export function clearGithubCache(): void {
     dataCache.clear();
+    githubPersistence()?.clearGithubDataCache();
     inFlight.clear();
     clearGithubSession();
 }
