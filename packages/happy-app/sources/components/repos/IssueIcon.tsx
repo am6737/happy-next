@@ -1,31 +1,13 @@
 import * as React from 'react';
-import { View } from 'react-native';
+import { GitHubOcticon } from './GitHubOcticon';
 
 interface IssueIconProps {
     size: number;
     color: string;
+    state?: 'open' | 'closed';
 }
 
-export const IssueIcon = React.memo<IssueIconProps>(({ size, color }) => {
-    const borderWidth = size * 0.125;
-    const dotSize = size * 0.25;
-    return (
-        <View style={{
-            width: size,
-            height: size,
-            borderRadius: size / 2,
-            borderWidth,
-            borderColor: color,
-            alignItems: 'center',
-            justifyContent: 'center',
-        }}>
-            <View style={{
-                width: dotSize,
-                height: dotSize,
-                borderRadius: dotSize / 2,
-                backgroundColor: color,
-            }} />
-        </View>
-    );
+export const IssueIcon = React.memo<IssueIconProps>(({ size, color, state = 'open' }) => {
+    return <GitHubOcticon name={state === 'closed' ? 'issue-closed' : 'issue-opened'} size={size} color={color} />;
 });
 IssueIcon.displayName = 'IssueIcon';
