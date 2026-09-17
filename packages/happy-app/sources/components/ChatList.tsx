@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { useSession, useSessionMessages, useProfile, storage } from "@/sync/storage";
+import { useSession, useSessionMessages, useProfile, useSetting, storage } from "@/sync/storage";
 import { ActivityIndicator, FlatList, Platform, Pressable, Text, View } from 'react-native';
 import { useCallback, useRef, useState } from 'react';
 import { useHeaderHeight } from '@/utils/responsive';
@@ -11,19 +11,10 @@ import { ConversationMinimapItem } from './ConversationMinimap';
 import { Metadata, Session } from '@/sync/storageTypes';
 import { ChatFooter } from './ChatFooter';
 import { Message, UserTextMessage } from '@/sync/typesMessage';
+import { shouldHideMessageInChatList } from './chatListVisibility';
 import { layout } from './layout';
 import { createScrollButtonVisibilityController } from './scrollButtonVisibilityController';
 import { t } from '@/text';
-
-const LOCAL_COMMAND_STDOUT_PATTERN = /^<local-command-stdout>[\s\S]*<\/local-command-stdout>$/;
-
-function isCompactionMarkerText(text: string): boolean {
-    return LOCAL_COMMAND_STDOUT_PATTERN.test(text.trim());
-}
-
-function shouldHideMessageInChatList(message: Message): boolean {
-    return message.kind === 'user-text' && isCompactionMarkerText(message.displayText ?? message.text);
-}
 
 // Does a loaded list message correspond to the given minimap target (whose id may come from the
 // throwaway reducer and therefore not match the store's id)?
@@ -112,9 +103,10 @@ const ChatListInternal = React.memo((props: {
 }) => {
     const { theme } = useUnistyles();
     const flatListRef = useRef<FlatList>(null);
+    const showThinkingMessages = useSetting('showThinkingMessages');
     const visibleMessages = React.useMemo(
-        () => props.messages.filter((message) => !shouldHideMessageInChatList(message)),
-        [props.messages]
+        () => props.messages.filter((message) => !shouldHideMessageInChatList(message, showThinkingMessages)),
+        [props.messages, showThinkingMessages]
     );
 
     // Compute which user-text messages should show sender name labels.
@@ -234,7 +226,7 @@ const ChatListInternal = React.memo((props: {
             if (loaded.message.localId) loadedByLocalId.add(loaded.message.localId);
         }
         for (const cached of props.minimapCachedUserMessages ?? []) {
-            if (shouldHideMessageInChatList(cached)) continue;
+            if (shouldHideMessageInChatList(cached, showThinkingMessages)) continue;
             if (cached.seq != null && loadedBySeq.has(cached.seq)) continue;
             if (cached.localId && loadedByLocalId.has(cached.localId)) continue;
             merged.push(cached);
@@ -245,7 +237,7 @@ const ChatListInternal = React.memo((props: {
         return merged
             .sort((a, b) => a.createdAt - b.createdAt || (a.seq ?? 0) - (b.seq ?? 0))
             .map((message) => ({ message }));
-    }, [props.minimapCachedUserMessages, loadedUserMessages]);
+    }, [props.minimapCachedUserMessages, loadedUserMessages, showThinkingMessages]);
     const activeMessageIdsRef = useRef<Set<string>>(new Set());
 
     const scrollToLoadedMessage = useCallback((target: UserTextMessage, animated = true): boolean => {
