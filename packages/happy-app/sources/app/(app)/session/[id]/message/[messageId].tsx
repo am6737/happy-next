@@ -15,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { layout } from '@/components/layout';
 import { getNativeHeaderTitleWidth } from '@/utils/nativeHeaderTitleWidth';
 import { LongPressCopy, useCopySelectable } from '@/components/LongPressCopy';
+import { getToolImagePath } from '@/utils/toolImagePath';
 
 const stylesheet = StyleSheet.create((theme) => ({
     loadingContainer: {
@@ -116,7 +117,10 @@ function FullView(props: { message: Message; sessionId: string; metadata: Metada
     const selectable = useCopySelectable();
 
     if (props.message.kind === 'tool-call') {
-        return <ToolFullView tool={props.message.tool} messages={props.message.children} sessionId={props.sessionId} metadata={props.message.tool.name === 'view_image' ? props.metadata : undefined} />
+        const tool = props.message.tool;
+        // Only image previews need metadata — it carries the home directory used to shorten the path.
+        const metadata = getToolImagePath(tool.name, tool.input) ? props.metadata : undefined;
+        return <ToolFullView tool={tool} messages={props.message.children} sessionId={props.sessionId} metadata={metadata} />
     }
     if (props.message.kind === 'agent-text') {
         return (

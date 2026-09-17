@@ -30,7 +30,12 @@ interface ToolFullViewProps {
 
 export function ToolFullView({ tool, metadata, messages = [], sessionId }: ToolFullViewProps) {
     // Check if there's a specialized content view for this tool
-    const SpecializedFullView = getToolFullViewComponent(tool.name);
+    const SpecializedFullView = getToolFullViewComponent(tool);
+    // A specialized view with nothing to show — an image this call never registered — hands the
+    // page back to the generic body, which is what the tool looked like before that view existed.
+    const [unavailable, setUnavailable] = React.useState(false);
+    const handleUnavailable = React.useCallback(() => setUnavailable(true), []);
+    React.useEffect(() => setUnavailable(false), [tool.callId]);
     const screenWidth = useWindowDimensions().width;
     const devModeEnabled = (useLocalSetting('devModeEnabled') || __DEV__);
     const selectable = useCopySelectable();
@@ -38,8 +43,8 @@ export function ToolFullView({ tool, metadata, messages = [], sessionId }: ToolF
         <ScrollView style={[styles.container, { paddingHorizontal: screenWidth > 700 ? 16 : 0 }]}>
             <View style={styles.contentWrapper}>
                 {/* Tool-specific content or generic fallback */}
-                {SpecializedFullView ? (
-                    <SpecializedFullView tool={tool} metadata={metadata || null} messages={messages} sessionId={sessionId} />
+                {SpecializedFullView && !unavailable ? (
+                    <SpecializedFullView tool={tool} metadata={metadata || null} messages={messages} sessionId={sessionId} onUnavailable={handleUnavailable} />
                 ) : (
                     <>
                     {/* Generic fallback for tools without specialized views */}

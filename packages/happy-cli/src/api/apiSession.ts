@@ -15,7 +15,7 @@ import { trimToolUseResult, trimToolResultContent, trimToolUseInput } from './tr
 import { RpcHandlerManager } from './rpc/RpcHandlerManager';
 
 import { registerCommonHandlers } from '../modules/common/registerCommonHandlers';
-import { registerToolImage } from '../modules/common/toolImageStore';
+import { registerToolImageForCall } from '../modules/common/toolImageStore';
 import { calculateCost } from '@/utils/pricing';
 import { isDebug } from '@/utils/env';
 
@@ -499,6 +499,9 @@ export class ApiSessionClient extends EventEmitter {
             for (const block of body.message.content) {
                 if (block.type === 'tool_use' && block.id && block.name) {
                     this.toolIdToName.set(block.id, block.name);
+                    // Claude tool calls never pass through sendAgentMessage — register here so the
+                    // app can preview images it reads, subagents included.
+                    registerToolImageForCall(this.sessionId, this.metadata?.path, block.name, block.id, block.input);
                     if (INPUT_TRIMMABLE_TOOLS.has(block.name)) {
                         needsInputTrim = true;
                     }
@@ -865,8 +868,8 @@ export class ApiSessionClient extends EventEmitter {
      * @param body - The message payload (type: 'message' | 'reasoning' | 'tool-call' | 'tool-result')
      */
     sendAgentMessage(provider: 'gemini' | 'codex' | 'claude' | 'opencode', body: ACPMessageData) {
-        if (body.type === 'tool-call' && body.name === 'view_image' && this.metadata) {
-            registerToolImage(this.sessionId, this.metadata.path, body.callId, body.input);
+        if (body.type === 'tool-call') {
+            registerToolImageForCall(this.sessionId, this.metadata?.path, body.name, body.callId, body.input);
         }
         if (body.type === 'token_count' && typeof body.model === 'string') {
             this.updateModelMetadata(body.model);

@@ -1,10 +1,10 @@
-export function getViewImagePath(input: unknown): string | null {
-    if (!input || typeof input !== 'object' || !('path' in input)) return null;
-    return typeof input.path === 'string' && input.path.trim() ? input.path : null;
-}
+import { getToolImagePath } from 'happy-wire';
 
-export function getViewImageDisplayPath(input: unknown, homeDir?: string): string | null {
-    const path = getViewImagePath(input);
+export { getToolImagePath };
+
+/** Display form of a tool call's image path, with a leading home directory shortened to `~`. */
+export function getToolImageDisplayPath(toolName: string, input: unknown, homeDir?: string): string | null {
+    const path = getToolImagePath(toolName, input);
     if (!path || !homeDir) return path;
     const home = homeDir.replace(/[\\/]+$/, '');
     if (!home) return path;

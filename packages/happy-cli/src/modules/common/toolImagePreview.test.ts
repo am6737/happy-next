@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { FILE_PREVIEW_BINARY_LIMIT, FILE_PREVIEW_CHUNK_SIZE } from 'happy-wire';
 import { createToolImagePreviewHandlers } from './toolImagePreview';
-import { getToolImageRecord, registerToolImage } from './toolImageStore';
+import { getToolImageRecord, registerToolImage, registerToolImageForCall } from './toolImageStore';
 import { registerCommonHandlers } from './registerCommonHandlers';
 
 const config = vi.hoisted(() => ({ home: '' }));
@@ -158,5 +158,17 @@ describe('tool image preview', () => {
         expect(opened.success).toBe(true);
         expect(await methods.get('readToolImagePreviewChunk')!({ token: opened.token, offset: 0 })).toMatchObject({ success: true });
         expect(await methods.get('closeToolImagePreview')!({ token: opened.token, offset: 0 })).toEqual({ success: true });
+    });
+
+    // Which call names an image is covered by happy-wire's getToolImagePath; this is the registration.
+    describe('registerToolImageForCall', () => {
+        it('registers an image read, and only an image read', () => {
+            registerToolImageForCall('session-a', workspace, 'Read', 'read-image', { file_path: path });
+            expect(getToolImageRecord('session-a', 'read-image')?.path).toBe(path);
+            registerToolImageForCall('session-a', workspace, 'Read', 'read-text', { file_path: join(workspace, 'notes.md') });
+            expect(getToolImageRecord('session-a', 'read-text')).toBeNull();
+            registerToolImageForCall('session-a', undefined, 'Read', 'read-nowhere', { file_path: path });
+            expect(getToolImageRecord('session-a', 'read-nowhere')).toBeNull();
+        });
     });
 });
