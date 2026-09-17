@@ -8,14 +8,13 @@ import { CopyableText } from '@/components/LongPressCopy';
 import { t } from '@/text';
 import { FilePreviewLoadError } from '@/components/FilePreview/loadFilePreview';
 import { ToolError } from '../ToolError';
-import { getViewImagePath, getViewImageDisplayPath } from '../viewImageInput';
+import { getToolImagePath, getToolImageDisplayPath } from '@/utils/toolImagePath';
 import { loadToolImagePreview, ToolImagePreviewError } from '../loadToolImagePreview';
 import type { ToolViewProps } from './_all';
 
 function errorText(error: unknown): string {
     if (error instanceof ToolImagePreviewError) {
         switch (error.message) {
-            case 'image_not_registered': return t('files.preview.imageNotRegistered');
             case 'image_missing': return t('files.preview.imageMissing');
             case 'image_changed': return t('files.preview.imageChanged');
             case 'image_unsupported': return t('files.preview.unsupported');
@@ -29,16 +28,23 @@ function errorText(error: unknown): string {
     return t('files.preview.unavailable');
 }
 
-export const ViewImageViewFull = React.memo(({ tool, sessionId, metadata }: ToolViewProps) => {
+export const ViewImageViewFull = React.memo(({ tool, sessionId, metadata, onUnavailable }: ToolViewProps) => {
     const { theme } = useUnistyles();
     const { height } = useWindowDimensions();
-    const path = getViewImagePath(tool.input);
-    const displayPath = getViewImageDisplayPath(tool.input, metadata?.homeDir);
+    const path = getToolImagePath(tool.name, tool.input);
+    const displayPath = getToolImageDisplayPath(tool.name, tool.input, metadata?.homeDir);
+    const label = displayPath ?? t('tools.names.viewImage');
     const [attempt, setAttempt] = React.useState(0);
     const [uri, setUri] = React.useState<string | null>(null);
     const [error, setError] = React.useState<string | null>(null);
     const [loading, setLoading] = React.useState(true);
     const [fullscreen, setFullscreen] = React.useState(false);
+    // A call with no registered image predates the preview — the page shows the ordinary tool body
+    // for it, the way it did before this view existed. Only a missing page keeps the retryable error.
+    const noImage = React.useCallback(() => {
+        if (onUnavailable) onUnavailable();
+        else setError(t('files.preview.imageNotRegistered'));
+    }, [onUnavailable]);
 
     React.useEffect(() => {
         const controller = new AbortController();
@@ -48,19 +54,21 @@ export const ViewImageViewFull = React.memo(({ tool, sessionId, metadata }: Tool
         setLoading(false);
         if (tool.state !== 'completed') return () => controller.abort();
         if (!sessionId || !tool.callId || !path) {
-            setError(t('files.preview.imageNotRegistered'));
+            noImage();
             return () => controller.abort();
         }
         setLoading(true);
         void loadToolImagePreview(sessionId, tool.callId, controller.signal).then((imageUri) => {
             if (!controller.signal.aborted) setUri(imageUri);
         }).catch((cause) => {
-            if (!controller.signal.aborted) setError(errorText(cause));
+            if (controller.signal.aborted) return;
+            if (cause instanceof ToolImagePreviewError && cause.message === 'image_not_registered') noImage();
+            else setError(errorText(cause));
         }).finally(() => {
             if (!controller.signal.aborted) setLoading(false);
         });
         return () => controller.abort();
-    }, [sessionId, tool.callId, tool.state, path, attempt]);
+    }, [sessionId, tool.callId, tool.state, path, attempt, noImage]);
 
     const toolError = tool.state === 'error'
         ? typeof tool.result === 'string' ? tool.result : JSON.stringify(tool.result ?? t('common.error'))
@@ -93,7 +101,7 @@ export const ViewImageViewFull = React.memo(({ tool, sessionId, metadata }: Tool
                                 source={{ uri }}
                                 style={{ width: '100%', height: '100%' }}
                                 contentFit="contain"
-                                accessibilityLabel={displayPath ?? t('tools.names.viewImage')}
+                                accessibilityLabel={label}
                                 onError={() => setError(t('files.preview.renderError'))}
                             />
                         </Pressable>

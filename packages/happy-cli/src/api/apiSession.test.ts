@@ -142,17 +142,36 @@ describe('ApiSessionClient v3 outbox', () => {
         expect(() => client.close()).not.toThrow();
     });
 
-    it('registers only view_image calls before sending them to the app', () => {
+    it('registers image-bearing tool calls before sending them to the app', () => {
         const client = new ApiSessionClient('fake-token', mockSession);
-        const register = vi.spyOn(toolImageStoreModule, 'registerToolImage').mockImplementation(() => {});
+        const register = vi.spyOn(toolImageStoreModule, 'registerToolImageForCall').mockImplementation(() => {});
         const enqueue = vi.spyOn(client as any, 'enqueueMessage').mockImplementation(() => {});
         const body = { type: 'tool-call' as const, callId: 'image-call', name: 'view_image', input: { path: '/outside/image.png' }, id: 'message-1' };
         client.sendAgentMessage('codex', body);
-        expect(register).toHaveBeenCalledWith('test-session-id', '/tmp', 'image-call', body.input);
+        expect(register).toHaveBeenCalledWith('test-session-id', '/tmp', 'view_image', 'image-call', body.input);
         expect(register.mock.invocationCallOrder[0]).toBeLessThan(enqueue.mock.invocationCallOrder[0]);
-        client.sendAgentMessage('codex', { ...body, name: 'Read' });
         client.sendAgentMessage('codex', { type: 'tool-result', callId: 'image-call', output: {}, id: 'result-1' });
         expect(register).toHaveBeenCalledTimes(1);
+        client.close();
+    });
+
+    it('registers every Claude tool call, including subagents', () => {
+        const client = new ApiSessionClient('fake-token', mockSession);
+        const register = vi.spyOn(toolImageStoreModule, 'registerToolImageForCall').mockImplementation(() => {});
+        client.sendClaudeSessionMessage({
+            type: 'assistant',
+            uuid: 'uuid-1',
+            isSidechain: true,
+            message: {
+                role: 'assistant',
+                content: [
+                    { type: 'tool_use', id: 'read-1', name: 'Read', input: { file_path: '/tmp/photo.png' } },
+                    { type: 'tool_use', id: 'edit-1', name: 'Edit', input: { file_path: '/tmp/photo.png' } },
+                ],
+            },
+        } as any);
+        expect(register).toHaveBeenCalledWith('test-session-id', '/tmp', 'Read', 'read-1', { file_path: '/tmp/photo.png' });
+        expect(register).toHaveBeenCalledTimes(2);
         client.close();
     });
 

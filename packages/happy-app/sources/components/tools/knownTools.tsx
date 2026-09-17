@@ -5,7 +5,7 @@ import * as z from 'zod';
 import { Ionicons, Octicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import React from 'react';
 import { t } from '@/text';
-import { getViewImageDisplayPath } from './viewImageInput';
+import { getToolImageDisplayPath } from '@/utils/toolImagePath';
 
 // Icon factory functions
 const ICON_TASK = (size: number = 24, color: string = '#000') => <Octicons name="rocket" size={size} color={color} />;
@@ -24,7 +24,7 @@ const ICON_ROBOT = (size: number = 24, color: string = '#000') => <MaterialCommu
 export const knownTools = {
     'view_image': {
         title: () => t('tools.names.viewImage'),
-        extractSubtitle: (opts: { metadata: Metadata | null, tool: ToolCall }) => getViewImageDisplayPath(opts.tool.input, opts.metadata?.homeDir),
+        extractSubtitle: (opts: { metadata: Metadata | null, tool: ToolCall }) => getToolImageDisplayPath('view_image', opts.tool.input, opts.metadata?.homeDir),
         icon: (size: number, color: string) => <Ionicons name="image-outline" size={size} color={color} />,
         minimal: true,
         isMutable: false,

@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { z } from 'zod';
+import { getToolImagePath } from 'happy-wire';
 import { configuration } from '@/configuration';
 import { logger } from '@/ui/logger';
 
@@ -36,6 +37,15 @@ export function registerToolImage(sessionId: string, workingDirectory: string, c
             logger.debug('[ToolImageStore] Cannot register image preview', error);
         }
     }
+}
+
+/**
+ * Register the image a tool call reads, when that call names one. Called only with locally
+ * observed tool calls, so the app can preview the file without ever supplying a path itself.
+ */
+export function registerToolImageForCall(sessionId: string, workingDirectory: string | undefined, toolName: string, callId: string, input: unknown): void {
+    const path = getToolImagePath(toolName, input);
+    if (path && workingDirectory) registerToolImage(sessionId, workingDirectory, callId, { path });
 }
 
 export function getToolImageRecord(sessionId: string, callId: string) {

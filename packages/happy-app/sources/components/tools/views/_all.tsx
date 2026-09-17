@@ -19,12 +19,19 @@ import { GeminiEditView } from './GeminiEditView';
 import { GeminiExecuteView } from './GeminiExecuteView';
 import { PreviewHtmlViewFull } from './PreviewHtmlViewFull';
 import { ViewImageViewFull } from './ViewImageViewFull';
+import { getToolImagePath } from '@/utils/toolImagePath';
 
 export type ToolViewProps = {
     tool: ToolCall;
     metadata: Metadata | null;
     messages: Message[];
     sessionId?: string;
+    /**
+     * A full view that cannot show what it was chosen for hands the page back to its ordinary
+     * body — a call the CLI never registered has no image to preview, which is an old call rather
+     * than a failure. Supplied by ToolFullView.
+     */
+    onUnavailable?: () => void;
 }
 
 // Type for tool view components
@@ -64,9 +71,11 @@ export function getToolViewComponent(toolName: string): ToolViewComponent | null
     return toolViewRegistry[toolName] || null;
 }
 
-// Helper function to get the full view component for a tool
-export function getToolFullViewComponent(toolName: string): ToolViewComponent | null {
-    return toolFullViewRegistry[toolName] || null;
+// Helper function to get the full view for a tool. Any call whose input names a previewable
+// image renders that image, the way view_image does — the CLI registers the file for it.
+export function getToolFullViewComponent(tool: ToolCall): ToolViewComponent | null {
+    if (getToolImagePath(tool.name, tool.input)) return ViewImageViewFull;
+    return toolFullViewRegistry[tool.name] || null;
 }
 
 // Export individual components
