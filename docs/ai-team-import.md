@@ -5,7 +5,7 @@
 ## 环境变量
 
 ```bash
-export HAPPY_SERVER_URL=http://localhost:3005
+export HAPPY_SERVER_URL=http://localhost:3031
 export HAPPY_TOKEN='当前 Happy 账号的 Bearer token'
 ```
 

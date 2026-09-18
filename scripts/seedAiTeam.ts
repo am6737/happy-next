@@ -33,7 +33,7 @@ type Team = {
 
 type State = { agents: Agent[]; teams: Team[] };
 
-const serverUrl = (process.env.HAPPY_SERVER_URL || 'http://localhost:3005').replace(/\/$/, '');
+const serverUrl = (process.env.HAPPY_SERVER_URL || 'http://localhost:3031').replace(/\/$/, '');
 const token = process.env.HAPPY_TOKEN;
 const dryRun = process.argv.includes('--dry-run');
 const updateExisting = process.argv.includes('--update-existing');
