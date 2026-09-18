@@ -201,6 +201,15 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
         marginLeft: 4,
         marginRight: 8,
     },
+    // Offline sessions: an outline rather than a fill, so the mark cannot be taken for the filled
+    // grey of an idle-but-connected session.
+    offlineDot: {
+        width: 6,
+        height: 6,
+        borderRadius: 3,
+        borderWidth: 1,
+        borderColor: theme.colors.textSecondary,
+    },
 }));
 
 interface ActiveSessionsGroupProps {
@@ -528,8 +537,28 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder, registerS
                                 </View>
                             );
                         }
-                        
-                        return <View style={{ width: 24 }}></View>;
+                        // Offline: a hollow ring, so it reads as "not running" rather than
+                        // "idle" — the filled grey above means the opposite.
+                        if (!sessionStatus.isConnected) {
+                            return (
+                                <View style={[styles.statusDotContainer, { marginRight: 8 }]}>
+                                    <View style={styles.offlineDot} />
+                                </View>
+                            );
+                        }
+
+                        // syncing / awaiting have a colour of their own (see useSessionStatus), so
+                        // they get the same treatment as thinking instead of a blank slot: with
+                        // nothing drawn, a session that is actively working looked emptier than an
+                        // idle one.
+                        return (
+                            <View style={[styles.statusDotContainer, { marginRight: 8 }]}>
+                                <StatusDot
+                                    color={sessionStatus.statusDotColor}
+                                    isPulsing={sessionStatus.isPulsing}
+                                />
+                            </View>
+                        );
                     })()}
                     
                     <Text
