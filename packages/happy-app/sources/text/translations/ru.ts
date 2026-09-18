@@ -119,6 +119,7 @@ export const ru: TranslationStructure = {
         back: 'Назад',
         create: 'Создать',
         rename: 'Переименовать',
+        details: 'Детали',
         reset: 'Сбросить',
         logout: 'Выйти',
         yes: 'Да',

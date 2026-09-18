@@ -107,6 +107,7 @@ export const it: TranslationStructure = {
         back: 'Indietro',
         create: 'Crea',
         rename: 'Rinomina',
+        details: 'Dettagli',
         reset: 'Ripristina',
         logout: 'Esci',
         yes: 'Sì',

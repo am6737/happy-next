@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, TextInput, Pressable, StyleSheet, KeyboardTypeOptions, Platform } from 'react-native';
+import { View, Text, TextInput, Pressable, StyleSheet, KeyboardTypeOptions, Platform, useWindowDimensions } from 'react-native';
 import { BaseModal } from './BaseModal';
 import { PromptModalConfig } from '../types';
 import { Modal } from '../ModalManager';
@@ -14,8 +14,12 @@ interface WebPromptModalProps {
     onConfirm: (value: string | null) => void;
 }
 
+const DEFAULT_MODAL_WIDTH = 270;
+const MODAL_HORIZONTAL_MARGIN = 32;
+
 export function WebPromptModal({ config, onClose, onConfirm }: WebPromptModalProps) {
     const { theme } = useUnistyles();
+    const { width: windowWidth } = useWindowDimensions();
     const [inputValue, setInputValue] = useState(config.defaultValue || '');
     const [checkboxChecked, setCheckboxChecked] = useState(config.checkbox?.defaultValue ?? false);
     const inputRef = useRef<TextInput>(null);
@@ -53,11 +57,13 @@ export function WebPromptModal({ config, onClose, onConfirm }: WebPromptModalPro
         }
     };
 
+    const modalWidth = Math.min(config.width ?? DEFAULT_MODAL_WIDTH, windowWidth - MODAL_HORIZONTAL_MARGIN);
+
     const styles = StyleSheet.create({
         container: {
             backgroundColor: theme.colors.surface,
             borderRadius: 14,
-            width: 270,
+            width: modalWidth,
             overflow: 'hidden',
             shadowColor: theme.colors.shadow.color,
             shadowOffset: {

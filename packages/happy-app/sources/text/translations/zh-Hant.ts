@@ -110,6 +110,7 @@ export const zhHant: TranslationStructure = {
         back: '返回',
         create: '建立',
         rename: '重新命名',
+        details: '詳情',
         reset: '重設',
         logout: '登出',
         yes: '是',

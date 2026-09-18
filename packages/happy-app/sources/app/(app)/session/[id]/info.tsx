@@ -11,11 +11,12 @@ import { Avatar } from '@/components/Avatar';
 import { useSession, useIsDataReady, useMachine, useOrchestratorHasRuns, storage } from '@/sync/storage';
 import { generateCopyTitle, getSessionName, useSessionStatus, formatOSPlatform, formatPathRelativeToHome, getSessionAvatarId, copySessionMetadata, copySessionModeSettings } from '@/utils/sessionUtils';
 import { canArchiveSession } from '@/utils/sessionLifecycle';
+import { promptRenameSession } from '@/utils/sessionRename';
 import * as Clipboard from 'expo-clipboard';
 import { Modal } from '@/modal';
 import { hapticsLight } from '@/components/haptics';
 import { showCopiedToast } from '@/components/Toast';
-import { sessionArchive, sessionKill, sessionDelete, machineForkClaudeSession, machineForkGeminiSession, machineForkCodexSession, machineSpawnNewSession, sessionUpdateSummary, sessionUpdateMetadataFields } from '@/sync/ops';
+import { sessionArchive, sessionKill, sessionDelete, machineForkClaudeSession, machineForkGeminiSession, machineForkCodexSession, machineSpawnNewSession, sessionUpdateMetadataFields } from '@/sync/ops';
 import { leaveSharedSession } from '@/sync/apiSharing';
 import { pushWorktreeBranch, mergeWorktreeBranch, createWorktreePR, cleanupWorktree, cleanupWorkspace, getLocalBranches, getCurrentBranch } from '@/utils/worktreeOps';
 import { getWorkspaceRepos } from '@/utils/workspaceRepos';
@@ -437,43 +438,7 @@ function SessionInfoContent({ session }: { session: Session }) {
         return new Date(timestamp).toLocaleString();
     }, []);
 
-    const handleRenameSession = useCallback(async () => {
-        if (!session.metadata) return;
-
-        const result = await Modal.promptWithCheckbox(
-            t('sessionInfo.renameSession'),
-            t('sessionInfo.renameSessionHint'),
-            {
-                defaultValue: session.metadata.summary?.text || '',
-                placeholder: getSessionName(session),
-                cancelText: t('common.cancel'),
-                confirmText: t('common.rename'),
-                checkbox: {
-                    label: t('sessionInfo.pinSessionTitle'),
-                    defaultValue: session.metadata.summaryPinned ?? false
-                }
-            }
-        );
-
-        if (result !== null) {
-            const trimmed = result.value.trim();
-            if (!trimmed) return;
-            try {
-                await sessionUpdateSummary(
-                    session.id,
-                    session.metadata,
-                    trimmed,
-                    session.metadataVersion,
-                    result.checked
-                );
-            } catch (error) {
-                Modal.alert(
-                    t('common.error'),
-                    error instanceof Error ? error.message : t('sessionInfo.failedToRenameSession')
-                );
-            }
-        }
-    }, [session]);
+    const handleRenameSession = useCallback(() => promptRenameSession(session), [session]);
 
     const handleCopyUpdateCommand = useCallback(() => {
         Modal.alert(

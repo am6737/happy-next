@@ -108,6 +108,7 @@ export const es: TranslationStructure = {
         back: 'Atrás',
         create: 'Crear',
         rename: 'Renombrar',
+        details: 'Detalles',
         reset: 'Restablecer',
         logout: 'Cerrar sesión',
         yes: 'Sí',

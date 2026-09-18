@@ -110,6 +110,7 @@ export const ja: TranslationStructure = {
         back: '戻る',
         create: '作成',
         rename: '名前を変更',
+        details: '詳細',
         reset: 'リセット',
         logout: 'ログアウト',
         yes: 'はい',

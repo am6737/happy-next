@@ -119,6 +119,7 @@ export const pl: TranslationStructure = {
         back: 'Wstecz',
         create: 'Utwórz',
         rename: 'Zmień nazwę',
+        details: 'Szczegóły',
         reset: 'Resetuj',
         logout: 'Wyloguj',
         yes: 'Tak',

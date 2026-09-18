@@ -27,6 +27,7 @@ describe('getSessionQuickActionKinds', () => {
             isConnected: true,
         })).toEqual([
             'details',
+            'renameSession',
             'newSession',
             'delegationHistory',
             'manageSharing',

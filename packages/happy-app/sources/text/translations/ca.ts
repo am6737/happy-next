@@ -108,6 +108,7 @@ export const ca: TranslationStructure = {
         back: 'Enrere',
         create: 'Crear',
         rename: 'Reanomena',
+        details: 'Detalls',
         reset: 'Reinicia',
         logout: 'Tanca la sessió',
         yes: 'Sí',

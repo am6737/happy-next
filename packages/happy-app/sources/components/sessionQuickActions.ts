@@ -3,6 +3,7 @@ import { canArchiveSession } from '@/utils/sessionLifecycle';
 
 export type SessionQuickActionKind =
     | 'details'
+    | 'renameSession'
     | 'newSession'
     | 'delegationHistory'
     | 'manageSharing'
@@ -29,7 +30,10 @@ export function getSessionQuickActionKinds({
         && (session.metadata?.claudeSessionId || session.metadata?.flavor === 'gemini' || session.metadata?.codexSessionId)
     );
 
-    const actions: SessionQuickActionKind[] = ['details', 'newSession'];
+    const actions: SessionQuickActionKind[] = ['details'];
+    // Only the owner can write session metadata; shared users get a read-only title.
+    if (isOwner) actions.push('renameSession');
+    actions.push('newSession');
     if (hasOrchestratorRuns) actions.push('delegationHistory');
     if (isAdmin) actions.push('manageSharing');
     if (!isOwner) actions.push('leaveSharedSession');

@@ -124,6 +124,7 @@ export const en: TranslationStructure = {
         back: 'Back',
         create: 'Create',
         rename: 'Rename',
+        details: 'Details',
         reset: 'Reset',
         logout: 'Logout',
         yes: 'Yes',

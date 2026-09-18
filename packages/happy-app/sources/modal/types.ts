@@ -44,6 +44,8 @@ export interface PromptModalConfig extends BaseModalConfig {
     confirmText?: string;
     inputType?: 'default' | 'secure-text' | 'email-address' | 'numeric';
     checkbox?: PromptCheckboxConfig;
+    /** Preferred dialog width in dp; clamped to fit the screen. Defaults to 270. */
+    width?: number;
 }
 
 export interface CustomModalConfig extends BaseModalConfig {

@@ -110,6 +110,7 @@ export const zhHans: TranslationStructure = {
         back: '返回',
         create: '创建',
         rename: '重命名',
+        details: '详情',
         reset: '重置',
         logout: '登出',
         yes: '是',

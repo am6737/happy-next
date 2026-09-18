@@ -110,6 +110,7 @@ export const en = {
         back: 'Back',
         create: 'Create',
         rename: 'Rename',
+        details: 'Details',
         reset: 'Reset',
         logout: 'Logout',
         yes: 'Yes',

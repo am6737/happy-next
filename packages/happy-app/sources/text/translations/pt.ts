@@ -108,6 +108,7 @@ export const pt: TranslationStructure = {
         back: 'Voltar',
         create: 'Criar',
         rename: 'Renomear',
+        details: 'Detalhes',
         reset: 'Redefinir',
         logout: 'Sair',
         yes: 'Sim',

@@ -1,7 +1,7 @@
 import React from 'react';
 import { Platform, Pressable, useWindowDimensions, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import { Ionicons } from '@expo/vector-icons';
+import { AntDesign, Ionicons } from '@expo/vector-icons';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from '@/components/StyledText';
@@ -9,6 +9,8 @@ import { Typography } from '@/constants/Typography';
 import { Session } from '@/sync/storageTypes';
 import { useOrchestratorHasRuns, useSessionMarkerColor } from '@/sync/storage';
 import { getSessionName, useSessionStatus, generateCopyTitle, copySessionMetadata, copySessionModeSettings } from '@/utils/sessionUtils';
+import { promptRenameSession } from '@/utils/sessionRename';
+import { showToast } from './Toast';
 import { useRouter } from 'expo-router';
 import { t } from '@/text';
 import { Modal } from '@/modal';
@@ -35,10 +37,13 @@ import { SessionColorPalette } from './SessionColorMarker';
 import type { SessionMarkerColor } from '@/sync/sessionAppearance';
 
 type MenuPosition = { x: number; y: number };
+type ActionIconSpec =
+    | { family: 'ionicons'; name: React.ComponentProps<typeof Ionicons>['name'] }
+    | { family: 'antdesign'; name: React.ComponentProps<typeof AntDesign>['name'] };
 type QuickAction = {
     kind: SessionQuickActionKind;
     label: string;
-    icon: React.ComponentProps<typeof Ionicons>['name'];
+    icon: ActionIconSpec;
     destructive?: boolean;
     disabled?: boolean;
     onPress: () => void;
@@ -48,6 +53,14 @@ const MENU_WIDTH = 212;
 const ITEM_HEIGHT = 42;
 const MENU_PADDING = 8;
 const PALETTE_HEIGHT = 46;
+const ICON_SIZE = 18;
+
+function ActionIcon({ icon, color }: { icon: ActionIconSpec; color: string }) {
+    if (icon.family === 'antdesign') {
+        return <AntDesign name={icon.name} size={ICON_SIZE} color={color} />;
+    }
+    return <Ionicons name={icon.name} size={ICON_SIZE} color={color} />;
+}
 
 const styles = StyleSheet.create((theme) => ({
     menu: {
@@ -180,6 +193,12 @@ function useSessionQuickActions(session: Session) {
         ]);
     }, [performArchive, session.metadata]);
 
+    const handleRename = React.useCallback(async () => {
+        if (await promptRenameSession(session)) {
+            showToast(t('sessionInfo.renameSessionSuccess'));
+        }
+    }, [session]);
+
     const handleDelete = React.useCallback(() => {
         Modal.alert(t('sessionInfo.deleteSession'), t('sessionInfo.deleteSessionWarning'), [
             { text: t('common.cancel'), style: 'cancel' },
@@ -276,6 +295,7 @@ function useSessionQuickActions(session: Session) {
 
     const handlers: Record<SessionQuickActionKind, () => void> = {
         details: () => router.push(`/session/${session.id}/info`),
+        renameSession: handleRename,
         newSession: handleNewSession,
         delegationHistory: () => router.push(`/orchestrator?controllerSessionId=${encodeURIComponent(session.id)}`),
         manageSharing: () => router.push(`/session/${session.id}/sharing`),
@@ -286,7 +306,8 @@ function useSessionQuickActions(session: Session) {
         deleteSession: handleDelete,
     };
     const labels: Record<SessionQuickActionKind, string> = {
-        details: t('sessionInfo.title'),
+        details: t('common.details'),
+        renameSession: t('common.rename'),
         newSession: t('sessionInfo.newSession'),
         delegationHistory: t('sessionInfo.delegationHistory'),
         manageSharing: t('session.sharing.manageSharing'),
@@ -296,16 +317,17 @@ function useSessionQuickActions(session: Session) {
         archiveSession: t('sessionInfo.archiveSession'),
         deleteSession: t('sessionInfo.deleteSession'),
     };
-    const icons: Record<SessionQuickActionKind, QuickAction['icon']> = {
-        details: 'information-circle-outline',
-        newSession: 'add-circle-outline',
-        delegationHistory: 'layers-outline',
-        manageSharing: 'share-outline',
-        leaveSharedSession: 'exit-outline',
-        viewMachine: 'server-outline',
-        forkSession: session.active ? 'copy-outline' : 'play-circle-outline',
-        archiveSession: 'archive-outline',
-        deleteSession: 'trash-outline',
+    const icons: Record<SessionQuickActionKind, ActionIconSpec> = {
+        details: { family: 'ionicons', name: 'information-circle-outline' },
+        renameSession: { family: 'antdesign', name: 'edit' },
+        newSession: { family: 'ionicons', name: 'add-circle-outline' },
+        delegationHistory: { family: 'ionicons', name: 'layers-outline' },
+        manageSharing: { family: 'ionicons', name: 'share-outline' },
+        leaveSharedSession: { family: 'ionicons', name: 'exit-outline' },
+        viewMachine: { family: 'ionicons', name: 'server-outline' },
+        forkSession: { family: 'ionicons', name: session.active ? 'copy-outline' : 'play-circle-outline' },
+        archiveSession: { family: 'ionicons', name: 'archive-outline' },
+        deleteSession: { family: 'ionicons', name: 'trash-outline' },
     };
     const kinds = getSessionQuickActionKinds({ session, hasOrchestratorRuns, isConnected: sessionStatus.isConnected });
     const actions = kinds.map((kind): QuickAction => ({
@@ -480,9 +502,8 @@ export function SessionContextMenu({ session, children }: { session: Session; ch
                                     action.disabled && styles.disabled,
                                 ]}
                             >
-                                <Ionicons
-                                    name={action.icon}
-                                    size={18}
+                                <ActionIcon
+                                    icon={action.icon}
                                     color={action.destructive ? theme.colors.textDestructive : theme.colors.textSecondary}
                                 />
                                 <Text style={[styles.itemText, action.destructive && styles.destructiveText]} numberOfLines={1}>
