@@ -453,7 +453,7 @@ describe('settings', () => {
                 favoriteMachines: [],
                 dismissedCLIWarnings: { perMachine: {}, global: {} },
                 useEnhancedSessionWizard: false,
-                showThinkingMessages: true,
+                showThinkingMessages: false,
             });
         });
 

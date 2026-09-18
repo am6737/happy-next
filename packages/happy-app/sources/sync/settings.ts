@@ -344,7 +344,7 @@ export const settingsDefaults: Settings = {
     agentInputEnterToSend: true,
     avatarStyle: 'brutalist',
     showFlavorIcons: false,
-    showThinkingMessages: true,
+    showThinkingMessages: false,
     compactSessionView: false,
     compactSessionViewMobile: false,
     compactSessionViewDesktop: true,
