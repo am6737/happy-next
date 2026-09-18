@@ -9,11 +9,9 @@ import { getSessionName, useSessionStatus, getSessionAvatarId } from '@/utils/se
 import { Avatar } from './Avatar';
 import { Typography } from '@/constants/Typography';
 import { StatusDot } from './StatusDot';
-import { StyleSheet } from 'react-native-unistyles';
-import { isMachineOnline } from '@/utils/machineUtils';
-import { machineSpawnNewSession, sessionArchive } from '@/sync/ops';
-import { resolveAbsolutePath } from '@/utils/pathUtils';
-import { storage } from '@/sync/storage';
+import { StyleSheet, useUnistyles } from 'react-native-unistyles';
+import { sessionArchive } from '@/sync/ops';
+import { storage, useSessionHasDraft } from '@/sync/storage';
 import { Modal } from '@/modal';
 import { t } from '@/text';
 import { useNavigateToSession } from '@/hooks/useNavigateToSession';
@@ -414,6 +412,8 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder, isCardFir
         isCardFirst ? styles.cardRowFirst :
             isCardLast ? styles.cardRowLast : undefined;
     const sessionStatus = useSessionStatus(session);
+    const { theme } = useUnistyles();
+    const hasDraft = useSessionHasDraft(session.id);
     const sessionName = getSessionName(session);
     const navigateToSession = useNavigateToSession();
     const swipeableRef = React.useRef<Swipeable | null>(null);
@@ -533,8 +533,8 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder, isCardFir
                         }
                         // permission_required / syncing (orange) and thinking / awaiting (blue):
                         // "you are needed" and "work is happening". Idle (waiting) and offline
-                        // (disconnected) draw nothing — an offline row's title is already greyed,
-                        // and the old grey dot only restated it.
+                        // (disconnected) draw nothing of their own — an offline row's title is
+                        // already greyed, and the old grey dot only restated it.
                         if (sessionStatus.state === 'permission_required' || sessionStatus.state === 'thinking'
                             || sessionStatus.state === 'syncing' || sessionStatus.state === 'awaiting') {
                             return (
@@ -542,6 +542,19 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder, isCardFir
                                     color={sessionStatus.statusDotColor}
                                     isPulsing={sessionStatus.isPulsing}
                                     style={styles.statusMark}
+                                />
+                            );
+                        }
+                        // An unsent message of yours. Not a state, and the quietest of the
+                        // three, so it takes the slot only from a row that has nothing else to
+                        // say: a working session keeps its colour, an unread completion its dot.
+                        if (hasDraft) {
+                            return (
+                                <Ionicons
+                                    name="create-outline"
+                                    size={14}
+                                    color={theme.colors.textSecondary}
+                                    style={[styles.statusMark, { marginRight: -4 }]}
                                 />
                             );
                         }
