@@ -4,6 +4,8 @@ import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { ToolViewProps } from './_all';
 import { ToolSectionView } from '../ToolSectionView';
 import { sessionAllow } from '@/sync/ops';
+import { askUserQuestionDraftKey } from '@/sync/askUserQuestionDraft';
+import { useAskUserQuestionDraft } from '@/hooks/useAskUserQuestionDraft';
 import { t } from '@/text';
 import { Ionicons } from '@expo/vector-icons';
 import { Typography } from '@/constants/Typography';
@@ -208,10 +210,32 @@ const styles = StyleSheet.create((theme) => ({
 
 export const AskUserQuestionView = React.memo<ToolViewProps>(({ tool, sessionId }) => {
     const { theme } = useUnistyles();
-    const [selections, setSelections] = React.useState<Map<number, Set<number>>>(new Map());
-    const [otherTexts, setOtherTexts] = React.useState<Map<number, string>>(new Map());
+    // The answer in progress is a draft (store-backed, see useAskUserQuestionDraft) rather than
+    // plain state: this row is unmounted whenever it leaves the list's render window — scrolling
+    // away, a stream of new messages, a message-syncing reload that re-keys every row — and the
+    // user's ticks and typed "Other" text have to come back with it.
+    const toolKey = askUserQuestionDraftKey(tool);
+    const {
+        selections,
+        otherTexts,
+        isSubmitted,
+        toggleOption,
+        setOtherText,
+        markSubmitted,
+        clearDraft,
+    } = useAskUserQuestionDraft(sessionId, toolKey);
     const [isSubmitting, setIsSubmitting] = React.useState(false);
-    const [isSubmitted, setIsSubmitted] = React.useState(false);
+    // Questions whose "Other" input should take focus on this mount. Restoring a draft mounts an
+    // already-open input — inside the list's overscan, before it is even visible — so autoFocus
+    // is granted only to an "Other" the user tapped in this mount.
+    const focusOtherRef = React.useRef<Set<number>>(new Set());
+
+    // Once the tool has run its course the draft has nothing left to hold: the submitted branch
+    // below reads the answers off the tool result itself.
+    const isToolFinished = tool.state === 'completed' || tool.state === 'error';
+    React.useEffect(() => {
+        if (isToolFinished) clearDraft();
+    }, [isToolFinished, clearDraft]);
 
     // Parse input
     const input = tool.input as AskUserQuestionInput | undefined;
@@ -244,36 +268,23 @@ export const AskUserQuestionView = React.memo<ToolViewProps>(({ tool, sessionId 
 
     const handleOptionToggle = React.useCallback((questionIndex: number, optionIndex: number, multiSelect: boolean) => {
         if (!canInteract) return;
-
-        setSelections(prev => {
-            const newMap = new Map(prev);
-            const currentSet = newMap.get(questionIndex) || new Set();
-
-            if (multiSelect) {
-                // Toggle for multi-select
-                const newSet = new Set(currentSet);
-                if (newSet.has(optionIndex)) {
-                    newSet.delete(optionIndex);
-                } else {
-                    newSet.add(optionIndex);
-                }
-                newMap.set(questionIndex, newSet);
-            } else {
-                // Replace for single-select
-                newMap.set(questionIndex, new Set([optionIndex]));
-            }
-
-            return newMap;
-        });
-    }, [canInteract]);
+        toggleOption(questionIndex, optionIndex, multiSelect);
+    }, [canInteract, toggleOption]);
 
     const handleOtherTextChange = React.useCallback((questionIndex: number, text: string) => {
-        setOtherTexts(prev => {
-            const newMap = new Map(prev);
-            newMap.set(questionIndex, text);
-            return newMap;
-        });
-    }, []);
+        setOtherText(questionIndex, text);
+    }, [setOtherText]);
+
+    // The "Other" row hands focus to its input only when the user opens it here and now.
+    const handleOtherToggle = React.useCallback((questionIndex: number, optionIndex: number, multiSelect: boolean, wasSelected: boolean) => {
+        if (!canInteract) return;
+        if (wasSelected) {
+            focusOtherRef.current.delete(questionIndex);
+        } else {
+            focusOtherRef.current.add(questionIndex);
+        }
+        toggleOption(questionIndex, optionIndex, multiSelect);
+    }, [canInteract, toggleOption]);
 
     const handleSubmit = React.useCallback(async () => {
         if (!sessionId || !allQuestionsAnswered || isSubmitting) return;
@@ -284,7 +295,9 @@ export const AskUserQuestionView = React.memo<ToolViewProps>(({ tool, sessionId 
         // Without this, users could edit their selections while the network calls
         // are in flight, but those edits would be ignored since we've already
         // captured the values above. TODO: Revisit this logic.
-        setIsSubmitted(true);
+        // Recorded on the draft too, so a row that remounts mid-flight (scroll, reload) stays
+        // submitted instead of handing the form back for a second, ignored submission.
+        markSubmitted();
 
         // Codex uses stable question IDs; Claude looks answers up by full question text.
         const answers: Record<string, string> = {};
@@ -326,7 +339,7 @@ export const AskUserQuestionView = React.memo<ToolViewProps>(({ tool, sessionId 
         } finally {
             setIsSubmitting(false);
         }
-    }, [sessionId, questions, selections, otherTexts, allQuestionsAnswered, isSubmitting, tool.permission?.id]);
+    }, [sessionId, questions, selections, otherTexts, allQuestionsAnswered, isSubmitting, markSubmitted, tool.permission?.id]);
 
     // Show submitted state
     if (isSubmitted || tool.state === 'completed') {
@@ -460,7 +473,7 @@ export const AskUserQuestionView = React.memo<ToolViewProps>(({ tool, sessionId 
                                                 isOtherSelected && styles.optionButtonSelected,
                                                 !canInteract && styles.optionButtonDisabled,
                                             ]}
-                                            onPress={() => handleOptionToggle(qIndex, otherIndex, question.multiSelect)}
+                                            onPress={() => handleOtherToggle(qIndex, otherIndex, question.multiSelect, isOtherSelected)}
                                             disabled={!canInteract}
                                             activeOpacity={0.7}
                                         >
@@ -495,7 +508,7 @@ export const AskUserQuestionView = React.memo<ToolViewProps>(({ tool, sessionId 
                                                 multiline={!question.isSecret}
                                                 secureTextEntry={question.isSecret}
                                                 editable={canInteract}
-                                                autoFocus
+                                                autoFocus={focusOtherRef.current.has(qIndex)}
                                                 textAlignVertical="top"
                                             />
                                         )}

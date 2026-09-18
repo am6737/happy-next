@@ -173,6 +173,22 @@ export interface SessionDraft {
     images: Array<{ uri: string; width: number; height: number; mimeType: string }>;
 }
 
+/**
+ * An in-progress `AskUserQuestion` answer: what the user has ticked and typed but not yet
+ * submitted. Lives in its own map keyed by the CLI's tool id (never on the message, whose id is
+ * re-minted whenever the reducer is recreated) so it survives the row unmounting, the list
+ * re-keying and an app restart. See useAskUserQuestionDraft.
+ */
+export interface AskUserQuestionDraft {
+    /** Question index -> ticked option indices (the "Other" sentinel equals `options.length`). */
+    selections: Record<number, number[]>;
+    /** Question index -> "Other" / free-form text. */
+    otherTexts: Record<number, string>;
+    /** Set once Submit was pressed and the answers are still in flight. */
+    submitted?: boolean;
+    updatedAt: number;
+}
+
 export interface Session {
     id: string,
     seq: number,

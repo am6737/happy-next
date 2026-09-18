@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { useShallow } from 'zustand/react/shallow'
-import { Session, SessionDraft, Machine, GitStatus, PendingMessage, SessionCapabilities } from "./storageTypes";
+import { Session, SessionDraft, AskUserQuestionDraft, Machine, GitStatus, PendingMessage, SessionCapabilities } from "./storageTypes";
+import { AskUserQuestionDraftMap, writeAskUserQuestionDraft } from "./askUserQuestionDraft";
 import { createReducer, reducer, ReducerState } from "./reducer/reducer";
 import { Message } from "./typesMessage";
 import { NormalizedMessage } from "./typesRaw";
@@ -9,7 +10,7 @@ import { applySettings, Settings } from "./settings";
 import { LocalSettings, applyLocalSettings } from "./localSettings";
 import { Profile } from "./profile";
 import { UserProfile } from "./friendTypes";
-import { loadSettings, loadLocalSettings, saveLocalSettings, saveSettings, loadProfile, saveProfile, loadSessionDrafts, saveSessionDrafts, normalizeDraft, loadDooTaskProfile, saveDooTaskProfile, loadDooTaskUserCache, saveDooTaskUserCache, clearDooTaskUserCache, loadDooTaskProjects, saveDooTaskProjects, clearDooTaskProjects, loadDooTaskPriorities, saveDooTaskPriorities, clearDooTaskPriorities, loadDooTaskColumns, saveDooTaskColumns, clearDooTaskColumns, loadRegisteredReposLocal, saveRegisteredReposLocal } from "./persistence";
+import { loadSettings, loadLocalSettings, saveLocalSettings, saveSettings, loadProfile, saveProfile, loadSessionDrafts, saveSessionDrafts, loadAskUserQuestionDrafts, saveAskUserQuestionDrafts, normalizeDraft, loadDooTaskProfile, saveDooTaskProfile, loadDooTaskUserCache, saveDooTaskUserCache, clearDooTaskUserCache, loadDooTaskProjects, saveDooTaskProjects, clearDooTaskProjects, loadDooTaskPriorities, saveDooTaskPriorities, clearDooTaskPriorities, loadDooTaskColumns, saveDooTaskColumns, clearDooTaskColumns, loadRegisteredReposLocal, saveRegisteredReposLocal } from "./persistence";
 import { DooTaskProfile, DooTaskProject, DooTaskItem, DooTaskFilters, DooTaskPager, DooTaskPriority, DooTaskColumn } from './dootask/types';
 import { dootaskFetchProjects, dootaskFetchTasks, dootaskFetchUsersBasic, dootaskFetchPriorities, dootaskFetchProjectColumns } from './dootask/api';
 import type { PermissionMode } from '@/components/PermissionModeSelector';
@@ -119,6 +120,11 @@ interface StorageState {
     // MMKV key on every write. Deliberately NOT a field on Session — drafts must never
     // take part in session sync/merge/cache. See useDraft.
     drafts: Record<string, SessionDraft>;
+    // Per-`AskUserQuestion` call drafts (ticked options + "Other" text), keyed
+    // `sessionId -> CLI tool id`. Same reasoning as `drafts`: deliberately its own map, so the
+    // row unmounting (virtualized list) or the whole list re-keying (message-syncing) can't
+    // take an in-progress answer with it. Mirrored to the `ask-user-question-drafts-v1` MMKV key.
+    askUserQuestionDrafts: AskUserQuestionDraftMap;
     // Per-session "message-list bootstrap (re)fetch is in flight" flag (transient, not persisted).
     // Set true while a focus/retry-triggered full reload (fetchMessagesV3 bootstrap) is loading,
     // cleared on success OR error. Drives the "refreshing" indicator in SessionView.
@@ -209,6 +215,7 @@ interface StorageState {
     getActiveSessions: () => Session[];
     applyCachedSessions: (sessions: Record<string, Session>, sharedSessions: Record<string, Session>) => void;
     setDraft: (sessionId: string, draft: SessionDraft | null) => void;
+    setAskUserQuestionDraft: (sessionId: string, toolKey: string, draft: AskUserQuestionDraft | null) => void;
     updateSessionActivity: (sessionId: string, active: boolean) => void;
     setAwaitingResponse: (sessionId: string, value: number | null) => void;
     setSessionMessagesFetching: (sessionId: string, fetching: boolean) => void;
@@ -456,6 +463,7 @@ export const storage = create<StorageState>()((set, get) => {
         sessionMessages: {},
         sessionPendingMessages: {},
         drafts: loadSessionDrafts(),
+        askUserQuestionDrafts: loadAskUserQuestionDrafts(),
         sessionMessagesFetching: {},
         sessionGitStatus: {},
         realtimeStatus: 'disconnected',
@@ -1403,6 +1411,14 @@ export const storage = create<StorageState>()((set, get) => {
             saveSessionDrafts(nextDrafts);
             return { ...state, drafts: nextDrafts };
         }),
+        setAskUserQuestionDraft: (sessionId: string, toolKey: string, draft: AskUserQuestionDraft | null) => set((state) => {
+            // Same rules as setDraft: normalize, bail out on a no-op, persist on a real write.
+            // writeAskUserQuestionDraft returns the same map when nothing changed.
+            const nextDrafts = writeAskUserQuestionDraft(state.askUserQuestionDrafts, sessionId, toolKey, draft);
+            if (nextDrafts === state.askUserQuestionDrafts) return state;
+            saveAskUserQuestionDrafts(nextDrafts);
+            return { ...state, askUserQuestionDrafts: nextDrafts };
+        }),
         setAwaitingResponse: (sessionId: string, value: number | null) => set((state) => {
             const session = state.sessions[sessionId];
             if (!session) return state;
@@ -1794,6 +1810,13 @@ export const storage = create<StorageState>()((set, get) => {
                 Object.entries(state.drafts).filter(([id]) => !deleteSet.has(id))
             );
             saveSessionDrafts(remainingDrafts);
+
+            // Same for the AskUserQuestion drafts filed under the deleted sessions.
+            const remainingQuestionDrafts = Object.fromEntries(
+                Object.entries(state.askUserQuestionDrafts).filter(([id]) => !deleteSet.has(id))
+            );
+            saveAskUserQuestionDrafts(remainingQuestionDrafts);
+
             for (const sessionId of deleteSet) {
                 projectManager.removeSession(sessionId);
             }
@@ -1812,6 +1835,7 @@ export const storage = create<StorageState>()((set, get) => {
                 sessionPendingMessages: remainingPendingMessages as Record<string, PendingMessage[]>,
                 sessionGitStatus: remainingGitStatus as Record<string, GitStatus | null>,
                 drafts: remainingDrafts,
+                askUserQuestionDrafts: remainingQuestionDrafts,
                 sessionListViewData
             };
         }),
