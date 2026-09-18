@@ -1,4 +1,4 @@
-import { Ionicons, Octicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons, Octicons, MaterialCommunityIcons, FontAwesome6 } from '@expo/vector-icons';
 import * as React from 'react';
 import { View, Platform, useWindowDimensions, ViewStyle, Text, ActivityIndicator, TouchableWithoutFeedback, Image as RNImage, Pressable, Keyboard, Modal as RNModal } from 'react-native';
 import { Image } from 'expo-image';
@@ -15,7 +15,7 @@ import { AgentInputAutocomplete } from './AgentInputAutocomplete';
 import { FloatingOverlay } from './FloatingOverlay';
 import { TextInputState, MultiTextInputHandle } from './MultiTextInput';
 import { applySuggestion } from './autocomplete/applySuggestion';
-import { shouldSendOnEnter } from './agentInputKeyboard';
+import { resolveEscapeAbort, shouldSendOnEnter } from './agentInputKeyboard';
 import { GitStatusBadge, useHasLoadedGitStatus } from './GitStatusBadge';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { useSetting } from '@/sync/storage';
@@ -68,7 +68,9 @@ interface AgentInputProps {
     onModelModeChange?: (mode: ModelMode) => void;
     metadata?: Metadata | null;
     onAbort?: () => void | Promise<void>;
-    showAbortButton?: boolean;
+    // True while the agent is working on a turn: the round button turns into a stop
+    // button and a double press of Escape aborts the turn.
+    isBusy?: boolean;
     connectionStatus?: {
         text: string;
         color: string;
@@ -653,9 +655,11 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
     }, [isContextDetailsPinned]);
 
 
-    // Abort button state
+    // Abort state - the round button doubles as a stop button while the agent works
     const [isAborting, setIsAborting] = React.useState(false);
     const shakerRef = React.useRef<ShakeInstance>(null);
+    // Timestamp of the Escape press that armed the double-press abort, 0 when disarmed
+    const escapeAbortArmedAtRef = React.useRef(0);
     const inputRef = React.useRef<MultiTextInputHandle>(null);
 
     const { dropZoneRef, isDragging } = useWebImageDrop({
@@ -675,6 +679,10 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
     // Attached images alone are enough to send (e.g. an image-only chat message),
     // even when the text input is empty.
     const hasImages = (props.images?.length ?? 0) > 0;
+    // While the agent works and there is nothing to send, the round button stops the turn
+    // instead of starting a voice session. Text/images keep the send button so messages can
+    // still be queued.
+    const showStopButton = !!(props.isBusy && props.onAbort && !hasText && !hasImages && !props.isSending);
 
     // Keep a latest text snapshot to avoid stale parent-state reads during fast click-after-type sends.
     const latestTextRef = React.useRef(props.value);
@@ -861,9 +869,21 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
             }
         }
 
-        // Handle Escape for abort when no suggestions are visible
-        if (event.key === 'Escape' && props.showAbortButton && props.onAbort && !isAborting) {
-            handleAbortPress();
+        // Handle Escape for abort when no suggestions are visible. A single press only arms
+        // the gesture - a second press inside the window confirms it.
+        const escapeAbortNow = Date.now();
+        const escapeAbort = resolveEscapeAbort({
+            key: event.key,
+            isBusy: !!props.isBusy,
+            isAborting,
+            armedAt: escapeAbortArmedAtRef.current,
+            now: escapeAbortNow,
+        });
+        if (escapeAbort !== 'ignore') {
+            escapeAbortArmedAtRef.current = escapeAbort === 'arm' ? escapeAbortNow : 0;
+            if (escapeAbort === 'abort') {
+                handleAbortPress();
+            }
             return true;
         }
 
@@ -898,7 +918,7 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
 
         }
         return false; // Key was not handled
-    }, [suggestions, moveUp, moveDown, selected, handleSuggestionSelect, props.showAbortButton, props.onAbort, isAborting, handleAbortPress, agentInputEnterToSend, resolveSendSnapshot, props.onSend, props.permissionMode, props.onPermissionModeChange, props.isSending, props.isSendDisabled, permissionModeOptions]);
+    }, [suggestions, moveUp, moveDown, selected, handleSuggestionSelect, props.isBusy, props.onAbort, isAborting, handleAbortPress, agentInputEnterToSend, resolveSendSnapshot, props.onSend, props.permissionMode, props.onPermissionModeChange, props.isSending, props.isSendDisabled, permissionModeOptions]);
 
     const connectionStatusIndicator = props.connectionStatus ? (
         <>
@@ -1753,40 +1773,6 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                     </Pressable>
                                 )}
 
-                                {/* Abort button */}
-                                {props.onAbort && (
-                                    <Shaker ref={shakerRef}>
-                                        <Pressable
-                                            style={(p) => ({
-                                                flexDirection: 'row',
-                                                alignItems: 'center',
-                                                borderRadius: Platform.select({ default: 16, android: 20 }),
-                                                paddingHorizontal: 8,
-                                                paddingVertical: 6,
-                                                justifyContent: 'center',
-                                                height: 32,
-                                                opacity: p.pressed ? 0.7 : 1,
-                                            })}
-                                            hitSlop={{ top: 5, bottom: 10, left: 0, right: 0 }}
-                                            onPress={handleAbortPress}
-                                            disabled={isAborting}
-                                        >
-                                            {isAborting ? (
-                                                <ActivityIndicator
-                                                    size="small"
-                                                    color={theme.colors.button.secondary.tint}
-                                                />
-                                            ) : (
-                                                <Octicons
-                                                    name={"stop"}
-                                                    size={16}
-                                                    color={theme.colors.button.secondary.tint}
-                                                />
-                                            )}
-                                        </Pressable>
-                                    </Shaker>
-                                )}
-
                                 {/* Git Status Badge */}
                                 <GitStatusButton sessionId={props.sessionId} onPress={props.onFileViewerPress} onBlank={() => inputRef.current?.focus()} />
                                 </View>
@@ -1811,11 +1797,12 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                     </Pressable>
                                 )}
 
-                                {/* Send/Voice button - aligned with first row */}
+                                {/* Send/Voice/Stop button - aligned with first row */}
+                                <Shaker ref={shakerRef}>
                                 <View
                                     style={[
                                         styles.sendButton,
-                                        (hasText || hasImages || props.isSending || props.allowEmptySend || (props.onMicPress && !props.isMicActive))
+                                        (hasText || hasImages || props.isSending || props.allowEmptySend || showStopButton || (props.onMicPress && !props.isMicActive))
                                             ? styles.sendButtonActive
                                             : styles.sendButtonInactive
                                     ]}
@@ -1830,6 +1817,10 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                         })}
                                         hitSlop={{ top: 5, bottom: 10, left: 0, right: 0 }}
                                         onPress={() => {
+                                            if (showStopButton) {
+                                                handleAbortPress();
+                                                return;
+                                            }
                                             const textSnapshot = resolveSendSnapshot();
                                             log.log(`[SEND_DEBUG][INPUT] press hasText=${hasText} latestLen=${latestTextRef.current.trim().length} stateLen=${inputState.text.trim().length} propLen=${props.value.trim().length} pickedLen=${textSnapshot.trim().length} mic=${props.onMicPress ? 'yes' : 'no'} disabled=${props.isSendDisabled || props.isSending ? 'yes' : 'no'}`);
                                             if (textSnapshot.trim() || hasImages || props.allowEmptySend) {
@@ -1843,11 +1834,11 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                             }
                                         }}
                                         accessibilityState={{
-                                            disabled: !!(props.isSendDisabled || props.isSending || (!hasText && !hasImages && !props.onMicPress && !props.allowEmptySend)),
+                                            disabled: !!(props.isSending || (!showStopButton && (props.isSendDisabled || (!hasText && !hasImages && !props.onMicPress && !props.allowEmptySend)))),
                                         }}
-                                        disabled={props.isSendDisabled || props.isSending}
+                                        disabled={props.isSending || (!!props.isSendDisabled && !showStopButton)}
                                     >
-                                        {props.isSending ? (
+                                        {props.isSending || isAborting ? (
                                             <ActivityIndicator
                                                 size="small"
                                                 color={theme.colors.button.primary.tint}
@@ -1861,6 +1852,12 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                                     styles.sendButtonIcon,
                                                     { marginTop: Platform.OS === 'web' ? 2 : 0 }
                                                 ]}
+                                            />
+                                        ) : showStopButton ? (
+                                            <FontAwesome6
+                                                name="stop"
+                                                size={14}
+                                                color={theme.colors.button.primary.tint}
                                             />
                                         ) : props.onMicPress && !props.isMicActive ? (
                                             <Image
@@ -1885,6 +1882,7 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                         )}
                                     </Pressable>
                                 </View>
+                                </Shaker>
                             </View>
                         </View>
                     </View>

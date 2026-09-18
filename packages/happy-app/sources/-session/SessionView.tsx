@@ -1205,7 +1205,7 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
             onMicPress={micButtonState.onMicPress}
             isMicActive={micButtonState.isMicActive}
             onAbort={() => sessionAbort(sessionId)}
-            showAbortButton={sessionStatus.state === 'thinking' || sessionStatus.state === 'awaiting' || sessionStatus.state === 'waiting'}
+            isBusy={sessionStatus.state === 'thinking' || sessionStatus.state === 'awaiting'}
             onFileViewerPress={() => router.push(`/session/${sessionId}/files`)}
             // Autocomplete configuration
             autocompletePrefixes={(session.metadata?.flavor === 'codex' || session.metadata?.codexSessionId) ? ['@', '/', '$'] : ['@', '/']}
