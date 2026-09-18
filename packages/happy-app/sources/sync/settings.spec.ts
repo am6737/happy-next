@@ -33,6 +33,38 @@ describe('settings', () => {
             expect(settingsParse(invalidSettings)).toEqual(settingsDefaults);
         });
 
+        it('should carry the legacy compactSessionView over to the desktop setting', () => {
+            const result = settingsParse({ compactSessionView: true });
+            expect(result.compactSessionViewDesktop).toBe(true);
+            // The legacy flag seeded desktop only; mobile starts from its default.
+            expect(result.compactSessionViewMobile).toBe(false);
+        });
+
+        it('should not touch the desktop setting when it is already present', () => {
+            const result = settingsParse({ compactSessionView: true, compactSessionViewDesktop: false });
+            expect(result.compactSessionViewDesktop).toBe(false);
+        });
+
+        it('should carry an explicit legacy "off" over to the desktop setting', () => {
+            // Desktop defaults to on, but an explicit legacy value wins — upgrading must not turn
+            // the setting back on for someone who had turned it off.
+            const result = settingsParse({ compactSessionView: false });
+            expect(result.compactSessionViewDesktop).toBe(false);
+            expect(result.compactSessionViewMobile).toBe(false);
+        });
+
+        it('should default desktop on and mobile off for settings without the legacy flag', () => {
+            const result = settingsParse({});
+            expect(result.compactSessionViewDesktop).toBe(true);
+            expect(result.compactSessionViewMobile).toBe(false);
+        });
+
+        it('should keep the two platform settings independent', () => {
+            const result = settingsParse({ compactSessionViewMobile: true, compactSessionViewDesktop: false });
+            expect(result.compactSessionViewMobile).toBe(true);
+            expect(result.compactSessionViewDesktop).toBe(false);
+        });
+
         it('should preserve unknown fields (loose schema)', () => {
             const settingsWithExtra = {
                 viewInline: true,
@@ -109,6 +141,8 @@ describe('settings', () => {
                 avatarStyle: 'gradient',
                 showFlavorIcons: false,
                 compactSessionView: false,
+                compactSessionViewMobile: false,
+                compactSessionViewDesktop: false,
                 showThinkingMessages: true,
 
                 reviewPromptAnswered: false,
@@ -147,6 +181,8 @@ describe('settings', () => {
                 avatarStyle: 'gradient', // This should be preserved from currentSettings
                 showFlavorIcons: false,
                 compactSessionView: false,
+                compactSessionViewMobile: false,
+                compactSessionViewDesktop: false,
                 showThinkingMessages: true,
 
                 reviewPromptAnswered: false,
@@ -185,6 +221,8 @@ describe('settings', () => {
                 avatarStyle: 'gradient',
                 showFlavorIcons: false,
                 compactSessionView: false,
+                compactSessionViewMobile: false,
+                compactSessionViewDesktop: false,
                 showThinkingMessages: true,
 
                 reviewPromptAnswered: false,
@@ -225,6 +263,8 @@ describe('settings', () => {
                 avatarStyle: 'gradient',
                 showFlavorIcons: false,
                 compactSessionView: false,
+                compactSessionViewMobile: false,
+                compactSessionViewDesktop: false,
                 showThinkingMessages: true,
 
                 reviewPromptAnswered: false,
@@ -270,6 +310,8 @@ describe('settings', () => {
                 avatarStyle: 'gradient',
                 showFlavorIcons: false,
                 compactSessionView: false,
+                compactSessionViewMobile: false,
+                compactSessionViewDesktop: false,
                 showThinkingMessages: true,
 
                 reviewPromptAnswered: false,
@@ -324,6 +366,8 @@ describe('settings', () => {
                 avatarStyle: 'gradient',
                 showFlavorIcons: false,
                 compactSessionView: false,
+                compactSessionViewMobile: false,
+                compactSessionViewDesktop: false,
                 showThinkingMessages: true,
 
                 reviewPromptAnswered: false,
@@ -388,6 +432,8 @@ describe('settings', () => {
                 avatarStyle: 'brutalist',
                 showFlavorIcons: false,
                 compactSessionView: false,
+                compactSessionViewMobile: false,
+                compactSessionViewDesktop: true,
                 agentInputEnterToSend: true,
 
                 reviewPromptAnswered: false,

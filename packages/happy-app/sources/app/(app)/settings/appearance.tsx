@@ -3,6 +3,7 @@ import { Item } from '@/components/Item';
 import { ItemGroup } from '@/components/ItemGroup';
 import { ItemList } from '@/components/ItemList';
 import { useSettingMutable, useLocalSettingMutable } from '@/sync/storage';
+import { useCompactSessionViewMutable } from '@/hooks/useCompactSessionView';
 import { useRouter } from 'expo-router';
 import * as Localization from 'expo-localization';
 import { useUnistyles } from 'react-native-unistyles';
@@ -28,7 +29,7 @@ export default function AppearanceSettingsScreen() {
     const [avatarStyle, setAvatarStyle] = useSettingMutable('avatarStyle');
     const [showFlavorIcons, setShowFlavorIcons] = useSettingMutable('showFlavorIcons');
     const [showThinkingMessages, setShowThinkingMessages] = useSettingMutable('showThinkingMessages');
-    const [compactSessionView, setCompactSessionView] = useSettingMutable('compactSessionView');
+    const [compactSessionView, setCompactSessionView] = useCompactSessionViewMutable();
     const [themePreference, setThemePreference] = useLocalSettingMutable('themePreference');
     const [preferredLanguage] = useSettingMutable('preferredLanguage');
     

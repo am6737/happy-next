@@ -269,7 +269,10 @@ export const SettingsSchema = z.object({
     avatarStyle: z.string().describe('Avatar display style'),
     showFlavorIcons: z.boolean().describe('Whether to show AI provider icons in avatars'),
     showThinkingMessages: z.boolean().describe('Whether to show AI thinking/reasoning messages'),
-    compactSessionView: z.boolean().describe('Whether to use compact view for active sessions'),
+    // Deprecated: kept for backward compatibility with older clients. Now split per platform.
+    compactSessionView: z.boolean().describe('Deprecated: superseded by compactSessionViewMobile / compactSessionViewDesktop'),
+    compactSessionViewMobile: z.boolean().describe('Whether to use compact view for active sessions on mobile (native iOS/Android app and phone/tablet browsers). Defaults to off'),
+    compactSessionViewDesktop: z.boolean().describe('Whether to use compact view for active sessions on desktop (Tauri desktop app and desktop browsers). Defaults to on'),
 
     reviewPromptAnswered: z.boolean().describe('Whether the review prompt has been answered'),
     reviewPromptLikedApp: z.boolean().nullish().describe('Whether user liked the app when asked'),
@@ -343,6 +346,8 @@ export const settingsDefaults: Settings = {
     showFlavorIcons: false,
     showThinkingMessages: true,
     compactSessionView: false,
+    compactSessionViewMobile: false,
+    compactSessionViewDesktop: true,
     reviewPromptAnswered: false,
     reviewPromptLikedApp: null,
     voiceAssistantLanguage: null,
@@ -392,6 +397,17 @@ export function settingsParse(settings: unknown): Settings {
     if (parsed.data.preferredLanguage === 'zh') {
         console.log('[Settings Migration] Converting language code from "zh" to "zh-Hans"');
         parsed.data.preferredLanguage = 'zh-Hans';
+    }
+
+    // Migration: compactSessionView used to be a single platform-agnostic flag. It is now split
+    // per platform (desktop = Tauri/browser, mobile = native app and phone/tablet browsers). The
+    // legacy value carries over to desktop as-is — including an explicit "off", so upgrading never
+    // turns the setting back on for someone who had turned it off. Mobile starts from its default.
+    // Only applied while the new field is absent, so a choice made since the split is never
+    // overwritten.
+    if (parsed.data.compactSessionViewDesktop === undefined && parsed.data.compactSessionView !== undefined) {
+        console.log(`[Settings Migration] Carrying compactSessionView (${parsed.data.compactSessionView}) over to compactSessionViewDesktop`);
+        parsed.data.compactSessionViewDesktop = parsed.data.compactSessionView;
     }
 
     // Merge defaults, parsed settings, and preserve unknown fields

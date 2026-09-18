@@ -3,7 +3,8 @@ import { View, Pressable, FlatList, Platform, RefreshControl, ScrollView, Native
 import { Swipeable } from 'react-native-gesture-handler';
 import { Text } from '@/components/StyledText';
 import { usePathname } from 'expo-router';
-import { SessionListViewItem, useSetting, useOrchestratorRunningTaskCount, useSessionHasDraft } from '@/sync/storage';
+import { SessionListViewItem, useOrchestratorRunningTaskCount, useSessionHasDraft } from '@/sync/storage';
+import { useCompactSessionView } from '@/hooks/useCompactSessionView';
 import { Ionicons } from '@expo/vector-icons';
 import { getSessionName, useSessionStatus, getSessionSubtitle, getSessionAvatarId, hasUnreadCompletion } from '@/utils/sessionUtils';
 import { Avatar } from './Avatar';
@@ -469,7 +470,7 @@ export function SessionsList() {
     }, [selectedSessionId]);
     const isTablet = useIsTablet();
     const navigateToSession = useNavigateToSession();
-    const compactSessionView = useSetting('compactSessionView');
+    const compactSessionView = useCompactSessionView();
     const router = useRouter();
     const { theme } = useUnistyles();
     const [refreshing, setRefreshing] = React.useState(false);
@@ -836,7 +837,7 @@ const SessionItem = React.memo(({ session, selected, isFirst, isLast, isSingle, 
     const hasDraft = useSessionHasDraft(session.id);
     const sessionName = getSessionName(session);
     const sessionSubtitle = getSessionSubtitle(session);
-    const compactSessionView = useSetting('compactSessionView');
+    const compactSessionView = useCompactSessionView();
     const runningTaskCount = useOrchestratorRunningTaskCount(session.id);
     const navigateToSession = useNavigateToSession();
     const swipeableRef = React.useRef<Swipeable | null>(null);
