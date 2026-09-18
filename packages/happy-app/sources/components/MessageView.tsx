@@ -535,7 +535,14 @@ function AgentTextBlock(props: {
 
   return (
     <View
-      style={[styles.agentMessageContainer, props.message.isThinking && { opacity: 0.3 }, hasOptions && styles.agentMessageContainerStretch]}
+      style={[
+        styles.agentMessageContainer,
+        props.message.isThinking && { opacity: 0.3 },
+        // The turn header carries a rule under it, so the row that opens a turn
+        // has to fill the column — a short first line would otherwise leave the
+        // rule stopping in the middle of it.
+        (hasOptions || props.isTurnStart) && styles.agentMessageContainerStretch,
+      ]}
       {...hoverHandlers}
     >
       {turnHeader(props)}
