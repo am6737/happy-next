@@ -25,7 +25,7 @@ import { ActionMenuModal } from '@/components/ActionMenuModal';
 import { ActionMenuItem } from '@/components/ActionMenu';
 import { sync } from '@/sync/sync';
 import { SessionContextMenu } from './SessionContextMenu';
-import { SessionColorMarkerForSession } from './SessionColorMarker';
+import { SessionMarkerBar } from './SessionColorMarker';
 import { SessionProjectGroup, useCollapsedSessionProjectGroups, useSessionProjectGroups } from '@/hooks/useSessionProjectGroups';
 
 const stylesheet = StyleSheet.create((theme, runtime) => ({
@@ -519,6 +519,9 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder, registerS
                 navigateToSession(session.id);
             }}
         >
+            {/* The session's colour marker, down the leading edge — out of flow, so an
+                unmarked row costs nothing and nothing shifts. See SessionMarkerBar. */}
+            <SessionMarkerBar sessionId={session.id} />
             <View style={styles.avatarContainer}>
                 <Avatar id={avatarId} size={48} monochrome={!sessionStatus.isConnected} flavor={session.metadata?.flavor} sessionIcon={session.metadata?.sessionIcon} />
             </View>
@@ -542,7 +545,6 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder, registerS
                     >
                         {sessionName}
                     </Text>
-                    <SessionColorMarkerForSession sessionId={session.id} />
                 </View>
 
                 {/* Status line with dot */}

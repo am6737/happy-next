@@ -9,8 +9,7 @@ import { getSessionName, useSessionStatus, getSessionAvatarId } from '@/utils/se
 import { Avatar } from './Avatar';
 import { Typography } from '@/constants/Typography';
 import { StatusDot } from './StatusDot';
-import { useSetting, useSessionHasDraft } from '@/sync/storage';
-import { StyleSheet, useUnistyles } from 'react-native-unistyles';
+import { StyleSheet } from 'react-native-unistyles';
 import { isMachineOnline } from '@/utils/machineUtils';
 import { machineSpawnNewSession, sessionArchive } from '@/sync/ops';
 import { resolveAbsolutePath } from '@/utils/pathUtils';
@@ -26,7 +25,7 @@ import { ActionMenuModal } from '@/components/ActionMenuModal';
 import { ActionMenuItem } from '@/components/ActionMenu';
 import { sync } from '@/sync/sync';
 import { SessionContextMenu } from './SessionContextMenu';
-import { SessionColorMarkerForSession } from './SessionColorMarker';
+import { SessionMarkerBar } from './SessionColorMarker';
 import { SessionProjectGroup, useCollapsedSessionProjectGroups, useSessionProjectGroups } from '@/hooks/useSessionProjectGroups';
 
 const stylesheet = StyleSheet.create((theme, runtime) => ({
@@ -145,12 +144,6 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
     sessionTitleDisconnected: {
         color: theme.colors.textSecondary,
     },
-    statusDotContainer: {
-        alignItems: 'center',
-        justifyContent: 'center',
-        width: 16,
-        height: 16,
-    },
     newSessionButton: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -193,22 +186,16 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
         textAlign: 'center',
         ...Typography.default('semiBold'),
     },
+    // Finished while you were away: the one right-hand mark that is not a session state.
     unreadDot: {
         width: 8,
         height: 8,
         borderRadius: 4,
         backgroundColor: '#007AFF',
-        marginLeft: 4,
-        marginRight: 8,
     },
-    // Offline sessions: an outline rather than a fill, so the mark cannot be taken for the filled
-    // grey of an idle-but-connected session.
-    offlineDot: {
-        width: 6,
-        height: 6,
-        borderRadius: 3,
-        borderWidth: 1,
-        borderColor: theme.colors.textSecondary,
+    // Gap between the title and the right-hand status mark.
+    statusMark: {
+        marginLeft: 8,
     },
 }));
 
@@ -398,9 +385,7 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder, registerS
     registerSessionRowRef?: (sessionId: string, ref: View | null) => void;
 }) => {
     const styles = stylesheet;
-    const { theme } = useUnistyles();
     const sessionStatus = useSessionStatus(session);
-    const hasDraft = useSessionHasDraft(session.id);
     const sessionName = getSessionName(session);
     const navigateToSession = useNavigateToSession();
     const swipeableRef = React.useRef<Swipeable | null>(null);
@@ -490,84 +475,16 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder, registerS
                 navigateToSession(session.id);
             }}
         >
+            {/* The session's colour marker, down the leading edge — out of flow, so an
+                unmarked row costs nothing and nothing shifts. See SessionMarkerBar. */}
+            <SessionMarkerBar sessionId={session.id} />
             <View style={styles.sessionContent}>
                 {/* Title line with status */}
                 <View style={styles.sessionTitleRow}>
-                    {/* Status dot or draft icon on the left */}
-                    {(() => {
-                        // Show draft icon when online with draft
-                        if (sessionStatus.state === 'waiting' && hasDraft) {
-                            return (
-                                <Ionicons
-                                    name="create-outline"
-                                    size={14}
-                                    color={theme.colors.textSecondary}
-                                    style={{ marginLeft: 2, marginRight: 8 }}
-                                />
-                            );
-                        }
-                        
-                        // Show status dot only for permission_required/thinking states
-                        if (sessionStatus.state === 'permission_required' || sessionStatus.state === 'thinking') {
-                            return (
-                                <View style={[styles.statusDotContainer, { marginRight: 8 }]}>
-                                    <StatusDot 
-                                        color={sessionStatus.statusDotColor} 
-                                        isPulsing={sessionStatus.isPulsing} 
-                                    />
-                                </View>
-                            );
-                        }
-                        
-                        // Show blue unread dot for completed tasks
-                        if (sessionStatus.hasUnreadCompletion) {
-                            return (
-                                <View style={[styles.unreadDot, { marginRight: 12 }]} />
-                            );
-                        }
-                        
-                        // Show grey dot for online without draft
-                        if (sessionStatus.state === 'waiting') {
-                            return (
-                                <View style={[styles.statusDotContainer, { marginRight: 8 }]}>
-                                    <StatusDot 
-                                        color={theme.colors.textSecondary} 
-                                        isPulsing={false} 
-                                    />
-                                </View>
-                            );
-                        }
-                        // Offline: a hollow ring, so it reads as "not running" rather than
-                        // "idle" — the filled grey above means the opposite.
-                        if (!sessionStatus.isConnected) {
-                            return (
-                                <View style={[styles.statusDotContainer, { marginRight: 8 }]}>
-                                    <View style={styles.offlineDot} />
-                                </View>
-                            );
-                        }
-
-                        // syncing / awaiting have a colour of their own (see useSessionStatus), so
-                        // they get the same treatment as thinking instead of a blank slot: with
-                        // nothing drawn, a session that is actively working looked emptier than an
-                        // idle one.
-                        return (
-                            <View style={[styles.statusDotContainer, { marginRight: 8 }]}>
-                                <StatusDot
-                                    color={sessionStatus.statusDotColor}
-                                    isPulsing={sessionStatus.isPulsing}
-                                />
-                            </View>
-                        );
-                    })()}
-                    
                     <Text
                         style={[
                             styles.sessionTitle,
-                            sessionStatus.isConnected ? styles.sessionTitleConnected : styles.sessionTitleDisconnected,
-                            {
-                                paddingLeft: 4,
-                            }
+                            sessionStatus.isConnected ? styles.sessionTitleConnected : styles.sessionTitleDisconnected
                         ]}
                         numberOfLines={1}
                         ref={(el: any) => {
@@ -578,7 +495,30 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder, registerS
                     >
                         {sessionName}
                     </Text>
-                    <SessionColorMarkerForSession sessionId={session.id} />
+                    {/* The only mark a compact row draws, at the far end so it can never move the
+                        title. Restricted to the things worth interrupting for — see below. */}
+                    {(() => {
+                        // Finished while you were away. The one signal here that is not a session
+                        // state, so it outranks them: a still blue dot.
+                        if (sessionStatus.hasUnreadCompletion) {
+                            return <View style={[styles.unreadDot, styles.statusMark]} />;
+                        }
+                        // permission_required / syncing (orange) and thinking / awaiting (blue):
+                        // "you are needed" and "work is happening". Idle (waiting) and offline
+                        // (disconnected) draw nothing — an offline row's title is already greyed,
+                        // and the old grey dot only restated it.
+                        if (sessionStatus.state === 'permission_required' || sessionStatus.state === 'thinking'
+                            || sessionStatus.state === 'syncing' || sessionStatus.state === 'awaiting') {
+                            return (
+                                <StatusDot
+                                    color={sessionStatus.statusDotColor}
+                                    isPulsing={sessionStatus.isPulsing}
+                                    style={styles.statusMark}
+                                />
+                            );
+                        }
+                        return null;
+                    })()}
                 </View>
             </View>
             </Pressable>

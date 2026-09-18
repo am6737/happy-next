@@ -32,7 +32,7 @@ import { HappyError } from '@/utils/errors';
 import { Modal } from '@/modal';
 import { sync } from '@/sync/sync';
 import { SessionContextMenu } from './SessionContextMenu';
-import { SessionColorMarkerForSession } from './SessionColorMarker';
+import { SessionMarkerBar } from './SessionColorMarker';
 import { getDesktopPlatform } from '@/desktop/desktopWindowUtils';
 
 const stylesheet = StyleSheet.create((theme) => ({
@@ -887,6 +887,9 @@ const SessionItem = React.memo(({ session, selected, isFirst, isLast, isSingle, 
                 navigateToSession(session.id);
             }}
         >
+            {/* The session's colour marker, down the leading edge — out of flow, so an
+                unmarked row costs nothing and nothing shifts. See SessionMarkerBar. */}
+            <SessionMarkerBar sessionId={session.id} />
             {!compactSessionView && (
                 <View style={styles.avatarContainer}>
                     <Avatar id={avatarId} size={48} monochrome={!sessionStatus.isConnected} flavor={session.metadata?.flavor} sessionIcon={session.metadata?.sessionIcon} />
@@ -917,7 +920,6 @@ const SessionItem = React.memo(({ session, selected, isFirst, isLast, isSingle, 
                     }}>
                         {sessionName}
                     </Text>
-                    <SessionColorMarkerForSession sessionId={session.id} />
                 </View>
 
                 {!compactSessionView && (

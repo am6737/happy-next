@@ -17,12 +17,14 @@ export const SESSION_MARKER_COLOR_VALUES: Record<SessionMarkerColor, string> = {
 };
 
 const styles = StyleSheet.create((theme) => ({
-    marker: {
-        width: 8,
-        height: 8,
-        borderRadius: 4,
-        marginLeft: 7,
-        flexShrink: 0,
+    // The marker as a bar down the row's leading edge. Full row height, so the parent must clip
+    // it (`overflow: 'hidden'`) if the row has rounded corners.
+    markerBar: {
+        position: 'absolute',
+        left: 0,
+        top: 0,
+        bottom: 0,
+        width: 4,
     },
     paletteSection: {
         height: 64,
@@ -75,18 +77,22 @@ const colorLabels: Record<SessionMarkerColor, () => string> = {
     gray: () => t('sessionInfo.markerGray'),
 };
 
-export function SessionColorMarker({ color }: { color: SessionMarkerColor | null }) {
+/**
+ * The marker as a bar down the row's leading edge — how every session row draws it.
+ *
+ * A bar is out of flow, so "no marker" needs no placeholder and nothing moves when one is added
+ * or removed. It also holds still: a trailing dot rides the end of a `flex: 1` title, so its
+ * horizontal position drifts with the title's length and a column of them can't be scanned.
+ */
+export function SessionMarkerBar({ sessionId }: { sessionId: string }) {
+    const color = useSessionMarkerColor(sessionId);
     if (!color) return null;
     return (
         <View
-            style={[styles.marker, { backgroundColor: SESSION_MARKER_COLOR_VALUES[color] }]}
-            accessibilityLabel={colorLabels[color]()}
+            pointerEvents="none"
+            style={[styles.markerBar, { backgroundColor: SESSION_MARKER_COLOR_VALUES[color] }]}
         />
     );
-}
-
-export function SessionColorMarkerForSession({ sessionId }: { sessionId: string }) {
-    return <SessionColorMarker color={useSessionMarkerColor(sessionId)} />;
 }
 
 export function SessionColorPalette({
