@@ -23,7 +23,8 @@
         ]
     },
     "scripts": {
-        "postinstall": "patch-package"
+        "postinstall": "patch-package",
+        "ai-team:seed": "tsx scripts/seedAiTeam.ts"
     },
     "devDependencies": {
         "patch-package": "^8.0.0"
