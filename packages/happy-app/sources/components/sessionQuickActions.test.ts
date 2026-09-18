@@ -46,11 +46,13 @@ describe('getSessionQuickActionKinds', () => {
     });
 
     it('limits shared sessions to shared-session actions', () => {
+        // No `newSession`: a shared session lives on the owner's machine and directory, so it
+        // cannot host a session of mine.
         expect(getSessionQuickActionKinds({
             session: session({ accessLevel: 'view' }),
             hasOrchestratorRuns: false,
             isConnected: true,
-        })).toEqual(['details', 'newSession', 'leaveSharedSession']);
+        })).toEqual(['details', 'leaveSharedSession']);
     });
 
     it('retains native archive after stopping Codex and rebuilding the menu', () => {

@@ -33,7 +33,9 @@ export function getSessionQuickActionKinds({
     const actions: SessionQuickActionKind[] = ['details'];
     // Only the owner can write session metadata; shared users get a read-only title.
     if (isOwner) actions.push('renameSession');
-    actions.push('newSession');
+    // Starting a session in this directory spawns it on the session's machine, which a session
+    // shared with me does not grant — it points at the owner's machine and directory.
+    if (isOwner) actions.push('newSession');
     if (hasOrchestratorRuns) actions.push('delegationHistory');
     if (isAdmin) actions.push('manageSharing');
     if (!isOwner) actions.push('leaveSharedSession');

@@ -962,12 +962,14 @@ function SessionInfoContent({ session }: { session: Session }) {
                 )}
 
                 <ItemGroup title={t('sessionInfo.quickActions')}>
-                    <Item
-                        title={t('sessionInfo.newSession')}
-                        subtitle={t('sessionInfo.newSessionSubtitle')}
-                        icon={<Ionicons name="add-circle-outline" size={29} color="#007AFF" />}
-                        onPress={handleNewSession}
-                    />
+                    {isOwner && (
+                        <Item
+                            title={t('sessionInfo.newSession')}
+                            subtitle={t('sessionInfo.newSessionSubtitle')}
+                            icon={<Ionicons name="add-circle-outline" size={29} color="#007AFF" />}
+                            onPress={handleNewSession}
+                        />
+                    )}
                     {hasOrchestratorRuns && (
                         <Item
                             title={t('sessionInfo.delegationHistory')}

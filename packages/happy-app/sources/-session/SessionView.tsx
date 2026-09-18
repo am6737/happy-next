@@ -255,7 +255,10 @@ export const SessionView = React.memo((props: { id: string }) => {
                             hasRuns={hasRuns}
                             runningTaskCount={runningTaskCount}
                             onOpenRuns={handleOpenSessionRuns}
-                            onNewSession={handleNewSession}
+                            // The + opens /new pre-filled with this session's machine and path,
+                            // which only works on a machine of my own — a session shared with me
+                            // points at the owner's.
+                            onNewSession={session.accessLevel ? undefined : handleNewSession}
                         />
                     ) : undefined,
                 }}
@@ -1404,7 +1407,7 @@ const ChatHeaderRight = React.memo((props: {
     hasRuns: boolean;
     runningTaskCount: number;
     onOpenRuns: () => void;
-    onNewSession: () => void;
+    onNewSession?: () => void;
 }) => {
     const { theme } = useUnistyles();
     return (
@@ -1451,7 +1454,7 @@ const ChatHeaderRight = React.memo((props: {
                         </View>
                     )}
                 </Pressable>
-            ) : (
+            ) : props.onNewSession ? (
                 <Pressable
                     onPress={props.onNewSession}
                     hitSlop={15}
@@ -1471,7 +1474,7 @@ const ChatHeaderRight = React.memo((props: {
                         color={theme.colors.header.tint}
                     />
                 </Pressable>
-            )}
+            ) : null}
             {props.avatarId && props.onAvatarPress && (
                 <Pressable
                     onPress={props.onAvatarPress}

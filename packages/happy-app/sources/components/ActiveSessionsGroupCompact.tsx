@@ -318,7 +318,9 @@ export function ActiveSessionsGroupCompact({ sessions, selectedSessionId, regist
                 const singleMachineId = singleMachineEntry?.[0];
                 const newSessionSource = projectGroup.sessions[0];
                 const newSessionMetadata = newSessionSource?.metadata;
-                const handleNewSession = newSessionMetadata?.path ? () => {
+                // The + opens /new pre-filled with this directory, which only works on a machine of
+                // my own — a session shared with me points at the owner's machine and directory.
+                const handleNewSession = newSessionMetadata?.path && newSessionSource && !newSessionSource.accessLevel ? () => {
                     const params = new URLSearchParams();
                     if (newSessionMetadata.machineId) params.set('machineId', newSessionMetadata.machineId);
                     params.set('path', newSessionMetadata.path);
