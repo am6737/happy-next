@@ -1205,7 +1205,10 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
             onMicPress={micButtonState.onMicPress}
             isMicActive={micButtonState.isMicActive}
             onAbort={() => sessionAbort(sessionId)}
-            isBusy={sessionStatus.state === 'thinking' || sessionStatus.state === 'awaiting'}
+            // A turn is in flight while it is thinking, while the send is still awaiting its
+            // first signal, and while it is blocked on a permission request - all three can be
+            // aborted; only the online-and-idle `waiting` state cannot.
+            isBusy={sessionStatus.state === 'thinking' || sessionStatus.state === 'awaiting' || sessionStatus.state === 'permission_required'}
             onFileViewerPress={() => router.push(`/session/${sessionId}/files`)}
             // Autocomplete configuration
             autocompletePrefixes={(session.metadata?.flavor === 'codex' || session.metadata?.codexSessionId) ? ['@', '/', '$'] : ['@', '/']}
