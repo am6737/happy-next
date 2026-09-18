@@ -1265,6 +1265,7 @@ export const pl: TranslationStructure = {
             other: 'Inne',
             otherDescription: 'Wpisz własną odpowiedź',
             otherPlaceholder: 'Wpisz swoją odpowiedź...',
+            answered: ({ answer }: { answer: string }) => `Odpowiedź: ${answer}`,
         }
     },
 

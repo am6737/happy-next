@@ -1256,6 +1256,7 @@ export const zhHans: TranslationStructure = {
             other: '其他',
             otherDescription: '输入您自己的答案',
             otherPlaceholder: '输入您的答案...',
+            answered: ({ answer }: { answer: string }) => `答案：${answer}`,
         }
     },
 

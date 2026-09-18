@@ -1254,6 +1254,7 @@ export const pt: TranslationStructure = {
             other: 'Outro',
             otherDescription: 'Digite sua própria resposta',
             otherPlaceholder: 'Digite sua resposta...',
+            answered: ({ answer }: { answer: string }) => `Resposta: ${answer}`,
         }
     },
 

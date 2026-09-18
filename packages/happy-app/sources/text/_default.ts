@@ -1251,6 +1251,7 @@ export const en = {
             other: 'Other',
             otherDescription: 'Type your own answer',
             otherPlaceholder: 'Type your answer...',
+            answered: ({ answer }: { answer: string }) => `Answer: ${answer}`,
         },
         desc: {
             terminalCmd: ({ cmd }: { cmd: string }) => `Terminal(cmd: ${cmd})`,

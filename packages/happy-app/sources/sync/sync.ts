@@ -48,7 +48,7 @@ import { gitStatusSync } from './gitStatusSync';
 import { projectManager } from './projectManager';
 import { AsyncLock } from '@/utils/lock';
 import { voiceHooks } from '@/realtime/hooks/voiceHooks';
-import { Message, UserTextMessage } from './typesMessage';
+import { ASK_USER_QUESTION_TOOL, AskUserQuestionMessage, buildAskUserQuestionMessage, Message, MinimapMessage, UserTextMessage } from './typesMessage';
 import { EncryptionCache } from './encryption/encryptionCache';
 import { systemPrompt, buildDootaskSystemPrompt } from './prompt/systemPrompt';
 import { getDootaskFromServer } from './dootask/api';
@@ -260,9 +260,9 @@ class Sync {
     // after the clear and resurrect obsolete messages on the next bootstrap.
     private messageCacheGeneration = new Map<string, number>();
     private messageCacheResetPromises = new Map<string, Promise<void>>();
-    /** Memoized minimap user-message lists per session, keyed by a cache-state freshness signature,
-     *  so refocusing a session doesn't re-decrypt its whole history. See getCachedUserMessagesForMinimap. */
-    private minimapUserMessagesCache = new Map<string, { signature: string; messages: UserTextMessage[] }>();
+    /** Memoized minimap message lists per session, keyed by a cache-state freshness signature,
+     *  so refocusing a session doesn't re-decrypt its whole history. See getCachedMinimapMessages. */
+    private minimapMessagesCache = new Map<string, { signature: string; messages: MinimapMessage[] }>();
     /** Decrypted local message text used by Command+K search. Invalidated whenever cached rows change. */
     private cachedMessageSearchIndex = new Map<string, { signature: string; entries: CachedMessageSearchEntry[] }>();
     /** Per-session last-known seq for v3 incremental fetch */
@@ -643,7 +643,7 @@ class Sync {
         const next = this.getMessageCacheGeneration(sessionId) + 1;
         this.messageCacheGeneration.set(sessionId, next);
         // Any cache clear/invalidate must drop the memoized minimap list too.
-        this.minimapUserMessagesCache.delete(sessionId);
+        this.minimapMessagesCache.delete(sessionId);
         this.cachedMessageSearchIndex.delete(sessionId);
         return next;
     }
@@ -3479,13 +3479,13 @@ class Sync {
         }
     }
 
-    // Read ALL locally-cached user messages for a session, decrypted+normalized into
-    // UserTextMessage objects. Used only to populate the conversation minimap so it can show
-    // user prompts that live in the offline cache but haven't been loaded into the message list
-    // yet. This deliberately does NOT touch `sessionReceivedMessages` (the dedup set used by
-    // `decryptAndNormalizeMessages`): if it did, the real fetch paths would later treat these
-    // messages as "already received" and skip applying them to the list.
-    getCachedUserMessagesForMinimap = async (sessionId: string): Promise<UserTextMessage[]> => {
+    // Read ALL locally-cached minimap landmarks for a session, decrypted+normalized into
+    // UserTextMessage / AskUserQuestionMessage objects. Used only to populate the conversation
+    // minimap so it can show prompts and questions that live in the offline cache but haven't been
+    // loaded into the message list yet. This deliberately does NOT touch `sessionReceivedMessages`
+    // (the dedup set used by `decryptAndNormalizeMessages`): if it did, the real fetch paths would
+    // later treat these messages as "already received" and skip applying them to the list.
+    getCachedMinimapMessages = async (sessionId: string): Promise<MinimapMessage[]> => {
         const accountKey = this.getMessageAccountKey();
         if (!accountKey) {
             return [];
@@ -3502,26 +3502,39 @@ class Sync {
         const signature = cacheState
             ? `${cacheState.updatedAt}:${cacheState.contiguousMinSeq}:${cacheState.contiguousMaxSeq}:${cacheState.oldestLoadedSeq}`
             : 'empty';
-        const memo = this.minimapUserMessagesCache.get(sessionId);
+        const memo = this.minimapMessagesCache.get(sessionId);
         if (memo && memo.signature === signature) {
             return memo.messages;
         }
 
-        // Proactively seed the minimap with only the newest MAX_USER_MESSAGES prompts. As the user
-        // scrolls the list, older prompts are merged in unbounded (via the loaded messages), so the
-        // cap only limits what we load up front. Page backwards from the newest message and decrypt
-        // PER PAGE so we can stop as soon as we have enough — decryption is the dominant cost, and a
-        // long history would otherwise be decrypted in full just to keep the last handful of prompts.
-        // MAX_SCAN bounds pathological sparse sessions (few prompts among many tool-call messages).
+        // Proactively seed the minimap with only the newest MAX_USER_MESSAGES prompts and
+        // MAX_QUESTIONS questions. As the user scrolls the list, older landmarks are merged in
+        // unbounded (via the loaded messages), so the caps only limit what we load up front. Page
+        // backwards from the newest message and decrypt PER PAGE so we can stop as soon as we have
+        // enough — decryption is the dominant cost, and a long history would otherwise be decrypted
+        // in full just to keep the last handful of landmarks. MAX_SCAN bounds pathological sparse
+        // sessions (few prompts/questions among many tool-call messages).
         const MAX_USER_MESSAGES = 50;
+        const MAX_QUESTIONS = 50;
         const MAX_SCAN = 5000;
         const PAGE = Sync.INITIAL_MESSAGES_LIMIT;
         const collectedUserMessages: UserTextMessage[] = [];
+        const pendingQuestions: {
+            id: string;
+            localId: string | null;
+            createdAt: number;
+            seq?: number | null;
+            input: unknown;
+            toolUseId: string | null;
+        }[] = [];
+        // Answers land in a NEWER record than the call that asked the question, and we scan
+        // newest→oldest, so the result is always seen before its call. Stash them and attach below.
+        const resultsByToolUseId = new Map<string, unknown>();
         let scanned = 0;
         let hitScanCap = false;
         try {
             let beforeSeq: number | null = null;
-            while (collectedUserMessages.length < MAX_USER_MESSAGES) {
+            while (collectedUserMessages.length < MAX_USER_MESSAGES || pendingQuestions.length < MAX_QUESTIONS) {
                 if (scanned >= MAX_SCAN) {
                     hitScanCap = true;
                     break;
@@ -3534,35 +3547,60 @@ class Sync {
                 }
                 scanned += page.messages.length;
 
-                // Decrypt this page and pull out top-level user prompts. Build UserTextMessage objects
-                // directly from the normalized rows (no reducer): we only need user prompts, so a full
-                // reducer pass — traceMessages, sidechain separation, event conversion — would be pure
-                // overhead. The real message id also keeps ids stable across refreshes (a fresh reducer
-                // would allocate new random ids each run, remounting every marker).
+                // Decrypt this page and pull out the top-level landmarks the rail draws. Build the
+                // message views directly from the normalized rows (no reducer): we only need prompts
+                // and AskUserQuestion calls, so a full reducer pass — traceMessages, sidechain
+                // separation, event conversion — would be pure overhead. The real message id also
+                // keeps ids stable across refreshes (a fresh reducer would allocate new random ids
+                // each run, remounting every marker).
                 const decrypted = await encryption.decryptMessages(page.messages);
                 for (const item of decrypted) {
                     if (!item) {
                         continue;
                     }
                     const normalized = normalizeRawMessage(item.id, item.localId, item.createdAt, item.content);
-                    // Exclude sub-agent (sidechain) prompts, matching what the list shows. `isSidechain`
-                    // is set at normalize time and is exactly what the reducer's tracer keys on.
-                    if (!normalized || normalized.role !== 'user' || normalized.isSidechain) {
+                    if (!normalized) {
                         continue;
                     }
-                    collectedUserMessages.push({
-                        kind: 'user-text',
-                        id: normalized.id,
-                        localId: normalized.localId,
-                        createdAt: normalized.createdAt,
-                        seq: item.seq,
-                        text: normalized.content.text,
-                        ...(normalized.meta?.displayText ? { displayText: normalized.meta.displayText } : {}),
-                        ...(normalized.content.type === 'mixed' ? { images: normalized.content.images } : {}),
-                        meta: normalized.meta,
-                        sentBy: item.sentBy,
-                        sentByName: item.sentByName,
-                    });
+                    // Exclude sub-agent (sidechain) content, matching what the list shows at top level.
+                    // `isSidechain` is set at normalize time and is exactly what the reducer's tracer
+                    // keys on.
+                    if (normalized.isSidechain) {
+                        continue;
+                    }
+                    if (normalized.role === 'user') {
+                        collectedUserMessages.push({
+                            kind: 'user-text',
+                            id: normalized.id,
+                            localId: normalized.localId,
+                            createdAt: normalized.createdAt,
+                            seq: item.seq,
+                            text: normalized.content.text,
+                            ...(normalized.meta?.displayText ? { displayText: normalized.meta.displayText } : {}),
+                            ...(normalized.content.type === 'mixed' ? { images: normalized.content.images } : {}),
+                            meta: normalized.meta,
+                            sentBy: item.sentBy,
+                            sentByName: item.sentByName,
+                        });
+                        continue;
+                    }
+                    if (normalized.role !== 'agent') {
+                        continue;
+                    }
+                    for (const content of normalized.content) {
+                        if (content.type === 'tool-call' && content.name === ASK_USER_QUESTION_TOOL) {
+                            pendingQuestions.push({
+                                id: normalized.id,
+                                localId: normalized.localId,
+                                createdAt: normalized.createdAt,
+                                seq: item.seq,
+                                input: content.input,
+                                toolUseId: content.id ?? null,
+                            });
+                        } else if (content.type === 'tool-result' && content.tool_use_id) {
+                            resultsByToolUseId.set(content.tool_use_id, content.content);
+                        }
+                    }
                 }
 
                 if (!page.hasMoreLocal || page.minSeq === null) {
@@ -3575,15 +3613,35 @@ class Sync {
             return [];
         }
         if (hitScanCap && collectedUserMessages.length < MAX_USER_MESSAGES) {
-            log.log(`💬 getCachedUserMessagesForMinimap scanned MAX_SCAN=${MAX_SCAN} cached messages for ${sessionId} without reaching ${MAX_USER_MESSAGES} prompts; older prompts are omitted from the minimap`);
+            log.log(`💬 getCachedMinimapMessages scanned MAX_SCAN=${MAX_SCAN} cached messages for ${sessionId} without reaching ${MAX_USER_MESSAGES} prompts; older prompts are omitted from the minimap`);
         }
 
-        // Keep only the newest MAX_USER_MESSAGES, ordered oldest→newest (matching the list order).
-        collectedUserMessages.sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0) || a.createdAt - b.createdAt);
-        const result = collectedUserMessages.length > MAX_USER_MESSAGES
-            ? collectedUserMessages.slice(collectedUserMessages.length - MAX_USER_MESSAGES)
-            : collectedUserMessages;
-        this.minimapUserMessagesCache.set(sessionId, { signature, messages: result });
+        // Now that the whole scan is done the answers are known, so the question views can be built.
+        const collectedQuestions = pendingQuestions
+            .map((pending) => buildAskUserQuestionMessage({
+                id: pending.id,
+                localId: pending.localId,
+                createdAt: pending.createdAt,
+                seq: pending.seq,
+                input: pending.input,
+                result: pending.toolUseId !== null ? resultsByToolUseId.get(pending.toolUseId) : undefined,
+            }))
+            .filter((message): message is AskUserQuestionMessage => message !== null);
+
+        // Keep only the newest of each kind, ordered oldest→newest (matching the list order). Both
+        // collections are in scan order (newest first), so each is sorted before the front is
+        // trimmed — the two kinds are capped independently so a question-heavy stretch cannot crowd
+        // out prompts.
+        const byOldestFirst = (a: MinimapMessage, b: MinimapMessage) =>
+            (a.seq ?? 0) - (b.seq ?? 0) || a.createdAt - b.createdAt;
+        const keepNewest = (items: MinimapMessage[], cap: number) =>
+            items.length > cap ? items.sort(byOldestFirst).slice(items.length - cap) : items;
+        const result: MinimapMessage[] = [
+            ...keepNewest(collectedUserMessages, MAX_USER_MESSAGES),
+            ...keepNewest(collectedQuestions, MAX_QUESTIONS),
+        ];
+        result.sort(byOldestFirst);
+        this.minimapMessagesCache.set(sessionId, { signature, messages: result });
         return result;
     }
 

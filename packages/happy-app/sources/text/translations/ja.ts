@@ -1243,6 +1243,7 @@ export const ja: TranslationStructure = {
             other: 'その他',
             otherDescription: '自分の回答を入力',
             otherPlaceholder: '回答を入力...',
+            answered: ({ answer }: { answer: string }) => `回答: ${answer}`,
         },
         multiEdit: {
             editNumber: ({ index, total }: { index: number; total: number }) => `編集 ${index}/${total}`,

@@ -10,7 +10,7 @@ import { MessageView } from './MessageView';
 import { ConversationMinimapItem } from './ConversationMinimap';
 import { Metadata, Session } from '@/sync/storageTypes';
 import { ChatFooter } from './ChatFooter';
-import { Message, UserTextMessage } from '@/sync/typesMessage';
+import { AskUserQuestionMessage, isAskUserQuestionToolCall, Message, MinimapMessage, toAskUserQuestionMessage, UserTextMessage } from '@/sync/typesMessage';
 import { shouldHideMessageInChatList } from './chatListVisibility';
 import { layout } from './layout';
 import { createScrollButtonVisibilityController } from './scrollButtonVisibilityController';
@@ -18,7 +18,7 @@ import { t } from '@/text';
 
 // Does a loaded list message correspond to the given minimap target (whose id may come from the
 // throwaway reducer and therefore not match the store's id)?
-function messageMatchesTarget(message: Message, target: UserTextMessage): boolean {
+function messageMatchesTarget(message: Message, target: MinimapMessage): boolean {
     if (target.seq != null && message.seq === target.seq) return true;
     if (target.localId && (message as { localId?: string | null }).localId === target.localId) return true;
     return message.id === target.id;
@@ -42,7 +42,7 @@ export interface ForkMessageRequest {
     skipDraft: boolean;
 }
 
-export const ChatList = React.memo((props: { session: Session; onFillInput?: (text: string, allOptions?: string[]) => void; onLoadMore?: () => void; onForkMessage?: (request: ForkMessageRequest) => void; forkingMessageId?: string | null; minimapCachedUserMessages?: UserTextMessage[]; onMinimapItemsChange?: (items: ConversationMinimapItem[]) => void; onActiveMessageIdsChange?: (ids: Set<string>) => void; onRegisterMinimapJump?: (jump: ((message: UserTextMessage) => void) | null) => void }) => {
+export const ChatList = React.memo((props: { session: Session; onFillInput?: (text: string, allOptions?: string[]) => void; onLoadMore?: () => void; onForkMessage?: (request: ForkMessageRequest) => void; forkingMessageId?: string | null; minimapCachedUserMessages?: MinimapMessage[]; onMinimapItemsChange?: (items: ConversationMinimapItem[]) => void; onActiveMessageIdsChange?: (ids: Set<string>) => void; onRegisterMinimapJump?: (jump: ((message: MinimapMessage) => void) | null) => void }) => {
     const { messages, hasMore } = useSessionMessages(props.session.id);
     const profile = useProfile();
     const isSharedSession = !!(props.session.isShared || props.session.accessLevel);
@@ -96,10 +96,10 @@ const ChatListInternal = React.memo((props: {
     onForkMessage?: (request: ForkMessageRequest) => void,
     thinking?: boolean,
     forkingMessageId?: string | null,
-    minimapCachedUserMessages?: UserTextMessage[],
+    minimapCachedUserMessages?: MinimapMessage[],
     onMinimapItemsChange?: (items: ConversationMinimapItem[]) => void,
     onActiveMessageIdsChange?: (ids: Set<string>) => void,
-    onRegisterMinimapJump?: (jump: ((message: UserTextMessage) => void) | null) => void,
+    onRegisterMinimapJump?: (jump: ((message: MinimapMessage) => void) | null) => void,
 }) => {
     const { theme } = useUnistyles();
     const flatListRef = useRef<FlatList>(null);
@@ -208,9 +208,21 @@ const ChatListInternal = React.memo((props: {
     }, [visibleMessages]);
     const loadedUserMessagesRef = useRef(loadedUserMessages);
 
-    // Merge offline-cached user messages with the loaded ones so the minimap can show prompts that
-    // live in the persistent cache but haven't been paged into the list yet. Loaded messages win on
-    // id (they carry an accurate scroll position); compaction markers are hidden to match the list.
+    // AskUserQuestion calls the rail places a marker for, in the same ascending order as
+    // `loadedUserMessages`. Sub-agent (sidechain) questions live inside their parent's children and
+    // are never top-level list rows, so they are not jump targets either.
+    const loadedQuestionMessages = React.useMemo<MinimapMessage[]>(() => {
+        return visibleMessages
+            .filter(isAskUserQuestionToolCall)
+            .map(toAskUserQuestionMessage)
+            .filter((message): message is AskUserQuestionMessage => message !== null)
+            .reverse();
+    }, [visibleMessages]);
+
+    // Merge offline-cached landmarks with the loaded ones so the minimap can show prompts and
+    // questions that live in the persistent cache but haven't been paged into the list yet. Loaded
+    // messages win on id (they carry an accurate scroll position); compaction markers are hidden to
+    // match the list.
     const minimapItems = React.useMemo<ConversationMinimapItem[]>(() => {
         // Loaded messages always win (they carry the store's id → accurate scroll position + active
         // highlight). A cached entry is dropped if a loaded message matches it by EITHER seq OR
@@ -219,14 +231,14 @@ const ChatListInternal = React.memo((props: {
         // so a single-key match would leak duplicates.
         const loadedBySeq = new Set<number>();
         const loadedByLocalId = new Set<string>();
-        const merged: UserTextMessage[] = [];
-        for (const loaded of loadedUserMessages) {
-            merged.push(loaded.message);
-            if (loaded.message.seq != null) loadedBySeq.add(loaded.message.seq);
-            if (loaded.message.localId) loadedByLocalId.add(loaded.message.localId);
+        const merged: MinimapMessage[] = [];
+        for (const loaded of [...loadedUserMessages.map((item) => item.message), ...loadedQuestionMessages]) {
+            merged.push(loaded);
+            if (loaded.seq != null) loadedBySeq.add(loaded.seq);
+            if (loaded.localId) loadedByLocalId.add(loaded.localId);
         }
         for (const cached of props.minimapCachedUserMessages ?? []) {
-            if (shouldHideMessageInChatList(cached, showThinkingMessages)) continue;
+            if (cached.kind === 'user-text' && shouldHideMessageInChatList(cached, showThinkingMessages)) continue;
             if (cached.seq != null && loadedBySeq.has(cached.seq)) continue;
             if (cached.localId && loadedByLocalId.has(cached.localId)) continue;
             merged.push(cached);
@@ -237,10 +249,10 @@ const ChatListInternal = React.memo((props: {
         return merged
             .sort((a, b) => a.createdAt - b.createdAt || (a.seq ?? 0) - (b.seq ?? 0))
             .map((message) => ({ message }));
-    }, [props.minimapCachedUserMessages, loadedUserMessages, showThinkingMessages]);
+    }, [props.minimapCachedUserMessages, loadedUserMessages, loadedQuestionMessages, showThinkingMessages]);
     const activeMessageIdsRef = useRef<Set<string>>(new Set());
 
-    const scrollToLoadedMessage = useCallback((target: UserTextMessage, animated = true): boolean => {
+    const scrollToLoadedMessage = useCallback((target: MinimapMessage, animated = true): boolean => {
         const index = visibleMessagesRef.current.findIndex((m) => messageMatchesTarget(m, target));
         if (index >= 0) {
             flatListRef.current?.scrollToIndex({ index, animated, viewPosition: 0.5 });
@@ -253,7 +265,7 @@ const ChatListInternal = React.memo((props: {
     // only updates after React commits the re-render triggered by the store change, which a single tick
     // doesn't guarantee — on a slow frame a one-shot scroll misses and the jump silently fails. Retry on
     // a bounded schedule instead.
-    const scrollToTargetWithRetries = useCallback((target: UserTextMessage, animated: boolean) => {
+    const scrollToTargetWithRetries = useCallback((target: MinimapMessage, animated: boolean) => {
         let attempts = 0;
         const MAX_ATTEMPTS = 20; // ~1s at 50ms
         const attempt = () => {
@@ -268,10 +280,10 @@ const ChatListInternal = React.memo((props: {
     const isJumpingRef = useRef(false);
     // The target of the in-flight jump. A second minimap click updates this so the running paging
     // loop retargets instead of the click being silently dropped.
-    const activeJumpTargetRef = useRef<UserTextMessage | null>(null);
+    const activeJumpTargetRef = useRef<MinimapMessage | null>(null);
     // Shows a bottom-centered hint while a minimap jump pages in older history before locating.
     const [isLocating, setIsLocating] = useState(false);
-    const handleJumpToMessage = useCallback(async (target: UserTextMessage) => {
+    const handleJumpToMessage = useCallback(async (target: MinimapMessage) => {
         activeJumpTargetRef.current = target;
         // A paging jump is already running — it will pick up the new target above. Keep the hint.
         if (isJumpingRef.current) return;
@@ -357,7 +369,9 @@ const ChatListInternal = React.memo((props: {
                 visibleIndexes.push(viewable.index);
             }
             const item = viewable.item;
-            if (item?.kind === 'user-text') {
+            // Questions are landmarks too, so a question on screen highlights its own marker
+            // instead of leaving the rail pointing at the nearest prompt.
+            if (item?.kind === 'user-text' || (item != null && isAskUserQuestionToolCall(item))) {
                 next.add(item.id);
             }
         }

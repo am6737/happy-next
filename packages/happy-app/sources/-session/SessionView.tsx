@@ -8,7 +8,7 @@ import { ChatHeaderTitle } from '@/components/ChatHeaderTitle';
 import { HeaderBackButton } from '@/components/navigation/Header';
 import { ChatList, type ForkMessageRequest } from '@/components/ChatList';
 import { ConversationMinimap, type ConversationMinimapItem } from '@/components/ConversationMinimap';
-import type { UserTextMessage } from '@/sync/typesMessage';
+import type { MinimapMessage } from '@/sync/typesMessage';
 import { Deferred } from '@/components/Deferred';
 import { DuplicateSheet } from '@/components/DuplicateSheet';
 import { ActionMenuModal } from '@/components/ActionMenuModal';
@@ -957,21 +957,22 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
     // Handle loading more older messages when scrolling to top
     const [minimapItems, setMinimapItems] = React.useState<ConversationMinimapItem[]>([]);
     const [minimapActiveMessageIds, setMinimapActiveMessageIds] = React.useState<Set<string>>(() => new Set());
-    const [minimapCachedUserMessages, setMinimapCachedUserMessages] = React.useState<UserTextMessage[]>([]);
+    const [minimapCachedMessages, setMinimapCachedMessages] = React.useState<MinimapMessage[]>([]);
     const [contentAreaWidth, setContentAreaWidth] = React.useState(0);
-    const minimapJumpRef = React.useRef<((message: UserTextMessage) => void) | null>(null);
-    const handleRegisterMinimapJump = React.useCallback((jump: ((message: UserTextMessage) => void) | null) => {
+    const minimapJumpRef = React.useRef<((message: MinimapMessage) => void) | null>(null);
+    const handleRegisterMinimapJump = React.useCallback((jump: ((message: MinimapMessage) => void) | null) => {
         minimapJumpRef.current = jump;
     }, []);
-    const handleMinimapJump = React.useCallback((message: UserTextMessage) => {
+    const handleMinimapJump = React.useCallback((message: MinimapMessage) => {
         minimapJumpRef.current?.(message);
     }, []);
 
     // Tracks which session the cached minimap list currently belongs to, so we only blank it on a
     // real session switch (not on every refocus of the same session, which would flicker the rail).
     const cachedMinimapSessionRef = React.useRef<string | null>(null);
-    // Load all user prompts from the persistent offline cache so the minimap can display prompts
-    // that haven't been paged into the message list yet. Refreshed on focus / session change.
+    // Load all minimap landmarks (prompts and AskUserQuestion calls) from the persistent offline
+    // cache so the rail can display ones that haven't been paged into the message list yet.
+    // Refreshed on focus / session change.
     useFocusEffect(
         React.useCallback(() => {
             // The minimap is web-only (see ConversationMinimap); don't pay the scan+decrypt on native.
@@ -979,12 +980,12 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
             let cancelled = false;
             if (cachedMinimapSessionRef.current !== sessionId) {
                 cachedMinimapSessionRef.current = sessionId;
-                setMinimapCachedUserMessages([]);
+                setMinimapCachedMessages([]);
             }
-            void sync.getCachedUserMessagesForMinimap(sessionId)
+            void sync.getCachedMinimapMessages(sessionId)
                 .then((messages) => {
                     if (!cancelled) {
-                        setMinimapCachedUserMessages(messages);
+                        setMinimapCachedMessages(messages);
                     }
                 })
                 .catch(() => {
@@ -1038,7 +1039,7 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
                         onForkMessage={canForkSession(session) ? handleForkFromMessage : undefined}
                         forkingMessageId={forkingMessageId}
                         onLoadMore={handleLoadMore}
-                        minimapCachedUserMessages={minimapCachedUserMessages}
+                        minimapCachedUserMessages={minimapCachedMessages}
                         onMinimapItemsChange={setMinimapItems}
                         onActiveMessageIdsChange={setMinimapActiveMessageIds}
                         onRegisterMinimapJump={handleRegisterMinimapJump}

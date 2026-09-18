@@ -1,11 +1,12 @@
 import * as React from 'react';
 import { Platform, Pressable, Text, View } from 'react-native';
 import { useUnistyles } from 'react-native-unistyles';
-import { UserTextMessage } from '@/sync/typesMessage';
+import { AskUserQuestionMessage, MinimapMessage, readAskUserQuestionAnswer, UserTextMessage } from '@/sync/typesMessage';
 import { formatMessageTime } from '@/utils/messageTime';
+import { t } from '@/text';
 
 export type ConversationMinimapItem = {
-    message: UserTextMessage;
+    message: MinimapMessage;
 };
 
 const HIT_WIDTH = 44;
@@ -26,13 +27,47 @@ const MAX_PREVIEW_CHARS = 180;
 const PREVIEW_WIDTH = 260;
 const MIN_CONTENT_WIDTH = 840;
 
-function getPreviewText(message: UserTextMessage) {
-    const raw = (message.displayText || message.text || '').replace(/\s+/g, ' ').trim();
-    if (!raw) return '(empty message)';
+function truncatePreview(raw: string) {
     return raw.length > MAX_PREVIEW_CHARS ? `${raw.slice(0, MAX_PREVIEW_CHARS - 1)}…` : raw;
 }
 
-function getAttachmentSummary(message: UserTextMessage) {
+function getPromptPreviewText(message: UserTextMessage) {
+    const raw = (message.displayText || message.text || '').replace(/\s+/g, ' ').trim();
+    if (!raw) return '(empty message)';
+    return truncatePreview(raw);
+}
+
+/** One line per question so a multi-question prompt stays readable in the preview. */
+function getQuestionPreviewText(message: AskUserQuestionMessage) {
+    return truncatePreview(message.questions.map((question) => question.question.trim()).filter(Boolean).join('\n'));
+}
+
+function getPreviewText(message: MinimapMessage) {
+    return message.kind === 'ask-user-question' ? getQuestionPreviewText(message) : getPromptPreviewText(message);
+}
+
+/**
+ * Small heading above the preview body: the first question's header for a single question, the
+ * question count otherwise. Prompts have no heading.
+ */
+function getPreviewLabel(message: MinimapMessage) {
+    if (message.kind !== 'ask-user-question') return null;
+    if (message.questions.length > 1) {
+        return t('tools.askUserQuestion.multipleQuestions', { count: message.questions.length });
+    }
+    return message.questions[0]?.header?.trim() || t('tools.names.question');
+}
+
+/** Secondary preview line: attachments for a prompt, the chosen answers for a question. */
+function getPreviewDetail(message: MinimapMessage) {
+    if (message.kind === 'ask-user-question') {
+        const chosen = message.answers;
+        if (!chosen) return null;
+        const answers = message.questions
+            .map((question) => readAskUserQuestionAnswer(chosen, question))
+            .filter((answer): answer is string => !!answer);
+        return answers.length > 0 ? t('tools.askUserQuestion.answered', { answer: answers.join(' · ') }) : null;
+    }
     const images = message.images ?? [];
     if (images.length === 0) return null;
     const kinds = Array.from(new Set(images.map((image) => image.mimeType || 'image')));
@@ -43,7 +78,7 @@ function getAttachmentSummary(message: UserTextMessage) {
 export function ConversationMinimap(props: {
     userMessages: ConversationMinimapItem[];
     activeMessageIds: Set<string>;
-    onJumpToMessage: (message: UserTextMessage) => void;
+    onJumpToMessage: (message: MinimapMessage) => void;
     contentWidth: number;
 }) {
     const { theme } = useUnistyles();
@@ -130,14 +165,18 @@ export function ConversationMinimap(props: {
                     const hoverScale = hoveredIndex === null ? 1 : getHoverScale(Math.abs(hoveredIndex - itemIndex));
                     const isHovered = hoveredIndex === itemIndex;
                     const markerWidth = MARKER_WIDTH * hoverScale;
-                    const attachmentSummary = getAttachmentSummary(item.message);
+                    // AskUserQuestion markers are drawn exactly like prompts: the rail is a neutral
+                    // map of landmarks, and hovering is what tells you which mark is a question.
+                    const isQuestion = item.message.kind === 'ask-user-question';
+                    const previewLabel = getPreviewLabel(item.message);
+                    const previewDetail = getPreviewDetail(item.message);
                     return (
                         <View key={item.message.id} style={{ position: 'relative', width: HIT_WIDTH, height: MARKER_SLOT_HEIGHT, alignItems: 'flex-start', justifyContent: 'center' }}>
                             <Pressable
                                 onPress={() => props.onJumpToMessage(item.message)}
                                 onHoverIn={() => setHoveredIndex(itemIndex)}
                                 accessibilityRole="button"
-                                accessibilityLabel="Jump to user message"
+                                accessibilityLabel={isQuestion ? 'Jump to question' : 'Jump to user message'}
                                 style={{
                                     width: HIT_WIDTH,
                                     height: MARKER_SLOT_HEIGHT,
@@ -182,12 +221,17 @@ export function ConversationMinimap(props: {
                                     <Text style={{ color: 'rgba(255,255,255,0.72)', fontSize: 11, marginBottom: 6 }}>
                                         {formatMessageTime(item.message.createdAt)}
                                     </Text>
+                                    {previewLabel ? (
+                                        <Text numberOfLines={1} style={{ color: 'rgba(255,255,255,0.72)', fontSize: 11, fontWeight: '600', marginBottom: 4 }}>
+                                            {previewLabel}
+                                        </Text>
+                                    ) : null}
                                     <Text numberOfLines={5} style={{ color: '#fff', fontSize: 13, lineHeight: 18 }}>
                                         {getPreviewText(item.message)}
                                     </Text>
-                                    {attachmentSummary ? (
-                                        <Text numberOfLines={1} style={{ color: 'rgba(255,255,255,0.64)', fontSize: 11, marginTop: 7 }}>
-                                            {attachmentSummary}
+                                    {previewDetail ? (
+                                        <Text numberOfLines={2} style={{ color: 'rgba(255,255,255,0.64)', fontSize: 11, marginTop: 7 }}>
+                                            {previewDetail}
                                         </Text>
                                     ) : null}
                                 </View>
