@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { CODEX_PACKAGE } from '@/codex/package';
 
 vi.mock('@/claude/claudeLocal', () => ({
   claudeCliPath: '/mock/claude.js',
@@ -31,7 +32,7 @@ describe('runOneShot spawn plan', () => {
     const plan = buildSpawnPlan('codex', 'hello', '/tmp/workdir', 'gpt-5.5-high', 'initial');
     expect(plan.command).toBe('npx');
     expect(plan.args).toContain('-y');
-    expect(plan.args).toContain('@openai/codex@0.153.4');
+    expect(plan.args).toContain(CODEX_PACKAGE);
     expect(plan.args).toContain('--dangerously-bypass-approvals-and-sandbox');
     expect(plan.args).toContain('hello');
     expect(plan.args).toContain('--model');
