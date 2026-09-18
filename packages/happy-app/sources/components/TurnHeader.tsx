@@ -1,9 +1,8 @@
 import * as React from 'react';
-import { Platform, Pressable, Text } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { StyleSheet, useUnistyles } from 'react-native-unistyles';
+import { Pressable, Text } from 'react-native';
+import { StyleSheet } from 'react-native-unistyles';
 import { t } from '@/text';
-import { formatDuration, formatFullMessageTime, formatMessageTime } from '@/utils/messageTime';
+import { formatDuration, formatFullMessageTime } from '@/utils/messageTime';
 import { TurnHeaderStatus } from './messageTurnTiming';
 import { showToast } from './Toast';
 import { hapticsLight } from './haptics';
@@ -14,12 +13,11 @@ import { hapticsLight } from './haptics';
  * the reply and stays put when the turn settles — a line that appeared and
  * disappeared on its own would jog everything above it.
  *
- * While the turn runs it counts up; once it settles it reads as a result, and the
- * exact start/end are a hover (web) or a tap (native) away.
+ * While the turn runs it counts up. Once it settles it just states the result: no
+ * affordance, nothing that changes under the cursor. Tapping it still reveals the
+ * exact window for anyone who wants it.
  */
 export const TurnHeader = React.memo((props: { status: TurnHeaderStatus }) => {
-    const { theme } = useUnistyles();
-    const [hovered, setHovered] = React.useState(false);
     const { status } = props;
     const running = status.state === 'running';
     const elapsedMs = useElapsedMs(running ? status.startedAt : null);
@@ -32,16 +30,10 @@ export const TurnHeader = React.memo((props: { status: TurnHeaderStatus }) => {
             : t('message.processed', { duration: formatDuration(elapsedMs) }))
         : t('message.took', { duration: formatDuration(status.completedAt - status.startedAt) });
 
-    // The exact window behind that duration: shown in place while the cursor sits
-    // on the line, and in full as the browser tooltip / native toast.
-    const range = running
-        ? null
-        : `${formatMessageTime(status.startedAt)} – ${formatMessageTime(status.completedAt)}`;
+    // The window behind that duration, for anyone who taps the line.
     const detail = running
         ? null
         : `${formatFullMessageTime(status.startedAt)} – ${formatFullMessageTime(status.completedAt)}`;
-
-    const text = range !== null && hovered ? `${range}, ${label}` : label;
 
     const showDetail = () => {
         if (detail === null) return;
@@ -49,35 +41,14 @@ export const TurnHeader = React.memo((props: { status: TurnHeaderStatus }) => {
         showToast(detail, { icon: null });
     };
 
-    // Spread rather than named props: Pressable's types have no mouse handlers,
-    // but the web build renders it as a DOM node that receives them.
-    const hoverHandlers = Platform.OS === 'web'
-        ? {
-            onMouseEnter: () => setHovered(true),
-            onMouseLeave: () => setHovered(false),
-        }
-        : {};
-
     return (
         <Pressable
             style={styles.row}
             onPress={running ? undefined : showDetail}
             disabled={running}
             accessibilityLabel={label}
-            {...hoverHandlers}
         >
-            {Platform.OS === 'web' ? (
-                // react-native-web drops the DOM `title` prop, so the full window
-                // rides on a plain DOM node, as the action bar's time does.
-                <span title={detail ?? undefined} style={{ display: 'inline-flex' }}>
-                    <Text style={styles.text} numberOfLines={1}>{text}</Text>
-                </span>
-            ) : (
-                <Text style={styles.text} numberOfLines={1}>{text}</Text>
-            )}
-            {!running && (
-                <Ionicons name="chevron-forward" size={12} color={theme.colors.textSecondary} />
-            )}
+            <Text style={styles.text} numberOfLines={1}>{label}</Text>
         </Pressable>
     );
 });
@@ -98,18 +69,12 @@ function useElapsedMs(startedAt: number | null): number {
 
 const styles = StyleSheet.create((theme) => ({
     row: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
         paddingBottom: 4,
         marginBottom: 8,
         borderBottomWidth: StyleSheet.hairlineWidth,
         borderBottomColor: theme.colors.divider,
     },
     text: {
-        // Single line, and free to shrink: the hover detail is longer than the
-        // label and must not push the chevron off the row.
-        flexShrink: 1,
         fontSize: 13,
         color: theme.colors.textSecondary,
     },

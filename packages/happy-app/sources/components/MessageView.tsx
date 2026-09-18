@@ -90,6 +90,12 @@ function MessageActionBar(props: {
 }) {
   const { theme } = useUnistyles();
   const ttsState = props.ttsState ?? 'idle';
+  const label = formatMessageTime(props.createdAt);
+  const fullTime = formatFullMessageTime(props.createdAt);
+  const showFullTime = () => {
+    hapticsLight();
+    showToast(fullTime, { icon: null });
+  };
   // Web: visible only on hover (but the row always occupies layout space).
   // Native: always visible. While a fork is in progress, or TTS is
   // loading/playing/queued, force the bar visible on web so the spinner /
@@ -156,21 +162,12 @@ function MessageActionBar(props: {
           )}
         </Pressable>
       ) : null}
-      {Platform.OS === 'web' ? (
-        // react-native-web doesn't forward the DOM `title` prop, so wrap the
-        // time in a native <span> to show the full timestamp on hover.
-        <span title={formatFullMessageTime(props.createdAt)} style={{ display: 'inline-flex' }}>
-          <Text style={styles.actionTime}>{formatMessageTime(props.createdAt)}</Text>
-        </span>
-      ) : (
-        // Native: tap the time to reveal the full timestamp in a toast.
-        <Pressable
-          onPress={() => { hapticsLight(); showToast(formatFullMessageTime(props.createdAt), { icon: null }); }}
-          hitSlop={6}
-        >
-          <Text style={styles.actionTime}>{formatMessageTime(props.createdAt)}</Text>
-        </Pressable>
-      )}
+      {/* The time states the time and nothing more: no hover tooltip on web, here
+          or on the turn header above a reply — pressing it gives the full
+          timestamp in a toast, on both platforms. */}
+      <Pressable onPress={showFullTime} hitSlop={6}>
+        <Text style={styles.actionTime}>{label}</Text>
+      </Pressable>
     </View>
   );
 }
