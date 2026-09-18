@@ -36,7 +36,7 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
     },
     projectCard: {
         backgroundColor: theme.colors.surface,
-        marginBottom: 8,
+        marginVertical: 10,
         marginHorizontal: Platform.select({ ios: 16, default: 12 }),
         borderRadius: Platform.select({ ios: 10, default: 16 }),
         overflow: 'hidden',
@@ -111,10 +111,11 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
         justifyContent: 'center',
     },
     sessionRow: {
-        height: 56,
+        height: 48,
         flexDirection: 'row',
         alignItems: 'center',
         paddingHorizontal: 16,
+        paddingInlineStart: 36,
         backgroundColor: theme.colors.surface,
     },
     sessionDivider: {
@@ -168,7 +169,7 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
         alignItems: 'center',
     },
     newSessionButtonIcon: {
-        marginRight: 8,
+        marginRight: 12,
         width: 16,
         alignItems: 'center',
         justifyContent: 'center',
@@ -366,8 +367,6 @@ export function ActiveSessionsGroupCompact({ sessions, selectedSessionId, regist
                                                 session={session}
                                                 selected={selectedSessionId === session.id}
                                                 registerSessionRowRef={registerSessionRowRef}
-                                                showBorder={index < machineGroup.sessions.length - 1 ||
-                                                    Array.from(projectGroup.machines.keys()).indexOf(machineId) < projectGroup.machines.size - 1}
                                             />
                                         ))}
                                     </View>
