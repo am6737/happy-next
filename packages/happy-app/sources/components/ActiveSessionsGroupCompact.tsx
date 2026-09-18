@@ -169,7 +169,7 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
         alignItems: 'center',
     },
     newSessionButtonIcon: {
-        marginRight: 12,
+        marginRight: 8,
         width: 16,
         alignItems: 'center',
         justifyContent: 'center',
@@ -491,7 +491,7 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder, registerS
                                     name="create-outline"
                                     size={14}
                                     color={theme.colors.textSecondary}
-                                    style={{ marginRight: 8 }}
+                                    style={{ marginLeft: 2, marginRight: 8 }}
                                 />
                             );
                         }
@@ -511,7 +511,7 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder, registerS
                         // Show blue unread dot for completed tasks
                         if (sessionStatus.hasUnreadCompletion) {
                             return (
-                                <View style={[styles.unreadDot, { marginRight: 8 }]} />
+                                <View style={[styles.unreadDot, { marginRight: 12 }]} />
                             );
                         }
                         
@@ -527,13 +527,16 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder, registerS
                             );
                         }
                         
-                        return null;
+                        return <View style={{ width: 24 }}></View>;
                     })()}
                     
                     <Text
                         style={[
                             styles.sessionTitle,
-                            sessionStatus.isConnected ? styles.sessionTitleConnected : styles.sessionTitleDisconnected
+                            sessionStatus.isConnected ? styles.sessionTitleConnected : styles.sessionTitleDisconnected,
+                            {
+                                paddingLeft: 4,
+                            }
                         ]}
                         numberOfLines={1}
                         ref={(el: any) => {
