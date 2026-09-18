@@ -351,7 +351,9 @@ export function ActiveSessionsGroupCompact({ sessions, selectedSessionId, regist
                             onToggle={() => toggleGroup(collapseKey)}
                             onNewSession={handleNewSession}
                             avatar={avatarId && firstSession ? (
-                                <Avatar id={avatarId} size={24} flavor={firstSession.metadata?.flavor} sessionIcon={firstSession.metadata?.sessionIcon} />
+                                // No flavor badge here: the header marks a directory, and the vendor of
+                                // whichever session happens to sort first is not the directory's identity.
+                                <Avatar id={avatarId} size={24} hideFlavorBadge sessionIcon={firstSession.metadata?.sessionIcon} />
                             ) : null}
                             rightContent={(
                                 <>
