@@ -1232,6 +1232,7 @@ export const zhHans: TranslationStructure = {
             applyChanges: '更新文件',
             viewDiff: '当前文件更改',
             question: '问题',
+            previewHtml: 'HTML 预览',
         },
         desc: {
             terminalCmd: ({ cmd }: { cmd: string }) => `终端(命令: ${cmd})`,

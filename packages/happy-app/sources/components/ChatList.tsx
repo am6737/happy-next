@@ -10,7 +10,7 @@ import { MessageView } from './MessageView';
 import { ConversationMinimapItem } from './ConversationMinimap';
 import { Metadata, Session } from '@/sync/storageTypes';
 import { ChatFooter } from './ChatFooter';
-import { AskUserQuestionMessage, isAskUserQuestionToolCall, Message, MinimapMessage, toAskUserQuestionMessage, UserTextMessage } from '@/sync/typesMessage';
+import { AskUserQuestionMessage, isAskUserQuestionToolCall, isPreviewHtmlToolCall, Message, MinimapMessage, PreviewHtmlMessage, toAskUserQuestionMessage, toPreviewHtmlMessage, UserTextMessage } from '@/sync/typesMessage';
 import { shouldHideMessageInChatList, shouldHideMessageInMinimap } from './chatListVisibility';
 import { layout } from './layout';
 import { createScrollButtonVisibilityController } from './scrollButtonVisibilityController';
@@ -219,10 +219,20 @@ const ChatListInternal = React.memo((props: {
             .reverse();
     }, [visibleMessages]);
 
-    // Merge offline-cached landmarks with the loaded ones so the minimap can show prompts and
-    // questions that live in the persistent cache but haven't been paged into the list yet. Loaded
-    // messages win on id (they carry an accurate scroll position); rows the rail leaves out (see
-    // shouldHideMessageInMinimap) are dropped from both sources.
+    // `preview_html` calls the rail places a marker for, in the same ascending order. Only calls
+    // that produced a document qualify — see buildPreviewHtmlMessage.
+    const loadedPreviewMessages = React.useMemo<MinimapMessage[]>(() => {
+        return visibleMessages
+            .filter(isPreviewHtmlToolCall)
+            .map(toPreviewHtmlMessage)
+            .filter((message): message is PreviewHtmlMessage => message !== null)
+            .reverse();
+    }, [visibleMessages]);
+
+    // Merge offline-cached landmarks with the loaded ones so the minimap can show prompts,
+    // questions and previews that live in the persistent cache but haven't been paged into the
+    // list yet. Loaded messages win on id (they carry an accurate scroll position); rows the rail
+    // leaves out (see shouldHideMessageInMinimap) are dropped from both sources.
     const minimapItems = React.useMemo<ConversationMinimapItem[]>(() => {
         // Loaded messages always win (they carry the store's id → accurate scroll position + active
         // highlight). A cached entry is dropped if a loaded message matches it by EITHER seq OR
@@ -232,7 +242,11 @@ const ChatListInternal = React.memo((props: {
         const loadedBySeq = new Set<number>();
         const loadedByLocalId = new Set<string>();
         const merged: MinimapMessage[] = [];
-        for (const loaded of [...loadedUserMessages.map((item) => item.message), ...loadedQuestionMessages]) {
+        for (const loaded of [
+            ...loadedUserMessages.map((item) => item.message),
+            ...loadedQuestionMessages,
+            ...loadedPreviewMessages,
+        ]) {
             if (shouldHideMessageInMinimap(loaded)) continue;
             merged.push(loaded);
             if (loaded.seq != null) loadedBySeq.add(loaded.seq);
@@ -250,7 +264,7 @@ const ChatListInternal = React.memo((props: {
         return merged
             .sort((a, b) => a.createdAt - b.createdAt || (a.seq ?? 0) - (b.seq ?? 0))
             .map((message) => ({ message }));
-    }, [props.minimapCachedUserMessages, loadedUserMessages, loadedQuestionMessages]);
+    }, [props.minimapCachedUserMessages, loadedUserMessages, loadedQuestionMessages, loadedPreviewMessages]);
     const activeMessageIdsRef = useRef<Set<string>>(new Set());
 
     const scrollToLoadedMessage = useCallback((target: MinimapMessage, animated = true): boolean => {
@@ -370,9 +384,9 @@ const ChatListInternal = React.memo((props: {
                 visibleIndexes.push(viewable.index);
             }
             const item = viewable.item;
-            // Questions are landmarks too, so a question on screen highlights its own marker
-            // instead of leaving the rail pointing at the nearest prompt.
-            if (item?.kind === 'user-text' || (item != null && isAskUserQuestionToolCall(item))) {
+            // Questions and previews are landmarks too, so one on screen highlights its own
+            // marker instead of leaving the rail pointing at the nearest prompt.
+            if (item?.kind === 'user-text' || (item != null && (isAskUserQuestionToolCall(item) || isPreviewHtmlToolCall(item)))) {
                 next.add(item.id);
             }
         }

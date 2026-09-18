@@ -1244,6 +1244,7 @@ export const en = {
             applyChanges: 'Update file',
             viewDiff: 'Current file changes',
             question: 'Question',
+            previewHtml: 'HTML preview',
         },
         askUserQuestion: {
             submit: 'Submit Answer',

@@ -46,7 +46,9 @@ export function shouldHideMessageInChatList(message: Message, showThinkingMessag
  * itself and the CLI forwards it — so this never has to pattern-match the summary's wording.
  */
 export function shouldHideMessageInMinimap(message: MinimapMessage): boolean {
-    if (message.kind === 'ask-user-question') {
+    // Tool-call landmarks are never dropped by the list filter below (it only looks at user rows),
+    // so they are kept unconditionally.
+    if (message.kind === 'ask-user-question' || message.kind === 'preview-html') {
         return false;
     }
     if (message.meta?.isCompactSummary === true) {

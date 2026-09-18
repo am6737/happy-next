@@ -1230,6 +1230,7 @@ export const ca: TranslationStructure = {
             applyChanges: 'Actualitza fitxer',
             viewDiff: 'Canvis del fitxer actual',
             question: 'Pregunta',
+            previewHtml: 'Previsualització HTML',
         },
         desc: {
             terminalCmd: ({ cmd }: { cmd: string }) => `Terminal(cmd: ${cmd})`,

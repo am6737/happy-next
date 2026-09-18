@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { shouldHideMessageInMinimap, shouldHideMessageInChatList } from './chatListVisibility';
-import { AgentTextMessage, UserTextMessage } from '@/sync/typesMessage';
+import { AgentTextMessage, MinimapMessage, UserTextMessage } from '@/sync/typesMessage';
 
 function agentText(overrides: Partial<AgentTextMessage> = {}): AgentTextMessage {
     return {
@@ -125,15 +125,26 @@ describe('shouldHideMessageInMinimap', () => {
         expect(shouldHideMessageInMinimap(withImage)).toBe(false);
     });
 
+    it('never drops a preview landmark', () => {
+        const preview: MinimapMessage = {
+            kind: 'preview-html',
+            id: 'preview-1',
+            localId: null,
+            createdAt: 0,
+            title: 'Weekly report',
+        };
+        expect(shouldHideMessageInMinimap(preview)).toBe(false);
+    });
+
     it('never drops a question landmark', () => {
-        const question = {
+        const question: MinimapMessage = {
             kind: 'ask-user-question',
             id: 'question-1',
             localId: null,
             createdAt: 0,
             questions: [{ header: 'Scope', question: 'Which files?' }],
             answers: null,
-        } as const;
+        };
         expect(shouldHideMessageInMinimap(question)).toBe(false);
     });
 });

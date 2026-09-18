@@ -43,14 +43,23 @@ function getQuestionPreviewText(message: AskUserQuestionMessage) {
 }
 
 function getPreviewText(message: MinimapMessage) {
-    return message.kind === 'ask-user-question' ? getQuestionPreviewText(message) : getPromptPreviewText(message);
+    if (message.kind === 'ask-user-question') return getQuestionPreviewText(message);
+    if (message.kind === 'preview-html') {
+        // The card is named by its title; an untitled one says what it is instead of showing blank.
+        return truncatePreview(message.title?.trim() || t('tools.names.previewHtml'));
+    }
+    return getPromptPreviewText(message);
 }
 
 /**
  * Small heading above the preview body: the first question's header for a single question, the
- * question count otherwise. Prompts have no heading.
+ * question count otherwise; a preview's name when its title is about to follow. Prompts have no
+ * heading.
  */
 function getPreviewLabel(message: MinimapMessage) {
+    if (message.kind === 'preview-html') {
+        return message.title?.trim() ? t('tools.names.previewHtml') : null;
+    }
     if (message.kind !== 'ask-user-question') return null;
     if (message.questions.length > 1) {
         return t('tools.askUserQuestion.multipleQuestions', { count: message.questions.length });
@@ -58,7 +67,7 @@ function getPreviewLabel(message: MinimapMessage) {
     return message.questions[0]?.header?.trim() || t('tools.names.question');
 }
 
-/** Secondary preview line: attachments for a prompt, the chosen answers for a question. */
+/** Secondary preview line: attachments for a prompt, the chosen answers for a question, none for a preview. */
 function getPreviewDetail(message: MinimapMessage) {
     if (message.kind === 'ask-user-question') {
         const chosen = message.answers;
@@ -68,6 +77,8 @@ function getPreviewDetail(message: MinimapMessage) {
             .filter((answer): answer is string => !!answer);
         return answers.length > 0 ? t('tools.askUserQuestion.answered', { answer: answers.join(' · ') }) : null;
     }
+    // Only prompts carry attachments; questions reported theirs above, previews have none.
+    if (message.kind !== 'user-text') return null;
     const images = message.images ?? [];
     if (images.length === 0) return null;
     const kinds = Array.from(new Set(images.map((image) => image.mimeType || 'image')));
@@ -167,7 +178,13 @@ export function ConversationMinimap(props: {
                     const markerWidth = MARKER_WIDTH * hoverScale;
                     // AskUserQuestion markers are drawn exactly like prompts: the rail is a neutral
                     // map of landmarks, and hovering is what tells you which mark is a question.
-                    const isQuestion = item.message.kind === 'ask-user-question';
+                    // Every landmark is drawn as the same mark; hovering — or the screen reader —
+                    // is what tells a question and a preview apart from a prompt.
+                    const jumpLabel = item.message.kind === 'ask-user-question'
+                        ? 'Jump to question'
+                        : item.message.kind === 'preview-html'
+                            ? 'Jump to preview'
+                            : 'Jump to user message';
                     const previewLabel = getPreviewLabel(item.message);
                     const previewDetail = getPreviewDetail(item.message);
                     return (
@@ -176,7 +193,7 @@ export function ConversationMinimap(props: {
                                 onPress={() => props.onJumpToMessage(item.message)}
                                 onHoverIn={() => setHoveredIndex(itemIndex)}
                                 accessibilityRole="button"
-                                accessibilityLabel={isQuestion ? 'Jump to question' : 'Jump to user message'}
+                                accessibilityLabel={jumpLabel}
                                 style={{
                                     width: HIT_WIDTH,
                                     height: MARKER_SLOT_HEIGHT,

@@ -105,14 +105,58 @@ export type AskUserQuestionMessage = {
     answers: Record<string, string> | null;
 }
 
+/**
+ * A conversation-minimap view of a `preview_html` call — the inline HTML card the list renders.
+ * It carries the same identity fields as any message (so the rail can key markers, dedupe them
+ * against the offline cache and jump back to the row) plus the card's title, which is all the hover
+ * preview shows. The document itself stays in the tool call.
+ */
+export type PreviewHtmlMessage = {
+    kind: 'preview-html';
+    id: string;
+    localId: string | null;
+    createdAt: number;
+    seq?: number | null;
+    title: string | null;
+};
+
 /** Everything the conversation minimap can place a marker for. */
-export type MinimapMessage = UserTextMessage | AskUserQuestionMessage;
+export type MinimapMessage = UserTextMessage | AskUserQuestionMessage | PreviewHtmlMessage;
 
 export const ASK_USER_QUESTION_TOOL = 'AskUserQuestion';
 
-/** True for the `AskUserQuestion` call itself — the only tool call the minimap places a marker for. */
+/** True for the `AskUserQuestion` call itself — one of the two tool calls the minimap marks. */
 export function isAskUserQuestionToolCall(message: Message): message is ToolCallMessage {
     return message.kind === 'tool-call' && message.tool.name === ASK_USER_QUESTION_TOOL;
+}
+
+export const PREVIEW_HTML_TOOL = 'preview_html';
+
+/** `preview_html` in every spelling an agent produces it under. */
+export function normalizePreviewHtmlToolName(name: string): string {
+    return name.replace(/__/g, ':').replace(/^mcp:/, '').replace(/^happy:/, '');
+}
+
+/** True for the `preview_html` call itself — the other tool call the minimap marks. */
+export function isPreviewHtmlToolCall(message: Message): message is ToolCallMessage {
+    return message.kind === 'tool-call' && normalizePreviewHtmlToolName(message.tool.name) === PREVIEW_HTML_TOOL;
+}
+
+/** The inline card a `preview_html` call renders: the document, plus the title shown above it. */
+export type PreviewHtmlCard = {
+    html: string;
+    title: string | null;
+};
+
+/**
+ * Read the card out of a `preview_html` tool input. Null when the input carries no document — the
+ * list then renders a plain tool row, so there is no card to show and no marker to place for it.
+ */
+export function readPreviewHtmlCard(input: unknown): PreviewHtmlCard | null {
+    if (!input || typeof input !== 'object') return null;
+    const value = input as { html?: unknown; title?: unknown };
+    if (typeof value.html !== 'string' || value.html.length === 0) return null;
+    return { html: value.html, title: typeof value.title === 'string' ? value.title : null };
 }
 
 /** Read the question list out of a raw `AskUserQuestion` tool input. Unparseable input yields []. */
@@ -188,6 +232,46 @@ export function toAskUserQuestionMessage(message: ToolCallMessage): AskUserQuest
         input: message.tool.input,
         permissionAnswers: message.tool.permission?.answers,
         result: message.tool.result,
+    });
+}
+
+/**
+ * Build the minimap view of a `preview_html` call from its parts. Shared by the loaded list (which
+ * has a reduced `ToolCallMessage`) and the offline cache (which decrypts raw records), so both sides
+ * produce identical-looking markers. Returns null while the call is still running: until its result
+ * lands the list renders a plain tool row, and a marker for it would jump to no card at all.
+ */
+export function buildPreviewHtmlMessage(fields: {
+    id: string;
+    localId: string | null;
+    createdAt: number;
+    seq?: number | null;
+    input: unknown;
+    /** Whether the call already has its result — the card only exists once it does. */
+    completed: boolean;
+}): PreviewHtmlMessage | null {
+    if (!fields.completed) return null;
+    const card = readPreviewHtmlCard(fields.input);
+    if (!card) return null;
+    return {
+        kind: 'preview-html',
+        id: fields.id,
+        localId: fields.localId,
+        createdAt: fields.createdAt,
+        seq: fields.seq,
+        title: card.title,
+    };
+}
+
+/** Minimap view of a loaded `preview_html` tool-call message. */
+export function toPreviewHtmlMessage(message: ToolCallMessage): PreviewHtmlMessage | null {
+    return buildPreviewHtmlMessage({
+        id: message.id,
+        localId: message.localId,
+        createdAt: message.createdAt,
+        seq: message.seq,
+        input: message.tool.input,
+        completed: message.tool.state === 'completed',
     });
 }
 

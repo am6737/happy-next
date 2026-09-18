@@ -48,7 +48,7 @@ import { gitStatusSync } from './gitStatusSync';
 import { projectManager } from './projectManager';
 import { AsyncLock } from '@/utils/lock';
 import { voiceHooks } from '@/realtime/hooks/voiceHooks';
-import { ASK_USER_QUESTION_TOOL, AskUserQuestionMessage, buildAskUserQuestionMessage, Message, MinimapMessage, UserTextMessage } from './typesMessage';
+import { ASK_USER_QUESTION_TOOL, AskUserQuestionMessage, buildAskUserQuestionMessage, buildPreviewHtmlMessage, Message, MinimapMessage, normalizePreviewHtmlToolName, PREVIEW_HTML_TOOL, PreviewHtmlMessage, UserTextMessage } from './typesMessage';
 import { EncryptionCache } from './encryption/encryptionCache';
 import { systemPrompt, buildDootaskSystemPrompt } from './prompt/systemPrompt';
 import { getDootaskFromServer } from './dootask/api';
@@ -3507,19 +3507,28 @@ class Sync {
             return memo.messages;
         }
 
-        // Proactively seed the minimap with only the newest MAX_USER_MESSAGES prompts and
-        // MAX_QUESTIONS questions. As the user scrolls the list, older landmarks are merged in
-        // unbounded (via the loaded messages), so the caps only limit what we load up front. Page
-        // backwards from the newest message and decrypt PER PAGE so we can stop as soon as we have
-        // enough — decryption is the dominant cost, and a long history would otherwise be decrypted
-        // in full just to keep the last handful of landmarks. MAX_SCAN bounds pathological sparse
-        // sessions (few prompts/questions among many tool-call messages).
+        // Proactively seed the minimap with only the newest MAX_USER_MESSAGES prompts, MAX_QUESTIONS
+        // questions and MAX_PREVIEWS previews. As the user scrolls the list, older landmarks are
+        // merged in unbounded (via the loaded messages), so the caps only limit what we load up
+        // front. Page backwards from the newest message and decrypt PER PAGE so we can stop as soon
+        // as we have enough — decryption is the dominant cost, and a long history would otherwise be
+        // decrypted in full just to keep the last handful of landmarks. MAX_SCAN bounds pathological
+        // sparse sessions (few prompts/questions among many tool-call messages).
         const MAX_USER_MESSAGES = 50;
         const MAX_QUESTIONS = 50;
+        const MAX_PREVIEWS = 50;
         const MAX_SCAN = 5000;
         const PAGE = Sync.INITIAL_MESSAGES_LIMIT;
         const collectedUserMessages: UserTextMessage[] = [];
         const pendingQuestions: {
+            id: string;
+            localId: string | null;
+            createdAt: number;
+            seq?: number | null;
+            input: unknown;
+            toolUseId: string | null;
+        }[] = [];
+        const pendingPreviews: {
             id: string;
             localId: string | null;
             createdAt: number;
@@ -3534,7 +3543,7 @@ class Sync {
         let hitScanCap = false;
         try {
             let beforeSeq: number | null = null;
-            while (collectedUserMessages.length < MAX_USER_MESSAGES || pendingQuestions.length < MAX_QUESTIONS) {
+            while (collectedUserMessages.length < MAX_USER_MESSAGES || pendingQuestions.length < MAX_QUESTIONS || pendingPreviews.length < MAX_PREVIEWS) {
                 if (scanned >= MAX_SCAN) {
                     hitScanCap = true;
                     break;
@@ -3549,10 +3558,10 @@ class Sync {
 
                 // Decrypt this page and pull out the top-level landmarks the rail draws. Build the
                 // message views directly from the normalized rows (no reducer): we only need prompts
-                // and AskUserQuestion calls, so a full reducer pass — traceMessages, sidechain
-                // separation, event conversion — would be pure overhead. The real message id also
-                // keeps ids stable across refreshes (a fresh reducer would allocate new random ids
-                // each run, remounting every marker).
+                // and the two tool calls the rail marks, so a full reducer pass — traceMessages,
+                // sidechain separation, event conversion — would be pure overhead. The real message
+                // id also keeps ids stable across refreshes (a fresh reducer would allocate new
+                // random ids each run, remounting every marker).
                 const decrypted = await encryption.decryptMessages(page.messages);
                 for (const item of decrypted) {
                     if (!item) {
@@ -3603,6 +3612,15 @@ class Sync {
                                 input: content.input,
                                 toolUseId: content.id ?? null,
                             });
+                        } else if (content.type === 'tool-call' && normalizePreviewHtmlToolName(content.name) === PREVIEW_HTML_TOOL) {
+                            pendingPreviews.push({
+                                id: normalized.id,
+                                localId: normalized.localId,
+                                createdAt: normalized.createdAt,
+                                seq: item.seq,
+                                input: content.input,
+                                toolUseId: content.id ?? null,
+                            });
                         } else if (content.type === 'tool-result' && content.tool_use_id) {
                             resultsByToolUseId.set(content.tool_use_id, content.content);
                         }
@@ -3634,10 +3652,22 @@ class Sync {
             }))
             .filter((message): message is AskUserQuestionMessage => message !== null);
 
-        // Keep only the newest of each kind, ordered oldest→newest (matching the list order). Both
-        // collections are in scan order (newest first), so each is sorted before the front is
-        // trimmed — the two kinds are capped independently so a question-heavy stretch cannot crowd
-        // out prompts.
+        // A preview only becomes a card once its call has a result; the scan is newest→oldest, so
+        // the result is always seen before the call it belongs to.
+        const collectedPreviews = pendingPreviews
+            .map((pending) => buildPreviewHtmlMessage({
+                id: pending.id,
+                localId: pending.localId,
+                createdAt: pending.createdAt,
+                seq: pending.seq,
+                input: pending.input,
+                completed: pending.toolUseId !== null && resultsByToolUseId.has(pending.toolUseId),
+            }))
+            .filter((message): message is PreviewHtmlMessage => message !== null);
+
+        // Keep only the newest of each kind, ordered oldest→newest (matching the list order). Each
+        // collection is in scan order (newest first), so each is sorted before the front is trimmed
+        // — the kinds are capped independently so a question-heavy stretch cannot crowd out prompts.
         const byOldestFirst = (a: MinimapMessage, b: MinimapMessage) =>
             (a.seq ?? 0) - (b.seq ?? 0) || a.createdAt - b.createdAt;
         const keepNewest = (items: MinimapMessage[], cap: number) =>
@@ -3645,6 +3675,7 @@ class Sync {
         const result: MinimapMessage[] = [
             ...keepNewest(collectedUserMessages, MAX_USER_MESSAGES),
             ...keepNewest(collectedQuestions, MAX_QUESTIONS),
+            ...keepNewest(collectedPreviews, MAX_PREVIEWS),
         ];
         result.sort(byOldestFirst);
         this.minimapMessagesCache.set(sessionId, { signature, messages: result });

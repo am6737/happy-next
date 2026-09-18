@@ -1241,6 +1241,7 @@ export const pl: TranslationStructure = {
             applyChanges: 'Zaktualizuj plik',
             viewDiff: 'Bieżące zmiany pliku',
             question: 'Pytanie',
+            previewHtml: 'Podgląd HTML',
         },
         desc: {
             terminalCmd: ({ cmd }: { cmd: string }) => `Terminal(cmd: ${cmd})`,
