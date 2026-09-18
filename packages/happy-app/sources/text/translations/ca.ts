@@ -179,6 +179,9 @@ export const ca: TranslationStructure = {
         justNow: 'ara mateix',
         minutesAgo: ({ count }: { count: number }) => `fa ${count} minut${count !== 1 ? 's' : ''}`,
         hoursAgo: ({ count }: { count: number }) => `fa ${count} hora${count !== 1 ? 'es' : ''}`,
+        durationSeconds: ({ count }: { count: number }) => `${count} s`,
+        durationMinutes: ({ count }: { count: number }) => `${count} min`,
+        durationHours: ({ count }: { count: number }) => `${count} h`,
     },
 
     connect: {
@@ -1952,6 +1955,9 @@ export const ca: TranslationStructure = {
         switchedToMode: ({ mode }: { mode: string }) => `S'ha canviat al mode ${mode}`,
         unknownEvent: 'Esdeveniment desconegut',
         usageLimitUntil: ({ time }: { time: string }) => `Límit d'ús assolit fins a ${time}`,
+        processing: 'Processant',
+        processed: ({ duration }: { duration: string }) => `Processat ${duration}`,
+        took: ({ duration }: { duration: string }) => `Ha trigat ${duration}`,
         unknownTime: 'temps desconegut',
         confirmOldOption: 'Send old option?',
         confirmOldOptionMessage: 'This option is from an earlier message. Are you sure you want to send it?',

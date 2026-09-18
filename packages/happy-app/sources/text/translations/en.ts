@@ -195,6 +195,9 @@ export const en: TranslationStructure = {
         justNow: 'just now',
         minutesAgo: ({ count }: { count: number }) => `${count} minute${count !== 1 ? 's' : ''} ago`,
         hoursAgo: ({ count }: { count: number }) => `${count} hour${count !== 1 ? 's' : ''} ago`,
+        durationSeconds: ({ count }: { count: number }) => `${count}s`,
+        durationMinutes: ({ count }: { count: number }) => `${count}m`,
+        durationHours: ({ count }: { count: number }) => `${count}h`,
     },
 
     connect: {
@@ -1970,6 +1973,9 @@ export const en: TranslationStructure = {
         switchedToMode: ({ mode }: { mode: string }) => `Switched to ${mode} mode`,
         unknownEvent: 'Unknown event',
         usageLimitUntil: ({ time }: { time: string }) => `Usage limit reached until ${time}`,
+        processing: 'Processing',
+        processed: ({ duration }: { duration: string }) => `Processed ${duration}`,
+        took: ({ duration }: { duration: string }) => `Took ${duration}`,
         unknownTime: 'unknown time',
         confirmOldOption: 'Send old option?',
         confirmOldOptionMessage: 'This option is from an earlier message. Are you sure you want to send it?',

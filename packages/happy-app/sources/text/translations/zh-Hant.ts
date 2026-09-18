@@ -180,6 +180,9 @@ export const zhHant: TranslationStructure = {
         justNow: '剛剛',
         minutesAgo: ({ count }: { count: number }) => `${count} 分鐘前`,
         hoursAgo: ({ count }: { count: number }) => `${count} 小時前`,
+        durationSeconds: ({ count }: { count: number }) => `${count}秒`,
+        durationMinutes: ({ count }: { count: number }) => `${count}分鐘`,
+        durationHours: ({ count }: { count: number }) => `${count}小時`,
     },
 
     connect: {
@@ -1954,6 +1957,9 @@ export const zhHant: TranslationStructure = {
         switchedToMode: ({ mode }: { mode: string }) => `已切換到 ${mode} 模式`,
         unknownEvent: '未知事件',
         usageLimitUntil: ({ time }: { time: string }) => `使用限制到 ${time}`,
+        processing: '正在處理',
+        processed: ({ duration }: { duration: string }) => `已處理 ${duration}`,
+        took: ({ duration }: { duration: string }) => `用時 ${duration}`,
         unknownTime: '未知時間',
         confirmOldOption: '發送舊選項？',
         confirmOldOptionMessage: '該選項來自較早的訊息，確定要發送嗎？',

@@ -190,6 +190,9 @@ export const pl: TranslationStructure = {
         justNow: 'teraz',
         minutesAgo: ({ count }: { count: number }) => `${count} ${plural({ count, one: 'minuta', few: 'minuty', many: 'minut' })} temu`,
         hoursAgo: ({ count }: { count: number }) => `${count} ${plural({ count, one: 'godzina', few: 'godziny', many: 'godzin' })} temu`,
+        durationSeconds: ({ count }: { count: number }) => `${count} ${plural({ count, one: 'sekunda', few: 'sekundy', many: 'sekund' })}`,
+        durationMinutes: ({ count }: { count: number }) => `${count} ${plural({ count, one: 'minuta', few: 'minuty', many: 'minut' })}`,
+        durationHours: ({ count }: { count: number }) => `${count} ${plural({ count, one: 'godzina', few: 'godziny', many: 'godzin' })}`,
     },
 
     connect: {
@@ -1963,6 +1966,9 @@ export const pl: TranslationStructure = {
         switchedToMode: ({ mode }: { mode: string }) => `Przełączono na tryb ${mode}`,
         unknownEvent: 'Nieznane zdarzenie',
         usageLimitUntil: ({ time }: { time: string }) => `Osiągnięto limit użycia do ${time}`,
+        processing: 'Przetwarzanie',
+        processed: ({ duration }: { duration: string }) => `Przetworzono ${duration}`,
+        took: ({ duration }: { duration: string }) => `Zajęło ${duration}`,
         unknownTime: 'nieznany czas',
         confirmOldOption: 'Send old option?',
         confirmOldOptionMessage: 'This option is from an earlier message. Are you sure you want to send it?',

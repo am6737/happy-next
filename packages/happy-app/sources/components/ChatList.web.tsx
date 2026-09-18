@@ -13,6 +13,8 @@ import { Metadata, Session } from '@/sync/storageTypes';
 import { ChatFooter } from './ChatFooter';
 import { AskUserQuestionMessage, isAskUserQuestionToolCall, isPreviewHtmlToolCall, Message, MinimapMessage, PreviewHtmlMessage, toAskUserQuestionMessage, toPreviewHtmlMessage, UserTextMessage } from '@/sync/typesMessage';
 import { shouldHideMessageInChatList, shouldHideMessageInMinimap } from './chatListVisibility';
+import { turnHeaderProps, useTurnAnalysis } from './messageTurnTiming';
+import { AWAITING_RESPONSE_MAX_MS } from '@/utils/sessionUtils';
 import { layout as appLayout } from './layout';
 import { createScrollButtonVisibilityController } from './scrollButtonVisibilityController';
 import { createProxyScrollIntent } from './proxyScrollIntent';
@@ -146,6 +148,8 @@ export const ChatList = React.memo((props: { session: Session; onFillInput?: (te
             currentUserId={profile.id}
             onForkMessage={props.onForkMessage}
             thinking={props.session.thinking}
+            taskCompleted={props.session.agentState?.taskCompleted}
+            awaitingResponseSince={props.session.awaitingResponseSince}
             forkingMessageId={props.forkingMessageId}
             minimapCachedUserMessages={props.minimapCachedUserMessages}
             onMinimapItemsChange={props.onMinimapItemsChange}
@@ -385,6 +389,11 @@ const ChatRow = React.memo((props: {
     isSharedSession: boolean,
     currentUserId: string,
     showSenderName: boolean,
+    // Flat so a list re-render doesn't change this row's props unless its own
+    // turn did (see turnHeaderProps).
+    isTurnStart: boolean,
+    turnStartedAt: number | undefined,
+    turnCompletedAt: number | null | undefined,
     constrainedHeightPx: number | undefined,
     refCallback: (el: HTMLDivElement | null) => void,
 }) => {
@@ -416,6 +425,9 @@ const ChatRow = React.memo((props: {
                     isSharedSession={props.isSharedSession}
                     currentUserId={props.currentUserId}
                     showSenderName={props.showSenderName}
+                    turnStartedAt={props.turnStartedAt}
+                    turnCompletedAt={props.turnCompletedAt}
+                    isTurnStart={props.isTurnStart}
                 />
             </div>
         </div>
@@ -452,6 +464,10 @@ const ChatListInternal = React.memo((props: {
     currentUserId: string,
     onForkMessage?: (request: ForkMessageRequest) => void,
     thinking?: boolean,
+    /** `session.agentState.taskCompleted` — the CLI's stamp for the newest finished task. */
+    taskCompleted?: number | null,
+    /** `session.awaitingResponseSince` — set the moment a message is sent. */
+    awaitingResponseSince?: number | null,
     forkingMessageId?: string | null,
     minimapCachedUserMessages?: MinimapMessage[],
     onMinimapItemsChange?: (items: ConversationMinimapItem[]) => void,
@@ -496,49 +512,21 @@ const ChatListInternal = React.memo((props: {
         return map;
     }, [visibleMessages, props.isSharedSession]);
 
-    // Compute which agent-text messages are the LAST text segment of their turn.
-    // An assistant turn can span several agent-text blocks (interleaved with
-    // tool calls / thinking); the action bar (copy + time) should appear only
-    // once per turn, on its final text block. In the newest-first array (index
-    // 0 = newest), scanning toward newer (lower index): the first non-thinking
-    // agent-text means a newer text block exists (not last); a user-text means
-    // we've reached the turn boundary (this turn is complete → this is its last
-    // segment); tool-call / agent-event / thinking blocks are skipped.
+    // Which rows carry the action bar, which rows carry their turn's header, and
+    // how long each turn took. See messageTurnTiming.ts for the rules.
     //
-    // The newest turn (scan reaches the start without hitting a user message)
-    // is only marked complete when the agent is idle (`!thinking`); while the
-    // agent is still generating, the bar is suppressed for the whole turn so it
-    // doesn't attach to a segment that isn't truly final yet.
-    // Latch of segment ids already shown as their turn's final segment. Keeps the
-    // bar shown if `thinking` briefly flips true again (it can turn true a frame
-    // before a freshly-sent user message lands in the list), avoiding a flicker.
-    const completedTurnIdsRef = useRef<Set<string>>(new Set());
-    const lastAgentSegmentIds = React.useMemo(() => {
-        const set = new Set<string>();
-        const previouslyCompleted = completedTurnIdsRef.current;
-        const stillCompleted = new Set<string>();
-        for (let i = 0; i < visibleMessages.length; i++) {
-            const msg = visibleMessages[i];
-            if (msg.kind !== 'agent-text' || msg.isThinking) continue;
-            let isLast = true;
-            let reachedUserBoundary = false;
-            for (let j = i - 1; j >= 0; j--) {
-                const newer = visibleMessages[j];
-                if (newer.kind === 'agent-text' && !newer.isThinking) { isLast = false; break; }
-                if (newer.kind === 'user-text') { reachedUserBoundary = true; break; }
-            }
-            if (!isLast) continue;
-            // Older (already-bounded) turns are always complete; the newest turn
-            // only counts as complete once the agent stops thinking — unless it
-            // was already shown as complete (latched).
-            if (reachedUserBoundary || !props.thinking || previouslyCompleted.has(msg.id)) {
-                set.add(msg.id);
-                stillCompleted.add(msg.id);
-            }
-        }
-        completedTurnIdsRef.current = stillCompleted;
-        return set;
-    }, [visibleMessages, props.thinking]);
+    // In flight means the CLI says it is thinking *or* the optimistic marker set
+    // when a message is sent is still standing: the marker is written in the same
+    // store update that lands the message, so a reply's header arrives with the
+    // message instead of a CLI heartbeat later.
+    const turnInFlight = !!props.thinking
+        || (props.awaitingResponseSince != null
+            && Date.now() - props.awaitingResponseSince < AWAITING_RESPONSE_MAX_MS);
+    const turns = useTurnAnalysis({
+        visibleMessages,
+        turnInFlight,
+        taskCompletedAt: props.taskCompleted,
+    });
 
     // For each agent message, the user prompt that FOLLOWS it in time (nearest
     // lower index in the newest-first array) — the fork truncation target for
@@ -2098,15 +2086,16 @@ const ChatListInternal = React.memo((props: {
         const messageIndex = visibleMessages.length - 1 - entryIndex;
         const item = visibleMessages[messageIndex];
         if (!item) continue;
-        // Agent turns show the action bar only on their last text segment;
-        // user messages always show it.
-        const showActionBar = item.kind === 'agent-text'
-            ? lastAgentSegmentIds.has(item.id)
-            : true;
+        // Agent turns show the action bar only on their last text segment, and
+        // only once the turn settled — a reply still being generated is not a
+        // finished message. User messages always show it.
+        const isTurnEnd = item.kind === 'agent-text' && turns.completedIds.has(item.id);
+        const showActionBar = item.kind === 'agent-text' ? isTurnEnd : true;
+        const turnHeader = turnHeaderProps(turns.headerById.get(item.id));
         // Fork is offered on user prompts and on AI replies (private sessions
         // only; agent replies only via their action-bar segment).
         const canFork = !!props.onForkMessage && !props.isSharedSession
-            && (item.kind === 'user-text' || (item.kind === 'agent-text' && showActionBar));
+            && (item.kind === 'user-text' || isTurnEnd);
         const isNewestMessage = messageIndex === 0;
         // Never-measured rows mount height-constrained to the model estimate so
         // mounting can't shift anything; the newest message (streams/grows) and
@@ -2129,6 +2118,7 @@ const ChatListInternal = React.memo((props: {
                 isSharedSession={props.isSharedSession}
                 currentUserId={props.currentUserId}
                 showSenderName={senderVisibility?.get(item.id) ?? false}
+                {...turnHeader}
                 constrainedHeightPx={constrainedHeightPx}
                 refCallback={getRowRefCallback(item.id)}
             />

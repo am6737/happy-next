@@ -2,9 +2,19 @@ import { describe, it, expect, vi } from 'vitest';
 
 vi.mock('@/text', () => ({
     getCurrentLanguage: () => 'en',
+    // Mirrors the `time.duration*` entries of the English translations, which
+    // `formatDuration` composes into one string.
+    t: (key: string, params: { count: number }) => {
+        const units: Record<string, string> = {
+            'time.durationSeconds': 's',
+            'time.durationMinutes': 'm',
+            'time.durationHours': 'h',
+        };
+        return `${params.count}${units[key]}`;
+    },
 }));
 
-import { formatMessageTime } from './messageTime';
+import { formatDuration, formatMessageTime } from './messageTime';
 
 // Fixed "now": Wednesday 2026-05-20 12:00 local time
 const NOW = new Date(2026, 4, 20, 12, 0, 0);
@@ -49,5 +59,26 @@ describe('formatMessageTime', () => {
         const NOON_NOW = new Date(2026, 4, 20, 12, 0, 0);
         const ts = new Date(2026, 4, 20, 0, 0, 0).getTime();
         expect(formatMessageTime(ts, NOON_NOW, 'en')).toBe('00:00');
+    });
+});
+
+describe('formatDuration', () => {
+    it('spells out the units, largest first', () => {
+        expect(formatDuration(0)).toBe('0s');
+        expect(formatDuration(42_000)).toBe('42s');
+        expect(formatDuration(102_000)).toBe('1m 42s');
+        expect(formatDuration(3_600_000 + 5 * 60_000 + 42_000)).toBe('1h 5m 42s');
+    });
+
+    it('leaves empty units out', () => {
+        expect(formatDuration(60_000)).toBe('1m');
+        expect(formatDuration(3_600_000)).toBe('1h');
+        expect(formatDuration(3_600_000 + 42_000)).toBe('1h 42s');
+        expect(formatDuration(3_600_000 + 5 * 60_000)).toBe('1h 5m');
+    });
+
+    it('floors to whole seconds and never goes negative', () => {
+        expect(formatDuration(1_999)).toBe('1s');
+        expect(formatDuration(-5_000)).toBe('0s');
     });
 });

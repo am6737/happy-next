@@ -181,6 +181,9 @@ export const zhHans: TranslationStructure = {
         justNow: '刚刚',
         minutesAgo: ({ count }: { count: number }) => `${count} 分钟前`,
         hoursAgo: ({ count }: { count: number }) => `${count} 小时前`,
+        durationSeconds: ({ count }: { count: number }) => `${count}秒`,
+        durationMinutes: ({ count }: { count: number }) => `${count}分钟`,
+        durationHours: ({ count }: { count: number }) => `${count}小时`,
     },
 
     connect: {
@@ -1954,6 +1957,9 @@ export const zhHans: TranslationStructure = {
         switchedToMode: ({ mode }: { mode: string }) => `已切换到 ${mode} 模式`,
         unknownEvent: '未知事件',
         usageLimitUntil: ({ time }: { time: string }) => `使用限制到 ${time}`,
+        processing: '正在处理',
+        processed: ({ duration }: { duration: string }) => `已处理 ${duration}`,
+        took: ({ duration }: { duration: string }) => `用时 ${duration}`,
         unknownTime: '未知时间',
         confirmOldOption: '发送旧选项？',
         confirmOldOptionMessage: '该选项来自较早的消息，确定要发送吗？',

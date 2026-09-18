@@ -23,6 +23,8 @@ import { useSetting } from "@/sync/storage";
 import { showCopiedToast, showToast } from '@/components/Toast';
 import { formatMessageTime, formatFullMessageTime } from '@/utils/messageTime';
 import { hapticsLight } from './haptics';
+import { TurnHeaderStatus } from './messageTurnTiming';
+import { TurnHeader } from './TurnHeader';
 import { useMessageTts } from '@/hooks/useMessageTts';
 
 export const MessageView = (props: {
@@ -39,6 +41,13 @@ export const MessageView = (props: {
   onFork?: () => void;
   showActionBar?: boolean;
   forkLoading?: boolean;
+  // The turn this row belongs to: `turnStartedAt` undefined = no timing known;
+  // `turnCompletedAt` null = still running. Flat scalars rather than one object
+  // so the list rows stay referentially stable.
+  turnStartedAt?: number | null;
+  turnCompletedAt?: number | null;
+  /** This row opens its turn, so the turn's header sits above it. */
+  isTurnStart?: boolean;
 }) => {
   return (
     <View style={styles.messageContainer} renderToHardwareTextureAndroid={true}>
@@ -57,6 +66,9 @@ export const MessageView = (props: {
           onFork={props.onFork}
           showActionBar={props.showActionBar}
           forkLoading={props.forkLoading}
+          turnStartedAt={props.turnStartedAt}
+          turnCompletedAt={props.turnCompletedAt}
+          isTurnStart={props.isTurnStart}
         />
       </View>
     </View>
@@ -66,6 +78,9 @@ export const MessageView = (props: {
 function MessageActionBar(props: {
   side: 'left' | 'right';
   hovered: boolean;
+  // The newest message keeps its bar on screen on web: it is the row the eye is
+  // already on, whether that is the reply landing or the prompt just sent.
+  isNewestMessage?: boolean;
   createdAt: number;
   onCopy?: () => void;
   onFork?: () => void;
@@ -80,7 +95,8 @@ function MessageActionBar(props: {
   // loading/playing/queued, force the bar visible on web so the spinner /
   // play state stays shown even if the cursor moved away.
   const ttsActive = ttsState !== 'idle';
-  const contentVisible = Platform.OS !== 'web' || props.hovered || !!props.forkLoading || ttsActive;
+  const contentVisible = Platform.OS !== 'web' || props.hovered || !!props.forkLoading || ttsActive
+    || !!props.isNewestMessage;
   return (
     <View
       style={[
@@ -159,6 +175,22 @@ function MessageActionBar(props: {
   );
 }
 
+/**
+ * The line above the row that opens a turn: `已处理 …` while it runs, `用时 …`
+ * once it has. Rows that open no turn (or whose turn we cannot time) get nothing.
+ */
+function turnHeader(props: {
+  isTurnStart?: boolean;
+  turnStartedAt?: number | null;
+  turnCompletedAt?: number | null;
+}): React.ReactElement | null {
+  if (!props.isTurnStart || props.turnStartedAt == null) return null;
+  const status: TurnHeaderStatus = props.turnCompletedAt == null
+    ? { state: 'running', startedAt: props.turnStartedAt }
+    : { state: 'done', startedAt: props.turnStartedAt, completedAt: props.turnCompletedAt };
+  return <TurnHeader status={status} />;
+}
+
 // The hover handlers live on the message container and the action bar is an
 // in-flow child of it. This debounce just adds a small grace period on
 // mouseleave so the bar doesn't flicker out when the cursor briefly crosses
@@ -211,6 +243,9 @@ function RenderBlock(props: {
   onFork?: () => void;
   showActionBar?: boolean;
   forkLoading?: boolean;
+  turnStartedAt?: number | null;
+  turnCompletedAt?: number | null;
+  isTurnStart?: boolean;
 }): React.ReactElement {
   switch (props.message.kind) {
     case 'user-text':
@@ -245,6 +280,9 @@ function RenderBlock(props: {
           onFork={props.onFork}
           showActionBar={props.showActionBar}
           forkLoading={props.forkLoading}
+          turnStartedAt={props.turnStartedAt}
+          turnCompletedAt={props.turnCompletedAt}
+          isTurnStart={props.isTurnStart}
         />
       );
 
@@ -254,6 +292,9 @@ function RenderBlock(props: {
         metadata={props.metadata}
         sessionId={props.sessionId}
         getMessageById={props.getMessageById}
+        turnStartedAt={props.turnStartedAt}
+        turnCompletedAt={props.turnCompletedAt}
+        isTurnStart={props.isTurnStart}
       />;
 
     case 'agent-event':
@@ -415,6 +456,7 @@ function UserTextBlock(props: {
         <MessageActionBar
           side="right"
           hovered={hovered}
+          isNewestMessage={props.isNewestMessage}
           createdAt={props.message.createdAt}
           onCopy={messageText ? handleCopy : undefined}
           onFork={props.onFork}
@@ -436,6 +478,9 @@ function AgentTextBlock(props: {
   onFork?: () => void;
   showActionBar?: boolean;
   forkLoading?: boolean;
+  turnStartedAt?: number | null;
+  turnCompletedAt?: number | null;
+  isTurnStart?: boolean;
 }) {
   const showThinkingMessages = useSetting('showThinkingMessages');
   const [optionsLoadingState, setOptionsLoadingState] = React.useState<OptionsLoadingState>({ loadingIndex: null });
@@ -493,6 +538,7 @@ function AgentTextBlock(props: {
       style={[styles.agentMessageContainer, props.message.isThinking && { opacity: 0.3 }, hasOptions && styles.agentMessageContainerStretch]}
       {...hoverHandlers}
     >
+      {turnHeader(props)}
       <MarkdownView
         markdown={props.message.text}
         sessionId={props.sessionId}
@@ -507,6 +553,7 @@ function AgentTextBlock(props: {
         <MessageActionBar
           side="left"
           hovered={hovered}
+          isNewestMessage={props.isNewestMessage}
           createdAt={props.message.createdAt}
           onCopy={messageText ? handleCopy : undefined}
           onFork={props.onFork}
@@ -569,12 +616,16 @@ function ToolCallBlock(props: {
   metadata: Metadata | null;
   sessionId: string;
   getMessageById?: (id: string) => Message | null;
+  turnStartedAt?: number | null;
+  turnCompletedAt?: number | null;
+  isTurnStart?: boolean;
 }) {
   if (!props.message.tool) {
     return null;
   }
   return (
     <View style={styles.toolContainer}>
+      {turnHeader(props)}
       <ToolView
         tool={props.message.tool}
         metadata={props.metadata}

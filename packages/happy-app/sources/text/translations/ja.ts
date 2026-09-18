@@ -211,6 +211,9 @@ export const ja: TranslationStructure = {
         justNow: 'たった今',
         minutesAgo: ({ count }: { count: number }) => `${count}分前`,
         hoursAgo: ({ count }: { count: number }) => `${count}時間前`,
+        durationSeconds: ({ count }: { count: number }) => `${count}秒`,
+        durationMinutes: ({ count }: { count: number }) => `${count}分`,
+        durationHours: ({ count }: { count: number }) => `${count}時間`,
     },
 
     connect: {
@@ -1984,6 +1987,9 @@ export const ja: TranslationStructure = {
         switchedToMode: ({ mode }: { mode: string }) => `${mode}モードに切り替えました`,
         unknownEvent: '不明なイベント',
         usageLimitUntil: ({ time }: { time: string }) => `${time}まで使用制限中`,
+        processing: '処理中',
+        processed: ({ duration }: { duration: string }) => `経過 ${duration}`,
+        took: ({ duration }: { duration: string }) => `所要時間 ${duration}`,
         unknownTime: '不明な時間',
         confirmOldOption: '古いオプションを送信しますか？',
         confirmOldOptionMessage: 'このオプションは以前のメッセージからのものです。送信してもよろしいですか？',

@@ -1,4 +1,4 @@
-import { getCurrentLanguage } from '@/text';
+import { getCurrentLanguage, t } from '@/text';
 
 function pad2(n: number): string {
     return n < 10 ? `0${n}` : `${n}`;
@@ -74,4 +74,22 @@ export function formatFullMessageTime(
         minute: '2-digit',
         second: '2-digit',
     }).format(new Date(timestamp));
+}
+
+/**
+ * A duration spelled out in words: `42秒`, `1分钟 42秒`, `1小时 5分钟 42秒`
+ * (localized). Empty units are left out, so 1 minute exactly reads `1分钟` rather
+ * than `1分钟 0秒`; a whole-zero duration still says `0秒` rather than nothing.
+ */
+export function formatDuration(ms: number): string {
+    const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    const parts: string[] = [];
+    if (hours > 0) parts.push(t('time.durationHours', { count: hours }));
+    if (minutes > 0) parts.push(t('time.durationMinutes', { count: minutes }));
+    // The seconds are the fallback that keeps the reading non-empty at 0:00.
+    if (seconds > 0 || parts.length === 0) parts.push(t('time.durationSeconds', { count: seconds }));
+    return parts.join(' ');
 }

@@ -11,7 +11,9 @@ export type SessionState = 'disconnected' | 'syncing' | 'thinking' | 'awaiting' 
 
 // How long the optimistic "processing…" indicator may linger without any real signal
 // (thinking / agent message / delivery error / offline) before it lazily expires.
-const AWAITING_RESPONSE_MAX_MS = 120_000;
+// How long the optimistic "awaiting response" marker stays believable on its
+// own, absent any real signal from the CLI.
+export const AWAITING_RESPONSE_MAX_MS = 120_000;
 
 // Fun vibing messages to show when a session is thinking. Randomly pick one each time.
 const vibingMessages = [

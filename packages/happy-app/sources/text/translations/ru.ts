@@ -986,6 +986,9 @@ export const ru: TranslationStructure = {
         justNow: 'только что',
         minutesAgo: ({ count }: { count: number }) => `${count} ${plural({ count, one: 'минуту', few: 'минуты', many: 'минут' })} назад`,
         hoursAgo: ({ count }: { count: number }) => `${count} ${plural({ count, one: 'час', few: 'часа', many: 'часов' })} назад`,
+        durationSeconds: ({ count }: { count: number }) => `${count} ${plural({ count, one: 'секунда', few: 'секунды', many: 'секунд' })}`,
+        durationMinutes: ({ count }: { count: number }) => `${count} ${plural({ count, one: 'минута', few: 'минуты', many: 'минут' })}`,
+        durationHours: ({ count }: { count: number }) => `${count} ${plural({ count, one: 'час', few: 'часа', many: 'часов' })}`,
     },
 
     session: {
@@ -1951,6 +1954,9 @@ export const ru: TranslationStructure = {
         switchedToMode: ({ mode }: { mode: string }) => `Переключено в режим ${mode}`,
         unknownEvent: 'Неизвестное событие',
         usageLimitUntil: ({ time }: { time: string }) => `Лимит использования достигнут до ${time}`,
+        processing: 'Обработка',
+        processed: ({ duration }: { duration: string }) => `Обработано ${duration}`,
+        took: ({ duration }: { duration: string }) => `Заняло ${duration}`,
         unknownTime: 'неизвестное время',
         confirmOldOption: 'Send old option?',
         confirmOldOptionMessage: 'This option is from an earlier message. Are you sure you want to send it?',
