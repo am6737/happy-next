@@ -256,6 +256,9 @@ const stylesheet = StyleSheet.create((theme) => ({
         gap: 12,
         paddingHorizontal: 16,
         paddingTop: 16,
+        // The chips are the last thing in the header, so this is all that separates them from
+        // the first row of the list.
+        paddingBottom: 4,
     },
     filterChip: {
         paddingHorizontal: 12,
