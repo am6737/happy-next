@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { shouldHideMessageInChatList } from './chatListVisibility';
+import { shouldHideMessageInMinimap, shouldHideMessageInChatList } from './chatListVisibility';
 import { AgentTextMessage, UserTextMessage } from '@/sync/typesMessage';
 
 function agentText(overrides: Partial<AgentTextMessage> = {}): AgentTextMessage {
@@ -87,5 +87,53 @@ describe('shouldHideMessageInChatList', () => {
             images: [{ type: 'image', url: 'https://example.com/a.jpg', width: 1568, height: 1400, mimeType: 'image/jpeg' }],
         });
         expect(shouldHideMessageInChatList(withImage, true)).toBe(false);
+    });
+});
+
+describe('shouldHideMessageInMinimap', () => {
+    const summaryText = 'This session is being continued from a previous conversation that ran out of context.';
+
+    it('drops the post-compaction summary the list still shows', () => {
+        const summary = userText(summaryText, { meta: { sentFrom: 'cli', isCompactSummary: true } });
+        expect(shouldHideMessageInChatList(summary, true)).toBe(false);
+        expect(shouldHideMessageInMinimap(summary)).toBe(true);
+    });
+
+    it('keeps ordinary prompts', () => {
+        expect(shouldHideMessageInMinimap(userText('hello'))).toBe(false);
+        // An explicit false must read the same as an absent flag.
+        expect(shouldHideMessageInMinimap(userText('hello', { meta: { isCompactSummary: false } }))).toBe(false);
+    });
+
+    it('ignores the summary wording — only the flag decides', () => {
+        // A user who quotes the summary's opening line is still a landmark.
+        expect(shouldHideMessageInMinimap(userText(summaryText))).toBe(false);
+    });
+
+    it('drops rows the list hides, so no marker points at a row that never renders', () => {
+        expect(shouldHideMessageInMinimap(userText('<local-command-stdout>compacted</local-command-stdout>'))).toBe(true);
+        expect(shouldHideMessageInMinimap(userText(imagePlaceholder('1080x2344', '922x2000', '1.17')))).toBe(true);
+        expect(shouldHideMessageInMinimap(userText('visible prompt', {
+            displayText: '<local-command-stdout>compacted</local-command-stdout>',
+        }))).toBe(true);
+    });
+
+    it('keeps image placeholders that carry an image, matching the list', () => {
+        const withImage = userText(imagePlaceholder('1080x2344', '922x2000', '1.17'), {
+            images: [{ type: 'image', url: 'https://example.com/a.jpg', width: 1568, height: 1400, mimeType: 'image/jpeg' }],
+        });
+        expect(shouldHideMessageInMinimap(withImage)).toBe(false);
+    });
+
+    it('never drops a question landmark', () => {
+        const question = {
+            kind: 'ask-user-question',
+            id: 'question-1',
+            localId: null,
+            createdAt: 0,
+            questions: [{ header: 'Scope', question: 'Which files?' }],
+            answers: null,
+        } as const;
+        expect(shouldHideMessageInMinimap(question)).toBe(false);
     });
 });

@@ -16,6 +16,10 @@ export interface SDKMessage {
 export interface SDKUserMessage extends SDKMessage {
     type: 'user'
     parent_tool_use_id?: string
+    /** Set by Claude Code on the post-compaction summary record, which is otherwise a plain user message. */
+    isCompactSummary?: boolean
+    /** Set by Claude Code on the stream output (in place of isCompactSummary) for client-generated user turns. */
+    isSynthetic?: boolean
     message: {
         role: 'user'
         content: string | Array<{

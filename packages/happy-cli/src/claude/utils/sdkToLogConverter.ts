@@ -109,10 +109,21 @@ export class SDKToLogConverter {
         switch (sdkMessage.type) {
             case 'user': {
                 const userMsg = sdkMessage as SDKUserMessage
+                // The post-compaction summary arrives as an ordinary user message. Claude Code marks
+                // it on the transcript record as isCompactSummary, but the stream we read in remote
+                // mode carries isSynthetic instead and drops isCompactSummary — so accept both and let
+                // downstream see one flag. Every synthetic user message seen on a live 2.1.270 stream
+                // with plain string content has been a compaction summary; the synthetic ones with
+                // block content are image placeholders and slash-command expansions.
+                const isCompactSummary = userMsg.isCompactSummary === true
+                    || (userMsg.isSynthetic === true && typeof userMsg.message.content === 'string')
                 logMessage = {
                     ...baseFields,
                     type: 'user',
-                    message: userMsg.message
+                    message: userMsg.message,
+                    // Carry the flag through so downstream can tell the summary apart from something
+                    // the user typed.
+                    ...(isCompactSummary ? { isCompactSummary: true } : {})
                 }
 
                 // Check if this is a tool result and add mode if available

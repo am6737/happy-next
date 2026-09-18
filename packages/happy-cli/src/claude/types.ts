@@ -23,6 +23,7 @@ export const RawJSONLinesSchema = z.discriminatedUnion("type", [
     type: z.literal("user"),
     isSidechain: z.boolean().optional(),
     isMeta: z.boolean().optional(),
+    isCompactSummary: z.boolean().optional(), // Post-compaction summary record (see apiSession.buildMessageContent)
     uuid: z.string(), // Used in getMessageKey()
     message: z.object({
       content: z.union([z.string(), z.any()]) // Used in sessionScanner.ts

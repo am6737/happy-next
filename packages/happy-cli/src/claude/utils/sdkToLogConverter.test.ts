@@ -415,4 +415,68 @@ describe('SDKToLogConverter', () => {
             expect((logMessage as any).mode).toBe('plan')
         })
     })
+    describe('Compaction summary flag', () => {
+        it('should flag a transcript record carrying isCompactSummary', () => {
+            const sdkMessage: SDKUserMessage = {
+                type: 'user',
+                isCompactSummary: true,
+                message: {
+                    role: 'user',
+                    content: 'This session is being continued from a previous conversation that ran out of context.'
+                }
+            }
+
+            const logMessage = converter.convert(sdkMessage)
+
+            expect((logMessage as any).isCompactSummary).toBe(true)
+        })
+
+        it('should flag the stream shape — synthetic user message with string content', () => {
+            // Remote mode reads Claude Code's stream, which marks the summary as synthetic rather
+            // than as isCompactSummary (verified against a live 2.1.270 stream).
+            const sdkMessage: SDKUserMessage = {
+                type: 'user',
+                isSynthetic: true,
+                message: {
+                    role: 'user',
+                    content: 'This session is being continued from a previous conversation that ran out of context.'
+                }
+            }
+
+            const logMessage = converter.convert(sdkMessage)
+
+            expect((logMessage as any).isCompactSummary).toBe(true)
+        })
+
+        it('should leave an ordinary prompt unflagged', () => {
+            const sdkMessage: SDKUserMessage = {
+                type: 'user',
+                message: {
+                    role: 'user',
+                    content: 'Hello Claude'
+                }
+            }
+
+            const logMessage = converter.convert(sdkMessage)
+
+            expect((logMessage as any).isCompactSummary).toBeUndefined()
+        })
+
+        it('should leave synthetic block messages unflagged', () => {
+            // Image placeholders and slash-command expansions are synthetic too, but they arrive as
+            // content blocks — only the string-content shape is the summary.
+            const sdkMessage: SDKUserMessage = {
+                type: 'user',
+                isSynthetic: true,
+                message: {
+                    role: 'user',
+                    content: [{ type: 'text', text: '[Image: original 1206x2622, displayed at 920x2000.]' }]
+                }
+            }
+
+            const logMessage = converter.convert(sdkMessage)
+
+            expect((logMessage as any).isCompactSummary).toBeUndefined()
+        })
+    })
 })

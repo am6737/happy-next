@@ -12,7 +12,7 @@ import { ConversationMinimapItem } from './ConversationMinimap';
 import { Metadata, Session } from '@/sync/storageTypes';
 import { ChatFooter } from './ChatFooter';
 import { AskUserQuestionMessage, isAskUserQuestionToolCall, Message, MinimapMessage, toAskUserQuestionMessage, UserTextMessage } from '@/sync/typesMessage';
-import { shouldHideMessageInChatList } from './chatListVisibility';
+import { shouldHideMessageInChatList, shouldHideMessageInMinimap } from './chatListVisibility';
 import { layout as appLayout } from './layout';
 import { createScrollButtonVisibilityController } from './scrollButtonVisibilityController';
 import { createProxyScrollIntent } from './proxyScrollIntent';
@@ -584,8 +584,8 @@ const ChatListInternal = React.memo((props: {
 
     // Merge offline-cached landmarks with the loaded ones so the minimap can show prompts and
     // questions that live in the persistent cache but haven't been paged into the list yet. Loaded
-    // messages win on id (they carry an accurate scroll position); compaction markers are hidden to
-    // match the list.
+    // messages win on id (they carry an accurate scroll position); rows the rail leaves out (see
+    // shouldHideMessageInMinimap) are dropped from both sources.
     const minimapItems = React.useMemo<ConversationMinimapItem[]>(() => {
         // Loaded messages always win (they carry the store's id → accurate scroll position + active
         // highlight). A cached entry is dropped if a loaded message matches it by EITHER seq OR
@@ -596,12 +596,13 @@ const ChatListInternal = React.memo((props: {
         const loadedByLocalId = new Set<string>();
         const merged: MinimapMessage[] = [];
         for (const loaded of [...loadedUserMessages.map((item) => item.message), ...loadedQuestionMessages]) {
+            if (shouldHideMessageInMinimap(loaded)) continue;
             merged.push(loaded);
             if (loaded.seq != null) loadedBySeq.add(loaded.seq);
             if (loaded.localId) loadedByLocalId.add(loaded.localId);
         }
         for (const cached of props.minimapCachedUserMessages ?? []) {
-            if (cached.kind === 'user-text' && shouldHideMessageInChatList(cached, showThinkingMessages)) continue;
+            if (shouldHideMessageInMinimap(cached)) continue;
             if (cached.seq != null && loadedBySeq.has(cached.seq)) continue;
             if (cached.localId && loadedByLocalId.has(cached.localId)) continue;
             merged.push(cached);
@@ -612,7 +613,7 @@ const ChatListInternal = React.memo((props: {
         return merged
             .sort((a, b) => a.createdAt - b.createdAt || (a.seq ?? 0) - (b.seq ?? 0))
             .map((message) => ({ message }));
-    }, [props.minimapCachedUserMessages, loadedUserMessages, loadedQuestionMessages, showThinkingMessages]);
+    }, [props.minimapCachedUserMessages, loadedUserMessages, loadedQuestionMessages]);
     const activeMessageIdsRef = useRef<Set<string>>(new Set());
 
     // ---- Virtualizer model ----

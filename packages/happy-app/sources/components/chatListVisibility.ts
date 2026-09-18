@@ -1,4 +1,4 @@
-import { Message } from '@/sync/typesMessage';
+import { Message, MinimapMessage } from '@/sync/typesMessage';
 
 const LOCAL_COMMAND_STDOUT_PATTERN = /^<local-command-stdout>[\s\S]*<\/local-command-stdout>$/;
 
@@ -31,4 +31,27 @@ export function shouldHideMessageInChatList(message: Message, showThinkingMessag
     }
     const text = message.displayText ?? message.text;
     return isCompactionMarkerText(text) || isImagePlaceholderText(text);
+}
+
+/**
+ * Whether the conversation minimap should leave this landmark off its rail.
+ *
+ * The rail only ever points at rows the list actually renders — a marker for a row the list hides
+ * would jump nowhere — so everything `shouldHideMessageInChatList` drops is dropped here too. On
+ * top of that the minimap hides post-compaction summaries: the list keeps them (they are the only
+ * record of what was dropped), but they are not a landmark the user wrote, and a summary can be
+ * thousands of words of prose that would swamp every real prompt around it on the rail.
+ *
+ * `meta.isCompactSummary` is the structural signal — Claude Code stamps it on the summary record
+ * itself and the CLI forwards it — so this never has to pattern-match the summary's wording.
+ */
+export function shouldHideMessageInMinimap(message: MinimapMessage): boolean {
+    if (message.kind === 'ask-user-question') {
+        return false;
+    }
+    if (message.meta?.isCompactSummary === true) {
+        return true;
+    }
+    // Thinking rows are never user rows, so the setting cannot matter here.
+    return shouldHideMessageInChatList(message, true);
 }

@@ -526,6 +526,11 @@ export class ApiSessionClient extends EventEmitter {
             body = this.trimToolResultPayload(body);
         }
 
+        // Claude Code records the post-compaction summary as a user message carrying
+        // isCompactSummary. It is not something the user typed, so the flag rides along in meta and
+        // the app leaves it off the conversation minimap while the list keeps showing it.
+        const isCompactSummary = body.type === 'user' && body.isCompactSummary === true;
+
         // Check if body is a user message (not sidechain or meta)
         if (body.type === 'user' && body.isSidechain !== true && body.isMeta !== true) {
             // Handle string content directly
@@ -542,7 +547,9 @@ export class ApiSessionClient extends EventEmitter {
                         }
                     };
                 }
-                this.maybeSetInitialTitleFromUserText(body.message.content);
+                if (!isCompactSummary) {
+                    this.maybeSetInitialTitleFromUserText(body.message.content);
+                }
                 return {
                     role: 'user',
                     content: {
@@ -550,7 +557,8 @@ export class ApiSessionClient extends EventEmitter {
                         text: body.message.content
                     },
                     meta: {
-                        sentFrom: 'cli'
+                        sentFrom: 'cli',
+                        ...(isCompactSummary ? { isCompactSummary: true } : {})
                     }
                 };
             }
@@ -565,7 +573,9 @@ export class ApiSessionClient extends EventEmitter {
                 // Only treat as user message if we extracted some text (not just tool_results)
                 if (textParts.length > 0) {
                     const joined = textParts.join('\n');
-                    this.maybeSetInitialTitleFromUserText(joined);
+                    if (!isCompactSummary) {
+                        this.maybeSetInitialTitleFromUserText(joined);
+                    }
                     return {
                         role: 'user',
                         content: {
@@ -573,7 +583,8 @@ export class ApiSessionClient extends EventEmitter {
                             text: joined
                         },
                         meta: {
-                            sentFrom: 'cli'
+                            sentFrom: 'cli',
+                            ...(isCompactSummary ? { isCompactSummary: true } : {})
                         }
                     };
                 }

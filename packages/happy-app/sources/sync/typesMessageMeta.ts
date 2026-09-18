@@ -11,7 +11,8 @@ export const MessageMetaSchema = z.object({
     appendSystemPrompt: z.string().nullable().optional(), // Append to system prompt for this message (null = reset)
     allowedTools: z.array(z.string()).nullable().optional(), // Allowed tools for this message (null = reset)
     disallowedTools: z.array(z.string()).nullable().optional(), // Disallowed tools for this message (null = reset)
-    displayText: z.string().optional() // Optional text to display in UI instead of actual message text
+    displayText: z.string().optional(), // Optional text to display in UI instead of actual message text
+    isCompactSummary: z.boolean().optional() // Claude Code's post-compaction summary record; the list shows it, the minimap leaves it off the rail
 });
 
 export type MessageMeta = z.infer<typeof MessageMetaSchema>;

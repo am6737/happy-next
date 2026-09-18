@@ -3569,6 +3569,12 @@ class Sync {
                         continue;
                     }
                     if (normalized.role === 'user') {
+                        // Post-compaction summaries are not minimap landmarks (see
+                        // shouldHideMessageInMinimap) — skip them here rather than let one burn a
+                        // MAX_USER_MESSAGES slot that a real prompt further back would have used.
+                        if (normalized.meta?.isCompactSummary) {
+                            continue;
+                        }
                         collectedUserMessages.push({
                             kind: 'user-text',
                             id: normalized.id,
