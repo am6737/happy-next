@@ -17,7 +17,7 @@ import { Modal } from '@/modal';
 import { useHappyAction } from '@/hooks/useHappyAction';
 import { HappyError } from '@/utils/errors';
 import { storage } from '@/sync/storage';
-import { markSessionRead, markSessionUnread, sync } from '@/sync/sync';
+import { sync } from '@/sync/sync';
 import { leaveSharedSession } from '@/sync/apiSharing';
 import {
     machineForkClaudeSession,
@@ -128,8 +128,16 @@ function useSessionQuickActions(session: Session) {
     // it rewinds both timestamps, which means the question is whether a live completion is left —
     // except on a session shared with me, whose `completionDismissedAt` is the owner's to write,
     // so there the owner's dismissal is one more thing that can leave the dot hidden.
+    //
+    // Mid-task is the other thing that leaves it hidden. `taskCompleted` is stamped when the CLI
+    // goes idle and is never cleared, so a session running its next task still has a live
+    // completion behind it — but the row is showing the pulsing mark for that task, and
+    // `useSessionStatus` reports no unread completion in any of the states that pulse, so a
+    // rewind here would change nothing on screen.
     const isUnread = sessionStatus.hasUnreadCompletion === true;
+    const isWorking = sessionStatus.isPulsing === true;
     const canMarkUnread = hasLiveCompletion(session)
+        && !isWorking
         && (!session.accessLevel || hasUnreadCompletionSince(session, 0));
     const canToggleRead = isUnread || canMarkUnread;
     const [forkingSession, setForkingSession] = React.useState(false);
@@ -325,8 +333,21 @@ function useSessionQuickActions(session: Session) {
         details: () => router.push(`/session/${session.id}/info`),
         renameSession: handleRename,
         toggleRead: () => {
-            if (isUnread) markSessionRead(session.id);
-            else markSessionUnread(session.id);
+            if (isUnread) {
+                sync.markSessionRead(session.id);
+                return;
+            }
+            // Nothing can read as unread while its own screen is open, so leave it the way the
+            // logo does. `markSessionUnread` stops the view being tracked first, which is what
+            // makes the dot stick; this is only about not leaving someone staring at it.
+            if (sync.isViewingSession(session.id)) {
+                try {
+                    router.dismissAll();
+                } catch (_) {
+                    // Already at the root of the stack. The dot still holds.
+                }
+            }
+            sync.markSessionUnread(session.id);
         },
         newSession: handleNewSession,
         delegationHistory: () => router.push(`/orchestrator?controllerSessionId=${encodeURIComponent(session.id)}`),

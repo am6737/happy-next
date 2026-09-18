@@ -214,40 +214,6 @@ function markSessionViewed(sessionId: string) {
     }
 }
 
-/**
- * What the row's context menu drives. There is no stored read flag — the blue dot is derived
- * (`hasUnreadCompletionSince`), so both directions are a matter of moving `lastViewedAt` and the
- * synced `completionDismissedAt` across `taskCompleted`. Callers decide in advance whether there
- * is anything to move across, since a no-op here is invisible to the person who clicked.
- *
- * Reading is exactly what opening the session already does, so it reuses that write.
- */
-export function markSessionRead(sessionId: string) {
-    markSessionViewed(sessionId);
-}
-
-export function markSessionUnread(sessionId: string) {
-    const session = storage.getState().sessions[sessionId];
-
-    // 0 says "never seen", which is below any `taskCompleted` and readable in the stored map.
-    sessionLastViewedAt.set(sessionId, 0);
-    saveSessionLastViewedAt(sessionLastViewedAt);
-
-    // Rewind the synced dismissal too, or the `Math.max` in `hasUnreadCompletionSince` keeps
-    // hiding the dot. Owners only: a session shared with me carries the owner's metadata, which
-    // I cannot write, so there the dot stays hidden if the owner has already dismissed it.
-    if (session?.metadata && session.active && !session.accessLevel) {
-        sessionUpdateMetadataFields(
-            sessionId,
-            session.metadata,
-            { completionDismissedAt: 0 },
-            session.metadataVersion
-        ).catch(() => {
-            // Local state is already rewritten; a later sync may bring the old value back.
-        });
-    }
-}
-
 class Sync {
     // Spawned agents (especially in spawn mode) can take noticeable time to connect.
     // Per-session pacing for all message-list updates to avoid autoscroll races across websocket and fetch paths.
@@ -852,10 +818,7 @@ class Sync {
         if (userInitiated) {
             markSessionViewed(sessionId);
             // Trigger re-render so blue dot disappears on tablet sidebar
-            const s = storage.getState().sessions[sessionId];
-            if (s) {
-                this.applySessions([{ ...s }]);
-            }
+            this.rerenderSessionRow(sessionId);
         }
     }
 
@@ -863,6 +826,66 @@ class Sync {
         this.viewingSessionId = null;
         voiceHooks.onSessionBlur();
     }
+
+    /** Whether the session screen is open on this session. See `markSessionUnread`. */
+    isViewingSession = (sessionId: string): boolean => this.viewingSessionId === sessionId;
+
+    /** Reading is exactly what opening the session already writes. */
+    markSessionRead = (sessionId: string) => {
+        markSessionViewed(sessionId);
+        this.rerenderSessionRow(sessionId);
+    };
+
+    /**
+     * There is no stored read flag — the blue dot is derived (`hasUnreadCompletionSince`) — so
+     * unreading moves `lastViewedAt` and the synced `completionDismissedAt` back across
+     * `taskCompleted`. Callers decide in advance whether there is anything to move across: a no-op
+     * here is invisible to the person who clicked.
+     */
+    markSessionUnread = (sessionId: string) => {
+        const session = storage.getState().sessions[sessionId];
+
+        // 0 says "never seen", which is below any `taskCompleted` and readable in the stored map.
+        sessionLastViewedAt.set(sessionId, 0);
+        saveSessionLastViewedAt(sessionLastViewedAt);
+
+        // Stop counting my own presence as reading it. `markSessionViewed` runs on every update to
+        // the session being viewed, so a session left open re-reads itself before the dot could
+        // show. Whether the screen stays open is the caller's business — see the context menu,
+        // which leaves it.
+        if (this.viewingSessionId === sessionId) {
+            this.onSessionHidden();
+        }
+
+        // Rewind the synced dismissal too, or the `Math.max` in `hasUnreadCompletionSince` keeps
+        // hiding the dot. Owners only: a session shared with me carries the owner's metadata,
+        // which I cannot write, so there the dot stays hidden if the owner has already dismissed
+        // it.
+        if (session?.metadata && session.active && !session.accessLevel) {
+            sessionUpdateMetadataFields(
+                sessionId,
+                session.metadata,
+                { completionDismissedAt: 0 },
+                session.metadataVersion
+            ).catch(() => {
+                // Local state is already rewritten; a later sync may bring the old value back.
+            });
+        }
+
+        this.rerenderSessionRow(sessionId);
+    };
+
+    /**
+     * The dot is derived at render time from `sessionLastViewedAt`, and that map is not reactive,
+     * so moving it changes nothing on screen by itself. A copy with a fresh identity is enough —
+     * the same nudge `onSessionVisible` makes on the way in.
+     */
+    private rerenderSessionRow = (sessionId: string) => {
+        const session = storage.getState().sessions[sessionId];
+        if (session) {
+            this.applySessions([{ ...session }]);
+        }
+    };
 
     private fetchOrchestratorActivity = (sessionId: string) => {
         if (!this.credentials) return;
