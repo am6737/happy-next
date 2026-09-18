@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -17,7 +17,8 @@ vi.mock('./sessionBinding', () => ({
     readStopSnapshot: vi.fn(() => []), writeStopSnapshot: vi.fn(),
 }));
 vi.mock('@/codex/appserver/CodexJsonRpcPeer', () => ({ CodexJsonRpcPeer: vi.fn(() => rpc) }));
-import { executeSessionArchive, syncCodexArchive, restoreCodexSession } from './executeSessionArchive';
+vi.mock('@/ui/logger', () => ({ logger: { debug: vi.fn() } }));
+import { executeSessionArchive, removeCodexSessionIndexEntries, syncCodexArchive, restoreCodexSession } from './executeSessionArchive';
 import { readSessionBinding, listSessionBindings, processIdentity, writeStopSnapshot, type SessionBinding } from './sessionBinding';
 
 describe('executeSessionArchive', () => {
@@ -32,6 +33,20 @@ describe('executeSessionArchive', () => {
         rpc.request.mockResolvedValue({ data: [], nextCursor: null });
     });
     afterEach(() => { if (home.value) rmSync(home.value, { recursive: true, force: true }); });
+    it('removes archived thread names from the legacy Codex session index', async () => {
+        home.value = mkdtempSync(join(tmpdir(), 'happy-archive-index-'));
+        const indexPath = join(home.value, 'session_index.jsonl');
+        const entries = [
+            { id: 'native-1', thread_name: 'Archived', updated_at: '2026-01-01T00:00:00Z' },
+            { id: 'keep', thread_name: 'Keep', updated_at: '2026-01-01T00:00:00Z' },
+            { id: 'native-1', thread_name: 'Renamed', updated_at: '2026-01-01T00:01:00Z' },
+        ];
+        writeFileSync(indexPath, entries.map(entry => JSON.stringify(entry)).join('\n') + '\n');
+
+        await removeCodexSessionIndexEntries(home.value, ['native-1']);
+
+        expect(readFileSync(indexPath, 'utf8')).toBe(`${JSON.stringify(entries[1])}\n`);
+    });
     it('restores native history after worktree cleanup using a stable cwd and the original Codex home', async () => {
         home.value = mkdtempSync(join(tmpdir(), 'happy-archive-cwd-'));
         const removedCwd = join(home.value, 'deleted-worktree');

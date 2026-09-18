@@ -1,13 +1,50 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, statSync } from 'node:fs';
+import { mkdirSync, readFileSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { configuration } from '@/configuration';
 import { CodexJsonRpcPeer } from '@/codex/appserver/CodexJsonRpcPeer';
 import { CODEX_PACKAGE } from '@/codex/package';
 import { readSessionBinding, listSessionBindings, isBindingRunning, processIdentity, readStopSnapshot, writeStopSnapshot, type SessionBinding } from './sessionBinding';
+import { atomicFileWrite } from '@/utils/fileAtomic';
+import { logger } from '@/ui/logger';
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+/**
+ * Older Codex session pickers use session_index.jsonl even though app-server archives
+ * the rollout and state-db row. Remove stale names so an archived thread cannot be
+ * resurrected in the picker after Codex restarts.
+ */
+export async function removeCodexSessionIndexEntries(codexHome: string, threadIds: readonly string[]): Promise<void> {
+    if (!threadIds.length) return;
+    const indexPath = join(codexHome, 'session_index.jsonl');
+    let contents: string;
+    try {
+        contents = readFileSync(indexPath, 'utf8');
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+        throw error;
+    }
+    const ids = new Set(threadIds);
+    let removed = false;
+    const remaining = contents.split('\n').filter(line => {
+        if (!line.trim()) return false;
+        try {
+            const entry = JSON.parse(line) as { id?: unknown };
+            if (typeof entry.id === 'string' && ids.has(entry.id)) {
+                removed = true;
+                return false;
+            }
+        } catch {
+            // Keep malformed entries intact; Codex will handle them on its next scan.
+        }
+        return true;
+    }).join('\n');
+    if (!removed) return;
+    // split/join above means `remaining` has no trailing newline; re-add one for the writer.
+    await atomicFileWrite(indexPath, `${remaining}\n`, 0o600);
+}
 
 export async function stopBoundSession(binding: SessionBinding, signal?: AbortSignal): Promise<void> {
     signal?.throwIfAborted();
@@ -65,10 +102,11 @@ export async function syncCodexArchive(binding: SessionBinding, archived: boolea
             cwd = join(configuration.happyHomeDir, 'archive-runtime');
             mkdirSync(cwd, { recursive: true, mode: 0o700 });
         }
+        const codexHome = binding.codexHome ? resolve(binding.cwd, binding.codexHome) : join(homedir(), '.codex');
         await peer.spawn('npx', ['-y', binding.codexPackage ?? CODEX_PACKAGE, 'app-server'], {
             cwd,
             signal: controller.signal,
-            env: { CODEX_HOME: binding.codexHome ? resolve(binding.cwd, binding.codexHome) : join(homedir(), '.codex') },
+            env: { CODEX_HOME: codexHome },
         });
         // Persist the native helper before issuing side effects, so a replacement daemon
         // can stop an orphaned helper before reconciling the same threads.
@@ -103,6 +141,14 @@ export async function syncCodexArchive(binding: SessionBinding, archived: boolea
                             other.nativeSessionIds.includes(threadId) && !other.emptyNativeSessionIds?.includes(threadId))) continue;
                     throw error;
                 }
+            }
+        }
+        if (archived) {
+            try {
+                await removeCodexSessionIndexEntries(codexHome, binding.nativeSessionIds);
+            } catch (error) {
+                // Native archive already succeeded; stale index cleanup is best effort.
+                logger.debug('[CodexArchive] Stale session index cleanup failed', error);
             }
         }
     } finally {
