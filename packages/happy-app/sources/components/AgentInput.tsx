@@ -15,7 +15,7 @@ import { AgentInputAutocomplete } from './AgentInputAutocomplete';
 import { FloatingOverlay } from './FloatingOverlay';
 import { TextInputState, MultiTextInputHandle } from './MultiTextInput';
 import { applySuggestion } from './autocomplete/applySuggestion';
-import { resolveEscapeAbort, shouldSendOnEnter } from './agentInputKeyboard';
+import { ABORT_ESCAPE_WINDOW_MS, resolveEscapeAbort, shouldSendOnEnter } from './agentInputKeyboard';
 import { GitStatusBadge, useHasLoadedGitStatus } from './GitStatusBadge';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { useSetting } from '@/sync/storage';
@@ -660,6 +660,41 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
     const shakerRef = React.useRef<ShakeInstance>(null);
     // Timestamp of the Escape press that armed the double-press abort, 0 when disarmed
     const escapeAbortArmedAtRef = React.useRef(0);
+    // Mirrors the armed gesture for rendering: the stop icon hides until the window lapses
+    const [isAbortArmed, setIsAbortArmed] = React.useState(false);
+    const escapeAbortTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const disarmEscapeAbort = React.useCallback(() => {
+        escapeAbortArmedAtRef.current = 0;
+        if (escapeAbortTimerRef.current) {
+            clearTimeout(escapeAbortTimerRef.current);
+            escapeAbortTimerRef.current = null;
+        }
+        setIsAbortArmed(false);
+    }, []);
+
+    const armEscapeAbort = React.useCallback((now: number) => {
+        escapeAbortArmedAtRef.current = now;
+        setIsAbortArmed(true);
+        if (escapeAbortTimerRef.current) {
+            clearTimeout(escapeAbortTimerRef.current);
+        }
+        escapeAbortTimerRef.current = setTimeout(disarmEscapeAbort, ABORT_ESCAPE_WINDOW_MS);
+    }, [disarmEscapeAbort]);
+
+    // A finished turn ends the gesture, and unmount must not leave a timer behind
+    React.useEffect(() => {
+        if (!props.isBusy) {
+            disarmEscapeAbort();
+        }
+    }, [props.isBusy, disarmEscapeAbort]);
+
+    React.useEffect(() => () => {
+        if (escapeAbortTimerRef.current) {
+            clearTimeout(escapeAbortTimerRef.current);
+        }
+    }, []);
+
     const inputRef = React.useRef<MultiTextInputHandle>(null);
 
     const { dropZoneRef, isDragging } = useWebImageDrop({
@@ -880,9 +915,11 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
             now: escapeAbortNow,
         });
         if (escapeAbort !== 'ignore') {
-            escapeAbortArmedAtRef.current = escapeAbort === 'arm' ? escapeAbortNow : 0;
             if (escapeAbort === 'abort') {
+                disarmEscapeAbort();
                 handleAbortPress();
+            } else {
+                armEscapeAbort(escapeAbortNow);
             }
             return true;
         }
@@ -918,7 +955,7 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
 
         }
         return false; // Key was not handled
-    }, [suggestions, moveUp, moveDown, selected, handleSuggestionSelect, props.isBusy, props.onAbort, isAborting, handleAbortPress, agentInputEnterToSend, resolveSendSnapshot, props.onSend, props.permissionMode, props.onPermissionModeChange, props.isSending, props.isSendDisabled, permissionModeOptions]);
+    }, [suggestions, moveUp, moveDown, selected, handleSuggestionSelect, props.isBusy, props.onAbort, isAborting, handleAbortPress, armEscapeAbort, disarmEscapeAbort, agentInputEnterToSend, resolveSendSnapshot, props.onSend, props.permissionMode, props.onPermissionModeChange, props.isSending, props.isSendDisabled, permissionModeOptions]);
 
     const connectionStatusIndicator = props.connectionStatus ? (
         <>
@@ -1854,11 +1891,15 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                                 ]}
                                             />
                                         ) : showStopButton ? (
-                                            <FontAwesome6
-                                                name="stop"
-                                                size={14}
-                                                color={theme.colors.button.primary.tint}
-                                            />
+                                            // Armed by the first Escape: the button goes blank
+                                            // until the double press lands or the window lapses
+                                            isAbortArmed ? null : (
+                                                <FontAwesome6
+                                                    name="stop"
+                                                    size={14}
+                                                    color={theme.colors.button.primary.tint}
+                                                />
+                                            )
                                         ) : props.onMicPress && !props.isMicActive ? (
                                             <Image
                                                 source={require('@/assets/images/icon-voice-white.png')}
