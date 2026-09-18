@@ -451,6 +451,8 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
     const isCodex = props.metadata?.flavor === 'codex' || props.agentType === 'codex';
     const isGemini = props.metadata?.flavor === 'gemini' || props.agentType === 'gemini';
     const isClaude = !isCodex && !isGemini;
+    // Vendor mark beside the model label. Claude is the fallback for sessions without a flavor.
+    const agentFlavorKey: keyof typeof agentFlavorIcons = isCodex ? 'codex' : isGemini ? 'gemini' : 'claude';
 
     const permissionModeOptions: PermissionMode[] = isCodex
         ? ['default', 'read-only', 'on-failure', 'full-auto']
@@ -1509,14 +1511,25 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                         }}>
                             {props.onModelModeChange && (
                                 <Pressable hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }} onPress={() => { hapticsLight(); setShowSettings(prev => prev === 'model' ? false : 'model'); }} style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}>
-                                    <Text style={{
-                                        fontSize: 11,
-                                        color: theme.colors.textSecondary,
-                                        ...Typography.default()
-                                    }}>
-                                        {currentModelLabel}
-                                        {props.fastMode && <>{' '}<MaterialCommunityIcons name="lightning-bolt" size={11} color={FAST_MODE_ICON_COLOR} /></>}
-                                    </Text>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                        {/* The model labels are vendor-less ("5.4", "3.8 Flash"), so the mark
+                                            sits here to say whose model this session runs. Not pressable on its
+                                            own - the vendor of a session cannot change. */}
+                                        <Image
+                                            source={agentFlavorIcons[agentFlavorKey]}
+                                            style={{ width: 12, height: 12 }}
+                                            contentFit="contain"
+                                            tintColor={agentFlavorKey === 'codex' ? theme.colors.textSecondary : undefined}
+                                        />
+                                        <Text style={{
+                                            fontSize: 11,
+                                            color: theme.colors.textSecondary,
+                                            ...Typography.default()
+                                        }}>
+                                            {currentModelLabel}
+                                            {props.fastMode && <>{' '}<MaterialCommunityIcons name="lightning-bolt" size={11} color={FAST_MODE_ICON_COLOR} /></>}
+                                        </Text>
+                                    </View>
                                 </Pressable>
                             )}
                             {props.permissionMode && (
