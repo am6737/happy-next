@@ -116,6 +116,41 @@ export const PRICING = {
     }
 } as const;
 
+/** Standard per-million-token rates for one model. */
+type ModelPricing = {
+    readonly input: number;
+    readonly output: number;
+    readonly cache_write: number;
+    readonly cache_read: number;
+};
+
+/**
+ * Fast mode (research preview) serves Claude Opus 5 and Claude Opus 4.8 at a
+ * premium rate across the full context window — 2x the standard Opus price.
+ * Prompt-caching multipliers apply on top. Opus 4.7 rejects fast mode and
+ * Opus 4.6 ignores it, so both stay on standard pricing.
+ * Source: https://platform.claude.com/docs/en/about-claude/pricing#fast-mode-pricing
+ */
+const FAST_MODE_PRICING: ModelPricing = {
+    input: 10.0,
+    output: 50.0,
+    cache_write: 12.50,
+    cache_read: 1.00
+};
+
+/** A trailing `-fast` marks a fast-mode request; a date suffix may follow it. */
+const FAST_MODE_SUFFIX = /-fast(?:-\d{8}|-\d{4}-\d{2}-\d{2})?$/;
+
+/** Fast mode is served only by Claude Opus 5 and Claude Opus 4.8. */
+const FAST_MODE_BASE_MODELS = ['claude-opus-5', 'claude-opus-4-8', 'claude-4.8-opus'];
+
+/** Premium rates for a fast-mode model id, or undefined for a standard model. */
+function resolveFastModePricing(modelId: string): ModelPricing | undefined {
+    if (!FAST_MODE_SUFFIX.test(modelId)) return undefined;
+    const base = modelId.replace(FAST_MODE_SUFFIX, '');
+    return FAST_MODE_BASE_MODELS.some((model) => base.includes(model)) ? FAST_MODE_PRICING : undefined;
+}
+
 export type ModelId = keyof typeof PRICING;
 
 // Default to Sonnet 3.5 if unknown
@@ -127,7 +162,8 @@ const DEFAULT_MODEL = 'claude-3-5-sonnet-20241022';
  * @param modelId - Model ID (optional, defaults to Sonnet 3.5)
  */
 export function calculateCost(usage: Usage, modelId?: string): { total: number, input: number, output: number } {
-    let pricing = PRICING[modelId as ModelId];
+    const id = typeof modelId === 'string' ? modelId : '';
+    let pricing: ModelPricing | undefined = resolveFastModePricing(id) ?? PRICING[id as ModelId];
 
     // Fallback if model not found
     if (!pricing) {
