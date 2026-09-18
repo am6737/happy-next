@@ -1,5 +1,20 @@
 # Changelog
 
+## Version 25 - 2026-09-18
+
+Happy Next v2.11.0 reworks the session list — rename, read/unread, and a scannable color bar — and times every assistant turn above its reply. Questions and HTML previews now appear on the conversation minimap, in-progress answers survive as drafts, and Happy CLI is updated to v0.9.0 with Codex v0.155.0.
+
+- Sessions: rename a session, or mark it read or unread, from its context menu
+- Sessions: draw the color marker as a bar down the row edge, give every session state a mark in the compact list, and remember the compact list per platform
+- Sessions: stop offering a new session from a session shared with you, let recipients of a shared session upload images, and name the real reason a message failed to send
+- Conversation: time each assistant turn above its reply, counting up while the turn runs
+- Minimap: mark AskUserQuestion calls and HTML previews, and keep compaction summaries off the rail
+- Drafts: keep in-progress AskUserQuestion answers so they survive scrolling away
+- Tools: preview images that file-reading tools open, and let HTML previews read a document from a file path
+- GitHub: use Octicons for lists and keep the repository list cached
+- Appearance: hide thinking and image placeholder rows, and default "show thinking messages" to off
+- CLI: Happy CLI v0.9.0 bundles Codex v0.155.0, and Claude fast-mode cost estimates are corrected
+
 ## Version 24 - 2026-09-12
 
 Happy Next v2.10.1 improves DooTask sign-in and cross-device connection sync, and adds a quick new-session action to desktop project headers. It also includes the GitHub workflows, safer file previews, and downloads introduced in v2.10.0.

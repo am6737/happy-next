@@ -143,6 +143,7 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Connect your GitHub account and browse repositories, issues, and pull requests
 - Create, comment on, close, and reopen issues and pull requests from the app
 - Start an AI session with issue or pull request context, and return to linked sessions from the detail page
+- GitHub lists use Octicons, and the repository list is cached locally so returning to it is instant
 
 ### Multi-Repo Worktree Workspaces
 - Create, switch, and archive multi-repo workspaces from the app
@@ -171,6 +172,7 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Access control with view, edit, and admin permission levels
 - "All / Shared with me / Shared by me" filter tabs and share indicator in session list
 - Public share web viewer for link-based access, with paginated message loading so long shared conversations open faster
+- Recipients of a shared session can upload chat images, and a failed send names the real reason
 
 ### OpenClaw Gateway
 - Connect to external AI machines via relay tunnel or direct WebSocket
@@ -251,6 +253,15 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Long user messages (>20k characters) collapse to a preview with a Show More toggle; text selection inside messages on web is fixed
 - Installed Codex skills appear in slash-command autocomplete; short-screen empty states and initial web-message layout are more reliable
 - Codex interactive questions support choices, custom Other values, free-form text, and masked sensitive answers
+- Session rename and mark-as-read / mark-as-unread from the session context menu, with the acting row ringed so the menu's target stays unambiguous
+- Session color markers are drawn as a bar down the row edge, so a column of them can be scanned and unmarked rows reserve no space; the compact list now marks every session state
+- Compact list view is stored per platform, so the denser desktop list and the mobile list keep their own setting
+- A new session is no longer offered from a session shared with you
+- Assistant turns carry a timer above the reply — counting up while the turn runs and reading as a duration once it settles (hover on web, tap on native)
+- The conversation minimap marks AskUserQuestion calls and HTML previews, and keeps compaction summaries off the rail
+- In-progress AskUserQuestion answers survive scrolling away, new messages, and reloads as drafts
+- Images opened by file-reading tools render as previews, and `preview_html` can read a document from a file path
+- Thinking and image placeholder rows are hidden, and "show thinking messages" now defaults to off for new users
 
 ### CLI
 - `happy update` self-upgrade, `happy --version` with all agent versions
@@ -262,7 +273,9 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Switching model or toggling plan mode hot-swaps on the already-warm Claude subprocess instead of cold-restarting, so changes apply instantly mid-session
 - Switching a session from remote back to local cleans up terminal stdin so leftover raw-mode input no longer leaks into the terminal
 - Multiline skill metadata parses correctly, and enabled Codex plugin skills are discovered consistently
-- Happy CLI v0.8.0 bundles Codex v0.154.0 with current App-Server interaction support
+- Happy CLI v0.9.0 bundles Codex v0.155.0 with current App-Server interaction support
+- Cost estimates bill Claude fast mode (Opus 5 and Opus 4.8) at its premium rate
+- Stale archived Codex session index entries are cleaned up
 - Resume Codex sessions from a scrolling picker, by session ID, or from the latest session, with working-directory selection
 - Codex exits cleanly without leaving the terminal hanging
 

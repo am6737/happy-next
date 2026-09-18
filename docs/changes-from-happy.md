@@ -121,6 +121,7 @@ The original Happy only supported Claude Code. Happy Next treats Claude Code, Co
 - **Connected repositories**: connect your GitHub account and browse repositories, issues, and pull requests
 - **Issue and pull request workflows**: create, comment on, close, and reopen work items from the app
 - **Linked AI sessions**: start a session with issue or pull request context, then return to associated sessions from the detail page
+- **Octicons and cached lists**: GitHub lists use Octicons, and the repository list is cached locally so returning to it is instant
 
 ## Voice Assistant (Happy Voice)
 
@@ -194,6 +195,7 @@ Share AI coding sessions with others through direct invites or public links, wit
 - **Permission-aware UI**: input bar, voice button, and session actions adapt to access level
 - **Server-side access control** module with permission validation for messages, RPC calls, and voice
 - **Access logging** for public share views
+- **Shared-session image uploads**: recipients of a session shared with them can upload chat images
 
 ## OpenClaw Integration
 
@@ -338,6 +340,17 @@ Extensive improvements to the chat and session management experience.
 - **Generic 'other' tool block**: unrecognized tool calls render with a dynamic title and icon instead of an empty placeholder
 - **Agent event ANSI strip**: agent event messages strip ANSI escape codes from child-CLI stderr so subprocess banner color sequences no longer leak into the chat as raw `[90m…[0m`
 - **iOS modal reliability**: image viewing waits for the keyboard to dismiss, and the duplicate-session sheet no longer leaves a white overlay when opened with the keyboard visible
+- **Session context menu actions**: rename a session, or mark it read or unread, from the session menu (web right-click, native long-press); the acting row carries a ring and a wash so the menu's target stays unambiguous
+- **Session color marker as an edge bar**: the marker is a 4dp bar down the row's leading edge, shared by the flat compact list, the grouped rows, and the session cards, so a column of markers can be scanned and an unmarked row reserves no space
+- **Every session state marked in the compact list**: the compact row is a single line with no status text, so `syncing` and `awaiting` — the two states that mean the session is working — no longer fall through to a blank spacer, and a disconnected session gets a hollow ring rather than sharing the idle grey fill
+- **Compact list view per platform**: `compactSessionViewDesktop` (default on) and `compactSessionViewMobile` (default off) let the denser desktop list and the mobile list keep their own setting; the legacy flag migrates to the desktop setting as-is, including an explicit "off"
+- **Assistant turn timing**: each assistant turn carries a status line above its first row — counting up while the turn runs, reading as a duration once it settles, with the exact start and end on hover (web) or tap (native); a reply from before the app was open still shows its duration
+- **Minimap landmarks**: AskUserQuestion calls and HTML previews are landmarks on the conversation rail with a hover preview, and post-compaction summaries are kept off the rail so they cannot swamp the real prompts around them
+- **AskUserQuestion drafts**: in-progress answers — ticks and typed "Other" text — survive scrolling the row out of the window, a stream of new messages, and a message-syncing reload, and are aged out after 7 days
+- **File-reading tool image previews**: images opened by file-reading tools render as previews
+- **`preview_html` from a file path**: the tool takes `filePath` as an alternative to an inline document — the CLI reads the file on the machine that owns it and folds the contents into the tool call args, so previews survive offline, archived, and shared sessions
+- **New session requires ownership**: "Start a session in this directory" is no longer offered from a session shared with you, on the context menu, the directory header, the session info screen, or the session header
+- **Thinking rows hidden**: thinking and image placeholder rows are hidden, and "show thinking messages" now defaults to off for new users
 
 ## CLI Improvements
 
@@ -351,6 +364,7 @@ The CLI (`happy-next-cli`) received substantial upgrades.
 - **MCP config centralization** with per-agent adapter pattern (Claude HTTP, Codex stdio, Gemini HTTP)
 - **Worktree detection** using native git instead of hardcoded path matching
 - **Accurate cost calculation** for Claude models, including corrected rate matching for Opus 4.5-4.8 and Haiku model IDs
+- **Fast mode cost**: fast mode bills at $10/$50 per MTok across the full context window, so a `-fast` model id no longer falls through to the standard Opus rate and under-reports by half; Opus 4.7 and 4.6 keep standard rates
 - **Shell command injection fix** with unified escaping
 - **Settings persistence**: "don't ask again" for tool approvals saved to `settings.local.json`
 - **Session title management**: `change_title` tool with lock support
@@ -361,7 +375,7 @@ The CLI (`happy-next-cli`) received substantial upgrades.
 - **Latest CLI version** fetched from npm instead of hardcoded minimum
 - **Daemon auto-start on boot**: `happy daemon enable` / `happy daemon disable`
 - **Daemon restart command**: restart the daemon without manual kill
-- **Happy CLI v0.8.0 with Codex v0.154.0**: current App-Server interaction support and fast mode
+- **Happy CLI v0.9.0 with Codex v0.155.0**: current App-Server interaction support and fast mode
 - **Codex session resume**: select from a scrolling session picker, resume by ID or continue the latest session, and choose the working directory
 - **Clean Codex exit**: avoid leaving the terminal hanging when a session ends
 - **Attribution setting**: new setting to control commit attribution, default off
@@ -418,6 +432,7 @@ Over 255 bug fixes landed. The following are grouped by area.
 - Harden message send on flaky networks
 - Suppress draft restore while a send is in flight
 - Stop the sessions list cache from resurrecting drafts you've already sent
+- Name the real reason a message failed to send
 
 ### Unread Blue Dot Indicator
 - Fix blue dot not showing for offline sessions
@@ -450,6 +465,7 @@ Over 255 bug fixes landed. The following are grouped by area.
 - Fix Gemini MCP tool registration failure
 - Fix Codex icon invisible in dark mode
 - Fix sub-agent messages overwriting session model metadata
+- Remove stale archived session index entries
 
 ### Markdown Rendering
 - Fix table horizontal scroll and row height measurement
@@ -510,6 +526,7 @@ Over 255 bug fixes landed. The following are grouped by area.
 - Fix divider display in sharing dialogs
 - Remove backoff retry from sharing API, fix 403 log spam
 - Allow shared users to make RPC calls to session CLI
+- Allow shared-session recipients to upload chat images
 - Restrict session info actions by access level
 - Hide input and voice button for view-only shared users
 
