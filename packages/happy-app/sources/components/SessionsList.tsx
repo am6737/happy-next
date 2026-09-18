@@ -873,15 +873,19 @@ const SessionItem = React.memo(({ session, selected, isFirst, isLast, isSingle, 
         return getSessionAvatarId(session);
     }, [session]);
 
+    // The row's corners where it ends a group. The container that clips it rounds at the same
+    // radii, so the context-menu ring has to be rounded to match or it gets notched.
+    const rowShape = isSingle ? styles.sessionItemSingle :
+        isFirst ? styles.sessionItemFirst :
+            isLast ? styles.sessionItemLast : {};
+
     const itemContent = (
-        <SessionContextMenu session={session}>
+        <SessionContextMenu session={session} highlightShape={rowShape}>
             <Pressable
                 style={[
                 compactSessionView ? styles.sessionItemCompact : styles.sessionItem,
                 selected && styles.sessionItemSelected,
-                isSingle ? styles.sessionItemSingle :
-                    isFirst ? styles.sessionItemFirst :
-                        isLast ? styles.sessionItemLast : {}
+                rowShape
             ]}
             onPress={() => {
                 navigateToSession(session.id);

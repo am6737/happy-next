@@ -28,6 +28,9 @@ import { SessionContextMenu } from './SessionContextMenu';
 import { SessionMarkerBar } from './SessionColorMarker';
 import { SessionProjectGroup, useCollapsedSessionProjectGroups, useSessionProjectGroups } from '@/hooks/useSessionProjectGroups';
 
+// Rounds the project card, and with it the first and last row inside it.
+const CARD_RADIUS = Platform.select({ ios: 10, default: 16 });
+
 const stylesheet = StyleSheet.create((theme, runtime) => ({
     container: {
         backgroundColor: theme.colors.groupped.background,
@@ -37,13 +40,27 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
         backgroundColor: theme.colors.surface,
         marginBottom: 8,
         marginHorizontal: Platform.select({ ios: 16, default: 12 }),
-        borderRadius: Platform.select({ ios: 10, default: 16 }),
+        borderRadius: CARD_RADIUS,
         overflow: 'hidden',
         shadowColor: theme.colors.shadow.color,
         shadowOffset: { width: 0, height: 0.33 },
         shadowOpacity: theme.colors.shadow.opacity,
         shadowRadius: 0,
         elevation: 1,
+    },
+    // The card clips its own rounded corners, so its first and last rows carry the same radius: the
+    // context-menu ring is drawn on the row, and a square ring there loses its corners to the clip.
+    // Middle rows are square-edged and need nothing.
+    cardRowFirst: {
+        borderTopLeftRadius: CARD_RADIUS,
+        borderTopRightRadius: CARD_RADIUS,
+    },
+    cardRowLast: {
+        borderBottomLeftRadius: CARD_RADIUS,
+        borderBottomRightRadius: CARD_RADIUS,
+    },
+    cardRowSingle: {
+        borderRadius: CARD_RADIUS,
     },
     sectionHeader: {
         paddingTop: 12,
@@ -349,6 +366,10 @@ export function ActiveSessionsGroup({ sessions, selectedSessionId, registerSessi
                 const collapseKey = projectGroup.collapseKey;
                 // Get the first machine name from this project's machines
                 const machineEntries = Array.from(projectGroup.machines.entries());
+                // The card is one rounded box spanning every machine in the project, so the rows
+                // the card rounds are its first and last overall — see `cardRowFirst`.
+                const cardMachines = [...machineEntries]
+                    .sort(([, machineA], [, machineB]) => machineA.machineName.localeCompare(machineB.machineName));
                 const firstMachine = machineEntries[0]?.[1];
                 const machineName = projectGroup.machines.size === 1
                     ? firstMachine?.machineName
@@ -391,22 +412,23 @@ export function ActiveSessionsGroup({ sessions, selectedSessionId, registerSessi
                         {/* Card with just the sessions */}
                         {!collapsedGroups[collapseKey] && <View style={styles.projectCard}>
                             {/* Sessions grouped by machine within the card */}
-                            {Array.from(projectGroup.machines.entries())
-                                .sort(([, machineA], [, machineB]) => machineA.machineName.localeCompare(machineB.machineName))
-                                .map(([machineId, machineGroup]) => (
-                                    <View key={`${projectPath}-${machineId}`}>
-                                        {machineGroup.sessions.map((session, index) => (
-                                            <CompactSessionRow
-                                                key={session.id}
-                                                session={session}
-                                                selected={selectedSessionId === session.id}
-                                                registerSessionRowRef={registerSessionRowRef}
-                                                showBorder={index < machineGroup.sessions.length - 1 ||
-                                                    Array.from(projectGroup.machines.keys()).indexOf(machineId) < projectGroup.machines.size - 1}
-                                            />
-                                        ))}
-                                    </View>
-                                ))}
+                            {cardMachines.map(([machineId, machineGroup], machineIndex) => (
+                                <View key={`${projectPath}-${machineId}`}>
+                                    {machineGroup.sessions.map((session, index) => (
+                                        <CompactSessionRow
+                                            key={session.id}
+                                            session={session}
+                                            selected={selectedSessionId === session.id}
+                                            registerSessionRowRef={registerSessionRowRef}
+                                            showBorder={index < machineGroup.sessions.length - 1 ||
+                                                machineIndex < cardMachines.length - 1}
+                                            isCardFirst={machineIndex === 0 && index === 0}
+                                            isCardLast={machineIndex === cardMachines.length - 1
+                                                && index === machineGroup.sessions.length - 1}
+                                        />
+                                    ))}
+                                </View>
+                            ))}
                         </View>}
                     </View>
                 );
@@ -416,13 +438,19 @@ export function ActiveSessionsGroup({ sessions, selectedSessionId, registerSessi
 }
 
 // Compact session row component with status line
-const CompactSessionRow = React.memo(({ session, selected, showBorder, registerSessionRowRef }: {
+const CompactSessionRow = React.memo(({ session, selected, showBorder, isCardFirst, isCardLast, registerSessionRowRef }: {
     session: Session;
     selected?: boolean;
     showBorder?: boolean;
+    isCardFirst?: boolean;
+    isCardLast?: boolean;
     registerSessionRowRef?: (sessionId: string, ref: View | null) => void;
 }) => {
     const styles = stylesheet;
+    // Both, when the card holds this row alone.
+    const cardRowShape = isCardFirst && isCardLast ? styles.cardRowSingle :
+        isCardFirst ? styles.cardRowFirst :
+            isCardLast ? styles.cardRowLast : undefined;
     const sessionStatus = useSessionStatus(session);
     const hasDraft = useSessionHasDraft(session.id);
     const sessionName = getSessionName(session);
@@ -509,7 +537,7 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder, registerS
     }, [session]);
 
     const itemContent = (
-        <SessionContextMenu session={session}>
+        <SessionContextMenu session={session} highlightShape={cardRowShape}>
             <Pressable
                 style={[
                 styles.sessionRow,

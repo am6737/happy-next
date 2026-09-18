@@ -1,5 +1,5 @@
 import React from 'react';
-import { Platform, Pressable, useWindowDimensions, View } from 'react-native';
+import { Platform, Pressable, StyleProp, useWindowDimensions, View, ViewStyle } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { AntDesign, Ionicons } from '@expo/vector-icons';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
@@ -387,7 +387,13 @@ function useSessionQuickActions(session: Session) {
     };
 }
 
-export function SessionContextMenu({ session, children }: { session: Session; children: React.ReactNode }) {
+export function SessionContextMenu({ session, children, highlightShape }: {
+    session: Session;
+    children: React.ReactNode;
+    // The row's corner radii, where the list rounds and clips its first and last rows. Left out,
+    // the ring's corners are square and the clip shaves them off.
+    highlightShape?: StyleProp<ViewStyle>;
+}) {
     const { theme } = useUnistyles();
     const { width, height } = useWindowDimensions();
     const safeArea = useSafeAreaInsets();
@@ -413,7 +419,7 @@ export function SessionContextMenu({ session, children }: { session: Session; ch
     // Rendered over `children` here rather than set on the row, so every list gets it without
     // having to know the menu exists. `pointerEvents: 'none'` keeps the row clickable underneath.
     const highlight = menuOpen
-        ? <View pointerEvents="none" style={styles.highlightOverlay} />
+        ? <View pointerEvents="none" style={[styles.highlightOverlay, highlightShape]} />
         : null;
 
     const selectMarkerColor = React.useCallback((color: SessionMarkerColor | null) => {
