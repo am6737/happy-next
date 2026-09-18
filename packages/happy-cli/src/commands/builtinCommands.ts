@@ -33,10 +33,14 @@ export function buildPreviewHtmlPrompt(input: string = '$ARGUMENTS'): string {
 ${target}
 
 Produce a complete, self-contained HTML document — all CSS and JS inlined, no external network
-resources — and call the \`preview_html\` tool with it so it renders in the client app.
+resources — and call the \`preview_html\` tool so it renders in the client app.
 
-- If the input is a path to an existing HTML file, read that file and preview its contents.
-- Otherwise treat the input as a description/spec and build the page to match it.
+- If the input is a path to an existing HTML file, pass it as \`filePath\`; the tool reads the file
+  for you.
+- If you write the document to a file, pass that path as \`filePath\` rather than repeating the whole
+  document in the tool call.
+- Otherwise treat the input as a description/spec and build the page to match it, then preview it
+  with either \`html\` or \`filePath\`.
 
 Call \`preview_html\` with the finished document; do not just print the HTML back as text.`;
 }

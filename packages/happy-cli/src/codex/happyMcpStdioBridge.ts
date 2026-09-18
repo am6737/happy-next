@@ -106,10 +106,11 @@ async function main() {
     });
 
     registerForwardedTool('preview_html', {
-      description: 'Preview an HTML page in the client app. The HTML must be a complete, self-contained document with all CSS and JS inlined.',
+      description: 'Preview an HTML page in the client app. Pass the document inline as `html`, or pass `filePath` to preview a local .html file you just generated. The document must be complete and self-contained, with all CSS and JS inlined.',
       title: 'Preview HTML',
       inputSchema: {
-        html: z.string().describe('Complete self-contained HTML document string'),
+        html: z.string().optional().describe('Complete self-contained HTML document string'),
+        filePath: z.string().optional().describe('Path to a local .html file to preview. Read by the CLI, so relative paths resolve against the session working directory'),
         title: z.string().optional().describe('Display title for the preview'),
       },
     });

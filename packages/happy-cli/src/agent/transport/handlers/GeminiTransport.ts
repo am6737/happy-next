@@ -88,7 +88,7 @@ const GEMINI_TOOL_PATTERNS: ExtendedToolPattern[] = [
   }),
   createTool({
     name: 'preview_html',
-    inputFields: ['html'],
+    inputFields: ['html', 'filePath'],
   }),
 
   // Happy Orchestrator MCP

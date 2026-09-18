@@ -26,6 +26,7 @@ import {
     ORCHESTRATOR_SUBMIT_TOOL_SCHEMA,
 } from '@/orchestrator/mcpToolSchemas';
 import { CLAUDE_MODEL_MODES, CODEX_MODEL_MODES, GEMINI_MODEL_MODES } from 'happy-wire';
+import { readPreviewHtmlFile } from '@/utils/previewHtmlFile';
 
 function toToolSuccess(data: unknown) {
     return {
@@ -118,14 +119,44 @@ function createMcpServer(client: ApiSessionClient, options: { enableHappyTools: 
     });
 
     mcp.registerTool('preview_html', {
-        description: 'Preview an HTML page in the client app. The HTML must be a complete, self-contained document with all CSS and JS inlined.',
+        description: 'Preview an HTML page in the client app. Pass the document inline as `html`, or pass `filePath` to preview a local .html file you just generated. The document must be complete and self-contained, with all CSS and JS inlined.',
         title: 'Preview HTML',
         inputSchema: {
-            html: z.string().describe('Complete self-contained HTML document string'),
+            html: z.string().optional().describe('Complete self-contained HTML document string'),
+            filePath: z.string().optional().describe('Path to a local .html file to preview. Read by the CLI, so relative paths resolve against the session working directory'),
             title: z.string().optional().describe('Display title for the preview'),
         },
     }, async (args) => {
-        logger.debug('[happyMCP] Preview HTML:', args.title || 'Untitled');
+        logger.debug('[happyMCP] Preview HTML:', args.title || args.filePath || 'Untitled');
+
+        const html = typeof args.html === 'string' && args.html.length > 0 ? args.html : null;
+        const filePath = typeof args.filePath === 'string' && args.filePath.length > 0 ? args.filePath : null;
+
+        if (html === null && filePath === null) {
+            return {
+                content: [{
+                    type: 'text',
+                    text: 'Failed to preview HTML: pass either `html` or `filePath`.',
+                }],
+                isError: true,
+            };
+        }
+
+        // Validate the file up front so the agent hears about a bad path now, rather than the
+        // preview silently rendering nothing when the tool call reaches the app.
+        if (html === null && filePath !== null) {
+            const file = readPreviewHtmlFile(filePath);
+            if (!file.ok) {
+                return {
+                    content: [{
+                        type: 'text',
+                        text: `Failed to preview HTML: cannot read '${filePath}' — ${file.error}.`,
+                    }],
+                    isError: true,
+                };
+            }
+        }
+
         return {
             content: [{
                 type: 'text',

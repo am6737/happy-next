@@ -18,6 +18,7 @@ import { initialMachineMetadata } from '@/daemon/run';
 import { MessageQueue2 } from '@/utils/MessageQueue2';
 import { hashObject } from '@/utils/deterministicJson';
 import { createMcpContext } from '@/agent/mcp';
+import { inlinePreviewHtmlFileArgs } from '@/utils/previewHtmlFile';
 import { createSessionMetadata } from '@/utils/createSessionMetadata';
 import { discoverCodexSkills, getCodexSkillsSignature } from './utils/skillDiscovery';
 import { syncOrchestratorAssets } from '@/orchestrator/skillSync';
@@ -759,7 +760,7 @@ export async function runCodex(opts: {
                     type: 'tool-call',
                     callId: msg.callId,
                     name: msg.toolName,
-                    input: msg.args,
+                    input: inlinePreviewHtmlFileArgs(msg.toolName, msg.args),
                     id: randomUUID(),
                 });
                 messageSentThisTurn = true;
