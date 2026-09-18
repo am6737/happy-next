@@ -127,6 +127,17 @@ const agentFlavorIcons = {
     gemini: require('@/assets/images/icon-gemini.png'),
 };
 
+// The vendor mark keeps one slot across flavors so the row cannot shift, and only the artwork
+// inside it is scaled. Codex's knot fills its frame while Claude's starburst carries ~18%
+// padding of its own, so identical frames would still read as different sizes - measured ink
+// in a 12px frame: Codex 12px, Claude 9.8px.
+const AGENT_MARK_SLOT = 12;
+const agentMarkArtworkSize: Record<keyof typeof agentFlavorIcons, number> = {
+    claude: 12,
+    codex: 10,
+    gemini: 12,
+};
+
 const stylesheet = StyleSheet.create((theme, runtime) => ({
     container: {
         alignItems: 'center',
@@ -1515,12 +1526,14 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                         {/* The model labels are vendor-less ("5.4", "3.8 Flash"), so the mark
                                             sits here to say whose model this session runs. Not pressable on its
                                             own - the vendor of a session cannot change. */}
-                                        <Image
-                                            source={agentFlavorIcons[agentFlavorKey]}
-                                            style={{ width: 12, height: 12 }}
-                                            contentFit="contain"
-                                            tintColor={agentFlavorKey === 'codex' ? theme.colors.textSecondary : undefined}
-                                        />
+                                        <View style={{ width: AGENT_MARK_SLOT, height: AGENT_MARK_SLOT, alignItems: 'center', justifyContent: 'center' }}>
+                                            <Image
+                                                source={agentFlavorIcons[agentFlavorKey]}
+                                                style={{ width: agentMarkArtworkSize[agentFlavorKey], height: agentMarkArtworkSize[agentFlavorKey] }}
+                                                contentFit="contain"
+                                                tintColor={agentFlavorKey === 'codex' ? theme.colors.textSecondary : undefined}
+                                            />
+                                        </View>
                                         <Text style={{
                                             fontSize: 11,
                                             color: theme.colors.textSecondary,
