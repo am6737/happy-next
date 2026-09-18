@@ -4,6 +4,7 @@ import { canArchiveSession } from '@/utils/sessionLifecycle';
 export type SessionQuickActionKind =
     | 'details'
     | 'renameSession'
+    | 'toggleRead'
     | 'newSession'
     | 'delegationHistory'
     | 'manageSharing'
@@ -33,6 +34,10 @@ export function getSessionQuickActionKinds({
     const actions: SessionQuickActionKind[] = ['details'];
     // Only the owner can write session metadata; shared users get a read-only title.
     if (isOwner) actions.push('renameSession');
+    // Pushed even where it cannot act: unlike the actions below, which are hidden when they do
+    // not apply, the item is disabled instead so the capability stays discoverable on a session
+    // that has simply never finished a task. See `markSessionUnread` for why that matters.
+    actions.push('toggleRead');
     // Starting a session in this directory spawns it on the session's machine, which a session
     // shared with me does not grant — it points at the owner's machine and directory.
     if (isOwner) actions.push('newSession');

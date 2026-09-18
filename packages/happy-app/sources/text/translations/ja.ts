@@ -1014,6 +1014,8 @@ export const ja: TranslationStructure = {
         delegationHistorySubtitle: 'この会話から開始した委任タスクとその実行状況を表示します',
         sharedSession: 'Shared Session',
         viewMachine: 'マシンを表示',
+        markAsRead: '既読にする',
+        markAsUnread: '未読にする',
         viewMachineSubtitle: 'マシンの詳細とセッションを表示',
         killSessionSubtitle: 'セッションを即座に終了',
         archiveSessionSubtitle: 'このセッションをアーカイブして停止',

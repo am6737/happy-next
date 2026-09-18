@@ -833,6 +833,8 @@ export const ru: TranslationStructure = {
         delegationHistorySubtitle: 'Просмотреть делегированные из этого диалога задачи и их статус',
         sharedSession: 'Shared Session',
         viewMachine: 'Посмотреть машину',
+        markAsRead: 'Отметить как прочитанное',
+        markAsUnread: 'Отметить как непрочитанное',
         viewMachineSubtitle: 'Посмотреть детали машины и сессии',
         killSessionSubtitle: 'Немедленно завершить сессию',
         archiveSessionSubtitle: 'Архивировать эту сессию и остановить её',

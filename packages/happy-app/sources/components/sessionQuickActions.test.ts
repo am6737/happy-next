@@ -28,6 +28,7 @@ describe('getSessionQuickActionKinds', () => {
         })).toEqual([
             'details',
             'renameSession',
+            'toggleRead',
             'newSession',
             'delegationHistory',
             'manageSharing',
@@ -52,7 +53,7 @@ describe('getSessionQuickActionKinds', () => {
             session: session({ accessLevel: 'view' }),
             hasOrchestratorRuns: false,
             isConnected: true,
-        })).toEqual(['details', 'leaveSharedSession']);
+        })).toEqual(['details', 'toggleRead', 'leaveSharedSession']);
     });
 
     it('retains native archive after stopping Codex and rebuilding the menu', () => {

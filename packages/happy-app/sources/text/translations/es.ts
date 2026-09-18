@@ -982,6 +982,8 @@ export const es: TranslationStructure = {
         delegationHistorySubtitle: 'Consulta las tareas delegadas iniciadas desde esta conversación y su estado',
         sharedSession: 'Shared Session',
         viewMachine: 'Ver máquina',
+        markAsRead: 'Marcar como leído',
+        markAsUnread: 'Marcar como no leído',
         viewMachineSubtitle: 'Ver detalles de máquina y sesiones',
         killSessionSubtitle: 'Terminar inmediatamente la sesión',
         archiveSessionSubtitle: 'Archivar esta sesión y detenerla',

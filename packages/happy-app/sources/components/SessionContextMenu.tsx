@@ -17,7 +17,7 @@ import { Modal } from '@/modal';
 import { useHappyAction } from '@/hooks/useHappyAction';
 import { HappyError } from '@/utils/errors';
 import { storage } from '@/sync/storage';
-import { sync } from '@/sync/sync';
+import { markSessionRead, markSessionUnread, sync } from '@/sync/sync';
 import { leaveSharedSession } from '@/sync/apiSharing';
 import {
     machineForkClaudeSession,
@@ -35,6 +35,7 @@ import { getSessionQuickActionKinds, SessionQuickActionKind } from './sessionQui
 import { SessionContextMenuPortal } from './SessionContextMenuPortal';
 import { SessionColorPalette } from './SessionColorMarker';
 import type { SessionMarkerColor } from '@/sync/sessionAppearance';
+import { hasLiveCompletion, hasUnreadCompletionSince } from '@/utils/sessionAttention';
 
 type MenuPosition = { x: number; y: number };
 type ActionIconSpec =
@@ -98,12 +99,39 @@ const styles = StyleSheet.create((theme) => ({
     disabled: {
         opacity: 0.45,
     },
+    // Anchors the overlay below to the row it wraps.
+    highlightHost: {
+        position: 'relative',
+    },
+    // The row the menu belongs to. The menu opens at the cursor, which can land well away from
+    // the row it acts on, so the row has to say which one it is. A ring rather than a background
+    // wash: a row's background already means "currently open" (`surfaceSelected`), and the two
+    // states can be true of different rows at once.
+    highlightOverlay: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        borderWidth: 2,
+        borderColor: theme.colors.textLink,
+        // The same hue as `textLink`, held back so the title stays legible over it.
+        backgroundColor: theme.dark ? 'rgba(10, 132, 255, 0.18)' : 'rgba(0, 122, 255, 0.08)',
+    },
 }));
 
 function useSessionQuickActions(session: Session) {
     const router = useRouter();
     const sessionStatus = useSessionStatus(session);
     const hasOrchestratorRuns = useOrchestratorHasRuns(session.id);
+    // See `markSessionUnread`. Reading always lands, so only the unread direction needs a guard:
+    // it rewinds both timestamps, which means the question is whether a live completion is left —
+    // except on a session shared with me, whose `completionDismissedAt` is the owner's to write,
+    // so there the owner's dismissal is one more thing that can leave the dot hidden.
+    const isUnread = sessionStatus.hasUnreadCompletion === true;
+    const canMarkUnread = hasLiveCompletion(session)
+        && (!session.accessLevel || hasUnreadCompletionSince(session, 0));
+    const canToggleRead = isUnread || canMarkUnread;
     const [forkingSession, setForkingSession] = React.useState(false);
     const [archiveMenuVisible, setArchiveMenuVisible] = React.useState(false);
     const [archiveMenuItems, setArchiveMenuItems] = React.useState<ActionMenuItem[]>([]);
@@ -296,6 +324,10 @@ function useSessionQuickActions(session: Session) {
     const handlers: Record<SessionQuickActionKind, () => void> = {
         details: () => router.push(`/session/${session.id}/info`),
         renameSession: handleRename,
+        toggleRead: () => {
+            if (isUnread) markSessionRead(session.id);
+            else markSessionUnread(session.id);
+        },
         newSession: handleNewSession,
         delegationHistory: () => router.push(`/orchestrator?controllerSessionId=${encodeURIComponent(session.id)}`),
         manageSharing: () => router.push(`/session/${session.id}/sharing`),
@@ -308,6 +340,7 @@ function useSessionQuickActions(session: Session) {
     const labels: Record<SessionQuickActionKind, string> = {
         details: t('common.details'),
         renameSession: t('common.rename'),
+        toggleRead: isUnread ? t('sessionInfo.markAsRead') : t('sessionInfo.markAsUnread'),
         newSession: t('sessionInfo.newSession'),
         delegationHistory: t('sessionInfo.delegationHistory'),
         manageSharing: t('session.sharing.manageSharing'),
@@ -320,6 +353,7 @@ function useSessionQuickActions(session: Session) {
     const icons: Record<SessionQuickActionKind, ActionIconSpec> = {
         details: { family: 'ionicons', name: 'information-circle-outline' },
         renameSession: { family: 'antdesign', name: 'edit' },
+        toggleRead: { family: 'ionicons', name: isUnread ? 'mail-open-outline' : 'mail-unread-outline' },
         newSession: { family: 'ionicons', name: 'add-circle-outline' },
         delegationHistory: { family: 'ionicons', name: 'layers-outline' },
         manageSharing: { family: 'ionicons', name: 'share-outline' },
@@ -335,7 +369,8 @@ function useSessionQuickActions(session: Session) {
         label: labels[kind],
         icon: icons[kind],
         destructive: kind === 'leaveSharedSession' || kind === 'archiveSession' || kind === 'deleteSession',
-        disabled: kind === 'forkSession' && forkingSession,
+        disabled: (kind === 'forkSession' && forkingSession)
+            || (kind === 'toggleRead' && !canToggleRead),
         onPress: handlers[kind],
     }));
 
@@ -372,6 +407,14 @@ export function SessionContextMenu({ session, children }: { session: Session; ch
         setPosition(null);
         setHoveredAction(null);
     }, []);
+
+    // Whichever menu this platform opens — the floating one on web, the modal elsewhere.
+    const menuOpen = position !== null || nativeMenuVisible;
+    // Rendered over `children` here rather than set on the row, so every list gets it without
+    // having to know the menu exists. `pointerEvents: 'none'` keeps the row clickable underneath.
+    const highlight = menuOpen
+        ? <View pointerEvents="none" style={styles.highlightOverlay} />
+        : null;
 
     const selectMarkerColor = React.useCallback((color: SessionMarkerColor | null) => {
         closeMenu();
@@ -438,7 +481,10 @@ export function SessionContextMenu({ session, children }: { session: Session; ch
 
         return (
             <>
-                {child}
+                <View style={styles.highlightHost}>
+                    {child}
+                    {highlight}
+                </View>
                 <ActionMenuModal
                     visible={nativeMenuVisible}
                     title={t('sessionInfo.quickActions')}
@@ -477,7 +523,10 @@ export function SessionContextMenu({ session, children }: { session: Session; ch
 
     return (
         <>
-            <View {...webContextMenuProps}>{children}</View>
+            <View {...webContextMenuProps} style={styles.highlightHost}>
+                {children}
+                {highlight}
+            </View>
             {position !== null && (
                 <SessionContextMenuPortal>
                     <View

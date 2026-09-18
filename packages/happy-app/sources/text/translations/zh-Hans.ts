@@ -984,6 +984,8 @@ export const zhHans: TranslationStructure = {
         delegationHistorySubtitle: '查看当前会话发起的委派任务及执行状态',
         sharedSession: '共享会话',
         viewMachine: '查看设备',
+        markAsRead: '标记已读',
+        markAsUnread: '标记未读',
         viewMachineSubtitle: '查看设备详情和会话',
         killSessionSubtitle: '立即终止会话',
         archiveSessionSubtitle: '归档此会话并停止它',

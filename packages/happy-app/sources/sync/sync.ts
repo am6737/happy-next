@@ -214,6 +214,40 @@ function markSessionViewed(sessionId: string) {
     }
 }
 
+/**
+ * What the row's context menu drives. There is no stored read flag — the blue dot is derived
+ * (`hasUnreadCompletionSince`), so both directions are a matter of moving `lastViewedAt` and the
+ * synced `completionDismissedAt` across `taskCompleted`. Callers decide in advance whether there
+ * is anything to move across, since a no-op here is invisible to the person who clicked.
+ *
+ * Reading is exactly what opening the session already does, so it reuses that write.
+ */
+export function markSessionRead(sessionId: string) {
+    markSessionViewed(sessionId);
+}
+
+export function markSessionUnread(sessionId: string) {
+    const session = storage.getState().sessions[sessionId];
+
+    // 0 says "never seen", which is below any `taskCompleted` and readable in the stored map.
+    sessionLastViewedAt.set(sessionId, 0);
+    saveSessionLastViewedAt(sessionLastViewedAt);
+
+    // Rewind the synced dismissal too, or the `Math.max` in `hasUnreadCompletionSince` keeps
+    // hiding the dot. Owners only: a session shared with me carries the owner's metadata, which
+    // I cannot write, so there the dot stays hidden if the owner has already dismissed it.
+    if (session?.metadata && session.active && !session.accessLevel) {
+        sessionUpdateMetadataFields(
+            sessionId,
+            session.metadata,
+            { completionDismissedAt: 0 },
+            session.metadataVersion
+        ).catch(() => {
+            // Local state is already rewritten; a later sync may bring the old value back.
+        });
+    }
+}
+
 class Sync {
     // Spawned agents (especially in spawn mode) can take noticeable time to connect.
     // Per-session pacing for all message-list updates to avoid autoscroll races across websocket and fetch paths.

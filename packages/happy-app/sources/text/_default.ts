@@ -993,6 +993,8 @@ export const en = {
         delegationHistorySubtitle: 'View delegated tasks launched from this conversation and their status',
         sharedSession: 'Shared Session',
         viewMachine: 'View Machine',
+        markAsRead: 'Mark as Read',
+        markAsUnread: 'Mark as Unread',
         viewMachineSubtitle: 'View machine details and sessions',
         killSessionSubtitle: 'Immediately terminate the session',
         archiveSessionSubtitle: 'Archive this session and stop it',
