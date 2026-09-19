@@ -73,7 +73,7 @@ const styles = StyleSheet.create((theme) => ({
         marginBottom: 8,
     },
     optionsContainer: {
-        gap: 4,
+        gap: 8,
     },
     optionButton: {
         flexDirection: 'row',
@@ -167,7 +167,8 @@ const styles = StyleSheet.create((theme) => ({
     actionsContainer: {
         flexDirection: 'row',
         gap: 12,
-        marginTop: 8,
+        marginTop: 2,
+        marginBottom: 2,
         justifyContent: 'flex-end',
     },
     submitButton: {
