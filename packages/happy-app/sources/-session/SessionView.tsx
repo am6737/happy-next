@@ -1146,6 +1146,7 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
     const input = canEdit ? (
         <AgentInput
             ref={inputRef}
+            panelSideMargin
             placeholder={t('session.inputPlaceholder')}
             value={message}
             onChangeText={setMessage}

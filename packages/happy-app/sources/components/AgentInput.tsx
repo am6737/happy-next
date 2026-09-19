@@ -111,6 +111,10 @@ interface AgentInputProps {
     // initial message). Defaults to the usual "only send when there is text".
     allowEmptySend?: boolean;
     minHeight?: number;
+    // Extra 8px of side margin on the input panel. The session composer asks for it so the
+    // panel's rounded edge lines up with the message column; the new-session page, which
+    // stacks the same panel under its own sections, keeps the panel flush.
+    panelSideMargin?: boolean;
     profileId?: string | null;
     onProfileClick?: () => void;
     images?: LocalImage[];
@@ -1689,7 +1693,10 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                 )}
 
                 {/* Box 2: Action Area (Input + Send) */}
-                <View ref={dropZoneRef} style={styles.unifiedPanel}>
+                <View
+                    ref={dropZoneRef}
+                    style={[styles.unifiedPanel, props.panelSideMargin && { marginHorizontal: 8 }]}
+                >
                     {/* Drag overlay */}
                     {isDragging && <View style={styles.dragOverlay} />}
 
