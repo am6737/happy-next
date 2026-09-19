@@ -293,7 +293,13 @@ export const SidebarView = React.memo((props: SidebarViewProps) => {
                 },
             ]}
         >
-            {titleText}
+            <Image
+                source={theme.dark
+                    ? require('@/assets/images/logotype-light.png')
+                    : require('@/assets/images/logotype-dark.png')}
+                contentFit="contain"
+                style={{ height: 20, width: 75 }}
+            />
             {socketStatus.status === 'disconnected' && (
                 <StatusDot
                     color={styles.statusDisconnected.color}
