@@ -407,6 +407,11 @@ export function SessionsList() {
     const sharedByMeData = useSharedByMeSessionListViewData();
     const machineNames = useMachineNameMap();
     const isDesktopWindows = getDesktopPlatform() === 'windows';
+    // The desktop sidebar drops the list viewport 8px below the header, then pulls the
+    // content back up by the same 8 so the first row does not move. Only the top edge
+    // moves; side and bottom insets are untouched. The tablet main area keeps the list
+    // flush, so this is gated on actually running inside a desktop shell.
+    const isDesktopSidebarList = getDesktopPlatform() !== null;
     // Selected tab is persisted to disk so it survives app restarts.
     const [persistedTab, setPersistedTab] = useLocalSettingMutable('sessionListSelectedTab');
     // machineId -> name cache, so machine tabs keep their labels before machines sync.
@@ -791,7 +796,7 @@ export function SessionsList() {
     ), [theme]);
 
     return (
-        <View style={styles.container}>
+        <View style={[styles.container, isDesktopSidebarList && { paddingTop: 8 }]}>
             <View ref={listViewportRef} style={styles.contentContainer}>
                 <FlatList
                     ref={listRef}
@@ -799,7 +804,10 @@ export function SessionsList() {
                     data={dataWithSelected}
                     renderItem={renderItem}
                     keyExtractor={keyExtractor}
-                    contentContainerStyle={{ paddingBottom: safeArea.bottom + 128, maxWidth: layout.maxWidth }}
+                    contentContainerStyle={[
+                        { paddingBottom: safeArea.bottom + 128, maxWidth: layout.maxWidth },
+                        isDesktopSidebarList && { marginTop: -8 },
+                    ]}
                     ListHeaderComponent={HeaderComponent}
                     ListEmptyComponent={EmptyComponent}
                     removeClippedSubviews={true}
