@@ -16,6 +16,7 @@ export interface SDKMessage {
 export interface SDKUserMessage extends SDKMessage {
     type: 'user'
     parent_tool_use_id?: string
+    uuid?: string
     /** Set by Claude Code on the post-compaction summary record, which is otherwise a plain user message. */
     isCompactSummary?: boolean
     /** Set by Claude Code on the stream output (in place of isCompactSummary) for client-generated user turns. */
@@ -57,6 +58,12 @@ export interface SDKSystemMessage extends SDKMessage {
     tools?: string[]
     slash_commands?: string[]
     skills?: string[]
+    /** Present on the `compact_boundary` subtype: the anchor is the post-compaction summary message. */
+    compact_metadata?: {
+        trigger?: 'auto' | 'manual'
+        preserved_messages?: { anchor_uuid?: string }
+        preserved_segment?: { anchor_uuid?: string }
+    }
     plugins?: Array<{
         name: string
         path?: string

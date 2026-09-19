@@ -50,6 +50,8 @@ export class SDKToLogConverter {
     private context: ConversionContext
     private responses?: Map<string, { approved: boolean, mode?: 'default' | 'acceptEdits' | 'auto' | 'bypassPermissions' | 'plan', reason?: string }>
     private sidechainLastUUID = new Map<string, string>();
+    /** Summaries named by a `compact_boundary`, which is how auto-compaction is recognized. */
+    private compactSummaryUuids = new Set<string>();
 
     constructor(
         context: Omit<ConversionContext, 'parentUuid'>,
@@ -112,10 +114,13 @@ export class SDKToLogConverter {
                 // The post-compaction summary arrives as an ordinary user message. Claude Code marks
                 // it on the transcript record as isCompactSummary, but the stream we read in remote
                 // mode carries isSynthetic instead and drops isCompactSummary — so accept both and let
-                // downstream see one flag. Every synthetic user message seen on a live 2.1.270 stream
-                // with plain string content has been a compaction summary; the synthetic ones with
-                // block content are image placeholders and slash-command expansions.
+                // downstream see one flag. A manual /compact arrives as a synthetic message with plain
+                // string content; auto-compaction sends the same summary as content blocks, which the
+                // string test alone misses, so the compact_boundary it precedes is what names it.
+                // Every other synthetic user message seen on a live stream (image placeholders,
+                // slash-command and skill expansions) is not a summary and stays unflagged.
                 const isCompactSummary = userMsg.isCompactSummary === true
+                    || (userMsg.uuid !== undefined && this.compactSummaryUuids.has(userMsg.uuid))
                     || (userMsg.isSynthetic === true && typeof userMsg.message.content === 'string')
                 logMessage = {
                     ...baseFields,
@@ -171,6 +176,16 @@ export class SDKToLogConverter {
                 // System messages with subtype 'init' might update session ID
                 if (systemMsg.subtype === 'init' && systemMsg.session_id) {
                     this.updateSessionId(systemMsg.session_id)
+                }
+
+                // The boundary that follows a compaction names the summary it anchored. It arrives
+                // before the summary itself, which is why the summary can be recognized by uuid.
+                if (systemMsg.subtype === 'compact_boundary') {
+                    const anchor = systemMsg.compact_metadata?.preserved_messages?.anchor_uuid
+                        ?? systemMsg.compact_metadata?.preserved_segment?.anchor_uuid
+                    if (anchor !== undefined) {
+                        this.compactSummaryUuids.add(anchor)
+                    }
                 }
 
                 // System messages are typically not sent to logs

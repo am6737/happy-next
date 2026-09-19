@@ -463,8 +463,8 @@ describe('SDKToLogConverter', () => {
         })
 
         it('should leave synthetic block messages unflagged', () => {
-            // Image placeholders and slash-command expansions are synthetic too, but they arrive as
-            // content blocks — only the string-content shape is the summary.
+            // Image placeholders, slash-command and skill expansions are synthetic too, and they
+            // arrive as content blocks — no boundary names them, so they stay unflagged.
             const sdkMessage: SDKUserMessage = {
                 type: 'user',
                 isSynthetic: true,
@@ -475,6 +475,53 @@ describe('SDKToLogConverter', () => {
             }
 
             const logMessage = converter.convert(sdkMessage)
+
+            expect((logMessage as any).isCompactSummary).toBeUndefined()
+        })
+
+        it('should flag the summary of an automatic compaction, which arrives as content blocks', () => {
+            // Unlike a manual /compact, auto-compaction reaches the stream with block content, so
+            // the string-content test misses it and the boundary's anchor is the only marker.
+            converter.convert({
+                type: 'system',
+                subtype: 'compact_boundary',
+                session_id: context.sessionId,
+                compact_metadata: {
+                    trigger: 'auto',
+                    preserved_messages: { anchor_uuid: 'anchor-1' },
+                    preserved_segment: { anchor_uuid: 'anchor-1' }
+                }
+            } as SDKSystemMessage)
+
+            const logMessage = converter.convert({
+                type: 'user',
+                uuid: 'anchor-1',
+                isSynthetic: true,
+                message: {
+                    role: 'user',
+                    content: [{ type: 'text', text: 'This session is being continued from a previous conversation that ran out of context.' }]
+                }
+            } as SDKUserMessage)
+
+            expect((logMessage as any).isCompactSummary).toBe(true)
+        })
+
+        it('should not flag a message the boundary did not anchor', () => {
+            converter.convert({
+                type: 'system',
+                subtype: 'compact_boundary',
+                session_id: context.sessionId,
+                compact_metadata: { trigger: 'auto', preserved_messages: { anchor_uuid: 'anchor-1' } }
+            } as SDKSystemMessage)
+
+            const logMessage = converter.convert({
+                type: 'user',
+                uuid: 'someone-else',
+                message: {
+                    role: 'user',
+                    content: 'Hello Claude'
+                }
+            } as SDKUserMessage)
 
             expect((logMessage as any).isCompactSummary).toBeUndefined()
         })
