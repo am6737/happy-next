@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { canAutoApproveForMode } from './permissionHandler';
+import { getToolDescriptor } from './getToolDescriptor';
+import { canAutoApproveForMode, canAutoApproveTool } from './permissionHandler';
 
 // canAutoApproveForMode decides whether a tool that already reached our
 // permission callback may be auto-approved purely from the permission mode.
@@ -28,5 +29,47 @@ describe('canAutoApproveForMode', () => {
             expect(canAutoApproveForMode(mode, { edit: true })).toBe(false);
             expect(canAutoApproveForMode(mode, { edit: false })).toBe(false);
         }
+    });
+});
+
+// canAutoApproveTool is the full policy the permission callback consults. On top of the
+// mode rule, it exempts Happy's own UI tools: the app issues them and has no footer to
+// approve them from, so asking deadlocks the turn - which means they must be exempt in
+// *every* mode, plan included. The invariants under test: the exemption is those two tools
+// by name (not the `mcp__happy__` namespace), it holds in all modes, and it widens nothing
+// else.
+const ALL_CLAUDE_MODES = ['default', 'acceptEdits', 'plan', 'auto', 'bypassPermissions'] as const;
+
+// Real descriptors, so the acceptEdits edit rule cannot leak onto a tool that is not an edit.
+const approves = (tool: string, mode: typeof ALL_CLAUDE_MODES[number]) =>
+    canAutoApproveTool(tool, mode, getToolDescriptor(tool));
+
+describe('canAutoApproveTool', () => {
+    it('exempts the two Happy UI tools in every mode', () => {
+        for (const mode of ALL_CLAUDE_MODES) {
+            expect(approves('mcp__happy__change_title', mode)).toBe(true);
+            expect(approves('mcp__happy__preview_html', mode)).toBe(true);
+        }
+    });
+
+    it('leaves the orchestrator tools asking, though they share the prefix', () => {
+        for (const mode of ALL_CLAUDE_MODES) {
+            expect(approves('mcp__happy__orchestrator_submit', mode)).toBe(false);
+            expect(approves('mcp__happy__orchestrator_send_message', mode)).toBe(false);
+        }
+    });
+
+    it('leaves interaction and machine tools asking in every mode', () => {
+        for (const mode of ALL_CLAUDE_MODES) {
+            expect(approves('AskUserQuestion', mode)).toBe(false);
+            expect(approves('ExitPlanMode', mode)).toBe(false);
+            expect(approves('Bash', mode)).toBe(false);
+        }
+    });
+
+    it('still auto-approves edits under acceptEdits, and only there', () => {
+        expect(approves('Edit', 'acceptEdits')).toBe(true);
+        expect(approves('Edit', 'default')).toBe(false);
+        expect(approves('Read', 'acceptEdits')).toBe(false);
     });
 });

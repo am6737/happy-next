@@ -29,6 +29,21 @@ interface PermissionResponse {
 }
 
 
+// Happy's own MCP UI tools: renaming the chat, and showing a preview inside the app. The
+// app is the one issuing them, and it renders `change_title` as an event message rather
+// than a tool row, so a pending permission for it has no footer to approve it from - the
+// turn hangs with the session stuck on "needs permission". Neither touches the user's
+// machine: one writes the app's own title, the other hands the app a document to render.
+// Both are therefore exempt in every mode, plan included, which is also what Gemini and
+// Codex have always done; Claude was the only handler missing it.
+//
+// An exact list on purpose, not an `mcp__happy__` prefix: the orchestrator tools share that
+// prefix, and they spawn and drive real agent work that must keep asking.
+const HAPPY_UI_TOOLS: ReadonlySet<string> = new Set([
+    'mcp__happy__change_title',
+    'mcp__happy__preview_html',
+]);
+
 interface PendingRequest {
     resolve: (value: PermissionResult) => void;
     reject: (error: Error) => void;
@@ -51,6 +66,15 @@ interface PendingRequest {
  */
 export function canAutoApproveForMode(mode: PermissionMode, descriptor: { edit?: boolean }): boolean {
     return mode === 'acceptEdits' && Boolean(descriptor.edit);
+}
+
+/**
+ * The whole auto-approval policy for a tool that has reached our permission callback:
+ * Happy's own UI tools never ask, in any mode, and an edit asks only outside acceptEdits.
+ * Everything else falls through to the user.
+ */
+export function canAutoApproveTool(toolName: string, mode: PermissionMode, descriptor: { edit?: boolean }): boolean {
+    return HAPPY_UI_TOOLS.has(toolName) || canAutoApproveForMode(mode, descriptor);
 }
 
 export class PermissionHandler {
@@ -192,10 +216,10 @@ export class PermissionHandler {
         const descriptor = getToolDescriptor(toolName);
 
         //
-        // Mode-based auto-approval
+        // Auto-approval: Happy's own UI tools in any mode, edits under acceptEdits
         //
 
-        if (canAutoApproveForMode(this.permissionMode, descriptor)) {
+        if (canAutoApproveTool(toolName, this.permissionMode, descriptor)) {
             return { behavior: 'allow', updatedInput: input as Record<string, unknown> };
         }
 
