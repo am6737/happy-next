@@ -1,4 +1,3 @@
-import { parseDocument } from 'htmlparser2';
 import { parseMarkdown, type MarkdownSpan } from '../markdown/parseMarkdown';
 
 export function escapeHtml(value: string): string {
@@ -15,73 +14,35 @@ export function escapeHtml(value: string): string {
     );
 }
 
-const tags = new Set(
-    'html head body main article section header footer nav aside div span p br hr h1 h2 h3 h4 h5 h6 ul ol li dl dt dd blockquote pre code strong b em i u s del small sub sup table thead tbody tfoot tr th td caption colgroup col figure figcaption img style details summary'.split(
-        ' '
-    )
-);
-const voidTags = new Set(['br', 'hr', 'img', 'col']);
-const attributes = new Set([
-    'class',
-    'id',
-    'title',
-    'style',
-    'alt',
-    'width',
-    'height',
-    'colspan',
-    'rowspan',
-    'start',
-    'value',
-    'open',
-    'dir',
-    'lang',
-]);
-
 export function safeImageSource(url: string): boolean {
     return /^data:image\/(png|jpeg|gif|webp);base64,[a-z0-9+/=\s]+$/i.test(url);
 }
 
-// Reconstruct only permitted HTML nodes. CSP remains a second boundary for CSS resource requests.
-export function sanitizeStaticHtml(html: string): string {
-    const document = parseDocument(html);
-    type Node = (typeof document.children)[number];
-    function render(node: Node): string {
-        if (node.type === 'text') return escapeHtml(node.data);
-        if (
-            node.type !== 'tag' &&
-            node.type !== 'style' &&
-            node.type !== 'script'
-        )
-            return '';
-        if (node.name === 'a') return node.children.map(render).join('');
-        if (!tags.has(node.name)) return '';
-        if (
-            node.name === 'html' ||
-            node.name === 'head' ||
-            node.name === 'body'
-        )
-            return node.children.map(render).join('');
-        if (node.name === 'style') {
-            const css = node.children
-                .filter((child) => child.type === 'text')
-                .map((child) => child.data)
-                .join('');
-            return `<style>${css.replace(/</g, '\\3c ')}</style>`;
-        }
-        if (node.name === 'img' && !safeImageSource(node.attribs.src || ''))
-            return `<span>${escapeHtml(node.attribs.alt || '[image]')}</span>`;
-        const attrs = Object.entries(node.attribs)
-            .filter(
-                ([name]) =>
-                    attributes.has(name) ||
-                    (node.name === 'img' && name === 'src')
-            )
-            .map(([name, value]) => ` ${name}="${escapeHtml(value)}"`)
-            .join('');
-        return `<${node.name}${attrs}>${voidTags.has(node.name) ? '' : `${node.children.map(render).join('')}</${node.name}>`}`;
+/** Reading colors that override the author's own foreground, background and borders. */
+function darkOverlay(): string {
+    return `<style>html{color-scheme:dark!important}html,body,body *{color:#e5e7eb!important;background-color:#202124!important;background-image:none!important;border-color:#62666c!important;box-shadow:none!important;text-shadow:none!important}body pre,body code,body th{background-color:#303238!important}body img{background-color:transparent!important}</style>`;
+}
+
+/**
+ * Appends markup to the end of an authored document, before its last `</body>` / `</html>`.
+ * A document without a closing tag (a fragment) simply gets the markup appended.
+ */
+function appendToDocument(html: string, markup: string): string {
+    const lower = html.toLowerCase();
+    for (const tag of ['</body>', '</html>']) {
+        const index = lower.lastIndexOf(tag);
+        if (index !== -1)
+            return `${html.slice(0, index)}${markup}${html.slice(index)}`;
     }
-    return document.children.map(render).join('');
+    return html + markup;
+}
+
+/**
+ * An HTML file renders as authored — scripts, inline handlers and external resources all
+ * work. The sandboxed frame is the boundary, not a sanitizer, so nothing is rewritten here.
+ */
+export function buildHtmlDocument(html: string, dark = false): string {
+    return dark ? appendToDocument(html, darkOverlay()) : html;
 }
 
 function spans(items: MarkdownSpan[]): string {
@@ -141,18 +102,15 @@ export function markdownPreviewHtml(markdown: string): string {
         .join('');
 }
 
-export function buildStaticDocument(
-    content: string,
-    kind: 'html' | 'markdown',
-    dark = false
-): string {
-    const body =
-        kind === 'html'
-            ? sanitizeStaticHtml(content)
-            : markdownPreviewHtml(content);
+/**
+ * Markdown is serialized from the app's own parser, so its document keeps the restrictive
+ * CSP and never runs a script.
+ */
+export function buildMarkdownDocument(markdown: string, dark = false): string {
+    const body = markdownPreviewHtml(markdown);
     return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src 'none'; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"><style>
 html{color-scheme:light;background:white;color:#202124;letter-spacing:0}body{margin:0;padding:20px;overflow-wrap:anywhere;font:16px/1.6 system-ui,sans-serif}*{box-sizing:border-box}img{max-width:100%;height:auto}pre,.table-scroll{max-width:100%;overflow:auto}pre{background:#f3f4f5;padding:12px;border-radius:4px}code{font-family:monospace}table{border-collapse:collapse}td,th{padding:8px 12px;border:1px solid #d9dcdf;text-align:left}blockquote{margin-left:0;padding-left:16px;border-left:3px solid #a4aaaf}h1{font-size:28px}h2{font-size:24px}h3{font-size:20px}hr{border:0;border-top:1px solid #d9dcdf}
-</style></head><body>${body}${dark ? `<style>html{color-scheme:dark!important}html,body,body *{color:#e5e7eb!important;background-color:#202124!important;background-image:none!important;border-color:#62666c!important;box-shadow:none!important;text-shadow:none!important}body pre,body code,body th{background-color:#303238!important}body img{background-color:transparent!important}</style>` : ''}</body></html>`;
+</style></head><body>${body}${dark ? darkOverlay() : ''}</body></html>`;
 }
 
 export function buildSvgDocument(

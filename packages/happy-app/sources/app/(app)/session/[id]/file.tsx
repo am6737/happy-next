@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { View, ScrollView, ActivityIndicator, Platform, Pressable, Share } from 'react-native';
+import { View, ScrollView, ActivityIndicator, Platform, Pressable, Share, useWindowDimensions } from 'react-native';
 import { useRoute } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { Text } from '@/components/StyledText';
@@ -32,6 +32,10 @@ import { ImageViewer } from '@/components/ImageViewer';
 import type { ImageViewerImage } from '@/components/ImageViewer';
 import { getFilePreviewType } from 'happy-wire';
 import { FilePreviewScreen } from '@/components/FilePreview/FilePreviewScreen';
+import { FileViewTabs, type FileViewTab } from '@/components/FilePreview/FileViewTabs';
+import { fileRouteNotice } from '@/components/FilePreview/fileNotice';
+import { ChatHeaderTitle } from '@/components/ChatHeaderTitle';
+import { getNativeHeaderTitleWidth } from '@/utils/nativeHeaderTitleWidth';
 import { useFileDownload } from '@/components/FilePreview/useFileDownload';
 import { FileDownloadProgress } from '@/components/FilePreview/FileDownloadProgress';
 import { buildFileMenuItems, canMutateFile, canShareFileText } from '@/utils/fileMenu';
@@ -116,6 +120,7 @@ function LegacyFileScreen() {
     const route = useRoute();
     const router = useRouter();
     const { theme } = useUnistyles();
+    const { width: screenWidth } = useWindowDimensions();
     const { id: sessionId } = useLocalSearchParams<{ id: string }>();
     const searchParams = useLocalSearchParams();
     const encodedPath = searchParams.path as string;
@@ -571,6 +576,31 @@ function LegacyFileScreen() {
 
     const language = getFileLanguage(filePath);
     const editorLanguage = language || 'plaintext';
+    const viewTabs: FileViewTab<'file' | 'diff'>[] = [
+        { value: 'file', label: t('files.file') },
+        { value: 'diff', label: t('files.diff') },
+    ];
+    // Which version this file was opened from is known from the params alone, so the header
+    // subtitle is filled in from the first frame rather than after the read settles.
+    const notice = fileRouteNotice({
+        note: searchParams.note as string | undefined,
+        ref,
+        staged: isStaged,
+    });
+    const headerTitleWidth = getNativeHeaderTitleWidth({
+        screenWidth,
+        rightActionCount: 1,
+    });
+    const headerTitle = React.useCallback(
+        () => (
+            <ChatHeaderTitle
+                title={t('common.fileViewer')}
+                subtitle={notice ?? undefined}
+                width={headerTitleWidth}
+            />
+        ),
+        [notice, headerTitleWidth]
+    );
     const useReadOnlyCodeEditor = displayMode === 'file' && !!fileContent?.content;
     const handleReadOnlyEditorChange = React.useCallback(() => {
         // Viewer mode only: ignore edits.
@@ -613,6 +643,7 @@ function LegacyFileScreen() {
 
     const fileActions = <>
         <Stack.Screen options={{
+            headerTitle,
             headerRight: () => (
                 <Pressable onPress={() => setMenuVisible(true)} accessibilityRole="button" accessibilityLabel={t('files.file')}
                     style={{ paddingHorizontal: 8, paddingVertical: 4 }}>
@@ -778,55 +809,13 @@ function LegacyFileScreen() {
                 </>
             ) : (
                 <>
-                    {/* Toggle buttons for File/Diff view */}
+                    {/* File/Diff view switch */}
                     {diffContent && (
-                        <View style={{
-                            flexDirection: 'row',
-                            paddingHorizontal: 16,
-                            paddingVertical: 12,
-                            borderBottomWidth: Platform.select({ ios: StyleSheet.hairlineWidth, default: 1 }),
-                            borderBottomColor: theme.colors.divider,
-                            backgroundColor: theme.colors.surface
-                        }}>
-                            <Pressable
-                                onPress={() => setDisplayMode('diff')}
-                                style={{
-                                    paddingHorizontal: 16,
-                                    paddingVertical: 8,
-                                    borderRadius: 8,
-                                    backgroundColor: displayMode === 'diff' ? theme.colors.textLink : theme.colors.input.background,
-                                    marginRight: 8
-                                }}
-                            >
-                                <Text style={{
-                                    fontSize: 14,
-                                    fontWeight: '600',
-                                    color: displayMode === 'diff' ? 'white' : theme.colors.textSecondary,
-                                    ...Typography.default()
-                                }}>
-                                    {t('files.diff')}
-                                </Text>
-                            </Pressable>
-
-                            <Pressable
-                                onPress={() => setDisplayMode('file')}
-                                style={{
-                                    paddingHorizontal: 16,
-                                    paddingVertical: 8,
-                                    borderRadius: 8,
-                                    backgroundColor: displayMode === 'file' ? theme.colors.textLink : theme.colors.input.background
-                                }}
-                            >
-                                <Text style={{
-                                    fontSize: 14,
-                                    fontWeight: '600',
-                                    color: displayMode === 'file' ? 'white' : theme.colors.textSecondary,
-                                    ...Typography.default()
-                                }}>
-                                    {t('files.file')}
-                                </Text>
-                            </Pressable>
-                        </View>
+                        <FileViewTabs
+                            tabs={viewTabs}
+                            value={displayMode}
+                            onChange={setDisplayMode}
+                        />
                     )}
 
                     {/* Content display */}

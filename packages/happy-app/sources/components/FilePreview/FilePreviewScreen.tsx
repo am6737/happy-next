@@ -6,6 +6,7 @@ import {
     Pressable,
     ScrollView,
     Share,
+    useWindowDimensions,
     View,
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
@@ -20,6 +21,8 @@ import { Text } from '@/components/StyledText';
 import { CodeEditor } from '@/components/CodeEditor';
 import { ImageViewer } from '@/components/ImageViewer';
 import { FileIcon } from '@/components/FileIcon';
+import { ChatHeaderTitle } from '@/components/ChatHeaderTitle';
+import { getNativeHeaderTitleWidth } from '@/utils/nativeHeaderTitleWidth';
 import { layout } from '@/components/layout';
 import { ActionMenuModal } from '@/components/ActionMenuModal';
 import { Modal } from '@/modal';
@@ -40,8 +43,14 @@ import {
     selectPreviewMode,
     type LoadedFilePreview,
 } from './loadFilePreview';
-import { buildStaticDocument, buildSvgDocument } from './staticDocument';
+import {
+    buildHtmlDocument,
+    buildMarkdownDocument,
+    buildSvgDocument,
+} from './staticDocument';
 import { SandboxDocument } from './SandboxDocument';
+import { FileViewTabs, type FileViewTab } from './FileViewTabs';
+import { fileRouteNotice } from './fileNotice';
 import { useFileDownload } from './useFileDownload';
 import { FileDownloadProgress } from './FileDownloadProgress';
 import { buildFileMenuItems, canMutateFile, canShareFileText } from '@/utils/fileMenu';
@@ -54,10 +63,12 @@ export function FilePreviewScreen({ filePath }: { filePath: string }) {
         view?: string;
         line?: string;
         column?: string;
+        note?: string;
     }>();
     const { id: sessionId, ref, staged, view } = params;
     const { theme } = useUnistyles();
     const insets = useSafeAreaInsets();
+    const { width: screenWidth } = useWindowDimensions();
     const router = useRouter();
     const session = useSession(sessionId);
     const sessionPath = session?.metadata?.path || '';
@@ -269,13 +280,11 @@ export function FilePreviewScreen({ filePath }: { filePath: string }) {
     const documentHtml = React.useMemo(() => {
         if (!loaded) return null;
         try {
-            if (
-                loaded.metadata.kind === 'html' ||
-                loaded.metadata.kind === 'markdown'
-            )
-                return buildStaticDocument(
+            if (loaded.metadata.kind === 'html')
+                return buildHtmlDocument(loaded.text || '', darkBackground);
+            if (loaded.metadata.kind === 'markdown')
+                return buildMarkdownDocument(
                     loaded.text || '',
-                    loaded.metadata.kind,
                     darkBackground
                 );
             if (loaded.metadata.kind === 'pdf') {
@@ -415,7 +424,7 @@ export function FilePreviewScreen({ filePath }: { filePath: string }) {
     ) : documentHtml ? (
         <SandboxDocument
             html={documentHtml}
-            scripts={kind === 'pdf'}
+            scripts={kind === 'pdf' || kind === 'html'}
             dark={darkBackground}
             title={fileName}
             onError={() => setRenderError(true)}
@@ -435,14 +444,42 @@ export function FilePreviewScreen({ filePath }: { filePath: string }) {
             : version === 'index'
               ? t('files.preview.index')
               : null;
-    const versionNotice = loaded?.metadata.deleted
-        ? [t('files.preview.deleted'), versionLabel].filter(Boolean).join(' · ')
-        : versionLabel;
-    const hasMetadataNotice =
-        !!versionNotice ||
-        loaded?.metadata.diffUnavailable ||
-        (loaded?.metadata.changed && loaded.text === null);
-    const tabs: { value: 'preview' | 'file' | 'diff'; label: string }[] = [
+    // Shown as the header subtitle, since the path row below already occupies the top of the body.
+    // Until the preview RPC answers, the route params are the only source of truth.
+    const assumedNotice = fileRouteNotice({
+        note: params.note,
+        ref,
+        staged: staged === '1',
+    });
+    const loadedNotice =
+        [
+            loaded?.metadata.deleted
+                ? [t('files.preview.deleted'), versionLabel].filter(Boolean).join(' · ')
+                : versionLabel,
+            loaded?.metadata.diffUnavailable ? t('files.preview.diffUnavailable') : null,
+            loaded?.metadata.changed && loaded.text === null
+                ? t('files.preview.changed')
+                : null,
+        ]
+            .filter(Boolean)
+            .join(' · ') || null;
+    // The loaded metadata wins once it lands, so a stale guess is corrected (or dropped).
+    const notice = loaded ? loadedNotice : assumedNotice;
+    const headerTitleWidth = getNativeHeaderTitleWidth({
+        screenWidth,
+        rightActionCount: 1,
+    });
+    const headerTitle = React.useCallback(
+        () => (
+            <ChatHeaderTitle
+                title={t('common.fileViewer')}
+                subtitle={notice ?? undefined}
+                width={headerTitleWidth}
+            />
+        ),
+        [notice, headerTitleWidth]
+    );
+    const tabs: FileViewTab<'preview' | 'file' | 'diff'>[] = [
         { value: 'preview', label: t('files.preview.title') },
     ];
     if (loaded?.text !== null && loaded)
@@ -462,6 +499,7 @@ export function FilePreviewScreen({ filePath }: { filePath: string }) {
         >
             <Stack.Screen
                 options={{
+                    headerTitle,
                     headerRight: () =>
                         icon('ellipsis-horizontal', t('files.file'), () =>
                             setMenuVisible(true)
@@ -529,114 +567,34 @@ export function FilePreviewScreen({ filePath }: { filePath: string }) {
                 </View>
             ) : (
                 <>
-                    {hasMetadataNotice && (
-                        <View
-                            style={{
-                                paddingHorizontal: 16,
-                                paddingVertical: 6,
-                                gap: 4,
-                            }}
-                        >
-                            {versionNotice && (
-                                <Text
+                    <FileViewTabs
+                        tabs={tabs}
+                        value={mode}
+                        onChange={setMode}
+                        trailing={
+                            mode === 'preview' && (
+                                <View
                                     style={{
-                                        color: theme.colors.textSecondary,
-                                        fontSize: 12,
-                                    }}
-                                >
-                                    {versionNotice}
-                                </Text>
-                            )}
-                            {loaded.metadata.diffUnavailable && (
-                                <Text
-                                    style={{
-                                        color: theme.colors.textSecondary,
-                                        fontSize: 12,
-                                    }}
-                                >
-                                    {t('files.preview.diffUnavailable')}
-                                </Text>
-                            )}
-                            {loaded.metadata.changed &&
-                                loaded.text === null && (
-                                    <Text
-                                        style={{
-                                            color: theme.colors.textSecondary,
-                                            fontSize: 12,
-                                        }}
-                                    >
-                                        {t('files.preview.changed')}
-                                    </Text>
-                                )}
-                        </View>
-                    )}
-                    <View
-                        style={{
-                            flexDirection: 'row',
-                            flexWrap: 'wrap',
-                            alignItems: 'center',
-                            paddingHorizontal: 12,
-                            borderBottomWidth: 1,
-                            borderBottomColor: theme.colors.divider,
-                        }}
-                    >
-                        <View style={{ flexDirection: 'row', flexShrink: 0 }}>
-                            {tabs.map((tab) => (
-                                <Pressable
-                                    key={tab.value}
-                                    accessibilityRole="tab"
-                                    accessibilityState={{
-                                        selected: mode === tab.value,
-                                    }}
-                                    onPress={() => setMode(tab.value)}
-                                    style={{
-                                        paddingHorizontal: 12,
+                                        flexDirection: 'row',
+                                        marginLeft: 'auto',
+                                        flexShrink: 0,
                                         minHeight: 40,
-                                        justifyContent: 'center',
-                                        borderBottomWidth: 2,
-                                        borderBottomColor:
-                                            mode === tab.value
-                                                ? theme.colors.textLink
-                                                : 'transparent',
+                                        alignItems: 'center',
                                     }}
                                 >
-                                    <Text
-                                        style={{
-                                            fontSize: 14,
-                                            color:
-                                                mode === tab.value
-                                                    ? theme.colors.textLink
-                                                    : theme.colors
-                                                          .textSecondary,
-                                        }}
-                                    >
-                                        {tab.label}
-                                    </Text>
-                                </Pressable>
-                            ))}
-                        </View>
-                        {mode === 'preview' && (
-                            <View
-                                style={{
-                                    flexDirection: 'row',
-                                    marginLeft: 'auto',
-                                    flexShrink: 0,
-                                    minHeight: 40,
-                                    alignItems: 'center',
-                                }}
-                            >
-                                {imageTools}
-                                {icon(
-                                    'expand-outline',
-                                    t('files.preview.fullscreen'),
-                                    () =>
-                                        kind === 'image'
-                                            ? setImageVisible(true)
-                                            : setFullscreen(true)
-                                )}
-                            </View>
-                        )}
-                    </View>
+                                    {imageTools}
+                                    {icon(
+                                        'expand-outline',
+                                        t('files.preview.fullscreen'),
+                                        () =>
+                                            kind === 'image'
+                                                ? setImageVisible(true)
+                                                : setFullscreen(true)
+                                    )}
+                                </View>
+                            )
+                        }
+                    />
                     {mode === 'preview' ? (
                         !fullscreen && preview
                     ) : mode === 'file' ? (

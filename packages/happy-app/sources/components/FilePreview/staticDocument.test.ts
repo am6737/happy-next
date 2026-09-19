@@ -1,56 +1,61 @@
 import { describe, expect, it } from 'vitest';
 import {
-    buildStaticDocument,
+    buildHtmlDocument,
+    buildMarkdownDocument,
     buildSvgDocument,
     markdownPreviewHtml,
-    sanitizeStaticHtml,
 } from './staticDocument';
 
 describe('static file previews', () => {
-    it('adds dark reading colors after author styles without enabling scripts', () => {
-        for (const kind of ['html', 'markdown'] as const) {
-            const light = buildStaticDocument('Hello', kind);
-            const dark = buildStaticDocument('Hello', kind, true);
-            expect(light).not.toContain('color-scheme:dark');
-            expect(dark).toContain('color-scheme:dark!important');
-            expect(dark).toContain('background-color:#202124!important');
-            expect(dark).toContain("script-src 'none'");
-            expect(dark).not.toContain('<script');
+    it('renders HTML as authored, keeping scripts, handlers and external resources', () => {
+        const source =
+            '<style>body{background-image:url(https://example.com/a.css)}</style><h1 onclick="alert(1)">Hi</h1><script>parent.hacked=true;fetch("https://example.com/x")</script><img src="https://example.com/image.png" alt="remote"><iframe src="https://example.com"></iframe><form action="https://example.com"><input></form>';
+        expect(buildHtmlDocument(source)).toBe(source);
+        expect(buildHtmlDocument(source)).not.toContain(
+            'Content-Security-Policy'
+        );
+    });
+    it('adds dark reading colors after author styles without adding a script', () => {
+        const light = buildHtmlDocument('<style>body{color:black}</style>');
+        const dark = buildHtmlDocument('<style>body{color:black}</style>', true);
+        expect(light).not.toContain('color-scheme:dark');
+        expect(dark).toContain('color-scheme:dark!important');
+        expect(dark).toContain('background-color:#202124!important');
+        expect(dark).not.toContain('<script');
+        expect(
+            dark.lastIndexOf('color:#e5e7eb!important')
+        ).toBeGreaterThan(dark.indexOf('body{color:black}'));
+    });
+    it('places dark colors before the closing tags and appends when absent', () => {
+        const document = buildHtmlDocument(
+            '<html><head></head><body><p>Hi</p></body></html>',
+            true
+        );
+        expect(document.indexOf('color-scheme:dark')).toBeLessThan(
+            document.lastIndexOf('</body>')
+        );
+        const fragment = buildHtmlDocument('<p>Hi</p>', true);
+        expect(fragment.startsWith('<p>Hi</p>')).toBe(true);
+        expect(fragment).toContain('color-scheme:dark!important');
+    });
+    it('keeps Markdown escaped and script-free behind a restrictive CSP', () => {
+        for (const dark of [false, true]) {
+            const document = buildMarkdownDocument('Hello', dark);
+            expect(document).toContain("script-src 'none'");
+            expect(document).toContain("connect-src 'none'");
+            expect(document).toContain("default-src 'none'");
+            expect(document).toContain("base-uri 'none'");
+            expect(document).not.toContain('<script');
+            expect(document).toContain('color-scheme:light');
         }
-        const html = buildStaticDocument('<style>body{color:black}</style>', 'html', true);
-        expect(html.lastIndexOf('color:#e5e7eb!important')).toBeGreaterThan(html.indexOf('body{color:black}'));
-    });
-    it('preserves static HTML and inline styles', () => {
-        expect(
-            sanitizeStaticHtml(
-                '<h1 class="title">Hello &amp; world</h1><style>.title{color:red}</style>'
-            )
-        ).toBe(
-            '<h1 class="title">Hello &amp; world</h1><style>.title{color:red}</style>'
+        const dark = buildMarkdownDocument(
+            '<style>body{color:black}</style>',
+            true
         );
-    });
-    it('removes scripts, events, navigation and nested documents', () => {
-        const result = sanitizeStaticHtml(
-            '<meta http-equiv="refresh" content="0;url=https://example.com"><base href="https://example.com"><h1 onclick="alert(1)">Hi</h1><script>alert(1)</script><iframe src="https://example.com"></iframe><a href="javascript:alert(1)">link</a><form action="https://example.com"><input></form>'
+        expect(dark).toContain('color-scheme:dark!important');
+        expect(dark.lastIndexOf('color:#e5e7eb!important')).toBeGreaterThan(
+            dark.indexOf('body{color:black}')
         );
-        expect(result).toBe('<h1>Hi</h1>link');
-    });
-    it('allows only embedded raster images, not srcset or remote images', () => {
-        expect(
-            sanitizeStaticHtml(
-                '<img src="https://example.com/image.png" alt="remote"><img src="data:image/png;base64,YQ==" srcset="https://example.com/a.png">'
-            )
-        ).toBe('<span>remote</span><img src="data:image/png;base64,YQ==">');
-    });
-    it('blocks resources and document execution with CSP', () => {
-        const result = buildStaticDocument(
-            '<style>@import "https://example.com/a.css";</style>',
-            'html'
-        );
-        expect(result).toContain("script-src 'none'");
-        expect(result).toContain("connect-src 'none'");
-        expect(result).toContain("default-src 'none'");
-        expect(result).toContain("base-uri 'none'");
     });
     it('escapes raw Markdown HTML and renders headings, tables, lists and code', () => {
         const result = markdownPreviewHtml(

@@ -269,7 +269,9 @@ export default function FilesScreen() {
             ? `${repoBaseCwd}/${file.fullPath}`
             : file.fullPath;
         const encodedPath = btoa(new TextEncoder().encode(absolutePath).reduce((s, b) => s + String.fromCharCode(b), ''));
-        const stagedParam = staged ? '&staged=1' : '';
+        // The staged section already knows the version, so the header subtitle starts out filled
+        // instead of waiting for the preview RPC to report it.
+        const stagedParam = staged ? `&staged=1&note=${encodeURIComponent(t('files.preview.index'))}` : '';
         router.push(`/session/${sessionId}/file?path=${encodeURIComponent(encodedPath)}${stagedParam}&view=diff`);
     }, [router, sessionId, selectedRepo, repoBaseCwd]);
 

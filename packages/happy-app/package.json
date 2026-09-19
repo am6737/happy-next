@@ -158,7 +158,6 @@
     "expo-web-browser": "~15.0.7",
     "fuse.js": "^7.1.0",
     "happy-wire": "*",
-    "htmlparser2": "10.0.0",
     "libsodium-wrappers": "0.8.2",
     "livekit-client": "^2.15.4",
     "lottie-react-native": "~7.3.1",
