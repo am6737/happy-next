@@ -69,7 +69,7 @@ function useElapsedMs(startedAt: number | null): number {
 
 const styles = StyleSheet.create((theme) => ({
     row: {
-        paddingBottom: 4,
+        paddingBottom: 6,
         marginBottom: 8,
         borderBottomWidth: StyleSheet.hairlineWidth,
         borderBottomColor: theme.colors.divider,
