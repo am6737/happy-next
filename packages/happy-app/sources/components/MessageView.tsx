@@ -732,7 +732,7 @@ const styles = StyleSheet.create((theme) => ({
     alignSelf: 'stretch',
   },
   agentEventContainer: {
-    marginHorizontal: 8,
+    marginHorizontal: 16,
     alignItems: 'center',
     paddingVertical: 8,
   },
@@ -741,7 +741,7 @@ const styles = StyleSheet.create((theme) => ({
     fontSize: 14,
   },
   toolContainer: {
-    marginHorizontal: 8,
+    marginHorizontal: 16,
   },
   debugText: {
     color: theme.colors.agentEventText,
