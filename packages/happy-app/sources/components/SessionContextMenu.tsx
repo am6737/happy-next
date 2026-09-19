@@ -36,6 +36,7 @@ import { SessionContextMenuPortal } from './SessionContextMenuPortal';
 import { SessionColorPalette } from './SessionColorMarker';
 import type { SessionMarkerColor } from '@/sync/sessionAppearance';
 import { hasLiveCompletion, hasUnreadCompletionSince } from '@/utils/sessionAttention';
+import { useDismissToHome } from '@/hooks/useDismissToHome';
 
 type MenuPosition = { x: number; y: number };
 type ActionIconSpec =
@@ -144,11 +145,18 @@ function useSessionQuickActions(session: Session) {
     const [archiveMenuVisible, setArchiveMenuVisible] = React.useState(false);
     const [archiveMenuItems, setArchiveMenuItems] = React.useState<ActionMenuItem[]>([]);
 
+    const dismissToHome = useDismissToHome();
+
     const [, performArchive] = useHappyAction(async () => {
+        // Home first: the flip to inactive empties the composer on the session's own screen, so
+        // archiving from the list would reflow that screen for the whole archive round trip
+        // before it pops.
+        dismissToHome();
         const previousActive = storage.getState().sessions[session.id]?.active ?? session.active;
         storage.getState().updateSessionActivity(session.id, false);
         const result = await sessionArchive(session.id);
         const errorMessage = result.message || t('sessionInfo.failedToArchiveSession');
+        // Archiving is idempotent: if RPC target is gone, session is effectively already archived.
         if (!result.success && /RPC method not available/i.test(errorMessage)) {
             await sync.clearSessionMessageCache(session.id);
             return;
@@ -341,11 +349,7 @@ function useSessionQuickActions(session: Session) {
             // logo does. `markSessionUnread` stops the view being tracked first, which is what
             // makes the dot stick; this is only about not leaving someone staring at it.
             if (sync.isViewingSession(session.id)) {
-                try {
-                    router.dismissAll();
-                } catch (_) {
-                    // Already at the root of the stack. The dot still holds.
-                }
+                dismissToHome();
             }
             sync.markSessionUnread(session.id);
         },

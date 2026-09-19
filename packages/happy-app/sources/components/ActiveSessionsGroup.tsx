@@ -18,6 +18,7 @@ import { Modal } from '@/modal';
 import { ProjectGitStatus } from './ProjectGitStatus';
 import { t } from '@/text';
 import { useNavigateToSession } from '@/hooks/useNavigateToSession';
+import { useDismissToHome } from '@/hooks/useDismissToHome';
 import { useHappyAction } from '@/hooks/useHappyAction';
 import { HappyError } from '@/utils/errors';
 import { getWorktreeInfo, cleanupWorktree } from '@/utils/worktreeOps';
@@ -456,6 +457,7 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder, isCardFir
     const sessionName = getSessionName(session);
     const runningTaskCount = useOrchestratorRunningTaskCount(session.id);
     const navigateToSession = useNavigateToSession();
+    const dismissToHome = useDismissToHome();
     const swipeableRef = React.useRef<Swipeable | null>(null);
     const swipeEnabled = Platform.OS !== 'web';
     const setRowRef = React.useCallback((ref: View | null) => {
@@ -463,12 +465,17 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder, isCardFir
     }, [registerSessionRowRef, session.id]);
 
     const [archivingSession, performArchive] = useHappyAction(async () => {
+        // Home first: the flip to inactive empties the composer on the session's own screen, so
+        // archiving from the list would reflow that screen for the whole archive round trip
+        // before it pops.
+        dismissToHome();
         const previousActive = storage.getState().sessions[session.id]?.active ?? session.active;
         storage.getState().updateSessionActivity(session.id, false);
 
         const result = await sessionArchive(session.id);
         const errorMessage = result.message || t('sessionInfo.failedToArchiveSession');
 
+        // Archiving is idempotent: if RPC target is gone, session is effectively already archived.
         if (!result.success && /RPC method not available/i.test(errorMessage)) {
             await sync.clearSessionMessageCache(session.id);
             return;
