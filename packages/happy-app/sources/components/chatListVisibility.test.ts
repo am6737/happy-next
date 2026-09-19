@@ -1,6 +1,25 @@
 import { describe, expect, it } from 'vitest';
-import { shouldHideMessageInMinimap, shouldHideMessageInChatList } from './chatListVisibility';
-import { AgentTextMessage, MinimapMessage, UserTextMessage } from '@/sync/typesMessage';
+import { currentLandmark, railLandmarkRows, shouldHideMessageInMinimap, shouldHideMessageInChatList, LandmarkRow } from './chatListVisibility';
+import { AgentTextMessage, MinimapMessage, ToolCallMessage, UserTextMessage } from '@/sync/typesMessage';
+
+function toolCall(name: string): ToolCallMessage {
+    return {
+        kind: 'tool-call',
+        id: `call-${name}`,
+        localId: null,
+        createdAt: 0,
+        tool: {
+            name,
+            state: 'completed',
+            input: null,
+            createdAt: 0,
+            startedAt: null,
+            completedAt: null,
+            description: null,
+        },
+        children: [],
+    };
+}
 
 function agentText(overrides: Partial<AgentTextMessage> = {}): AgentTextMessage {
     return {
@@ -146,5 +165,88 @@ describe('shouldHideMessageInMinimap', () => {
             answers: null,
         };
         expect(shouldHideMessageInMinimap(question)).toBe(false);
+    });
+});
+
+describe('railLandmarkRows', () => {
+    const prompt = userText('hello', { id: 'prompt' });
+    const question = toolCall('AskUserQuestion');
+    const reply = agentText({ id: 'reply' });
+    const bash = toolCall('Bash');
+
+    it('carries the rows the rail has a mark for, with their index in the list', () => {
+        const railIds = new Set(['prompt', question.id]);
+        expect(railLandmarkRows([reply, bash, question, prompt], railIds)).toEqual([
+            { id: question.id, index: 2 },
+            { id: 'prompt', index: 3 },
+        ]);
+    });
+
+    it('leaves out a row the rail hides, so the reader is never reported on a mark that is not drawn', () => {
+        // A compaction summary: the list renders it, `shouldHideMessageInMinimap` keeps it off the rail,
+        // and it is exactly the row the reader is on when they scroll up to it.
+        const summary = userText('<summary>', { id: 'summary', meta: { sentFrom: 'cli', isCompactSummary: true } });
+        const railIds = new Set(['prompt']);
+        const rows = railLandmarkRows([summary, prompt], railIds);
+        expect(rows).toEqual([{ id: 'prompt', index: 1 }]);
+        // And so the rail keeps lighting the prompt for as long as the summary is the last row above.
+        expect(currentLandmark(rows, [0, 1])).toBe('prompt');
+    });
+
+    it('has nothing to say while the rail is empty', () => {
+        expect(railLandmarkRows([prompt, reply], new Set())).toEqual([]);
+    });
+});
+
+describe('currentLandmark', () => {
+    // Four landmarks with room between them: a is the oldest prompt, b is a preview_html call, c and d
+    // are prompts. Indexes are into the list's newest-first order, so d is the closest to the bottom.
+    const landmarks: LandmarkRow[] = [
+        { id: 'd', index: 5 },
+        { id: 'c', index: 9 },
+        { id: 'b', index: 13 },
+        { id: 'a', index: 15 },
+    ];
+
+    it('holds the last landmark for as long as the closing reply runs', () => {
+        // The reply after d is longer than a screen: no landmark is on screen anywhere in it, and the
+        // reader has still been through d.
+        expect(currentLandmark(landmarks, [0, 1, 2, 3])).toBe('d');
+        expect(currentLandmark(landmarks, [2, 3, 4, 5])).toBe('d');
+        expect(currentLandmark(landmarks, [0, 1, 2, 3, 4, 5])).toBe('d');
+    });
+
+    it('takes the landmark the reader is looking at over the older one above it', () => {
+        // A preview or a question sits right under the prompt that asked for it, so the two share the
+        // screen; the reader is on the lower one, which is the newer of the two.
+        expect(currentLandmark(landmarks, [12, 13, 14, 15])).toBe('b');
+        expect(currentLandmark(landmarks, [13, 14, 15, 16])).toBe('b');
+    });
+
+    it('follows the reader back up the conversation', () => {
+        expect(currentLandmark(landmarks, [8, 9, 10])).toBe('c');
+        expect(currentLandmark(landmarks, [9, 10, 11, 12])).toBe('c');
+        expect(currentLandmark(landmarks, [14, 15, 16])).toBe('a');
+        expect(currentLandmark(landmarks, [15, 16, 17])).toBe('a');
+    });
+
+    it('lights every landmark in turn as the reader walks up the conversation', () => {
+        // The report this rule was rewritten for: with a preview_html as the second landmark from the
+        // top, scrolling up never lit it — the prompt just above it shared the screen and the older of
+        // the two won. Walking up must step through all four, one at a time, and never skip one.
+        const lit: string[] = [];
+        for (let bottom = 4; bottom <= 18; bottom++) {
+            lit.push(currentLandmark(landmarks, [bottom, bottom + 1, bottom + 2])!);
+        }
+        expect(lit.join('')).toBe('ddccccbbbbaaaaa');
+    });
+
+    it('points at the first landmark while the reader is still above every one of them', () => {
+        expect(currentLandmark(landmarks, [16, 17, 18])).toBe('a');
+    });
+
+    it('says nothing without a landmark row, or without a row measured at all', () => {
+        expect(currentLandmark([], [0, 1, 2])).toBeNull();
+        expect(currentLandmark(landmarks, [])).toBeNull();
     });
 });

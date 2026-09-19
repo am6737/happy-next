@@ -847,6 +847,7 @@ export const ja: TranslationStructure = {
         inputPlaceholder: 'メッセージを入力...',
         initialMessage: '何をしましょう？',
         locatingMessage: 'メッセージを移動中…',
+        minimapNavigator: 'メッセージナビゲーター',
         takePhoto: '写真を撮る',
         chooseFromLibrary: 'ライブラリから選択',
         pasteFromClipboard: 'クリップボードから貼り付け',

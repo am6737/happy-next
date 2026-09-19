@@ -827,6 +827,7 @@ export const pl: TranslationStructure = {
         inputPlaceholder: 'Wpisz wiadomość...',
         initialMessage: 'Nad czym chciałbyś pracować?',
         locatingMessage: 'Lokalizowanie wiadomości…',
+        minimapNavigator: 'Nawigator wiadomości',
         takePhoto: 'Zrób zdjęcie',
         chooseFromLibrary: 'Wybierz z galerii',
         pasteFromClipboard: 'Wklej ze schowka',

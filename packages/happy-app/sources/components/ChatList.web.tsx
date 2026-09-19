@@ -12,7 +12,7 @@ import { ConversationMinimapItem } from './ConversationMinimap';
 import { Metadata, Session } from '@/sync/storageTypes';
 import { ChatFooter } from './ChatFooter';
 import { AskUserQuestionMessage, isAskUserQuestionToolCall, isPreviewHtmlToolCall, Message, MinimapMessage, PreviewHtmlMessage, toAskUserQuestionMessage, toPreviewHtmlMessage, UserTextMessage } from '@/sync/typesMessage';
-import { shouldHideMessageInChatList, shouldHideMessageInMinimap } from './chatListVisibility';
+import { currentLandmark, railLandmarkRows, shouldHideMessageInChatList, shouldHideMessageInMinimap, type LandmarkRow } from './chatListVisibility';
 import { turnHeaderProps, useTurnAnalysis } from './messageTurnTiming';
 import { AWAITING_RESPONSE_MAX_MS } from '@/utils/sessionUtils';
 import { layout as appLayout } from './layout';
@@ -132,7 +132,7 @@ export interface ForkMessageRequest {
 // A loaded user message paired with its index in the newest-first `visibleMessages`.
 type LoadedUserMessage = { message: UserTextMessage; index: number };
 
-export const ChatList = React.memo((props: { session: Session; onFillInput?: (text: string, allOptions?: string[]) => void; onLoadMore?: () => void; onForkMessage?: (request: ForkMessageRequest) => void; forkingMessageId?: string | null; minimapCachedUserMessages?: MinimapMessage[]; onMinimapItemsChange?: (items: ConversationMinimapItem[]) => void; onActiveMessageIdsChange?: (ids: Set<string>) => void; onRegisterMinimapJump?: (jump: ((message: MinimapMessage) => void) | null) => void }) => {
+export const ChatList = React.memo((props: { session: Session; onFillInput?: (text: string, allOptions?: string[]) => void; onLoadMore?: () => void; onForkMessage?: (request: ForkMessageRequest) => void; forkingMessageId?: string | null; minimapCachedUserMessages?: MinimapMessage[]; onMinimapItemsChange?: (items: ConversationMinimapItem[]) => void; onActiveMessageIdChange?: (id: string | null) => void; onRegisterMinimapJump?: (jump: ((message: MinimapMessage) => void) | null) => void }) => {
     const { messages, hasMore } = useSessionMessages(props.session.id);
     const profile = useProfile();
     const isSharedSession = !!(props.session.isShared || props.session.accessLevel);
@@ -153,7 +153,7 @@ export const ChatList = React.memo((props: { session: Session; onFillInput?: (te
             forkingMessageId={props.forkingMessageId}
             minimapCachedUserMessages={props.minimapCachedUserMessages}
             onMinimapItemsChange={props.onMinimapItemsChange}
-            onActiveMessageIdsChange={props.onActiveMessageIdsChange}
+            onActiveMessageIdChange={props.onActiveMessageIdChange}
             onRegisterMinimapJump={props.onRegisterMinimapJump}
         />
     )
@@ -471,7 +471,8 @@ const ChatListInternal = React.memo((props: {
     forkingMessageId?: string | null,
     minimapCachedUserMessages?: MinimapMessage[],
     onMinimapItemsChange?: (items: ConversationMinimapItem[]) => void,
-    onActiveMessageIdsChange?: (ids: Set<string>) => void,
+    /** The landmark the rail should mark as the reader's — see `currentLandmark`. */
+    onActiveMessageIdChange?: (id: string | null) => void,
     onRegisterMinimapJump?: (jump: ((message: MinimapMessage) => void) | null) => void,
 }) => {
     const { theme } = useUnistyles();
@@ -546,8 +547,7 @@ const ChatListInternal = React.memo((props: {
     }, [visibleMessages]);
 
     // Loaded user messages in ascending (oldest→newest) order, carrying their index into the
-    // newest-first `visibleMessages`. Used for the active-marker nearest-neighbor computation
-    // while scrolling and as the minimap item source.
+    // newest-first `visibleMessages`. The minimap item source.
     const loadedUserMessages = React.useMemo<LoadedUserMessage[]>(() => {
         return visibleMessages
             .map((message, index) => message.kind === 'user-text'
@@ -556,8 +556,6 @@ const ChatListInternal = React.memo((props: {
             .filter((item): item is LoadedUserMessage => item !== null)
             .reverse();
     }, [visibleMessages]);
-    const loadedUserMessagesRef = useRef(loadedUserMessages);
-    loadedUserMessagesRef.current = loadedUserMessages;
 
     // AskUserQuestion calls the rail places a marker for, in the same ascending order as
     // `loadedUserMessages`. Sub-agent (sidechain) questions live inside their parent's children and
@@ -616,7 +614,16 @@ const ChatListInternal = React.memo((props: {
             .sort((a, b) => a.createdAt - b.createdAt || (a.seq ?? 0) - (b.seq ?? 0))
             .map((message) => ({ message }));
     }, [props.minimapCachedUserMessages, loadedUserMessages, loadedQuestionMessages, loadedPreviewMessages]);
-    const activeMessageIdsRef = useRef<Set<string>>(new Set());
+    // Landmark rows in the list's own order — newest first — carrying the index each has there. Only a
+    // row the rail draws a mark for counts, so the landmark the rail is told to light is always one it
+    // has; the rail's current landmark is read off these and the rows on screen, see `currentLandmark`.
+    const landmarkRows = React.useMemo(
+        () => railLandmarkRows(visibleMessages, new Set(minimapItems.map((item) => item.message.id))),
+        [visibleMessages, minimapItems],
+    );
+    const landmarkRowsRef = useRef(landmarkRows);
+    landmarkRowsRef.current = landmarkRows;
+    const activeMessageIdRef = useRef<string | null>(null);
 
     // ---- Virtualizer model ----
 
@@ -1265,59 +1272,30 @@ const ChatListInternal = React.memo((props: {
     // ---- Viewability via IntersectionObserver (minimap active highlight) ----
     const intersectionObserverRef = useRef<IntersectionObserver | null>(null);
     const visibleIdsRef = useRef<Set<string>>(new Set());
-    const onActiveMessageIdsChangeRef = useRef(props.onActiveMessageIdsChange);
-    onActiveMessageIdsChangeRef.current = props.onActiveMessageIdsChange;
+    const onActiveMessageIdChangeRef = useRef(props.onActiveMessageIdChange);
+    onActiveMessageIdChangeRef.current = props.onActiveMessageIdChange;
 
     const recomputeActiveIds = useCallback(() => {
         const items = visibleMessagesRef.current;
         const indexById = new Map<string, number>();
         items.forEach((message, index) => indexById.set(message.id, index));
-        const next = new Set<string>();
+
         const visibleIndexes: number[] = [];
         for (const id of visibleIdsRef.current) {
             const index = indexById.get(id);
-            if (index == null) continue;
-            visibleIndexes.push(index);
-            // Questions and previews are landmarks too, so one on screen highlights its own
-            // marker instead of leaving the rail pointing at the nearest prompt.
-            const item = items[index];
-            if (item?.kind === 'user-text' || (item != null && (isAskUserQuestionToolCall(item) || isPreviewHtmlToolCall(item)))) {
-                next.add(id);
-            }
+            if (index != null) visibleIndexes.push(index);
         }
 
-        // If the viewport is between two user prompts (e.g. only assistant/tool output is
-        // visible), keep the rail useful by highlighting the nearest loaded user prompt.
-        // If nothing is measured as visible at all (transient during fast updates), keep
-        // the previous active marker instead of jumping to an endpoint.
-        if (next.size === 0) {
-            const userItems = loadedUserMessagesRef.current;
-            if (userItems.length > 0 && visibleIndexes.length > 0) {
-                const centerIndex = visibleIndexes.reduce((sum, index) => sum + index, 0) / visibleIndexes.length;
-                let nearest = userItems[0];
-                let nearestDistance = Math.abs(nearest.index - centerIndex);
-                for (const userItem of userItems) {
-                    const distance = Math.abs(userItem.index - centerIndex);
-                    if (distance < nearestDistance) {
-                        nearest = userItem;
-                        nearestDistance = distance;
-                    }
-                }
-                next.add(nearest.message.id);
-            } else {
-                const validIds = new Set(userItems.map((item) => item.message.id));
-                for (const id of activeMessageIdsRef.current) {
-                    if (validIds.has(id)) {
-                        next.add(id);
-                    }
-                }
-            }
-        }
-
-        if (next.size > 0 || loadedUserMessagesRef.current.length === 0) {
-            activeMessageIdsRef.current = next;
-            onActiveMessageIdsChangeRef.current?.(next);
-        }
+        // Which landmark the reader is on is a question about the whole list — where they sit among its
+        // landmarks — not about the rows that happen to be on screen; see `currentLandmark`. The marker
+        // follows them back through prompts, questions and previews alike, so no landmark on the rail is
+        // unreachable.
+        const next = currentLandmark(landmarkRowsRef.current, visibleIndexes);
+        // Nothing measured at all, which the observer reports now and then as rows mount: keep the last
+        // answer rather than flicking the rail to an endpoint.
+        if (next === null || next === activeMessageIdRef.current) return;
+        activeMessageIdRef.current = next;
+        onActiveMessageIdChangeRef.current?.(next);
     }, []);
 
     const ensureIntersectionObserver = useCallback(() => {
@@ -1954,20 +1932,15 @@ const ChatListInternal = React.memo((props: {
     React.useEffect(() => {
         props.onMinimapItemsChange?.(minimapItems);
 
-        const validIds = new Set(minimapItems.map((item) => item.message.id));
-        const stillValidActiveIds = Array.from(activeMessageIdsRef.current).filter((id) => validIds.has(id));
-        if (stillValidActiveIds.length > 0) {
-            const next = new Set(stillValidActiveIds);
-            activeMessageIdsRef.current = next;
-            props.onActiveMessageIdsChange?.(next);
-            return;
-        }
+        // A landmark the rail no longer carries cannot be marked — the reader was on it and it has left
+        // the rail (a summary dropped by the list filter, a page reloaded away) — so rest on the newest.
+        const activeId = activeMessageIdRef.current;
+        if (activeId !== null && minimapItems.some((item) => item.message.id === activeId)) return;
 
-        const fallback = minimapItems[minimapItems.length - 1];
-        const next = fallback ? new Set([fallback.message.id]) : new Set<string>();
-        activeMessageIdsRef.current = next;
-        props.onActiveMessageIdsChange?.(next);
-    }, [props.onMinimapItemsChange, props.onActiveMessageIdsChange, minimapItems]);
+        const newest = minimapItems[minimapItems.length - 1];
+        activeMessageIdRef.current = newest ? newest.message.id : null;
+        props.onActiveMessageIdChange?.(activeMessageIdRef.current);
+    }, [props.onMinimapItemsChange, props.onActiveMessageIdChange, minimapItems]);
 
     React.useEffect(() => {
         const controller = createScrollButtonVisibilityController({

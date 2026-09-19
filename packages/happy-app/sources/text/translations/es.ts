@@ -815,6 +815,7 @@ export const es: TranslationStructure = {
         inputPlaceholder: 'Escriba un mensaje ...',
         initialMessage: '¿En qué te gustaría trabajar?',
         locatingMessage: 'Localizando mensaje…',
+        minimapNavigator: 'Navegador de mensajes',
         takePhoto: 'Tomar foto',
         chooseFromLibrary: 'Elegir de la galería',
         pasteFromClipboard: 'Pegar desde el portapapeles',

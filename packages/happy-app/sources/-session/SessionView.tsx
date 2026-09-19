@@ -7,7 +7,7 @@ import { getSuggestions } from '@/components/autocomplete/suggestions';
 import { ChatHeaderTitle } from '@/components/ChatHeaderTitle';
 import { HeaderBackButton } from '@/components/navigation/Header';
 import { ChatList, type ForkMessageRequest } from '@/components/ChatList';
-import { ConversationMinimap, type ConversationMinimapItem } from '@/components/ConversationMinimap';
+import { ConversationMinimap, type ConversationMinimapEdgeTouch, type ConversationMinimapItem } from '@/components/ConversationMinimap';
 import type { MinimapMessage } from '@/sync/typesMessage';
 import { Deferred } from '@/components/Deferred';
 import { DuplicateSheet } from '@/components/DuplicateSheet';
@@ -44,7 +44,7 @@ import { useFocusEffect, useIsFocused, useNavigation } from '@react-navigation/n
 import { Stack, useRouter } from 'expo-router';
 import * as React from 'react';
 import { useMemo } from 'react';
-import { ActivityIndicator, Platform, Pressable, Text, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, Text, useWindowDimensions, View, type GestureResponderEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useUnistyles } from 'react-native-unistyles';
 
@@ -959,15 +959,39 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
 
     // Handle loading more older messages when scrolling to top
     const [minimapItems, setMinimapItems] = React.useState<ConversationMinimapItem[]>([]);
-    const [minimapActiveMessageIds, setMinimapActiveMessageIds] = React.useState<Set<string>>(() => new Set());
+    const [minimapActiveMessageId, setMinimapActiveMessageId] = React.useState<string | null>(null);
     const [minimapCachedMessages, setMinimapCachedMessages] = React.useState<MinimapMessage[]>([]);
     const [contentAreaWidth, setContentAreaWidth] = React.useState(0);
-    const minimapJumpRef = React.useRef<((message: MinimapMessage) => void) | null>(null);
-    const handleRegisterMinimapJump = React.useCallback((jump: ((message: MinimapMessage) => void) | null) => {
+    const minimapJumpRef = React.useRef<((message: MinimapMessage) => void | Promise<void>) | null>(null);
+    const handleRegisterMinimapJump = React.useCallback((jump: ((message: MinimapMessage) => void | Promise<void>) | null) => {
         minimapJumpRef.current = jump;
     }, []);
+    // The answer is handed back rather than dropped: a jump that has to page older messages in takes a
+    // while, and the rail holds itself up until it lands.
     const handleMinimapJump = React.useCallback((message: MinimapMessage) => {
-        minimapJumpRef.current?.(message);
+        return minimapJumpRef.current?.(message);
+    }, []);
+
+    // The minimap's summoning swipe, listened for from here: the rail cannot watch the screen edge itself
+    // without putting a touch zone between the list and the thumb, and this View is the nearest ancestor
+    // of the list that can hear the edge instead. The touch props below are bubbling events — they read
+    // touches the list is already handling, and change nothing about how the list scrolls.
+    const minimapEdgeTouchRef = React.useRef<ConversationMinimapEdgeTouch | null>(null);
+    const handleRegisterMinimapEdgeTouch = React.useCallback((listener: ConversationMinimapEdgeTouch | null) => {
+        minimapEdgeTouchRef.current = listener;
+    }, []);
+    // One stable handler per phase: this view re-renders constantly, and a new identity would make RN
+    // re-register the touch handlers with it every time.
+    const edgeTouchHandlers = React.useMemo(() => {
+        const report = (phase: 'start' | 'move' | 'end') => (event: GestureResponderEvent) => {
+            minimapEdgeTouchRef.current?.(phase, event.nativeEvent.pageX, event.nativeEvent.pageY);
+        };
+        return {
+            onTouchStart: report('start'),
+            onTouchMove: report('move'),
+            onTouchEnd: report('end'),
+            onTouchCancel: report('end'),
+        };
     }, []);
 
     // Tracks which session the cached minimap list currently belongs to, so we only blank it on a
@@ -978,8 +1002,6 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
     // Refreshed on focus / session change.
     useFocusEffect(
         React.useCallback(() => {
-            // The minimap is web-only (see ConversationMinimap); don't pay the scan+decrypt on native.
-            if (Platform.OS !== 'web') return;
             let cancelled = false;
             if (cachedMinimapSessionRef.current !== sessionId) {
                 cachedMinimapSessionRef.current = sessionId;
@@ -1044,7 +1066,7 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
                         onLoadMore={handleLoadMore}
                         minimapCachedUserMessages={minimapCachedMessages}
                         onMinimapItemsChange={setMinimapItems}
-                        onActiveMessageIdsChange={setMinimapActiveMessageIds}
+                        onActiveMessageIdChange={setMinimapActiveMessageId}
                         onRegisterMinimapJump={handleRegisterMinimapJump}
                     />
                 )}
@@ -1300,6 +1322,7 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
             <View
                 ref={dropZoneRef}
                 onLayout={(event) => setContentAreaWidth(event.nativeEvent.layout.width)}
+                {...edgeTouchHandlers}
                 style={{ flexBasis: 0, flexGrow: 1, position: 'relative', paddingBottom: safeArea.bottom + ((isRunningOnMac() || Platform.OS === 'web') ? 8 : 0) }}
             >
                 <AgentContentView
@@ -1334,9 +1357,10 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
 
             <ConversationMinimap
                 userMessages={minimapItems}
-                activeMessageIds={minimapActiveMessageIds}
+                activeMessageId={minimapActiveMessageId}
                 onJumpToMessage={handleMinimapJump}
                 contentWidth={contentAreaWidth}
+                onRegisterMinimapEdgeTouch={handleRegisterMinimapEdgeTouch}
             />
 
             {/* Back button for landscape phone mode when header is hidden */}

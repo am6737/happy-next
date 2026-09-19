@@ -826,6 +826,7 @@ export const en = {
         inputPlaceholder: 'Type a message ...',
         initialMessage: 'What would you like to work on?',
         locatingMessage: 'Locating message…',
+        minimapNavigator: 'Message navigator',
         takePhoto: 'Take Photo',
         chooseFromLibrary: 'Choose from Library',
         pasteFromClipboard: 'Paste from Clipboard',

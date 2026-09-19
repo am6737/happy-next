@@ -1000,6 +1000,7 @@ export const ru: TranslationStructure = {
         inputPlaceholder: 'Введите сообщение...',
         initialMessage: 'Над чем вы хотите поработать?',
         locatingMessage: 'Поиск сообщения…',
+        minimapNavigator: 'Навигатор по сообщениям',
         takePhoto: 'Сделать фото',
         chooseFromLibrary: 'Выбрать из галереи',
         pasteFromClipboard: 'Вставить из буфера обмена',

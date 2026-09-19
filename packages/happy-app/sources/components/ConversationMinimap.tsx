@@ -1,119 +1,90 @@
 import * as React from 'react';
-import { Platform, Pressable, Text, View } from 'react-native';
+import { Platform, Pressable, View } from 'react-native';
 import { useUnistyles } from 'react-native-unistyles';
-import { AskUserQuestionMessage, MinimapMessage, readAskUserQuestionAnswer, UserTextMessage } from '@/sync/typesMessage';
-import { formatMessageTime } from '@/utils/messageTime';
-import { t } from '@/text';
+import { MinimapMessage } from '@/sync/typesMessage';
+import {
+    MARKER_HEIGHT,
+    MARKER_SLOT_HEIGHT,
+    MARKER_WIDTH,
+    MIN_ITEMS,
+    getHoverScale,
+    maxVisibleSlots,
+    windowStartFor,
+} from './minimapScrubber';
+import { MinimapPreviewCard, PREVIEW_WIDTH } from './minimapPreview';
+import { ConversationMinimapTouch } from './ConversationMinimapTouch';
 
 export type ConversationMinimapItem = {
     message: MinimapMessage;
 };
 
-const HIT_WIDTH = 44;
-const MARKER_WIDTH = 7;
-const MARKER_HEIGHT = 2;
-const MARKER_SLOT_HEIGHT = 10;
-const MIN_VISIBLE_ITEMS = 8;
-
-function getHoverScale(distance: number) {
-    if (distance <= 0) return 4;
-    if (distance === 1) return 3.4;
-    if (distance === 2) return 2.8;
-    if (distance === 3) return 2.2;
-    if (distance === 4) return 1.6;
-    return 1;
-}
-const MAX_PREVIEW_CHARS = 180;
-const PREVIEW_WIDTH = 260;
-const MIN_CONTENT_WIDTH = 840;
-
-function truncatePreview(raw: string) {
-    return raw.length > MAX_PREVIEW_CHARS ? `${raw.slice(0, MAX_PREVIEW_CHARS - 1)}…` : raw;
-}
-
-function getPromptPreviewText(message: UserTextMessage) {
-    const raw = (message.displayText || message.text || '').replace(/\s+/g, ' ').trim();
-    if (!raw) return '(empty message)';
-    return truncatePreview(raw);
-}
-
-/** One line per question so a multi-question prompt stays readable in the preview. */
-function getQuestionPreviewText(message: AskUserQuestionMessage) {
-    return truncatePreview(message.questions.map((question) => question.question.trim()).filter(Boolean).join('\n'));
-}
-
-function getPreviewText(message: MinimapMessage) {
-    if (message.kind === 'ask-user-question') return getQuestionPreviewText(message);
-    if (message.kind === 'preview-html') {
-        // The card is named by its title; an untitled one says what it is instead of showing blank.
-        return truncatePreview(message.title?.trim() || t('tools.names.previewHtml'));
-    }
-    return getPromptPreviewText(message);
-}
+/** The moments a touch at the screen edge is reported at, once for each. */
+export type ConversationMinimapEdgeTouchPhase = 'start' | 'move' | 'end';
 
 /**
- * Small heading above the preview body: the first question's header for a single question, the
- * question count otherwise; a preview's name when its title is about to follow. Prompts have no
- * heading.
+ * How the summoning swipe is reported from outside the rail, by a `View` that can see the touches the
+ * message list is handling. The coordinates are in window space; see `ConversationMinimapTouch.onEdgeTouch`.
  */
-function getPreviewLabel(message: MinimapMessage) {
-    if (message.kind === 'preview-html') {
-        return message.title?.trim() ? t('tools.names.previewHtml') : null;
-    }
-    if (message.kind !== 'ask-user-question') return null;
-    if (message.questions.length > 1) {
-        return t('tools.askUserQuestion.multipleQuestions', { count: message.questions.length });
-    }
-    return message.questions[0]?.header?.trim() || t('tools.names.question');
-}
+export type ConversationMinimapEdgeTouch = (
+    phase: ConversationMinimapEdgeTouchPhase,
+    pageX: number,
+    pageY: number,
+) => void;
 
-/** Secondary preview line: attachments for a prompt, the chosen answers for a question, none for a preview. */
-function getPreviewDetail(message: MinimapMessage) {
-    if (message.kind === 'ask-user-question') {
-        const chosen = message.answers;
-        if (!chosen) return null;
-        const answers = message.questions
-            .map((question) => readAskUserQuestionAnswer(chosen, question))
-            .filter((answer): answer is string => !!answer);
-        return answers.length > 0 ? t('tools.askUserQuestion.answered', { answer: answers.join(' · ') }) : null;
-    }
-    // Only prompts carry attachments; questions reported theirs above, previews have none.
-    if (message.kind !== 'user-text') return null;
-    const images = message.images ?? [];
-    if (images.length === 0) return null;
-    const kinds = Array.from(new Set(images.map((image) => image.mimeType || 'image')));
-    const kindText = kinds.length === 1 ? kinds[0] : kinds.join(', ');
-    return `${images.length} attachment${images.length === 1 ? '' : 's'} · ${kindText}`;
-}
-
-export function ConversationMinimap(props: {
+export type ConversationMinimapProps = {
     userMessages: ConversationMinimapItem[];
-    activeMessageIds: Set<string>;
-    onJumpToMessage: (message: MinimapMessage) => void;
+    /**
+     * The landmark the reader is on, as the message list reports it — or `null` before the list has
+     * said. The rail draws exactly one lit mark, so this is one id and not a set; see
+     * `currentLandmark` for how the list decides which.
+     */
+    activeMessageId: string | null;
+    /**
+     * Move the reader to this landmark. A list that has to page older messages in before it can move
+     * answers late, and reports that by returning a promise; see the touch rail, which stays up until
+     * it settles.
+     */
+    onJumpToMessage: (message: MinimapMessage) => void | Promise<void>;
     contentWidth: number;
-}) {
+    /**
+     * Touch has no hover, and the rail cannot watch the screen edge itself without taking the edge away
+     * from the message list — a touch zone is a touch zone. So it listens from the outside instead: the
+     * host screen hands it the edge's touches through here, and the rail decides what they mean. Not
+     * used on web, where the rail is driven by hover.
+     */
+    onRegisterMinimapEdgeTouch?: (listener: ConversationMinimapEdgeTouch | null) => void;
+};
+
+const HIT_WIDTH = 44;
+const MIN_CONTENT_WIDTH = 840;
+
+export function ConversationMinimap(props: ConversationMinimapProps) {
+    // A phone has no hover, so touch gets a rail that is swiped in from the right edge instead.
+    if (Platform.OS !== 'web') {
+        return <ConversationMinimapTouch {...props} />;
+    }
+    return <WebMinimap {...props} />;
+}
+
+/** Left-edge rail: the pointer is the scrubber, the preview follows the hovered mark. */
+function WebMinimap(props: ConversationMinimapProps) {
     const { theme } = useUnistyles();
     const [hoveredIndex, setHoveredIndex] = React.useState<number | null>(null);
     const [availableHeight, setAvailableHeight] = React.useState(0);
 
+    // Where the rail rests: the landmark the reader is on, or the newest one when the list has not
+    // named it yet — the rail is read from the bottom of the conversation far more often than not.
     const activeIndex = React.useMemo(() => {
-        const index = props.userMessages.findIndex((item) => props.activeMessageIds.has(item.message.id));
+        const index = props.userMessages.findIndex((item) => item.message.id === props.activeMessageId);
         return index >= 0 ? index : Math.max(0, props.userMessages.length - 1);
-    }, [props.userMessages, props.activeMessageIds]);
-
-    const maxVisibleItems = React.useMemo(() => {
-        if (availableHeight <= 0) return props.userMessages.length;
-        return Math.max(MIN_VISIBLE_ITEMS, Math.floor(availableHeight / MARKER_SLOT_HEIGHT));
-    }, [availableHeight, props.userMessages.length]);
+    }, [props.userMessages, props.activeMessageId]);
 
     const visibleWindow = React.useMemo(() => {
         const total = props.userMessages.length;
-        const count = Math.min(total, maxVisibleItems);
-        let start = activeIndex - Math.floor(count / 2);
-        start = Math.max(0, Math.min(start, Math.max(0, total - count)));
-        const end = Math.min(total, start + count);
-        return { start, end, items: props.userMessages.slice(start, end) };
-    }, [props.userMessages, activeIndex, maxVisibleItems]);
+        const slots = maxVisibleSlots(availableHeight, MARKER_SLOT_HEIGHT, total);
+        const start = windowStartFor(activeIndex, slots, total);
+        return { start, end: start + slots, items: props.userMessages.slice(start, start + slots) };
+    }, [props.userMessages, activeIndex, availableHeight]);
 
     React.useEffect(() => {
         setHoveredIndex(null);
@@ -130,7 +101,7 @@ export function ConversationMinimap(props: {
         onMouseLeave: () => setHoveredIndex(null),
     };
 
-    if (Platform.OS !== 'web' || props.contentWidth < MIN_CONTENT_WIDTH || props.userMessages.length < 2) {
+    if (props.contentWidth < MIN_CONTENT_WIDTH || props.userMessages.length < MIN_ITEMS) {
         return null;
     }
 
@@ -172,7 +143,7 @@ export function ConversationMinimap(props: {
                 />
 
                 {visibleWindow.items.map((item, itemIndex) => {
-                    const isActive = hoveredIndex === null && props.activeMessageIds.has(item.message.id);
+                    const isActive = hoveredIndex === null && item.message.id === props.activeMessageId;
                     const hoverScale = hoveredIndex === null ? 1 : getHoverScale(Math.abs(hoveredIndex - itemIndex));
                     const isHovered = hoveredIndex === itemIndex;
                     const markerWidth = MARKER_WIDTH * hoverScale;
@@ -185,8 +156,6 @@ export function ConversationMinimap(props: {
                         : item.message.kind === 'preview-html'
                             ? 'Jump to preview'
                             : 'Jump to user message';
-                    const previewLabel = getPreviewLabel(item.message);
-                    const previewDetail = getPreviewDetail(item.message);
                     return (
                         <View key={item.message.id} style={{ position: 'relative', width: HIT_WIDTH, height: MARKER_SLOT_HEIGHT, alignItems: 'flex-start', justifyContent: 'center' }}>
                             <Pressable
@@ -216,42 +185,10 @@ export function ConversationMinimap(props: {
                                 />
                             </Pressable>
                             {isHovered && (
-                                <View
-                                    pointerEvents="none"
-                                    style={{
-                                        position: 'absolute',
-                                        top: -44,
-                                        left: HIT_WIDTH + 8,
-                                        width: PREVIEW_WIDTH,
-                                        borderRadius: 12,
-                                        paddingHorizontal: 12,
-                                        paddingVertical: 10,
-                                        backgroundColor: 'rgba(18, 18, 20, 0.88)',
-                                        borderWidth: 1,
-                                        borderColor: 'rgba(255, 255, 255, 0.12)',
-                                        shadowColor: '#000',
-                                        shadowOpacity: 0.25,
-                                        shadowRadius: 14,
-                                        shadowOffset: { width: 0, height: 8 },
-                                    }}
-                                >
-                                    <Text style={{ color: 'rgba(255,255,255,0.72)', fontSize: 11, marginBottom: 6 }}>
-                                        {formatMessageTime(item.message.createdAt)}
-                                    </Text>
-                                    {previewLabel ? (
-                                        <Text numberOfLines={1} style={{ color: 'rgba(255,255,255,0.72)', fontSize: 11, fontWeight: '600', marginBottom: 4 }}>
-                                            {previewLabel}
-                                        </Text>
-                                    ) : null}
-                                    <Text numberOfLines={5} style={{ color: '#fff', fontSize: 13, lineHeight: 18 }}>
-                                        {getPreviewText(item.message)}
-                                    </Text>
-                                    {previewDetail ? (
-                                        <Text numberOfLines={2} style={{ color: 'rgba(255,255,255,0.64)', fontSize: 11, marginTop: 7 }}>
-                                            {previewDetail}
-                                        </Text>
-                                    ) : null}
-                                </View>
+                                <MinimapPreviewCard
+                                    message={item.message}
+                                    style={{ position: 'absolute', top: -44, left: HIT_WIDTH + 8 }}
+                                />
                             )}
                         </View>
                     );

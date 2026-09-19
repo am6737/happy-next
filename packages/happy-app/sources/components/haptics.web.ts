@@ -6,6 +6,10 @@ export function hapticsLight() {
     // No implementation
 }
 
+export function hapticsHeavy() {
+    // No implementation
+}
+
 export function hapticsSuccess() {
     // No implementation
 }
