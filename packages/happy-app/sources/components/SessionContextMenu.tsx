@@ -37,6 +37,7 @@ import { SessionColorPalette } from './SessionColorMarker';
 import type { SessionMarkerColor } from '@/sync/sessionAppearance';
 import { hasLiveCompletion, hasUnreadCompletionSince } from '@/utils/sessionAttention';
 import { useDismissToHome } from '@/hooks/useDismissToHome';
+import { shouldDismissSessionMenuOnScroll, ScrollTarget } from './sessionContextMenuScroll';
 
 type MenuPosition = { x: number; y: number };
 type ActionIconSpec =
@@ -426,6 +427,14 @@ export function SessionContextMenu({ session, children, highlightShape }: {
     const [hoveredAction, setHoveredAction] = React.useState<SessionQuickActionKind | null>(null);
     const [nativeMenuVisible, setNativeMenuVisible] = React.useState(false);
     const menuRef = React.useRef<HTMLElement | null>(null);
+    // The row this menu belongs to, as a DOM node. A scroll only invalidates the menu when it
+    // moves this row — see `shouldDismissSessionMenuOnScroll`.
+    const anchorRef = React.useRef<ScrollTarget>(null);
+    // Stable identity: an inline callback ref is re-run on every render, which would drop the
+    // anchor between commits.
+    const setAnchorRef = React.useCallback((node: unknown) => {
+        anchorRef.current = (node as ScrollTarget) ?? null;
+    }, []);
     const lastLongPressAtRef = React.useRef(0);
     const { actions, archiveMenu } = useSessionQuickActions(session);
     const markerColor = useSessionMarkerColor(session.id);
@@ -474,16 +483,25 @@ export function SessionContextMenu({ session, children, highlightShape }: {
         const handleKeyDown = (event: KeyboardEvent) => {
             if (event.key === 'Escape') closeMenu();
         };
+        // Capture phase, so this sees scrolls from every container in the document — the chat
+        // pane rewriting its own scrollTop on each streaming update included. Only a scroll that
+        // moves the row the menu belongs to makes the menu stale; the rest are none of its
+        // business.
+        const handleScroll = (event: Event) => {
+            if (shouldDismissSessionMenuOnScroll(event.target as ScrollTarget, anchorRef.current)) {
+                closeMenu();
+            }
+        };
 
         document.addEventListener('pointerdown', handlePointerDown, true);
         document.addEventListener('contextmenu', handleContextMenuOutside, true);
         document.addEventListener('keydown', handleKeyDown, true);
-        window.addEventListener('scroll', closeMenu, true);
+        window.addEventListener('scroll', handleScroll, true);
         return () => {
             document.removeEventListener('pointerdown', handlePointerDown, true);
             document.removeEventListener('contextmenu', handleContextMenuOutside, true);
             document.removeEventListener('keydown', handleKeyDown, true);
-            window.removeEventListener('scroll', closeMenu, true);
+            window.removeEventListener('scroll', handleScroll, true);
         };
     }, [closeMenu, position]);
 
@@ -554,7 +572,7 @@ export function SessionContextMenu({ session, children, highlightShape }: {
 
     return (
         <>
-            <View {...webContextMenuProps} style={styles.highlightHost}>
+            <View {...webContextMenuProps} ref={setAnchorRef} style={styles.highlightHost}>
                 {children}
                 {highlight}
             </View>
