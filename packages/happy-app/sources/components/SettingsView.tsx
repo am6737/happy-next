@@ -157,19 +157,29 @@ export const SettingsView = React.memo(function SettingsView() {
             t('dootask.disconnectConfirm'),
             { confirmText: t('modals.disconnect'), destructive: true }
         );
-        if (confirmed) {
-            if (dootaskProfile) {
-                // Complete both remote disconnects before clearing local state.
-                // This makes the account-scoped deletion visible to other
-                // devices as soon as they reconcile their profile.
-                const { dootaskLogout, deleteDootaskFromServer } = await import('@/sync/dootask/api');
-                await Promise.allSettled([
-                    dootaskLogout(dootaskProfile.serverUrl, dootaskProfile.token),
-                    deleteDootaskFromServer(),
-                ]);
-            }
-            storage.getState().clearDootaskData();
-        }
+        if (!confirmed) return;
+
+        const profile = dootaskProfile;
+
+        // Unbind locally and unconditionally, before touching the network. The
+        // DooTask server being unreachable is exactly when a user wants to
+        // disconnect, so nothing here may wait on reaching it — a pending
+        // request used to leave the account bound with no error shown.
+        storage.getState().clearDootaskData();
+
+        if (!profile) return;
+
+        // Best-effort remote cleanup, detached from the UI. A server that never
+        // answers may leave these pending, which is why the unbind above must
+        // not wait on them; a failure only means the next device to reconcile
+        // still sees the stale profile.
+        void (async () => {
+            const { dootaskLogout, deleteDootaskFromServer } = await import('@/sync/dootask/api');
+            await Promise.allSettled([
+                dootaskLogout(profile.serverUrl, profile.token),
+                deleteDootaskFromServer(),
+            ]);
+        })().catch(() => {});
     });
 
     return (
