@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from '@/components/StyledText';
 import { Typography } from '@/constants/Typography';
 import { Session } from '@/sync/storageTypes';
-import { useOrchestratorHasRuns, useSessionMarkerColor } from '@/sync/storage';
+import { useSessionMarkerColor } from '@/sync/storage';
 import { getSessionName, useSessionStatus, generateCopyTitle, copySessionMetadata, copySessionModeSettings } from '@/utils/sessionUtils';
 import { promptRenameSession } from '@/utils/sessionRename';
 import { showToast } from './Toast';
@@ -31,13 +31,16 @@ import { cleanupWorkspace, cleanupWorktree } from '@/utils/worktreeOps';
 import { getWorkspaceRepos } from '@/utils/workspaceRepos';
 import { ActionMenuModal } from './ActionMenuModal';
 import { ActionMenuItem } from './ActionMenu';
-import { getSessionQuickActionKinds, SessionQuickActionKind } from './sessionQuickActions';
+import { getSessionQuickActionKinds, getSessionQuickActionSections, SessionQuickActionKind } from './sessionQuickActions';
 import { SessionContextMenuPortal } from './SessionContextMenuPortal';
 import { SessionColorPalette } from './SessionColorMarker';
 import type { SessionMarkerColor } from '@/sync/sessionAppearance';
 import { hasLiveCompletion, hasUnreadCompletionSince } from '@/utils/sessionAttention';
 import { useDismissToHome } from '@/hooks/useDismissToHome';
 import { shouldDismissSessionMenuOnScroll, ScrollTarget } from './sessionContextMenuScroll';
+import { getDesktopPlatform } from '@/desktop/desktopWindowUtils';
+import { getRevealLabelKey, revealItemInFileManager } from '@/desktop/desktopReveal';
+import { useLocalMachineIds } from '@/desktop/desktopLocalMachine';
 
 type MenuPosition = { x: number; y: number };
 type ActionIconSpec =
@@ -49,6 +52,8 @@ type QuickAction = {
     icon: ActionIconSpec;
     destructive?: boolean;
     disabled?: boolean;
+    // First item of a section: the menu draws a divider above it.
+    startsSection: boolean;
     onPress: () => void;
 };
 
@@ -57,6 +62,9 @@ const ITEM_HEIGHT = 42;
 const MENU_PADDING = 8;
 const PALETTE_HEIGHT = 46;
 const ICON_SIZE = 18;
+// The rule plus its margins. Counted into the menu's height so it still clamps against the
+// window edge with the dividers in.
+const SECTION_DIVIDER_HEIGHT = 9;
 
 function ActionIcon({ icon, color }: { icon: ActionIconSpec; color: string }) {
     if (icon.family === 'antdesign') {
@@ -101,6 +109,12 @@ const styles = StyleSheet.create((theme) => ({
     disabled: {
         opacity: 0.45,
     },
+    // Between two sections. The palette carries its own top border, so it needs no divider.
+    sectionDivider: {
+        height: StyleSheet.hairlineWidth,
+        backgroundColor: theme.colors.divider,
+        marginVertical: 4,
+    },
     // Anchors the overlay below to the row it wraps.
     highlightHost: {
         position: 'relative',
@@ -125,7 +139,11 @@ const styles = StyleSheet.create((theme) => ({
 function useSessionQuickActions(session: Session) {
     const router = useRouter();
     const sessionStatus = useSessionStatus(session);
-    const hasOrchestratorRuns = useOrchestratorHasRuns(session.id);
+    // Revealing a folder only means something for a session spawned by the CLI on this very
+    // computer; anywhere else the path is on another disk.
+    const localMachineIds = useLocalMachineIds();
+    const sessionMachineId = session.metadata?.machineId;
+    const isLocalMachine = !!sessionMachineId && localMachineIds.has(sessionMachineId);
     // See `markSessionUnread`. Reading always lands, so only the unread direction needs a guard:
     // it rewinds both timestamps, which means the question is whether a live completion is left —
     // except on a session shared with me, whose `completionDismissedAt` is the owner's to write,
@@ -355,10 +373,15 @@ function useSessionQuickActions(session: Session) {
             sync.markSessionUnread(session.id);
         },
         newSession: handleNewSession,
-        delegationHistory: () => router.push(`/orchestrator?controllerSessionId=${encodeURIComponent(session.id)}`),
-        manageSharing: () => router.push(`/session/${session.id}/sharing`),
+        revealInFileManager: () => {
+            const path = session.metadata?.path;
+            if (!path) return;
+            void revealItemInFileManager(path).catch((error) => {
+                console.warn('Failed to reveal the session folder:', error);
+                showToast(t('sessionInfo.revealInFileManagerFailed'));
+            });
+        },
         leaveSharedSession: handleLeave,
-        viewMachine: () => router.push(`/machine/${session.metadata?.machineId}`),
         forkSession: handleFork,
         archiveSession: handleArchive,
         deleteSession: handleDelete,
@@ -368,10 +391,8 @@ function useSessionQuickActions(session: Session) {
         renameSession: t('common.rename'),
         toggleRead: isUnread ? t('sessionInfo.markAsRead') : t('sessionInfo.markAsUnread'),
         newSession: t('sessionInfo.newSession'),
-        delegationHistory: t('sessionInfo.delegationHistory'),
-        manageSharing: t('session.sharing.manageSharing'),
+        revealInFileManager: t(getRevealLabelKey(getDesktopPlatform())),
         leaveSharedSession: t('sessionInfo.leaveSharedSession'),
-        viewMachine: t('sessionInfo.viewMachine'),
         forkSession: session.active ? t('sessionInfo.copySession') : t('sessionInfo.resumeSession'),
         archiveSession: t('sessionInfo.archiveSession'),
         deleteSession: t('sessionInfo.deleteSession'),
@@ -381,24 +402,29 @@ function useSessionQuickActions(session: Session) {
         renameSession: { family: 'antdesign', name: 'edit' },
         toggleRead: { family: 'ionicons', name: isUnread ? 'mail-open-outline' : 'mail-unread-outline' },
         newSession: { family: 'ionicons', name: 'add-circle-outline' },
-        delegationHistory: { family: 'ionicons', name: 'layers-outline' },
-        manageSharing: { family: 'ionicons', name: 'share-outline' },
+        revealInFileManager: { family: 'ionicons', name: 'folder-open-outline' },
         leaveSharedSession: { family: 'ionicons', name: 'exit-outline' },
-        viewMachine: { family: 'ionicons', name: 'server-outline' },
         forkSession: { family: 'ionicons', name: session.active ? 'copy-outline' : 'play-circle-outline' },
         archiveSession: { family: 'ionicons', name: 'archive-outline' },
         deleteSession: { family: 'ionicons', name: 'trash-outline' },
     };
-    const kinds = getSessionQuickActionKinds({ session, hasOrchestratorRuns, isConnected: sessionStatus.isConnected });
-    const actions = kinds.map((kind): QuickAction => ({
+    const sections = getSessionQuickActionSections(getSessionQuickActionKinds({
+        session,
+        isConnected: sessionStatus.isConnected,
+        isLocalMachine,
+    }));
+    // Flattened, with the head of every section after the first flagged so the renderer knows
+    // where the dividers go.
+    const actions = sections.flatMap((section, sectionIndex): QuickAction[] => section.map((kind, indexInSection) => ({
         kind,
         label: labels[kind],
         icon: icons[kind],
         destructive: kind === 'leaveSharedSession' || kind === 'archiveSession' || kind === 'deleteSession',
         disabled: (kind === 'forkSession' && forkingSession)
             || (kind === 'toggleRead' && !canToggleRead),
+        startsSection: sectionIndex > 0 && indexInSection === 0,
         onPress: handlers[kind],
-    }));
+    })));
 
     return {
         actions,
@@ -552,7 +578,8 @@ export function SessionContextMenu({ session, children, highlightShape }: {
         );
     }
 
-    const menuHeight = actions.length * ITEM_HEIGHT + MENU_PADDING + PALETTE_HEIGHT;
+    const dividerCount = actions.filter(action => action.startsSection).length;
+    const menuHeight = actions.length * ITEM_HEIGHT + dividerCount * SECTION_DIVIDER_HEIGHT + MENU_PADDING + PALETTE_HEIGHT;
     const left = position ? Math.max(8, Math.min(position.x, width - MENU_WIDTH - 8)) : 0;
     const top = position ? Math.max(8, Math.min(position.y, height - menuHeight - 8)) : 0;
     const handleContextMenu = (event: {
@@ -584,30 +611,32 @@ export function SessionContextMenu({ session, children, highlightShape }: {
                         style={[styles.menu, { left, top }]}
                     >
                         {actions.map(action => (
-                            <Pressable
-                                key={action.kind}
-                                disabled={action.disabled}
-                                onHoverIn={() => setHoveredAction(action.kind)}
-                                onHoverOut={() => setHoveredAction(current => current === action.kind ? null : current)}
-                                onPress={(event) => {
-                                    event.stopPropagation?.();
-                                    closeMenu();
-                                    action.onPress();
-                                }}
-                                style={({ pressed }) => [
-                                    styles.item,
-                                    (pressed || hoveredAction === action.kind) && { backgroundColor: theme.colors.surfacePressed },
-                                    action.disabled && styles.disabled,
-                                ]}
-                            >
-                                <ActionIcon
-                                    icon={action.icon}
-                                    color={action.destructive ? theme.colors.textDestructive : theme.colors.textSecondary}
-                                />
-                                <Text style={[styles.itemText, action.destructive && styles.destructiveText]} numberOfLines={1}>
-                                    {action.label}
-                                </Text>
-                            </Pressable>
+                            <React.Fragment key={action.kind}>
+                                {action.startsSection && <View style={styles.sectionDivider} />}
+                                <Pressable
+                                    disabled={action.disabled}
+                                    onHoverIn={() => setHoveredAction(action.kind)}
+                                    onHoverOut={() => setHoveredAction(current => current === action.kind ? null : current)}
+                                    onPress={(event) => {
+                                        event.stopPropagation?.();
+                                        closeMenu();
+                                        action.onPress();
+                                    }}
+                                    style={({ pressed }) => [
+                                        styles.item,
+                                        (pressed || hoveredAction === action.kind) && { backgroundColor: theme.colors.surfacePressed },
+                                        action.disabled && styles.disabled,
+                                    ]}
+                                >
+                                    <ActionIcon
+                                        icon={action.icon}
+                                        color={action.destructive ? theme.colors.textDestructive : theme.colors.textSecondary}
+                                    />
+                                    <Text style={[styles.itemText, action.destructive && styles.destructiveText]} numberOfLines={1}>
+                                        {action.label}
+                                    </Text>
+                                </Pressable>
+                            </React.Fragment>
                         ))}
                         <SessionColorPalette
                             selectedColor={markerColor}

@@ -1696,6 +1696,42 @@ fn get_desktop_diagnostics(app: AppHandle) -> Result<DesktopDiagnostics, String>
     })
 }
 
+/// Machine ids the CLI on this computer is registered under.
+///
+/// A session's `metadata.machineId` is one of these exactly when that session runs on this
+/// computer — which is what "show in file manager" needs to know before offering itself. Only
+/// the id leaves this function: the settings files also hold the user's environment variables.
+#[tauri::command]
+async fn get_desktop_local_machine_ids(app: AppHandle) -> Vec<String> {
+    let Ok(home) = app.path().home_dir() else {
+        return Vec::new();
+    };
+    let Ok(entries) = fs::read_dir(&home) else {
+        return Vec::new();
+    };
+    let mut ids: Vec<String> = Vec::new();
+    for entry in entries.flatten() {
+        // Every CLI home is a dot-directory: `.happy-next` by default, `.happy-next-dev` for a
+        // dev build, `.happy` for installs the CLI has not migrated yet.
+        if !entry.file_name().to_string_lossy().starts_with(".happy") {
+            continue;
+        }
+        let Ok(contents) = fs::read_to_string(entry.path().join("settings.json")) else {
+            continue;
+        };
+        let Ok(settings) = serde_json::from_str::<serde_json::Value>(&contents) else {
+            continue;
+        };
+        let Some(id) = settings.get("machineId").and_then(|id| id.as_str()) else {
+            continue;
+        };
+        if !id.is_empty() && !ids.iter().any(|known| known == id) {
+            ids.push(id.to_owned());
+        }
+    }
+    ids
+}
+
 #[tauri::command]
 fn open_desktop_log_directory(app: AppHandle) -> Result<(), String> {
     let directory = app
@@ -2117,6 +2153,7 @@ pub fn run() {
             set_desktop_unread_count,
             get_desktop_diagnostics,
             open_desktop_log_directory,
+            get_desktop_local_machine_ids,
             open_desktop_html_preview
         ])
         .setup(|app| {
