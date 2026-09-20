@@ -295,8 +295,8 @@ export const SidebarView = React.memo((props: SidebarViewProps) => {
         >
             <Image
                 source={theme.dark
-                    ? require('@/assets/images/logotype-light.png')
-                    : require('@/assets/images/logotype-dark.png')}
+                    ? require('@/assets/images/logotype-light.svg')
+                    : require('@/assets/images/logotype-dark.svg')}
                 contentFit="contain"
                 style={{ height: 20, width: 75 }}
             />

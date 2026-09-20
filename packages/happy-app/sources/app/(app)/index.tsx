@@ -55,7 +55,7 @@ function NotAuthenticated() {
     const portraitLayout = (
         <View style={styles.portraitContainer}>
             <Image
-                source={theme.dark ? require('@/assets/images/logotype-light.png') : require('@/assets/images/logotype-dark.png')}
+                source={theme.dark ? require('@/assets/images/logotype-light.svg') : require('@/assets/images/logotype-dark.svg')}
                 resizeMode="contain"
                 style={styles.logo}
             />
@@ -114,7 +114,7 @@ function NotAuthenticated() {
             <View style={styles.landscapeInner}>
                 <View style={styles.landscapeLogoSection}>
                     <Image
-                        source={theme.dark ? require('@/assets/images/logotype-light.png') : require('@/assets/images/logotype-dark.png')}
+                        source={theme.dark ? require('@/assets/images/logotype-light.svg') : require('@/assets/images/logotype-dark.svg')}
                         resizeMode="contain"
                         style={styles.logo}
                     />
