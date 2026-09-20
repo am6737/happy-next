@@ -128,16 +128,31 @@ const styles = StyleSheet.create((theme) => ({
     optionContent: {
         flex: 1,
     },
+    // react-native-web stamps `user-select: none` on every TouchableOpacity, which makes an
+    // option's label and description impossible to copy on web. `user-select` is inherited, so
+    // declaring it on the text beats the tappable row above it — and RNW cancels the press when a
+    // selectionchange lands mid-gesture, so dragging across the text selects it instead of
+    // toggling the option. WebKit (Safari, and the desktop client's WKWebView) also needs the
+    // prefixed spelling: it inherited `-webkit-user-select: none` from the row and only that
+    // spelling overrides it. Both live under `_web`, so native is untouched.
     optionLabel: {
         fontSize: 14,
         fontWeight: '500',
         color: theme.colors.text,
-        lineHeight: 20
+        lineHeight: 20,
+        _web: {
+            userSelect: 'text',
+            WebkitUserSelect: 'text',
+        },
     },
     optionDescription: {
         fontSize: 13,
         color: theme.colors.textSecondary,
         marginTop: 2,
+        _web: {
+            userSelect: 'text',
+            WebkitUserSelect: 'text',
+        },
     },
     markdownPreview: {
         marginTop: 8,
