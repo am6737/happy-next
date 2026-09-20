@@ -13,6 +13,7 @@ import { useActiveWord } from './autocomplete/useActiveWord';
 import { useActiveSuggestions } from './autocomplete/useActiveSuggestions';
 import { AgentInputAutocomplete } from './AgentInputAutocomplete';
 import { FloatingOverlay } from './FloatingOverlay';
+import { FullWindowOverlay } from 'react-native-screens';
 import { TextInputState, MultiTextInputHandle } from './MultiTextInput';
 import { applySuggestion } from './autocomplete/applySuggestion';
 import { ABORT_ESCAPE_WINDOW_MS, resolveEscapeAbort, shouldSendOnEnter } from './agentInputKeyboard';
@@ -991,6 +992,59 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
         </>
     ) : null;
 
+    // Rendered outside the input tree on native. A React Native Modal presented while the
+    // keyboard is up blanks everything behind it on iOS, and the keyboard is open by
+    // definition whenever this indicator is tapped (see 1f51968d / b1fd050d).
+    const contextDetailsPopover = contextWarning ? (
+        <Pressable
+            style={{ flex: 1, backgroundColor: 'transparent' }}
+            onPress={() => setIsContextDetailsPinned(false)}
+        >
+            <Pressable
+                onPress={(event) => event.stopPropagation()}
+                style={{
+                    position: 'absolute',
+                    left: contextDetailsAnchor
+                        ? Math.min(
+                            Math.max(contextDetailsAnchor.x, CONTEXT_DETAILS_SCREEN_MARGIN),
+                            Math.max(CONTEXT_DETAILS_SCREEN_MARGIN, screenWidth - CONTEXT_DETAILS_TOOLTIP_WIDTH - CONTEXT_DETAILS_SCREEN_MARGIN)
+                        )
+                        : CONTEXT_DETAILS_SCREEN_MARGIN,
+                    top: contextDetailsAnchor
+                        ? Math.min(
+                            Math.max(
+                                CONTEXT_DETAILS_SCREEN_MARGIN,
+                                contextDetailsAnchor.y + contextDetailsAnchor.height - CONTEXT_DETAILS_TOOLTIP_GAP - CONTEXT_DETAILS_TOOLTIP_HEIGHT
+                            ),
+                            Math.max(CONTEXT_DETAILS_SCREEN_MARGIN, screenHeight - CONTEXT_DETAILS_TOOLTIP_HEIGHT - CONTEXT_DETAILS_SCREEN_MARGIN)
+                        )
+                        : CONTEXT_DETAILS_SCREEN_MARGIN,
+                    minWidth: CONTEXT_DETAILS_TOOLTIP_WIDTH,
+                    paddingHorizontal: 10,
+                    paddingVertical: 8,
+                    borderRadius: 10,
+                    backgroundColor: theme.colors.surface,
+                    borderWidth: 0.5,
+                    borderColor: theme.colors.modal.border,
+                    shadowColor: theme.colors.shadow.color,
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: theme.colors.shadow.opacity,
+                    shadowRadius: 6,
+                    elevation: 8,
+                }}
+            >
+                <Text style={{
+                    fontSize: 12,
+                    lineHeight: 20,
+                    color: theme.colors.text,
+                    ...Typography.default()
+                }}>
+                    {contextWarning.details}
+                </Text>
+            </Pressable>
+        </Pressable>
+    ) : null;
+
     return (
         <View style={[
             styles.container,
@@ -1461,60 +1515,22 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                         </View>
                                     )}
                                     </View>
-                                    <RNModal
-                                        transparent
-                                        visible={Platform.OS !== 'web' && isContextDetailsPinned && !!contextDetailsAnchor}
-                                        animationType="none"
-                                        onRequestClose={() => setIsContextDetailsPinned(false)}
-                                    >
-                                        <Pressable
-                                            style={{ flex: 1, backgroundColor: 'transparent' }}
-                                            onPress={() => setIsContextDetailsPinned(false)}
+                                    {Platform.OS === 'ios' ? (
+                                        isContextDetailsPinned && contextDetailsAnchor ? (
+                                            <FullWindowOverlay>
+                                                {contextDetailsPopover}
+                                            </FullWindowOverlay>
+                                        ) : null
+                                    ) : (
+                                        <RNModal
+                                            transparent
+                                            visible={Platform.OS !== 'web' && isContextDetailsPinned && !!contextDetailsAnchor}
+                                            animationType="none"
+                                            onRequestClose={() => setIsContextDetailsPinned(false)}
                                         >
-                                            <Pressable
-                                                onPress={(event) => event.stopPropagation()}
-                                                style={{
-                                                    position: 'absolute',
-                                                    left: contextDetailsAnchor
-                                                        ? Math.min(
-                                                            Math.max(contextDetailsAnchor.x, CONTEXT_DETAILS_SCREEN_MARGIN),
-                                                            Math.max(CONTEXT_DETAILS_SCREEN_MARGIN, screenWidth - CONTEXT_DETAILS_TOOLTIP_WIDTH - CONTEXT_DETAILS_SCREEN_MARGIN)
-                                                        )
-                                                        : CONTEXT_DETAILS_SCREEN_MARGIN,
-                                                    top: contextDetailsAnchor
-                                                        ? Math.min(
-                                                            Math.max(
-                                                                CONTEXT_DETAILS_SCREEN_MARGIN,
-                                                                contextDetailsAnchor.y + contextDetailsAnchor.height - CONTEXT_DETAILS_TOOLTIP_GAP - CONTEXT_DETAILS_TOOLTIP_HEIGHT
-                                                            ),
-                                                            Math.max(CONTEXT_DETAILS_SCREEN_MARGIN, screenHeight - CONTEXT_DETAILS_TOOLTIP_HEIGHT - CONTEXT_DETAILS_SCREEN_MARGIN)
-                                                        )
-                                                        : CONTEXT_DETAILS_SCREEN_MARGIN,
-                                                    minWidth: CONTEXT_DETAILS_TOOLTIP_WIDTH,
-                                                    paddingHorizontal: 10,
-                                                    paddingVertical: 8,
-                                                    borderRadius: 10,
-                                                    backgroundColor: theme.colors.surface,
-                                                    borderWidth: 0.5,
-                                                    borderColor: theme.colors.modal.border,
-                                                    shadowColor: theme.colors.shadow.color,
-                                                    shadowOffset: { width: 0, height: 2 },
-                                                    shadowOpacity: theme.colors.shadow.opacity,
-                                                    shadowRadius: 6,
-                                                    elevation: 8,
-                                                }}
-                                            >
-                                                <Text style={{
-                                                    fontSize: 12,
-                                                    lineHeight: 20,
-                                                    color: theme.colors.text,
-                                                    ...Typography.default()
-                                                }}>
-                                                    {contextWarning.details}
-                                                </Text>
-                                            </Pressable>
-                                        </Pressable>
-                                    </RNModal>
+                                            {contextDetailsPopover}
+                                        </RNModal>
+                                    )}
                                 </>
                             )}
                         </View>
