@@ -665,7 +665,7 @@ const styles = StyleSheet.create((theme) => ({
     paddingHorizontal: 12,
     paddingVertical: 4,
     borderRadius: 12,
-    marginBottom: 0,
+    marginBlock: 4,
     maxWidth: '100%',
     position: 'relative',
   },

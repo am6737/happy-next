@@ -563,7 +563,7 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder, isCardFir
                                     name="create-outline"
                                     size={14}
                                     color={theme.colors.textSecondary}
-                                    style={[styles.statusMark, { marginRight: -4 }]}
+                                    style={[styles.statusMark, { marginLeft: 8, marginRight: -4 }]}
                                 />
                             );
                         }
