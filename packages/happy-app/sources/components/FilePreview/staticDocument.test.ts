@@ -48,14 +48,22 @@ describe('static file previews', () => {
             expect(document).not.toContain('<script');
             expect(document).toContain('color-scheme:light');
         }
+        // Whatever the Markdown contains is text, never markup — including a <style> block, which
+        // would otherwise be the one way an author could restyle the reader for them.
         const dark = buildMarkdownDocument(
             '<style>body{color:black}</style>',
             true
         );
         expect(dark).toContain('color-scheme:dark!important');
-        expect(dark.lastIndexOf('color:#e5e7eb!important')).toBeGreaterThan(
-            dark.indexOf('body{color:black}')
-        );
+        expect(dark).toContain('&lt;style&gt;body{color:black}&lt;/style&gt;');
+        expect(dark).not.toContain('<style>body{color:black}');
+    });
+    it('paints a dark Markdown document dark from its first frame', () => {
+        // The dark palette has to be parsed before the body, or the document paints light first and
+        // repaints when the parser reaches the styles — the flash this ordering exists to prevent.
+        const dark = buildMarkdownDocument('# Hi', true);
+        expect(dark.indexOf('color-scheme:dark')).toBeLessThan(dark.indexOf('<body>'));
+        expect(buildMarkdownDocument('# Hi')).not.toContain('color-scheme:dark');
     });
     it('escapes raw Markdown HTML and renders headings, tables, lists and code', () => {
         const result = markdownPreviewHtml(

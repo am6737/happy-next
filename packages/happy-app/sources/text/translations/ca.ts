@@ -1991,6 +1991,7 @@ export const ca: TranslationStructure = {
         playVoice: 'Reprodueix la veu',
         stopVoice: 'Atura la veu',
         queuedVoice: 'A la cua de lectura — toca per treure',
+        compactSummaryPlaceholder: ({ chars }: { chars: number }) => `Context compactat (${chars} caràcters). Toca per veure'l.`,
         tooLongPlaceholder: ({ chars }: { chars: number }) => `Missatge llarg (${chars} caràcters). Toca per veure'l.`,
     },
 
@@ -2021,6 +2022,8 @@ export const ca: TranslationStructure = {
     textSelection: {
         // Text selection screen
         selectText: 'Seleccionar rang de text',
+        titleFullText: 'Veure text complet',
+        titleOriginalText: 'Veure text original',
         title: 'Seleccionar text',
         noTextProvided: 'No s\'ha proporcionat text',
         textNotFound: 'Text no trobat o expirat',

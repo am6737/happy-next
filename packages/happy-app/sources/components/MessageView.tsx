@@ -26,6 +26,7 @@ import { hapticsLight } from './haptics';
 import { TurnHeaderStatus } from './messageTurnTiming';
 import { TurnHeader } from './TurnHeader';
 import { useMessageTts } from '@/hooks/useMessageTts';
+import { userTextPresentation, type CollapsedTextReason } from './messageCollapse';
 
 export const MessageView = (props: {
   message: Message;
@@ -305,11 +306,6 @@ function RenderBlock(props: {
   }
 }
 
-// Beyond this many characters, parseMarkdown + the resulting React tree freezes the UI on
-// mid-range devices. Such messages are almost always pasted dumps (skill bodies, logs, files),
-// so we collapse them to a single tap-to-view placeholder instead of rendering them inline.
-const LONG_USER_MESSAGE_THRESHOLD = 20000;
-
 function UserTextBlock(props: {
   message: UserTextMessage;
   sessionId: string;
@@ -385,11 +381,12 @@ function UserTextBlock(props: {
   }, [messageText]);
 
   const renderedText = props.message.displayText || props.message.text;
-  const isTooLong = renderedText.length > LONG_USER_MESSAGE_THRESHOLD;
-  const handleOpenFullText = React.useCallback(() => {
+  const presentation = userTextPresentation(renderedText, props.message.meta);
+  // The reason travels as the entry point, so the screen it opens knows what to call itself.
+  const handleOpenFullText = React.useCallback((reason: CollapsedTextReason) => {
     try {
       const textId = storeTempText(renderedText);
-      router.push(`/text-selection?textId=${textId}`);
+      router.push(`/text-selection?textId=${textId}&from=${reason}`);
     } catch (error) {
       console.error('Error opening long message:', error);
     }
@@ -423,14 +420,16 @@ function UserTextBlock(props: {
             />
           </>
         )}
-        {isTooLong ? (
+        {presentation.kind === 'collapsed' ? (
           <Pressable
-            onPress={handleOpenFullText}
-            onLongPress={handleOpenFullText}
+            onPress={() => handleOpenFullText(presentation.reason)}
+            onLongPress={() => handleOpenFullText(presentation.reason)}
             style={styles.longMessagePlaceholder}
           >
             <Text style={styles.longMessagePlaceholderText}>
-              {t('message.tooLongPlaceholder', { chars: renderedText.length })}
+              {presentation.reason === 'compaction'
+                ? t('message.compactSummaryPlaceholder', { chars: presentation.chars })
+                : t('message.tooLongPlaceholder', { chars: presentation.chars })}
             </Text>
           </Pressable>
         ) : (

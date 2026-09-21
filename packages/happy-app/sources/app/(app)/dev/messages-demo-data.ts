@@ -457,5 +457,33 @@ export const NewComponent: React.FC<NewComponentProps> = ({ title, description }
                 children: []
             }
         ]
-    }
+    },
+
+    // Post-compaction summary: the list collapses it to one tap-to-view line (see
+    // messageCollapse.ts) rather than rendering the prose inline.
+    {
+        id: 'compact-summary-1',
+        localId: null,
+        createdAt: Date.now() - 1000,
+        kind: 'user-text',
+        meta: { sentFrom: 'cli', isCompactSummary: true },
+        text: `This session is being continued from a previous conversation that ran out of context. The summary below covers the earlier portion of the conversation.
+
+Summary:
+1. Primary Request and Intent:
+   The user asked for the chat list to collapse post-compaction summaries into a single tap-to-view line, the same way an over-long message already collapses, with a detail screen offering both a rendered preview and the raw source.
+
+2. Key Technical Concepts:
+   - Expo Router routes and their search params
+   - MMKV-backed temporary text handoff between screens
+   - Sandboxed WebView documents for Markdown rendering
+
+3. Files and Code Sections:
+   - sources/components/messageCollapse.ts: the rule that decides inline vs collapsed.
+   - sources/app/(app)/text-selection.tsx: the detail screen.
+
+4. Errors and fixes:
+   - None yet.`,
+    },
+
 ];

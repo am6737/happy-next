@@ -2002,6 +2002,7 @@ export const pl: TranslationStructure = {
         playVoice: 'Odtwórz głos',
         stopVoice: 'Zatrzymaj',
         queuedVoice: 'W kolejce odczytu — stuknij, aby usunąć',
+        compactSummaryPlaceholder: ({ chars }: { chars: number }) => `Kontekst skompaktowany (${chars} znaków). Stuknij, aby otworzyć.`,
         tooLongPlaceholder: ({ chars }: { chars: number }) => `Długa wiadomość (${chars} znaków). Stuknij, aby otworzyć.`,
     },
 
@@ -2032,6 +2033,8 @@ export const pl: TranslationStructure = {
     textSelection: {
         // Text selection screen
         selectText: 'Wybierz zakres tekstu',
+        titleFullText: 'Pokaż cały tekst',
+        titleOriginalText: 'Pokaż oryginalny tekst',
         title: 'Wybierz tekst',
         noTextProvided: 'Nie podano tekstu',
         textNotFound: 'Tekst nie został znaleziony lub wygasł',

@@ -18,9 +18,12 @@ export function safeImageSource(url: string): boolean {
     return /^data:image\/(png|jpeg|gif|webp);base64,[a-z0-9+/=\s]+$/i.test(url);
 }
 
+/** The background a document in dark mode paints before anything else can. */
+export const DARK_DOCUMENT_BACKGROUND = '#202124';
+
 /** Reading colors that override the author's own foreground, background and borders. */
 function darkOverlay(): string {
-    return `<style>html{color-scheme:dark!important}html,body,body *{color:#e5e7eb!important;background-color:#202124!important;background-image:none!important;border-color:#62666c!important;box-shadow:none!important;text-shadow:none!important}body pre,body code,body th{background-color:#303238!important}body img{background-color:transparent!important}</style>`;
+    return `<style>html{color-scheme:dark!important}html,body,body *{color:#e5e7eb!important;background-color:${DARK_DOCUMENT_BACKGROUND}!important;background-image:none!important;border-color:#62666c!important;box-shadow:none!important;text-shadow:none!important}body pre,body code,body th{background-color:#303238!important}body img{background-color:transparent!important}</style>`;
 }
 
 /**
@@ -108,9 +111,13 @@ export function markdownPreviewHtml(markdown: string): string {
  */
 export function buildMarkdownDocument(markdown: string, dark = false): string {
     const body = markdownPreviewHtml(markdown);
+    // The dark palette rides in the head, ahead of every element it styles. Carried at the end of
+    // the body instead — which is where an authored HTML document has to put it — the document
+    // paints light first and only repaints once the parser reaches it, and that first light frame
+    // is the flash a reader in dark mode sees each time this opens.
     return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src 'none'; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"><style>
 html{color-scheme:light;background:white;color:#202124;letter-spacing:0}body{margin:0;padding:20px;overflow-wrap:anywhere;font:16px/1.6 system-ui,sans-serif}*{box-sizing:border-box}img{max-width:100%;height:auto}pre,.table-scroll{max-width:100%;overflow:auto}pre{background:#f3f4f5;padding:12px;border-radius:4px}code{font-family:monospace}table{border-collapse:collapse}td,th{padding:8px 12px;border:1px solid #d9dcdf;text-align:left}blockquote{margin-left:0;padding-left:16px;border-left:3px solid #a4aaaf}h1{font-size:28px}h2{font-size:24px}h3{font-size:20px}hr{border:0;border-top:1px solid #d9dcdf}
-</style></head><body>${body}${dark ? darkOverlay() : ''}</body></html>`;
+</style>${dark ? darkOverlay() : ''}</head><body>${body}</body></html>`;
 }
 
 export function buildSvgDocument(

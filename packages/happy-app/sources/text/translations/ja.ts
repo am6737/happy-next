@@ -2023,6 +2023,7 @@ export const ja: TranslationStructure = {
         playVoice: '読み上げ',
         stopVoice: '停止',
         queuedVoice: '読み上げキューに追加済み。タップで削除',
+        compactSummaryPlaceholder: ({ chars }: { chars: number }) => `コンテキストを圧縮しました（${chars} 文字）。タップして表示。`,
         tooLongPlaceholder: ({ chars }: { chars: number }) => `長いメッセージ（${chars} 文字）。タップして表示。`,
     },
 
@@ -2053,6 +2054,8 @@ export const ja: TranslationStructure = {
     textSelection: {
         // Text selection screen
         selectText: 'テキスト範囲を選択',
+        titleFullText: '全文を表示',
+        titleOriginalText: '原文を表示',
         title: 'テキストを選択',
         noTextProvided: 'テキストが提供されていません',
         textNotFound: 'テキストが見つからないか期限切れです',

@@ -1991,6 +1991,7 @@ export const pt: TranslationStructure = {
         playVoice: 'Reproduzir voz',
         stopVoice: 'Parar voz',
         queuedVoice: 'Na fila de leitura — toque para remover',
+        compactSummaryPlaceholder: ({ chars }: { chars: number }) => `Contexto compactado (${chars} caracteres). Toque para ver.`,
         tooLongPlaceholder: ({ chars }: { chars: number }) => `Mensagem longa (${chars} caracteres). Toque para ver.`,
     },
 
@@ -2021,6 +2022,8 @@ export const pt: TranslationStructure = {
     textSelection: {
         // Text selection screen
         selectText: 'Selecionar intervalo de texto',
+        titleFullText: 'Ver texto completo',
+        titleOriginalText: 'Ver texto original',
         title: 'Selecionar texto',
         noTextProvided: 'Nenhum texto fornecido',
         textNotFound: 'Texto não encontrado ou expirado',

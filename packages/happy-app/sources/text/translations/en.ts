@@ -2009,6 +2009,7 @@ export const en: TranslationStructure = {
         playVoice: 'Play voice',
         stopVoice: 'Stop voice',
         queuedVoice: 'Queued — tap to remove',
+        compactSummaryPlaceholder: ({ chars }: { chars: number }) => `Context compacted (${chars} characters). Tap to view.`,
         tooLongPlaceholder: ({ chars }: { chars: number }) => `Long message (${chars} characters). Tap to view.`,
     },
 
@@ -2039,6 +2040,8 @@ export const en: TranslationStructure = {
     textSelection: {
         // Text selection screen
         selectText: 'Select text range',
+        titleFullText: 'View full text',
+        titleOriginalText: 'View original text',
         title: 'Select Text',
         noTextProvided: 'No text provided',
         textNotFound: 'Text not found or expired',

@@ -1990,6 +1990,7 @@ export const ru: TranslationStructure = {
         playVoice: 'Озвучить',
         stopVoice: 'Остановить',
         queuedVoice: 'В очереди на озвучку — нажмите, чтобы убрать',
+        compactSummaryPlaceholder: ({ chars }: { chars: number }) => `Контекст сжат (${chars} симв.). Нажмите, чтобы открыть.`,
         tooLongPlaceholder: ({ chars }: { chars: number }) => `Длинное сообщение (${chars} симв.). Нажмите, чтобы открыть.`,
     },
 
@@ -2032,6 +2033,8 @@ export const ru: TranslationStructure = {
     textSelection: {
         // Text selection screen
         selectText: 'Выделить диапазон текста',
+        titleFullText: 'Показать весь текст',
+        titleOriginalText: 'Показать исходный текст',
         title: 'Выделить текст',
         noTextProvided: 'Текст не предоставлен',
         textNotFound: 'Текст не найден или устарел',

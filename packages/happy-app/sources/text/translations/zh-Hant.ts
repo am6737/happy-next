@@ -1993,6 +1993,7 @@ export const zhHant: TranslationStructure = {
         playVoice: '朗讀',
         stopVoice: '停止朗讀',
         queuedVoice: '已加入朗讀佇列，點按移除',
+        compactSummaryPlaceholder: ({ chars }: { chars: number }) => `上下文已壓縮（${chars} 字元），點擊查看`,
         tooLongPlaceholder: ({ chars }: { chars: number }) => `訊息過長（${chars} 字元），點擊查看`,
     },
 
@@ -2023,6 +2024,8 @@ export const zhHant: TranslationStructure = {
     textSelection: {
         // Text selection screen
         selectText: '選擇文字範圍',
+        titleFullText: '檢視全文',
+        titleOriginalText: '檢視原文',
         title: '選擇文字',
         noTextProvided: '未提供文字',
         textNotFound: '文字未找到或已過期',
