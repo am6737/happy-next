@@ -12,9 +12,10 @@ import { ConversationMinimapItem } from './ConversationMinimap';
 import { Metadata, Session } from '@/sync/storageTypes';
 import { ChatFooter } from './ChatFooter';
 import { AskUserQuestionMessage, isAskUserQuestionToolCall, isPreviewHtmlToolCall, Message, MinimapMessage, PreviewHtmlMessage, toAskUserQuestionMessage, toPreviewHtmlMessage, UserTextMessage } from '@/sync/typesMessage';
-import { currentLandmark, railLandmarkRows, shouldHideMessageInChatList, shouldHideMessageInMinimap, type LandmarkRow } from './chatListVisibility';
-import { turnHeaderProps, useTurnAnalysis, type TurnProcess } from './messageTurnTiming';
-import { rowSnapshot } from './rowSnapshot';
+import { currentLandmark, isMinimapLandmarkRow, railLandmarkRows, shouldHideMessageInChatList, shouldHideMessageInMinimap, type LandmarkRow } from './chatListVisibility';
+import { foldedLineKeepsRow } from './turnFold';
+import { turnHeaderProps, useTurnAnalysis } from './messageTurnTiming';
+import { newestRowSnapshot } from './rowSnapshot';
 import { toolTitle } from './tools/toolTitle';
 import { useTurnFolding } from '@/hooks/useTurnFolding';
 import { AWAITING_RESPONSE_MAX_MS } from '@/utils/sessionUtils';
@@ -136,28 +137,6 @@ export interface ForkMessageRequest {
 }
 
 // --- End of the sync block ---
-
-/**
- * The newest hidden row that has something to say, for a running turn's folded line. Rows with
- * nothing to show (a mode switch, a notice) are stepped over rather than blanking the line — what
- * the reader wants is the nearest step, not strictly the last row.
- */
-function newestSnapshot(
-    process: TurnProcess | undefined,
-    messageById: ReadonlyMap<string, Message>,
-    metadata: Metadata | null,
-): string | undefined {
-    if (!process) return undefined;
-    // Collected oldest first, so the newest is at the end.
-    for (let i = process.hiddenIds.length - 1; i >= 0; i--) {
-        const row = messageById.get(process.hiddenIds[i]);
-        if (!row) continue;
-        // The step is named the way its own row is (see toolTitle).
-        const snapshot = rowSnapshot(row, row.kind === 'tool-call' ? toolTitle(row.tool, metadata) : null);
-        if (snapshot) return snapshot;
-    }
-    return undefined;
-}
 
 // A loaded user message paired with its index in the newest-first `visibleMessages`.
 type LoadedUserMessage = { message: UserTextMessage; index: number };
@@ -2179,17 +2158,29 @@ const ChatListInternal = React.memo((props: {
         // Present only on the row that opens a turn whose process is worth folding.
         const fold = folding.controlByHeaderId.get(item.id);
         const process = turns.foldById.get(item.id);
+        // The fold keeps a settled turn's answer and never swallows a landmark. Either can be the
+        // very row the line sits on — the turn's only text opening it, a question card opening it —
+        // and that row then shows its own content below the line instead of giving way to it.
+        const foldKeepsRow = foldedLineKeepsRow({
+            folded: fold?.folded === true,
+            answer: process?.answerId === item.id,
+            landmark: isMinimapLandmarkRow(item),
+        });
         // A running turn folds to its line alone, so the line says what the turn is doing. Once it
-        // settles the answer is on screen and the line goes back to just its cost.
+        // settles the answer is on screen and the line goes back to just its cost. The row the line
+        // is drawn on is a candidate like any other — it is the turn's first step, and when it is the
+        // only one, the line names it.
         const foldSnapshot = fold?.folded && turns.headerById.get(item.id)?.state === 'running'
-            ? newestSnapshot(process, messageById, props.metadata)
+            ? newestRowSnapshot({
+                hiddenIds: process?.hiddenIds ?? [],
+                lineRow: foldKeepsRow ? null : item,
+                messageById,
+                headlineOf: (tool) => toolTitle(tool, props.metadata),
+            })
             : undefined;
         // The line divides the turn from its answer, so a folded turn with no answer to show — one
         // still running, or one that ended without a word — has nothing under the line to divide.
         const foldDivides = !(fold?.folded === true && process?.answerId == null);
-        // The fold keeps a settled turn's answer, and the answer can be the very row the line sits
-        // on. That row then shows its own content below the line instead of giving way to it.
-        const foldKeepsRow = fold?.folded === true && process?.answerId === item.id;
         // Fork is offered on user prompts and on AI replies (private sessions
         // only; agent replies only via their action-bar segment).
         const canFork = !!props.onForkMessage && !props.isSharedSession

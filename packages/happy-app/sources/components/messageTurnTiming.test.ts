@@ -196,12 +196,14 @@ describe('folded turns', () => {
 
     it('hides the process, keeping the row that opens it and the answer', () => {
         const result = analyze([agent('a1', 50), tool('t2', 40), tool('t1', 30), user('u1', 10)]);
-        expect(fold(result, 't1')).toEqual({ hiddenIds: ['t2'], steps: 1, snapshotId: 't2', answerId: 'a1', running: false });
+        // The list keeps t1 to carry the line, but the line takes its content like everything else
+        // under it — so both calls are steps the folded line reports, not just the one it drops.
+        expect(fold(result, 't1')).toEqual({ hiddenIds: ['t2'], steps: 2, snapshotId: 't2', answerId: 'a1' });
     });
 
     it('hides the working-out between the header and the answer, text included', () => {
         const result = analyze([agent('a1', 50), agent('mid', 40), tool('t1', 30), user('u1', 10)]);
-        expect(fold(result, 't1')).toEqual({ hiddenIds: ['mid'], steps: 0, snapshotId: 'mid', answerId: 'a1', running: false });
+        expect(fold(result, 't1')).toEqual({ hiddenIds: ['mid'], steps: 1, snapshotId: 'mid', answerId: 'a1' });
     });
 
     it('counts every tool call it hides, not the rows it hides', () => {
@@ -216,28 +218,65 @@ describe('folded turns', () => {
         ]);
         expect(fold(result, 't1')).toEqual({
             hiddenIds: ['t2', 't3', 'mid', 't4'],
-            steps: 3,
+            // t1 is the turn's header and the fourth call the fold takes out of sight: the line stands
+            // where its content was.
+            steps: 4,
             snapshotId: 't4',
             answerId: 'a1',
-            running: false,
         });
     });
 
     it('keeps a question the reader may still have to answer', () => {
         const result = analyze([agent('a1', 50), question('q1', 40), tool('t1', 30), user('u1', 10)]);
-        expect(fold(result, 't1')).toEqual({ hiddenIds: [], steps: 0, snapshotId: null, answerId: 'a1', running: false });
+        // The card stays where it is, and the line is drawn on the tool call above it, whose content it
+        // takes: one step, nothing dropped.
+        expect(fold(result, 't1')).toEqual({ hiddenIds: [], steps: 1, snapshotId: 't1', answerId: 'a1' });
+    });
+
+    it('keeps a question that opens the turn, the very row the line lands on', () => {
+        // The agent asked first, so the question card is the turn's header: the fold draws its line on
+        // that row. The card keeps its content there (foldedLineKeepsRow), and it is kept out of the
+        // rows the fold drops here — either half missing is the question disappearing from the list.
+        const result = analyze([agent('a1', 50), tool('t1', 40), question('q1', 30), user('u1', 10)]);
+        expect(fold(result, 'q1')).toEqual({
+            hiddenIds: ['t1'],
+            steps: 1,
+            snapshotId: 't1',
+            answerId: 'a1',
+        });
+        expect(result.headerById.get('q1')?.state).toBe('done');
     });
 
     it('has nothing to hide when the turn is only its answer', () => {
         const result = analyze([agent('a1', 50), user('u1', 10)]);
-        expect(fold(result, 'a1')).toEqual({ hiddenIds: [], steps: 0, snapshotId: null, answerId: 'a1', running: false });
+        expect(fold(result, 'a1')).toEqual({ hiddenIds: [], steps: 0, snapshotId: null, answerId: 'a1' });
     });
 
     it('folds a running turn to its line alone, answer included', () => {
         // Nothing is kept back but the header: a turn still running has no answer to keep, and the
         // line's snapshot is what stands in for the step it is on.
         const result = analyze([agent('a1', 50), tool('t1', 30), user('u1', 10)], { inFlight: true });
-        expect(fold(result, 't1')).toEqual({ hiddenIds: ['a1'], steps: 0, snapshotId: 'a1', answerId: null, running: true });
+        expect(fold(result, 't1')).toEqual({ hiddenIds: ['a1'], steps: 1, snapshotId: 'a1', answerId: null });
+    });
+
+    it('folds a running turn from the step it opens with', () => {
+        // The line is drawn on that first tool call, so the fold has no row to take out of the list —
+        // but the line still stands in for it, which is what lets a turn fold from its very first step
+        // instead of showing a full tool row until a second one arrives.
+        const result = analyze([tool('t1', 30), user('u1', 10)], { inFlight: true });
+        expect(fold(result, 't1')).toEqual({
+            hiddenIds: [],
+            steps: 1,
+            snapshotId: 't1',
+            answerId: null,
+        });
+    });
+
+    it('counts no step for a running turn that is only writing', () => {
+        // Nothing to fold yet: words being written are the thing the reader is watching, and the line
+        // has no step to stand for.
+        const result = analyze([agent('a1', 30), user('u1', 10)], { inFlight: true });
+        expect(fold(result, 'a1')?.steps).toBe(0);
     });
 
     it('hands the answer back as soon as the turn settles', () => {
@@ -257,7 +296,6 @@ describe('folded turns', () => {
             steps: 3,
             snapshotId: 't3',
             answerId: 'a1',
-            running: false,
         });
     });
 
@@ -279,17 +317,19 @@ describe('folded turns', () => {
             [agent('a2', 60), user('u2', 50), tool('t2', 45), agent('a1', 40), tool('t1', 30), user('u1', 10)],
             { inFlight: true },
         );
-        expect(fold(result, 't1')).toEqual({ hiddenIds: ['t2'], steps: 1, snapshotId: 't2', answerId: 'a1', running: false });
-        // The running turn folds too, and keeps nothing back.
-        expect(fold(result, 'a2')).toEqual({ hiddenIds: [], steps: 0, snapshotId: null, answerId: null, running: true });
+        expect(fold(result, 't1')).toEqual({ hiddenIds: ['t2'], steps: 2, snapshotId: 't2', answerId: 'a1' });
+        // The newer turn is only its own text so far: it keeps nothing back either, and has no step for
+        // a line to report.
+        expect(fold(result, 'a2')).toEqual({ hiddenIds: [], steps: 0, snapshotId: 'a2', answerId: null });
     });
 
     it('never reaches across a prompt into the turn before it', () => {
         const result = analyze(
             [agent('a2', 60), user('u2', 50), tool('t2', 45), agent('a1', 40), tool('t1', 30), user('u1', 10)],
         );
-        expect(fold(result, 't1')).toEqual({ hiddenIds: ['t2'], steps: 1, snapshotId: 't2', answerId: 'a1', running: false });
-        // The newer turn's own process is all it hides: its prompt is a boundary, not a row.
-        expect(fold(result, 'a2')).toEqual({ hiddenIds: [], steps: 0, snapshotId: null, answerId: 'a2', running: false });
+        expect(fold(result, 't1')).toEqual({ hiddenIds: ['t2'], steps: 2, snapshotId: 't2', answerId: 'a1' });
+        // The newer turn's own process is all it hides: its prompt is a boundary, not a row. That row
+        // is the answer as well, so the line keeps its content and hides nothing at all.
+        expect(fold(result, 'a2')).toEqual({ hiddenIds: [], steps: 0, snapshotId: null, answerId: 'a2' });
     });
 });

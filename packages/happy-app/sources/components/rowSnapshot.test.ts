@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { rowSnapshot, toolSnapshot, ToolHeadline } from './rowSnapshot';
+import { newestRowSnapshot, rowSnapshot, toolSnapshot, ToolHeadline } from './rowSnapshot';
 import { Message, ToolCall } from '@/sync/typesMessage';
 
 function tool(name: string, input: unknown, overrides: Partial<ToolCall> = {}): ToolCall {
@@ -28,6 +28,62 @@ function named(text: string): ToolHeadline {
 function generic(text: string): ToolHeadline {
     return { text, generic: true };
 }
+
+describe('newestRowSnapshot', () => {
+    const headlineOf = (call: ToolCall) => named(String((call.input as { file_path: string }).file_path));
+    /** A step the registry can read a name out of. */
+    const step = (id: string): Message => ({ ...toolCall('Read', { file_path: `/app/${id}.tsx` }), id });
+    /** A row with nothing to say: a notice, not a step. */
+    const notice = (id: string): Message => ({ kind: 'agent-event', id, createdAt: 0, event: { type: 'ready' } });
+    const rows = (...messages: Message[]) => new Map(messages.map((m) => [m.id, m]));
+
+    it('names the newest hidden step', () => {
+        expect(newestRowSnapshot({
+            hiddenIds: ['t1', 't2'],
+            lineRow: step('line'),
+            messageById: rows(step('t1'), step('t2'), step('line')),
+            headlineOf,
+        })).toBe('/app/t2.tsx');
+    });
+
+    it('steps over a hidden row that has nothing to say', () => {
+        expect(newestRowSnapshot({
+            hiddenIds: ['t1', 'e1'],
+            lineRow: step('line'),
+            messageById: rows(step('t1'), notice('e1'), step('line')),
+            headlineOf,
+        })).toBe('/app/t1.tsx');
+    });
+
+    it('names the row the line is drawn on when that is the only thing hidden', () => {
+        // The turn's first step is the row the line stands on, and the one the reader is watching: with
+        // the line's own row left out of its candidates, the line said nothing at all.
+        expect(newestRowSnapshot({
+            hiddenIds: [],
+            lineRow: step('line'),
+            messageById: rows(step('line')),
+            headlineOf,
+        })).toBe('/app/line.tsx');
+    });
+
+    it('prefers a step hidden below the line over the row it is drawn on', () => {
+        expect(newestRowSnapshot({
+            hiddenIds: ['t1'],
+            lineRow: step('line'),
+            messageById: rows(step('t1'), step('line')),
+            headlineOf,
+        })).toBe('/app/t1.tsx');
+    });
+
+    it('stays blank when nothing it hides has anything to say', () => {
+        expect(newestRowSnapshot({
+            hiddenIds: ['e1'],
+            lineRow: null,
+            messageById: rows(notice('e1')),
+            headlineOf,
+        })).toBeUndefined();
+    });
+});
 
 describe('rowSnapshot', () => {
     it('names a step the way its own row is named', () => {

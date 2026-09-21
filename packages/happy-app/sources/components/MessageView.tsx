@@ -55,8 +55,9 @@ export const MessageView = (props: {
    */
   foldFolded?: boolean;
   /**
-   * True on the row a settled turn's fold leaves standing. That row is the turn's answer, which
-   * keeps its content even though the line sits on it. Only ever set alongside `foldFolded`.
+   * True on a row the fold leaves standing: a settled turn's answer, or a landmark the fold may never
+   * hide. Either can be the row the line sits on, and that row keeps its content even though the line
+   * stands in for it. Only ever set alongside `foldFolded`.
    */
   foldKeepsRow?: boolean;
   /**
@@ -74,8 +75,8 @@ export const MessageView = (props: {
 }) => {
   const { message, foldFolded, foldSnapshot, onToggleFold } = props;
   const foldSteps = props.foldSteps ?? 0;
-  // The folded line takes the place of the row it sits on — unless the fold kept this row, which it
-  // does for a settled turn's answer, and the answer can be the row the line itself sits on.
+  // The folded line takes the place of the row it sits on — unless the fold kept this row: a settled
+  // turn's answer, or a landmark, either of which can be the row the line itself sits on.
   const foldHidesRow = foldFolded === true && props.foldKeepsRow !== true;
   const handleToggleFold = React.useCallback(() => {
     onToggleFold?.(message.id);

@@ -95,3 +95,42 @@ export function rowSnapshot(message: Message, headline: ToolHeadline | null = nu
             return null;
     }
 }
+
+/**
+ * What a folded line shows at its far end: the newest row it hides that has something to say.
+ *
+ * Rows with nothing to say — a mode switch, a notice — are stepped over rather than blanking the line,
+ * because what the reader wants is the nearest step, not strictly the last row.
+ *
+ * `lineRow` is the row the folded line is drawn on, tried last of all: it is the turn's first row, so
+ * anything hidden below it says more about what the turn is up to — but when it is the only thing the
+ * fold has taken, naming it beats leaving the line blank. It is null when the fold left that row's own
+ * content standing, which it does for a landmark and for a settled turn's answer: the row is on screen
+ * as itself, so the line has nothing to say about it.
+ */
+export function newestRowSnapshot(params: {
+    /** Ids of the rows the fold hides, oldest first. */
+    hiddenIds: readonly string[];
+    /** The row the line is drawn on, or null when the fold left its content standing. */
+    lineRow: Message | null;
+    /** The rows those ids name; an id with no row here is stepped over. */
+    messageById: ReadonlyMap<string, Message>;
+    /**
+     * The registry's headline for a tool call, resolved by the caller — same reason as in rowSnapshot:
+     * the registry is a module of React components and this runs per folded row on every render.
+     */
+    headlineOf: (tool: ToolCall) => ToolHeadline | null;
+}): string | undefined {
+    const { hiddenIds, lineRow, messageById, headlineOf } = params;
+    const snapshotOf = (row: Message): string | null =>
+        rowSnapshot(row, row.kind === 'tool-call' ? headlineOf(row.tool) : null);
+
+    // Collected oldest first, so the newest is at the end.
+    for (let i = hiddenIds.length - 1; i >= 0; i--) {
+        const row = messageById.get(hiddenIds[i]);
+        if (!row) continue;
+        const snapshot = snapshotOf(row);
+        if (snapshot) return snapshot;
+    }
+    return (lineRow ? snapshotOf(lineRow) : null) ?? undefined;
+}

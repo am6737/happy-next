@@ -269,7 +269,7 @@ export const SettingsSchema = z.object({
     avatarStyle: z.string().describe('Avatar display style'),
     showFlavorIcons: z.boolean().describe('Whether to show AI provider icons in avatars'),
     showThinkingMessages: z.boolean().describe('Whether to show AI thinking/reasoning messages'),
-    foldTurnProcess: z.boolean().describe('Whether a finished turn starts with its tool calls folded into one line'),
+    foldTurnProcess: z.boolean().describe('Whether a turn starts with its tool calls folded into one line'),
     // Deprecated: kept for backward compatibility with older clients. Now split per platform.
     compactSessionView: z.boolean().describe('Deprecated: superseded by compactSessionViewMobile / compactSessionViewDesktop'),
     compactSessionViewMobile: z.boolean().describe('Whether to use compact view for active sessions on mobile (native iOS/Android app and phone/tablet browsers). Defaults to off'),

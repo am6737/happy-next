@@ -27,18 +27,25 @@ type Turn = {
 /**
  * What folding a turn's process hides, and what the folded line counts.
  *
- * `hiddenIds` never names the header row (the folded line takes its place) nor the turn's answer, so a
- * folded turn still shows what the agent concluded — only the working-out goes away.
+ * The line swallows the row it is drawn on along with every row below it, so that whole set is what
+ * the fold hides, and the count and the snapshot are read off it. Two kinds of row it may not
+ * swallow: the answer of a settled turn — the fold exists to show what the agent concluded — and a
+ * landmark. `hiddenIds` is that set with the row under the line left out of it, because that row is
+ * not dropped: the line lives on it.
  */
 export type TurnProcess = {
-    /** Rows the list drops while this turn is folded, oldest first. */
+    /**
+     * Rows the list drops while this turn is folded, oldest first — never the row the line is drawn
+     * on, which stays to carry it.
+     */
     hiddenIds: string[];
-    /** Tool calls among them — the count the folded line reports. */
+    /** Tool calls among the rows the fold hides, the row under the line included. */
     steps: number;
     /**
-     * The newest row this fold hides, or null when it hides nothing. While the turn runs that is
+     * The newest row the fold hides, or null when it hides nothing. While the turn runs that is
      * whatever the agent is doing right now — the one thing a reader would want on the folded line,
-     * since everything else about the turn is out of sight.
+     * since everything else about the turn is out of sight. It can be the row the line is drawn on,
+     * which is all a turn has to show for itself when it opens with a step.
      */
     snapshotId: string | null;
     /**
@@ -50,11 +57,6 @@ export type TurnProcess = {
      * carries the line and its own content at once.
      */
     answerId: string | null;
-    /**
-     * Whether the turn this process belongs to is still going. A running turn folds from its first
-     * hidden row — the reader is watching it work — where a settled one has to be worth folding.
-     */
-    running: boolean;
 };
 
 /** What the header above a turn's first row shows. */
@@ -148,25 +150,25 @@ function collectTurns(visibleMessages: Message[]): Turn[] {
  * rather than working-out.
  */
 function turnProcess(turn: Turn, settled: boolean): TurnProcess {
-    const keep = new Set<string>();
-    if (turn.headerId !== null) keep.add(turn.headerId);
-    if (settled && turn.lastTextId !== null) keep.add(turn.lastTextId);
+    const answerId = settled ? turn.lastTextId : null;
 
     const hiddenIds: string[] = [];
     let steps = 0;
+    let snapshotId: string | null = null;
     for (const row of turn.rows) {
-        if (keep.has(row.id) || isMinimapLandmarkRow(row)) continue;
-        hiddenIds.push(row.id);
+        // The line swallows the row it is drawn on along with everything below it. The rows it may not
+        // swallow are the answer — the fold exists to show it — and a landmark, which the rail jumps
+        // to and the reader may still have to answer. So this walk is what the fold hides, and the
+        // count and the snapshot are read straight off it with the row under the line included: that
+        // row's content is gone too, and the line is what stands in its place.
+        if (isMinimapLandmarkRow(row) || row.id === answerId) continue;
         if (row.kind === 'tool-call') steps++;
+        // Collected oldest first, so the newest is the last one seen.
+        snapshotId = row.id;
+        // The row under the line is the one row of this set the list never drops: the line lives on it.
+        if (row.id !== turn.headerId) hiddenIds.push(row.id);
     }
-    return {
-        hiddenIds,
-        steps,
-        // Collected oldest first, so the newest is the last one pushed.
-        snapshotId: hiddenIds.length > 0 ? hiddenIds[hiddenIds.length - 1] : null,
-        answerId: settled ? turn.lastTextId : null,
-        running: !settled,
-    };
+    return { hiddenIds, steps, snapshotId, answerId };
 }
 
 // The CLI stamps `taskCompleted` from its own clock; a stamp far ahead of ours
