@@ -1,10 +1,12 @@
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
     isTerminalTmuxAvailable,
+    listTerminalSessions,
+    prepareTerminalTmuxServer,
     isTerminalId,
     terminalTmuxAttachArgs,
     terminalTmuxBinary,
@@ -98,5 +100,76 @@ describe.skipIf(!tmuxInstalled)('asking whether tmux is there', () => {
             restore();
             rmSync(dir, { recursive: true, force: true });
         }
+    });
+});
+
+
+describe.skipIf(!tmuxInstalled)('reading back what tmux holds', () => {
+    let socketDir = '';
+    let socket = '';
+    const previousSocket = process.env.HAPPY_TERMINAL_TMUX_SOCKET;
+
+    beforeAll(() => {
+        // Resolved, because a macOS /tmp is a symlink and tmux reports the real
+        // path — the listing would otherwise disagree with the directory made here.
+        socketDir = realpathSync(mkdtempSync(join(tmpdir(), 'happy-tmux-list-')));
+        socket = join(socketDir, 'terminal.sock');
+        process.env.HAPPY_TERMINAL_TMUX_SOCKET = socket;
+        prepareTerminalTmuxServer();
+    });
+
+    afterAll(() => {
+        spawnSync(terminalTmuxBinary(), ['-S', socket, 'kill-server']);
+        rmSync(socketDir, { recursive: true, force: true });
+        if (previousSocket === undefined) {
+            delete process.env.HAPPY_TERMINAL_TMUX_SOCKET;
+        } else {
+            process.env.HAPPY_TERMINAL_TMUX_SOCKET = previousSocket;
+        }
+    });
+
+    /** Runs one shell under tmux and reads the listing back. */
+    async function listOne(id: string, cwd: string, title: string) {
+        const args = terminalTmuxAttachArgs({ id, cwd, shell: '/bin/bash', args: [], rows: 24, cols: 80 });
+        args.splice(args.indexOf('new-session') + 1, 0, '-d');
+        expect(spawnSync(terminalTmuxBinary(), args).status).toBe(0);
+        expect(spawnSync(terminalTmuxBinary(), ['-S', socket, 'select-pane', '-t', id, '-T', title]).status).toBe(0);
+
+        return (await listTerminalSessions()).find((entry) => entry.id === id);
+    }
+
+    it('reads a directory and a title that hold the field separator back exactly', async () => {
+        // The separator is printable, so a path and a title are both free to
+        // hold it. Reading each field on its own, keyed by an id that cannot,
+        // is what keeps a `|` in either from shifting the line.
+        const cwd = join(socketDir, 'a|b');
+        mkdirSync(cwd, { recursive: true });
+
+        const listed = await listOne('term_list_separator', cwd, 'title|with|pipes');
+
+        expect(listed).toBeDefined();
+        expect(listed!.cwd).toBe(cwd);
+        expect(listed!.title).toBe('title|with|pipes');
+        expect(listed!.rows).toBe(24);
+        expect(listed!.cols).toBe(80);
+    });
+
+    it('keeps a terminal on the list however tmux renders the bytes in its path', async () => {
+        // tmux rewrites the control bytes it considers unprintable, and what it
+        // rewrites them to depends on the version — a literal backslash-037 from
+        // 3.4, the byte itself on others. Whatever it does to the value, the
+        // terminal has to stay on the list: a path holding one of those bytes is
+        // still a shell that is running, and dropping it is the daemon losing a
+        // terminal it was supposed to take back.
+        const cwd = join(socketDir, 'a' + String.fromCharCode(31) + 'b');
+        mkdirSync(cwd, { recursive: true });
+
+        const listed = await listOne('term_list_control_byte', cwd, 'still here');
+
+        expect(listed).toBeDefined();
+        expect(listed!.cwd.startsWith(socketDir)).toBe(true);
+        expect(listed!.rows).toBe(24);
+        expect(listed!.cols).toBe(80);
+        expect(listed!.title).toBe('still here');
     });
 });

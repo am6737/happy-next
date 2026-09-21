@@ -244,21 +244,48 @@ export interface TmuxTerminal {
 }
 
 /**
- * Field separator for the listing format.
+ * The separator between a terminal's id and the value asked for beside it.
  *
- * A tab or a space can appear in a working directory and would split the line
- * in the wrong place; this cannot. Asking for every field at once also keeps
- * the listing to one round trip instead of a call per session.
+ * Printable, because tmux rewrites the bytes it considers unprintable — to `_`
+ * through 3.2, to a literal `\037` from 3.4 — and it rewrites the whole line,
+ * literals included. Which byte it rewrites, and to what, changes between
+ * versions, so no control byte can be asked for and read back.
+ *
+ * A printable one is only safe because of where it sits. A terminal id is
+ * constrained to `[A-Za-z0-9._-]` (see `isTerminalId`), so it cannot contain
+ * this, and everything past the first occurrence is taken verbatim: a directory
+ * or a title is free to hold it.
  */
-const FIELD_SEPARATOR = '';
+const FIELD_SEPARATOR = '|';
 
-const LIST_FORMAT = [
-    '#{session_name}',
-    '#{pane_current_path}',
-    '#{pane_height}',
-    '#{pane_width}',
-    PANE_TITLE_FORMAT,
-].join(FIELD_SEPARATOR);
+/**
+ * One field, for every terminal tmux is holding, keyed by terminal id.
+ *
+ * Asked for one field per call rather than all of them together, because only
+ * the id in front of the separator has a charset this can rule on. With two
+ * free-form fields on one line a `|` in a directory and a `|` in a title are
+ * the same character, and no split tells them apart.
+ */
+async function readField(format: string): Promise<Map<string, string>> {
+    const result = await run(['list-panes', '-a', '-F', `#{session_name}${FIELD_SEPARATOR}${format}`]);
+    if (result.code !== 0) {
+        // No server running is the ordinary state before the first terminal.
+        return new Map();
+    }
+
+    const values = new Map<string, string>();
+    for (const line of result.stdout.split('\n')) {
+        const boundary = line.indexOf(FIELD_SEPARATOR);
+        const id = boundary > 0 ? line.slice(0, boundary) : '';
+        // An id is never empty and never holds the separator, so a line that
+        // starts with one — or has none at all — is not a pane this understands.
+        if (!isTerminalId(id)) {
+            continue;
+        }
+        values.set(id, line.slice(boundary + FIELD_SEPARATOR.length));
+    }
+    return values;
+}
 
 /**
  * The terminals tmux is holding right now.
@@ -267,34 +294,32 @@ const LIST_FORMAT = [
  * survives the daemon being replaced.
  */
 export async function listTerminalSessions(): Promise<TmuxTerminal[]> {
-    const result = await run(['list-panes', '-a', '-F', LIST_FORMAT]);
-    if (result.code !== 0) {
-        // No server running is the ordinary state before the first terminal.
-        return [];
+    const [paths, heights, widths, titles] = await Promise.all([
+        readField('#{pane_current_path}'),
+        readField('#{pane_height}'),
+        readField('#{pane_width}'),
+        readField(PANE_TITLE_FORMAT),
+    ]);
+
+    const terminals: TmuxTerminal[] = [];
+    for (const [id, height] of heights) {
+        const width = widths.get(id);
+        // A pane listed without its size is one that went away between the
+        // reads. The next listing is a better answer than a terminal guessed at.
+        if (width === undefined) {
+            continue;
+        }
+        const rows = Number(height);
+        const cols = Number(width);
+        if (!Number.isInteger(rows) || !Number.isInteger(cols)) {
+            continue;
+        }
+        // A shell that has been removed out from under still reports its last
+        // directory, which is a better answer for a label than nothing.
+        const title = titles.get(id);
+        terminals.push({ id, cwd: paths.get(id) || '/', rows, cols, title: title || undefined });
     }
-
-    return result.stdout
-        .split('\n')
-        .map(parseListLine)
-        .filter((terminal): terminal is TmuxTerminal => terminal !== null);
-}
-
-function parseListLine(line: string): TmuxTerminal | null {
-    const fields = line.split(FIELD_SEPARATOR);
-    if (fields.length !== 5) {
-        return null;
-    }
-
-    const [id, cwd, rows, cols, title] = fields;
-    const height = Number(rows);
-    const width = Number(cols);
-    if (!id || !Number.isInteger(height) || !Number.isInteger(width)) {
-        return null;
-    }
-
-    // A shell that has been removed out from under still reports its last
-    // directory, which is a better answer for a label than nothing.
-    return { id, cwd: cwd || '/', rows: height, cols: width, title: title || undefined };
+    return terminals;
 }
 
 export interface TerminalTmuxAttachOptions {
