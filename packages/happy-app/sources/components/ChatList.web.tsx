@@ -1716,7 +1716,9 @@ const ChatListInternal = React.memo((props: {
             setPendingJump(jump);
         }
         folding.toggle(headerId);
-    }, [folding]);
+        // `folding.toggle` and not `folding`: the object is rebuilt every render, so depending on it
+        // would hand every mounted row a new callback prop on every commit and defeat their memo.
+    }, [folding.toggle]);
 
     // The target of the in-flight jump. A second minimap click updates this so the running paging
     // loop retargets instead of the click being silently dropped.
