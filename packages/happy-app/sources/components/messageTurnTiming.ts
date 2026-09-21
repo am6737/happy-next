@@ -27,9 +27,10 @@ type Turn = {
 /**
  * What folding a turn's process hides, and what the folded line counts.
  *
- * The line swallows the row it is drawn on along with every row below it, so that whole set is what
- * the fold hides, and the count and the snapshot are read off it. Two kinds of row it may not
- * swallow: the answer of a settled turn — the fold exists to show what the agent concluded — and a
+ * The fold takes the process — the rows that led up to the agent's last step, that step included —
+ * and what stands after that step is the conclusion: the agent stopped working and said what it came
+ * to say, so it stays on screen whole. Two kinds of row inside the reach it may not swallow either:
+ * the answer of a settled turn, which can be a row the agent wrote before its last step, and a
  * landmark. `hiddenIds` is that set with the row under the line left out of it, because that row is
  * not dropped: the line lives on it.
  */
@@ -137,13 +138,31 @@ function collectTurns(visibleMessages: Message[]): Turn[] {
 }
 
 /**
+ * The index of the row the fold's reach ends at: the agent's last step, or the turn's last row when
+ * it never took one. A landmark is not a step — the fold never takes it.
+ */
+function lastStepIndex(rows: Message[]): number {
+    for (let index = rows.length - 1; index >= 0; index--) {
+        const row = rows[index];
+        if (row.kind === 'tool-call' && !isMinimapLandmarkRow(row)) return index;
+    }
+    return rows.length - 1;
+}
+
+/**
  * What folding this turn would hide.
  *
  * The header row always stays: the folded line takes its place. A settled turn keeps its answer too,
  * because a folded turn should still say what the agent concluded — but a running one has no answer
  * yet, and what it does have is a step in progress. So a running turn folds to its line and nothing
  * else, and the line carries a snapshot of the newest row so the reader can still see what is being
- * done; when it settles, the answer unfolds beneath the line.
+ * done; when it settles, the turn's conclusion unfolds beneath the line.
+ *
+ * That conclusion is everything the agent wrote after its last step, not merely its final block. A
+ * turn ends with a report and then a postscript often enough, and the report is the part worth
+ * reading: taking it would leave the folded turn saying nothing about what it did. Only turns that
+ * end on a step fall back on the answer alone — the last thing the agent said is then a row above
+ * that step, and it is kept for the same reason.
  *
  * Rows the conversation rail draws a mark for are kept either way: the rail jumps to them, and a
  * question card is something the reader may still have to answer, so hiding one would hide a prompt
@@ -151,16 +170,19 @@ function collectTurns(visibleMessages: Message[]): Turn[] {
  */
 function turnProcess(turn: Turn, settled: boolean): TurnProcess {
     const answerId = settled ? turn.lastTextId : null;
+    // A turn still working has no conclusion to spare: the line stands for the whole of it.
+    const reach = settled ? lastStepIndex(turn.rows) : turn.rows.length - 1;
 
     const hiddenIds: string[] = [];
     let steps = 0;
     let snapshotId: string | null = null;
-    for (const row of turn.rows) {
-        // The line swallows the row it is drawn on along with everything below it. The rows it may not
-        // swallow are the answer — the fold exists to show it — and a landmark, which the rail jumps
-        // to and the reader may still have to answer. So this walk is what the fold hides, and the
-        // count and the snapshot are read straight off it with the row under the line included: that
-        // row's content is gone too, and the line is what stands in its place.
+    // Everything past the reach is the conclusion, and the walk simply never gets there.
+    for (let index = 0; index <= reach; index++) {
+        const row = turn.rows[index];
+        // The rows the fold may not swallow are the answer — the fold exists to show it — and a
+        // landmark, which the rail jumps to and the reader may still have to answer. So this walk is
+        // what the fold hides, and the count and the snapshot are read straight off it with the row
+        // under the line included: that row's content is gone too, and the line stands in its place.
         if (isMinimapLandmarkRow(row) || row.id === answerId) continue;
         if (row.kind === 'tool-call') steps++;
         // Collected oldest first, so the newest is the last one seen.

@@ -201,9 +201,57 @@ describe('folded turns', () => {
         expect(fold(result, 't1')).toEqual({ hiddenIds: ['t2'], steps: 2, snapshotId: 't2', answerId: 'a1' });
     });
 
-    it('hides the working-out between the header and the answer, text included', () => {
+    it('keeps the words a turn wrote after its last step, not merely its answer', () => {
         const result = analyze([agent('a1', 50), agent('mid', 40), tool('t1', 30), user('u1', 10)]);
-        expect(fold(result, 't1')).toEqual({ hiddenIds: ['mid'], steps: 1, snapshotId: 'mid', answerId: 'a1' });
+        // The tool is the last thing the agent did, so everything it wrote after it answers the prompt —
+        // `mid` included, not only the closing block. A folded turn that hid the report and left the
+        // postscript under its line would be saying nothing about the turn at all.
+        expect(fold(result, 't1')).toEqual({ hiddenIds: [], steps: 1, snapshotId: 't1', answerId: 'a1' });
+    });
+
+    it('hides the words a turn wrote before its last step', () => {
+        const result = analyze([
+            agent('a1', 60),
+            tool('t2', 50),
+            agent('mid', 40),
+            tool('t1', 30),
+            user('u1', 10),
+        ]);
+        // The agent narrated, took a step, then wrote its report: the narration led up to the step and
+        // goes with it, the report is what the reader is here for and stays.
+        expect(fold(result, 't1')).toEqual({
+            hiddenIds: ['mid', 't2'],
+            steps: 2,
+            snapshotId: 't2',
+            answerId: 'a1',
+        });
+    });
+
+    it('keeps a report and the postscript after it, both', () => {
+        const result = analyze([
+            agent('closing', 90),
+            agent('report', 80),
+            tool('t3', 70),
+            agent('narration', 60),
+            tool('t2', 50),
+            tool('t1', 40),
+            user('u1', 10),
+        ]);
+        // The shape that settled this rule: steps, a line of narration, a last step, then the report the
+        // reader asked for and a short note after it. Everything from the report down is the answer.
+        expect(fold(result, 't1')).toEqual({
+            hiddenIds: ['t2', 'narration', 't3'],
+            steps: 3,
+            snapshotId: 't3',
+            answerId: 'closing',
+        });
+    });
+
+    it('keeps the last word of a turn that ended on a step', () => {
+        const result = analyze([tool('t2', 50), agent('mid', 40), tool('t1', 30), user('u1', 10)]);
+        // Nothing follows the final step, so the reach alone would take the whole reply. The agent's last
+        // word is a row above that step, and the fold keeps it rather than leaving a bare line.
+        expect(fold(result, 't1')).toEqual({ hiddenIds: ['t2'], steps: 2, snapshotId: 't2', answerId: 'mid' });
     });
 
     it('counts every tool call it hides, not the rows it hides', () => {
