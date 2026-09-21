@@ -23,7 +23,6 @@ import { useSetting } from "@/sync/storage";
 import { showCopiedToast, showToast } from '@/components/Toast';
 import { formatMessageTime, formatFullMessageTime } from '@/utils/messageTime';
 import { hapticsLight } from './haptics';
-import { TurnHeaderStatus } from './messageTurnTiming';
 import { TurnHeader } from './TurnHeader';
 import { useMessageTts } from '@/hooks/useMessageTts';
 import { userTextPresentation, type CollapsedTextReason } from './messageCollapse';
@@ -49,11 +48,65 @@ export const MessageView = (props: {
   turnCompletedAt?: number | null;
   /** This row opens its turn, so the turn's header sits above it. */
   isTurnStart?: boolean;
+  /**
+   * Whether this row's turn is showing one line instead of its process. Undefined when the turn has
+   * nothing worth folding, which is also when there is no fold to toggle. Only the row that opens a
+   * turn ever carries it: that is the row the folded line stands in for.
+   */
+  foldFolded?: boolean;
+  /**
+   * True on the row a settled turn's fold leaves standing. That row is the turn's answer, which
+   * keeps its content even though the line sits on it. Only ever set alongside `foldFolded`.
+   */
+  foldKeepsRow?: boolean;
+  /**
+   * Whether the folded line closes its row off from what follows. False only on a folded turn with
+   * no answer of its own — the line is then the whole of what the turn shows, and a line there
+   * would be dividing the row from empty space.
+   */
+  foldDivides?: boolean;
+  /** Tool calls the folded line counts. */
+  foldSteps?: number;
+  /** What the folded rows are doing right now, for a turn that is still running. */
+  foldSnapshot?: string;
+  /** Flip the fold on the turn this row opens. Stable, so list rows keep their props. */
+  onToggleFold?: (headerId: string) => void;
 }) => {
+  const { message, foldFolded, foldSnapshot, onToggleFold } = props;
+  const foldSteps = props.foldSteps ?? 0;
+  // The folded line takes the place of the row it sits on — unless the fold kept this row, which it
+  // does for a settled turn's answer, and the answer can be the row the line itself sits on.
+  const foldHidesRow = foldFolded === true && props.foldKeepsRow !== true;
+  const handleToggleFold = React.useCallback(() => {
+    onToggleFold?.(message.id);
+  }, [onToggleFold, message.id]);
+  // Memoized so the memoized TurnHeader keeps its props: the list re-renders on every scroll frame.
+  const fold = React.useMemo(
+    () => foldFolded === undefined
+      ? undefined
+      : { folded: foldFolded, steps: foldSteps, snapshot: foldSnapshot, onToggle: handleToggleFold },
+    [foldFolded, foldSteps, foldSnapshot, handleToggleFold],
+  );
+
+  // A folded turn is its header and nothing else: the folded line is the whole row, and the answer
+  // below it is a row of its own. Nothing here is dropped from the list — the process rows were
+  // filtered out upstream — so the row keeps its id and only its content changes.
+  const header = props.isTurnStart && props.turnStartedAt != null ? (
+    <View style={styles.turnHeaderRow}>
+      <TurnHeader
+        startedAt={props.turnStartedAt}
+        completedAt={props.turnCompletedAt ?? null}
+        fold={fold}
+        divide={props.foldDivides ?? true}
+      />
+    </View>
+  ) : null;
+
   return (
     <View style={styles.messageContainer} renderToHardwareTextureAndroid={true}>
       <View style={styles.messageContent}>
-        <RenderBlock
+        {header}
+        {foldHidesRow ? null : <RenderBlock
           message={props.message}
           metadata={props.metadata}
           sessionId={props.sessionId}
@@ -67,10 +120,8 @@ export const MessageView = (props: {
           onFork={props.onFork}
           showActionBar={props.showActionBar}
           forkLoading={props.forkLoading}
-          turnStartedAt={props.turnStartedAt}
-          turnCompletedAt={props.turnCompletedAt}
           isTurnStart={props.isTurnStart}
-        />
+        />}
       </View>
     </View>
   );
@@ -173,22 +224,6 @@ function MessageActionBar(props: {
   );
 }
 
-/**
- * The line above the row that opens a turn: `已处理 …` while it runs, `用时 …`
- * once it has. Rows that open no turn (or whose turn we cannot time) get nothing.
- */
-function turnHeader(props: {
-  isTurnStart?: boolean;
-  turnStartedAt?: number | null;
-  turnCompletedAt?: number | null;
-}): React.ReactElement | null {
-  if (!props.isTurnStart || props.turnStartedAt == null) return null;
-  const status: TurnHeaderStatus = props.turnCompletedAt == null
-    ? { state: 'running', startedAt: props.turnStartedAt }
-    : { state: 'done', startedAt: props.turnStartedAt, completedAt: props.turnCompletedAt };
-  return <TurnHeader status={status} />;
-}
-
 // The hover handlers live on the message container and the action bar is an
 // in-flow child of it. This debounce just adds a small grace period on
 // mouseleave so the bar doesn't flicker out when the cursor briefly crosses
@@ -241,8 +276,6 @@ function RenderBlock(props: {
   onFork?: () => void;
   showActionBar?: boolean;
   forkLoading?: boolean;
-  turnStartedAt?: number | null;
-  turnCompletedAt?: number | null;
   isTurnStart?: boolean;
 }): React.ReactElement {
   switch (props.message.kind) {
@@ -278,9 +311,6 @@ function RenderBlock(props: {
           onFork={props.onFork}
           showActionBar={props.showActionBar}
           forkLoading={props.forkLoading}
-          turnStartedAt={props.turnStartedAt}
-          turnCompletedAt={props.turnCompletedAt}
-          isTurnStart={props.isTurnStart}
         />
       );
 
@@ -290,9 +320,6 @@ function RenderBlock(props: {
         metadata={props.metadata}
         sessionId={props.sessionId}
         getMessageById={props.getMessageById}
-        turnStartedAt={props.turnStartedAt}
-        turnCompletedAt={props.turnCompletedAt}
-        isTurnStart={props.isTurnStart}
       />;
 
     case 'agent-event':
@@ -474,8 +501,6 @@ function AgentTextBlock(props: {
   onFork?: () => void;
   showActionBar?: boolean;
   forkLoading?: boolean;
-  turnStartedAt?: number | null;
-  turnCompletedAt?: number | null;
   isTurnStart?: boolean;
 }) {
   const showThinkingMessages = useSetting('showThinkingMessages');
@@ -541,7 +566,6 @@ function AgentTextBlock(props: {
       ]}
       {...hoverHandlers}
     >
-      {turnHeader(props)}
       <MarkdownView
         markdown={props.message.text}
         sessionId={props.sessionId}
@@ -619,16 +643,12 @@ function ToolCallBlock(props: {
   metadata: Metadata | null;
   sessionId: string;
   getMessageById?: (id: string) => Message | null;
-  turnStartedAt?: number | null;
-  turnCompletedAt?: number | null;
-  isTurnStart?: boolean;
 }) {
   if (!props.message.tool) {
     return null;
   }
   return (
     <View style={styles.toolContainer}>
-      {turnHeader(props)}
       <ToolView
         tool={props.message.tool}
         metadata={props.metadata}
@@ -741,6 +761,12 @@ const styles = StyleSheet.create((theme) => ({
   },
   toolContainer: {
     marginHorizontal: 16,
+  },
+  // The header stands where the block's own inset would have put it: the two
+  // blocks that used to render it are inset 16px (one by padding, one by
+  // margin), and it now sits outside both.
+  turnHeaderRow: {
+    paddingHorizontal: 16,
   },
   debugText: {
     color: theme.colors.agentEventText,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { analyzeTurns } from './messageTurnTiming';
-import { AgentTextMessage, Message, UserTextMessage } from '@/sync/typesMessage';
+import { ASK_USER_QUESTION_TOOL, AgentTextMessage, Message, UserTextMessage } from '@/sync/typesMessage';
 
 function user(id: string, createdAt: number): UserTextMessage {
     return { kind: 'user-text', id, localId: null, createdAt, text: id };
@@ -31,6 +31,16 @@ function tool(id: string, createdAt: number): Message {
 
 function event(id: string, createdAt: number): Message {
     return { kind: 'agent-event', id, createdAt, event: { type: 'ready' } };
+}
+
+function namedTool(id: string, createdAt: number, name: string): Message {
+    const call = tool(id, createdAt);
+    return { ...(call as { kind: 'tool-call' }), tool: { ...(call as any).tool, name } } as Message;
+}
+
+/** A question card — one of the two rows the conversation rail marks. */
+function question(id: string, createdAt: number): Message {
+    return namedTool(id, createdAt, ASK_USER_QUESTION_TOOL);
 }
 
 const NO_LATCH: ReadonlySet<string> = new Set<string>();
@@ -176,5 +186,110 @@ describe('turns above the loaded window', () => {
         const result = analyze([agent('a2', 40), agent('a1', 20)]);
         expect([...result.headerById.keys()]).toEqual(['a1']);
         expect(done(result, 'a1')).toEqual({ startedAt: 20, completedAt: 40 });
+    });
+});
+
+describe('folded turns', () => {
+    function fold(result: ReturnType<typeof analyzeTurns>, headerId: string) {
+        return result.foldById.get(headerId);
+    }
+
+    it('hides the process, keeping the row that opens it and the answer', () => {
+        const result = analyze([agent('a1', 50), tool('t2', 40), tool('t1', 30), user('u1', 10)]);
+        expect(fold(result, 't1')).toEqual({ hiddenIds: ['t2'], steps: 1, snapshotId: 't2', answerId: 'a1', running: false });
+    });
+
+    it('hides the working-out between the header and the answer, text included', () => {
+        const result = analyze([agent('a1', 50), agent('mid', 40), tool('t1', 30), user('u1', 10)]);
+        expect(fold(result, 't1')).toEqual({ hiddenIds: ['mid'], steps: 0, snapshotId: 'mid', answerId: 'a1', running: false });
+    });
+
+    it('counts every tool call it hides, not the rows it hides', () => {
+        const result = analyze([
+            agent('a1', 60),
+            tool('t4', 50),
+            agent('mid', 45),
+            tool('t3', 40),
+            tool('t2', 35),
+            tool('t1', 30),
+            user('u1', 10),
+        ]);
+        expect(fold(result, 't1')).toEqual({
+            hiddenIds: ['t2', 't3', 'mid', 't4'],
+            steps: 3,
+            snapshotId: 't4',
+            answerId: 'a1',
+            running: false,
+        });
+    });
+
+    it('keeps a question the reader may still have to answer', () => {
+        const result = analyze([agent('a1', 50), question('q1', 40), tool('t1', 30), user('u1', 10)]);
+        expect(fold(result, 't1')).toEqual({ hiddenIds: [], steps: 0, snapshotId: null, answerId: 'a1', running: false });
+    });
+
+    it('has nothing to hide when the turn is only its answer', () => {
+        const result = analyze([agent('a1', 50), user('u1', 10)]);
+        expect(fold(result, 'a1')).toEqual({ hiddenIds: [], steps: 0, snapshotId: null, answerId: 'a1', running: false });
+    });
+
+    it('folds a running turn to its line alone, answer included', () => {
+        // Nothing is kept back but the header: a turn still running has no answer to keep, and the
+        // line's snapshot is what stands in for the step it is on.
+        const result = analyze([agent('a1', 50), tool('t1', 30), user('u1', 10)], { inFlight: true });
+        expect(fold(result, 't1')).toEqual({ hiddenIds: ['a1'], steps: 0, snapshotId: 'a1', answerId: null, running: true });
+    });
+
+    it('hands the answer back as soon as the turn settles', () => {
+        const rows = [agent('a1', 50), tool('t1', 30), user('u1', 10)];
+        const whileRunning = analyze(rows, { inFlight: true });
+        const onceSettled = analyze(rows);
+        expect(fold(whileRunning, 't1')?.hiddenIds).toEqual(['a1']);
+        expect(fold(onceSettled, 't1')?.hiddenIds).toEqual([]);
+    });
+
+    it('keeps an answer that is the very row the line sits on', () => {
+        // The turn's only text opens it, so the answer and the header are one row: the fold takes the
+        // process and leaves that row's own words standing, under the line.
+        const result = analyze([tool('t3', 50), tool('t2', 45), tool('t1', 40), agent('a1', 35), user('u1', 10)]);
+        expect(fold(result, 'a1')).toEqual({
+            hiddenIds: ['t1', 't2', 't3'],
+            steps: 3,
+            snapshotId: 't3',
+            answerId: 'a1',
+            running: false,
+        });
+    });
+
+    it('has no answer to keep when the turn ended without a word of its own', () => {
+        const result = analyze([tool('t3', 50), tool('t2', 45), tool('t1', 40), user('u1', 10)]);
+        expect(fold(result, 't1')?.answerId).toBeNull();
+    });
+
+    it('snapshots the newest row, which is the one in flight', () => {
+        const result = analyze(
+            [tool('t3', 50), tool('t2', 40), tool('t1', 30), user('u1', 10)],
+            { inFlight: true },
+        );
+        expect(fold(result, 't1')?.snapshotId).toBe('t3');
+    });
+
+    it('folds a settled turn while a newer one runs', () => {
+        const result = analyze(
+            [agent('a2', 60), user('u2', 50), tool('t2', 45), agent('a1', 40), tool('t1', 30), user('u1', 10)],
+            { inFlight: true },
+        );
+        expect(fold(result, 't1')).toEqual({ hiddenIds: ['t2'], steps: 1, snapshotId: 't2', answerId: 'a1', running: false });
+        // The running turn folds too, and keeps nothing back.
+        expect(fold(result, 'a2')).toEqual({ hiddenIds: [], steps: 0, snapshotId: null, answerId: null, running: true });
+    });
+
+    it('never reaches across a prompt into the turn before it', () => {
+        const result = analyze(
+            [agent('a2', 60), user('u2', 50), tool('t2', 45), agent('a1', 40), tool('t1', 30), user('u1', 10)],
+        );
+        expect(fold(result, 't1')).toEqual({ hiddenIds: ['t2'], steps: 1, snapshotId: 't2', answerId: 'a1', running: false });
+        // The newer turn's own process is all it hides: its prompt is a boundary, not a row.
+        expect(fold(result, 'a2')).toEqual({ hiddenIds: [], steps: 0, snapshotId: null, answerId: 'a2', running: false });
     });
 });

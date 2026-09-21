@@ -1,4 +1,4 @@
-import { Message, MinimapMessage } from '@/sync/typesMessage';
+import { isAskUserQuestionToolCall, isPreviewHtmlToolCall, Message, MinimapMessage } from '@/sync/typesMessage';
 
 const LOCAL_COMMAND_STDOUT_PATTERN = /^<local-command-stdout>[\s\S]*<\/local-command-stdout>$/;
 
@@ -31,6 +31,17 @@ export function shouldHideMessageInChatList(message: Message, showThinkingMessag
     }
     const text = message.displayText ?? message.text;
     return isCompactionMarkerText(text) || isImagePlaceholderText(text);
+}
+
+/**
+ * A row the conversation rail draws a mark for: a question card, or an inline HTML preview.
+ *
+ * These are landmarks rather than working-out. The rail jumps to them, and a question is something the
+ * reader may still have to answer — so anything that hides rows has to keep them, and the jump stays
+ * able to land. Folding a turn's process is the caller this exists for.
+ */
+export function isMinimapLandmarkRow(message: Message): boolean {
+    return isAskUserQuestionToolCall(message) || isPreviewHtmlToolCall(message);
 }
 
 /**

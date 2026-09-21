@@ -1,11 +1,29 @@
 import * as React from 'react';
-import { Pressable, Text } from 'react-native';
-import { StyleSheet } from 'react-native-unistyles';
+import { Animated, Easing, Pressable, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { t } from '@/text';
 import { formatDuration, formatFullMessageTime } from '@/utils/messageTime';
-import { TurnHeaderStatus } from './messageTurnTiming';
 import { showToast } from './Toast';
 import { hapticsLight } from './haptics';
+import { TextShimmer } from './TextShimmer';
+
+/** How long the chevron takes to swing between open and folded. */
+const CHEVRON_TURN_MS = 180;
+
+/** The folded line's state, for the turns that have one. */
+export type TurnFoldProps = {
+    folded: boolean;
+    /** Tool calls the process is hiding. */
+    steps: number;
+    /**
+     * What the hidden rows are doing right now, shown at the far end of the line. Only a turn still
+     * running has one: once it settles the answer is on screen below, and the line goes back to
+     * being just the cost of the process.
+     */
+    snapshot?: string;
+    onToggle: () => void;
+};
 
 /**
  * The line above an assistant turn: how long it has been going, or how long it
@@ -16,24 +34,64 @@ import { hapticsLight } from './haptics';
  * While the turn runs it counts up. Once it settles it just states the result: no
  * affordance, nothing that changes under the cursor. Tapping it still reveals the
  * exact window for anyone who wants it.
+ *
+ * A turn whose process is long enough to be worth folding hands one in through
+ * `fold`, and then this line is the fold: a chevron and what the process cost,
+ * tap to open or close it. That displaces the exact-window tap, which moves to a
+ * long press rather than being lost.
  */
-export const TurnHeader = React.memo((props: { status: TurnHeaderStatus }) => {
-    const { status } = props;
-    const running = status.state === 'running';
-    const elapsedMs = useElapsedMs(running ? status.startedAt : null);
+export const TurnHeader = React.memo((props: {
+    startedAt: number;
+    /** Null while the turn is still running. */
+    completedAt: number | null;
+    fold?: TurnFoldProps;
+    /**
+     * Whether the line closes the row off from what follows it. False on a row with nothing under
+     * the line — a folded turn the line is the whole of — where the line would be dividing the row
+     * from empty space. Defaults to true.
+     */
+    divide?: boolean;
+}) => {
+    const { theme } = useUnistyles();
+    const { startedAt, completedAt, fold } = props;
+    const divide = props.divide ?? true;
+    const folded = fold?.folded ?? false;
+    const running = completedAt === null;
 
-    const label = running
+    // One glyph that turns, rather than two icons swapped: this row is the thing the reader just
+    // tapped, and a swap reads as a jump. `Animated` with the native driver, not Reanimated — see
+    // StatusDot for what a Reanimated frame costs in this build. A rotation is a transform, so it
+    // never re-runs layout either.
+    const turn = React.useRef(new Animated.Value(folded ? 1 : 0)).current;
+    React.useEffect(() => {
+        Animated.timing(turn, {
+            toValue: folded ? 1 : 0,
+            duration: CHEVRON_TURN_MS,
+            easing: Easing.inOut(Easing.quad),
+            useNativeDriver: true,
+        }).start();
+    }, [folded, turn]);
+    const rotation = turn.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '-90deg'] });
+    const elapsedMs = useElapsedMs(running ? startedAt : null);
+    const elapsed = running ? elapsedMs : completedAt - startedAt;
+
+    let label: string;
+    if (running && elapsed < 1000) {
         // Under a second there is nothing to report yet, so the line says what is
         // happening instead of how long it has been.
-        ? (elapsedMs < 1000
-            ? t('message.processing')
-            : t('message.processed', { duration: formatDuration(elapsedMs) }))
-        : t('message.took', { duration: formatDuration(status.completedAt - status.startedAt) });
+        label = t('message.processing');
+    } else if (running) {
+        label = t('message.processed', { duration: formatDuration(elapsed) });
+    } else if (fold?.folded) {
+        label = t('message.foldedProcess', { duration: formatDuration(elapsed), steps: fold.steps });
+    } else {
+        label = t('message.took', { duration: formatDuration(elapsed) });
+    }
 
-    // The window behind that duration, for anyone who taps the line.
+    // The window behind that duration, for anyone who long-presses the line.
     const detail = running
         ? null
-        : `${formatFullMessageTime(status.startedAt)} – ${formatFullMessageTime(status.completedAt)}`;
+        : `${formatFullMessageTime(startedAt)} – ${formatFullMessageTime(completedAt)}`;
 
     const showDetail = () => {
         if (detail === null) return;
@@ -41,14 +99,51 @@ export const TurnHeader = React.memo((props: { status: TurnHeaderStatus }) => {
         showToast(detail, { icon: null });
     };
 
+    // A fold is offered whatever the turn is doing. While it runs, the folded line is the only thing
+    // showing — which is exactly when the reader is most likely to want it open.
+    const foldable = fold !== undefined;
+    const onPress = foldable ? fold.onToggle : (running ? undefined : showDetail);
+    const onLongPress = foldable ? showDetail : undefined;
+    // Inert means there is nothing here to do, not that the turn is busy: react-native-web answers a
+    // disabled Pressable with `pointer-events: none`, so a running turn's fold would be untappable.
+    const inert = onPress === undefined;
+
     return (
         <Pressable
-            style={styles.row}
-            onPress={running ? undefined : showDetail}
-            disabled={running}
-            accessibilityLabel={label}
+            style={[styles.row, !divide && styles.rowUndivided]}
+            onPress={onPress}
+            onLongPress={onLongPress}
+            disabled={inert}
+            accessibilityRole={foldable ? 'button' : undefined}
+            accessibilityState={foldable ? { expanded: !folded } : undefined}
+            accessibilityLabel={foldable
+                ? `${label}. ${folded ? t('message.expandProcess') : t('message.foldProcess')}`
+                : label}
         >
+            {foldable && (
+                <Animated.View style={[styles.chevron, { transform: [{ rotate: rotation }] }]}>
+                    <Ionicons name="chevron-down" size={12} color={theme.colors.textSecondary} />
+                </Animated.View>
+            )}
             <Text style={styles.text} numberOfLines={1}>{label}</Text>
+            {foldable && fold.snapshot ? (
+                running ? (
+                    // What the turn is doing right now is the long part of the line, and it is the
+                    // part that carries the sign of life: a band of light travels it, so the line
+                    // reads as still working without anything about it changing size.
+                    <TextShimmer
+                        style={styles.snapshotLive}
+                        baseColor={theme.colors.textSecondary}
+                        highlightColor={theme.colors.text}
+                    >
+                        {fold.snapshot}
+                    </TextShimmer>
+                ) : (
+                    // The snapshot gives way to the label: the cost of the process is the line's own
+                    // subject, and the snapshot is what the reader glances at.
+                    <Text style={styles.snapshot} numberOfLines={1}>{fold.snapshot}</Text>
+                )
+            ) : null}
         </Pressable>
     );
 });
@@ -69,13 +164,52 @@ function useElapsedMs(startedAt: number | null): number {
 
 const styles = StyleSheet.create((theme) => ({
     row: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 5,
         paddingBottom: 6,
         marginBottom: 8,
         borderBottomWidth: StyleSheet.hairlineWidth,
         borderBottomColor: theme.colors.divider,
     },
+    // The hairline still takes up its width with nothing under the row to divide: the fold opens
+    // and closes in place, and a row that changed height on that would move everything below it.
+    rowUndivided: {
+        borderBottomColor: 'transparent',
+    },
+    // The chevron leans left a little: at this size a bare glyph floats in from the
+    // margin, and the label is what the line is for.
+    chevron: {
+        marginLeft: -2,
+        width: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
     text: {
         fontSize: 13,
+        color: theme.colors.textSecondary,
+        // The cost of the process is short and is the line's own subject, so it never gives way.
+        flexShrink: 0,
+    },
+    // Everything the line has left goes to the snapshot, which is the part long enough to need
+    // cutting. minWidth keeps it from refusing to shrink below its content on web.
+    snapshot: {
+        flexShrink: 1,
+        minWidth: 0,
+        marginLeft: 'auto',
+        paddingLeft: 12,
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+        opacity: 0.7,
+    },
+    // The live one paints its own dimming into the gradient, so it takes neither the flat colour nor
+    // the 70%: the band has to be free to reach the text's full strength.
+    snapshotLive: {
+        flexShrink: 1,
+        minWidth: 0,
+        marginLeft: 'auto',
+        paddingLeft: 12,
+        fontSize: 12,
         color: theme.colors.textSecondary,
     },
 }));

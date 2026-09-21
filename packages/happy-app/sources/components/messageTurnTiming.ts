@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { Message, UserTextMessage } from '@/sync/typesMessage';
+import { isMinimapLandmarkRow } from './chatListVisibility';
 
 /**
  * One assistant turn: everything between a user prompt and the next one.
@@ -19,6 +20,41 @@ type Turn = {
     headerId: string | null;
     /** Newest row of the turn — the best end estimate from timestamps alone. */
     lastRowAt: number;
+    /** Every row of the agent's reply, oldest first — the order the walk below collects them in. */
+    rows: Message[];
+};
+
+/**
+ * What folding a turn's process hides, and what the folded line counts.
+ *
+ * `hiddenIds` never names the header row (the folded line takes its place) nor the turn's answer, so a
+ * folded turn still shows what the agent concluded — only the working-out goes away.
+ */
+export type TurnProcess = {
+    /** Rows the list drops while this turn is folded, oldest first. */
+    hiddenIds: string[];
+    /** Tool calls among them — the count the folded line reports. */
+    steps: number;
+    /**
+     * The newest row this fold hides, or null when it hides nothing. While the turn runs that is
+     * whatever the agent is doing right now — the one thing a reader would want on the folded line,
+     * since everything else about the turn is out of sight.
+     */
+    snapshotId: string | null;
+    /**
+     * The turn's answer — the one row the fold keeps besides the header, so a folded turn still says
+     * what the agent concluded. Null while the turn runs, and for a turn that ends without a word of
+     * its own.
+     *
+     * It can be the header row itself, when the turn's only text is the row it opens with. Such a row
+     * carries the line and its own content at once.
+     */
+    answerId: string | null;
+    /**
+     * Whether the turn this process belongs to is still going. A running turn folds from its first
+     * hidden row — the reader is watching it work — where a settled one has to be worth folding.
+     */
+    running: boolean;
 };
 
 /** What the header above a turn's first row shows. */
@@ -35,6 +71,11 @@ export type TurnAnalysis = {
     running: { lastTextId: string | null } | null;
     /** Header status per row id, for the rows that open a turn. */
     headerById: Map<string, TurnHeaderStatus>;
+    /**
+     * What each turn's process hides if folded, keyed by the header row it folds onto. A running
+     * turn folds like any other — to its line alone, with the newest row's snapshot on it.
+     */
+    foldById: Map<string, TurnProcess>;
 };
 
 /**
@@ -77,10 +118,12 @@ function collectTurns(visibleMessages: Message[]): Turn[] {
                 lastTextId: null,
                 headerId: null,
                 lastRowAt: msg.createdAt,
+                rows: [],
             };
             turns.push(current);
             if (msg.kind === 'user-text') continue;
         }
+        current.rows.push(msg);
         // The turn's header sits above its first real agent row. Mode switches and
         // other notices don't open a turn's reply, so they don't take the slot.
         if (current.headerId === null && msg.kind !== 'agent-event') current.headerId = msg.id;
@@ -89,6 +132,41 @@ function collectTurns(visibleMessages: Message[]): Turn[] {
     }
 
     return turns;
+}
+
+/**
+ * What folding this turn would hide.
+ *
+ * The header row always stays: the folded line takes its place. A settled turn keeps its answer too,
+ * because a folded turn should still say what the agent concluded — but a running one has no answer
+ * yet, and what it does have is a step in progress. So a running turn folds to its line and nothing
+ * else, and the line carries a snapshot of the newest row so the reader can still see what is being
+ * done; when it settles, the answer unfolds beneath the line.
+ *
+ * Rows the conversation rail draws a mark for are kept either way: the rail jumps to them, and a
+ * question card is something the reader may still have to answer, so hiding one would hide a prompt
+ * rather than working-out.
+ */
+function turnProcess(turn: Turn, settled: boolean): TurnProcess {
+    const keep = new Set<string>();
+    if (turn.headerId !== null) keep.add(turn.headerId);
+    if (settled && turn.lastTextId !== null) keep.add(turn.lastTextId);
+
+    const hiddenIds: string[] = [];
+    let steps = 0;
+    for (const row of turn.rows) {
+        if (keep.has(row.id) || isMinimapLandmarkRow(row)) continue;
+        hiddenIds.push(row.id);
+        if (row.kind === 'tool-call') steps++;
+    }
+    return {
+        hiddenIds,
+        steps,
+        // Collected oldest first, so the newest is the last one pushed.
+        snapshotId: hiddenIds.length > 0 ? hiddenIds[hiddenIds.length - 1] : null,
+        answerId: settled ? turn.lastTextId : null,
+        running: !settled,
+    };
 }
 
 // The CLI stamps `taskCompleted` from its own clock; a stamp far ahead of ours
@@ -146,6 +224,7 @@ export function analyzeTurns(params: {
     const completedIds = new Set<string>();
     const stillCompleted = new Set<string>();
     const headerById = new Map<string, TurnHeaderStatus>();
+    const foldById = new Map<string, TurnProcess>();
     let running: { lastTextId: string | null } | null = null;
 
     for (let index = 0; index < turns.length; index++) {
@@ -159,6 +238,7 @@ export function analyzeTurns(params: {
             running = { lastTextId: turn.lastTextId };
             if (turn.headerId !== null) {
                 headerById.set(turn.headerId, { state: 'running', startedAt: turn.startedAt });
+                foldById.set(turn.headerId, turnProcess(turn, false));
             }
             continue;
         }
@@ -169,6 +249,7 @@ export function analyzeTurns(params: {
 
         if (turn.headerId !== null) {
             headerById.set(turn.headerId, { state: 'done', startedAt: turn.startedAt, completedAt });
+            foldById.set(turn.headerId, turnProcess(turn, true));
         }
         if (turn.lastTextId !== null) {
             completedIds.add(turn.lastTextId);
@@ -176,7 +257,7 @@ export function analyzeTurns(params: {
         }
     }
 
-    return { completedIds, stillCompleted, running, headerById };
+    return { completedIds, stillCompleted, running, headerById, foldById };
 }
 
 /**
@@ -197,7 +278,7 @@ export function useTurnAnalysis(params: {
     turnInFlight: boolean | undefined;
     /** `session.agentState.taskCompleted`. */
     taskCompletedAt?: number | null;
-}): Pick<TurnAnalysis, 'completedIds' | 'headerById'> {
+}): Pick<TurnAnalysis, 'completedIds' | 'headerById' | 'foldById'> {
     const { visibleMessages, turnInFlight, taskCompletedAt } = params;
     const completedTurnsRef = React.useRef<Set<string>>(new Set());
     const turnEndsRef = React.useRef<Map<string, number>>(new Map());
@@ -229,5 +310,6 @@ export function useTurnAnalysis(params: {
     return React.useMemo(() => ({
         completedIds: analysis.completedIds,
         headerById: analysis.headerById,
+        foldById: analysis.foldById,
     }), [analysis]);
 }

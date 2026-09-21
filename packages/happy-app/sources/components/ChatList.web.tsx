@@ -13,7 +13,10 @@ import { Metadata, Session } from '@/sync/storageTypes';
 import { ChatFooter } from './ChatFooter';
 import { AskUserQuestionMessage, isAskUserQuestionToolCall, isPreviewHtmlToolCall, Message, MinimapMessage, PreviewHtmlMessage, toAskUserQuestionMessage, toPreviewHtmlMessage, UserTextMessage } from '@/sync/typesMessage';
 import { currentLandmark, railLandmarkRows, shouldHideMessageInChatList, shouldHideMessageInMinimap, type LandmarkRow } from './chatListVisibility';
-import { turnHeaderProps, useTurnAnalysis } from './messageTurnTiming';
+import { turnHeaderProps, useTurnAnalysis, type TurnProcess } from './messageTurnTiming';
+import { rowSnapshot } from './rowSnapshot';
+import { toolTitle } from './tools/toolTitle';
+import { useTurnFolding } from '@/hooks/useTurnFolding';
 import { AWAITING_RESPONSE_MAX_MS } from '@/utils/sessionUtils';
 import { layout as appLayout } from './layout';
 import { createScrollButtonVisibilityController } from './scrollButtonVisibilityController';
@@ -38,6 +41,11 @@ import {
 
 // Web-only ChatList. The native implementation (./ChatList.tsx, inverted
 // FlatList) stays untouched; this file replaces it on web.
+//
+// Folding a turn's process lives here and only here. Anchoring it needs the layout model below —
+// holding the row the reader tapped still while the rows under it come and go. The native list has
+// no such model and no way to be told where a row is before the frame that moves it paints, so the
+// fold would take the line out from under their finger. It waits for a list that can.
 //
 // Architecture (modeled on the Codex desktop thread list):
 //
@@ -128,6 +136,28 @@ export interface ForkMessageRequest {
 }
 
 // --- End of the sync block ---
+
+/**
+ * The newest hidden row that has something to say, for a running turn's folded line. Rows with
+ * nothing to show (a mode switch, a notice) are stepped over rather than blanking the line — what
+ * the reader wants is the nearest step, not strictly the last row.
+ */
+function newestSnapshot(
+    process: TurnProcess | undefined,
+    messageById: ReadonlyMap<string, Message>,
+    metadata: Metadata | null,
+): string | undefined {
+    if (!process) return undefined;
+    // Collected oldest first, so the newest is at the end.
+    for (let i = process.hiddenIds.length - 1; i >= 0; i--) {
+        const row = messageById.get(process.hiddenIds[i]);
+        if (!row) continue;
+        // The step is named the way its own row is (see toolTitle).
+        const snapshot = rowSnapshot(row, row.kind === 'tool-call' ? toolTitle(row.tool, metadata) : null);
+        if (snapshot) return snapshot;
+    }
+    return undefined;
+}
 
 // A loaded user message paired with its index in the newest-first `visibleMessages`.
 type LoadedUserMessage = { message: UserTextMessage; index: number };
@@ -221,6 +251,11 @@ const LOAD_MORE_RETRY_MS = 300;
 const BAND_SNAP_THRESHOLD_PX = 100;
 // …leaving this much band visible so the paging spinner shows.
 const BAND_PEEK_PX = 72;
+
+/** How close a jump's scroll write has to land to count as taken. */
+const JUMP_LAND_TOLERANCE_PX = 1;
+/** How many commits a jump may be repositioned on before it gives up. */
+const MAX_JUMP_ATTEMPTS = 12;
 // Keys the browser turns into native scrolling of the hovered/focused scroller.
 const SCROLL_KEYS = new Set(['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' ']);
 // Post-jump feedback: horizontal shake on the target row.
@@ -394,6 +429,13 @@ const ChatRow = React.memo((props: {
     isTurnStart: boolean,
     turnStartedAt: number | undefined,
     turnCompletedAt: number | null | undefined,
+    // Fold state, on the row that opens a foldable turn only (see turnFold.ts).
+    foldFolded: boolean | undefined,
+    foldKeepsRow: boolean,
+    foldDivides: boolean,
+    foldSteps: number | undefined,
+    foldSnapshot: string | undefined,
+    onToggleFold: ((headerId: string) => void) | undefined,
     constrainedHeightPx: number | undefined,
     refCallback: (el: HTMLDivElement | null) => void,
 }) => {
@@ -428,6 +470,12 @@ const ChatRow = React.memo((props: {
                     turnStartedAt={props.turnStartedAt}
                     turnCompletedAt={props.turnCompletedAt}
                     isTurnStart={props.isTurnStart}
+                    foldFolded={props.foldFolded}
+                    foldKeepsRow={props.foldKeepsRow}
+                    foldDivides={props.foldDivides}
+                    foldSteps={props.foldSteps}
+                    foldSnapshot={props.foldSnapshot}
+                    onToggleFold={props.onToggleFold}
                 />
             </div>
         </div>
@@ -438,8 +486,15 @@ type PendingJump = {
     key: string;
     nonce: number;
     // 'center': minimap jump. 'top': internal band snap (viewport top lands
-    // at the entry's top edge plus the spinner peek).
-    align: 'center' | 'top';
+    // at the entry's top edge plus the spinner peek). 'keep': hold the entry's
+    // top edge at `topInsetPx` below the viewport top, which is where the
+    // reader last saw it — a fold toggle changes the height of the turn under
+    // the line they just tapped, and without this the line leaves from under
+    // their finger while the answer below stays pinned to the bottom.
+    align: 'center' | 'top' | 'keep';
+    topInsetPx?: number;
+    /** Commits this jump has been positioned on without the write taking. */
+    attempts?: number;
     // Internal repositions skip the shake feedback and logging.
     silent: boolean;
 };
@@ -489,9 +544,43 @@ const ChatListInternal = React.memo((props: {
 
     // ---- Data layer (newest-first, matches native ChatList.tsx verbatim) ----
 
-    const visibleMessages = React.useMemo(
+    const foldTurnProcess = useSetting('foldTurnProcess');
+    // For the snapshot a running turn's folded line carries.
+    const messageById = React.useMemo(() => {
+        const map = new Map<string, Message>();
+        for (const message of props.messages) map.set(message.id, message);
+        return map;
+    }, [props.messages]);
+    const listedMessages = React.useMemo(
         () => props.messages.filter((message) => !shouldHideMessageInChatList(message, showThinkingMessages)),
         [props.messages, showThinkingMessages]
+    );
+
+    // Which rows carry the action bar, which rows carry their turn's header, and
+    // how long each turn took. See messageTurnTiming.ts for the rules.
+    //
+    // In flight means the CLI says it is thinking *or* the optimistic marker set
+    // when a message is sent is still standing: the marker is written in the same
+    // store update that lands the message, so a reply's header arrives with the
+    // message instead of a CLI heartbeat later.
+    const turnInFlight = !!props.thinking
+        || (props.awaitingResponseSince != null
+            && Date.now() - props.awaitingResponseSince < AWAITING_RESPONSE_MAX_MS);
+    const turns = useTurnAnalysis({
+        visibleMessages: listedMessages,
+        turnInFlight,
+        taskCompletedAt: props.taskCompleted,
+    });
+
+    // Which turns are showing their process and which are showing one line. A folded row leaves the
+    // key set entirely rather than rendering as null: this list sizes rows from a height model that
+    // survives a re-render, so an element left in place would keep the height it was once given.
+    const folding = useTurnFolding({ foldById: turns.foldById, enabled: foldTurnProcess });
+    const visibleMessages = React.useMemo(
+        () => folding.hiddenIds.size === 0
+            ? listedMessages
+            : listedMessages.filter((message) => !folding.hiddenIds.has(message.id)),
+        [listedMessages, folding.hiddenIds]
     );
     const visibleMessagesRef = useRef(visibleMessages);
     visibleMessagesRef.current = visibleMessages;
@@ -512,22 +601,6 @@ const ChatListInternal = React.memo((props: {
         }
         return map;
     }, [visibleMessages, props.isSharedSession]);
-
-    // Which rows carry the action bar, which rows carry their turn's header, and
-    // how long each turn took. See messageTurnTiming.ts for the rules.
-    //
-    // In flight means the CLI says it is thinking *or* the optimistic marker set
-    // when a message is sent is still standing: the marker is written in the same
-    // store update that lands the message, so a reply's header arrives with the
-    // message instead of a CLI heartbeat later.
-    const turnInFlight = !!props.thinking
-        || (props.awaitingResponseSince != null
-            && Date.now() - props.awaitingResponseSince < AWAITING_RESPONSE_MAX_MS);
-    const turns = useTurnAnalysis({
-        visibleMessages,
-        turnInFlight,
-        taskCompletedAt: props.taskCompleted,
-    });
 
     // For each agent message, the user prompt that FOLLOWS it in time (nearest
     // lower index in the newest-first array) — the fork truncation target for
@@ -1619,6 +1692,32 @@ const ChatListInternal = React.memo((props: {
     const maybeBandSnapToTopRef = useRef(maybeBandSnapToTop);
     maybeBandSnapToTopRef.current = maybeBandSnapToTop;
 
+    // Unfolding a turn makes the rows under its fold line reappear, and collapsing them takes them
+    // away again. Either way the turn grows or shrinks BELOW the line the reader just tapped, and a
+    // bottom-anchored list answers that by pushing everything above the answer up — the line leaves
+    // from under their finger. So the tap is a jump: it holds the row it was made on at the exact
+    // height it had on screen. The jump re-measures the rows it is about to mount before it lands,
+    // which a one-shot scroll correction cannot do.
+    const handleToggleFold = React.useCallback((headerId: string) => {
+        const row = rowElsByKeyRef.current.get(headerId);
+        const scroller = scrollerElRef.current;
+        if (row && scroller) {
+            const topInsetPx = row.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+            const jump: PendingJump = {
+                key: headerId,
+                nonce: ++jumpNonceRef.current,
+                align: 'keep',
+                topInsetPx,
+                silent: true,
+            };
+            // Set before the toggle commits, so the entry-set effect below defers to the jump
+            // instead of compensating the change on its own.
+            pendingJumpRef.current = jump;
+            setPendingJump(jump);
+        }
+        folding.toggle(headerId);
+    }, [folding]);
+
     // The target of the in-flight jump. A second minimap click updates this so the running paging
     // loop retargets instead of the click being silently dropped.
     const activeJumpTargetRef = useRef<MinimapMessage | null>(null);
@@ -1671,15 +1770,26 @@ const ChatListInternal = React.memo((props: {
         }
     }, [props.onLoadMore]);
 
+    // Where a pending jump wants the viewport, for both the render override below (which mounts
+    // the target in the same commit that asked for it) and the landing effect (which positions it
+    // from exact heights). One mapping, so the two can never disagree.
+    const jumpDistanceFor = (jump: PendingJump, viewportHeightPx: number): number | null =>
+        jump.align === 'center'
+            ? distanceToCenterEntry({ layout, key: jump.key, viewportHeightPx })
+            : distanceToAlignEntryTop({
+                layout,
+                key: jump.key,
+                viewportHeightPx,
+                topInsetPx: jump.align === 'keep' ? jump.topInsetPx ?? 0 : BAND_PEEK_PX,
+            });
+
     // ---- Render-phase window overrides ----
     // A pending jump mounts its target in the SAME commit that requested it;
     // an entry-set change remaps the window to follow its anchor key (indices
     // shift on prepends).
     let renderedRange: RenderRange = viewport.renderedRange;
     if (pendingJump != null) {
-        const jumpDistance = pendingJump.align === 'top'
-            ? distanceToAlignEntryTop({ layout, key: pendingJump.key, viewportHeightPx: viewport.viewportHeightPx, topInsetPx: BAND_PEEK_PX })
-            : distanceToCenterEntry({ layout, key: pendingJump.key, viewportHeightPx: viewport.viewportHeightPx });
+        const jumpDistance = jumpDistanceFor(pendingJump, viewport.viewportHeightPx);
         if (jumpDistance != null) {
             renderedRange = computeVisibleRange({
                 layout,
@@ -1846,18 +1956,7 @@ const ChatListInternal = React.memo((props: {
         // If measuring staged a commit, wait for it — this effect re-runs with
         // the rebuilt layout (deps) and positions against exact heights.
         if (applyMeasuredHeightsRef.current(batch, false) || pendingOpsRef.current) return;
-        const modelDistance = jump.align === 'top'
-            ? distanceToAlignEntryTop({
-                layout,
-                key: jump.key,
-                viewportHeightPx: scroller.clientHeight,
-                topInsetPx: BAND_PEEK_PX,
-            })
-            : distanceToCenterEntry({
-                layout,
-                key: jump.key,
-                viewportHeightPx: scroller.clientHeight,
-            });
+        const modelDistance = jumpDistanceFor(jump, scroller.clientHeight);
         const clearJump = () => queueMicrotask(() => {
             if (pendingJumpRef.current === jump) pendingJumpRef.current = null;
             setPendingJump((current) => (current === jump ? null : current));
@@ -1868,6 +1967,16 @@ const ChatListInternal = React.memo((props: {
         }
         const raw = modelDistance === 0 ? 0 : fromModelDistance(modelDistance);
         setRawDistance(raw);
+        // The canvas is decoupled from the model and only resizes at renormalization points, so a
+        // position that needs more room than the canvas currently has is silently clamped — the
+        // write reads back short. Stay pending rather than clearing: this effect runs after every
+        // commit, and growing the canvas is a commit, so the next one lands it. A jump that never
+        // fits gives up instead of re-running forever.
+        jump.attempts = (jump.attempts ?? 0) + 1;
+        if (Math.abs(getRawDistance() - raw) > JUMP_LAND_TOLERANCE_PX && jump.attempts < MAX_JUMP_ATTEMPTS) {
+            ensureRenormLoop();
+            return;
+        }
         updateViewportRef.current(Math.abs(scroller.scrollTop), scroller.clientHeight);
         if (!jump.silent) {
             shakeRow(jump.key);
@@ -2065,6 +2174,20 @@ const ChatListInternal = React.memo((props: {
         const isTurnEnd = item.kind === 'agent-text' && turns.completedIds.has(item.id);
         const showActionBar = item.kind === 'agent-text' ? isTurnEnd : true;
         const turnHeader = turnHeaderProps(turns.headerById.get(item.id));
+        // Present only on the row that opens a turn whose process is worth folding.
+        const fold = folding.controlByHeaderId.get(item.id);
+        const process = turns.foldById.get(item.id);
+        // A running turn folds to its line alone, so the line says what the turn is doing. Once it
+        // settles the answer is on screen and the line goes back to just its cost.
+        const foldSnapshot = fold?.folded && turns.headerById.get(item.id)?.state === 'running'
+            ? newestSnapshot(process, messageById, props.metadata)
+            : undefined;
+        // The line divides the turn from its answer, so a folded turn with no answer to show — one
+        // still running, or one that ended without a word — has nothing under the line to divide.
+        const foldDivides = !(fold?.folded === true && process?.answerId == null);
+        // The fold keeps a settled turn's answer, and the answer can be the very row the line sits
+        // on. That row then shows its own content below the line instead of giving way to it.
+        const foldKeepsRow = fold?.folded === true && process?.answerId === item.id;
         // Fork is offered on user prompts and on AI replies (private sessions
         // only; agent replies only via their action-bar segment).
         const canFork = !!props.onForkMessage && !props.isSharedSession
@@ -2091,6 +2214,12 @@ const ChatListInternal = React.memo((props: {
                 isSharedSession={props.isSharedSession}
                 currentUserId={props.currentUserId}
                 showSenderName={senderVisibility?.get(item.id) ?? false}
+                foldFolded={fold?.folded}
+                foldKeepsRow={foldKeepsRow}
+                foldDivides={foldDivides}
+                foldSteps={fold?.steps}
+                foldSnapshot={foldSnapshot}
+                onToggleFold={handleToggleFold}
                 {...turnHeader}
                 constrainedHeightPx={constrainedHeightPx}
                 refCallback={getRowRefCallback(item.id)}

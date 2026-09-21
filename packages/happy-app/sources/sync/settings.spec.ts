@@ -144,6 +144,7 @@ describe('settings', () => {
                 compactSessionViewMobile: false,
                 compactSessionViewDesktop: false,
                 showThinkingMessages: true,
+                foldTurnProcess: true,
 
                 reviewPromptAnswered: false,
                 reviewPromptLikedApp: null,
@@ -184,6 +185,7 @@ describe('settings', () => {
                 compactSessionViewMobile: false,
                 compactSessionViewDesktop: false,
                 showThinkingMessages: true,
+                foldTurnProcess: true,
 
                 reviewPromptAnswered: false,
                 reviewPromptLikedApp: null,
@@ -224,6 +226,7 @@ describe('settings', () => {
                 compactSessionViewMobile: false,
                 compactSessionViewDesktop: false,
                 showThinkingMessages: true,
+                foldTurnProcess: true,
 
                 reviewPromptAnswered: false,
                 reviewPromptLikedApp: null,
@@ -266,6 +269,7 @@ describe('settings', () => {
                 compactSessionViewMobile: false,
                 compactSessionViewDesktop: false,
                 showThinkingMessages: true,
+                foldTurnProcess: true,
 
                 reviewPromptAnswered: false,
                 reviewPromptLikedApp: null,
@@ -313,6 +317,7 @@ describe('settings', () => {
                 compactSessionViewMobile: false,
                 compactSessionViewDesktop: false,
                 showThinkingMessages: true,
+                foldTurnProcess: true,
 
                 reviewPromptAnswered: false,
                 reviewPromptLikedApp: null,
@@ -369,6 +374,7 @@ describe('settings', () => {
                 compactSessionViewMobile: false,
                 compactSessionViewDesktop: false,
                 showThinkingMessages: true,
+                foldTurnProcess: true,
 
                 reviewPromptAnswered: false,
                 reviewPromptLikedApp: null,
@@ -454,6 +460,7 @@ describe('settings', () => {
                 dismissedCLIWarnings: { perMachine: {}, global: {} },
                 useEnhancedSessionWizard: false,
                 showThinkingMessages: false,
+                foldTurnProcess: true,
             });
         });
 
