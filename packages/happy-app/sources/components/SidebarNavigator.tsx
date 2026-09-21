@@ -5,6 +5,7 @@ import { useIsTablet } from '@/utils/responsive';
 import { SidebarView } from './SidebarView';
 import { Platform, View, useWindowDimensions } from 'react-native';
 import { useLocalSettingMutable } from '@/sync/storage';
+import { isTerminalWindow } from '@/desktop/desktopWindowUtils';
 
 const MIN_WEB_SIDEBAR_WIDTH = 250;
 const MAX_WEB_SIDEBAR_WIDTH = 800;
@@ -18,7 +19,9 @@ function clampSidebarWidth(width: number, windowWidth: number): number {
 export const SidebarNavigator = React.memo(() => {
     const auth = useAuth();
     const isTablet = useIsTablet();
-    const showPermanentDrawer = auth.isAuthenticated && isTablet;
+    // A terminal window is a shell onto a machine, not somewhere to read
+    // conversations, so it carries no session list even where one would fit.
+    const showPermanentDrawer = auth.isAuthenticated && isTablet && !isTerminalWindow();
     const { width: windowWidth } = useWindowDimensions();
     const isWeb = Platform.OS === 'web';
     const [persistedWebSidebarWidth, setPersistedWebSidebarWidth] = useLocalSettingMutable('webSidebarWidth');

@@ -32,6 +32,8 @@ import { getWorkspaceRepos } from '@/utils/workspaceRepos';
 import { ActionMenuModal } from './ActionMenuModal';
 import { ActionMenuItem } from './ActionMenu';
 import { getSessionQuickActionKinds, getSessionQuickActionSections, SessionQuickActionKind } from './sessionQuickActions';
+import { resolveTerminalDirectory, spawnTerminal } from '@/terminal/openTerminal';
+import { isTauriDesktop } from '@/utils/tauri';
 import { SessionContextMenuPortal } from './SessionContextMenuPortal';
 import { SessionColorPalette } from './SessionColorMarker';
 import type { SessionMarkerColor } from '@/sync/sessionAppearance';
@@ -41,6 +43,7 @@ import { shouldDismissSessionMenuOnScroll, ScrollTarget } from './sessionContext
 import { getDesktopPlatform } from '@/desktop/desktopWindowUtils';
 import { getRevealLabelKey, revealItemInFileManager } from '@/desktop/desktopReveal';
 import { useLocalMachineIds } from '@/desktop/desktopLocalMachine';
+import { openDesktopTerminalWindow } from '@/desktop/desktopWindowUtils';
 
 type MenuPosition = { x: number; y: number };
 type ActionIconSpec =
@@ -208,6 +211,35 @@ function useSessionQuickActions(session: Session) {
         router.push(query ? `/new?${query}` : '/new');
     }, [router, session.metadata?.machineId, session.metadata?.path]);
 
+    const handleOpenTerminal = React.useCallback(() => {
+        const machineId = session.metadata?.machineId;
+        if (!machineId) return;
+        // The session's checkout is the directory someone wants a shell in; a session that has
+        // not been given one yet still deserves a terminal, so fall back to the machine's home.
+        const homeDir = storage.getState().machines[machineId]?.metadata?.homeDir;
+        const cwd = resolveTerminalDirectory({ sessionPath: session.metadata?.path, homeDir });
+        void (async () => {
+            try {
+                // A second shell rather than the one already in that directory:
+                // asking for a terminal is asking for a prompt, and being handed
+                // the shell that is already open — perhaps in a window that is
+                // already showing it — reads as the command having done nothing.
+                const terminal = await spawnTerminal({ machineId, cwd });
+                // On the desktop the terminals get their own window — they are a
+                // place you go and stay, not a page inside the session list. Any-
+                // where without windows, the workspace is an ordinary screen.
+                if (isTauriDesktop()) {
+                    await openDesktopTerminalWindow({ machineId, terminalId: terminal.id });
+                    return;
+                }
+                router.push(`/terminals?machineId=${machineId}&terminalId=${terminal.id}`);
+            } catch (error) {
+                console.warn('Failed to open a terminal:', error);
+                showToast(t('terminalSession.openFailed'));
+            }
+        })();
+    }, [router, session.metadata?.machineId, session.metadata?.path]);
+
     const handleArchive = React.useCallback(() => {
         const workspaceRepos = getWorkspaceRepos(session.metadata);
         const machineId = session.metadata?.machineId;
@@ -373,6 +405,7 @@ function useSessionQuickActions(session: Session) {
             sync.markSessionUnread(session.id);
         },
         newSession: handleNewSession,
+        terminal: handleOpenTerminal,
         revealInFileManager: () => {
             const path = session.metadata?.path;
             if (!path) return;
@@ -391,6 +424,7 @@ function useSessionQuickActions(session: Session) {
         renameSession: t('common.rename'),
         toggleRead: isUnread ? t('sessionInfo.markAsRead') : t('sessionInfo.markAsUnread'),
         newSession: t('sessionInfo.newSession'),
+        terminal: t('sessionInfo.openTerminal'),
         revealInFileManager: t(getRevealLabelKey(getDesktopPlatform())),
         leaveSharedSession: t('sessionInfo.leaveSharedSession'),
         forkSession: session.active ? t('sessionInfo.copySession') : t('sessionInfo.resumeSession'),
@@ -402,6 +436,7 @@ function useSessionQuickActions(session: Session) {
         renameSession: { family: 'antdesign', name: 'edit' },
         toggleRead: { family: 'ionicons', name: isUnread ? 'mail-open-outline' : 'mail-unread-outline' },
         newSession: { family: 'ionicons', name: 'add-circle-outline' },
+        terminal: { family: 'ionicons', name: 'terminal-outline' },
         revealInFileManager: { family: 'ionicons', name: 'folder-open-outline' },
         leaveSharedSession: { family: 'ionicons', name: 'exit-outline' },
         forkSession: { family: 'ionicons', name: session.active ? 'copy-outline' : 'play-circle-outline' },

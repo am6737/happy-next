@@ -829,6 +829,8 @@ export const ru: TranslationStructure = {
         quickActions: 'Быстрые действия',
         newSession: 'Новая сессия',
         newSessionSubtitle: 'Запустить новую сессию на текущей машине и в текущем рабочем каталоге',
+        openTerminal: 'Терминал',
+        openTerminalSubtitle: 'Открыть оболочку в рабочем каталоге этой сессии',
         revealInFinder: 'Показать в Finder',
         revealInFolder: 'Показать в папке',
         revealInFileManagerFailed: 'Не удалось показать эту папку',
@@ -1450,6 +1452,20 @@ export const ru: TranslationStructure = {
         copyHash: 'Копировать хэш коммита',
         copyMessage: 'Копировать сообщение коммита',
     },
+
+    terminalSession: {
+        title: 'Терминал',
+        openFailed: 'Не удалось открыть терминал',
+        empty: 'Нет открытых терминалов',
+        newTerminal: 'Новый терминал',
+        machineOffline: 'Машина не в сети · экран перестал обновляться',
+        duplicateTerminal: 'Дублировать терминал',
+        closeTerminal: 'Закрыть терминал',
+        renameTerminalHint: 'Дайте этому терминалу собственное имя. Оставьте пустым, чтобы вернуть прежнее.',
+        duplicateFailed: 'Не удалось дублировать терминал',
+        closeTab: ({ label }: { label: string }) => `Закрыть ${label}`,
+    },
+
 
     settingsVoice: {
 

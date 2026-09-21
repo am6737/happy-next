@@ -982,6 +982,8 @@ export const ca: TranslationStructure = {
         quickActions: 'Accions ràpides',
         newSession: 'Nova sessió',
         newSessionSubtitle: 'Inicia una sessió nova amb la màquina i el directori de treball actuals',
+        openTerminal: 'Terminal',
+        openTerminalSubtitle: 'Obrir un shell al directori de treball d\'aquesta sessió',
         revealInFinder: 'Mostra al Finder',
         revealInFolder: 'Mostra a la carpeta',
         revealInFileManagerFailed: 'No s’ha pogut mostrar aquesta carpeta',
@@ -1439,6 +1441,20 @@ export const ca: TranslationStructure = {
         copyHash: 'Copiar hash del commit',
         copyMessage: 'Copiar missatge del commit',
     },
+
+    terminalSession: {
+        title: 'Terminal',
+        openFailed: 'No s\'ha pogut obrir un terminal',
+        empty: 'No hi ha terminals oberts',
+        newTerminal: 'Terminal nou',
+        machineOffline: 'Màquina desconnectada · la pantalla està aturada',
+        duplicateTerminal: 'Duplica el terminal',
+        closeTerminal: 'Tanca el terminal',
+        renameTerminalHint: 'Dona a aquest terminal un nom propi. Deixa-ho buit per tornar al que té.',
+        duplicateFailed: 'No s\'ha pogut duplicar el terminal',
+        closeTab: ({ label }: { label: string }) => `Tanca ${label}`,
+    },
+
 
     settingsVoice: {
 

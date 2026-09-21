@@ -982,6 +982,8 @@ export const pt: TranslationStructure = {
         quickActions: 'Ações rápidas',
         newSession: 'Nova sessão',
         newSessionSubtitle: 'Inicie uma nova sessão usando a máquina e o diretório de trabalho atuais',
+        openTerminal: 'Terminal',
+        openTerminalSubtitle: 'Abrir um shell no diretório de trabalho desta sessão',
         revealInFinder: 'Mostrar no Finder',
         revealInFolder: 'Mostrar na pasta',
         revealInFileManagerFailed: 'Não foi possível mostrar esta pasta',
@@ -1439,6 +1441,20 @@ export const pt: TranslationStructure = {
         copyHash: 'Copiar hash do commit',
         copyMessage: 'Copiar mensagem do commit',
     },
+
+    terminalSession: {
+        title: 'Terminal',
+        openFailed: 'Não foi possível abrir um terminal',
+        empty: 'Nenhum terminal aberto',
+        newTerminal: 'Novo terminal',
+        machineOffline: 'Máquina offline · o ecrã parou de atualizar',
+        duplicateTerminal: 'Duplicar terminal',
+        closeTerminal: 'Fechar terminal',
+        renameTerminalHint: 'Dê a este terminal um nome próprio. Deixe vazio para voltar ao que tem.',
+        duplicateFailed: 'Não foi possível duplicar o terminal',
+        closeTab: ({ label }: { label: string }) => `Fechar ${label}`,
+    },
+
 
     settingsVoice: {
 

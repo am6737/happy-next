@@ -984,6 +984,8 @@ export const zhHant: TranslationStructure = {
         quickActions: '快速操作',
         newSession: '新增會話',
         newSessionSubtitle: '使用目前機器和工作目錄啟動新會話',
+        openTerminal: '終端',
+        openTerminalSubtitle: '在此工作階段的工作目錄中開啟終端',
         revealInFinder: '在 Finder 中顯示',
         revealInFolder: '在資料夾中顯示',
         revealInFileManagerFailed: '無法在檔案管理員中顯示此資料夾',
@@ -1441,6 +1443,20 @@ export const zhHant: TranslationStructure = {
         copyHash: '複製提交雜湊',
         copyMessage: '複製提交訊息',
     },
+
+    terminalSession: {
+        title: '終端',
+        openFailed: '無法開啟終端',
+        empty: '沒有開啟的終端',
+        newTerminal: '新增終端',
+        machineOffline: '機器離線 · 畫面已停止更新',
+        duplicateTerminal: '複製終端',
+        closeTerminal: '關閉終端',
+        renameTerminalHint: '給它一個自己的名字；留空則回復原本的名稱。',
+        duplicateFailed: '無法複製終端',
+        closeTab: ({ label }: { label: string }) => `關閉 ${label}`,
+    },
+
 
     settingsVoice: {
 

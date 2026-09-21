@@ -10,7 +10,7 @@ import { t } from '@/text';
 import { Ionicons } from '@expo/vector-icons';
 import { isUsingCustomServer } from '@/sync/serverConfig';
 import { useAuth } from '@/auth/AuthContext';
-import { getDesktopPlatform } from '@/desktop/desktopWindowUtils';
+import { getDesktopPlatform, isTerminalWindow } from '@/desktop/desktopWindowUtils';
 
 export const unstable_settings = {
     initialRouteName: 'index',
@@ -24,6 +24,10 @@ export default function RootLayout() {
     const isCustomServer = isUsingCustomServer();
     const { isAuthenticated } = useAuth();
     const hideUnauthenticatedWindowsHeader = getDesktopPlatform() === 'windows' && !isAuthenticated;
+    // The terminal window already says what it is in its tab strip, and a header
+    // would only push the tabs down. On a phone the same screen is a page in the
+    // app, where the header is how you get back out.
+    const inTerminalWindow = isTerminalWindow();
 
     return (
         <Stack
@@ -636,6 +640,15 @@ export default function RootLayout() {
                     headerShown: false,
                     presentation: 'fullScreenModal',
                     animation: 'fade_from_bottom',
+                }}
+            />
+            {/* Every machine's shells, one tab each. `/terminal` is a different
+                feature — pairing a device — so this lives under the plural. */}
+            <Stack.Screen
+                name="terminals/index"
+                options={{
+                    headerShown: !inTerminalWindow,
+                    headerTitle: t('terminalSession.title'),
                 }}
             />
         </Stack>

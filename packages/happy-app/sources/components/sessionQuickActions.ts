@@ -6,6 +6,7 @@ export type SessionQuickActionKind =
     | 'renameSession'
     | 'toggleRead'
     | 'newSession'
+    | 'terminal'
     | 'revealInFileManager'
     | 'forkSession'
     | 'leaveSharedSession'
@@ -27,6 +28,7 @@ const SESSION_QUICK_ACTION_SECTION: Record<SessionQuickActionKind, number> = {
     toggleRead: 0,
     // Where it runs — the machine and the directory behind it.
     newSession: 1,
+    terminal: 1,
     revealInFileManager: 1,
     forkSession: 1,
     // Leaving it behind.
@@ -64,6 +66,10 @@ export function getSessionQuickActionKinds({
     // Starting a session in this directory spawns it on the session's machine, which a session
     // shared with me does not grant — it points at the owner's machine and directory.
     if (isOwner) actions.push('newSession');
+    // A terminal is a door into that machine, so it needs the same ownership the line above
+    // does. It has no path condition: a shell with no particular directory is still useful, and
+    // the daemon falls back to the machine's home.
+    if (isOwner && session.metadata?.machineId) actions.push('terminal');
     // A path on another computer is not on this disk, so there is nothing to show.
     if (isLocalMachine && session.metadata?.path) actions.push('revealInFileManager');
     if (isOwner && isForkable) actions.push('forkSession');

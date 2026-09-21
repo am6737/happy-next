@@ -999,6 +999,8 @@ export const en: TranslationStructure = {
         quickActions: 'Quick Actions',
         newSession: 'New Session',
         newSessionSubtitle: 'Start a new session using the current machine and working directory',
+        openTerminal: 'Terminal',
+        openTerminalSubtitle: 'Open a shell in the working directory of this session',
         revealInFinder: 'Show in Finder',
         revealInFolder: 'Show in Folder',
         revealInFileManagerFailed: 'Could not show this folder',
@@ -1456,6 +1458,20 @@ export const en: TranslationStructure = {
         copyHash: 'Copy Commit Hash',
         copyMessage: 'Copy Commit Message',
     },
+
+    terminalSession: {
+        title: 'Terminal',
+        openFailed: 'Could not open a terminal',
+        empty: 'No terminals open',
+        newTerminal: 'New terminal',
+        machineOffline: 'Machine offline · screen has stopped updating',
+        duplicateTerminal: 'Duplicate terminal',
+        closeTerminal: 'Close terminal',
+        renameTerminalHint: 'Give this terminal a name of its own. Leave it empty to go back to the name it has.',
+        duplicateFailed: 'Could not duplicate the terminal',
+        closeTab: ({ label }: { label: string }) => `Close ${label}`,
+    },
+
 
     settingsVoice: {
 

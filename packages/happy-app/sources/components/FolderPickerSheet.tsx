@@ -15,6 +15,8 @@ const SheetTextInput = Platform.OS === 'web' ? TextInput : BottomSheetTextInput;
 interface FolderPickerSheetProps {
     machineId: string;
     homeDir?: string;
+    /** Where to open, when that should be somewhere other than the home directory. */
+    initialPath?: string;
     /** 'directory' (default) picks folders; 'file' picks individual files. */
     mode?: 'directory' | 'file';
     onSelect: (path: string) => void;
@@ -44,6 +46,7 @@ interface DirEntry {
 export const FolderPickerSheet = React.memo(React.forwardRef<BottomSheetModal, FolderPickerSheetProps>(({
     machineId,
     homeDir = '/',
+    initialPath,
     mode = 'directory',
     onSelect,
     onFileSelect,
@@ -53,7 +56,11 @@ export const FolderPickerSheet = React.memo(React.forwardRef<BottomSheetModal, F
     const { theme } = useUnistyles();
 
     // ---- state ----
-    const [currentPath, setCurrentPath] = React.useState(homeDir);
+    // Where the sheet opens. Only the starting point moves: `~` still means the
+    // home directory, and the home button still goes there.
+    const startPath = initialPath ?? homeDir;
+
+    const [currentPath, setCurrentPath] = React.useState(startPath);
     const [entries, setEntries] = React.useState<DirEntry[]>([]);
     const [loading, setLoading] = React.useState(false);
     const [error, setError] = React.useState<string | null>(null);
@@ -167,9 +174,9 @@ export const FolderPickerSheet = React.memo(React.forwardRef<BottomSheetModal, F
     const handleAnimate = React.useCallback((from: number, to: number) => {
         if (from === -1 && to === 0) {
             setSelectedFiles(initialSelection?.length ? new Set(initialSelection) : new Set());
-            navigateTo(homeDir);
+            navigateTo(startPath);
         }
-    }, [homeDir, navigateTo, initialSelection]);
+    }, [initialSelection, navigateTo, startPath]);
 
     const handleDismiss = React.useCallback(() => {
         setSearch('');

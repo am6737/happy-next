@@ -24,10 +24,27 @@ const libsodiumPaths = [
 ];
 const libsodiumPath = libsodiumPaths.find(p => fs.existsSync(p));
 
+// Force @xterm/headless to use its CJS entry.
+// Its package.json points `module` at `lib/xterm.mjs`, but the published tarball only ships
+// `lib-headless/` — so native builds (which take `main`) resolve and web builds (which prefer
+// `module`) fail with "Unable to resolve @xterm/headless".
+// Two candidates: a hoisted install under the app, then the monorepo root.
+const xtermHeadlessPaths = [
+  path.resolve(__dirname, 'node_modules/@xterm/headless/lib-headless/xterm-headless.js'),
+  path.resolve(__dirname, '../../node_modules/@xterm/headless/lib-headless/xterm-headless.js'),
+];
+const xtermHeadlessPath = xtermHeadlessPaths.find(p => fs.existsSync(p));
+
 config.resolver.resolveRequest = (context, moduleName, platform) => {
   if (moduleName === 'libsodium-wrappers' && libsodiumPath) {
     return {
       filePath: libsodiumPath,
+      type: 'sourceFile',
+    };
+  }
+  if (moduleName === '@xterm/headless' && xtermHeadlessPath) {
+    return {
+      filePath: xtermHeadlessPath,
       type: 'sourceFile',
     };
   }

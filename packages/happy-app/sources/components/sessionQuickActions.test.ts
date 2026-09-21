@@ -30,9 +30,31 @@ describe('getSessionQuickActionKinds', () => {
             'renameSession',
             'toggleRead',
             'newSession',
+            'terminal',
             'forkSession',
             'archiveSession',
         ]);
+    });
+
+    it('offers a terminal only where the session names a machine', () => {
+        // The terminal runs on that machine, so without one there is nothing to open it on.
+        const withoutMachine = session();
+        delete (withoutMachine.metadata as { machineId?: string }).machineId;
+        expect(getSessionQuickActionKinds({
+            session: withoutMachine,
+            isConnected: true,
+            isLocalMachine: false,
+        })).not.toContain('terminal');
+    });
+
+    it('offers no terminal to a shared session', () => {
+        // Same reason as `newSession`: the machine is the owner's, and a terminal there is a
+        // shell with their environment in it.
+        expect(getSessionQuickActionKinds({
+            session: session({ accessLevel: 'view' }),
+            isConnected: true,
+            isLocalMachine: false,
+        })).not.toContain('terminal');
     });
 
     it('offers the folder of a session running on this computer', () => {
@@ -105,12 +127,13 @@ describe('getSessionQuickActionSections', () => {
             'renameSession',
             'toggleRead',
             'newSession',
+            'terminal',
             'revealInFileManager',
             'forkSession',
             'archiveSession',
         ])).toEqual([
             ['details', 'renameSession', 'toggleRead'],
-            ['newSession', 'revealInFileManager', 'forkSession'],
+            ['newSession', 'terminal', 'revealInFileManager', 'forkSession'],
             ['archiveSession'],
         ]);
     });

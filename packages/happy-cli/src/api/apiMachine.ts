@@ -10,6 +10,9 @@ import { isDebug } from '@/utils/env';
 import { MachineMetadata, DaemonState, Machine, Update, UpdateMachineBody } from './types';
 import { registerCommonHandlers, SpawnSessionOptions, SpawnSessionResult } from '../modules/common/registerCommonHandlers';
 import { registerOpenClawHandlers, openClawTunnelManager } from '../modules/openclaw';
+import { registerTerminalHandlers } from '../modules/terminal/registerTerminalHandlers';
+import type { TerminalManager } from '../modules/terminal/terminalManager';
+import type { TerminalFrame } from 'happy-wire';
 import { listClaudeSessionsFromIndex, getClaudeSessionPreview, findClaudeProjectId, readAllClaudeSessionUserMessages, saveClaudeSessionCacheStats } from '@/claude/utils/claudeSessionIndex';
 import { forkAndTruncateSession, forkSession } from '@/claude/utils/claudeSessionFork';
 import { readGeminiSessionLog, listGeminiSessions, getGeminiSessionPreview, saveGeminiSessionCacheStats } from '@/gemini/utils/sessionReader';
@@ -125,6 +128,7 @@ interface DaemonToServerEvents {
         result?: any
         error?: string
     }) => void) => void;
+    'terminal-frame': (data: TerminalFrame) => void;
 }
 
 type MachineRpcHandlers = {
@@ -162,6 +166,7 @@ export class ApiMachineClient {
     private socket!: Socket<ServerToDaemonEvents, DaemonToServerEvents>;
     private keepAliveInterval: NodeJS.Timeout | null = null;
     private rpcHandlerManager: RpcHandlerManager;
+    private terminalManager: TerminalManager;
 
     private claudeCache = new SessionCache({
         loader: listClaudeSessionsFromIndex,
@@ -201,6 +206,22 @@ export class ApiMachineClient {
         registerCommonHandlers(this.rpcHandlerManager, '/');
         registerOpenClawHandlers(this.rpcHandlerManager, {
             key: this.machine.encryptionKey
+        });
+
+        // Terminal output goes out on its own event rather than rpc-call: the
+        // RPC path answers every call with a round trip, which a stream of
+        // frames cannot afford. The payload stays encrypted with the machine
+        // key, so the relay server only ever forwards opaque bytes.
+        this.terminalManager = registerTerminalHandlers(this.rpcHandlerManager, {
+            machineId: this.machine.id,
+            encryptionKey: this.machine.encryptionKey,
+            encryptionVariant: this.machine.encryptionVariant,
+            sendFrame: (frame) => {
+                if (!this.socket?.connected) {
+                    return;
+                }
+                this.socket.emit('terminal-frame', frame);
+            }
         });
 
         // WHY: metadata is E2E-encrypted, so the orchestrator server cannot
@@ -916,6 +937,7 @@ export class ApiMachineClient {
     shutdown() {
         logger.debug('[API MACHINE] Shutting down');
         openClawTunnelManager.closeAll();
+        this.terminalManager?.stop();
         this.stopKeepAlive();
         if (this.socket) {
             this.socket.close();

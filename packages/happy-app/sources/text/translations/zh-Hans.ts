@@ -984,6 +984,8 @@ export const zhHans: TranslationStructure = {
         quickActions: '快速操作',
         newSession: '新建会话',
         newSessionSubtitle: '使用当前机器和工作目录启动新会话',
+        openTerminal: '终端',
+        openTerminalSubtitle: '在此会话的工作目录中打开终端',
         revealInFinder: '在 Finder 中显示',
         revealInFolder: '在文件夹中显示',
         revealInFileManagerFailed: '无法在文件管理器中显示此文件夹',
@@ -1441,6 +1443,20 @@ export const zhHans: TranslationStructure = {
         copyHash: '复制提交哈希',
         copyMessage: '复制提交信息',
     },
+
+    terminalSession: {
+        title: '终端',
+        openFailed: '无法打开终端',
+        empty: '没有打开的终端',
+        newTerminal: '新建终端',
+        machineOffline: '机器离线 · 画面已停止更新',
+        duplicateTerminal: '复制终端',
+        closeTerminal: '关闭终端',
+        renameTerminalHint: '给它起一个自己的名字；留空则恢复原本的名称。',
+        duplicateFailed: '无法复制终端',
+        closeTab: ({ label }: { label: string }) => `关闭 ${label}`,
+    },
+
 
     settingsVoice: {
 

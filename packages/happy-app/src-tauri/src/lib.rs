@@ -5,7 +5,7 @@ use std::{
     net::{SocketAddr, TcpListener, TcpStream},
     path::{Path, PathBuf},
     sync::{
-        atomic::{AtomicBool, AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering},
         Arc, Mutex,
     },
     thread,
@@ -16,8 +16,8 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     webview::{NewWindowFeatures, NewWindowResponse, WebviewWindowBuilder},
     window::{Color, Monitor},
-    AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, Runtime, State, Theme, WebviewUrl,
-    Window,
+    AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, PhysicalPosition, Runtime, State,
+    Theme, WebviewUrl, Window,
 };
 use tauri_plugin_opener::OpenerExt;
 use uuid::Uuid;
@@ -66,6 +66,28 @@ const AUTHENTICATED_TRAFFIC_LIGHT_X: f64 = 16.0;
 const UNAUTHENTICATED_TRAFFIC_LIGHT_X: f64 = 20.0;
 const DESKTOP_NOTIFICATION_CLICKED_EVENT: &str = "desktop-notification-clicked";
 const DESKTOP_NOTIFICATION_PROTOCOL_PREFIX: &str = "happy-next://notification/";
+
+/// The one terminal window, which spans every machine.
+const TERMINAL_WINDOW_LABEL: &str = "terminal";
+/// Asks the terminal window's page to close one of its tabs.
+const TERMINAL_CLOSE_TAB_EVENT: &str = "terminal-close-tab";
+#[cfg(target_os = "macos")]
+const TRAFFIC_LIGHT_INSET: f64 = 13.0;
+/// Kept in step with the tab row in `terminal/TerminalWindowTitleRow.tsx`: the
+/// traffic lights are moved down to sit centred in it.
+#[cfg(target_os = "macos")]
+const TITLE_ROW_HEIGHT: f64 = 38.0;
+/// Where the traffic lights are asked to sit: the row's centre line, plus the
+/// distance they land below whatever is passed here.
+///
+/// Not `(row - button) / 2`, and not `row - button` either, because this is not
+/// an offset from the row's top. wry adds it to the buttons' height to decide
+/// how tall the title bar is, and AppKit keeps the buttons a fixed distance from
+/// that bar's *bottom* — so a taller bar carries them *down* with it instead of
+/// centring them in it. Measured in the running window: 26 put their centre at
+/// 23.5px, which is 2.5px lower than half this row.
+#[cfg(target_os = "macos")]
+const TRAFFIC_LIGHT_INSET_Y: f64 = TITLE_ROW_HEIGHT / 2.0 + 2.5;
 
 #[derive(Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -152,6 +174,25 @@ struct DesktopState {
     unread_item: Mutex<Option<MenuItem<tauri::Wry>>>,
     html_preview_server: Mutex<Option<HtmlPreviewServer>>,
     notification_activation: Mutex<DesktopNotificationActivationState>,
+    terminal_focus: Mutex<Option<TerminalFocus>>,
+    /// How many tabs the terminal window's page is showing, so a close request
+    /// knows whether it is closing a tab or the window. Reported by the page,
+    /// because the strip lives in it.
+    terminal_tab_count: AtomicUsize,
+}
+
+/// The tab a freshly opened terminal window should land on.
+///
+/// Opening a terminal from a session either starts a shell or finds the one
+/// already running in that directory, and the window has to end up showing it
+/// either way. The request outlives the window's creation — the webview asks
+/// for it once it is running — so it is parked here rather than passed as an
+/// argument nobody is around to receive.
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TerminalFocus {
+    machine_id: String,
+    terminal_id: String,
 }
 
 #[derive(Default)]
@@ -176,7 +217,25 @@ impl Default for DesktopState {
                 listener_ready: false,
                 pending_ids: notification_ids_from_args(std::env::args()),
             }),
+            terminal_focus: Mutex::new(None),
+            terminal_tab_count: AtomicUsize::new(0),
         }
+    }
+}
+
+impl DesktopState {
+    /// Parks the tab a terminal window should open on, for the window to
+    /// collect once it is running.
+    fn request_terminal_focus(&self, focus: TerminalFocus) {
+        if let Ok(mut pending) = self.terminal_focus.lock() {
+            *pending = Some(focus);
+        }
+    }
+
+    /// Hands that request over, and forgets it — a window that reloads later
+    /// must not be pulled back to a tab nothing asked for any more.
+    fn take_terminal_focus(&self) -> Option<TerminalFocus> {
+        self.terminal_focus.lock().ok().and_then(|mut pending| pending.take())
     }
 }
 
@@ -2036,6 +2095,96 @@ fn create_html_preview_child_window(
 }
 
 #[tauri::command]
+async fn open_desktop_terminal_window(
+    app: AppHandle,
+    state: State<'_, DesktopState>,
+    focus: Option<TerminalFocus>,
+) -> Result<(), String> {
+    if let Some(focus) = focus.as_ref() {
+        state.request_terminal_focus(focus.clone());
+    }
+
+    // One window, reused. It spans every machine — the tabs are what tell the
+    // shells apart — so re-opening it from a session raises what is already
+    // there and hands it the tab to switch to.
+    if let Some(existing) = app.get_webview_window(TERMINAL_WINDOW_LABEL) {
+        let _ = existing.unminimize();
+        let _ = existing.show();
+        let _ = existing.set_focus();
+        // It is already running, so it has long since read the pending focus.
+        if let Some(focus) = focus {
+            let _ = existing.emit("terminal-focus", &focus);
+        }
+        return Ok(());
+    }
+
+    let preference = state
+        .bootstrap
+        .lock()
+        .map(|bootstrap| bootstrap.theme_preference)
+        .unwrap_or_default();
+    let dark = app
+        .get_webview_window("main")
+        .is_some_and(|window| resolve_dark_background(&window, preference));
+    let (red, green, blue) = if dark {
+        DARK_BACKGROUND_RGB
+    } else {
+        LIGHT_BACKGROUND_RGB
+    };
+    let window_theme = if dark { Theme::Dark } else { Theme::Light };
+
+    // The root document, not a terminal route: a session's terminal is started
+    // through an RPC and handed over separately, so there is nothing a URL
+    // could carry that the focus handoff does not.
+    let mut builder =
+        WebviewWindowBuilder::new(&app, TERMINAL_WINDOW_LABEL, WebviewUrl::App("index.html".into()))
+            .title("Terminal")
+            .inner_size(1000.0, 700.0)
+            .min_inner_size(480.0, 320.0)
+            .theme(Some(window_theme))
+            .background_color(Color(red, green, blue, 255));
+
+    // The tab strip stands in for the title bar, so the window is asked not to
+    // draw one. macOS keeps its traffic lights and has them moved down into the
+    // tab row; Windows gives up its decorations entirely, and the app draws the
+    // minimise/maximise/close buttons at the other end of that same row.
+    #[cfg(target_os = "macos")]
+    {
+        builder = builder
+            .title_bar_style(tauri::TitleBarStyle::Overlay)
+            .hidden_title(true)
+            .traffic_light_position(LogicalPosition::new(
+                TRAFFIC_LIGHT_INSET,
+                TRAFFIC_LIGHT_INSET_Y,
+            ));
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        builder = builder.decorations(false);
+    }
+
+    builder.build().map_err(|error| error.to_string())?;
+
+    Ok(())
+}
+
+/// Hands over the tab a just-opened terminal window should show, and clears it.
+#[tauri::command]
+fn take_terminal_focus(state: State<'_, DesktopState>) -> Option<TerminalFocus> {
+    state.take_terminal_focus()
+}
+
+/// How many tabs the terminal window is showing, as the page counts them.
+///
+/// Pushed on every change rather than asked for when a close request arrives:
+/// the window has to be closable even while the page that would answer is still
+/// starting, and a count of zero closes the window rather than holding it open.
+#[tauri::command]
+fn set_terminal_tab_count(state: State<'_, DesktopState>, count: usize) {
+    state.terminal_tab_count.store(count, Ordering::SeqCst);
+}
+
+#[tauri::command]
 async fn open_desktop_html_preview(
     app: AppHandle,
     state: State<'_, DesktopState>,
@@ -2154,7 +2303,10 @@ pub fn run() {
             get_desktop_diagnostics,
             open_desktop_log_directory,
             get_desktop_local_machine_ids,
-            open_desktop_html_preview
+            open_desktop_html_preview,
+            open_desktop_terminal_window,
+            take_terminal_focus,
+            set_terminal_tab_count
         ])
         .setup(|app| {
             #[cfg(debug_assertions)]
@@ -2232,6 +2384,21 @@ pub fn run() {
                     return;
                 }
 
+                // Closing the terminal window closes one of its tabs, and the
+                // window only goes once there is nothing left to close. Which of
+                // the two this is comes from the count the page keeps here rather
+                // than from asking it: the answer has to be there in the instant
+                // the window is closed, and a page that is still booting could
+                // not give one — with a count of zero it falls through to the
+                // ordinary close below, which is the safe way to be wrong.
+                if window.label() == TERMINAL_WINDOW_LABEL
+                    && state.terminal_tab_count.load(Ordering::SeqCst) > 0
+                {
+                    api.prevent_close();
+                    let _ = window.emit(TERMINAL_CLOSE_TAB_EVENT, ());
+                    return;
+                }
+
                 if state.close_to_tray.load(Ordering::SeqCst) {
                     api.prevent_close();
                     let _ = window.hide();
@@ -2264,6 +2431,49 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn focus(machine_id: &str, terminal_id: &str) -> TerminalFocus {
+        TerminalFocus {
+            machine_id: machine_id.to_string(),
+            terminal_id: terminal_id.to_string(),
+        }
+    }
+
+    #[test]
+    fn a_terminal_focus_request_is_handed_over_once() {
+        let state = DesktopState::default();
+        assert!(state.take_terminal_focus().is_none());
+
+        state.request_terminal_focus(focus("machine-a", "term-1"));
+        let taken = state.take_terminal_focus().expect("the request should be waiting");
+        assert_eq!(taken.machine_id, "machine-a");
+        assert_eq!(taken.terminal_id, "term-1");
+
+        // Taken rather than copied: a window that reloads a minute later must not
+        // be pulled back to a tab that nothing asked for any more.
+        assert!(state.take_terminal_focus().is_none());
+    }
+
+    #[test]
+    fn a_later_terminal_focus_request_replaces_an_unclaimed_one() {
+        let state = DesktopState::default();
+        state.request_terminal_focus(focus("machine-a", "term-1"));
+        state.request_terminal_focus(focus("machine-b", "term-2"));
+
+        let taken = state.take_terminal_focus().expect("the request should be waiting");
+        assert_eq!(taken.machine_id, "machine-b");
+    }
+
+    #[test]
+    fn terminal_focus_serializes_the_way_the_webview_reads_it() {
+        // The app reads `machineId`/`terminalId` off this payload, so the field
+        // names are part of the contract rather than an implementation detail.
+        let json = serde_json::to_string(&focus("machine-a", "term-1")).unwrap();
+        assert_eq!(json, r#"{"machineId":"machine-a","terminalId":"term-1"}"#);
+
+        let parsed: TerminalFocus = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.terminal_id, "term-1");
+    }
 
     #[test]
     fn bootstrap_cache_uses_safe_defaults_for_missing_fields() {
@@ -2373,3 +2583,4 @@ mod tests {
         .is_none());
     }
 }
+

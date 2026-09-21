@@ -1014,6 +1014,8 @@ export const ja: TranslationStructure = {
         quickActions: 'クイックアクション',
         newSession: '新しいセッション',
         newSessionSubtitle: '現在のマシンと作業ディレクトリを使用して新しいセッションを開始します',
+        openTerminal: 'ターミナル',
+        openTerminalSubtitle: 'このセッションの作業ディレクトリでシェルを開きます',
         revealInFinder: 'Finder に表示',
         revealInFolder: 'フォルダに表示',
         revealInFileManagerFailed: 'このフォルダを表示できませんでした',
@@ -1471,6 +1473,20 @@ export const ja: TranslationStructure = {
         copyHash: 'コミットハッシュをコピー',
         copyMessage: 'コミットメッセージをコピー',
     },
+
+    terminalSession: {
+        title: 'ターミナル',
+        openFailed: 'ターミナルを開けませんでした',
+        empty: '開いているターミナルはありません',
+        newTerminal: '新しいターミナル',
+        machineOffline: 'マシンがオフライン · 画面の更新が停止しました',
+        duplicateTerminal: 'ターミナルを複製',
+        closeTerminal: 'ターミナルを閉じる',
+        renameTerminalHint: 'このターミナルに名前を付けます。空欄にすると元の名前に戻ります。',
+        duplicateFailed: 'ターミナルを複製できませんでした',
+        closeTab: ({ label }: { label: string }) => `${label} を閉じる`,
+    },
+
 
     settingsVoice: {
 

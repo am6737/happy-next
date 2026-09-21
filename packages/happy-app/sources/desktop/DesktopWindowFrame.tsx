@@ -1,4 +1,4 @@
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { Image } from 'expo-image';
 import { usePathname, useRouter } from 'expo-router';
@@ -14,11 +14,10 @@ import { t } from '@/text';
 import { StatusDot } from '@/components/StatusDot';
 import { requestCommandPalette } from '@/components/CommandPalette/events';
 import { DesktopUpdateButton } from './DesktopUpdateButton';
-import { getDesktopPlatform, handleDesktopTitleBarMouseDown } from './desktopWindowUtils';
+import { DesktopWindowControls, WINDOWS_TITLE_BAR_HEIGHT } from './DesktopWindowControls';
+import { getDesktopPlatform, handleDesktopTitleBarMouseDown, isTerminalWindow } from './desktopWindowUtils';
 import { useDesktopWindowFullscreen } from './useDesktopWindowFullscreen';
 
-const WINDOWS_TITLE_BAR_HEIGHT = 40;
-const WINDOWS_CONTROL_WIDTH = 46;
 const MACOS_RIGHT_DRAG_STRIP_LEFT = 360;
 const WINDOWS_NAVIGATION_BUTTON_SIZE = 30;
 
@@ -41,57 +40,6 @@ function getWindowsUnauthenticatedRoute(pathname: string): WindowsUnauthenticate
     }
 }
 
-type WindowControlProps = {
-    accessibilityLabel: string;
-    destructive?: boolean;
-    icon: React.ComponentProps<typeof MaterialCommunityIcons>['name'];
-    onPress: () => void;
-};
-
-function WindowControl({ accessibilityLabel, destructive, icon, onPress }: WindowControlProps) {
-    const { theme } = useUnistyles();
-    const [hovered, setHovered] = React.useState(false);
-    const [focused, setFocused] = React.useState(false);
-
-    return (
-        <Pressable
-            accessibilityLabel={accessibilityLabel}
-            accessibilityRole="button"
-            onBlur={() => setFocused(false)}
-            onFocus={() => setFocused(true)}
-            onHoverIn={() => setHovered(true)}
-            onHoverOut={() => setHovered(false)}
-            onPress={onPress}
-            style={({ pressed }) => ({
-                alignItems: 'center',
-                backgroundColor: destructive && hovered
-                    ? '#E81123'
-                    : hovered || pressed || focused
-                        ? theme.colors.surfacePressed
-                        : 'transparent',
-                height: WINDOWS_TITLE_BAR_HEIGHT,
-                justifyContent: 'center',
-                outlineColor: focused ? theme.colors.textLink : 'transparent',
-                outlineOffset: -2,
-                outlineStyle: 'solid',
-                outlineWidth: focused ? 2 : 0,
-                width: WINDOWS_CONTROL_WIDTH,
-            } as any)}
-        >
-            <MaterialCommunityIcons
-                color={destructive && hovered ? '#FFFFFF' : theme.colors.text}
-                name={icon}
-                size={16}
-            />
-        </Pressable>
-    );
-}
-
-function runWindowAction(action: () => Promise<void>): void {
-    void action().catch((error) => {
-        console.warn('Desktop window action failed:', error);
-    });
-}
 
 type WindowsNavigationButtonProps = {
     accessibilityLabel: string;
@@ -322,7 +270,6 @@ export function DesktopWindowFrame({ children }: { children: React.ReactNode }) 
     const { isAuthenticated } = useAuth();
     const pathname = usePathname();
     const router = useRouter();
-    const [maximized, setMaximized] = React.useState(false);
     const isWindowsFullscreen = useDesktopWindowFullscreen(desktopPlatform === 'windows');
     const { width: windowWidth } = useWindowDimensions();
     const handleGoHome = React.useCallback(() => {
@@ -333,40 +280,10 @@ export function DesktopWindowFrame({ children }: { children: React.ReactNode }) 
         }
     }, [router]);
 
-    React.useEffect(() => {
-        if (desktopPlatform !== 'windows') {
-            return;
-        }
-
-        const window = getCurrentWindow();
-        let mounted = true;
-        let unlisten: (() => void) | undefined;
-
-        const updateMaximized = async () => {
-            try {
-                const value = await window.isMaximized();
-                if (mounted) {
-                    setMaximized(value);
-                }
-            } catch (error) {
-                console.warn('Failed to read desktop window state:', error);
-            }
-        };
-
-        void updateMaximized();
-        void window.onResized(() => {
-            void updateMaximized();
-        }).then((cleanup) => {
-            unlisten = cleanup;
-        }).catch((error) => console.warn('Failed to observe desktop window size:', error));
-
-        return () => {
-            mounted = false;
-            unlisten?.();
-        };
-    }, [desktopPlatform]);
-
-    if (!desktopPlatform) {
+    // The terminal window is framed by the OS instead. This frame would give it
+    // a second title bar on Windows and lay a drag strip over the top of the tab
+    // strip on macOS, which is the opposite of the plain window it should be.
+    if (!desktopPlatform || isTerminalWindow()) {
         return <>{children}</>;
     }
 
@@ -512,22 +429,7 @@ export function DesktopWindowFrame({ children }: { children: React.ReactNode }) 
                     <View style={{ backgroundColor: theme.colors.divider, height: 20, marginHorizontal: 10, width: 1 }} />
                 )}
                 <View style={{ flexDirection: 'row', height: titleBarHeight }}>
-                    <WindowControl
-                        accessibilityLabel="Minimize window"
-                        icon="window-minimize"
-                        onPress={() => runWindowAction(() => window.minimize())}
-                    />
-                    <WindowControl
-                        accessibilityLabel={maximized ? 'Restore window' : 'Maximize window'}
-                        icon={maximized ? 'window-restore' : 'window-maximize'}
-                        onPress={() => runWindowAction(() => window.toggleMaximize())}
-                    />
-                    <WindowControl
-                        accessibilityLabel="Close window"
-                        destructive
-                        icon="window-close"
-                        onPress={() => runWindowAction(() => window.close())}
-                    />
+                    <DesktopWindowControls />
                 </View>
             </View>
             <View style={{ flex: 1 }}>

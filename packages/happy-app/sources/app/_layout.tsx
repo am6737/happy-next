@@ -40,6 +40,7 @@ import { isTauriDesktop } from '@/utils/tauri';
 import { DesktopBridge } from '@/desktop/DesktopBridge';
 import { DesktopWindowFrame } from '@/desktop/DesktopWindowFrame';
 import { DesktopAuthWindowSync } from '@/desktop/DesktopAuthWindowSync';
+import { DesktopTerminalWindowRedirect } from '@/desktop/DesktopTerminalWindowRedirect';
 import { ThemePreferenceSync } from '@/components/ThemePreferenceSync';
 import { ActionMenuOverlayProvider } from '@/components/ActionMenuOverlayProvider';
 import { getNotificationSessionId } from '@/utils/notificationData';
@@ -375,6 +376,7 @@ export default function RootLayout() {
         <>
             <FaviconPermissionIndicator />
             <DesktopBridge />
+            <DesktopTerminalWindowRedirect />
             {providers}
         </>
     );

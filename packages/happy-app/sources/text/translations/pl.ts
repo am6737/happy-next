@@ -994,6 +994,8 @@ export const pl: TranslationStructure = {
         quickActions: 'Szybkie akcje',
         newSession: 'Nowa sesja',
         newSessionSubtitle: 'Uruchom nową sesję przy użyciu bieżącej maszyny i katalogu roboczego',
+        openTerminal: 'Terminal',
+        openTerminalSubtitle: 'Otwórz powłokę w katalogu roboczym tej sesji',
         revealInFinder: 'Pokaż w Finderze',
         revealInFolder: 'Pokaż w folderze',
         revealInFileManagerFailed: 'Nie udało się pokazać tego folderu',
@@ -1450,6 +1452,20 @@ export const pl: TranslationStructure = {
         copyHash: 'Kopiuj hash commita',
         copyMessage: 'Kopiuj wiadomość commita',
     },
+
+    terminalSession: {
+        title: 'Terminal',
+        openFailed: 'Nie udało się otworzyć terminala',
+        empty: 'Brak otwartych terminali',
+        newTerminal: 'Nowy terminal',
+        machineOffline: 'Maszyna offline · ekran przestał się odświeżać',
+        duplicateTerminal: 'Duplikuj terminal',
+        closeTerminal: 'Zamknij terminal',
+        renameTerminalHint: 'Nadaj temu terminalowi własną nazwę. Pozostaw puste, aby wrócić do poprzedniej.',
+        duplicateFailed: 'Nie udało się zduplikować terminala',
+        closeTab: ({ label }: { label: string }) => `Zamknij ${label}`,
+    },
+
 
     settingsVoice: {
 

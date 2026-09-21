@@ -36,6 +36,16 @@
         "default": "./dist/lib.mjs"
       }
     },
+    "./modules/terminal/terminalWorkerProcess": {
+      "require": {
+        "types": "./dist/modules/terminal/terminalWorkerProcess.d.cts",
+        "default": "./dist/modules/terminal/terminalWorkerProcess.cjs"
+      },
+      "import": {
+        "types": "./dist/modules/terminal/terminalWorkerProcess.d.mts",
+        "default": "./dist/modules/terminal/terminalWorkerProcess.mjs"
+      }
+    },
     "./codex/happyMcpStdioBridge": {
       "require": {
         "types": "./dist/codex/happyMcpStdioBridge.d.cts",
@@ -89,8 +99,8 @@
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "^0.14.1",
-    "@paralleldrive/cuid2": "^2.2.2",
     "@modelcontextprotocol/sdk": "^1.25.3",
+    "@paralleldrive/cuid2": "^2.2.2",
     "@stablelib/base64": "^2.0.1",
     "@stablelib/hex": "^2.0.1",
     "@types/cross-spawn": "^6.0.6",
@@ -99,6 +109,7 @@
     "@types/react": "^19.2.7",
     "@types/tmp": "^0.2.6",
     "@types/ws": "^8.18.1",
+    "@xterm/headless": "6.1.0-beta.213",
     "ai": "^5.0.107",
     "axios": "^1.13.2",
     "chalk": "^5.6.2",
@@ -109,6 +120,7 @@
     "http-proxy": "^1.18.1",
     "http-proxy-middleware": "^3.0.5",
     "ink": "^6.5.1",
+    "node-pty": "1.2.0-beta.15",
     "open": "^10.2.0",
     "ps-list": "^8.1.1",
     "qrcode-terminal": "^0.12.0",
@@ -128,14 +140,14 @@
     "dotenv": "^16.6.1",
     "eslint": "^9",
     "eslint-config-prettier": "^10",
+    "happy-wire": "*",
     "pkgroll": "^2.14.2",
     "release-it": "^19.0.6",
     "shx": "^0.3.3",
     "ts-node": "^10",
     "tsx": "^4.20.6",
     "typescript": "5.9.3",
-    "vitest": "^3.2.4",
-    "happy-wire": "*"
+    "vitest": "^3.2.4"
   },
   "resolutions": {
     "whatwg-url": "14.2.0",
