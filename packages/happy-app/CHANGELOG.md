@@ -1,5 +1,21 @@
 # Changelog
 
+## Version 26 - 2026-09-21
+
+Happy Next v2.12.0 adds terminals that live on the machine — a shell owned by the daemon rather than by the window showing it, with its own desktop window and tabs — and folds a turn's working-out into one line you can open. The minimap becomes a swipe-in landmark rail on touch, HTML previews render as authored, and Happy CLI is updated to v0.9.1 with Codex v0.155.1.
+
+- Terminals: run a shell on the machine, one worker per terminal, shown in its own desktop window with tabs
+- Terminals: keep running across a daemon restart by living under tmux, and come back attached to the same shell
+- Conversation: fold a turn's process into one line — how long it took and how many tool calls it hid — that opens on a tap and says what the agent is doing while the turn runs
+- Conversation: collapse a compacted conversation's summary to a single tap-to-view line
+- Minimap: summon the landmark rail with a swipe in from the right edge on touch, with a card previewing the mark under your finger
+- Files: render HTML as authored inside the sandbox, switch a file's views through one tab bar, and move the version notice into the header
+- Sessions: reveal a local session's folder in Finder or Explorer, and split the session menu into sections
+- Models: mark the session's vendor beside the model label
+- Composer: turn the voice button into a stop button while the agent works, and abort on a double press of Escape
+- Desktop: draw the brand wordmark from the SVG logos in the sidebar, welcome screen and settings
+- CLI: Happy CLI v0.9.1 bundles Codex v0.155.1, flags automatic compaction summaries too, and takes durable terminals back correctly on Linux
+
 ## Version 25 - 2026-09-18
 
 Happy Next v2.11.0 reworks the session list — rename, read/unread, and a scannable color bar — and times every assistant turn above its reply. Questions and HTML previews now appear on the conversation minimap, in-progress answers survive as drafts, and Happy CLI is updated to v0.9.0 with Codex v0.155.0.

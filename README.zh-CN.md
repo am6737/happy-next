@@ -96,6 +96,8 @@ Happy Next 是原版 Happy 的重大演进，以下是亮点：
 - 签名更新包会定期以及在应用重新获得焦点时检查，在后台静默下载，并由用户点击更新按钮后安装并重启
 - 桌面诊断、轮转本地日志、WebKit 存储维护、上传失败恢复、麦克风/摄像头支持、原生上下文菜单、可靠且主题隔离的 HTML 预览窗口、兼容 CSP 的代码编辑、系统浏览器外链和受限原生权限
 
+- 终端在独立的桌面窗口中打开，带自己的标签栏，标题显示 shell 所在目录
+
 ### 编排器（Orchestrator）
 - 定义任务依赖图（DAG），支持按任务指定模型和工作目录
 - 跨 Claude、Codex 和 Gemini 自动调度执行
@@ -116,7 +118,7 @@ Happy Next 是原版 Happy 的重大演进，以下是亮点：
 - 三个 Agent 均为一等公民，支持会话恢复、复制/分叉和历史记录
 - 多 Agent 历史页面，按供应商分标签页，支持设备和 Agent 类型筛选
 - 按 Agent 选择模型、费用追踪和上下文窗口显示
-- Codex 支持 ACP 和 App-Server（JSON-RPC）两种后端，内置 Codex v0.154.0 并支持 fast mode
+- Codex 支持 ACP 和 App-Server（JSON-RPC）两种后端，内置 Codex v0.155.1 并支持 fast mode
 - Codex 归档操作同步到原生历史，保持归档状态显示一致，并可在继续工作时恢复已归档会话
 - 更可靠的 Codex 会话复制和分叉，并明确提示活动会话冲突
 - Codex 交互式问题和审批请求可直接在应用中处理，支持选项、自定义“其他”、自由文本和敏感回答掩码
@@ -265,6 +267,12 @@ Happy Next 是原版 Happy 的重大演进，以下是亮点：
 - 读取文件的工具所打开的图片可直接预览，`preview_html` 支持从文件路径读取文档
 - 隐藏思考与图片占位行，全新用户的"显示思考消息"默认关闭
 
+- 一轮对话的过程折叠成一行——耗时多久、隐藏了多少次工具调用——点击即可展开，运行中这行还会说明 agent 当前在做什么
+- 压缩摘要折叠成一行，无论多短都可以点击查看完整内容
+- 触屏上从右边缘划入即可唤出 landmark 导轨，手指滑动选取、松开跳转，手指下方的标记有卡片预览
+- 输入区的独立中止按钮已移除：agent 忙碌且没有内容可发送时，圆形按钮变为停止按钮，Esc 双击中止
+- 会话菜单可在 Finder（Windows 为资源管理器）中显示本地会话所在文件夹，菜单本身也拆分为分节
+
 ### CLI
 - `happy update` 自更新、`happy --version` 显示所有 Agent 版本
 - 守护进程开机自启动（`happy daemon enable/disable`）、重启命令
@@ -275,11 +283,15 @@ Happy Next 是原版 Happy 的重大演进，以下是亮点：
 - 切换模型或开关 plan 模式时，在已 warm 的 Claude 子进程上原地热切换，不再冷重启，改动会话中途立即生效
 - 会话从 remote 切回 local 时清理终端 stdin，残留的 raw-mode 输入不再泄漏到终端
 - 正确解析多行 skill metadata，并稳定发现已启用的 Codex plugin skills
-- Happy CLI v0.9.0 内置 Codex v0.155.0，并支持当前 App-Server 交互
+- Happy CLI v0.9.1 内置 Codex v0.155.1，并支持当前 App-Server 交互
 - 费用估算按溢价费率计算 Claude Fast Mode（Opus 5 与 Opus 4.8）
 - 清理 Codex 归档会话中失效的索引条目
 - 从可滚动列表、指定会话 ID 或最近会话恢复 Codex，并可选择工作目录
 - Codex 可正常退出，避免终端挂起
+
+- 终端跑在机器上而不是 app 里：每个 shell 运行在自己 fork 出的 worker 中，shell 出错不会拖垮 daemon；输出作为独立事件流式发送而不走 RPC；服务端转发时对不透明载荷中的控制字节做转义
+- 装有 tmux 时这些 shell 会跨 daemon 重启存活——新的 daemon 接回上一个留下的会话，重启只损失连接而不是会话
+- 自动压缩摘要与手动压缩一样会被标记，Happy 自身的 UI 工具不再作为权限问题抛给用户
 
 ### Bug 修复和稳定性
 - 255+ Bug 修复：消息发送可靠性、会话生命周期、Markdown 渲染、导航、语音、DooTask、共享
@@ -306,6 +318,9 @@ Happy Next 是原版 Happy 的重大演进，以下是亮点：
 - 键盘处理、加载状态、导航稳定性、图标字体预加载
 
 完整变更日志：[docs/changes-from-happy.zh-CN.md](docs/changes-from-happy.zh-CN.md)
+
+- 状态栏在模型标签前加上厂商 logo，与会话的模型列表同源推导
+- 桌面侧栏、欢迎页和设置改用轮廓化 SVG 字标渲染品牌标识
 
 ## 项目组件
 

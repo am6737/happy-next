@@ -94,6 +94,8 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Signed automatic updates are checked periodically and when the app regains focus, download quietly in the background, and wait for the user to install and restart
 - Desktop diagnostics, rotating local logs, WebKit storage maintenance, upload retry recovery, microphone/camera support, native context menus, reliable theme-isolated HTML preview windows, CSP-compatible code editing, system-browser external links, and restricted native capabilities
 
+- Terminals open in a dedicated desktop window with a tab bar of their own, titled by the directory the shell is in
+
 ### Orchestrator
 - Define task dependency graphs (DAGs) with per-task model and working directory
 - Auto-schedule execution across Claude, Codex, and Gemini agents
@@ -114,7 +116,7 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - All three agents are first-class citizens with session resume, duplicate/fork, and history
 - Multi-agent history page with per-provider tabs, device and agent filter dropdowns
 - Per-agent model selection, cost tracking, and context window display
-- ACP and App-Server (JSON-RPC) backends for Codex, with Codex v0.154.0 and fast mode
+- ACP and App-Server (JSON-RPC) backends for Codex, with Codex v0.155.1 and fast mode
 - Codex archive actions synchronize with native history, show archived state consistently, and support restoring archived sessions when continuing work
 - Reliable Codex duplication and forking, with clear active-session conflict errors
 - Codex interactive questions and approval requests render in the app, including choices, custom Other values, free-form text, and masked sensitive answers
@@ -263,6 +265,12 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Images opened by file-reading tools render as previews, and `preview_html` can read a document from a file path
 - Thinking and image placeholder rows are hidden, and "show thinking messages" now defaults to off for new users
 
+- A turn's process folds into one line — how long it took and how many tool calls it hid — that opens on a tap, with the line naming what the agent is doing while the turn runs
+- A compacted conversation's summary collapses to a single tap-to-view line, however short it is
+- The landmark minimap rail is summoned by a swipe in from the right edge on touch — slide to pick a mark, release to jump — with a card previewing the mark under your finger
+- The composer's standalone abort button is gone: the round button becomes a stop button while the agent is busy and there is nothing to send, and Escape aborts on a double press
+- A local session's folder can be revealed in Finder, or in Explorer on Windows, from a session menu now split into sections
+
 ### CLI
 - `happy update` self-upgrade, `happy --version` with all agent versions
 - Daemon auto-start on boot (`happy daemon enable/disable`), restart command
@@ -273,11 +281,15 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Switching model or toggling plan mode hot-swaps on the already-warm Claude subprocess instead of cold-restarting, so changes apply instantly mid-session
 - Switching a session from remote back to local cleans up terminal stdin so leftover raw-mode input no longer leaks into the terminal
 - Multiline skill metadata parses correctly, and enabled Codex plugin skills are discovered consistently
-- Happy CLI v0.9.0 bundles Codex v0.155.0 with current App-Server interaction support
+- Happy CLI v0.9.1 bundles Codex v0.155.1 with current App-Server interaction support
 - Cost estimates bill Claude fast mode (Opus 5 and Opus 4.8) at its premium rate
 - Stale archived Codex session index entries are cleaned up
 - Resume Codex sessions from a scrolling picker, by session ID, or from the latest session, with working-directory selection
 - Codex exits cleanly without leaving the terminal hanging
+
+- Terminals run on the machine rather than in the app: each shell lives in a forked worker of its own so a misbehaving shell cannot take the daemon down, output streams as its own event rather than riding RPC, and the server relays the frames with the control bytes inside the opaque payload escaped
+- Where tmux is installed those shells outlive the daemon — the next daemon attaches to what the last one left, so a restart costs the connection and not the session
+- Automatic compaction summaries are flagged the same way manual ones are, and Happy's own UI tools are never put to the user as permission questions
 
 ### Bug Fixes & Stability
 - 255+ bug fixes: message sending reliability, session lifecycle, Markdown rendering, navigation, voice, DooTask, sharing
@@ -303,6 +315,9 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Keyboard handling, loading states, navigation stability, icon font preloading
 
 Full changelog: [docs/changes-from-happy.md](docs/changes-from-happy.md)
+
+- The status row marks the session's vendor with a small logo in front of the model label, derived from the same source as the model list
+- The desktop sidebar, welcome screen and settings draw the brand wordmark from the outlined SVG logos
 
 ## 📦 Project Components
 

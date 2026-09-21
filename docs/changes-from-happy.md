@@ -48,6 +48,8 @@ Happy Next now ships as a native-feeling desktop client instead of requiring a b
 - **Security and media**: restricted Tauri capabilities, hardened CSP and navigation boundaries, native context menus, reliable theme-isolated HTML preview child windows, CSP-compatible code editing, system-browser external links, and explicit microphone/camera support
 - **Platform visuals**: refreshed logos, favicons, splash screens, notification assets, and independent macOS and Windows icons, including the macOS 26 layered icon format and compatibility fallback for older macOS versions
 
+- **Terminal windows**: a terminal opens in a window of its own with a tab bar, titled by the directory the shell is in
+
 ## Orchestrator
 
 A multi-agent orchestration system that lets you define task dependency graphs and execute them automatically.
@@ -97,7 +99,7 @@ The original Happy only supported Claude Code. Happy Next treats Claude Code, Co
 - **Refreshed Gemini catalog** adds Gemini 3.8 Flash and Gemini 3.7 Flash alongside the existing Gemini models
 - **Streamlined model picker**: Claude 1M-context variants collapse into a single toggle (7 models instead of 12); reasoning-effort presets show side by side on wide screens and Claude defaults to High effort
 - **GPT-6 Astra and GPT-5.6 catalog support**: current model families include their reasoning-effort and context settings
-- **Codex v0.154.0**: bundled Codex CLI updated with current App-Server interaction support
+- **Codex v0.155.1**: bundled Codex CLI updated with current App-Server interaction support
 - **Cost tracking** with accurate token usage for Claude models (cache tokens, reasoning tokens)
 - **Codex reasoning effort** configuration (low / medium / high / xhigh)
 - **ACP (Agent Client Protocol) backend**: JSON-RPC agent protocol (originally introduced for Codex to replace the MCP client approach, now used for Gemini)
@@ -352,6 +354,12 @@ Extensive improvements to the chat and session management experience.
 - **New session requires ownership**: "Start a session in this directory" is no longer offered from a session shared with you, on the context menu, the directory header, the session info screen, or the session header
 - **Thinking rows hidden**: thinking and image placeholder rows are hidden, and "show thinking messages" now defaults to off for new users
 
+- **Turn folding**: a long turn's tool calls, their output and the notes between them fold into one line reading how long the turn took and how many tool calls it hid; tapping opens it, and while the turn runs the line names the newest hidden step under a band of light travelling across it. A running turn folds from its first hidden row, while a settled one keeps the threshold — a rule about reading a turn, not about watching one work
+- **Compaction summary collapse**: a post-compaction summary — a machine record of what the context window dropped, not something anyone typed — collapses to a single tap-to-view line however short it is, opening in the text-selection screen's rendered and as-authored tabs
+- **Landmark rail on touch**: the minimap rail is summoned by a swipe in from the right edge, the finger slides over a fixed window of marks while a card previews the mark under it, and release jumps. Web and touch light the same mark from one rule, so a question, an HTML preview or a compaction summary can no longer leave the rail dark or light the wrong mark
+- **Composer abort**: the standalone abort button is gone — the round button becomes a stop button while the agent is busy and there is nothing to send — and Escape aborts on a double press within 1.5s
+- **Session menu**: reveal a local session's folder in Finder, or in Explorer on Windows, matched against the ids the local CLI is registered under rather than a hostname guess; the nine-item menu is split into three sections — the session, where it runs, and leaving it behind
+
 ## CLI Improvements
 
 The CLI (`happy-next-cli`) received substantial upgrades.
@@ -375,7 +383,7 @@ The CLI (`happy-next-cli`) received substantial upgrades.
 - **Latest CLI version** fetched from npm instead of hardcoded minimum
 - **Daemon auto-start on boot**: `happy daemon enable` / `happy daemon disable`
 - **Daemon restart command**: restart the daemon without manual kill
-- **Happy CLI v0.9.0 with Codex v0.155.0**: current App-Server interaction support and fast mode
+- **Happy CLI v0.9.1 with Codex v0.155.1**: current App-Server interaction support and fast mode
 - **Codex session resume**: select from a scrolling session picker, resume by ID or continue the latest session, and choose the working directory
 - **Clean Codex exit**: avoid leaving the terminal hanging when a session ends
 - **Attribution setting**: new setting to control commit attribution, default off
@@ -390,6 +398,12 @@ The CLI (`happy-next-cli`) received substantial upgrades.
 - **Hot-swap model & plan mode**: switching the model or toggling plan mode no longer cold-restarts the Claude subprocess. When only the model or permission/plan mode changes on an already-warm process, the change is applied in place via the stream-json control channel, so it takes effect instantly mid-session instead of paying a session-resume restart
 - **Remote→local stdin cleanup**: switching a session from remote back to local now cleans up terminal stdin, so leftover raw-mode input no longer leaks into the terminal
 - **Skill metadata and plugin discovery**: multiline skill metadata parses correctly, and enabled Codex plugin skills are discovered consistently
+
+- **Terminals on the machine**: a terminal is a shell owned by the daemon rather than by the window showing it. Each one runs in a forked worker of its own, so a misbehaving shell cannot take the daemon down; creating, attaching, input, resize and disposal are RPC, while output streams as its own event rather than riding RPC; and the server relays the frames with the control bytes inside the opaque payload escaped, so a terminal's own output cannot be read as the envelope around it
+- **Durable terminals**: where tmux is installed, those shells outlive the daemon — the next daemon attaches to what the last one left, so a restart costs the connection and not the session. Where tmux is absent nothing changes, and the daemon asks again on each new terminal, because having installed it since is not a reason to restart. Re-attaching is strict: a session that ended between being listed and being attached to is reported, never silently replaced by a fresh shell
+- **Automatic compaction summaries**: flagged on the same path as manual ones
+- **Happy's own UI tools**: never put to the user as permission questions
+- **Durable terminals on Linux**: the tmux listing is no longer read through a control byte tmux rewrites, which had made the listing answer nothing on tmux 3.3-3.6 — a daemon restart dropped every terminal instead of taking the shells back
 
 ## Server
 
@@ -417,6 +431,9 @@ The CLI (`happy-next-cli`) received substantial upgrades.
 - **Header alignment**: unified back buttons and aligned header actions across session and machine screens
 - **Image handling**: compression, MIME preservation, gallery viewer with zoom/gestures
 - **Status bar**: expanded model/permission display, auto-collapse timeout, mobile mic button
+
+- **Vendor mark**: a small logo derived from the session's flavor — the same source the model list uses — sits in front of the model's short label, so a session's vendor no longer needs the model list opened to be known
+- **SVG wordmark**: the desktop sidebar, the welcome screen and the settings logo view draw the brand wordmark from the outlined SVG exports instead of rasterised PNGs
 
 ## Bug Fixes & Stability
 
