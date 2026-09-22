@@ -1,8 +1,8 @@
 # Changelog
 
-## Version 26 - 2026-09-21
+## Version 26 - 2026-09-23
 
-Happy Next v2.12.0 adds terminals that live on the machine — a shell owned by the daemon rather than by the window showing it, with its own desktop window and tabs — and folds a turn's working-out into one line you can open. The minimap becomes a swipe-in landmark rail on touch, HTML previews render as authored, and Happy CLI is updated to v0.9.1 with Codex v0.155.1.
+Happy Next v2.12.1 adds terminals that live on the machine — a shell owned by the daemon rather than by the window showing it, with its own desktop window and tabs — and folds a turn's working-out into one line you can open. Plan proposals now show folded at the shape of a proposal, the fold line holds where you tapped it, the minimap becomes a swipe-in landmark rail on touch, HTML previews render as authored, and Happy CLI is updated to v0.9.2 with Codex v0.155.1 and GPT-6-Astra's Ultra effort.
 
 - Terminals: run a shell on the machine, one worker per terminal, shown in its own desktop window with tabs
 - Terminals: keep running across a daemon restart by living under tmux, and come back attached to the same shell
@@ -15,6 +15,10 @@ Happy Next v2.12.0 adds terminals that live on the machine — a shell owned by 
 - Composer: turn the voice button into a stop button while the agent works, and abort on a double press of Escape
 - Desktop: draw the brand wordmark from the SVG logos in the sidebar, welcome screen and settings
 - CLI: Happy CLI v0.9.1 bundles Codex v0.155.1, flags automatic compaction summaries too, and takes durable terminals back correctly on Linux
+- Plan proposals: show folded at the shape of a proposal, marked on the landmark rail and kept out of the turn's fold, and a proposal is sent as the request it is
+- Conversation: a step waiting on a permission stays out of the fold, so the question is never folded away, and the fold line holds the position it was tapped at instead of snapping when the page settles around it
+- CLI: Happy CLI v0.9.2 bundles Codex v0.155.1, terminal shells start with better defaults and handle input more predictably, and a cold Codex download no longer reads as a failed handshake
+- Models: GPT-6-Astra gains its Ultra effort, and the Codex models OpenAI retired (GPT-5.4, GPT-5.4-Mini, GPT-5.2) are no longer offered
 
 ## Version 25 - 2026-09-18
 

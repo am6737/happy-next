@@ -359,6 +359,9 @@ Extensive improvements to the chat and session management experience.
 - **Landmark rail on touch**: the minimap rail is summoned by a swipe in from the right edge, the finger slides over a fixed window of marks while a card previews the mark under it, and release jumps. Web and touch light the same mark from one rule, so a question, an HTML preview or a compaction summary can no longer leave the rail dark or light the wrong mark
 - **Composer abort**: the standalone abort button is gone — the round button becomes a stop button while the agent is busy and there is nothing to send — and Escape aborts on a double press within 1.5s
 - **Session menu**: reveal a local session's folder in Finder, or in Explorer on Windows, matched against the ids the local CLI is registered under rather than a hostname guess; the nine-item menu is split into three sections — the session, where it runs, and leaving it behind
+- **Plan proposal shape**: a plan proposal renders folded at the shape of a proposal rather than as a generic tool block — marked on the landmark rail, kept out of the turn's fold, and submitted as the request it is
+- **Permission steps stay out of the fold**: a step waiting on a permission is never folded away, so the question stays where it can be answered
+- **Fold line holds its place**: the fold line keeps the position it was tapped at on web and native alike, instead of snapping when the page settles around it
 
 ## CLI Improvements
 
@@ -404,6 +407,9 @@ The CLI (`happy-next-cli`) received substantial upgrades.
 - **Automatic compaction summaries**: flagged on the same path as manual ones
 - **Happy's own UI tools**: never put to the user as permission questions
 - **Durable terminals on Linux**: the tmux listing is no longer read through a control byte tmux rewrites, which had made the listing answer nothing on tmux 3.3-3.6 — a daemon restart dropped every terminal instead of taking the shells back
+- **Happy CLI v0.9.2 with Codex v0.155.1**: terminal shells start from better defaults and handle input more predictably
+- **Cold Codex download**: a first-run Codex download is no longer reported as a failed handshake
+- **Codex model lineup**: GPT-6-Astra gains its `ultra` effort, and the families OpenAI retired from Codex (GPT-5.4, GPT-5.4-Mini, GPT-5.2) are no longer offered; a session saved on one of them keeps the model and effort it was created with, resolved from a retired-mode table rather than passed through as a model name
 
 ## Server
 

@@ -271,6 +271,10 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - The composer's standalone abort button is gone: the round button becomes a stop button while the agent is busy and there is nothing to send, and Escape aborts on a double press
 - A local session's folder can be revealed in Finder, or in Explorer on Windows, from a session menu now split into sections
 
+- A plan proposal shows folded at the shape of a proposal — marked on the landmark rail and kept out of the turn's fold — and submitting one sends it as the request it is
+- A step waiting on a permission stays out of the fold, so the question is never folded away
+- The fold line holds the position it was tapped at on web and native alike, instead of snapping when the page settles around it
+
 ### CLI
 - `happy update` self-upgrade, `happy --version` with all agent versions
 - Daemon auto-start on boot (`happy daemon enable/disable`), restart command
@@ -290,6 +294,9 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Terminals run on the machine rather than in the app: each shell lives in a forked worker of its own so a misbehaving shell cannot take the daemon down, output streams as its own event rather than riding RPC, and the server relays the frames with the control bytes inside the opaque payload escaped
 - Where tmux is installed those shells outlive the daemon — the next daemon attaches to what the last one left, so a restart costs the connection and not the session
 - Automatic compaction summaries are flagged the same way manual ones are, and Happy's own UI tools are never put to the user as permission questions
+
+- Happy CLI v0.9.2 bundles Codex v0.155.1; terminal shells start with better defaults and handle input more predictably, and a cold Codex download no longer reads as a failed handshake
+- The Codex model list gains GPT-6-Astra's Ultra effort and drops the models OpenAI retired (GPT-5.4, GPT-5.4-Mini, GPT-5.2), while a session already running on a retired model keeps the model and effort it was created with
 
 ### Bug Fixes & Stability
 - 255+ bug fixes: message sending reliability, session lifecycle, Markdown rendering, navigation, voice, DooTask, sharing
