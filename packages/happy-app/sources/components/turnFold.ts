@@ -43,10 +43,12 @@ export function turnFoldControl(params: {
  *
  * The line stands in for that row, and two kinds of row refuse to give way. A settled turn's answer,
  * because the fold exists to show what the agent concluded and the answer can be the very row the
- * line lands on. And a row the fold may not take (`foldMustKeepMessage`) — a landmark, or a tool
- * call still waiting on a permission — which nothing may take wherever it sits in the turn: the rail
- * jumps to a landmark, and a question, a plan proposal and a permission request are all rows the
- * reader is the one who answers.
+ * line lands on. And a row the fold may not take (`foldMustKeepMessage`) — a landmark, a tool call
+ * still waiting on a permission, or a notice the CLI wrote — which nothing may take wherever it sits
+ * in the turn: the rail jumps to a landmark, a question and a permission request are both rows the
+ * reader is the one who answers (a plan proposal being the second of the two: the card is the
+ * request, and it is kept for as long as the request stands, no longer), and a notice is the only
+ * trace of what it reports.
  *
  * The rows a fold drops are filtered the same way, but that filter cannot cover this case: a row the
  * fold may not take can open a turn, and the row that opens a turn is the row the line lands on. A

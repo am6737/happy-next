@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { currentLandmark, foldMustKeepMessage, isMinimapLandmarkRow, isPendingPermissionRow, railLandmarkRows, shouldHideMessageInMinimap, shouldHideMessageInChatList, LandmarkRow } from './chatListVisibility';
-import { AgentTextMessage, MinimapMessage, ToolCallMessage, UserTextMessage } from '@/sync/typesMessage';
+import { currentLandmark, foldMustKeepMessage, isAgentEventRow, isMinimapLandmarkRow, isPendingPermissionRow, railLandmarkRows, shouldHideMessageInMinimap, shouldHideMessageInChatList, LandmarkRow } from './chatListVisibility';
+import { AgentTextMessage, Message, MinimapMessage, ToolCallMessage, UserTextMessage } from '@/sync/typesMessage';
 
 function toolCall(name: string): ToolCallMessage {
     return {
@@ -47,6 +47,11 @@ function userText(text: string, overrides: Partial<UserTextMessage> = {}): UserT
         text,
         ...overrides,
     };
+}
+
+/** A notice the CLI wrote into the conversation: the new title, a mode switch, a usage limit. */
+function agentEvent(): Message {
+    return { kind: 'agent-event', id: 'event-1', createdAt: 0, event: { type: 'message', message: 'Title changed to "Ship the fold"' } };
 }
 
 function imagePlaceholder(original: string, displayed: string, scale: string): string {
@@ -172,27 +177,11 @@ describe('shouldHideMessageInMinimap', () => {
         };
         expect(shouldHideMessageInMinimap(question)).toBe(false);
     });
-
-    it('never drops a plan proposal', () => {
-        const plan: MinimapMessage = {
-            kind: 'plan-proposal',
-            id: 'plan-1',
-            localId: null,
-            createdAt: 0,
-            summary: 'Ship the fold',
-        };
-        expect(shouldHideMessageInMinimap(plan)).toBe(false);
-    });
 });
 
 describe('isMinimapLandmarkRow', () => {
-    it('marks the rows the reader answers', () => {
+    it('marks the row the reader answers', () => {
         expect(isMinimapLandmarkRow(toolCall('AskUserQuestion'))).toBe(true);
-        // The plan proposal is the row the reader approves or rejects, so the rail marks it like a
-        // question — the fold keeps it for the same reason.
-        expect(isMinimapLandmarkRow(toolCall('ExitPlanMode'))).toBe(true);
-        // The same card, under the spelling the other agents send it as.
-        expect(isMinimapLandmarkRow(toolCall('exit_plan_mode'))).toBe(true);
     });
 
     it('marks an inline preview, which the rail jumps to', () => {
@@ -204,6 +193,16 @@ describe('isMinimapLandmarkRow', () => {
         expect(isMinimapLandmarkRow(toolCall('enter_plan_mode'))).toBe(false);
         expect(isMinimapLandmarkRow(agentText())).toBe(false);
         expect(isMinimapLandmarkRow(userText('hello'))).toBe(false);
+    });
+
+    it('leaves a plan proposal unmarked, answered or not', () => {
+        // The proposal is a request, not a landmark: the reader answers it through the same footer as
+        // any other permission, and once they have, the row folds with the rest of the process. A rail
+        // mark for it would outlive the card it points at.
+        expect(isMinimapLandmarkRow(toolCall('ExitPlanMode'))).toBe(false);
+        expect(isMinimapLandmarkRow(toolCall('exit_plan_mode'))).toBe(false);
+        expect(isMinimapLandmarkRow(permissionCall('pending', 'ExitPlanMode'))).toBe(false);
+        expect(isMinimapLandmarkRow(permissionCall('approved', 'ExitPlanMode'))).toBe(false);
     });
 });
 
@@ -226,6 +225,18 @@ describe('isPendingPermissionRow', () => {
     });
 });
 
+describe('isAgentEventRow', () => {
+    it('names the notices the CLI writes', () => {
+        expect(isAgentEventRow(agentEvent())).toBe(true);
+    });
+
+    it('says nothing about the agent\'s own work', () => {
+        expect(isAgentEventRow(toolCall('Read'))).toBe(false);
+        expect(isAgentEventRow(agentText())).toBe(false);
+        expect(isAgentEventRow(userText('hello'))).toBe(false);
+    });
+});
+
 describe('foldMustKeepMessage', () => {
     it('keeps a landmark, which the rail has a mark for', () => {
         expect(foldMustKeepMessage(toolCall('AskUserQuestion'))).toBe(true);
@@ -238,6 +249,20 @@ describe('foldMustKeepMessage', () => {
         const waiting = permissionCall('pending');
         expect(isMinimapLandmarkRow(waiting)).toBe(false);
         expect(foldMustKeepMessage(waiting)).toBe(true);
+    });
+
+    it('keeps a plan proposal only while the reader has not answered it', () => {
+        // Same row, same reason: the card is the request, and the footer that answers it lives on it.
+        expect(foldMustKeepMessage(permissionCall('pending', 'ExitPlanMode'))).toBe(true);
+        expect(foldMustKeepMessage(permissionCall('approved', 'ExitPlanMode'))).toBe(false);
+        expect(foldMustKeepMessage(permissionCall('denied', 'exit_plan_mode'))).toBe(false);
+    });
+
+    it('keeps a notice the CLI wrote, which nothing else records', () => {
+        // The title change has no other row, and the rail has no mark for it either: it is kept where
+        // it stands, not jumped to.
+        expect(isMinimapLandmarkRow(agentEvent())).toBe(false);
+        expect(foldMustKeepMessage(agentEvent())).toBe(true);
     });
 
     it('lets a decided call go, exactly as the rail does', () => {

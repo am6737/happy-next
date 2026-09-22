@@ -121,23 +121,14 @@ export type PreviewHtmlMessage = {
 };
 
 /**
- * A conversation-minimap view of a plan proposal — the card the reader approves or rejects. It
- * carries the same identity fields as any message (so the rail can key markers, dedupe them against
- * the offline cache and jump back to the row) plus the plan's opening line, which is all the hover
- * preview shows. The plan itself stays in the tool call.
+ * Everything the conversation minimap can place a marker for.
+ *
+ * A plan proposal is deliberately not one of them. The card is a request like any other — the reader
+ * answers it through the same permission footer every other request gets — and once it is answered
+ * the row is a step like any other, which the fold takes with the rest of the process. A mark for it
+ * would outlive the card it points at. The plan itself goes on living in the tool call, in the list.
  */
-export type PlanProposalMessage = {
-    kind: 'plan-proposal';
-    id: string;
-    localId: string | null;
-    createdAt: number;
-    seq?: number | null;
-    /** The plan's first line of prose — never blank: a proposal without one gets no marker. */
-    summary: string;
-};
-
-/** Everything the conversation minimap can place a marker for. */
-export type MinimapMessage = UserTextMessage | AskUserQuestionMessage | PreviewHtmlMessage | PlanProposalMessage;
+export type MinimapMessage = UserTextMessage | AskUserQuestionMessage | PreviewHtmlMessage;
 
 export const ASK_USER_QUESTION_TOOL = 'AskUserQuestion';
 
@@ -173,26 +164,6 @@ export function readPreviewHtmlCard(input: unknown): PreviewHtmlCard | null {
     const value = input as { html?: unknown; title?: unknown };
     if (typeof value.html !== 'string' || value.html.length === 0) return null;
     return { html: value.html, title: typeof value.title === 'string' ? value.title : null };
-}
-
-/**
- * The plan proposal, in every spelling an agent sends it under: Claude Code's tool, and the
- * snake_case the same card arrives as elsewhere.
- */
-const EXIT_PLAN_MODE_TOOL_NAMES: ReadonlySet<string> = new Set(['ExitPlanMode', 'exit_plan_mode']);
-
-/** Whether a tool name is a plan proposal, for the raw records the offline cache scans. */
-export function isExitPlanModeToolName(name: string): boolean {
-    return EXIT_PLAN_MODE_TOOL_NAMES.has(name);
-}
-
-/**
- * True for a plan proposal — a row the list may not drop, and the one the reader is the one who
- * answers: the plan on it is what they are approving or rejecting. It is a rail landmark like the
- * other two, so the rail marks it and the fold keeps it; see `isMinimapLandmarkRow`.
- */
-export function isExitPlanModeToolCall(message: Message): message is ToolCallMessage {
-    return message.kind === 'tool-call' && isExitPlanModeToolName(message.tool.name);
 }
 
 /** Read the question list out of a raw `AskUserQuestion` tool input. Unparseable input yields []. */
@@ -308,63 +279,6 @@ export function toPreviewHtmlMessage(message: ToolCallMessage): PreviewHtmlMessa
         seq: message.seq,
         input: message.tool.input,
         completed: message.tool.state === 'completed',
-    });
-}
-
-/**
- * The opening line of the plan on a proposal: its first line of prose, with the marker that opens it
- * stripped — `# Ship the fold`, `- Ship the fold` and `Ship the fold` read the same, and only the
- * last belongs on a preview card. Null when the call carries no plan at all, which is a row with
- * nothing on it to point at.
- */
-export function readPlanProposalSummary(input: unknown): string | null {
-    if (!input || typeof input !== 'object') return null;
-    const plan = (input as { plan?: unknown }).plan;
-    if (typeof plan !== 'string') return null;
-    for (const raw of plan.split('\n')) {
-        const line = raw.replace(PLAN_LINE_MARKER, '').trim();
-        if (line) return line;
-    }
-    return null;
-}
-
-/** A heading, a quote or a list item marker — the marks a line's own prose does not need. The
- * marker may also be the whole line, which is then a line with nothing to show. */
-const PLAN_LINE_MARKER = /^(?:#{1,6}(?:\s+|$)|>(?:\s+|$)|[*-](?:\s+|$)|\d+[.)](?:\s+|$))/;
-
-/**
- * Build the minimap view of a plan proposal from its parts. Shared by the loaded list (which has a
- * reduced `ToolCallMessage`) and the offline cache (which decrypts raw records), so both sides
- * produce identical-looking markers. Returns null when the call carries no plan: the list renders an
- * empty card for one, and a marker for it would point at nothing.
- */
-export function buildPlanProposalMessage(fields: {
-    id: string;
-    localId: string | null;
-    createdAt: number;
-    seq?: number | null;
-    input: unknown;
-}): PlanProposalMessage | null {
-    const summary = readPlanProposalSummary(fields.input);
-    if (summary === null) return null;
-    return {
-        kind: 'plan-proposal',
-        id: fields.id,
-        localId: fields.localId,
-        createdAt: fields.createdAt,
-        seq: fields.seq,
-        summary,
-    };
-}
-
-/** Minimap view of a loaded `ExitPlanMode` tool-call message. */
-export function toPlanProposalMessage(message: ToolCallMessage): PlanProposalMessage | null {
-    return buildPlanProposalMessage({
-        id: message.id,
-        localId: message.localId,
-        createdAt: message.createdAt,
-        seq: message.seq,
-        input: message.tool.input,
     });
 }
 

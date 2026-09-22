@@ -31,8 +31,9 @@ type Turn = {
  * and what stands after that step is the conclusion: the agent stopped working and said what it came
  * to say, so it stays on screen whole. Two kinds of row inside the reach it may not swallow either:
  * the answer of a settled turn, which can be a row the agent wrote before its last step, and a row
- * the reader answers — a question card or a plan proposal. `hiddenIds` is that set with the row under
- * the line left out of it, because that row is not dropped: the line lives on it.
+ * the reader answers — a question card, or a request they have not decided yet. `hiddenIds` is that
+ * set with the row under the line left out of it, because that row is not dropped: the line lives on
+ * it.
  */
 export type TurnProcess = {
     /**
@@ -140,8 +141,9 @@ function collectTurns(visibleMessages: Message[]): Turn[] {
 /**
  * The index of the row the fold's reach ends at: the agent's last step, or the turn's last row when
  * it never took one. A row the fold may not take is not a step either — the reach never ends on one,
- * so a turn that stops at a plan proposal keeps everything back to the step before it, and one that
- * stops at a permission request keeps everything back to the step before that too.
+ * so a turn that stops on an unanswered request keeps everything back to the step before it. A
+ * request the reader has answered is a step like any other, so the reach ends on it and the fold
+ * takes it.
  */
 function lastStepIndex(rows: Message[]): number {
     for (let index = rows.length - 1; index >= 0; index--) {
@@ -166,9 +168,11 @@ function lastStepIndex(rows: Message[]): number {
  * end on a step fall back on the answer alone — the last thing the agent said is then a row above
  * that step, and it is kept for the same reason.
  *
- * Rows nothing may hide are kept either way (`foldMustKeepMessage`): a question card, a plan proposal
- * and a tool call whose permission request is still unanswered are all things the reader answers, so
- * hiding one would hide a prompt rather than working-out.
+ * Rows nothing may hide are kept either way (`foldMustKeepMessage`): a question card and a tool call
+ * whose permission request is still unanswered are both things the reader answers, so hiding one
+ * would hide a prompt rather than working-out — a plan proposal is kept on that count alone, and so
+ * folds away with the rest once the reader has decided it — and a notice the CLI wrote (a title
+ * change, a mode switch, a usage limit) is the only trace of what it reports, so it stays too.
  */
 function turnProcess(turn: Turn, settled: boolean): TurnProcess {
     const answerId = settled ? turn.lastTextId : null;

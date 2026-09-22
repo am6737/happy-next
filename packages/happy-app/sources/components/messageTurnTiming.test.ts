@@ -31,8 +31,9 @@ function tool(id: string, createdAt: number): Message {
     };
 }
 
+/** A notice the CLI wrote into the conversation — a title change, a mode switch, a usage limit. */
 function event(id: string, createdAt: number): Message {
-    return { kind: 'agent-event', id, createdAt, event: { type: 'ready' } };
+    return { kind: 'agent-event', id, createdAt, event: { type: 'message', message: id } };
 }
 
 function namedTool(id: string, createdAt: number, name: string): Message {
@@ -45,14 +46,14 @@ function question(id: string, createdAt: number): Message {
     return namedTool(id, createdAt, ASK_USER_QUESTION_TOOL);
 }
 
-/** A plan proposal — a row the reader answers, and the third row the rail marks. */
-function planProposal(id: string, createdAt: number, name = PLAN_PROPOSAL_TOOL): Message {
-    return namedTool(id, createdAt, name);
+/** A plan proposal — a request like any other: the card is what the reader approves or rejects. */
+function planProposal(id: string, createdAt: number, status: 'pending' | 'approved' | 'denied' = 'pending', name = PLAN_PROPOSAL_TOOL): Message {
+    return awaitingPermission(id, createdAt, status, name);
 }
 
 /** A tool call the agent is blocked on: nothing moves until the reader answers the request. */
-function awaitingPermission(id: string, createdAt: number, status: 'pending' | 'approved' | 'denied' = 'pending'): Message {
-    const call = tool(id, createdAt) as { kind: 'tool-call'; tool: Record<string, unknown> };
+function awaitingPermission(id: string, createdAt: number, status: 'pending' | 'approved' | 'denied' = 'pending', name = 'Read'): Message {
+    const call = namedTool(id, createdAt, name) as { kind: 'tool-call'; tool: Record<string, unknown> };
     return { ...call, tool: { ...call.tool, permission: { id: `perm-${id}`, status } } } as Message;
 }
 
@@ -310,8 +311,8 @@ describe('folded turns', () => {
 
     it('keeps a plan proposal the reader has not answered yet', () => {
         // The agent proposed a plan mid-turn, and the reader is the one who answers it: folding the
-        // turn's progress must not take the plan off the screen. It is not working-out, so it is not
-        // counted either — the line counts the rows it hides.
+        // turn's progress must not take the plan — or the buttons that answer it — off the screen. It
+        // is a request, not working-out, so it is not counted either: the line counts the rows it hides.
         const result = analyze([agent('a1', 60), tool('t3', 50), planProposal('p1', 40), tool('t2', 30), tool('t1', 20), user('u1', 10)]);
         expect(fold(result, 't1')).toEqual({
             hiddenIds: ['t2', 't3'],
@@ -322,7 +323,7 @@ describe('folded turns', () => {
     });
 
     it('keeps the snake_case plan proposal too', () => {
-        const result = analyze([agent('a1', 50), planProposal('p1', 40, 'exit_plan_mode'), tool('t1', 30), user('u1', 10)]);
+        const result = analyze([agent('a1', 50), planProposal('p1', 40, 'pending', 'exit_plan_mode'), tool('t1', 30), user('u1', 10)]);
         expect(fold(result, 't1')).toEqual({ hiddenIds: [], steps: 1, snapshotId: 't1', answerId: 'a1' });
     });
 
@@ -338,6 +339,48 @@ describe('folded turns', () => {
             answerId: 'a1',
         });
         expect(result.headerById.get('p1')?.state).toBe('done');
+    });
+
+    it('folds a plan proposal the reader has answered like any other step', () => {
+        // Answered is process: the reader approved or rejected the plan and the card has nothing left
+        // to ask, so it folds, it counts, and the line's snapshot moves onto it.
+        const result = analyze([agent('a1', 60), tool('t3', 50), planProposal('p1', 40, 'approved'), tool('t2', 30), tool('t1', 20), user('u1', 10)]);
+        expect(fold(result, 't1')).toEqual({
+            hiddenIds: ['t2', 'p1', 't3'],
+            steps: 4,
+            snapshotId: 't3',
+            answerId: 'a1',
+        });
+    });
+
+    it('folds an answered plan proposal that opens the turn, the very row the line lands on', () => {
+        const result = analyze([agent('a1', 50), tool('t1', 40), planProposal('p1', 30, 'denied'), user('u1', 10)]);
+        expect(fold(result, 'p1')).toEqual({
+            hiddenIds: ['t1'],
+            steps: 2,
+            snapshotId: 't1',
+            answerId: 'a1',
+        });
+        expect(result.headerById.get('p1')?.state).toBe('done');
+    });
+
+    it('keeps a notice the CLI wrote, the only trace of what it reports', () => {
+        // The turn renamed the session as it worked. That row is not process — it is the one place the
+        // new title is recorded, and the agent's own words never mention it — so the fold leaves it
+        // standing, and does not count it either: the line counts the rows it hides.
+        const result = analyze([agent('a1', 50), tool('t2', 40), event('e1', 30), tool('t1', 20), user('u1', 10)]);
+        expect(fold(result, 't1')).toEqual({
+            hiddenIds: ['t2'],
+            steps: 2,
+            snapshotId: 't2',
+            answerId: 'a1',
+        });
+    });
+
+    it('names a hidden step on the running line, keeping the notice beside it out of the snapshot', () => {
+        // The notice is on screen as a row of its own, so the line says what it is hiding instead.
+        const result = analyze([event('e1', 40), tool('t1', 30), user('u1', 10)], { inFlight: true });
+        expect(fold(result, 't1')).toEqual({ hiddenIds: [], steps: 1, snapshotId: 't1', answerId: null });
     });
 
     it('keeps a step the agent is waiting on a permission for', () => {

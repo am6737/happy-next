@@ -150,14 +150,12 @@ function WebMinimap(props: ConversationMinimapProps) {
                     // AskUserQuestion markers are drawn exactly like prompts: the rail is a neutral
                     // map of landmarks, and hovering is what tells you which mark is a question.
                     // Every landmark is drawn as the same mark; hovering — or the screen reader —
-                    // is what tells a question, a preview and a plan proposal apart from a prompt.
+                    // is what tells a question and a preview apart from a prompt.
                     const jumpLabel = item.message.kind === 'ask-user-question'
                         ? 'Jump to question'
                         : item.message.kind === 'preview-html'
                             ? 'Jump to preview'
-                            : item.message.kind === 'plan-proposal'
-                                ? 'Jump to plan'
-                                : 'Jump to user message';
+                            : 'Jump to user message';
                     return (
                         <View key={item.message.id} style={{ position: 'relative', width: HIT_WIDTH, height: MARKER_SLOT_HEIGHT, alignItems: 'flex-start', justifyContent: 'center' }}>
                             <Pressable

@@ -1,4 +1,4 @@
-import { isAskUserQuestionToolCall, isExitPlanModeToolCall, isPreviewHtmlToolCall, Message, MinimapMessage } from '@/sync/typesMessage';
+import { isAskUserQuestionToolCall, isPreviewHtmlToolCall, Message, MinimapMessage } from '@/sync/typesMessage';
 
 const LOCAL_COMMAND_STDOUT_PATTERN = /^<local-command-stdout>[\s\S]*<\/local-command-stdout>$/;
 
@@ -34,16 +34,18 @@ export function shouldHideMessageInChatList(message: Message, showThinkingMessag
 }
 
 /**
- * A row the conversation rail draws a mark for: a question card, an inline HTML preview, or a plan
- * proposal.
+ * A row the conversation rail draws a mark for: a question card, or an inline HTML preview.
  *
- * These are landmarks rather than working-out. The rail jumps to them, and two of them are rows the
- * reader is the one who answers — a question, and a plan proposal, the plan itself being what they
- * approve or reject — so anything that hides rows has to keep them, on top of the jump staying able
- * to land. Folding a turn's process is the caller this exists for.
+ * These are landmarks rather than working-out. The rail jumps to them, and a question is a row the
+ * reader is the one who answers — so anything that hides rows has to keep them, on top of the jump
+ * staying able to land. Folding a turn's process is the caller this exists for.
+ *
+ * A plan proposal is deliberately not one. It is a request like any other — see
+ * `isPendingPermissionRow` — and the rail has no mark for it either, so nothing here outlives the
+ * answer the reader gives it.
  */
 export function isMinimapLandmarkRow(message: Message): boolean {
-    return isAskUserQuestionToolCall(message) || isPreviewHtmlToolCall(message) || isExitPlanModeToolCall(message);
+    return isAskUserQuestionToolCall(message) || isPreviewHtmlToolCall(message);
 }
 
 /**
@@ -53,22 +55,40 @@ export function isMinimapLandmarkRow(message: Message): boolean {
  * any other — but while the request stands, that row is the only thing between the agent and its
  * next move, and nothing about it is working-out to be folded away. Once decided it folds like the
  * rest of the process: the reader has had their say and the row has nothing left to ask.
+ *
+ * A plan proposal is the same kind of row: the card is the request, the reader approves or rejects it
+ * through the same footer, and the fold keeps it for exactly as long as the request stands.
  */
 export function isPendingPermissionRow(message: Message): boolean {
     return message.kind === 'tool-call' && message.tool.permission?.status === 'pending';
 }
 
 /**
- * A row nothing that hides rows may take: a landmark the rail marks, or a request still waiting on
- * the reader.
+ * A one-line notice the CLI wrote into the conversation: a new title, a mode switch, a usage limit, a
+ * compaction.
  *
- * The two are kept for one reason — the row is a prompt rather than working-out — which is why every
- * caller that hides rows asks this and not the landmark question alone. The rail's own marks stay on
+ * It is not working-out, and it is the only trace of the thing it reports — the title change has no
+ * other row, the usage limit has no other explanation for why the turn stopped — so a fold has no
+ * business taking it. It is not a landmark either: the rail has nothing to jump to, and the notice
+ * says what it has to say where it stands.
+ */
+export function isAgentEventRow(message: Message): boolean {
+    return message.kind === 'agent-event';
+}
+
+/**
+ * A row nothing that hides rows may take: a landmark the rail marks, a request still waiting on the
+ * reader, or a notice the CLI wrote.
+ *
+ * The three are kept for one reason — none of them is working-out — which is why every caller that
+ * hides rows asks this and not the landmark question alone. The rail's own marks stay on
  * `isMinimapLandmarkRow`: a permission request is not a landmark, and the rail points at rows the
- * reader wrote into the conversation, not at every step that wants an answer.
+ * reader wrote into the conversation, not at every step that wants an answer. A plan proposal is such
+ * a request and is kept by that half alone, so it is kept only until the reader decides it; a notice
+ * is kept by the last half alone and never marks the rail.
  */
 export function foldMustKeepMessage(message: Message): boolean {
-    return isMinimapLandmarkRow(message) || isPendingPermissionRow(message);
+    return isMinimapLandmarkRow(message) || isPendingPermissionRow(message) || isAgentEventRow(message);
 }
 
 /**
@@ -86,7 +106,7 @@ export function foldMustKeepMessage(message: Message): boolean {
 export function shouldHideMessageInMinimap(message: MinimapMessage): boolean {
     // Tool-call landmarks are never dropped by the list filter below (it only looks at user rows),
     // so they are kept unconditionally.
-    if (message.kind === 'ask-user-question' || message.kind === 'preview-html' || message.kind === 'plan-proposal') {
+    if (message.kind === 'ask-user-question' || message.kind === 'preview-html') {
         return false;
     }
     if (message.meta?.isCompactSummary === true) {
