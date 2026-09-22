@@ -10,6 +10,7 @@ import {
     minimumCanvasHeightPx,
     nextViewportState,
     pickCompensationAnchor,
+    splitViewportDistance,
     rangeAroundAnchor,
     rangeContains,
     sameKeys,
@@ -36,6 +37,34 @@ describe('buildLayoutModel', () => {
         expect(layout.totalHeightPx).toBe(550);
         expect(layout.heightsPx).toEqual([100, 100, 100, 150, 100]);
         expect(layout.bottomOffsetsPx).toEqual([450, 350, 250, 100, 0]);
+    });
+
+    it('gives a folded entry no height but keeps its measurement', () => {
+        const measured = { C: 240, D: 150 };
+        const layout = buildLayoutModel({
+            keys: KEYS,
+            measuredHeightsByKey: measured,
+            estimateHeightPx: 100,
+            collapsedKeys: new Set(['C']),
+        });
+        expect(layout.heightsPx).toEqual([100, 100, 0, 150, 100]);
+        expect(layout.totalHeightPx).toBe(450);
+        expect(layout.topOffsetsPx).toEqual([0, 100, 200, 200, 350]);
+        // The measurement survives: an expand animation needs its endpoint.
+        expect(measured.C).toBe(240);
+        // ...and so a layout rebuilt without the fold comes back unchanged.
+        expect(buildLayoutModel({ keys: KEYS, measuredHeightsByKey: measured, estimateHeightPx: 100 }).heightsPx)
+            .toEqual([100, 100, 240, 150, 100]);
+    });
+
+    it('applies a minimum height to a measured entry', () => {
+        const layout = buildLayoutModel({
+            keys: KEYS,
+            measuredHeightsByKey: { C: 12 },
+            estimateHeightPx: 100,
+            minHeightsByKey: { C: 64 },
+        });
+        expect(layout.heightsPx[2]).toBe(64);
     });
 
     it('handles an empty entry set', () => {
@@ -67,6 +96,45 @@ describe('computeVisibleRange', () => {
             .toEqual({ startIndex: 0, endIndex: 5 });
         expect(computeVisibleRange({ layout, distanceFromBottomPx: 0, viewportHeightPx: 150, overscanCount: 99 }))
             .toEqual({ startIndex: 0, endIndex: 5 });
+    });
+
+    it('keeps the newest entry in the window at the very bottom', () => {
+        // E is folded away, so it is zero-height and a binary search over
+        // offsets cannot see it: without the rule the newest entry is dropped.
+        const layout = buildLayoutModel({
+            keys: KEYS,
+            measuredHeightsByKey: { A: 100, B: 100, C: 100, D: 100, E: 100 },
+            estimateHeightPx: 100,
+            collapsedKeys: new Set(['E']),
+        });
+        expect(computeVisibleRange({ layout, distanceFromBottomPx: 0, viewportHeightPx: 100, overscanCount: 0 }))
+            .toEqual({ startIndex: 3, endIndex: 4 });
+        expect(computeVisibleRange({
+            layout,
+            distanceFromBottomPx: 0,
+            viewportHeightPx: 100,
+            overscanCount: 0,
+            collapseEmptyRows: true,
+        })).toEqual({ startIndex: 3, endIndex: 5 });
+    });
+
+    it('keeps the oldest entry in the window at the very top', () => {
+        const layout = buildLayoutModel({
+            keys: KEYS,
+            measuredHeightsByKey: { A: 100, B: 100, C: 100, D: 100, E: 100 },
+            estimateHeightPx: 100,
+            collapsedKeys: new Set(['A']),
+        });
+        const distanceFromBottomPx = layout.totalHeightPx;
+        expect(computeVisibleRange({ layout, distanceFromBottomPx, viewportHeightPx: 100, overscanCount: 0 }))
+            .toEqual({ startIndex: 1, endIndex: 2 });
+        expect(computeVisibleRange({
+            layout,
+            distanceFromBottomPx,
+            viewportHeightPx: 100,
+            overscanCount: 0,
+            collapseEmptyRows: true,
+        })).toEqual({ startIndex: 0, endIndex: 1 });
     });
 
     it('clamps a distance beyond the content to the topmost entry', () => {
@@ -175,6 +243,41 @@ describe('pickCompensationAnchor', () => {
         })).toBe('C');
     });
 
+    it('never anchors on a gap or on a folded (zero-height) entry', () => {
+        const previousLayout = buildLayoutModel({
+            keys: KEYS,
+            measuredHeightsByKey: { C: 100, D: 100, E: 100 },
+            estimateHeightPx: 100,
+            collapsedKeys: new Set(['C']),
+        });
+        // Viewport [150, 300]: C is measured but folded away, D is the anchor.
+        expect(pickCompensationAnchor({
+            previousLayout,
+            nextLayout: previousLayout,
+            distanceFromBottomPx: 150,
+            viewportHeightPx: 150,
+            measuredHeightsByKey: { C: 100, D: 100, E: 100 },
+            collapseEmptyRows: true,
+        })).toBe('D');
+        // Without the collapse flag the zero-height entry is fair game again.
+        expect(pickCompensationAnchor({
+            previousLayout,
+            nextLayout: previousLayout,
+            distanceFromBottomPx: 150,
+            viewportHeightPx: 150,
+            measuredHeightsByKey: { C: 100, D: 100, E: 100 },
+        })).toBe('C');
+        // And a spacing entry is never an anchor, whatever its height.
+        expect(pickCompensationAnchor({
+            previousLayout,
+            nextLayout: previousLayout,
+            distanceFromBottomPx: 150,
+            viewportHeightPx: 150,
+            measuredHeightsByKey: { C: 100, D: 100, E: 100 },
+            gapKeys: new Set(['D']),
+        })).toBe('C');
+    });
+
     it('returns null when nothing in the viewport is measured', () => {
         const layout = uniformLayout();
         expect(pickCompensationAnchor({
@@ -184,6 +287,43 @@ describe('pickCompensationAnchor', () => {
             viewportHeightPx: 150,
             measuredHeightsByKey: {},
         })).toBeNull();
+    });
+});
+
+describe('splitViewportDistance', () => {
+    it('carries the whole distance when the range has room for it', () => {
+        expect(splitViewportDistance({ wantedDistancePx: 400, maxDistancePx: 1000 }))
+            .toEqual({ rawDistancePx: 400, carriedPx: 0 });
+        expect(splitViewportDistance({ wantedDistancePx: 1000, maxDistancePx: 1000 }))
+            .toEqual({ rawDistancePx: 1000, carriedPx: 0 });
+    });
+
+    it('carries what is left of a distance past the top of the range', () => {
+        expect(splitViewportDistance({ wantedDistancePx: 1200, maxDistancePx: 1000 }))
+            .toEqual({ rawDistancePx: 1000, carriedPx: 200 });
+    });
+
+    it('carries a distance below the bottom of the range, which no scroll can reach', () => {
+        expect(splitViewportDistance({ wantedDistancePx: -150, maxDistancePx: 1000 }))
+            .toEqual({ rawDistancePx: 0, carriedPx: -150 });
+        expect(splitViewportDistance({ wantedDistancePx: 0, maxDistancePx: 1000 }))
+            .toEqual({ rawDistancePx: 0, carriedPx: 0 });
+    });
+
+    it('keeps the sum, so the split never moves the viewport in the model', () => {
+        for (const wantedDistancePx of [-500, -1, 0, 250, 1000, 1001, 5000]) {
+            const split = splitViewportDistance({ wantedDistancePx, maxDistancePx: 1000 });
+            expect(split.rawDistancePx + split.carriedPx).toBe(wantedDistancePx);
+            expect(split.rawDistancePx).toBeGreaterThanOrEqual(0);
+            expect(split.rawDistancePx).toBeLessThanOrEqual(1000);
+        }
+    });
+
+    it('reads an unscrollable box as carrying nothing', () => {
+        expect(splitViewportDistance({ wantedDistancePx: 300, maxDistancePx: 0 }))
+            .toEqual({ rawDistancePx: 0, carriedPx: 300 });
+        expect(splitViewportDistance({ wantedDistancePx: -300, maxDistancePx: -10 }))
+            .toEqual({ rawDistancePx: 0, carriedPx: -300 });
     });
 });
 

@@ -43,8 +43,22 @@ export function buildLayoutModel(args: {
     keys: string[];
     measuredHeightsByKey: Record<string, number>;
     estimateHeightPx: number;
+    /**
+     * Entries folded away: they take no height at all. Their measured height
+     * stays in `measuredHeightsByKey`, which is what makes the expand
+     * animation possible — its endpoint is known before the first frame — and
+     * what lets a fold be undone without re-measuring anything.
+     *
+     * (The reference reaches zero height by measuring zero, because its
+     * animated element really is zero tall, and it drops the gap in front of
+     * such an entry as well. Our list has no gaps, so a folded entry simply
+     * loses its height here.)
+     */
+    collapsedKeys?: ReadonlySet<string>;
+    /** Floor for a measured height, applied before a fold zeroes it. */
+    minHeightsByKey?: Record<string, number>;
 }): LayoutModel {
-    const { keys, measuredHeightsByKey, estimateHeightPx } = args;
+    const { keys, measuredHeightsByKey, estimateHeightPx, collapsedKeys, minHeightsByKey } = args;
     const count = keys.length;
     const heightsPx = new Array<number>(count);
     const topOffsetsPx = new Array<number>(count);
@@ -52,7 +66,9 @@ export function buildLayoutModel(args: {
     let total = 0;
     for (let i = 0; i < count; i++) {
         const key = keys[i];
-        const height = measuredHeightsByKey[key] ?? estimateHeightPx;
+        const height = collapsedKeys?.has(key)
+            ? 0
+            : Math.max(minHeightsByKey?.[key] ?? 0, measuredHeightsByKey[key] ?? estimateHeightPx);
         indexByKey.set(key, i);
         topOffsetsPx[i] = total;
         heightsPx[i] = height;
@@ -72,14 +88,26 @@ export function computeVisibleRange(args: {
     distanceFromBottomPx: number;
     viewportHeightPx: number;
     overscanCount: number;
+    /**
+     * When entries can be zero-height (folded away), reaching either end of the
+     * content drops the overscan on that side: at the very bottom the window
+     * must run to the newest entry, and at the very top to the oldest, or the
+     * end of the list would sit inside a gap of unmounted entries.
+     */
+    collapseEmptyRows?: boolean;
 }): RenderRange {
     const { layout, overscanCount } = args;
     const count = layout.keys.length;
     if (count === 0) return { startIndex: 0, endIndex: 0 };
+    const collapse = args.collapseEmptyRows === true;
     const bottomEdge = Math.min(Math.max(0, args.distanceFromBottomPx), layout.totalHeightPx);
     const topEdge = Math.min(bottomEdge + Math.max(0, args.viewportHeightPx), layout.totalHeightPx);
-    const first = firstIndexWithBottomBelow(layout.bottomOffsetsPx, topEdge);
-    const pastLast = firstIndexWithTopAtOrBelow(layout.bottomOffsetsPx, layout.heightsPx, bottomEdge);
+    const first = collapse && topEdge === layout.totalHeightPx
+        ? 0
+        : firstIndexWithBottomBelow(layout.bottomOffsetsPx, topEdge);
+    const pastLast = collapse && bottomEdge === 0
+        ? count
+        : firstIndexWithTopAtOrBelow(layout.bottomOffsetsPx, layout.heightsPx, bottomEdge);
     return {
         startIndex: Math.max(0, first - overscanCount),
         endIndex: Math.min(count, Math.max(pastLast, first + 1) + overscanCount),
@@ -195,6 +223,10 @@ export function pickCompensationAnchor(args: {
     distanceFromBottomPx: number;
     viewportHeightPx: number;
     measuredHeightsByKey: Record<string, number>;
+    /** Entries that are pure spacing, never content: unusable as an anchor. */
+    gapKeys?: Set<string>;
+    /** With zero-height entries in play, one of them cannot anchor anything. */
+    collapseEmptyRows?: boolean;
 }): string | null {
     const range = computeVisibleRange({
         layout: args.previousLayout,
@@ -204,11 +236,34 @@ export function pickCompensationAnchor(args: {
     });
     for (let i = range.startIndex; i < range.endIndex; i++) {
         const key = args.previousLayout.keys[i];
-        if (key != null && args.measuredHeightsByKey[key] != null && args.nextLayout.indexByKey.has(key)) {
-            return key;
-        }
+        if (key == null) continue;
+        if (args.gapKeys?.has(key)) continue;
+        if (args.collapseEmptyRows === true && (args.previousLayout.heightsPx[i] ?? 0) <= 0) continue;
+        if (args.measuredHeightsByKey[key] == null) continue;
+        if (!args.nextLayout.indexByKey.has(key)) continue;
+        return key;
     }
     return null;
+}
+
+/**
+ * How much of a viewport distance the scroller can carry, and how much has to stay in the canvas
+ * bottom offset.
+ *
+ * The two add up to the distance asked for, so where the viewport sits in the model is the same
+ * either way. That is what lets a jump reach a row the scroll range has run out of room for — at
+ * the newest message, where there is nothing further to scroll, and at the canvas's own top edge
+ * alike — and it is why the leftover is worth keeping rather than clamping away: renormalization
+ * moves the split between the two, never their sum, so no visible pixel moves when it does.
+ */
+export function splitViewportDistance(args: {
+    /** Where the viewport belongs, as a scroll distance, before the range has its say. */
+    wantedDistancePx: number;
+    /** The furthest the scroller can be scrolled. */
+    maxDistancePx: number;
+}): { rawDistancePx: number; carriedPx: number } {
+    const rawDistancePx = Math.min(Math.max(0, args.wantedDistancePx), Math.max(0, args.maxDistancePx));
+    return { rawDistancePx, carriedPx: args.wantedDistancePx - rawDistancePx };
 }
 
 // Distance that places the entry's top edge `topInsetPx` below the viewport top.

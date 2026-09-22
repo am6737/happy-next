@@ -18,10 +18,12 @@ import { turnHeaderProps, useTurnAnalysis } from './messageTurnTiming';
 import { newestRowSnapshot } from './rowSnapshot';
 import { toolTitle } from './tools/toolTitle';
 import { useTurnFolding } from '@/hooks/useTurnFolding';
+import { useFoldAnimation } from '@/hooks/useFoldAnimation';
 import { AWAITING_RESPONSE_MAX_MS } from '@/utils/sessionUtils';
 import { layout as appLayout } from './layout';
 import { createScrollButtonVisibilityController } from './scrollButtonVisibilityController';
 import { createProxyScrollIntent } from './proxyScrollIntent';
+import { createScrollDistanceController } from './scrollDistanceController';
 import { t } from '@/text';
 import {
     buildLayoutModel,
@@ -33,6 +35,7 @@ import {
     minimumCanvasHeightPx,
     nextViewportState,
     pickCompensationAnchor,
+    splitViewportDistance,
     rangeAroundAnchor,
     sameKeys,
     type LayoutModel,
@@ -43,10 +46,11 @@ import {
 // Web-only ChatList. The native implementation (./ChatList.tsx, inverted
 // FlatList) stays untouched; this file replaces it on web.
 //
-// Folding a turn's process lives here and only here. Anchoring it needs the layout model below —
-// holding the row the reader tapped still while the rows under it come and go. The native list has
-// no such model and no way to be told where a row is before the frame that moves it paints, so the
-// fold would take the line out from under their finger. It waits for a list that can.
+// Folding a turn's process lives here and only here. Keeping the line the reader tapped where they
+// tapped it needs the layout model below: the rows under the line change the height of the content
+// between it and the answer, and only the model can say by how much before the frame paints. The
+// native list has no such model, so the fold would take the line out from under their finger. It
+// waits for a list that can.
 //
 // Architecture (modeled on the Codex desktop thread list):
 //
@@ -81,7 +85,10 @@ import {
 //        constant-height canvas instead of resizing it;
 //      - growth below the viewport is absorbed by canvasBottomOffsetPx, the
 //        model coordinate of the canvas's bottom edge (content that grows
-//        "below the canvas" stays virtual until it could become visible);
+//        "below the canvas" stays virtual until it could become visible).
+//        Nothing accumulates here: a fold, a measurement and a new page all
+//        end in one number — how much the content at or below the row the
+//        reader is looking at changed — and that number moves the viewport.
 //      - `overflow: clip` on the canvas guarantees transient window overflow
 //        can never leak into scrollHeight.
 //    When scrolling goes quiet (scrollend / input+scroll silence) one
@@ -138,7 +145,7 @@ export interface ForkMessageRequest {
 
 // --- End of the sync block ---
 
-// A loaded user message paired with its index in the newest-first `visibleMessages`.
+// A loaded user message paired with its index in the newest-first `listedMessages`.
 type LoadedUserMessage = { message: UserTextMessage; index: number };
 
 export const ChatList = React.memo((props: { session: Session; onFillInput?: (text: string, allOptions?: string[]) => void; onLoadMore?: () => void; onForkMessage?: (request: ForkMessageRequest) => void; forkingMessageId?: string | null; minimapCachedUserMessages?: MinimapMessage[]; onMinimapItemsChange?: (items: ConversationMinimapItem[]) => void; onActiveMessageIdChange?: (id: string | null) => void; onRegisterMinimapJump?: (jump: ((message: MinimapMessage) => void) | null) => void }) => {
@@ -416,6 +423,13 @@ const ChatRow = React.memo((props: {
     foldSnapshot: string | undefined,
     onToggleFold: ((headerId: string) => void) | undefined,
     constrainedHeightPx: number | undefined,
+    // Set only while this row's height belongs to a fold animation: the animation writes the height
+    // and the clip onto the outer wrapper (never onto the inner element the observer measures), so
+    // the row stays a row to the measurement pipeline however tall it is being drawn.
+    outerRefCallback: ((el: HTMLDivElement | null) => void) | undefined,
+    // The same, for the row that opens the fold: there the animated element is the row's content
+    // inside `MessageView`, because the folded line above it must not move.
+    foldBodyRef: ((el: HTMLElement | null) => void) | undefined,
     refCallback: (el: HTMLDivElement | null) => void,
 }) => {
     const { message, onForkMessage, forkTarget } = props;
@@ -432,7 +446,7 @@ const ChatRow = React.memo((props: {
         ? { height: props.constrainedHeightPx, overflow: 'hidden', flexShrink: 0 } as React.CSSProperties
         : rowOuterStyle;
     return (
-        <div style={outerStyle}>
+        <div ref={props.outerRefCallback} style={outerStyle}>
             <div ref={props.refCallback} style={rowInnerStyle}>
                 <MessageView
                     message={message}
@@ -455,6 +469,7 @@ const ChatRow = React.memo((props: {
                     foldSteps={props.foldSteps}
                     foldSnapshot={props.foldSnapshot}
                     onToggleFold={props.onToggleFold}
+                    foldBodyRef={props.foldBodyRef}
                 />
             </div>
         </div>
@@ -465,13 +480,8 @@ type PendingJump = {
     key: string;
     nonce: number;
     // 'center': minimap jump. 'top': internal band snap (viewport top lands
-    // at the entry's top edge plus the spinner peek). 'keep': hold the entry's
-    // top edge at `topInsetPx` below the viewport top, which is where the
-    // reader last saw it — a fold toggle changes the height of the turn under
-    // the line they just tapped, and without this the line leaves from under
-    // their finger while the answer below stays pinned to the bottom.
-    align: 'center' | 'top' | 'keep';
-    topInsetPx?: number;
+    // at the entry's top edge plus the spinner peek).
+    align: 'center' | 'top';
     /** Commits this jump has been positioned on without the write taking. */
     attempts?: number;
     // Internal repositions skip the shake feedback and logging.
@@ -485,6 +495,9 @@ type PendingMeasureOps = {
     pinToBottom: boolean;
     // Identity token: the drain effect only consumes ops for ITS commit.
     heights: Record<string, number>;
+    // The raw distance this commit's heights were absorbed into. The next batch
+    // adds to this rather than reading a position back out of the document.
+    scrollDistancePx?: number;
 };
 
 const ChatListInternal = React.memo((props: {
@@ -551,18 +564,28 @@ const ChatListInternal = React.memo((props: {
         taskCompletedAt: props.taskCompleted,
     });
 
-    // Which turns are showing their process and which are showing one line. A folded row leaves the
-    // key set entirely rather than rendering as null: this list sizes rows from a height model that
-    // survives a re-render, so an element left in place would keep the height it was once given.
+    // Which turns are showing their process and which are showing one line.
+    //
+    // A folded row stays in the key set and takes no height there (see `collapsedKeys`), rather than
+    // leaving the set: this list sizes rows from a model that outlives a render, so a row that left
+    // would have to be measured again on its way back and everything below it would move while it
+    // happened. A row that is still there at zero height keeps its measurement, and can grow back
+    // from it — which is also what an expand animation needs to know its endpoint.
     const folding = useTurnFolding({ foldById: turns.foldById, enabled: foldTurnProcess });
-    const visibleMessages = React.useMemo(
-        () => folding.hiddenIds.size === 0
-            ? listedMessages
-            : listedMessages.filter((message) => !folding.hiddenIds.has(message.id)),
-        [listedMessages, folding.hiddenIds]
+    // The height animation a fold plays, and the rows it is playing on. Owns no layout of its own:
+    // it writes heights onto the elements it is given and reads them back, nothing else.
+    const foldAnim = useFoldAnimation();
+    // Read by the measurement pipeline, which runs from observer callbacks rather than a render.
+    const hiddenIdsRef = useRef(folding.hiddenIds);
+    hiddenIdsRef.current = folding.hiddenIds;
+    // What a tap on a fold line needs to know about that line, keyed by the row the line sits on:
+    // which rows the fold takes, and whether the line's own row is one of them. Filled by the rows
+    // loop below, so that `handleToggleFold` can stay stable for every row's memo.
+    const foldTapRef = useRef<Map<string, { hiddenIds: readonly string[]; keepsRow: boolean; folded: boolean }>>(
+        new Map(),
     );
-    const visibleMessagesRef = useRef(visibleMessages);
-    visibleMessagesRef.current = visibleMessages;
+    const listedMessagesRef = useRef(listedMessages);
+    listedMessagesRef.current = listedMessages;
 
     // Compute which user-text messages should show sender name labels.
     // In the newest-first array (index 0 = newest), show name when the next item
@@ -571,15 +594,15 @@ const ChatListInternal = React.memo((props: {
     const senderVisibility = React.useMemo(() => {
         if (!props.isSharedSession) return null;
         const map = new Map<string, boolean>();
-        for (let i = 0; i < visibleMessages.length; i++) {
-            const msg = visibleMessages[i];
+        for (let i = 0; i < listedMessages.length; i++) {
+            const msg = listedMessages[i];
             if (msg.kind !== 'user-text') continue;
-            const nextMsg = visibleMessages[i + 1];
+            const nextMsg = listedMessages[i + 1];
             const nextSentBy = nextMsg?.kind === 'user-text' ? nextMsg.sentBy : null;
             map.set(msg.id, msg.sentBy !== nextSentBy);
         }
         return map;
-    }, [visibleMessages, props.isSharedSession]);
+    }, [listedMessages, props.isSharedSession]);
 
     // For each agent message, the user prompt that FOLLOWS it in time (nearest
     // lower index in the newest-first array) — the fork truncation target for
@@ -587,8 +610,8 @@ const ChatListInternal = React.memo((props: {
     const forkTargetsById = React.useMemo(() => {
         const map = new Map<string, UserTextMessage | null>();
         let nextUserMessage: UserTextMessage | null = null;
-        for (let i = 0; i < visibleMessages.length; i++) {
-            const msg = visibleMessages[i];
+        for (let i = 0; i < listedMessages.length; i++) {
+            const msg = listedMessages[i];
             if (msg.kind === 'user-text') {
                 nextUserMessage = msg;
             } else if (msg.kind === 'agent-text') {
@@ -596,39 +619,39 @@ const ChatListInternal = React.memo((props: {
             }
         }
         return map;
-    }, [visibleMessages]);
+    }, [listedMessages]);
 
     // Loaded user messages in ascending (oldest→newest) order, carrying their index into the
-    // newest-first `visibleMessages`. The minimap item source.
+    // newest-first `listedMessages`. The minimap item source.
     const loadedUserMessages = React.useMemo<LoadedUserMessage[]>(() => {
-        return visibleMessages
+        return listedMessages
             .map((message, index) => message.kind === 'user-text'
                 ? { message, index }
                 : null)
             .filter((item): item is LoadedUserMessage => item !== null)
             .reverse();
-    }, [visibleMessages]);
+    }, [listedMessages]);
 
     // AskUserQuestion calls the rail places a marker for, in the same ascending order as
     // `loadedUserMessages`. Sub-agent (sidechain) questions live inside their parent's children and
     // are never top-level list rows, so they are not jump targets either.
     const loadedQuestionMessages = React.useMemo<MinimapMessage[]>(() => {
-        return visibleMessages
+        return listedMessages
             .filter(isAskUserQuestionToolCall)
             .map(toAskUserQuestionMessage)
             .filter((message): message is AskUserQuestionMessage => message !== null)
             .reverse();
-    }, [visibleMessages]);
+    }, [listedMessages]);
 
     // `preview_html` calls the rail places a marker for, in the same ascending order. Only calls
     // that produced a document qualify — see buildPreviewHtmlMessage.
     const loadedPreviewMessages = React.useMemo<MinimapMessage[]>(() => {
-        return visibleMessages
+        return listedMessages
             .filter(isPreviewHtmlToolCall)
             .map(toPreviewHtmlMessage)
             .filter((message): message is PreviewHtmlMessage => message !== null)
             .reverse();
-    }, [visibleMessages]);
+    }, [listedMessages]);
 
     // Merge offline-cached landmarks with the loaded ones so the minimap can show prompts,
     // questions and previews that live in the persistent cache but haven't been paged into the
@@ -670,8 +693,8 @@ const ChatListInternal = React.memo((props: {
     // row the rail draws a mark for counts, so the landmark the rail is told to light is always one it
     // has; the rail's current landmark is read off these and the rows on screen, see `currentLandmark`.
     const landmarkRows = React.useMemo(
-        () => railLandmarkRows(visibleMessages, new Set(minimapItems.map((item) => item.message.id))),
-        [visibleMessages, minimapItems],
+        () => railLandmarkRows(listedMessages, new Set(minimapItems.map((item) => item.message.id))),
+        [listedMessages, minimapItems],
     );
     const landmarkRowsRef = useRef(landmarkRows);
     landmarkRowsRef.current = landmarkRows;
@@ -681,12 +704,12 @@ const ChatListInternal = React.memo((props: {
 
     // Chronological (oldest-first) entry keys for the layout model.
     const entryKeys = React.useMemo(() => {
-        const keys = new Array<string>(visibleMessages.length);
-        for (let i = 0; i < visibleMessages.length; i++) {
-            keys[visibleMessages.length - 1 - i] = visibleMessages[i].id;
+        const keys = new Array<string>(listedMessages.length);
+        for (let i = 0; i < listedMessages.length; i++) {
+            keys[listedMessages.length - 1 - i] = listedMessages[i].id;
         }
         return keys;
-    }, [visibleMessages]);
+    }, [listedMessages]);
 
     // Session restore state, read once at mount (the component remounts per session).
     const [restored] = useState(() => sessionRestoreStates.get(props.sessionId));
@@ -695,8 +718,13 @@ const ChatListInternal = React.memo((props: {
     measuredHeightsRef.current = measuredHeights;
 
     const layout = React.useMemo(
-        () => buildLayoutModel({ keys: entryKeys, measuredHeightsByKey: measuredHeights, estimateHeightPx: ROW_ESTIMATE_PX }),
-        [entryKeys, measuredHeights]
+        () => buildLayoutModel({
+            keys: entryKeys,
+            measuredHeightsByKey: measuredHeights,
+            estimateHeightPx: ROW_ESTIMATE_PX,
+            collapsedKeys: folding.hiddenIds,
+        }),
+        [entryKeys, measuredHeights, folding.hiddenIds]
     );
     const layoutRef = useRef(layout);
     layoutRef.current = layout;
@@ -760,14 +788,14 @@ const ChatListInternal = React.memo((props: {
 
     const [showScrollButton, setShowScrollButton] = useState(false);
     const visibilityControllerRef = useRef<ReturnType<typeof createScrollButtonVisibilityController> | null>(null);
-    const lastSeenTimestampRef = useRef<number>(visibleMessages[0]?.createdAt ?? 0);
+    const lastSeenTimestampRef = useRef<number>(listedMessages[0]?.createdAt ?? 0);
     const isLoadingMoreRef = useRef(false);
     const [isLocating, setIsLocating] = useState(false);
 
     // Calculate unread count: count messages newer than the last seen timestamp
     let unreadCount = 0;
     if (showScrollButton) {
-        for (const msg of visibleMessages) {
+        for (const msg of listedMessages) {
             if (msg.createdAt > lastSeenTimestampRef.current) {
                 unreadCount++;
             } else {
@@ -777,6 +805,25 @@ const ChatListInternal = React.memo((props: {
     }
 
     // ---- Coordinate helpers ----
+
+    // The distance the scroller was TOLD to be at, kept apart from the distance it reports: a write
+    // the engine rounds (fractional scrollTop, a range it has not laid out, either end) is remembered
+    // as an intent, and reads answer with the intent while the DOM still holds the rounding. Every
+    // correction below then starts from the intent, so a rounding is spent once instead of becoming
+    // the next correction's starting point — which is what a drift is made of. The record dies the
+    // moment the DOM reports something else, i.e. as soon as the reader scrolls.
+    const scrollDistanceRef = useRef(createScrollDistanceController({
+        getElement: () => scrollerElRef.current,
+        onDistanceChange: (rawDistancePx) => {
+            const scroller = scrollerElRef.current;
+            if (!scroller || scroller.clientHeight === 0) return;
+            lastVisibleRawRef.current = rawDistancePx;
+            lastSelfWriteRef.current = { rawPx: rawDistancePx, atMs: performance.now() };
+            updateViewportRef.current(rawDistancePx, scroller.clientHeight);
+        },
+    }));
+    const scrollDistance = scrollDistanceRef.current;
+    const getRequestedRawDistance = () => scrollDistance.getRequestedDistancePx();
 
     const getRawDistance = () => {
         const scroller = scrollerElRef.current;
@@ -791,16 +838,24 @@ const ChatListInternal = React.memo((props: {
     // Content-space distance (raw + canvas bottom offset): stable across
     // renormalizations — what session restore stores and re-asserts.
     const toContentDistance = (raw: number) => raw + canvasBottomOffsetRef.current;
-    const fromModelDistance = (model: number) => Math.max(0, model + footerHeightRef.current - canvasBottomOffsetRef.current);
+    // Model distance → the viewport distance that shows it. Unclamped: what the scroll range can
+    // carry is a separate question, answered by splitViewportDistance.
+    const fromModelDistance = (model: number) => model + footerHeightRef.current - canvasBottomOffsetRef.current;
     const setRawDistance = (raw: number) => {
         const scroller = scrollerElRef.current;
         // Hidden: the write would be dropped and the 0 read-back would corrupt
         // atBottom (a boxless scroller always reads "at bottom").
         if (!scroller || scroller.clientHeight === 0) return;
-        scroller.scrollTop = raw === 0 ? 0 : -raw;
-        lastSelfWriteRef.current = { rawPx: Math.abs(scroller.scrollTop), atMs: performance.now() };
-        atBottomRef.current = Math.abs(scroller.scrollTop) <= SCROLL_THRESHOLD;
-        lastVisibleRawRef.current = Math.abs(scroller.scrollTop);
+        // The controller owns the write so that what the engine does with it is
+        // remembered rather than lost (see scrollDistanceRef above).
+        const actual = scrollDistance.setDistancePx(raw);
+        // A write of our own supersedes the guard an earlier write armed: that guard exists to catch
+        // the engine re-deriving an offset behind us, and it cannot tell a deliberate later write
+        // from one of those — it would put its own stale value back, over the newer one.
+        writeVerifierRef.current = null;
+        lastSelfWriteRef.current = { rawPx: actual, atMs: performance.now() };
+        atBottomRef.current = actual <= SCROLL_THRESHOLD;
+        lastVisibleRawRef.current = actual;
     };
 
     const cancelScrollAnimation = () => {
@@ -896,16 +951,42 @@ const ChatListInternal = React.memo((props: {
         return raw > 1 && toModelDistance(raw) + scroller.clientHeight
             > layoutNow.totalHeightPx + BAND_SNAP_THRESHOLD_PX;
     };
-    const isRenormDirty = () =>
-        canvasBottomOffsetRef.current !== 0
-        || canvasHeightRef.current !== desiredCanvasHeightPx()
-        || isViewportInBand();
+    // The viewport's place in the model is ONE number — the scroll distance plus the canvas bottom
+    // offset — but it is split between them: the scroll range carries only what it has room for and
+    // the offset carries the rest. That is what lets a jump land on a row the list has no room left
+    // to scroll to, at the newest message and at the canvas's own top edge alike. Renormalization
+    // moves the split, never the sum, so the pixels stay put either way.
+    const maxRawDistance = () => {
+        const scroller = scrollerElRef.current;
+        return scroller ? Math.max(0, scroller.scrollHeight - scroller.clientHeight) : 0;
+    };
+    const splitForScroller = (wantedDistancePx: number) => splitViewportDistance({
+        wantedDistancePx,
+        maxDistancePx: maxRawDistance(),
+    });
+    // Whether the offset has somewhere left to go. It is there because the scroll range could not
+    // take it, so once renormalization has carried as much as the range will hold, what remains is
+    // the offset's resting value: running the loop again would only put the same number back.
+    const cboHasRoom = () => {
+        const cbo = canvasBottomOffsetRef.current;
+        if (cbo === 0) return false;
+        return splitForScroller(getRequestedRawDistance() + cbo).carriedPx !== cbo;
+    };
+    // Whether renormalizing would change anything — the test `performRenorm` makes for itself, so a
+    // caller can skip the commit it would otherwise no-op through.
+    const canRenormalize = () =>
+        canvasHeightRef.current !== desiredCanvasHeightPx() || cboHasRoom();
 
-    // Re-sync the canvas to the model and rewrite scrollTop equivalently.
+    const isRenormDirty = () => canRenormalize() || isViewportInBand();
+
+    // Re-sync the canvas to the model and move as much of the viewport's distance as the scroll
+    // range can carry out of the offset and into the scroll distance.
     // Screen positions are invariant: a row sits (topFromBottom − offset)
     // above the canvas bottom and the viewport sits (raw − footer) above it,
     // so raw += offset while the offset returns to 0 keeps every visible
-    // pixel in place. MUST NOT run from inside a React commit (flushSync).
+    // pixel in place — and the part of the offset the range cannot take stays
+    // put and keeps those pixels in place exactly the same way.
+    // MUST NOT run from inside a React commit (flushSync).
     const performRenorm = () => {
         const scroller = scrollerElRef.current;
         // Hidden: the equivalent scrollTop rewrite would be dropped, silently
@@ -915,7 +996,11 @@ const ChatListInternal = React.memo((props: {
         const cboPrev = canvasBottomOffsetRef.current;
         const nextCanvasHeight = desiredCanvasHeightPx();
         if (cboPrev === 0 && nextCanvasHeight === canvasHeightRef.current) return;
-        const rawTarget = Math.max(0, getRawDistance() + cboPrev);
+        // The distance is OURS, not the scroller's: the engine keeps at most a rounded
+        // scrollTop, and re-deriving this sum from that rounded value throws the fractional
+        // part away every time we renormalize — a renorm happens on every fold, so the fold
+        // line would creep by one rounding step per toggle.
+        const wanted = getRequestedRawDistance() + cboPrev;
         renormCountRef.current += 1;
         canvasBottomOffsetRef.current = 0;
         canvasHeightRef.current = nextCanvasHeight;
@@ -925,9 +1010,13 @@ const ChatListInternal = React.memo((props: {
         });
         // Reading scrollHeight forces layout on the committed styles, so the
         // write below lands against the new geometry — all before paint.
-        const clamped = Math.min(rawTarget, Math.max(0, scroller.scrollHeight - scroller.clientHeight));
-        if (clamped !== getRawDistance()) setRawDistance(clamped);
-        armWriteVerifier(clamped);
+        const { rawDistancePx, carriedPx } = splitForScroller(wanted);
+        if (rawDistancePx !== getRawDistance()) setRawDistance(rawDistancePx);
+        if (carriedPx !== 0) {
+            canvasBottomOffsetRef.current = carriedPx;
+            flushSync(() => setCanvasBottomOffsetPx(carriedPx));
+        }
+        armWriteVerifier(rawDistancePx);
         updateViewportRef.current(Math.abs(scroller.scrollTop), scroller.clientHeight);
     };
 
@@ -995,7 +1084,9 @@ const ChatListInternal = React.memo((props: {
             && toModelDistance(raw) + scroller.clientHeight > layoutNow.totalHeightPx + 50) {
             force = true;
         }
-        if (force) {
+        // An offset resting outside the range is not a reason to re-base: the commit would put the
+        // same number back, once per scroll event.
+        if (force && canRenormalize()) {
             forcedRenormCountRef.current += 1;
             performRenorm();
         }
@@ -1151,21 +1242,57 @@ const ChatListInternal = React.memo((props: {
     const preMeasureLayoutRef = useRef<LayoutModel | null>(null);
     const committedLayoutRef = useRef<LayoutModel>(layout);
 
-    // Apply a batch of measured row heights: update the height cache, rebuild
-    // the model, and fold any size change BELOW the viewport into the canvas
-    // bottom offset (bottom-anchored coordinates shift only from below; the
-    // offset replaces the scrollTop write of the pre-freeze design, so the
-    // scroller's geometry stays untouched mid-gesture). At the bottom, stage a
-    // pin back to 0 instead. Runs pre-paint in every path.
+    // Apply a batch of measured row heights: update the height cache, rebuild the model, and move the
+    // viewport by the one number the heights below the reader's line add up to.
+    //
+    // The rule is the reference's, and the whole of it is `heightDeltaPx`. Every measured entry whose
+    // bottom edge sits at or below the absorption line contributes its height delta, and the viewport
+    // moves by that sum and nothing else. Which makes the absorption line the load-bearing value: it
+    // is the bottom edge of the topmost MEASURED entry inside the viewport, not the viewport's own
+    // edge. A row that is on screen and measured is one the reader can see, so a change below it is a
+    // change they did not ask to look at, and holding that row still is what keeps the answer below
+    // it from sliding out from under the line they are reading at.
+    //
+    // Every term is a number we own: the line comes from the model, the deltas come from the model,
+    // and the distance the sum is added to is the distance we last asked the scroller for, never the
+    // one it reported back. That last part is the difference between a correction and a drift.
     const applyMeasuredHeights = (batch: Map<string, { element: HTMLElement; heightPx: number }>, useFlushSyncCommit: boolean): boolean => {
         const current = measuredHeightsRef.current;
         const layoutNow = layoutRef.current;
-        let next = current;
+        const viewportNow = viewportRef.current;
         const rawNow = getRawDistance();
-        const referenceModel = toModelDistance(rawNow);
-        let deltaBelow = 0;
+        const restoreMode = pendingRestoreRef.current != null;
+        const withinGrace = performance.now() - lastUserInputAtRef.current < USER_SCROLL_GRACE_MS;
+        const pinToBottom = !restoreMode && atBottomRef.current && (!withinGrace || rawNow === 0);
+        // A pending jump is about to place the viewport itself, out of a layout built from this very
+        // batch, so no measurement here is "below the viewport" in a sense the correction may act on
+        // and taking one for that would move the screen twice. A restore is the same: the saved
+        // offset is the truth, and the reader's position is not ours to correct on the way there.
+        const viewportOwned = pendingJumpRef.current != null || restoreMode;
+        let absorptionLinePx = viewportNow.distanceFromBottomPx;
+        if (!viewportOwned) {
+            const anchorKey = pickCompensationAnchor({
+                previousLayout: layoutNow,
+                nextLayout: layoutNow,
+                distanceFromBottomPx: absorptionLinePx,
+                viewportHeightPx: viewportNow.viewportHeightPx,
+                measuredHeightsByKey: current,
+                collapseEmptyRows: true,
+            });
+            const anchorIndex = anchorKey == null ? null : layoutNow.indexByKey.get(anchorKey);
+            // Nothing measured on screen: fall back to the viewport's own edge. Content above the line
+            // can then slide rather than stay put, but the line is still ours and nothing accumulates.
+            if (anchorIndex != null) absorptionLinePx = layoutNow.bottomOffsetsPx[anchorIndex] ?? absorptionLinePx;
+        }
+        let next = current;
+        let heightDeltaPx = 0;
+        // A row whose height is being animated is one the observer has no opinion about: it reports
+        // the body at the size the animation has drawn so far, frame after frame, and every one of
+        // those would look like a measurement. The animation settles the row itself when it ends.
+        const suppressedKeys = foldAnim.suppressedKeysRef.current;
         for (const [key, { element, heightPx }] of batch) {
             if (rowElsByKeyRef.current.get(key) !== element) continue;
+            if (suppressedKeys.has(key)) continue;
             const height = Math.max(1, heightPx);
             if (next[key] === height) continue;
             if (next === current) next = { ...current };
@@ -1173,37 +1300,62 @@ const ChatListInternal = React.memo((props: {
             const index = layoutNow.indexByKey.get(key);
             if (index == null) continue;
             const deltaVsLayout = height - (layoutNow.heightsPx[index] ?? height);
-            if (deltaVsLayout !== 0 && (layoutNow.bottomOffsetsPx[index] ?? 0) <= referenceModel) {
-                deltaBelow += deltaVsLayout;
+            if (deltaVsLayout !== 0 && !viewportOwned && (layoutNow.bottomOffsetsPx[index] ?? 0) <= absorptionLinePx) {
+                heightDeltaPx += deltaVsLayout;
             }
         }
         if (next === current) return false;
 
-        const restoreMode = pendingRestoreRef.current != null;
-        const withinGrace = performance.now() - lastUserInputAtRef.current < USER_SCROLL_GRACE_MS;
-        const pinToBottom = !restoreMode && atBottomRef.current && (!withinGrace || rawNow === 0);
+        const staged = pendingOpsRef.current;
+        // The distance this commit is added to: the last one we asked for. With nothing to add the
+        // previous intent is kept rather than re-derived, so even a batch that changes no height
+        // cannot pull one of the engine's roundings back into the arithmetic.
+        const intentRawPx = staged?.scrollDistancePx ?? getRequestedRawDistance();
+        const wantedRawPx = Math.max(0, intentRawPx + heightDeltaPx);
+        const movingDistance = !viewportOwned && !pinToBottom && (heightDeltaPx !== 0 || staged != null);
+        let nextRawPx = rawNow;
         let nextCbo = canvasBottomOffsetRef.current;
-        if (!restoreMode && !pinToBottom && deltaBelow !== 0) {
-            nextCbo += deltaBelow;
+        if (movingDistance) {
+            // What the scroll range cannot carry the canvas bottom offset carries, and the two add up
+            // to the distance asked for — so the viewport's place in the model is the same either way,
+            // and a distance the range has no room for still lands where it was asked to.
+            const split = splitForScroller(wantedRawPx);
+            nextRawPx = split.rawDistancePx;
+            nextCbo += split.carriedPx;
         }
-
-        measuredHeightsRef.current = next;
-        preMeasureLayoutRef.current ??= layoutNow;
-        const nextLayout = buildLayoutModel({ keys: layoutNow.keys, measuredHeightsByKey: next, estimateHeightPx: ROW_ESTIMATE_PX });
+        const nextLayout = buildLayoutModel({
+            keys: layoutNow.keys,
+            measuredHeightsByKey: next,
+            estimateHeightPx: ROW_ESTIMATE_PX,
+            // The same folds the render builds its layout with: without them a measurement commit
+            // would hand every folded row its height back, and the viewport would move by the whole
+            // of the fold on the next thing that measured anything.
+            collapsedKeys: hiddenIdsRef.current,
+        });
         const targetModel = restoreMode
             ? Math.max(0, (pendingRestoreRef.current ?? 0) - footerHeightRef.current)
             : pinToBottom
                 ? Math.max(0, nextCbo - footerHeightRef.current)
-                : Math.max(0, rawNow - footerHeightRef.current + nextCbo);
+                : Math.max(0, nextRawPx - footerHeightRef.current + nextCbo);
         const nextViewport = nextViewportState({
-            current: viewportRef.current,
+            current: viewportNow,
             layout: nextLayout,
             distanceFromBottomPx: targetModel,
-            viewportHeightPx: viewportRef.current.viewportHeightPx,
+            viewportHeightPx: viewportNow.viewportHeightPx,
             overscanCount: OVERSCAN_ROWS,
         });
-        pendingOpsRef.current = { restore: restoreMode, pinToBottom, heights: next };
+        pendingOpsRef.current = {
+            restore: restoreMode,
+            pinToBottom,
+            heights: next,
+            scrollDistancePx: pinToBottom ? 0 : wantedRawPx,
+        };
         canvasBottomOffsetRef.current = nextCbo;
+        // The canvas is frozen, so a measurement cannot change the scroll range and no engine-side
+        // adjustment can follow the commit. (The reference guards against one here with
+        // `preserveScrollPositionForNextLayout`; that guard belongs with the renormalization work that
+        // unfreezes the canvas.)
+        if (movingDistance) setRawDistance(nextRawPx);
         const commit = () => {
             setMeasuredHeights(next);
             setCanvasBottomOffsetPx(nextCbo);
@@ -1328,7 +1480,7 @@ const ChatListInternal = React.memo((props: {
     onActiveMessageIdChangeRef.current = props.onActiveMessageIdChange;
 
     const recomputeActiveIds = useCallback(() => {
-        const items = visibleMessagesRef.current;
+        const items = listedMessagesRef.current;
         const indexById = new Map<string, number>();
         items.forEach((message, index) => indexById.set(message.id, index));
 
@@ -1615,7 +1767,7 @@ const ChatListInternal = React.memo((props: {
     maybeLoadMoreRef.current = maybeLoadMore;
     React.useEffect(() => {
         maybeLoadMoreRef.current();
-    }, [visibleMessages]);
+    }, [listedMessages]);
 
     // ---- Jump to a minimap prompt ----
 
@@ -1640,7 +1792,7 @@ const ChatListInternal = React.memo((props: {
     // target and position it instantly from the model — the same single path
     // whether or not the row happens to be mounted. No animation, ever.
     const startJump = (target: MinimapMessage): boolean => {
-        const message = visibleMessagesRef.current.find((m) => messageMatchesTarget(m, target));
+        const message = listedMessagesRef.current.find((m) => messageMatchesTarget(m, target));
         if (!message) return false;
         cancelScrollAnimation();
         pendingRestoreRef.current = null;
@@ -1671,33 +1823,31 @@ const ChatListInternal = React.memo((props: {
     const maybeBandSnapToTopRef = useRef(maybeBandSnapToTop);
     maybeBandSnapToTopRef.current = maybeBandSnapToTop;
 
-    // Unfolding a turn makes the rows under its fold line reappear, and collapsing them takes them
-    // away again. Either way the turn grows or shrinks BELOW the line the reader just tapped, and a
-    // bottom-anchored list answers that by pushing everything above the answer up — the line leaves
-    // from under their finger. So the tap is a jump: it holds the row it was made on at the exact
-    // height it had on screen. The jump re-measures the rows it is about to mount before it lands,
-    // which a one-shot scroll correction cannot do.
+    // A tap on the fold line is nothing but a height change: the rows below the line take no height,
+    // or take theirs back, and the layout effect absorbs exactly that much into the viewport (see
+    // `applyMeasuredHeights`, which the layout effect shares its rule with). Nothing here reads the
+    // row's position on screen and nothing writes the scroller — reading a position back and aiming
+    // for it is what turned every tap into a fresh chance to import the engine's rounding, and what
+    // made the line creep a little further with each one.
+    //
+    // The animation is the same heights walked down (or back up) in a couple of hundred
+    // milliseconds, on the rows themselves: it changes where nothing ends up — the fold is in the
+    // model from the first frame, so the layout effect has already absorbed all of it — and it
+    // cannot move the line the reader tapped, because every row it takes lies below that line and
+    // the line's own row animates the content hanging under it (see `useFoldAnimation`).
     const handleToggleFold = React.useCallback((headerId: string) => {
-        const row = rowElsByKeyRef.current.get(headerId);
-        const scroller = scrollerElRef.current;
-        if (row && scroller) {
-            const topInsetPx = row.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
-            const jump: PendingJump = {
-                key: headerId,
-                nonce: ++jumpNonceRef.current,
-                align: 'keep',
-                topInsetPx,
-                silent: true,
-            };
-            // Set before the toggle commits, so the entry-set effect below defers to the jump
-            // instead of compensating the change on its own.
-            pendingJumpRef.current = jump;
-            setPendingJump(jump);
+        const tap = foldTapRef.current.get(headerId);
+        if (tap) {
+            // The line's own row is one of the rows the fold takes — unless the fold leaves it
+            // standing, in which case its content stays and only the process below it goes.
+            const keys = tap.keepsRow ? tap.hiddenIds : [headerId, ...tap.hiddenIds];
+            // The state the row is in *now* decides which way the bodies are about to go.
+            foldAnim.start({ keys, direction: tap.folded ? 'expanding' : 'collapsing' });
         }
         folding.toggle(headerId);
         // `folding.toggle` and not `folding`: the object is rebuilt every render, so depending on it
         // would hand every mounted row a new callback prop on every commit and defeat their memo.
-    }, [folding.toggle]);
+    }, [folding.toggle, foldAnim.start]);
 
     // The target of the in-flight jump. A second minimap click updates this so the running paging
     // loop retargets instead of the click being silently dropped.
@@ -1723,7 +1873,7 @@ const ChatListInternal = React.memo((props: {
                 if (state.messages.some((m) => messageMatchesTarget(m, current))) break;
                 const beforeOldestSeq = state.oldestSeq;
                 await props.onLoadMore?.();
-                // Let the store subscription flush into visibleMessagesRef before re-checking.
+                // Let the store subscription flush into listedMessagesRef before re-checking.
                 await new Promise<void>((resolve) => setTimeout(resolve, 0));
                 const loaded = storage.getState().sessionMessages[sessionIdRef.current];
                 if (!loaded) break;
@@ -1737,7 +1887,7 @@ const ChatListInternal = React.memo((props: {
             }
             const finalTarget = activeJumpTargetRef.current;
             if (finalTarget) {
-                // The store commit must reach visibleMessagesRef (a React render) before the jump
+                // The store commit must reach listedMessagesRef (a React render) before the jump
                 // can resolve the row — retry on a bounded schedule instead of a single tick.
                 const MAX_ATTEMPTS = 20; // ~1s at 50ms
                 for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
@@ -1757,12 +1907,7 @@ const ChatListInternal = React.memo((props: {
     const jumpDistanceFor = (jump: PendingJump, viewportHeightPx: number): number | null =>
         jump.align === 'center'
             ? distanceToCenterEntry({ layout, key: jump.key, viewportHeightPx })
-            : distanceToAlignEntryTop({
-                layout,
-                key: jump.key,
-                viewportHeightPx,
-                topInsetPx: jump.align === 'keep' ? jump.topInsetPx ?? 0 : BAND_PEEK_PX,
-            });
+            : distanceToAlignEntryTop({ layout, key: jump.key, viewportHeightPx, topInsetPx: BAND_PEEK_PX });
 
     // ---- Render-phase window overrides ----
     // A pending jump mounts its target in the SAME commit that requested it;
@@ -1815,10 +1960,13 @@ const ChatListInternal = React.memo((props: {
         ensureRenormLoop();
     }, [viewport.viewportHeightPx, headerInsetPx, layout.totalHeightPx, props.hasMore]);
 
-    // 1. Entry-set changes (new message, page prepend): keep the first
-    // measured on-screen row's top edge still. Prepends are naturally free in
-    // bottom-anchored coordinates (delta 0); appends below a scrolled-up
-    // viewport get compensated; at the bottom, glue to 0.
+    // 1. Layout changes nothing measured: a fold, a new message, a page
+    // prepend. Keep the first measured on-screen row's top edge still, which
+    // is the same rule `applyMeasuredHeights` applies to a measurement batch —
+    // what changed at or below the reader's line moves the viewport, what
+    // changed above it does not. Prepends are naturally free in bottom-anchored
+    // coordinates (delta 0); appends below a scrolled-up viewport get
+    // compensated; at the bottom, glue to 0.
     React.useLayoutEffect(() => {
         const previous = committedLayoutRef.current;
         const next = preMeasureLayoutRef.current ?? layout;
@@ -1842,6 +1990,7 @@ const ChatListInternal = React.memo((props: {
             distanceFromBottomPx: model,
             viewportHeightPx: scroller.clientHeight,
             measuredHeightsByKey: measuredHeightsRef.current,
+            collapseEmptyRows: true,
         });
         if (!anchorKey) return;
         const prevTop = entryTopFromBottom(previous, anchorKey);
@@ -1882,7 +2031,39 @@ const ChatListInternal = React.memo((props: {
         }
     });
 
-    // 3. Drain staged measurement ops right after the commit, before paint:
+    // 3. A fold's animation has just ended: measure the rows it was drawing.
+    //
+    // Their heights were the animation's to draw, so the observer's reports were set aside for the
+    // duration (see `applyMeasuredHeights`). What it ends on is the truth — by now the row the line
+    // sits on has given up its content, and the rows the fold took are gone entirely — so the model
+    // takes those heights here, in the same pre-paint pass. It has to: the model held the row at the
+    // height it had while opening, and the next measurement of it might be far away.
+    //
+    // Nothing moves because of it. The viewport holds a row by keeping the distance it was asked for
+    // in step with the sum of the heights at or below that row, and this measurement changes both by
+    // the same number — so the reading position the reader chose survives the fold, however many
+    // times they fold it.
+    React.useLayoutEffect(() => {
+        const settledRows = foldAnim.takeSettled();
+        if (settledRows == null) return;
+        const batch = new Map<string, { element: HTMLElement; heightPx: number }>();
+        for (const row of settledRows) {
+            const el = rowElsByKeyRef.current.get(row.key);
+            if (!el) continue;
+            // The border box the observer would have reported, unrounded: the row's own box — the
+            // element the observer watches, which the clip never reached — never the number the
+            // animation was writing, which was never a measurement of anything.
+            const heightPx = el.getBoundingClientRect().height;
+            if (heightPx > 0) batch.set(row.key, { element: el, heightPx });
+        }
+        if (batch.size > 0) applyMeasuredHeightsRef.current(batch, false);
+        // The clip has done its work: the rows still mounted go back to sizing themselves — read off
+        // the elements the animation kept, since the rows that stopped animating in this very commit
+        // have already had their refs taken away.
+        foldAnim.releaseKeys(settledRows);
+    }, [foldAnim.animatingIds]);
+
+    // 4. Drain staged measurement ops right after the commit, before paint:
     // re-assert a pending restore or pin back to the bottom. Everything else
     // was absorbed into the canvas bottom offset — no scroll write needed.
     React.useLayoutEffect(() => {
@@ -1897,7 +2078,7 @@ const ChatListInternal = React.memo((props: {
         if (isRenormDirty()) ensureRenormLoop();
     }, [measuredHeights]);
 
-    // 4. Commit the render-phase window remap after entry-set changes and
+    // 5. Commit the render-phase window remap after entry-set changes and
     // re-assert a pending restore (more content may make it reachable now).
     React.useLayoutEffect(() => {
         if (pendingJumpRef.current) return;
@@ -1907,7 +2088,7 @@ const ChatListInternal = React.memo((props: {
         if (!pendingOpsRef.current) reassertPendingRestoreRef.current();
     }, [entryKeys]);
 
-    // 5. Initial mount: apply the saved scroll offset before first paint, once
+    // 6. Initial mount: apply the saved scroll offset before first paint, once
     // the scroller exists (the empty gate can delay it past mount).
     const didInitialScrollRef = useRef(false);
     React.useLayoutEffect(() => {
@@ -1921,7 +2102,7 @@ const ChatListInternal = React.memo((props: {
         updateViewportRef.current(Math.abs(scroller.scrollTop), scroller.clientHeight);
     });
 
-    // 6. Execute a pending jump: the render override above already mounted the
+    // 7. Execute a pending jump: the render override above already mounted the
     // target; re-measure everything mounted synchronously, then position the
     // target from the (now exact for mounted rows) model — instantly.
     React.useLayoutEffect(() => {
@@ -1936,7 +2117,8 @@ const ChatListInternal = React.memo((props: {
         }
         // If measuring staged a commit, wait for it — this effect re-runs with
         // the rebuilt layout (deps) and positions against exact heights.
-        if (applyMeasuredHeightsRef.current(batch, false) || pendingOpsRef.current) return;
+        const staged = applyMeasuredHeightsRef.current(batch, false);
+        if (staged || pendingOpsRef.current) return;
         const modelDistance = jumpDistanceFor(jump, scroller.clientHeight);
         const clearJump = () => queueMicrotask(() => {
             if (pendingJumpRef.current === jump) pendingJumpRef.current = null;
@@ -1946,13 +2128,21 @@ const ChatListInternal = React.memo((props: {
             clearJump();
             return;
         }
-        const raw = modelDistance === 0 ? 0 : fromModelDistance(modelDistance);
+        const wantedRaw = modelDistance === 0 ? 0 : fromModelDistance(modelDistance);
+        const { rawDistancePx: raw, carriedPx: carried } = splitForScroller(wantedRaw);
         setRawDistance(raw);
         // The canvas is decoupled from the model and only resizes at renormalization points, so a
-        // position that needs more room than the canvas currently has is silently clamped — the
-        // write reads back short. Stay pending rather than clearing: this effect runs after every
-        // commit, and growing the canvas is a commit, so the next one lands it. A jump that never
-        // fits gives up instead of re-running forever.
+        // position past either end of the scroll range reads back short: there is no room left to
+        // scroll to the row, and no commit is coming that would make some. The offset takes exactly
+        // what the range cannot — it moves the model by that much and needs no room to do it — so
+        // the row lands here rather than waiting for a renormalization that would put the same
+        // offset back (see `cboHasRoom`). A write that is dropped anyway (a hidden scroller) still
+        // gets the retries below.
+        const nextOffset = canvasBottomOffsetRef.current + carried;
+        if (nextOffset !== canvasBottomOffsetRef.current) {
+            canvasBottomOffsetRef.current = nextOffset;
+            setCanvasBottomOffsetPx(nextOffset);
+        }
         jump.attempts = (jump.attempts ?? 0) + 1;
         if (Math.abs(getRawDistance() - raw) > JUMP_LAND_TOLERANCE_PX && jump.attempts < MAX_JUMP_ATTEMPTS) {
             ensureRenormLoop();
@@ -2038,7 +2228,7 @@ const ChatListInternal = React.memo((props: {
             onShow: () => {
                 setShowScrollButton((prev) => {
                     if (prev) return prev;
-                    lastSeenTimestampRef.current = visibleMessagesRef.current[0]?.createdAt ?? 0;
+                    lastSeenTimestampRef.current = listedMessagesRef.current[0]?.createdAt ?? 0;
                     return true;
                 });
             },
@@ -2146,9 +2336,19 @@ const ChatListInternal = React.memo((props: {
 
     const rows: React.ReactNode[] = [];
     for (let entryIndex = renderedRange.startIndex; entryIndex < renderedRange.endIndex; entryIndex++) {
-        const messageIndex = visibleMessages.length - 1 - entryIndex;
-        const item = visibleMessages[messageIndex];
+        const messageIndex = listedMessages.length - 1 - entryIndex;
+        const item = listedMessages[messageIndex];
         if (!item) continue;
+        // A row mid-fold is still the row itself, at whatever height the animation has drawn: that
+        // is what the reader is watching, and it is the same element either way.
+        const foldAnimating = foldAnim.animatingIds.has(item.id);
+        // Folded away: the row holds its place in the model at no height, and nothing else about it
+        // is mounted — no message view to lay out, no row for the observer to measure. Its height
+        // lives on in `measuredHeights`, which is where it grows back from.
+        if (!foldAnimating && folding.hiddenIds.has(item.id)) {
+            rows.push(<div key={item.id} aria-hidden style={{ height: 0, overflow: 'hidden' }} />);
+            continue;
+        }
         // Agent turns show the action bar only on their last text segment, and
         // only once the turn settled — a reply still being generated is not a
         // finished message. User messages always show it.
@@ -2166,6 +2366,17 @@ const ChatListInternal = React.memo((props: {
             answer: process?.answerId === item.id,
             landmark: isMinimapLandmarkRow(item),
         });
+        if (fold) {
+            foldTapRef.current.set(item.id, {
+                hiddenIds: process?.hiddenIds ?? [],
+                keepsRow: foldKeepsRow,
+                folded: fold.folded,
+            });
+        }
+        // While the fold is closing, the row the line sits on keeps its content — clipped away by
+        // the animation rather than taken away in a single frame. The fold is what the model already
+        // knows; this is only what the reader is shown while it happens.
+        const foldKeepsRowNow = foldKeepsRow || (foldAnimating && fold?.folded === true);
         // A running turn folds to its line alone, so the line says what the turn is doing. Once it
         // settles the answer is on screen and the line goes back to just its cost. The row the line
         // is drawn on is a candidate like any other — it is the turn's first step, and when it is the
@@ -2186,6 +2397,8 @@ const ChatListInternal = React.memo((props: {
         const canFork = !!props.onForkMessage && !props.isSharedSession
             && (item.kind === 'user-text' || isTurnEnd);
         const isNewestMessage = messageIndex === 0;
+        // Stable per row, so handing it to a row cannot cost the row its memo.
+        const foldAnimClipRef = foldAnimating ? foldAnim.clipRefFor(item.id) : undefined;
         // Never-measured rows mount height-constrained to the model estimate so
         // mounting can't shift anything; the newest message (streams/grows) and
         // the jump target (positioned from its real size) render natural.
@@ -2208,13 +2421,18 @@ const ChatListInternal = React.memo((props: {
                 currentUserId={props.currentUserId}
                 showSenderName={senderVisibility?.get(item.id) ?? false}
                 foldFolded={fold?.folded}
-                foldKeepsRow={foldKeepsRow}
+                foldKeepsRow={foldKeepsRowNow}
                 foldDivides={foldDivides}
                 foldSteps={fold?.steps}
                 foldSnapshot={foldSnapshot}
                 onToggleFold={handleToggleFold}
                 {...turnHeader}
                 constrainedHeightPx={constrainedHeightPx}
+                // The row the line is drawn on animates the content inside it; every other row
+                // animates whole. Only a row the animation is actually playing on gets an element,
+                // so the ref map holds the rows in flight and nothing else.
+                outerRefCallback={foldAnimating && !fold ? foldAnimClipRef : undefined}
+                foldBodyRef={foldAnimating && fold ? foldAnimClipRef : undefined}
                 refCallback={getRowRefCallback(item.id)}
             />
         );
@@ -2229,7 +2447,7 @@ const ChatListInternal = React.memo((props: {
 
     return (
         <View style={{ flex: 1 }}>
-            {visibleMessages.length === 0 ? (
+            {listedMessages.length === 0 ? (
                 // No rows to render yet — show the paging spinner centered (the
                 // session-level first-load spinner lives in SessionView).
                 <View style={{ flex: 1 }}>
@@ -2274,7 +2492,7 @@ const ChatListInternal = React.memo((props: {
 
             {/* Proxy scrollbar: shows the honest loaded height (no canvas
                 slack); the real scroller's native bar is hidden. */}
-            {visibleMessages.length > 0 && (
+            {listedMessages.length > 0 && (
                 <div ref={handleProxyEl} style={{ ...proxyScrollerStyle, width: proxyStripWidthPx() }}>
                     <div ref={handleProxyGhostEl} style={{ width: 1 }} />
                 </div>

@@ -72,6 +72,14 @@ export const MessageView = (props: {
   foldSnapshot?: string;
   /** Flip the fold on the turn this row opens. Stable, so list rows keep their props. */
   onToggleFold?: (headerId: string) => void;
+  /**
+   * The element a fold's height animation clips this row's content in (web only). A fold is a height
+   * change like any other, so the list animates it by writing heights onto one element — and that
+   * element has to hold the row's content and nothing else, or the folded line would slide with it
+   * (see `useFoldAnimation`). It is rendered for the whole life of a foldable line, so nothing inside
+   * the row is torn down and rebuilt when a fold opens or closes.
+   */
+  foldBodyRef?: (el: HTMLElement | null) => void;
 }) => {
   const { message, foldFolded, foldSnapshot, onToggleFold } = props;
   const foldSteps = props.foldSteps ?? 0;
@@ -103,26 +111,34 @@ export const MessageView = (props: {
     </View>
   ) : null;
 
+  const body = foldHidesRow ? null : <RenderBlock
+    message={props.message}
+    metadata={props.metadata}
+    sessionId={props.sessionId}
+    getMessageById={props.getMessageById}
+    isNewestMessage={props.isNewestMessage}
+    onFillInput={props.onFillInput}
+    readOnly={props.readOnly}
+    isSharedSession={props.isSharedSession}
+    currentUserId={props.currentUserId}
+    showSenderName={props.showSenderName}
+    onFork={props.onFork}
+    showActionBar={props.showActionBar}
+    forkLoading={props.forkLoading}
+    isTurnStart={props.isTurnStart}
+  />;
+
   return (
     <View style={styles.messageContainer} renderToHardwareTextureAndroid={true}>
       <View style={styles.messageContent}>
         {header}
-        {foldHidesRow ? null : <RenderBlock
-          message={props.message}
-          metadata={props.metadata}
-          sessionId={props.sessionId}
-          getMessageById={props.getMessageById}
-          isNewestMessage={props.isNewestMessage}
-          onFillInput={props.onFillInput}
-          readOnly={props.readOnly}
-          isSharedSession={props.isSharedSession}
-          currentUserId={props.currentUserId}
-          showSenderName={props.showSenderName}
-          onFork={props.onFork}
-          showActionBar={props.showActionBar}
-          forkLoading={props.forkLoading}
-          isTurnStart={props.isTurnStart}
-        />}
+        {/* Only on web, and only on a row that carries a fold: the wrapper keeps the flex column the
+            content used to sit in, so a row that folds lays out exactly as it did before. */}
+        {Platform.OS === 'web' && foldFolded !== undefined
+          // The declared ref type is the component instance, because that is what a ref is on
+          // native; on web it is the DOM element underneath, which is what the animation needs.
+          ? <View ref={props.foldBodyRef as unknown as React.Ref<View>} style={styles.foldBody}>{body}</View>
+          : body}
       </View>
     </View>
   );
@@ -768,6 +784,13 @@ const styles = StyleSheet.create((theme) => ({
   // margin), and it now sits outside both.
   turnHeaderRow: {
     paddingHorizontal: 16,
+  },
+  // The content of a row that carries a fold, on its own element so a fold can animate its height
+  // without touching the line above it. Nothing is set on it that a height could fight: the height
+  // and the clip are written by the animation, and cleared with it.
+  foldBody: {
+    flexDirection: 'column',
+    flexShrink: 0,
   },
   debugText: {
     color: theme.colors.agentEventText,
