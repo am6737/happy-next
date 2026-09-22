@@ -71,6 +71,7 @@ export interface TerminalGridViewProps {
   fontSize?: number;
   style?: StyleProp<ViewStyle>;
   onCellMetricsChange?: (metrics: TerminalGridCellMetrics) => void;
+  cursorVisible?: boolean;
 }
 
 function estimateCellMetrics(fontSize: number): CellMetrics {
@@ -295,6 +296,7 @@ export function TerminalGridView({
   fontSize = DEFAULT_TERMINAL_FONT_SIZE,
   style,
   onCellMetricsChange,
+  cursorVisible = true,
 }: TerminalGridViewProps) {
   const [metrics, setMetrics] = useState<CellMetrics>(() => estimateCellMetrics(fontSize));
   const measuredMetricsRef = useRef<TerminalGridCellMetrics | null>(null);
@@ -401,7 +403,7 @@ export function TerminalGridView({
             styleEpoch={resolver.themeKey}
           />
         ))}
-        {!state.cursor.hidden && <View pointerEvents="none" style={cursorStyle} />}
+        {!state.cursor.hidden && cursorVisible && <View pointerEvents="none" style={cursorStyle} />}
       </View>
     </View>
   );

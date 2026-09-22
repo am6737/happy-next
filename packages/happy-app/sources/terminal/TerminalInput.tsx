@@ -35,8 +35,10 @@ export interface TerminalInputHandle {
 interface TerminalInputProps {
   isKeyboardVisible: boolean;
   onFocus?: () => void;
+  onBlur?: () => void;
   onInput?: (data: string) => void;
   onTerminalKey?: (key: NativeTerminalKey) => void;
+  onPhysicalKey?: (event: { key: string; ctrlKey?: boolean; metaKey?: boolean; altKey?: boolean; shiftKey?: boolean }) => void;
   style?: StyleProp<TextStyle>;
 }
 
@@ -180,11 +182,12 @@ export function createTerminalTextInputState(): TerminalTextInputState {
 }
 
 export const TerminalInput = forwardRef<TerminalInputHandle, TerminalInputProps>(
-  function TerminalInput({ isKeyboardVisible, onFocus, onInput, onTerminalKey, style }, ref) {
+  function TerminalInput({ isKeyboardVisible, onFocus, onBlur, onInput, onTerminalKey, onPhysicalKey, style }, ref) {
     const inputRef = useRef<TextInput>(null);
     const isFocusedRef = useRef(false);
     const pendingFocusFrameRef = useRef<number | null>(null);
     const inputState = useMemo(() => createTerminalTextInputState(), []);
+    const lastTextChangeAtRef = useRef(0);
     const inputStyle = useMemo(() => [styles.input, style], [style]);
 
     const clearPendingFocus = useCallback(() => {
@@ -273,6 +276,7 @@ export const TerminalInput = forwardRef<TerminalInputHandle, TerminalInputProps>
 
     const handleChangeText = useCallback(
       (text: string) => {
+        lastTextChangeAtRef.current = Date.now();
         const change = inputState.receiveTextChange(text);
         if (change.data.length > 0) {
           onInput?.(change.data);
@@ -286,6 +290,14 @@ export const TerminalInput = forwardRef<TerminalInputHandle, TerminalInputProps>
 
     const handleKeyPress = useCallback(
       (event: NativeSyntheticEvent<TextInputKeyPressEventData>) => {
+        const nativeEvent = event.nativeEvent as TextInputKeyPressEventData & { ctrlKey?: boolean; metaKey?: boolean; altKey?: boolean; shiftKey?: boolean };
+        if (nativeEvent.ctrlKey || nativeEvent.metaKey || nativeEvent.altKey) {
+          onPhysicalKey?.(nativeEvent);
+          return;
+        }
+        if (isPrintableKey(event.nativeEvent.key) && Date.now() - lastTextChangeAtRef.current < 100) {
+          return;
+        }
         const change = inputState.receiveKeyPress(event.nativeEvent.key);
         if (change.key) {
           onTerminalKey?.(change.key);
@@ -297,7 +309,7 @@ export const TerminalInput = forwardRef<TerminalInputHandle, TerminalInputProps>
           resetNativeInput();
         }
       },
-      [inputState, onInput, onTerminalKey, resetNativeInput],
+      [inputState, onInput, onPhysicalKey, onTerminalKey, resetNativeInput],
     );
 
     return (
@@ -317,7 +329,10 @@ export const TerminalInput = forwardRef<TerminalInputHandle, TerminalInputProps>
         importantForAutofill="no"
         multiline={true}
         onChangeText={handleChangeText}
-        onBlur={handleBlur}
+        onBlur={() => {
+          handleBlur();
+          onBlur?.();
+        }}
         onFocus={handleFocus}
         onKeyPress={handleKeyPress}
         showSoftInputOnFocus={true}

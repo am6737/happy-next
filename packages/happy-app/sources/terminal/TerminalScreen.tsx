@@ -72,6 +72,18 @@ export const TerminalScreen = memo(({ machineId, terminalId, status, onTitle, on
     const [layout, setLayout] = useState<{ width: number; height: number } | null>(null);
     const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
     const [ctrlActive, setCtrlActive] = useState(false);
+    const [isInputFocused, setIsInputFocused] = useState(false);
+    const [cursorVisible, setCursorVisible] = useState(true);
+    const physicalKeyRef = useRef<string | null>(null);
+
+    useEffect(() => {
+        if (!isInputFocused) {
+            setCursorVisible(true);
+            return;
+        }
+        const timer = setInterval(() => setCursorVisible((visible) => !visible), 530);
+        return () => clearInterval(timer);
+    }, [isInputFocused]);
 
     const streamRef = useRef<TerminalStream | null>(null);
     const inputRef = useRef<TerminalInputHandle>(null);
@@ -162,10 +174,25 @@ export const TerminalScreen = memo(({ machineId, terminalId, status, onTitle, on
                     return;
                 }
             }
+            if (physicalKeyRef.current === data) {
+                physicalKeyRef.current = null;
+                return;
+            }
             stream.write(data);
         },
         [ctrlActive],
     );
+
+    const handlePhysicalKey = useCallback((event: { key: string; ctrlKey?: boolean; metaKey?: boolean; altKey?: boolean; shiftKey?: boolean }) => {
+        const stream = streamRef.current;
+        if (!stream || event.key.length !== 1) return;
+        if (event.ctrlKey || event.metaKey || event.altKey) {
+            stream.write(encodeTerminalKeyInput({ key: event.key, ctrl: event.ctrlKey, meta: event.metaKey, alt: event.altKey, shift: event.shiftKey }, { inputMode: stream.getInputMode() }));
+            physicalKeyRef.current = event.key;
+            return;
+        }
+        physicalKeyRef.current = null;
+    }, []);
 
     const handleTerminalKey = useCallback((key: NativeTerminalKey | string) => {
         const stream = streamRef.current;
@@ -190,15 +217,16 @@ export const TerminalScreen = memo(({ machineId, terminalId, status, onTitle, on
 
     return (
         <KeyboardAvoidingView behavior="padding" style={styles.root}>
-            <View style={[styles.gridArea, { backgroundColor }]} onLayout={handleLayout}>
+            <View style={[styles.gridArea, { backgroundColor }]}>
                 {/* Rendered even before a terminal exists: measuring the font is
                     what tells us the grid size, and the grid size is what the
                     stream needs to attach. Gating this on the size would mean
                     neither ever happens. */}
-                <Pressable onPress={focusKeyboard} style={styles.gridHitbox}>
+                <Pressable onPress={focusKeyboard} onLayout={handleLayout} style={styles.gridHitbox}>
                     <TerminalGridView
                         state={viewport ?? UNMEASURED_VIEWPORT}
                         xtermTheme={xtermTheme}
+                        cursorVisible={cursorVisible}
                         onCellMetricsChange={setCellMetrics}
                     />
                 </Pressable>
@@ -222,7 +250,10 @@ export const TerminalScreen = memo(({ machineId, terminalId, status, onTitle, on
                     ref={inputRef}
                     isKeyboardVisible={isKeyboardVisible}
                     onInput={handleInput}
+                    onFocus={() => setIsInputFocused(true)}
+                    onBlur={() => setIsInputFocused(false)}
                     onTerminalKey={handleTerminalKey}
+                    onPhysicalKey={handlePhysicalKey}
                 />
             </View>
 
@@ -255,6 +286,7 @@ export const TerminalScreen = memo(({ machineId, terminalId, status, onTitle, on
 
 const styles = StyleSheet.create({
     root: {
+        backgroundColor: '#1E1E1E',
         flex: 1,
     },
     gridArea: {
@@ -262,6 +294,7 @@ const styles = StyleSheet.create({
     },
     gridHitbox: {
         flex: 1,
+        margin: 12,
     },
     overlay: {
         alignItems: 'center',

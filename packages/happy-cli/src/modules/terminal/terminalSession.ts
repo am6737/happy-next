@@ -12,6 +12,7 @@
  */
 
 import * as pty from 'node-pty';
+import { existsSync } from 'node:fs';
 import xterm, { type Terminal as HeadlessTerminalInstance } from '@xterm/headless';
 import type { TerminalState } from 'happy-wire';
 import {
@@ -86,6 +87,16 @@ export interface TerminalSession {
 
 const DEFAULT_SIZE: TerminalSize = { rows: 30, cols: 100 };
 
+export function resolveDefaultTerminalShell(platform = process.platform, currentShell = process.env.SHELL): string {
+    if (platform === 'darwin') {
+        return existsSync('/bin/zsh') ? '/bin/zsh' : '/bin/sh';
+    }
+    if (currentShell) {
+        return currentShell;
+    }
+    return '/bin/sh';
+}
+
 /**
  * Strips the OSC 0/1/2 window-title sequence out of a chunk so the title can be
  * surfaced without leaking the escape codes into the rendered grid. The bytes
@@ -103,7 +114,7 @@ function extractTitle(data: string): string | undefined {
 export function createTerminalSession(options: CreateTerminalOptions): TerminalSession {
     const size = options.size ?? DEFAULT_SIZE;
     const scrollbackLines = options.scrollbackLines ?? DEFAULT_SCROLLBACK_LINES;
-    const shell = options.shell ?? process.env.SHELL ?? '/bin/bash';
+    const shell = options.shell ?? resolveDefaultTerminalShell();
     const shellArgs = options.args ?? [];
     const useTmux = options.tmux === true;
 
