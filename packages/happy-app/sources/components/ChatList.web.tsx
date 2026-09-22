@@ -186,6 +186,12 @@ const OVERSCAN_ROWS = 10;
 // How far past the viewport's own top edge an anchor may reach before its top counts as scrolled
 // off. A pixel of slack so that a row sitting exactly at the edge is still "on screen".
 const ANCHOR_TOP_SLACK_PX = 1;
+// How long a tap on a fold line owns the viewport. The heights it changes land over the animation
+// that draws them (200ms) plus the measurement commit that follows it, and for that whole window the
+// viewport may not be glued to the bottom — see `foldTapOwnsViewport`. Generous on purpose: the
+// commit that ends the animation is what carries the real heights, and a frame that runs long is a
+// frame that would otherwise drag the row the reader tapped.
+const FOLD_TAP_SETTLE_MS = 800;
 // Codex-style animated "scroll to bottom" (cubic ease-out).
 const SCROLL_TO_BOTTOM_ANIMATION_MS = 260;
 // Animate scroll-to-bottom only within this many viewports of the bottom.
@@ -980,6 +986,28 @@ const ChatListInternal = React.memo((props: {
     // compensated (via mBelow), so the entries effect must diff against it.
     const preMeasureLayoutRef = useRef<LayoutModel | null>(null);
     const committedLayoutRef = useRef<LayoutModel>(layout);
+    // The last fold the reader tapped: when, and the rows that tap takes or gives back. It is the
+    // one thing that outranks the bottom — see `foldTapOwnsViewport`.
+    const lastFoldTapRef = useRef<{ at: number; keys: Set<string> } | null>(null);
+
+    // Whether a height change is one the reader asked for by tapping a fold line.
+    //
+    // A tap is the reader pointing at a row and saying "this one". The rows it changes are below
+    // that row, so the arithmetic holds the row still and lets the rest slide — the same rule as
+    // everywhere else. At the bottom of the conversation it is the one case where that rule must
+    // win: gluing the viewport to the content bottom instead would spend the whole height change on
+    // moving the row they tapped, which is not what a tap on a row looks like it should do.
+    //
+    // The window is the tap's own animation plus the measurement commit it ends on. A batch counts
+    // only when it carries one of the rows the tap touched; a layout change counts only when the
+    // entry set held still, because a fold moves no entry — see the call site in the layout effect.
+    const foldTapOwnsViewport = (keys: Iterable<string> | null): boolean => {
+        const tap = lastFoldTapRef.current;
+        if (tap == null || performance.now() - tap.at > FOLD_TAP_SETTLE_MS) return false;
+        if (keys == null) return true;
+        for (const key of keys) if (tap.keys.has(key)) return true;
+        return false;
+    };
 
     // Apply a batch of measured row heights: update the height cache, rebuild the model, and move the
     // viewport by the one number the heights below the reader's line add up to.
@@ -1002,7 +1030,8 @@ const ChatListInternal = React.memo((props: {
         const rawNow = getRawDistance();
         const restoreMode = pendingRestoreRef.current != null;
         const withinGrace = performance.now() - lastUserInputAtRef.current < USER_SCROLL_GRACE_MS;
-        const pinToBottom = !restoreMode && atBottomRef.current && (!withinGrace || rawNow === 0);
+        const pinToBottom = !restoreMode && atBottomRef.current && (!withinGrace || rawNow === 0)
+            && !foldTapOwnsViewport(batch.keys());
         // A pending jump is about to place the viewport itself, out of a layout built from this very
         // batch, so no measurement here is "below the viewport" in a sense the correction may act on
         // and taking one for that would move the screen twice. A restore is the same: the saved
@@ -1514,13 +1543,18 @@ const ChatListInternal = React.memo((props: {
     // the line's own row animates the content hanging under it (see `useFoldAnimation`).
     const handleToggleFold = React.useCallback((headerId: string) => {
         const tap = foldTapRef.current.get(headerId);
+        // The line's own row is one of the rows the fold takes — unless the fold leaves it standing,
+        // in which case its content stays and only the process below it goes.
+        const keys = tap == null
+            ? [headerId]
+            : tap.keepsRow ? [...tap.hiddenIds] : [headerId, ...tap.hiddenIds];
         if (tap) {
-            // The line's own row is one of the rows the fold takes — unless the fold leaves it
-            // standing, in which case its content stays and only the process below it goes.
-            const keys = tap.keepsRow ? tap.hiddenIds : [headerId, ...tap.hiddenIds];
             // The state the row is in *now* decides which way the bodies are about to go.
             foldAnim.start({ keys, direction: tap.folded ? 'expanding' : 'collapsing' });
         }
+        // This tap, and the rows it is about to change, own the viewport until its animation has
+        // settled: see `foldTapOwnsViewport`.
+        lastFoldTapRef.current = { at: performance.now(), keys: new Set(keys) };
         folding.toggle(headerId);
         // `folding.toggle` and not `folding`: the object is rebuilt every render, so depending on it
         // would hand every mounted row a new callback prop on every commit and defeat their memo.
@@ -1633,7 +1667,13 @@ const ChatListInternal = React.memo((props: {
         const scroller = scrollerElRef.current;
         if (!scroller || pendingRestoreRef.current != null || isAnimatingScrollRef.current) return;
         const raw = Math.abs(scroller.scrollTop);
-        if (atBottomRef.current) {
+        // A fold moves no entry: the rows it takes stay in the set at zero height. So the tap's own
+        // layout change is exactly the one that leaves the entry set alone, and the fold window only
+        // covers that. An append or a prepend within the window is the conversation moving on, and
+        // the bottom rule above still owns it — a new message arriving right after a tap is followed,
+        // not held.
+        const entrySetHeldStill = previous == null || sameKeys(previous.keys, next.keys);
+        if (atBottomRef.current && !(entrySetHeldStill && foldTapOwnsViewport(null))) {
             const withinGrace = performance.now() - lastUserInputAtRef.current < USER_SCROLL_GRACE_MS;
             if (raw !== 0 && !withinGrace) setRawDistance(0);
             return;
