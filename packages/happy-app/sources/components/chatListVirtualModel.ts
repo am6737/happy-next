@@ -167,41 +167,6 @@ export function entryTopFromBottom(layout: LayoutModel, key: string): number | n
     return (layout.bottomOffsetsPx[index] ?? 0) + (layout.heightsPx[index] ?? 0);
 }
 
-// The scroll distance that keeps the anchor entry's TOP edge at the same
-// viewport position across a layout change.
-export function compensatedDistanceFromBottom(args: {
-    anchorKey: string;
-    distanceFromBottomPx: number;
-    previousLayout: LayoutModel;
-    nextLayout: LayoutModel;
-}): number | null {
-    const prevTopFromBottom = entryTopFromBottom(args.previousLayout, args.anchorKey);
-    const nextTopFromBottom = entryTopFromBottom(args.nextLayout, args.anchorKey);
-    if (prevTopFromBottom == null || nextTopFromBottom == null) return null;
-    return Math.max(0, args.distanceFromBottomPx + nextTopFromBottom - prevTopFromBottom);
-}
-
-// Extra empty canvas above the content top. It is the physical headroom that
-// lets the window absorb content growth (page prepends, measurement
-// corrections of rows entering from the top) WITHOUT resizing the canvas —
-// scrollHeight changes mid-gesture are what desktop engines answer with an
-// asynchronous scroll adjustment (the visible jump). When the whole history is
-// loaded and the viewport is reading near the content top, the slack would be
-// scrollable blank above the oldest message, so it collapses (with hysteresis
-// so renormalizations don't flap around the boundary).
-export function desiredTopSlackPx(args: {
-    hasMore: boolean;
-    totalHeightPx: number;
-    viewportTopModelPx: number;
-    currentSlackPx: number;
-    maxSlackPx: number;
-}): number {
-    if (args.hasMore) return args.maxSlackPx;
-    const collapseBandPx = args.currentSlackPx <= 0 ? 2400 : 1200;
-    if (args.viewportTopModelPx > args.totalHeightPx - collapseBandPx) return 0;
-    return args.maxSlackPx;
-}
-
 // The canvas sits between the list's header spacer and footer inside the
 // scroller. Keeping it at least as tall as the remaining viewport prevents a
 // short, newly-mounted conversation from being clipped by the canvas while
@@ -244,39 +209,6 @@ export function pickCompensationAnchor(args: {
         return key;
     }
     return null;
-}
-
-/**
- * How much of a viewport distance the scroller can carry, and how much has to stay in the canvas
- * bottom offset.
- *
- * The two add up to the distance asked for, so where the viewport sits in the model is the same
- * either way. That is what lets a jump reach a row the scroll range has run out of room for — at
- * the newest message, where there is nothing further to scroll, and at the canvas's own top edge
- * alike — and it is why the leftover is worth keeping rather than clamping away: renormalization
- * moves the split between the two, never their sum, so no visible pixel moves when it does.
- */
-export function splitViewportDistance(args: {
-    /** Where the viewport belongs, as a scroll distance, before the range has its say. */
-    wantedDistancePx: number;
-    /** The furthest the scroller can be scrolled. */
-    maxDistancePx: number;
-}): { rawDistancePx: number; carriedPx: number } {
-    const rawDistancePx = Math.min(Math.max(0, args.wantedDistancePx), Math.max(0, args.maxDistancePx));
-    return { rawDistancePx, carriedPx: args.wantedDistancePx - rawDistancePx };
-}
-
-// Distance that places the entry's top edge `topInsetPx` below the viewport top.
-export function distanceToAlignEntryTop(args: {
-    layout: LayoutModel;
-    key: string;
-    viewportHeightPx: number;
-    topInsetPx: number;
-}): number | null {
-    const index = args.layout.indexByKey.get(args.key);
-    if (index == null) return null;
-    const topFromBottom = (args.layout.bottomOffsetsPx[index] ?? 0) + (args.layout.heightsPx[index] ?? 0);
-    return Math.max(0, topFromBottom - args.viewportHeightPx + args.topInsetPx);
 }
 
 // Distance that centers the entry in the viewport.

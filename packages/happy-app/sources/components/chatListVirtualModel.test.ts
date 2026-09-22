@@ -1,16 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
     buildLayoutModel,
-    compensatedDistanceFromBottom,
     computeVisibleRange,
-    desiredTopSlackPx,
-    distanceToAlignEntryTop,
     distanceToCenterEntry,
     entryTopFromBottom,
     minimumCanvasHeightPx,
     nextViewportState,
     pickCompensationAnchor,
-    splitViewportDistance,
     rangeAroundAnchor,
     rangeContains,
     sameKeys,
@@ -164,71 +160,6 @@ describe('rangeAroundAnchor', () => {
     });
 });
 
-describe('compensatedDistanceFromBottom', () => {
-    it('keeps the anchor still when an entry below it grows', () => {
-        const previousLayout = uniformLayout({ C: 100, D: 100 });
-        const nextLayout = uniformLayout({ C: 100, D: 150 });
-        // D grew by 50 below the viewport; the distance must grow by 50 too.
-        expect(compensatedDistanceFromBottom({
-            anchorKey: 'C',
-            distanceFromBottomPx: 220,
-            previousLayout,
-            nextLayout,
-        })).toBe(270);
-    });
-
-    it('is a no-op when an entry above the anchor changes', () => {
-        const previousLayout = uniformLayout();
-        const nextLayout = uniformLayout({ A: 300 });
-        expect(compensatedDistanceFromBottom({
-            anchorKey: 'C',
-            distanceFromBottomPx: 220,
-            previousLayout,
-            nextLayout,
-        })).toBe(220);
-    });
-
-    it('compensates an append below the anchor (new entry at the bottom)', () => {
-        const previousLayout = uniformLayout();
-        const nextLayout = buildLayoutModel({
-            keys: [...KEYS, 'F'],
-            measuredHeightsByKey: {},
-            estimateHeightPx: 100,
-        });
-        expect(compensatedDistanceFromBottom({
-            anchorKey: 'C',
-            distanceFromBottomPx: 220,
-            previousLayout,
-            nextLayout,
-        })).toBe(320);
-    });
-
-    it('is a no-op for a prepend (older page) — bottom-anchored coordinates', () => {
-        const previousLayout = uniformLayout();
-        const nextLayout = buildLayoutModel({
-            keys: ['P1', 'P2', ...KEYS],
-            measuredHeightsByKey: {},
-            estimateHeightPx: 100,
-        });
-        expect(compensatedDistanceFromBottom({
-            anchorKey: 'C',
-            distanceFromBottomPx: 220,
-            previousLayout,
-            nextLayout,
-        })).toBe(220);
-    });
-
-    it('returns null when the anchor is missing from either layout', () => {
-        const layout = uniformLayout();
-        expect(compensatedDistanceFromBottom({
-            anchorKey: 'Z',
-            distanceFromBottomPx: 100,
-            previousLayout: layout,
-            nextLayout: layout,
-        })).toBeNull();
-    });
-});
-
 describe('pickCompensationAnchor', () => {
     it('picks the topmost MEASURED entry in the strict viewport', () => {
         const previousLayout = uniformLayout({ C: 100, D: 100 });
@@ -290,52 +221,7 @@ describe('pickCompensationAnchor', () => {
     });
 });
 
-describe('splitViewportDistance', () => {
-    it('carries the whole distance when the range has room for it', () => {
-        expect(splitViewportDistance({ wantedDistancePx: 400, maxDistancePx: 1000 }))
-            .toEqual({ rawDistancePx: 400, carriedPx: 0 });
-        expect(splitViewportDistance({ wantedDistancePx: 1000, maxDistancePx: 1000 }))
-            .toEqual({ rawDistancePx: 1000, carriedPx: 0 });
-    });
-
-    it('carries what is left of a distance past the top of the range', () => {
-        expect(splitViewportDistance({ wantedDistancePx: 1200, maxDistancePx: 1000 }))
-            .toEqual({ rawDistancePx: 1000, carriedPx: 200 });
-    });
-
-    it('carries a distance below the bottom of the range, which no scroll can reach', () => {
-        expect(splitViewportDistance({ wantedDistancePx: -150, maxDistancePx: 1000 }))
-            .toEqual({ rawDistancePx: 0, carriedPx: -150 });
-        expect(splitViewportDistance({ wantedDistancePx: 0, maxDistancePx: 1000 }))
-            .toEqual({ rawDistancePx: 0, carriedPx: 0 });
-    });
-
-    it('keeps the sum, so the split never moves the viewport in the model', () => {
-        for (const wantedDistancePx of [-500, -1, 0, 250, 1000, 1001, 5000]) {
-            const split = splitViewportDistance({ wantedDistancePx, maxDistancePx: 1000 });
-            expect(split.rawDistancePx + split.carriedPx).toBe(wantedDistancePx);
-            expect(split.rawDistancePx).toBeGreaterThanOrEqual(0);
-            expect(split.rawDistancePx).toBeLessThanOrEqual(1000);
-        }
-    });
-
-    it('reads an unscrollable box as carrying nothing', () => {
-        expect(splitViewportDistance({ wantedDistancePx: 300, maxDistancePx: 0 }))
-            .toEqual({ rawDistancePx: 0, carriedPx: 300 });
-        expect(splitViewportDistance({ wantedDistancePx: -300, maxDistancePx: -10 }))
-            .toEqual({ rawDistancePx: 0, carriedPx: -300 });
-    });
-});
-
-describe('jump positioning', () => {
-    it('aligns an entry top at the requested inset', () => {
-        const layout = uniformLayout();
-        // A's top edge is 500 from the bottom; viewport 150 with 10px inset.
-        expect(distanceToAlignEntryTop({ layout, key: 'A', viewportHeightPx: 150, topInsetPx: 10 })).toBe(360);
-        // Near the bottom the distance clamps to 0.
-        expect(distanceToAlignEntryTop({ layout, key: 'E', viewportHeightPx: 150, topInsetPx: 10 })).toBe(0);
-    });
-
+describe('distanceToCenterEntry', () => {
     it('centers an entry in the viewport', () => {
         const layout = uniformLayout();
         // C spans 200–300 from the bottom; centered in a 150px viewport → [175, 325].
@@ -443,37 +329,12 @@ describe('entryTopFromBottom', () => {
         expect(entryTopFromBottom(uniformLayout(), 'nope')).toBeNull();
     });
 
-    it('is invariant under prepends and shifts by appends (the canvas-offset delta)', () => {
+    it('is invariant under a prepend and shifts by an append, which is what a compensation reads', () => {
         const before = uniformLayout();
         const prepended = buildLayoutModel({ keys: ['P', ...KEYS], measuredHeightsByKey: {}, estimateHeightPx: 100 });
         expect(entryTopFromBottom(prepended, 'C')).toBe(entryTopFromBottom(before, 'C'));
         const appended = buildLayoutModel({ keys: [...KEYS, 'Z'], measuredHeightsByKey: { Z: 40 }, estimateHeightPx: 100 });
         expect(entryTopFromBottom(appended, 'C')! - entryTopFromBottom(before, 'C')!).toBe(40);
-    });
-});
-
-describe('desiredTopSlackPx', () => {
-    it('keeps full slack while more history can load', () => {
-        expect(desiredTopSlackPx({ hasMore: true, totalHeightPx: 10_000, viewportTopModelPx: 9_900, currentSlackPx: 0, maxSlackPx: 3000 }))
-            .toBe(3000);
-    });
-
-    it('collapses near a fully-loaded top and keeps slack mid-history', () => {
-        expect(desiredTopSlackPx({ hasMore: false, totalHeightPx: 10_000, viewportTopModelPx: 9_500, currentSlackPx: 3000, maxSlackPx: 3000 }))
-            .toBe(0);
-        expect(desiredTopSlackPx({ hasMore: false, totalHeightPx: 10_000, viewportTopModelPx: 5_000, currentSlackPx: 3000, maxSlackPx: 3000 }))
-            .toBe(3000);
-    });
-
-    it('collapses for short conversations and is hysteretic around the boundary', () => {
-        // Shorter than the viewport: viewport top is above the content top.
-        expect(desiredTopSlackPx({ hasMore: false, totalHeightPx: 600, viewportTopModelPx: 800, currentSlackPx: 0, maxSlackPx: 3000 }))
-            .toBe(0);
-        // Between the collapse band (1200px) and the re-expand band (2400px):
-        // the current state wins, in both directions.
-        const between = { hasMore: false, totalHeightPx: 10_000, viewportTopModelPx: 10_000 - 2000, maxSlackPx: 3000 };
-        expect(desiredTopSlackPx({ ...between, currentSlackPx: 3000 })).toBe(3000);
-        expect(desiredTopSlackPx({ ...between, currentSlackPx: 0 })).toBe(0);
     });
 });
 
