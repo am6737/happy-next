@@ -1250,6 +1250,12 @@ export const ja: TranslationStructure = {
             initializing: 'エージェントを初期化中...',
             moreTools: ({ count }: { count: number }) => `+${count} 個のツール`,
         },
+        // A plan proposal is written to be read in full, so its view shows the shape of one
+        // and keeps the rest behind this.
+        plan: {
+            expand: '計画の全文を表示',
+            collapse: '折りたたむ',
+        },
         askUserQuestion: {
             submit: '回答を送信',
             multipleQuestions: ({ count }: { count: number }) => `${count}件の質問`,

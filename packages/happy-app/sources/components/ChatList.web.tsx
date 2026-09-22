@@ -196,6 +196,9 @@ const USER_SCROLL_GRACE_MS = 400;
 const ROW_ESTIMATE_PX = 100;
 // Rows kept mounted beyond the visible ones, per side.
 const OVERSCAN_ROWS = 10;
+// How far past the viewport's own top edge an anchor may reach before its top counts as scrolled
+// off. A pixel of slack so that a row sitting exactly at the edge is still "on screen".
+const ANCHOR_TOP_SLACK_PX = 1;
 // Codex-style animated "scroll to bottom" (cubic ease-out).
 const SCROLL_TO_BOTTOM_ANIMATION_MS = 260;
 // Animate scroll-to-bottom only within this many viewports of the bottom.
@@ -1281,6 +1284,7 @@ const ChatListInternal = React.memo((props: {
         // offset is the truth, and the reader's position is not ours to correct on the way there.
         const viewportOwned = pendingJumpRef.current != null || restoreMode;
         let absorptionLinePx = viewportNow.distanceFromBottomPx;
+        let anchorIndex: number | null = null;
         if (!viewportOwned) {
             const anchorKey = pickCompensationAnchor({
                 previousLayout: layoutNow,
@@ -1290,11 +1294,22 @@ const ChatListInternal = React.memo((props: {
                 measuredHeightsByKey: current,
                 collapseEmptyRows: true,
             });
-            const anchorIndex = anchorKey == null ? null : layoutNow.indexByKey.get(anchorKey);
+            anchorIndex = anchorKey == null ? null : layoutNow.indexByKey.get(anchorKey) ?? null;
             // Nothing measured on screen: fall back to the viewport's own edge. Content above the line
             // can then slide rather than stay put, but the line is still ours and nothing accumulates.
             if (anchorIndex != null) absorptionLinePx = layoutNow.bottomOffsetsPx[anchorIndex] ?? absorptionLinePx;
         }
+        // Whether the anchor's own top edge is on screen. A row taller than the viewport has two
+        // edges and the line can only hold one of them: absorbing the row's own change holds its TOP,
+        // which for a row the reader has already scrolled past is an edge they cannot see — and it
+        // carries everything below the row away by the height the row just gave up. Such a row is
+        // left out of the sum instead, so the distance from the bottom does not move and the edge the
+        // reader can see — the one they tapped under — is the one that stays.
+        const anchorTopPx = anchorIndex == null
+            ? null
+            : (layoutNow.bottomOffsetsPx[anchorIndex] ?? 0) + (layoutNow.heightsPx[anchorIndex] ?? 0);
+        const anchorTopOnScreen = anchorTopPx == null
+            || anchorTopPx <= viewportNow.distanceFromBottomPx + viewportNow.viewportHeightPx + ANCHOR_TOP_SLACK_PX;
         let next = current;
         let heightDeltaPx = 0;
         // A row whose height is being animated is one the observer has no opinion about: it reports
@@ -1311,7 +1326,8 @@ const ChatListInternal = React.memo((props: {
             const index = layoutNow.indexByKey.get(key);
             if (index == null) continue;
             const deltaVsLayout = height - (layoutNow.heightsPx[index] ?? height);
-            if (deltaVsLayout !== 0 && !viewportOwned && (layoutNow.bottomOffsetsPx[index] ?? 0) <= absorptionLinePx) {
+            if (deltaVsLayout !== 0 && !viewportOwned && (layoutNow.bottomOffsetsPx[index] ?? 0) <= absorptionLinePx
+                && (index !== anchorIndex || anchorTopOnScreen)) {
                 heightDeltaPx += deltaVsLayout;
             }
         }

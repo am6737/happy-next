@@ -1262,6 +1262,12 @@ export const pt: TranslationStructure = {
             modifyingMultipleFiles: ({ file, count }: { file: string; count: number }) => `${file} e ${count} mais`,
             showingDiff: 'Mostrando alterações',
         },
+        // A plan proposal is written to be read in full, so its view shows the shape of one
+        // and keeps the rest behind this.
+        plan: {
+            expand: 'Ver o plano completo',
+            collapse: 'Mostrar menos',
+        },
         askUserQuestion: {
             submit: 'Enviar resposta',
             multipleQuestions: ({ count }: { count: number }) => `${count} ${plural({ count, singular: 'pergunta', plural: 'perguntas' })}`,

@@ -1273,6 +1273,12 @@ export const ru: TranslationStructure = {
             modifyingMultipleFiles: ({ file, count }: { file: string; count: number }) => `${file} и ещё ${count}`,
             showingDiff: 'Показ изменений',
         },
+        // A plan proposal is written to be read in full, so its view shows the shape of one
+        // and keeps the rest behind this.
+        plan: {
+            expand: 'Показать весь план',
+            collapse: 'Свернуть',
+        },
         askUserQuestion: {
             submit: 'Отправить ответ',
             multipleQuestions: ({ count }: { count: number }) => `${count} ${plural({ count, one: 'вопрос', few: 'вопроса', many: 'вопросов' })}`,

@@ -1259,6 +1259,12 @@ export const en = {
             question: 'Question',
             previewHtml: 'HTML preview',
         },
+        // A plan proposal is written to be read in full, so its view shows the shape of one
+        // and keeps the rest behind this.
+        plan: {
+            expand: 'Show the full plan',
+            collapse: 'Show less',
+        },
         askUserQuestion: {
             submit: 'Submit Answer',
             multipleQuestions: ({ count }: { count: number }) => `${count} questions`,

@@ -1247,6 +1247,12 @@ export const zhHant: TranslationStructure = {
             question: '問題',
             previewHtml: 'HTML 預覽',
         },
+        // A plan proposal is written to be read in full, so its view shows the shape of one
+        // and keeps the rest behind this.
+        plan: {
+            expand: '展開全部計畫',
+            collapse: '收合',
+        },
         askUserQuestion: {
             submit: '提交答案',
             multipleQuestions: ({ count }: { count: number }) => `${count} 個問題`,
