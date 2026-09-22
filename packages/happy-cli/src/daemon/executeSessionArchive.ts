@@ -5,6 +5,7 @@ import { homedir } from 'node:os';
 import { configuration } from '@/configuration';
 import { CodexJsonRpcPeer } from '@/codex/appserver/CodexJsonRpcPeer';
 import { CODEX_PACKAGE } from '@/codex/package';
+import { resolveCodexRuntime } from '@/codex/codexRuntime';
 import { readSessionBinding, listSessionBindings, isBindingRunning, processIdentity, readStopSnapshot, writeStopSnapshot, type SessionBinding } from './sessionBinding';
 import { atomicFileWrite } from '@/utils/fileAtomic';
 import { logger } from '@/ui/logger';
@@ -103,7 +104,8 @@ export async function syncCodexArchive(binding: SessionBinding, archived: boolea
             mkdirSync(cwd, { recursive: true, mode: 0o700 });
         }
         const codexHome = binding.codexHome ? resolve(binding.cwd, binding.codexHome) : join(homedir(), '.codex');
-        await peer.spawn('npx', ['-y', binding.codexPackage ?? CODEX_PACKAGE, 'app-server'], {
+        const runtime = resolveCodexRuntime(binding.codexPackage ?? CODEX_PACKAGE, ['app-server']);
+        await peer.spawn(runtime.command, runtime.args, {
             cwd,
             signal: controller.signal,
             env: { CODEX_HOME: codexHome },

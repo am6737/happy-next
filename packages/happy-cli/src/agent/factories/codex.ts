@@ -16,6 +16,7 @@ import type { AgentBackend, McpServerConfig, AgentFactoryOptions } from '../core
 import { agentRegistry } from '../core';
 import { logger } from '@/ui/logger';
 import { CODEX_PACKAGE } from '@/codex/package';
+import { resolveCodexRuntime } from '@/codex/codexRuntime';
 
 /**
  * Options for creating a Codex app-server backend
@@ -54,7 +55,8 @@ export interface CodexBackendResult {
 /**
  * Create a Codex backend using the app-server JSON-RPC protocol.
  *
- * Spawns the configured Codex npm package via `npx` in app-server mode.
+ * Spawns the configured Codex package in app-server mode: a `codex` already on PATH that
+ * matches the pinned version is used as-is, otherwise the package is fetched through `npx`.
  * Set HAPPY_CODEX_PACKAGE to override the default package/version.
  *
  * If no model is specified, the Codex CLI will use its own default
@@ -63,11 +65,12 @@ export interface CodexBackendResult {
 export function createCodexBackend(options: CodexBackendOptions): CodexBackendResult {
   // Let Codex choose the default model based on auth method (API key vs ChatGPT)
   const model = options.model ?? process.env.CODEX_MODEL ?? null;
+  const runtime = resolveCodexRuntime(CODEX_PACKAGE, ['app-server']);
 
   const backendOptions: CodexAppServerBackendOptions = {
     cwd: options.cwd,
-    command: 'npx',
-    args: ['-y', CODEX_PACKAGE, 'app-server'],
+    command: runtime.command,
+    args: runtime.args,
     env: {
       ...options.env,
     },
@@ -91,6 +94,7 @@ export function createCodexBackend(options: CodexBackendOptions): CodexBackendRe
     mcpServerCount: options.mcpServers ? Object.keys(options.mcpServers).length : 0,
     hasResumeFile: !!options.resumeFile,
     codexPackage: CODEX_PACKAGE,
+    codexCommand: `${runtime.command} ${runtime.args.slice(0, 2).join(' ')}`,
   });
 
   return {

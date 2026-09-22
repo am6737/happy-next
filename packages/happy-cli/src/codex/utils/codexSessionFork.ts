@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { restoreCodexSession } from '@/daemon/executeSessionArchive';
 import { logger } from '@/ui/logger';
 import { CODEX_PACKAGE } from '@/codex/package';
+import { CODEX_INITIALIZE_TIMEOUT_MS, resolveCodexRuntime } from '@/codex/codexRuntime';
 import { CodexJsonRpcPeer } from '../appserver/CodexJsonRpcPeer';
 import { Methods, type InitializeParams, type ThreadForkParams, type ThreadForkResponse, type ThreadTurnsListResponse } from '../appserver/types';
 import { findCodexSessionFile, generateStableUuid, extractUserText, isSystemMessage, readCodexSessionContent } from './codexSessionReader';
@@ -127,14 +128,15 @@ export async function forkAndTruncateCodexSession(
     }
 
     peer = new CodexJsonRpcPeer();
-    await peer.spawn('npx', ['-y', CODEX_PACKAGE, 'app-server'], {
+    const runtime = resolveCodexRuntime(CODEX_PACKAGE, ['app-server']);
+    await peer.spawn(runtime.command, runtime.args, {
       cwd: process.cwd(),
       ...(codexHome ? { env: { CODEX_HOME: codexHome } } : {}),
     });
     await peer.request(Methods.INITIALIZE, {
       clientInfo: { name: 'happy-codex-fork', version: '1.0.0' },
       capabilities: { experimentalApi: true },
-    } satisfies InitializeParams);
+    } satisfies InitializeParams, CODEX_INITIALIZE_TIMEOUT_MS);
     peer.notify(Methods.INITIALIZED);
 
     const params: ThreadForkParams = { threadId, excludeTurns: true };

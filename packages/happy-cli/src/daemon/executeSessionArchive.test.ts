@@ -20,6 +20,11 @@ vi.mock('@/codex/appserver/CodexJsonRpcPeer', () => ({ CodexJsonRpcPeer: vi.fn((
 vi.mock('@/ui/logger', () => ({ logger: { debug: vi.fn() } }));
 import { executeSessionArchive, removeCodexSessionIndexEntries, syncCodexArchive, restoreCodexSession } from './executeSessionArchive';
 import { readSessionBinding, listSessionBindings, processIdentity, writeStopSnapshot, type SessionBinding } from './sessionBinding';
+import { CODEX_PACKAGE } from '@/codex/package';
+import { resolveCodexRuntime } from '@/codex/codexRuntime';
+
+/** Whatever this machine resolves for the pinned Codex: a matching local binary or npx. */
+const codexRuntime = resolveCodexRuntime(CODEX_PACKAGE, ['app-server']);
 
 describe('executeSessionArchive', () => {
     beforeEach(() => {
@@ -51,7 +56,7 @@ describe('executeSessionArchive', () => {
         home.value = mkdtempSync(join(tmpdir(), 'happy-archive-cwd-'));
         const removedCwd = join(home.value, 'deleted-worktree');
         await syncCodexArchive({ ...binding, provider: 'codex', cwd: removedCwd, codexHome: '../codex-data' } as SessionBinding, false);
-        expect(rpc.spawn).toHaveBeenCalledWith('npx', expect.any(Array), expect.objectContaining({
+        expect(rpc.spawn).toHaveBeenCalledWith(codexRuntime.command, codexRuntime.args, expect.objectContaining({
             cwd: join(home.value, 'archive-runtime'), env: { CODEX_HOME: join(home.value, 'codex-data') },
         }));
         expect(rpc.request).toHaveBeenCalledWith('thread/unarchive', { threadId: 'native-1' }, 20000);

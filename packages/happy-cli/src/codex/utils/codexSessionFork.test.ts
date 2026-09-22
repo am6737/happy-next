@@ -6,6 +6,7 @@ import { forkAndTruncateCodexSession, forkCodexSession } from './codexSessionFor
 import { generateStableUuid } from './codexSessionReader';
 import { Methods } from '../appserver/types';
 import { CODEX_PACKAGE } from '../package';
+import { CODEX_INITIALIZE_TIMEOUT_MS, resolveCodexRuntime } from '../codexRuntime';
 
 const peer = vi.hoisted(() => ({ spawn: vi.fn(), request: vi.fn(), notify: vi.fn(), close: vi.fn() }));
 const restore = vi.hoisted(() => vi.fn());
@@ -64,8 +65,9 @@ describe('Codex session fork', () => {
 
   it('forks paginated history by canonical ID, never by copying or resuming the source', async () => {
     expect(await forkCodexSession(sourceId)).toEqual({ success: true, newFilePath: forkPath });
-    expect(peer.spawn).toHaveBeenCalledWith('npx', ['-y', CODEX_PACKAGE, 'app-server'], { cwd: process.cwd() });
-    expect(peer.request).toHaveBeenNthCalledWith(1, Methods.INITIALIZE, expect.objectContaining({ capabilities: { experimentalApi: true } }));
+    const runtime = resolveCodexRuntime(CODEX_PACKAGE, ['app-server']);
+    expect(peer.spawn).toHaveBeenCalledWith(runtime.command, runtime.args, { cwd: process.cwd() });
+    expect(peer.request).toHaveBeenNthCalledWith(1, Methods.INITIALIZE, expect.objectContaining({ capabilities: { experimentalApi: true } }), CODEX_INITIALIZE_TIMEOUT_MS);
     expect(peer.notify).toHaveBeenCalledWith(Methods.INITIALIZED);
     expect(peer.request).toHaveBeenNthCalledWith(2, Methods.THREAD_FORK, { threadId: sourceId, excludeTurns: true });
     expect(peer.request).toHaveBeenCalledTimes(2);
@@ -86,7 +88,8 @@ describe('Codex session fork', () => {
     });
     expect(await forkCodexSession(sourceId, true)).toEqual({ success: true, newFilePath: forkPath });
     expect(restore).toHaveBeenCalledWith(sourceId);
-    expect(peer.spawn).toHaveBeenCalledWith('npx', ['-y', CODEX_PACKAGE, 'app-server'], {
+    const runtime = resolveCodexRuntime(CODEX_PACKAGE, ['app-server']);
+    expect(peer.spawn).toHaveBeenCalledWith(runtime.command, runtime.args, {
       cwd: process.cwd(), env: { CODEX_HOME: originalHome },
     });
     expect(restore.mock.invocationCallOrder[0]).toBeLessThan(peer.spawn.mock.invocationCallOrder[0]);

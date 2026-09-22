@@ -10,6 +10,7 @@
  */
 
 import { CodexJsonRpcPeer } from './CodexJsonRpcPeer';
+import { CODEX_INITIALIZE_TIMEOUT_MS } from '@/codex/codexRuntime';
 import { recordNativeThreadEmpty } from '@/daemon/sessionBinding';
 import {
   Methods,
@@ -235,7 +236,7 @@ export class CodexAppServerBackend implements AgentBackend {
         version: '0.14.0',
       },
       capabilities: { experimentalApi: true },
-    } satisfies InitializeParams);
+    } satisfies InitializeParams, CODEX_INITIALIZE_TIMEOUT_MS);
     this.structuredLegacyDenials = supportsStructuredLegacyDenials(initializeResult.userAgent ?? '');
 
     this.peer.notify(Methods.INITIALIZED);

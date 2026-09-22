@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { claudeCliPath } from '@/claude/claudeLocal';
 import { CODEX_PACKAGE } from '@/codex/package';
+import { resolveCodexRuntime } from '@/codex/codexRuntime';
 import { logger } from '@/ui/logger';
 import { MODEL_MODE_DEFAULT, isModelModeForAgent, parseCodexModelMode, parseClaudeModelMode } from 'happy-wire';
 import {
@@ -110,7 +111,7 @@ export function buildSpawnPlan(
       };
     }
     case 'codex': {
-      const codexArgs = ['-y', CODEX_PACKAGE, 'exec', '--dangerously-bypass-approvals-and-sandbox'];
+      const codexArgs = ['exec', '--dangerously-bypass-approvals-and-sandbox'];
       if (executionType === 'resume') {
         codexArgs.push('resume', childSessionId!, prompt);
       } else {
@@ -129,9 +130,10 @@ export function buildSpawnPlan(
           }
         }
       }
+      const runtime = resolveCodexRuntime(CODEX_PACKAGE, codexArgs);
       return {
-        command: 'npx',
-        args: codexArgs,
+        command: runtime.command,
+        args: runtime.args,
         cwd: workingDirectory,
         env: { ...process.env },
       };

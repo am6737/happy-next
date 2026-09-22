@@ -2,6 +2,8 @@ import { render } from "ink";
 import React from "react";
 import { ApiClient } from '@/api/api';
 import { createCodexBackend } from '@/agent/factories/codex';
+import { CODEX_PACKAGE } from './package';
+import { codexPackageVersion, isCodexRuntimeWarm } from './codexRuntime';
 import type { CodexAppServerBackend } from './appserver/CodexAppServerBackend';
 import type { ApprovalPolicy, SandboxMode } from './appserver/types';
 import type { PermissionMode } from '@/api/types';
@@ -1328,6 +1330,12 @@ Tokens used: ${goal.tokensUsed}${goal.tokenBudget ? ` / ${goal.tokenBudget}` : '
                     thinking = true;
                     sendRemoteKeepAlive(thinking);
                     session.sendAgentMessage('codex', { type: 'task_started', id: randomUUID() });
+                    if (!isCodexRuntimeWarm(CODEX_PACKAGE)) {
+                        const notice = `Preparing Codex ${codexPackageVersion(CODEX_PACKAGE) ?? 'runtime'}`
+                            + ' — first run downloads it, this can take a minute';
+                        messageBuffer.addMessage(notice, 'status');
+                        session.sendSessionEvent({ type: 'message', message: notice });
+                    }
 
                     // Create backend with the new configuration
                     await createBackend({
