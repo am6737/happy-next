@@ -9,10 +9,7 @@ export type CodexModelFamily =
     | 'gpt-5.6-sol'
     | 'gpt-5.6-terra'
     | 'gpt-5.6-luna'
-    | 'gpt-5.5'
-    | 'gpt-5.4'
-    | 'gpt-5.4-mini'
-    | 'gpt-5.2';
+    | 'gpt-5.5';
 export type ClaudeReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 export type ClaudeModelFamily =
     | typeof MODEL_MODE_DEFAULT
@@ -113,6 +110,7 @@ export const MODEL_MODES = [
     'gpt-6-astra-high',
     'gpt-6-astra-xhigh',
     'gpt-6-astra-max',
+    'gpt-6-astra-ultra',
     'gpt-5.6-sol-low',
     'gpt-5.6-sol-medium',
     'gpt-5.6-sol-high',
@@ -134,18 +132,6 @@ export const MODEL_MODES = [
     'gpt-5.5-medium',
     'gpt-5.5-high',
     'gpt-5.5-xhigh',
-    'gpt-5.4-low',
-    'gpt-5.4-medium',
-    'gpt-5.4-high',
-    'gpt-5.4-xhigh',
-    'gpt-5.4-mini-low',
-    'gpt-5.4-mini-medium',
-    'gpt-5.4-mini-high',
-    'gpt-5.4-mini-xhigh',
-    'gpt-5.2-low',
-    'gpt-5.2-medium',
-    'gpt-5.2-high',
-    'gpt-5.2-xhigh',
     'gemini-3.8-flash',
     'gemini-3.7-flash',
     'gemini-3.1-pro-preview',
@@ -258,6 +244,7 @@ export const CODEX_MODEL_MODES = [
     'gpt-6-astra-high',
     'gpt-6-astra-xhigh',
     'gpt-6-astra-max',
+    'gpt-6-astra-ultra',
     'gpt-5.6-sol-low',
     'gpt-5.6-sol-medium',
     'gpt-5.6-sol-high',
@@ -279,18 +266,6 @@ export const CODEX_MODEL_MODES = [
     'gpt-5.5-medium',
     'gpt-5.5-high',
     'gpt-5.5-xhigh',
-    'gpt-5.4-low',
-    'gpt-5.4-medium',
-    'gpt-5.4-high',
-    'gpt-5.4-xhigh',
-    'gpt-5.4-mini-low',
-    'gpt-5.4-mini-medium',
-    'gpt-5.4-mini-high',
-    'gpt-5.4-mini-xhigh',
-    'gpt-5.2-low',
-    'gpt-5.2-medium',
-    'gpt-5.2-high',
-    'gpt-5.2-xhigh',
 ] as const satisfies readonly ModelMode[];
 
 const MODEL_MODE_SET = new Set<ModelMode>(MODEL_MODES);
@@ -427,9 +402,6 @@ export const CODEX_MODEL_FAMILY_OPTIONS = [
     { value: 'gpt-5.6-terra', label: 'GPT-5.6-Terra', shortLabel: '5.6-Terra', description: 'Balanced agentic coding model for everyday work' },
     { value: 'gpt-5.6-luna', label: 'GPT-5.6-Luna', shortLabel: '5.6-Luna', description: 'Fast and affordable agentic coding model' },
     { value: 'gpt-5.5', label: 'GPT-5.5', shortLabel: '5.5', description: 'Frontier model for complex coding and research' },
-    { value: 'gpt-5.4', label: 'GPT-5.4', shortLabel: '5.4', description: 'Strong model for everyday coding' },
-    { value: 'gpt-5.4-mini', label: 'GPT-5.4-Mini', shortLabel: '5.4-Mini', description: 'Small, fast, cost-efficient model' },
-    { value: 'gpt-5.2', label: 'GPT-5.2', shortLabel: '5.2', description: 'Optimized for professional, long-running agents' },
 ] as const satisfies readonly { value: CodexModelFamily; label: string; shortLabel: string; description: string }[];
 
 export const CODEX_MODEL_OPTIONS = [
@@ -439,6 +411,7 @@ export const CODEX_MODEL_OPTIONS = [
     { value: 'gpt-6-astra-high', label: 'GPT-6-Astra (High)', description: 'Strong quality' },
     { value: 'gpt-6-astra-xhigh', label: 'GPT-6-Astra (XHigh)', description: 'Extra reasoning depth' },
     { value: 'gpt-6-astra-max', label: 'GPT-6-Astra (Max)', description: 'Maximum reasoning depth' },
+    { value: 'gpt-6-astra-ultra', label: 'GPT-6-Astra (Ultra)', description: 'Maximum reasoning with automatic task delegation' },
     { value: 'gpt-5.6-sol-low', label: 'GPT-5.6-Sol (Low)', description: 'Fast responses' },
     { value: 'gpt-5.6-sol-medium', label: 'GPT-5.6-Sol (Medium)', description: 'Balanced responses' },
     { value: 'gpt-5.6-sol-high', label: 'GPT-5.6-Sol (High)', description: 'Strong quality' },
@@ -460,18 +433,6 @@ export const CODEX_MODEL_OPTIONS = [
     { value: 'gpt-5.5-medium', label: 'GPT-5.5 (Medium)', description: 'Balanced responses' },
     { value: 'gpt-5.5-high', label: 'GPT-5.5 (High)', description: 'Strong quality' },
     { value: 'gpt-5.5-xhigh', label: 'GPT-5.5 (XHigh)', description: 'Best quality' },
-    { value: 'gpt-5.4-low', label: 'GPT-5.4 (Low)', description: 'Fast responses' },
-    { value: 'gpt-5.4-medium', label: 'GPT-5.4 (Medium)', description: 'Balanced responses' },
-    { value: 'gpt-5.4-high', label: 'GPT-5.4 (High)', description: 'Strong quality' },
-    { value: 'gpt-5.4-xhigh', label: 'GPT-5.4 (XHigh)', description: 'Best quality' },
-    { value: 'gpt-5.4-mini-low', label: 'GPT-5.4-Mini (Low)', description: 'Fastest responses' },
-    { value: 'gpt-5.4-mini-medium', label: 'GPT-5.4-Mini (Medium)', description: 'Balanced speed and quality' },
-    { value: 'gpt-5.4-mini-high', label: 'GPT-5.4-Mini (High)', description: 'Higher quality with good speed' },
-    { value: 'gpt-5.4-mini-xhigh', label: 'GPT-5.4-Mini (XHigh)', description: 'Best quality' },
-    { value: 'gpt-5.2-low', label: 'GPT-5.2 (Low)', description: 'Fast responses' },
-    { value: 'gpt-5.2-medium', label: 'GPT-5.2 (Medium)', description: 'Balanced responses' },
-    { value: 'gpt-5.2-high', label: 'GPT-5.2 (High)', description: 'Strong quality' },
-    { value: 'gpt-5.2-xhigh', label: 'GPT-5.2 (XHigh)', description: 'Best quality' },
 ] as const satisfies readonly { value: ModelMode; label: string; description: string }[];
 
 const CODEX_MODE_TO_SELECTION: Partial<Record<ModelMode, { family: CodexModelFamily; effort: CodexReasoningEffort }>> = {
@@ -480,6 +441,7 @@ const CODEX_MODE_TO_SELECTION: Partial<Record<ModelMode, { family: CodexModelFam
     'gpt-6-astra-high': { family: 'gpt-6-astra', effort: 'high' },
     'gpt-6-astra-xhigh': { family: 'gpt-6-astra', effort: 'xhigh' },
     'gpt-6-astra-max': { family: 'gpt-6-astra', effort: 'max' },
+    'gpt-6-astra-ultra': { family: 'gpt-6-astra', effort: 'ultra' },
     'gpt-5.6-sol-low': { family: 'gpt-5.6-sol', effort: 'low' },
     'gpt-5.6-sol-medium': { family: 'gpt-5.6-sol', effort: 'medium' },
     'gpt-5.6-sol-high': { family: 'gpt-5.6-sol', effort: 'high' },
@@ -501,19 +463,36 @@ const CODEX_MODE_TO_SELECTION: Partial<Record<ModelMode, { family: CodexModelFam
     'gpt-5.5-medium': { family: 'gpt-5.5', effort: 'medium' },
     'gpt-5.5-high': { family: 'gpt-5.5', effort: 'high' },
     'gpt-5.5-xhigh': { family: 'gpt-5.5', effort: 'xhigh' },
-    'gpt-5.4-low': { family: 'gpt-5.4', effort: 'low' },
-    'gpt-5.4-medium': { family: 'gpt-5.4', effort: 'medium' },
-    'gpt-5.4-high': { family: 'gpt-5.4', effort: 'high' },
-    'gpt-5.4-xhigh': { family: 'gpt-5.4', effort: 'xhigh' },
-    'gpt-5.4-mini-low': { family: 'gpt-5.4-mini', effort: 'low' },
-    'gpt-5.4-mini-medium': { family: 'gpt-5.4-mini', effort: 'medium' },
-    'gpt-5.4-mini-high': { family: 'gpt-5.4-mini', effort: 'high' },
-    'gpt-5.4-mini-xhigh': { family: 'gpt-5.4-mini', effort: 'xhigh' },
-    'gpt-5.2-low': { family: 'gpt-5.2', effort: 'low' },
-    'gpt-5.2-medium': { family: 'gpt-5.2', effort: 'medium' },
-    'gpt-5.2-high': { family: 'gpt-5.2', effort: 'high' },
-    'gpt-5.2-xhigh': { family: 'gpt-5.2', effort: 'xhigh' },
 };
+
+/**
+ * Codex families that have been retired from the pickers. `isModelMode` no
+ * longer accepts them, but a session saved while they were current still
+ * carries a composite mode like `gpt-5.4-high`. Without this map the resolver
+ * would hand that string to the CLI verbatim as a model name; with it the
+ * session keeps running on the model and effort it was created with.
+ */
+const RETIRED_CODEX_MODES: Record<string, string> = {
+    'gpt-5.4-low': 'gpt-5.4',
+    'gpt-5.4-medium': 'gpt-5.4',
+    'gpt-5.4-high': 'gpt-5.4',
+    'gpt-5.4-xhigh': 'gpt-5.4',
+    'gpt-5.4-mini-low': 'gpt-5.4-mini',
+    'gpt-5.4-mini-medium': 'gpt-5.4-mini',
+    'gpt-5.4-mini-high': 'gpt-5.4-mini',
+    'gpt-5.4-mini-xhigh': 'gpt-5.4-mini',
+    'gpt-5.2-low': 'gpt-5.2',
+    'gpt-5.2-medium': 'gpt-5.2',
+    'gpt-5.2-high': 'gpt-5.2',
+    'gpt-5.2-xhigh': 'gpt-5.2',
+};
+
+/** Resolve a retired composite mode to the model and effort it names, or null. */
+function parseRetiredCodexMode(mode: string): { model: string; reasoningEffort: CodexReasoningEffort } | null {
+    const model = RETIRED_CODEX_MODES[mode];
+    if (!model) return null;
+    return { model, reasoningEffort: mode.slice(model.length + 1) as CodexReasoningEffort };
+}
 
 export function parseClaudeModelMode(mode: ModelMode): { family: ClaudeModelFamily; effort: ClaudeReasoningEffort | null } {
     const entry = CLAUDE_MODE_TO_SELECTION[mode];
@@ -583,7 +562,8 @@ export function parseCodexModelMode(mode: ModelMode): { family: CodexModelFamily
 
 export function getCodexReasoningOptions(family: CodexModelFamily): readonly CodexReasoningEffort[] {
     if (family === MODEL_MODE_DEFAULT) return ['high', 'medium', 'low'];
-    if (family === 'gpt-6-astra') return ['max', 'xhigh', 'high', 'medium', 'low'];
+    // Astra, like Sol/Terra, adds the top-tier `max` and `ultra` (auto multi-agent delegation) efforts.
+    if (family === 'gpt-6-astra') return ['ultra', 'max', 'xhigh', 'high', 'medium', 'low'];
     // GPT-5.6 Sol/Terra add the top-tier `max` and `ultra` (auto multi-agent delegation) efforts.
     if (family === 'gpt-5.6-sol' || family === 'gpt-5.6-terra') return ['ultra', 'max', 'xhigh', 'high', 'medium', 'low'];
     // GPT-5.6 Luna adds `max` but not `ultra`.
@@ -644,7 +624,10 @@ const REASONING_EFFORT_LABELS: Record<string, string> = {
 
 export function resolveModelSelectionForFlavor(flavor: string | null | undefined, modelMode: string): ModelSelection {
     if (modelMode === MODEL_MODE_DEFAULT) return { model: null, reasoningEffort: null };
-    if (!isModelMode(modelMode)) return { model: modelMode, reasoningEffort: null };
+    if (!isModelMode(modelMode)) {
+        const retired = flavor === 'codex' ? parseRetiredCodexMode(modelMode) : null;
+        return retired ?? { model: modelMode, reasoningEffort: null };
+    }
     if (flavor === 'codex') {
         const parsed = parseCodexModelMode(modelMode);
         if (parsed.family === MODEL_MODE_DEFAULT) return { model: modelMode, reasoningEffort: null };
@@ -661,7 +644,9 @@ export function resolveModelSelectionForFlavor(flavor: string | null | undefined
 
 export function resolveLocalModelDisplay(modelMode: string | null | undefined): ModelSelection {
     if (!modelMode || modelMode === MODEL_MODE_DEFAULT) return { model: null, reasoningEffort: null };
-    if (!isModelMode(modelMode)) return { model: modelMode, reasoningEffort: null };
+    if (!isModelMode(modelMode)) {
+        return parseRetiredCodexMode(modelMode) ?? { model: modelMode, reasoningEffort: null };
+    }
 
     const parsedCodex = parseCodexModelMode(modelMode);
     if (parsedCodex.family !== MODEL_MODE_DEFAULT) {

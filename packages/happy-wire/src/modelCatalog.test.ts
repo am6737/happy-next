@@ -16,17 +16,20 @@ import {
     isModelModeForAgent,
     MODEL_MODE_DEFAULT,
     parseCodexModelMode,
+    resolveLocalModelDisplay,
     resolveModelSelectionForFlavor,
 } from './modelCatalog';
 
 describe('modelCatalog', () => {
     it('validates model mode and flavor-specific mode', () => {
         expect(isModelMode('gpt-6-astra-max')).toBe(true);
+        expect(isModelMode('gpt-6-astra-ultra')).toBe(true);
         expect(isModelMode('gpt-5.6-sol-ultra')).toBe(true);
         expect(isModelMode('gpt-5.5-xhigh')).toBe(true);
         expect(isModelMode('unknown-model')).toBe(false);
 
         expect(isModelModeForAgent('codex', 'gpt-5.6-sol-ultra')).toBe(true);
+        expect(isModelModeForAgent('codex', 'gpt-6-astra-ultra')).toBe(true);
         expect(isModelModeForAgent('claude', 'claude-fable-5-1-max')).toBe(true);
         expect(isModelModeForAgent('gemini', 'gpt-5.6-sol-ultra')).toBe(false);
         expect(isModelModeForAgent('claude', 'claude-opus-4-6')).toBe(true);
@@ -41,8 +44,8 @@ describe('modelCatalog', () => {
     });
 
     it('parses codex model mode into family and effort', () => {
-        expect(parseCodexModelMode('gpt-5.2-medium')).toEqual({
-            family: 'gpt-5.2',
+        expect(parseCodexModelMode('gpt-5.5-medium')).toEqual({
+            family: 'gpt-5.5',
             effort: 'medium',
         });
         expect(parseCodexModelMode('claude-opus-4-6')).toEqual({
@@ -53,16 +56,17 @@ describe('modelCatalog', () => {
 
     it('builds codex model mode and default', () => {
         expect(buildCodexModelMode('gpt-6-astra', 'max')).toBe('gpt-6-astra-max');
-        expect(buildCodexModelMode('gpt-5.4-mini', 'low')).toBe('gpt-5.4-mini-low');
-        expect(buildCodexModelMode('gpt-5.4-mini', 'xhigh')).toBe('gpt-5.4-mini-xhigh');
+        expect(buildCodexModelMode('gpt-6-astra', 'ultra')).toBe('gpt-6-astra-ultra');
+        expect(buildCodexModelMode('gpt-5.6-luna', 'low')).toBe('gpt-5.6-luna-low');
+        expect(buildCodexModelMode('gpt-5.6-luna', 'xhigh')).toBe('gpt-5.6-luna-xhigh');
         expect(buildCodexModelMode('gpt-5.6-sol', 'ultra')).toBe('gpt-5.6-sol-ultra');
         expect(buildCodexModelMode('gpt-5.6-luna', 'max')).toBe('gpt-5.6-luna-max');
         expect(buildCodexModelMode(MODEL_MODE_DEFAULT, 'high')).toBe(MODEL_MODE_DEFAULT);
     });
 
     it('returns valid reasoning options per codex family', () => {
-        expect(getCodexReasoningOptions('gpt-6-astra')).toEqual(['max', 'xhigh', 'high', 'medium', 'low']);
-        expect(getCodexReasoningOptions('gpt-5.4-mini')).toEqual(['xhigh', 'high', 'medium', 'low']);
+        expect(getCodexReasoningOptions('gpt-6-astra')).toEqual(['ultra', 'max', 'xhigh', 'high', 'medium', 'low']);
+        expect(getCodexReasoningOptions('gpt-5.5')).toEqual(['xhigh', 'high', 'medium', 'low']);
         expect(getCodexReasoningOptions('gpt-5.6-sol')).toEqual(['ultra', 'max', 'xhigh', 'high', 'medium', 'low']);
         expect(getCodexReasoningOptions('gpt-5.6-terra')).toEqual(['ultra', 'max', 'xhigh', 'high', 'medium', 'low']);
         expect(getCodexReasoningOptions('gpt-5.6-luna')).toEqual(['max', 'xhigh', 'high', 'medium', 'low']);
@@ -148,7 +152,43 @@ describe('modelCatalog', () => {
     it('keeps codex model list in catalog shape', () => {
         expect(CODEX_MODEL_MODES[0]).toBe(MODEL_MODE_DEFAULT);
         expect(CODEX_MODEL_MODES).toContain('gpt-6-astra-max');
-        expect(CODEX_MODEL_MODES).toContain('gpt-5.4-mini-high');
+        expect(CODEX_MODEL_MODES).toContain('gpt-6-astra-ultra');
+        expect(CODEX_MODEL_MODES).toContain('gpt-5.5-high');
+    });
+
+    it('drops retired codex families from the pickers but keeps old sessions resolving', () => {
+        // Retired from the pickers: no longer a valid mode, no longer offered.
+        expect(isModelMode('gpt-5.4-high')).toBe(false);
+        expect(isModelMode('gpt-5.4-mini-low')).toBe(false);
+        expect(isModelMode('gpt-5.2-xhigh')).toBe(false);
+        expect(isModelModeForAgent('codex', 'gpt-5.4-high')).toBe(false);
+        expect(CODEX_MODEL_MODES).not.toContain('gpt-5.4-high');
+        expect(CODEX_MODEL_MODES).not.toContain('gpt-5.4-mini-high');
+        expect(CODEX_MODEL_MODES).not.toContain('gpt-5.2-high');
+
+        // A session saved while they were current still runs on what it was created with —
+        // without the retired map the composite string would be sent as a model name.
+        expect(resolveModelSelectionForFlavor('codex', 'gpt-5.4-high')).toEqual({
+            model: 'gpt-5.4',
+            reasoningEffort: 'high',
+        });
+        expect(resolveModelSelectionForFlavor('codex', 'gpt-5.4-mini-xhigh')).toEqual({
+            model: 'gpt-5.4-mini',
+            reasoningEffort: 'xhigh',
+        });
+        expect(resolveLocalModelDisplay('gpt-5.2-medium')).toEqual({
+            model: 'gpt-5.2',
+            reasoningEffort: 'medium',
+        });
+        // The retired map is codex-only: another flavor still passes the raw id through.
+        expect(resolveModelSelectionForFlavor('claude', 'gpt-5.4-high')).toEqual({
+            model: 'gpt-5.4-high',
+            reasoningEffort: null,
+        });
+
+        // Retired families keep their label and context window so old sessions still render.
+        expect(formatModelDisplay('gpt-5.4', 'high')).toBe('GPT-5.4 (High)');
+        expect(getMaxContextSize('gpt-5.4-high', 'codex')).toBe(272_000);
     });
 
     it('keeps gemini free-tier fallback model in catalog', () => {
