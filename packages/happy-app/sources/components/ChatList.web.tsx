@@ -29,12 +29,13 @@ import {
     buildLayoutModel,
     computeVisibleRange,
     distanceToCenterEntry,
-    entryTopFromBottom,
+    entryBottomFromBottom,
     minimumCanvasHeightPx,
     nextViewportState,
     pickCompensationAnchor,
     rangeAroundAnchor,
     sameKeys,
+    shiftForAnchorLine,
     type LayoutModel,
     type RenderRange,
     type ViewportState,
@@ -1766,12 +1767,12 @@ const ChatListInternal = React.memo((props: {
     // measurement pass then refines real−estimate on the corrected scroll.
 
     // 1. Layout changes nothing measured: a fold, a new message, a page
-    // prepend. Keep the first measured on-screen row's top edge still, which
-    // is the same rule `applyMeasuredHeights` applies to a measurement batch —
-    // what changed at or below the reader's line moves the viewport, what
-    // changed above it does not. Prepends are naturally free in bottom-anchored
-    // coordinates (delta 0); appends below a scrolled-up viewport get
-    // compensated; at the bottom, glue to 0.
+    // prepend. Keep the first measured on-screen row's bottom edge — its line —
+    // where it is, which is the same rule `applyMeasuredHeights` applies to a
+    // measurement batch: what changed at or below the reader's line moves the
+    // viewport, what changed above it does not. Prepends are naturally free in
+    // bottom-anchored coordinates (delta 0); appends below a scrolled-up
+    // viewport get compensated; at the bottom, glue to 0.
     React.useLayoutEffect(() => {
         const previous = committedLayoutRef.current;
         const next = preMeasureLayoutRef.current ?? layout;
@@ -1809,15 +1810,19 @@ const ChatListInternal = React.memo((props: {
             collapseEmptyRows: true,
         });
         if (!anchorKey) return;
-        const prevTop = entryTopFromBottom(previous, anchorKey);
-        const nextTop = entryTopFromBottom(next, anchorKey);
-        if (prevTop == null || nextTop == null || nextTop === prevTop) return;
-        // The anchor's distance-from-bottom moved (appends/removals below the
-        // viewport; prepends are delta 0 by construction). Add the shift to the
-        // distance we last asked for — the same arithmetic as a measurement
-        // batch's, on the same number — so the rows at and above the anchor
-        // keep their place while everything below it slides with it.
-        const shiftedRawPx = Math.max(0, raw + (nextTop - prevTop));
+        // The anchor's LINE — its bottom edge — is the edge the two compensation rules have in
+        // common: it is what `absorptionLinePx` measures a measurement batch against, and it is the
+        // edge that changes of the anchor's OWN height cannot move. Holding the top edge instead
+        // makes the anchor's own height a shift of the whole screen: a row at the top of the viewport
+        // that gives up 33px because a page of history arrived would drag the conversation up under
+        // the reader's eyes, page after page. Changes below the line are the ones that push the line,
+        // and they arrive here as the line's own movement.
+        const lineShiftPx = shiftForAnchorLine({ previous, next, anchorKey });
+        if (lineShiftPx === 0) return;
+        // Add the shift to the distance we last asked for — the same arithmetic as a measurement
+        // batch's, on the same number — so the rows at and above the line keep their place while
+        // everything below it slides with it.
+        const shiftedRawPx = Math.max(0, raw + lineShiftPx);
         setRawDistance(shiftedRawPx);
         updateViewportRef.current(shiftedRawPx, scroller.clientHeight);
     }, [layout]);

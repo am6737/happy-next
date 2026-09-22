@@ -167,6 +167,42 @@ export function entryTopFromBottom(layout: LayoutModel, key: string): number | n
     return (layout.bottomOffsetsPx[index] ?? 0) + (layout.heightsPx[index] ?? 0);
 }
 
+// Distance from the content bottom to the entry's BOTTOM edge — the edge an entry has in common
+// with the one below it, and the one a change of its own height does not move.
+export function entryBottomFromBottom(layout: LayoutModel, key: string): number | null {
+    const index = layout.indexByKey.get(key);
+    if (index == null) return null;
+    return layout.bottomOffsetsPx[index] ?? 0;
+}
+
+/**
+ * How far the distance from the bottom has to move for the reader's line to stay where it is.
+ *
+ * The line is the anchor's BOTTOM edge, and which edge that is is the whole of the rule:
+ *
+ *   - an entry's own height sits ABOVE its bottom edge, so an entry that changes its own height
+ *     changes nothing under it — and a reader parked on a row that gives up 33px because a page of
+ *     history arrived is reading the pixels BELOW that row, not the row's own box. Holding the top
+ *     edge instead makes that row's height a shift of the whole screen, which is a 33px jump of the
+ *     conversation under their eyes on every page;
+ *   - an entry's own height sits BELOW the bottom edge of every entry above it, so a fold under the
+ *     line pushes the line and comes back here as the line's movement. That is the fold's rule as
+ *     the measurement batch states it (`absorptionLinePx` is the same edge), so both paths agree on
+ *     which pixels stay: the line's, with everything under it sliding by what changed.
+ *
+ * Zero when either layout does not know the anchor, or when the line did not move.
+ */
+export function shiftForAnchorLine(args: {
+    previous: LayoutModel;
+    next: LayoutModel;
+    anchorKey: string;
+}): number {
+    const before = entryBottomFromBottom(args.previous, args.anchorKey);
+    const after = entryBottomFromBottom(args.next, args.anchorKey);
+    if (before == null || after == null) return 0;
+    return after - before;
+}
+
 // The canvas sits between the list's header spacer and footer inside the
 // scroller. Keeping it at least as tall as the remaining viewport prevents a
 // short, newly-mounted conversation from being clipped by the canvas while

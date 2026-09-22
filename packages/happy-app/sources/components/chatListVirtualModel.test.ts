@@ -3,6 +3,7 @@ import {
     buildLayoutModel,
     computeVisibleRange,
     distanceToCenterEntry,
+    entryBottomFromBottom,
     entryTopFromBottom,
     minimumCanvasHeightPx,
     nextViewportState,
@@ -10,6 +11,7 @@ import {
     rangeAroundAnchor,
     rangeContains,
     sameKeys,
+    shiftForAnchorLine,
     type ViewportState,
 } from './chatListVirtualModel';
 
@@ -335,6 +337,74 @@ describe('entryTopFromBottom', () => {
         expect(entryTopFromBottom(prepended, 'C')).toBe(entryTopFromBottom(before, 'C'));
         const appended = buildLayoutModel({ keys: [...KEYS, 'Z'], measuredHeightsByKey: { Z: 40 }, estimateHeightPx: 100 });
         expect(entryTopFromBottom(appended, 'C')! - entryTopFromBottom(before, 'C')!).toBe(40);
+    });
+});
+
+describe('entryBottomFromBottom', () => {
+    it('returns the distance from the content bottom to the entry bottom', () => {
+        const layout = uniformLayout({ D: 150 });
+        // E's bottom edge IS the content bottom; D's sits one E above it.
+        expect(entryBottomFromBottom(layout, 'E')).toBe(0);
+        expect(entryBottomFromBottom(layout, 'D')).toBe(100);
+        expect(entryBottomFromBottom(layout, 'C')).toBe(250);
+        expect(entryBottomFromBottom(layout, 'A')).toBe(450);
+    });
+
+    it('returns null for unknown keys', () => {
+        expect(entryBottomFromBottom(uniformLayout(), 'nope')).toBeNull();
+    });
+
+    it('is invariant under a prepend, which is why a page of history moves no box below it', () => {
+        const before = uniformLayout();
+        const prepended = buildLayoutModel({ keys: ['P', 'Q', ...KEYS], measuredHeightsByKey: {}, estimateHeightPx: 100 });
+        expect(entryBottomFromBottom(prepended, 'C')).toBe(entryBottomFromBottom(before, 'C'));
+    });
+});
+
+describe('shiftForAnchorLine', () => {
+    it('is zero when the anchor is the entry whose own height changed', () => {
+        // The paging case, at the size it happens: the row the reader's line rests on is a 33px fold
+        // line, and the page that arrives turns it into a folded body row of the now-complete turn.
+        // Its own box gave up 33px, but its box is ABOVE its bottom edge — nothing under the line
+        // moved — so nothing under the line may move on screen either. (Reading the TOP edge instead
+        // reports this as a 33px shift of every row below it: the shake.)
+        const before = uniformLayout({ A: 33 });
+        const after = buildLayoutModel({
+            keys: KEYS,
+            measuredHeightsByKey: { A: 33 },
+            estimateHeightPx: 100,
+            collapsedKeys: new Set(['A']),
+        });
+        expect(entryTopFromBottom(after, 'A')! - entryTopFromBottom(before, 'A')!).toBe(-33);
+        expect(shiftForAnchorLine({ previous: before, next: after, anchorKey: 'A' })).toBe(0);
+    });
+
+    it('is the change below the line when a fold happens under it', () => {
+        // Folding D away takes 100px out of the content between the line at C and the bottom, so the
+        // line drops by 100 in bottom-anchored coordinates: the distance gives up the same 100 and
+        // everything at or above C keeps its place while what is under it slides up by the fold.
+        const before = uniformLayout();
+        const after = buildLayoutModel({
+            keys: KEYS,
+            measuredHeightsByKey: {},
+            estimateHeightPx: 100,
+            collapsedKeys: new Set(['D']),
+        });
+        expect(shiftForAnchorLine({ previous: before, next: after, anchorKey: 'C' })).toBe(-100);
+    });
+
+    it('is the appended height when entries arrive below the line', () => {
+        const before = uniformLayout();
+        const after = buildLayoutModel({ keys: [...KEYS, 'Z'], measuredHeightsByKey: { Z: 40 }, estimateHeightPx: 100 });
+        expect(shiftForAnchorLine({ previous: before, next: after, anchorKey: 'C' })).toBe(40);
+        expect(shiftForAnchorLine({ previous: before, next: after, anchorKey: 'Z' })).toBe(0);
+    });
+
+    it('is zero when either layout does not know the anchor', () => {
+        const before = uniformLayout();
+        const after = buildLayoutModel({ keys: [...KEYS, 'Z'], measuredHeightsByKey: { Z: 40 }, estimateHeightPx: 100 });
+        expect(shiftForAnchorLine({ previous: before, next: after, anchorKey: 'nope' })).toBe(0);
+        expect(shiftForAnchorLine({ previous: after, next: before, anchorKey: 'Z' })).toBe(0);
     });
 });
 
