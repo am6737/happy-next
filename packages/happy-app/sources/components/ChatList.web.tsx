@@ -11,7 +11,7 @@ import { MessageView } from './MessageView';
 import { ConversationMinimapItem } from './ConversationMinimap';
 import { Metadata, Session } from '@/sync/storageTypes';
 import { ChatFooter } from './ChatFooter';
-import { AskUserQuestionMessage, isAskUserQuestionToolCall, isPreviewHtmlToolCall, Message, MinimapMessage, PreviewHtmlMessage, toAskUserQuestionMessage, toPreviewHtmlMessage, UserTextMessage } from '@/sync/typesMessage';
+import { AskUserQuestionMessage, isAskUserQuestionToolCall, isExitPlanModeToolCall, isPreviewHtmlToolCall, Message, MinimapMessage, PlanProposalMessage, PreviewHtmlMessage, toAskUserQuestionMessage, toPlanProposalMessage, toPreviewHtmlMessage, UserTextMessage } from '@/sync/typesMessage';
 import { currentLandmark, isMinimapLandmarkRow, railLandmarkRows, shouldHideMessageInChatList, shouldHideMessageInMinimap, type LandmarkRow } from './chatListVisibility';
 import { foldedLineKeepsRow } from './turnFold';
 import { turnHeaderProps, useTurnAnalysis } from './messageTurnTiming';
@@ -653,10 +653,20 @@ const ChatListInternal = React.memo((props: {
             .reverse();
     }, [listedMessages]);
 
+    // `ExitPlanMode` calls the rail places a marker for, in the same ascending order. Only calls
+    // that carry a plan qualify — see buildPlanProposalMessage.
+    const loadedPlanMessages = React.useMemo<MinimapMessage[]>(() => {
+        return listedMessages
+            .filter(isExitPlanModeToolCall)
+            .map(toPlanProposalMessage)
+            .filter((message): message is PlanProposalMessage => message !== null)
+            .reverse();
+    }, [listedMessages]);
+
     // Merge offline-cached landmarks with the loaded ones so the minimap can show prompts,
-    // questions and previews that live in the persistent cache but haven't been paged into the
-    // list yet. Loaded messages win on id (they carry an accurate scroll position); rows the rail
-    // leaves out (see shouldHideMessageInMinimap) are dropped from both sources.
+    // questions, previews and plan proposals that live in the persistent cache but haven't been
+    // paged into the list yet. Loaded messages win on id (they carry an accurate scroll position);
+    // rows the rail leaves out (see shouldHideMessageInMinimap) are dropped from both sources.
     const minimapItems = React.useMemo<ConversationMinimapItem[]>(() => {
         // Loaded messages always win (they carry the store's id → accurate scroll position + active
         // highlight). A cached entry is dropped if a loaded message matches it by EITHER seq OR
@@ -670,6 +680,7 @@ const ChatListInternal = React.memo((props: {
             ...loadedUserMessages.map((item) => item.message),
             ...loadedQuestionMessages,
             ...loadedPreviewMessages,
+            ...loadedPlanMessages,
         ]) {
             if (shouldHideMessageInMinimap(loaded)) continue;
             merged.push(loaded);
@@ -688,7 +699,7 @@ const ChatListInternal = React.memo((props: {
         return merged
             .sort((a, b) => a.createdAt - b.createdAt || (a.seq ?? 0) - (b.seq ?? 0))
             .map((message) => ({ message }));
-    }, [props.minimapCachedUserMessages, loadedUserMessages, loadedQuestionMessages, loadedPreviewMessages]);
+    }, [props.minimapCachedUserMessages, loadedUserMessages, loadedQuestionMessages, loadedPreviewMessages, loadedPlanMessages]);
     // Landmark rows in the list's own order — newest first — carrying the index each has there. Only a
     // row the rail draws a mark for counts, so the landmark the rail is told to light is always one it
     // has; the rail's current landmark is read off these and the rows on screen, see `currentLandmark`.
@@ -2358,9 +2369,10 @@ const ChatListInternal = React.memo((props: {
         // Present only on the row that opens a turn whose process is worth folding.
         const fold = folding.controlByHeaderId.get(item.id);
         const process = turns.foldById.get(item.id);
-        // The fold keeps a settled turn's answer and never swallows a landmark. Either can be the
-        // very row the line sits on — the turn's only text opening it, a question card opening it —
-        // and that row then shows its own content below the line instead of giving way to it.
+        // The fold keeps a settled turn's answer and never swallows a row the reader answers. Either
+        // can be the very row the line sits on — the turn's only text opening it, a question card or a
+        // plan proposal opening it — and that row then shows its own content below the line instead of
+        // giving way to it.
         const foldKeepsRow = foldedLineKeepsRow({
             folded: fold?.folded === true,
             answer: process?.answerId === item.id,

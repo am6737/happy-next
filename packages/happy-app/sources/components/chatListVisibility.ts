@@ -1,4 +1,4 @@
-import { isAskUserQuestionToolCall, isPreviewHtmlToolCall, Message, MinimapMessage } from '@/sync/typesMessage';
+import { isAskUserQuestionToolCall, isExitPlanModeToolCall, isPreviewHtmlToolCall, Message, MinimapMessage } from '@/sync/typesMessage';
 
 const LOCAL_COMMAND_STDOUT_PATTERN = /^<local-command-stdout>[\s\S]*<\/local-command-stdout>$/;
 
@@ -34,14 +34,16 @@ export function shouldHideMessageInChatList(message: Message, showThinkingMessag
 }
 
 /**
- * A row the conversation rail draws a mark for: a question card, or an inline HTML preview.
+ * A row the conversation rail draws a mark for: a question card, an inline HTML preview, or a plan
+ * proposal.
  *
- * These are landmarks rather than working-out. The rail jumps to them, and a question is something the
- * reader may still have to answer — so anything that hides rows has to keep them, and the jump stays
- * able to land. Folding a turn's process is the caller this exists for.
+ * These are landmarks rather than working-out. The rail jumps to them, and two of them are rows the
+ * reader is the one who answers — a question, and a plan proposal, the plan itself being what they
+ * approve or reject — so anything that hides rows has to keep them, on top of the jump staying able
+ * to land. Folding a turn's process is the caller this exists for.
  */
 export function isMinimapLandmarkRow(message: Message): boolean {
-    return isAskUserQuestionToolCall(message) || isPreviewHtmlToolCall(message);
+    return isAskUserQuestionToolCall(message) || isPreviewHtmlToolCall(message) || isExitPlanModeToolCall(message);
 }
 
 /**
@@ -59,7 +61,7 @@ export function isMinimapLandmarkRow(message: Message): boolean {
 export function shouldHideMessageInMinimap(message: MinimapMessage): boolean {
     // Tool-call landmarks are never dropped by the list filter below (it only looks at user rows),
     // so they are kept unconditionally.
-    if (message.kind === 'ask-user-question' || message.kind === 'preview-html') {
+    if (message.kind === 'ask-user-question' || message.kind === 'preview-html' || message.kind === 'plan-proposal') {
         return false;
     }
     if (message.meta?.isCompactSummary === true) {

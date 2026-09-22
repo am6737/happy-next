@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { currentLandmark, railLandmarkRows, shouldHideMessageInMinimap, shouldHideMessageInChatList, LandmarkRow } from './chatListVisibility';
+import { currentLandmark, isMinimapLandmarkRow, railLandmarkRows, shouldHideMessageInMinimap, shouldHideMessageInChatList, LandmarkRow } from './chatListVisibility';
 import { AgentTextMessage, MinimapMessage, ToolCallMessage, UserTextMessage } from '@/sync/typesMessage';
 
 function toolCall(name: string): ToolCallMessage {
@@ -165,6 +165,39 @@ describe('shouldHideMessageInMinimap', () => {
             answers: null,
         };
         expect(shouldHideMessageInMinimap(question)).toBe(false);
+    });
+
+    it('never drops a plan proposal', () => {
+        const plan: MinimapMessage = {
+            kind: 'plan-proposal',
+            id: 'plan-1',
+            localId: null,
+            createdAt: 0,
+            summary: 'Ship the fold',
+        };
+        expect(shouldHideMessageInMinimap(plan)).toBe(false);
+    });
+});
+
+describe('isMinimapLandmarkRow', () => {
+    it('marks the rows the reader answers', () => {
+        expect(isMinimapLandmarkRow(toolCall('AskUserQuestion'))).toBe(true);
+        // The plan proposal is the row the reader approves or rejects, so the rail marks it like a
+        // question — the fold keeps it for the same reason.
+        expect(isMinimapLandmarkRow(toolCall('ExitPlanMode'))).toBe(true);
+        // The same card, under the spelling the other agents send it as.
+        expect(isMinimapLandmarkRow(toolCall('exit_plan_mode'))).toBe(true);
+    });
+
+    it('marks an inline preview, which the rail jumps to', () => {
+        expect(isMinimapLandmarkRow(toolCall('mcp__happy__preview_html'))).toBe(true);
+    });
+
+    it('leaves ordinary work unmarked', () => {
+        expect(isMinimapLandmarkRow(toolCall('Read'))).toBe(false);
+        expect(isMinimapLandmarkRow(toolCall('enter_plan_mode'))).toBe(false);
+        expect(isMinimapLandmarkRow(agentText())).toBe(false);
+        expect(isMinimapLandmarkRow(userText('hello'))).toBe(false);
     });
 });
 

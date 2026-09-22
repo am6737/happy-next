@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { analyzeTurns } from './messageTurnTiming';
 import { ASK_USER_QUESTION_TOOL, AgentTextMessage, Message, UserTextMessage } from '@/sync/typesMessage';
 
+const PLAN_PROPOSAL_TOOL = 'ExitPlanMode';
+
 function user(id: string, createdAt: number): UserTextMessage {
     return { kind: 'user-text', id, localId: null, createdAt, text: id };
 }
@@ -41,6 +43,11 @@ function namedTool(id: string, createdAt: number, name: string): Message {
 /** A question card — one of the two rows the conversation rail marks. */
 function question(id: string, createdAt: number): Message {
     return namedTool(id, createdAt, ASK_USER_QUESTION_TOOL);
+}
+
+/** A plan proposal — a row the reader answers, and the third row the rail marks. */
+function planProposal(id: string, createdAt: number, name = PLAN_PROPOSAL_TOOL): Message {
+    return namedTool(id, createdAt, name);
 }
 
 const NO_LATCH: ReadonlySet<string> = new Set<string>();
@@ -293,6 +300,38 @@ describe('folded turns', () => {
             answerId: 'a1',
         });
         expect(result.headerById.get('q1')?.state).toBe('done');
+    });
+
+    it('keeps a plan proposal the reader has not answered yet', () => {
+        // The agent proposed a plan mid-turn, and the reader is the one who answers it: folding the
+        // turn's progress must not take the plan off the screen. It is not working-out, so it is not
+        // counted either — the line counts the rows it hides.
+        const result = analyze([agent('a1', 60), tool('t3', 50), planProposal('p1', 40), tool('t2', 30), tool('t1', 20), user('u1', 10)]);
+        expect(fold(result, 't1')).toEqual({
+            hiddenIds: ['t2', 't3'],
+            steps: 3,
+            snapshotId: 't3',
+            answerId: 'a1',
+        });
+    });
+
+    it('keeps the snake_case plan proposal too', () => {
+        const result = analyze([agent('a1', 50), planProposal('p1', 40, 'exit_plan_mode'), tool('t1', 30), user('u1', 10)]);
+        expect(fold(result, 't1')).toEqual({ hiddenIds: [], steps: 1, snapshotId: 't1', answerId: 'a1' });
+    });
+
+    it('keeps a plan proposal that opens the turn, the very row the line lands on', () => {
+        // The turn's first row is the proposal, so the line is drawn on it: the card keeps its content
+        // there (foldedLineKeepsRow), and the walk leaves it out of the dropped rows. Either half
+        // missing is the plan disappearing from the list.
+        const result = analyze([agent('a1', 50), tool('t1', 40), planProposal('p1', 30), user('u1', 10)]);
+        expect(fold(result, 'p1')).toEqual({
+            hiddenIds: ['t1'],
+            steps: 1,
+            snapshotId: 't1',
+            answerId: 'a1',
+        });
+        expect(result.headerById.get('p1')?.state).toBe('done');
     });
 
     it('has nothing to hide when the turn is only its answer', () => {

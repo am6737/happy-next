@@ -28,17 +28,22 @@ function getPreviewText(message: MinimapMessage) {
         // The card is named by its title; an untitled one says what it is instead of showing blank.
         return truncatePreview(message.title?.trim() || t('tools.names.previewHtml'));
     }
+    // A plan proposal is named by its tool, and its opening line is what the card shows.
+    if (message.kind === 'plan-proposal') return truncatePreview(message.summary);
     return getPromptPreviewText(message);
 }
 
 /**
  * Small heading above the preview body: the first question's header for a single question, the
- * question count otherwise; a preview's name when its title is about to follow. Prompts have no
- * heading.
+ * question count otherwise; a preview's name when its title is about to follow, and the plan
+ * proposal's whenever there is a plan under it. Prompts have no heading.
  */
 function getPreviewLabel(message: MinimapMessage) {
     if (message.kind === 'preview-html') {
         return message.title?.trim() ? t('tools.names.previewHtml') : null;
+    }
+    if (message.kind === 'plan-proposal') {
+        return t('tools.names.planProposal');
     }
     if (message.kind !== 'ask-user-question') return null;
     if (message.questions.length > 1) {
@@ -47,7 +52,8 @@ function getPreviewLabel(message: MinimapMessage) {
     return message.questions[0]?.header?.trim() || t('tools.names.question');
 }
 
-/** Secondary preview line: attachments for a prompt, the chosen answers for a question, none for a preview. */
+/** Secondary preview line: attachments for a prompt, the chosen answers for a question, nothing for the
+ * two cards the agent made. */
 function getPreviewDetail(message: MinimapMessage) {
     if (message.kind === 'ask-user-question') {
         const chosen = message.answers;
@@ -57,7 +63,8 @@ function getPreviewDetail(message: MinimapMessage) {
             .filter((answer): answer is string => !!answer);
         return answers.length > 0 ? t('tools.askUserQuestion.answered', { answer: answers.join(' · ') }) : null;
     }
-    // Only prompts carry attachments; questions reported theirs above, previews have none.
+    // Only prompts carry attachments; questions reported theirs above, previews and plan proposals
+    // have none.
     if (message.kind !== 'user-text') return null;
     const images = message.images ?? [];
     if (images.length === 0) return null;

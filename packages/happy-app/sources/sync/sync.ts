@@ -48,7 +48,7 @@ import { gitStatusSync } from './gitStatusSync';
 import { projectManager } from './projectManager';
 import { AsyncLock } from '@/utils/lock';
 import { voiceHooks } from '@/realtime/hooks/voiceHooks';
-import { ASK_USER_QUESTION_TOOL, AskUserQuestionMessage, buildAskUserQuestionMessage, buildPreviewHtmlMessage, Message, MinimapMessage, normalizePreviewHtmlToolName, PREVIEW_HTML_TOOL, PreviewHtmlMessage, UserTextMessage } from './typesMessage';
+import { ASK_USER_QUESTION_TOOL, AskUserQuestionMessage, buildAskUserQuestionMessage, buildPlanProposalMessage, buildPreviewHtmlMessage, isExitPlanModeToolName, Message, MinimapMessage, normalizePreviewHtmlToolName, PlanProposalMessage, PREVIEW_HTML_TOOL, PreviewHtmlMessage, UserTextMessage } from './typesMessage';
 import { EncryptionCache } from './encryption/encryptionCache';
 import { systemPrompt, buildDootaskSystemPrompt } from './prompt/systemPrompt';
 import { getDootaskFromServer } from './dootask/api';
@@ -3565,7 +3565,8 @@ class Sync {
         }
 
         // Proactively seed the minimap with only the newest MAX_USER_MESSAGES prompts, MAX_QUESTIONS
-        // questions and MAX_PREVIEWS previews. As the user scrolls the list, older landmarks are
+        // questions, MAX_PREVIEWS previews and MAX_PLANS plan proposals. As the user scrolls the list,
+        // older landmarks are
         // merged in unbounded (via the loaded messages), so the caps only limit what we load up
         // front. Page backwards from the newest message and decrypt PER PAGE so we can stop as soon
         // as we have enough — decryption is the dominant cost, and a long history would otherwise be
@@ -3574,6 +3575,7 @@ class Sync {
         const MAX_USER_MESSAGES = 50;
         const MAX_QUESTIONS = 50;
         const MAX_PREVIEWS = 50;
+        const MAX_PLANS = 50;
         const MAX_SCAN = 5000;
         const PAGE = Sync.INITIAL_MESSAGES_LIMIT;
         const collectedUserMessages: UserTextMessage[] = [];
@@ -3593,6 +3595,14 @@ class Sync {
             input: unknown;
             toolUseId: string | null;
         }[] = [];
+        /** Plans need no toolUseId: the card is on the row from the moment the call lands. */
+        const pendingPlans: {
+            id: string;
+            localId: string | null;
+            createdAt: number;
+            seq?: number | null;
+            input: unknown;
+        }[] = [];
         // Answers land in a NEWER record than the call that asked the question, and we scan
         // newest→oldest, so the result is always seen before its call. Stash them and attach below.
         const resultsByToolUseId = new Map<string, unknown>();
@@ -3600,7 +3610,7 @@ class Sync {
         let hitScanCap = false;
         try {
             let beforeSeq: number | null = null;
-            while (collectedUserMessages.length < MAX_USER_MESSAGES || pendingQuestions.length < MAX_QUESTIONS || pendingPreviews.length < MAX_PREVIEWS) {
+            while (collectedUserMessages.length < MAX_USER_MESSAGES || pendingQuestions.length < MAX_QUESTIONS || pendingPreviews.length < MAX_PREVIEWS || pendingPlans.length < MAX_PLANS) {
                 if (scanned >= MAX_SCAN) {
                     hitScanCap = true;
                     break;
@@ -3678,6 +3688,14 @@ class Sync {
                                 input: content.input,
                                 toolUseId: content.id ?? null,
                             });
+                        } else if (content.type === 'tool-call' && isExitPlanModeToolName(content.name)) {
+                            pendingPlans.push({
+                                id: normalized.id,
+                                localId: normalized.localId,
+                                createdAt: normalized.createdAt,
+                                seq: item.seq,
+                                input: content.input,
+                            });
                         } else if (content.type === 'tool-result' && content.tool_use_id) {
                             resultsByToolUseId.set(content.tool_use_id, content.content);
                         }
@@ -3722,6 +3740,11 @@ class Sync {
             }))
             .filter((message): message is PreviewHtmlMessage => message !== null);
 
+        // A plan proposal is a card the moment its call lands, so there is no result to wait for.
+        const collectedPlans = pendingPlans
+            .map((pending) => buildPlanProposalMessage(pending))
+            .filter((message): message is PlanProposalMessage => message !== null);
+
         // Keep only the newest of each kind, ordered oldest→newest (matching the list order). Each
         // collection is in scan order (newest first), so each is sorted before the front is trimmed
         // — the kinds are capped independently so a question-heavy stretch cannot crowd out prompts.
@@ -3733,6 +3756,7 @@ class Sync {
             ...keepNewest(collectedUserMessages, MAX_USER_MESSAGES),
             ...keepNewest(collectedQuestions, MAX_QUESTIONS),
             ...keepNewest(collectedPreviews, MAX_PREVIEWS),
+            ...keepNewest(collectedPlans, MAX_PLANS),
         ];
         result.sort(byOldestFirst);
         this.minimapMessagesCache.set(sessionId, { signature, messages: result });

@@ -10,7 +10,7 @@ import { MessageView } from './MessageView';
 import { ConversationMinimapItem } from './ConversationMinimap';
 import { Metadata, Session } from '@/sync/storageTypes';
 import { ChatFooter } from './ChatFooter';
-import { AskUserQuestionMessage, isAskUserQuestionToolCall, isPreviewHtmlToolCall, Message, MinimapMessage, PreviewHtmlMessage, toAskUserQuestionMessage, toPreviewHtmlMessage, UserTextMessage } from '@/sync/typesMessage';
+import { AskUserQuestionMessage, isAskUserQuestionToolCall, isExitPlanModeToolCall, isPreviewHtmlToolCall, Message, MinimapMessage, PlanProposalMessage, PreviewHtmlMessage, toAskUserQuestionMessage, toPlanProposalMessage, toPreviewHtmlMessage, UserTextMessage } from '@/sync/typesMessage';
 import { currentLandmark, railLandmarkRows, shouldHideMessageInChatList, shouldHideMessageInMinimap, type LandmarkRow } from './chatListVisibility';
 import { turnHeaderProps, useTurnAnalysis } from './messageTurnTiming';
 import { AWAITING_RESPONSE_MAX_MS } from '@/utils/sessionUtils';
@@ -208,10 +208,20 @@ const ChatListInternal = React.memo((props: {
             .reverse();
     }, [visibleMessages]);
 
+    // `ExitPlanMode` calls the rail places a marker for, in the same ascending order. Only calls
+    // that carry a plan qualify — see buildPlanProposalMessage.
+    const loadedPlanMessages = React.useMemo<MinimapMessage[]>(() => {
+        return visibleMessages
+            .filter(isExitPlanModeToolCall)
+            .map(toPlanProposalMessage)
+            .filter((message): message is PlanProposalMessage => message !== null)
+            .reverse();
+    }, [visibleMessages]);
+
     // Merge offline-cached landmarks with the loaded ones so the minimap can show prompts,
-    // questions and previews that live in the persistent cache but haven't been paged into the
-    // list yet. Loaded messages win on id (they carry an accurate scroll position); rows the rail
-    // leaves out (see shouldHideMessageInMinimap) are dropped from both sources.
+    // questions, previews and plan proposals that live in the persistent cache but haven't been
+    // paged into the list yet. Loaded messages win on id (they carry an accurate scroll position);
+    // rows the rail leaves out (see shouldHideMessageInMinimap) are dropped from both sources.
     const minimapItems = React.useMemo<ConversationMinimapItem[]>(() => {
         // Loaded messages always win (they carry the store's id → accurate scroll position + active
         // highlight). A cached entry is dropped if a loaded message matches it by EITHER seq OR
@@ -225,6 +235,7 @@ const ChatListInternal = React.memo((props: {
             ...loadedUserMessages.map((item) => item.message),
             ...loadedQuestionMessages,
             ...loadedPreviewMessages,
+            ...loadedPlanMessages,
         ]) {
             if (shouldHideMessageInMinimap(loaded)) continue;
             merged.push(loaded);
@@ -243,7 +254,7 @@ const ChatListInternal = React.memo((props: {
         return merged
             .sort((a, b) => a.createdAt - b.createdAt || (a.seq ?? 0) - (b.seq ?? 0))
             .map((message) => ({ message }));
-    }, [props.minimapCachedUserMessages, loadedUserMessages, loadedQuestionMessages, loadedPreviewMessages]);
+    }, [props.minimapCachedUserMessages, loadedUserMessages, loadedQuestionMessages, loadedPreviewMessages, loadedPlanMessages]);
 
     // Landmark rows in the list's own order — newest first — carrying the index each has there. Only a
     // row the rail draws a mark for counts, so the landmark the rail is told to light is always one it

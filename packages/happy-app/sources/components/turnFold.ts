@@ -43,9 +43,9 @@ export function turnFoldControl(params: {
  *
  * The line stands in for that row, and two kinds of row refuse to give way. A settled turn's answer,
  * because the fold exists to show what the agent concluded and the answer can be the very row the
- * line lands on. And a landmark — a question card, an inline HTML preview — which no fold may hide
- * wherever it sits in the turn: the rail jumps to it, and a question is something the reader may
- * still have to answer.
+ * line lands on. And a landmark — a question card, an inline HTML preview, a plan proposal — which
+ * no fold may take wherever it sits in the turn: the rail jumps to it, and a question and a plan
+ * proposal are rows the reader is the one who answers.
  *
  * The rows a fold drops are filtered the same way (see `isMinimapLandmarkRow`), but that filter
  * cannot cover this case: a landmark that opens a turn is the row the line lands on, and a row the
