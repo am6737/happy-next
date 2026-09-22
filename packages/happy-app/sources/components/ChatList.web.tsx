@@ -220,6 +220,10 @@ const LOAD_MORE_RETRY_MS = 300;
 const JUMP_LAND_TOLERANCE_PX = 1;
 /** How many commits a jump may be repositioned on before it gives up. */
 const MAX_JUMP_ATTEMPTS = 12;
+/** How close a distance write has to land to count as taken rather than refused. */
+const WRITE_VERIFY_TOLERANCE_PX = 1;
+/** Frames a refused write waits for the box to catch up before taking the end of the range. */
+const WRITE_VERIFY_MAX_CHECKS = 6;
 // Keys the browser turns into native scrolling of the hovered/focused scroller.
 const SCROLL_KEYS = new Set(['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' ']);
 // Post-jump feedback: horizontal shake on the target row.
@@ -461,6 +465,16 @@ type PendingJump = {
     attempts?: number;
     // Internal repositions skip the shake feedback and logging.
     silent: boolean;
+};
+// A write the engine refused, kept until the box has caught up with it: the row a fold opens
+// arrives a commit after the arithmetic that accounted for it, so the range can be briefly shorter
+// than the distance we asked for. `lastScrollHeightPx` is how the wait knows the box has stopped
+// moving, and `checks` bounds it.
+type PendingWriteVerify = {
+    askedRawPx: number;
+    atMs: number;
+    lastScrollHeightPx: number;
+    checks: number;
 };
 type PendingMeasureOps = {
     // While a session restore is pending, measurement batches re-assert the
@@ -759,6 +773,16 @@ const ChatListInternal = React.memo((props: {
     // Far in the past — `performance.now()` starts near 0, so initializing to 0
     // would count the first 400ms of page life as "user is scrolling".
     const lastUserInputAtRef = useRef(-1e9);
+    // The same, for their SCROLLING input only — a wheel, a drag, a scroll key — and not the tap
+    // that opens a fold. Together with `lastDistanceWriteAtRef` it decides whether an offset the
+    // scroller reports is where the reader is, or one the engine clamped on its own: see
+    // `handleScroll` and the layout effect that absorbs a fold.
+    const lastScrollInputAtRef = useRef(-1e9);
+    // When we last wrote the distance ourselves. A write the reader's input predates is ours to
+    // answer for — they have not moved since we placed them.
+    const lastDistanceWriteAtRef = useRef(-1e9);
+    // A write the engine refused, waiting for the box to catch up (see `verifyPendingWrite`).
+    const pendingWriteVerifyRef = useRef<PendingWriteVerify | null>(null);
     // Raw |scrollTop| target of a pending session restore; re-asserted after
     // every measurement batch until it lands (or the user takes over).
     const pendingRestoreRef = useRef<number | null>(restored && !restored.atBottom ? restored.scrollDistancePx : null);
@@ -830,8 +854,81 @@ const ChatListInternal = React.memo((props: {
         // The controller owns the write so that what the engine does with it is
         // remembered rather than lost (see scrollDistanceRef above).
         const actual = scrollDistance.setDistancePx(raw);
+        const atMs = performance.now();
+        lastDistanceWriteAtRef.current = atMs;
         atBottomRef.current = actual <= SCROLL_THRESHOLD;
         lastVisibleRawRef.current = actual;
+        // A refusal is not an answer (see `settleRefusedWrite`): hold the request until the box has
+        // caught up with it. Anything within tolerance of the ask is the engine holding it.
+        if (Math.abs(actual - raw) <= WRITE_VERIFY_TOLERANCE_PX) {
+            pendingWriteVerifyRef.current = null;
+            return;
+        }
+        pendingWriteVerifyRef.current = { askedRawPx: raw, atMs, lastScrollHeightPx: -1, checks: 0 };
+        scheduleWriteVerify();
+    };
+
+    // The box a refused write was waiting for: ask again while it is still growing, and settle on
+    // what the range can hold once it has stopped. Returns true when there is nothing left to wait
+    // for, and false to be called again on the next frame.
+    //
+    // `counted` is what makes "at rest" mean a frame and not an invocation: an uncounted check (the
+    // same-tick one) may take a range that already covers the request, but the end of a range is
+    // only taken on a frame that saw the box hold still.
+    const verifyPendingWrite = (counted: boolean): boolean => {
+        const armed = pendingWriteVerifyRef.current;
+        if (!armed) return true;
+        const scroller = scrollerElRef.current;
+        if (!scroller || scroller.clientHeight === 0) {
+            pendingWriteVerifyRef.current = null;
+            return true;
+        }
+        // The reader scrolled by hand after the write: their position is the truth (the scroll
+        // handler adopted it), not a request we are still waiting on.
+        if (lastScrollInputAtRef.current > armed.atMs) {
+            pendingWriteVerifyRef.current = null;
+            return true;
+        }
+        // A restore or a jump owns the distance right now, and re-asserts its own target.
+        if (pendingRestoreRef.current != null || pendingJumpRef.current) {
+            pendingWriteVerifyRef.current = null;
+            return true;
+        }
+        let atRest = false;
+        if (counted) {
+            const scrollHeightPx = scroller.scrollHeight;
+            const stillMoving = scrollHeightPx !== armed.lastScrollHeightPx;
+            armed.lastScrollHeightPx = scrollHeightPx;
+            armed.checks += 1;
+            atRest = (!stillMoving && armed.checks > 1) || armed.checks >= WRITE_VERIFY_MAX_CHECKS;
+        }
+        const settled = scrollDistance.settleRefusedWrite({ requestedPx: armed.askedRawPx, atRest });
+        if (settled == null) return false;
+        pendingWriteVerifyRef.current = null;
+        setRawDistance(settled);
+        return false;
+    };
+    const verifyPendingWriteRef = useRef(verifyPendingWrite);
+    verifyPendingWriteRef.current = verifyPendingWrite;
+
+    // A refusal is usually answered by the very next frame's layout, so the checks are cheap and
+    // bounded: one in this tick, then one per frame until the box stops moving — one chain at a
+    // time, so a write that arrives mid-wait is served by the chain already running.
+    const writeVerifyChainRef = useRef(false);
+    const scheduleWriteVerify = () => {
+        if (writeVerifyChainRef.current) return;
+        writeVerifyChainRef.current = true;
+        queueMicrotask(() => verifyPendingWriteRef.current(false));
+        window.requestAnimationFrame(() => {
+            const tick = () => {
+                if (verifyPendingWriteRef.current(true)) {
+                    writeVerifyChainRef.current = false;
+                    return;
+                }
+                window.requestAnimationFrame(tick);
+            };
+            tick();
+        });
     };
 
     const cancelScrollAnimation = () => {
@@ -946,6 +1043,8 @@ const ChatListInternal = React.memo((props: {
         const onWheel = () => {
             proxyScrollIntentRef.current.input(performance.now());
             proxySelfWriteRef.current = null;
+            // A wheel here is the reader scrolling the list, whoever ends up moving the offset.
+            lastScrollInputAtRef.current = performance.now();
         };
         const onKeyDown = (event: KeyboardEvent) => {
             if (SCROLL_KEYS.has(event.key)) onWheel();
@@ -1176,7 +1275,10 @@ const ChatListInternal = React.memo((props: {
         // Hidden: keep the restore armed; re-display re-asserts it.
         if (scroller.clientHeight === 0) return;
         setRawDistance(target);
-        const actual = getRequestedRawDistance();
+        // What the scroller holds, not what we asked for: a restore the content is still too short
+        // for has to stay armed and be re-asserted after the next measurement (see
+        // scrollDistanceController.ts — the intent is ours, the reported offset is the engine's).
+        const actual = scrollDistance.readDistancePx();
         if (Math.abs(actual - target) <= RESTORE_TOLERANCE_PX) {
             pendingRestoreRef.current = null;
         } else if (!props.hasMore
@@ -1231,6 +1333,10 @@ const ChatListInternal = React.memo((props: {
             // new heights + window and the drain effect applies the scroll
             // correction — the whole chain is invisible.
             if (batch.size > 0) applyMeasuredHeightsRef.current(batch, true);
+            // A row settling is also the box arriving for a write that was refused a frame earlier
+            // (a fold's opened row measures to the height the model already had, so the batch comes
+            // back empty and nothing else here would re-assert the distance).
+            verifyPendingWriteRef.current(true);
         });
         rowResizeObserverRef.current = observer;
         return observer;
@@ -1341,6 +1447,18 @@ const ChatListInternal = React.memo((props: {
         }
         // First visible event after a covered period: restore, don't record.
         if (maybeHandleReshowRef.current()) return;
+        // The reader's own scroll, and the only thing that moves the distance we own. Two conditions,
+        // because a scroll event is not evidence of a reader: the engine clamps the offset when a
+        // layout shrinks under the viewport — a fold takes thousands of pixels off the canvas in one
+        // commit — and accepting that clamp as their position is what used to throw the viewport to
+        // the bottom of the conversation with the line they tapped gone off the screen. So the input
+        // has to be theirs (a wheel, a drag, a scroll key: never the tap that opens a fold, which is
+        // a `pointerdown` and nothing more) and newer than our last write, which is the one that
+        // would have moved the offset since.
+        if (lastScrollInputAtRef.current > lastDistanceWriteAtRef.current
+            && performance.now() - lastScrollInputAtRef.current < USER_SCROLL_GRACE_MS) {
+            scrollDistance.adoptReportedDistancePx();
+        }
         const raw = Math.abs(scroller.scrollTop);
         lastVisibleRawRef.current = raw;
         const atBottom = raw <= SCROLL_THRESHOLD;
@@ -1380,18 +1498,26 @@ const ChatListInternal = React.memo((props: {
             // top of the scroll range (where scroll events go silent) — it must
             // still be able to keep paging.
             const onWheel = () => {
+                lastScrollInputAtRef.current = performance.now();
                 maybeHandleReshowRef.current();
                 onUserInput();
                 maybeLoadMoreRef.current();
             };
+            // A drag scrolls the list exactly as a wheel does, and only its moves say so: the
+            // pointer/touch START is also what a tap on a row is, and a tap moves nobody.
+            const onTouchMove = () => {
+                lastScrollInputAtRef.current = performance.now();
+            };
             el.addEventListener('scroll', onScroll, { passive: true });
             el.addEventListener('wheel', onWheel, { passive: true });
             el.addEventListener('touchstart', onUserInput, { passive: true });
+            el.addEventListener('touchmove', onTouchMove, { passive: true });
             el.addEventListener('pointerdown', onUserInput, { passive: true });
             detachScrollerListenersRef.current = () => {
                 el.removeEventListener('scroll', onScroll);
                 el.removeEventListener('wheel', onWheel);
                 el.removeEventListener('touchstart', onUserInput);
+                el.removeEventListener('touchmove', onTouchMove);
                 el.removeEventListener('pointerdown', onUserInput);
             };
             if (typeof ResizeObserver !== 'undefined') {
@@ -1666,7 +1792,13 @@ const ChatListInternal = React.memo((props: {
         if (pendingOpsRef.current || pendingJumpRef.current || previous === next) return;
         const scroller = scrollerElRef.current;
         if (!scroller || pendingRestoreRef.current != null || isAnimatingScrollRef.current) return;
-        const raw = Math.abs(scroller.scrollTop);
+        // The distance we last asked for — never the one the scroller reports. A fold takes the
+        // height out from under the viewport in the same commit that re-renders the rows, so by the
+        // time this effect runs the engine has already clamped the offset to the range that is left.
+        // That clamp is the engine's, not the reader's: starting the arithmetic from it — or picking
+        // the anchor in the window it describes — is what moved the line they had just tapped, and
+        // at the far end of a short conversation floored it at 0, i.e. at the newest message.
+        const raw = getRequestedRawDistance();
         // A fold moves no entry: the rows it takes stay in the set at zero height. So the tap's own
         // layout change is exactly the one that leaves the entry set alone, and the fold window only
         // covers that. An append or a prepend within the window is the conversation moving on, and
@@ -1696,7 +1828,7 @@ const ChatListInternal = React.memo((props: {
         // distance we last asked for — the same arithmetic as a measurement
         // batch's, on the same number — so the rows at and above the anchor
         // keep their place while everything below it slides with it.
-        const shiftedRawPx = Math.max(0, getRequestedRawDistance() + (nextTop - prevTop));
+        const shiftedRawPx = Math.max(0, raw + (nextTop - prevTop));
         setRawDistance(shiftedRawPx);
         updateViewportRef.current(shiftedRawPx, scroller.clientHeight);
     }, [layout]);
@@ -1824,10 +1956,12 @@ const ChatListInternal = React.memo((props: {
         const wantedRaw = Math.max(0, fromModelDistance(modelDistance));
         setRawDistance(wantedRaw);
         jump.attempts = (jump.attempts ?? 0) + 1;
-        // The range covers the whole content, so the only way this reads back short is a write the
-        // engine dropped outright (a hidden scroller): the effect runs on every commit, so the next
-        // one positions the jump again.
-        if (Math.abs(getRequestedRawDistance() - wantedRaw) > JUMP_LAND_TOLERANCE_PX
+        // Where the scroller ACTUALLY landed, not where we asked it to: this is the one read of the
+        // DOM here, and it is a verification rather than a correction. The range covers the whole
+        // content, so the only way this reads back short is a write the engine dropped outright (a
+        // hidden scroller) or a target the content is not tall enough for yet (paging still filling
+        // in): the effect runs on every commit, so the next one positions the jump again.
+        if (Math.abs(scrollDistance.readDistancePx() - wantedRaw) > JUMP_LAND_TOLERANCE_PX
             && jump.attempts < MAX_JUMP_ATTEMPTS) {
             return;
         }
@@ -1861,6 +1995,7 @@ const ChatListInternal = React.memo((props: {
             const target = event.target as HTMLElement | null;
             if (target && (target.isContentEditable || target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
             lastUserInputAtRef.current = performance.now();
+            lastScrollInputAtRef.current = performance.now();
             pendingRestoreRef.current = null;
             cancelScrollAnimation();
             // Same duty as the wheel listener: at the top of the scroll range
@@ -1887,6 +2022,9 @@ const ChatListInternal = React.memo((props: {
                 viewportHeightPx: vp.viewportHeightPx,
                 distanceFromBottomPx: vp.distanceFromBottomPx,
                 requestedDistancePx: getRequestedRawDistance(),
+                // Both numbers, because they differ exactly when something is worth looking at: the
+                // distance we own against the one the scroller reports.
+                reportedDistancePx: scrollDistance.readDistancePx(),
                 renderedRange: [vp.renderedRange.startIndex, vp.renderedRange.endIndex],
             };
         };

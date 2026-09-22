@@ -4,16 +4,25 @@
 //
 // Port of the `thread-scroll-layout` controller at the core of Codex's thread
 // view. Its rule is that every scroll correction is arithmetic on our own
-// number — the intent plus a delta the model measured — and never a
+// number — the intent plus a delta the caller measured — and never a
 // re-derivation from the DOM:
 //
-//   - A write that the engine partly refuses (fractional `scrollTop`, a range it
-//     has not laid out yet, a clamp at either end) is remembered as
-//     {requested, actual}. Reads then answer with `requested` while the DOM
-//     still reports `actual`.
-//   - The record dies the moment the DOM reports something else, which is what a
-//     real user scroll does. Until then the rounding error is a value we carry,
-//     not a value we accumulate.
+//   - A write is remembered as the distance we asked for, whatever the engine
+//     did with it: a fractional `scrollTop`, a range it has not laid out yet, a
+//     clamp at either end. Reads answer with the request, so the rounding the
+//     engine hands back is a value we carry rather than a value we accumulate.
+//   - Only the reader moves that number: `adoptReportedDistancePx` is called
+//     when they scrolled by hand. A scroller that moved with nobody asking did
+//     not move the reader — a layout that shrank under the viewport clamps the
+//     offset itself, and reading that clamp back as where they are is what
+//     turned a fold into a jump to the bottom of the conversation.
+//   - A refusal is not an answer, but it is not nothing either: the range can
+//     be short of the request for exactly one commit (the row a fold opens
+//     arrives a frame after the arithmetic that accounted for it), and there
+//     the request is simply asked again once the box has caught up. The range
+//     end is only taken once the box has stopped moving — at rest, a request
+//     past it means the reader is at the end of the content, which is a place
+//     and not a refusal. See `settleRefusedWrite`.
 //
 // Without that, a toggle that reads its target out of the DOM re-imports one
 // quantization step per toggle. On a fractional layout (a scaled display, a
@@ -28,9 +37,9 @@ export interface ScrollElementLike {
 export function createScrollDistanceController(params: { getElement: () => ScrollElementLike | null }) {
     const { getElement } = params;
 
-    // {requested, actual} of the last write the engine did not honour exactly.
-    // Null means the DOM agrees with us.
-    let clamp: { requestedPx: number; actualPx: number } | null = null;
+    // The distance we own. Null until the first write: before that there is
+    // nothing of ours to answer with, and the scroller's own number is the truth.
+    let intentPx: number | null = null;
 
     /** What the scroller currently reports, in its own quantized numbers. */
     function readDistancePx(): number {
@@ -40,12 +49,11 @@ export function createScrollDistanceController(params: { getElement: () => Scrol
 
     /**
      * The distance we intended, which is what all correction arithmetic must
-     * start from. Falls back to the reported distance once the DOM has moved on
-     * its own.
+     * start from. `readDistancePx` stays the caller's for verification — a write
+     * the engine dropped outright is visible there and nowhere else.
      */
     function getRequestedDistancePx(): number {
-        const actual = readDistancePx();
-        return clamp != null && clamp.actualPx === actual ? clamp.requestedPx : actual;
+        return intentPx ?? readDistancePx();
     }
 
     /**
@@ -57,15 +65,66 @@ export function createScrollDistanceController(params: { getElement: () => Scrol
         const el = getElement();
         if (!el) return 0;
         const target = Math.max(0, distancePx);
+        intentPx = target;
         // column-reverse: 0 is the content bottom, everything above is negative.
         el.scrollTop = target === 0 ? 0 : -target;
-        const actual = Math.max(0, Math.abs(el.scrollTop));
-        // A write the engine refused at either end of the range is not a rounding
-        // to remember — the DOM holds those two offsets exactly.
-        const atLimit = target <= 0 || target >= el.scrollHeight - el.clientHeight;
-        clamp = actual !== target && !atLimit ? { requestedPx: target, actualPx: actual } : null;
-        return actual;
+        return Math.max(0, Math.abs(el.scrollTop));
     }
 
-    return { readDistancePx, getRequestedDistancePx, setDistancePx };
+    /**
+     * The reader moved the scroller themselves: whatever it reports is where they
+     * are, and the arithmetic starts from there. Nothing else may call this — a
+     * clamp is not a scroll.
+     */
+    function adoptReportedDistancePx(): number {
+        intentPx = readDistancePx();
+        return intentPx;
+    }
+
+    /**
+     * What a write the engine refused should be settled at, or null while there
+     * is nothing to settle. The caller writes whatever comes back — through
+     * `setDistancePx`, so the intent ends up on it.
+     */
+    function settleRefusedWrite(params: { requestedPx: number; atRest: boolean }): number | null {
+        const el = getElement();
+        if (!el) return null;
+        return resolveRefusedWrite({
+            requestedPx: params.requestedPx,
+            reportedPx: readDistancePx(),
+            maxDistancePx: el.scrollHeight - el.clientHeight,
+            atRest: params.atRest,
+        });
+    }
+
+    return { readDistancePx, getRequestedDistancePx, setDistancePx, adoptReportedDistancePx, settleRefusedWrite };
+}
+
+/**
+ * The number a refused write should be settled at: the request itself, the end
+ * of the range, or null while the refusal is still worth waiting on.
+ *
+ * A write is refused in two shapes, and they are told apart by the range rather
+ * than by the clamp:
+ *
+ *   - the range covers the request, so the refusal was the box being a frame
+ *     behind — ask again, and the line the reader tapped comes back;
+ *   - the range does not cover it. Only when the box has stopped moving is that
+ *     final: at rest it means the content ends before the request, and the
+ *     range end is where the reader is. While the box is still moving it means
+ *     nothing at all, and taking the clamp would be the old bug — a momentary
+ *     range read back as a position.
+ */
+export function resolveRefusedWrite(params: {
+    requestedPx: number;
+    reportedPx: number;
+    maxDistancePx: number;
+    atRest: boolean;
+    tolerancePx?: number;
+}): number | null {
+    const tolerancePx = params.tolerancePx ?? 1;
+    const maxDistancePx = Math.max(0, params.maxDistancePx);
+    if (Math.abs(params.reportedPx - params.requestedPx) <= tolerancePx) return null;
+    if (params.requestedPx <= maxDistancePx + tolerancePx) return params.requestedPx;
+    return params.atRest ? maxDistancePx : null;
 }
