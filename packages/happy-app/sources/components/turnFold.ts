@@ -43,13 +43,14 @@ export function turnFoldControl(params: {
  *
  * The line stands in for that row, and two kinds of row refuse to give way. A settled turn's answer,
  * because the fold exists to show what the agent concluded and the answer can be the very row the
- * line lands on. And a landmark — a question card, an inline HTML preview, a plan proposal — which
- * no fold may take wherever it sits in the turn: the rail jumps to it, and a question and a plan
- * proposal are rows the reader is the one who answers.
+ * line lands on. And a row the fold may not take (`foldMustKeepMessage`) — a landmark, or a tool
+ * call still waiting on a permission — which nothing may take wherever it sits in the turn: the rail
+ * jumps to a landmark, and a question, a plan proposal and a permission request are all rows the
+ * reader is the one who answers.
  *
- * The rows a fold drops are filtered the same way (see `isMinimapLandmarkRow`), but that filter
- * cannot cover this case: a landmark that opens a turn is the row the line lands on, and a row the
- * line lands on is never dropped — it renders, with the line in place of its content. So the
+ * The rows a fold drops are filtered the same way, but that filter cannot cover this case: a row the
+ * fold may not take can open a turn, and the row that opens a turn is the row the line lands on. A
+ * row the line lands on is never dropped — it renders, with the line in place of its content. So the
  * exception has to be made here too, and this is where it is made.
  */
 export function foldedLineKeepsRow(params: {
@@ -57,9 +58,9 @@ export function foldedLineKeepsRow(params: {
     folded: boolean;
     /** Whether this row is the turn's answer. */
     answer: boolean;
-    /** Whether this row is a landmark the conversation rail marks. */
-    landmark: boolean;
+    /** Whether the fold may not take this row at all — see `foldMustKeepMessage`. */
+    mustKeep: boolean;
 }): boolean {
     if (!params.folded) return false;
-    return params.answer || params.landmark;
+    return params.answer || params.mustKeep;
 }

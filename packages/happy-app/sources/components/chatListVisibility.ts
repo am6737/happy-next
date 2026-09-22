@@ -47,6 +47,31 @@ export function isMinimapLandmarkRow(message: Message): boolean {
 }
 
 /**
+ * A row the reader still has to act on: a tool call whose permission request has not been answered.
+ *
+ * It is not a landmark — the rail has no reason to mark it, and once it is answered it is a step like
+ * any other — but while the request stands, that row is the only thing between the agent and its
+ * next move, and nothing about it is working-out to be folded away. Once decided it folds like the
+ * rest of the process: the reader has had their say and the row has nothing left to ask.
+ */
+export function isPendingPermissionRow(message: Message): boolean {
+    return message.kind === 'tool-call' && message.tool.permission?.status === 'pending';
+}
+
+/**
+ * A row nothing that hides rows may take: a landmark the rail marks, or a request still waiting on
+ * the reader.
+ *
+ * The two are kept for one reason — the row is a prompt rather than working-out — which is why every
+ * caller that hides rows asks this and not the landmark question alone. The rail's own marks stay on
+ * `isMinimapLandmarkRow`: a permission request is not a landmark, and the rail points at rows the
+ * reader wrote into the conversation, not at every step that wants an answer.
+ */
+export function foldMustKeepMessage(message: Message): boolean {
+    return isMinimapLandmarkRow(message) || isPendingPermissionRow(message);
+}
+
+/**
  * Whether the conversation minimap should leave this landmark off its rail.
  *
  * The rail only ever points at rows the list actually renders — a marker for a row the list hides

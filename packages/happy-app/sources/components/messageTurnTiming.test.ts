@@ -50,6 +50,12 @@ function planProposal(id: string, createdAt: number, name = PLAN_PROPOSAL_TOOL):
     return namedTool(id, createdAt, name);
 }
 
+/** A tool call the agent is blocked on: nothing moves until the reader answers the request. */
+function awaitingPermission(id: string, createdAt: number, status: 'pending' | 'approved' | 'denied' = 'pending'): Message {
+    const call = tool(id, createdAt) as { kind: 'tool-call'; tool: Record<string, unknown> };
+    return { ...call, tool: { ...call.tool, permission: { id: `perm-${id}`, status } } } as Message;
+}
+
 const NO_LATCH: ReadonlySet<string> = new Set<string>();
 const NO_ENDS: ReadonlyMap<string, number> = new Map<string, number>();
 
@@ -332,6 +338,32 @@ describe('folded turns', () => {
             answerId: 'a1',
         });
         expect(result.headerById.get('p1')?.state).toBe('done');
+    });
+
+    it('keeps a step the agent is waiting on a permission for', () => {
+        // The agent asked to do something and nothing moves until the reader answers: taking that row
+        // away would take the request away with it. It is a prompt, not working-out, so the line does
+        // not count it either.
+        const result = analyze([agent('a1', 60), tool('t3', 50), awaitingPermission('p1', 40), tool('t2', 30), tool('t1', 20), user('u1', 10)]);
+        expect(fold(result, 't1')).toEqual({
+            hiddenIds: ['t2', 't3'],
+            steps: 3,
+            snapshotId: 't3',
+            answerId: 'a1',
+        });
+    });
+
+    it('never ends the fold\'s reach on a step that is waiting on a permission', () => {
+        // The newest thing the agent did is ask; the reach stops at the step before it, so the
+        // request is not inside the rows the fold would take.
+        const result = analyze([agent('a1', 50), awaitingPermission('p1', 40), tool('t1', 30), user('u1', 10)]);
+        expect(fold(result, 't1')).toEqual({ hiddenIds: [], steps: 1, snapshotId: 't1', answerId: 'a1' });
+    });
+
+    it('folds a step whose permission has been answered like any other', () => {
+        // Answered is process: the reader has had their say, and the row has nothing left to ask.
+        const result = analyze([agent('a1', 50), awaitingPermission('p1', 40, 'approved'), tool('t1', 30), user('u1', 10)]);
+        expect(fold(result, 't1')).toEqual({ hiddenIds: ['p1'], steps: 2, snapshotId: 'p1', answerId: 'a1' });
     });
 
     it('has nothing to hide when the turn is only its answer', () => {

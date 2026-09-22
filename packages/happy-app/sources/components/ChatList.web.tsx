@@ -12,7 +12,7 @@ import { ConversationMinimapItem } from './ConversationMinimap';
 import { Metadata, Session } from '@/sync/storageTypes';
 import { ChatFooter } from './ChatFooter';
 import { AskUserQuestionMessage, isAskUserQuestionToolCall, isExitPlanModeToolCall, isPreviewHtmlToolCall, Message, MinimapMessage, PlanProposalMessage, PreviewHtmlMessage, toAskUserQuestionMessage, toPlanProposalMessage, toPreviewHtmlMessage, UserTextMessage } from '@/sync/typesMessage';
-import { currentLandmark, isMinimapLandmarkRow, railLandmarkRows, shouldHideMessageInChatList, shouldHideMessageInMinimap, type LandmarkRow } from './chatListVisibility';
+import { currentLandmark, foldMustKeepMessage, railLandmarkRows, shouldHideMessageInChatList, shouldHideMessageInMinimap, type LandmarkRow } from './chatListVisibility';
 import { foldedLineKeepsRow } from './turnFold';
 import { turnHeaderProps, useTurnAnalysis } from './messageTurnTiming';
 import { newestRowSnapshot } from './rowSnapshot';
@@ -2034,14 +2034,14 @@ const ChatListInternal = React.memo((props: {
         // Present only on the row that opens a turn whose process is worth folding.
         const fold = folding.controlByHeaderId.get(item.id);
         const process = turns.foldById.get(item.id);
-        // The fold keeps a settled turn's answer and never swallows a row the reader answers. Either
-        // can be the very row the line sits on — the turn's only text opening it, a question card or a
-        // plan proposal opening it — and that row then shows its own content below the line instead of
-        // giving way to it.
+        // The fold keeps a settled turn's answer and never swallows a row the reader answers — a
+        // question card, a plan proposal, a tool call still waiting on a permission. Either can be the
+        // very row the line sits on — the turn's only text opening it, a question card opening it —
+        // and that row then shows its own content below the line instead of giving way to it.
         const foldKeepsRow = foldedLineKeepsRow({
             folded: fold?.folded === true,
             answer: process?.answerId === item.id,
-            landmark: isMinimapLandmarkRow(item),
+            mustKeep: foldMustKeepMessage(item),
         });
         if (fold) {
             foldTapRef.current.set(item.id, {

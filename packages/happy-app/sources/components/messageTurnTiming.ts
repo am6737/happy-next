@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { Message, UserTextMessage } from '@/sync/typesMessage';
-import { isMinimapLandmarkRow } from './chatListVisibility';
+import { foldMustKeepMessage } from './chatListVisibility';
 
 /**
  * One assistant turn: everything between a user prompt and the next one.
@@ -37,7 +37,7 @@ type Turn = {
 export type TurnProcess = {
     /**
      * Rows the list drops while this turn is folded, oldest first — never the row the line is drawn
-     * on, which stays to carry it.
+     * on, which stays to carry it, and never a row the reader still has to answer.
      */
     hiddenIds: string[];
     /** Tool calls among the rows the fold hides, the row under the line included. */
@@ -140,12 +140,13 @@ function collectTurns(visibleMessages: Message[]): Turn[] {
 /**
  * The index of the row the fold's reach ends at: the agent's last step, or the turn's last row when
  * it never took one. A row the fold may not take is not a step either — the reach never ends on one,
- * so a turn that stops at a plan proposal keeps everything back to the step before it.
+ * so a turn that stops at a plan proposal keeps everything back to the step before it, and one that
+ * stops at a permission request keeps everything back to the step before that too.
  */
 function lastStepIndex(rows: Message[]): number {
     for (let index = rows.length - 1; index >= 0; index--) {
         const row = rows[index];
-        if (row.kind === 'tool-call' && !isMinimapLandmarkRow(row)) return index;
+        if (row.kind === 'tool-call' && !foldMustKeepMessage(row)) return index;
     }
     return rows.length - 1;
 }
@@ -165,9 +166,9 @@ function lastStepIndex(rows: Message[]): number {
  * end on a step fall back on the answer alone — the last thing the agent said is then a row above
  * that step, and it is kept for the same reason.
  *
- * Rows nothing may hide are kept either way (`isMinimapLandmarkRow`): a question card and a plan
- * proposal are both things the reader answers, so hiding one would hide a prompt rather than
- * working-out.
+ * Rows nothing may hide are kept either way (`foldMustKeepMessage`): a question card, a plan proposal
+ * and a tool call whose permission request is still unanswered are all things the reader answers, so
+ * hiding one would hide a prompt rather than working-out.
  */
 function turnProcess(turn: Turn, settled: boolean): TurnProcess {
     const answerId = settled ? turn.lastTextId : null;
@@ -184,7 +185,7 @@ function turnProcess(turn: Turn, settled: boolean): TurnProcess {
         // the reader answers, which are no more working-out than it is. So this walk is what the fold
         // hides, and the count and the snapshot are read straight off it with the row under the line
         // included: that row's content is gone too, and the line stands in its place.
-        if (isMinimapLandmarkRow(row) || row.id === answerId) continue;
+        if (foldMustKeepMessage(row) || row.id === answerId) continue;
         if (row.kind === 'tool-call') steps++;
         // Collected oldest first, so the newest is the last one seen.
         snapshotId = row.id;

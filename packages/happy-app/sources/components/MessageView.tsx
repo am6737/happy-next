@@ -55,9 +55,10 @@ export const MessageView = (props: {
    */
   foldFolded?: boolean;
   /**
-   * True on a row the fold leaves standing: a settled turn's answer, or a landmark the fold may never
-   * hide. Either can be the row the line sits on, and that row keeps its content even though the line
-   * stands in for it. Only ever set alongside `foldFolded`.
+   * True on a row the fold leaves standing: a settled turn's answer, or a row the fold may never hide
+   * — a landmark, or a tool call still waiting on a permission. Either can be the row the line sits
+   * on, and that row keeps its content even though the line stands in for it. Only ever set alongside
+   * `foldFolded`.
    */
   foldKeepsRow?: boolean;
   /**

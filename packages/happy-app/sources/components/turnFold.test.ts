@@ -60,7 +60,7 @@ describe('turnFoldControl', () => {
 });
 
 describe('foldedLineKeepsRow', () => {
-    const plain = { folded: true, answer: false, landmark: false };
+    const plain = { folded: true, answer: false, mustKeep: false };
 
     it('lets the line take the place of a row that is only working-out', () => {
         expect(foldedLineKeepsRow(plain)).toBe(false);
@@ -70,13 +70,14 @@ describe('foldedLineKeepsRow', () => {
         expect(foldedLineKeepsRow({ ...plain, answer: true })).toBe(true);
     });
 
-    it('keeps a landmark, which no fold may hide wherever it sits', () => {
+    it('keeps a row the fold may not take, which it may not hide wherever it sits', () => {
         // A question card that opens a turn is the row the line lands on, so this is the only thing
-        // standing between the reader and a question the fold would otherwise take away.
-        expect(foldedLineKeepsRow({ ...plain, landmark: true })).toBe(true);
+        // standing between the reader and a question the fold would otherwise take away. A landmark
+        // and a step still waiting on a permission both arrive here as `mustKeep`.
+        expect(foldedLineKeepsRow({ ...plain, mustKeep: true })).toBe(true);
     });
 
     it('keeps nothing back when the turn is not folded', () => {
-        expect(foldedLineKeepsRow({ folded: false, answer: true, landmark: true })).toBe(false);
+        expect(foldedLineKeepsRow({ folded: false, answer: true, mustKeep: true })).toBe(false);
     });
 });

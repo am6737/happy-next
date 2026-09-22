@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { currentLandmark, isMinimapLandmarkRow, railLandmarkRows, shouldHideMessageInMinimap, shouldHideMessageInChatList, LandmarkRow } from './chatListVisibility';
+import { currentLandmark, foldMustKeepMessage, isMinimapLandmarkRow, isPendingPermissionRow, railLandmarkRows, shouldHideMessageInMinimap, shouldHideMessageInChatList, LandmarkRow } from './chatListVisibility';
 import { AgentTextMessage, MinimapMessage, ToolCallMessage, UserTextMessage } from '@/sync/typesMessage';
 
 function toolCall(name: string): ToolCallMessage {
@@ -19,6 +19,12 @@ function toolCall(name: string): ToolCallMessage {
         },
         children: [],
     };
+}
+
+/** The same call, carrying the permission request the agent is now waiting on. */
+function permissionCall(status: 'pending' | 'approved' | 'denied' | 'canceled', name = 'Read'): ToolCallMessage {
+    const call = toolCall(name);
+    return { ...call, tool: { ...call.tool, permission: { id: `perm-${name}`, status } } };
 }
 
 function agentText(overrides: Partial<AgentTextMessage> = {}): AgentTextMessage {
@@ -198,6 +204,46 @@ describe('isMinimapLandmarkRow', () => {
         expect(isMinimapLandmarkRow(toolCall('enter_plan_mode'))).toBe(false);
         expect(isMinimapLandmarkRow(agentText())).toBe(false);
         expect(isMinimapLandmarkRow(userText('hello'))).toBe(false);
+    });
+});
+
+describe('isPendingPermissionRow', () => {
+    it('names the call the agent is blocked on', () => {
+        expect(isPendingPermissionRow(permissionCall('pending'))).toBe(true);
+    });
+
+    it('says nothing once the reader has decided it', () => {
+        // Answered is a step like any other: the row has nothing left to ask.
+        expect(isPendingPermissionRow(permissionCall('approved'))).toBe(false);
+        expect(isPendingPermissionRow(permissionCall('denied'))).toBe(false);
+        expect(isPendingPermissionRow(permissionCall('canceled'))).toBe(false);
+    });
+
+    it('says nothing about a call that never asked', () => {
+        expect(isPendingPermissionRow(toolCall('Read'))).toBe(false);
+        expect(isPendingPermissionRow(agentText())).toBe(false);
+        expect(isPendingPermissionRow(userText('hello'))).toBe(false);
+    });
+});
+
+describe('foldMustKeepMessage', () => {
+    it('keeps a landmark, which the rail has a mark for', () => {
+        expect(foldMustKeepMessage(toolCall('AskUserQuestion'))).toBe(true);
+        expect(foldMustKeepMessage(toolCall('mcp__happy__preview_html'))).toBe(true);
+    });
+
+    it('keeps a call still waiting on a permission, which is not a landmark', () => {
+        // The rail marks rows the reader can jump between; a permission request is the row the reader
+        // is *already* standing on, and the fold would take the buttons away with it.
+        const waiting = permissionCall('pending');
+        expect(isMinimapLandmarkRow(waiting)).toBe(false);
+        expect(foldMustKeepMessage(waiting)).toBe(true);
+    });
+
+    it('lets a decided call go, exactly as the rail does', () => {
+        expect(foldMustKeepMessage(permissionCall('approved'))).toBe(false);
+        expect(foldMustKeepMessage(toolCall('Read'))).toBe(false);
+        expect(foldMustKeepMessage(agentText())).toBe(false);
     });
 });
 
