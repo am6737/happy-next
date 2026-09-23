@@ -237,6 +237,8 @@ export const zhHant: TranslationStructure = {
         profiles: '設定檔',
         profilesSubtitle: '管理工作階段的環境變數設定檔',
         openclawSubtitle: '連接到 OpenClaw 閘道',
+        terminal: '終端',
+        terminalSubtitle: '在你已連線的機器上開啟 shell',
         history: '歷史',
         sessionHistorySubtitle: '查看過去的 Happy 工作階段',
         claudeSessionsSubtitle: '瀏覽此裝置上的 Claude CLI 工作階段',

@@ -197,6 +197,8 @@ export const ru: TranslationStructure = {
         profiles: 'Профили',
         profilesSubtitle: 'Управление профилями переменных окружения для сессий',
         openclawSubtitle: 'Подключение к шлюзам OpenClaw',
+        terminal: 'Терминал',
+        terminalSubtitle: 'Открывайте оболочки на подключённых машинах',
         history: 'History',
         sessionHistorySubtitle: 'View past Happy sessions',
         claudeSessionsSubtitle: 'Browse Claude CLI sessions on this device',

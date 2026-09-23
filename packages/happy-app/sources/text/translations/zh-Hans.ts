@@ -238,6 +238,8 @@ export const zhHans: TranslationStructure = {
         profiles: '配置文件',
         profilesSubtitle: '管理环境配置文件和变量',
         openclawSubtitle: '连接到 OpenClaw 网关',
+        terminal: '终端',
+        terminalSubtitle: '在你已连接的机器上打开 shell',
         history: '历史记录',
         sessionHistorySubtitle: '查看过去的 Happy 会话',
         claudeSessionsSubtitle: '浏览设备上的 Claude CLI 会话',

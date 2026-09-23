@@ -265,6 +265,8 @@ export const it: TranslationStructure = {
         profiles: 'Profili',
         profilesSubtitle: 'Gestisci i profili delle variabili ambiente per le sessioni',
         openclawSubtitle: 'Connetti ai gateway OpenClaw',
+        terminal: 'Terminale',
+        terminalSubtitle: 'Apri shell sulle tue macchine collegate',
         history: 'History',
         sessionHistorySubtitle: 'View past Happy sessions',
         claudeSessionsSubtitle: 'Browse Claude CLI sessions on this device',

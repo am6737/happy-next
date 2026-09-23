@@ -4,7 +4,7 @@ import { Image } from 'expo-image';
 import * as React from 'react';
 import { Text } from '@/components/StyledText';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, FontAwesome6 } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 import { useAuth } from '@/auth/AuthContext';
 import { isTauriDesktop } from '@/utils/tauri';
@@ -438,6 +438,12 @@ export const SettingsView = React.memo(function SettingsView() {
                         />
                     }
                     onPress={() => router.push('/openclaw')}
+                />
+                <Item
+                    title={t('settings.terminal')}
+                    subtitle={t('settings.terminalSubtitle')}
+                    icon={<FontAwesome6 name="terminal" size={24} color="#5856D6" />}
+                    onPress={() => router.push('/terminals')}
                 />
             </ItemGroup>
 

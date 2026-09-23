@@ -268,6 +268,8 @@ export const ja: TranslationStructure = {
         profiles: 'プロファイル',
         profilesSubtitle: 'セッション用の環境変数プロファイルを管理',
         openclawSubtitle: 'OpenClawゲートウェイに接続',
+        terminal: 'ターミナル',
+        terminalSubtitle: '接続中のマシンでシェルを開く',
         history: 'History',
         sessionHistorySubtitle: 'View past Happy sessions',
         claudeSessionsSubtitle: 'Browse Claude CLI sessions on this device',
