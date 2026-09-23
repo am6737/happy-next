@@ -1,6 +1,9 @@
 import { memo } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useUnistyles } from 'react-native-unistyles';
+import { useKeyboardSpace } from '@/hooks/useKeyboardVisible';
+import { resolveTerminalBarBottomPadding } from './terminalBarPadding';
 
 /**
  * The keys a soft keyboard cannot produce.
@@ -13,6 +16,13 @@ import { useUnistyles } from 'react-native-unistyles';
  * Labels stay in English on purpose: `esc`, `tab` and `^C` are what every
  * terminal user already reads, and translating them would make the bar harder
  * to recognise, not easier.
+ *
+ * It is also the bottom edge of the screen, so it is the row that has to clear
+ * the home indicator, and the row that has to move up when the keyboard takes
+ * that space. Its own padding is what does both, which is what makes the grid
+ * above it shrink by the keyboard's height rather than sit behind it with the
+ * cursor — the last line of a shell that has filled the screen — under the
+ * keyboard where nobody can see it.
  */
 export interface TerminalKeyBarProps {
     ctrlActive: boolean;
@@ -48,6 +58,17 @@ const CTRL_C = '\x03';
 export const TerminalKeyBar = memo(({ ctrlActive, onToggleCtrl, onKey, onSend, status }: TerminalKeyBarProps) => {
     const { theme } = useUnistyles();
     const { width } = useWindowDimensions();
+    const safeArea = useSafeAreaInsets();
+    // Plain state rather than a `KeyboardAvoidingView`, whose padding is worked
+    // out from the view's own frame: React Native reports that frame relative
+    // to the screen's content, so under a header the keyboard's height comes
+    // out short by the header's, and the bottom of the grid — the cursor — is
+    // left behind the keyboard. Padding on the row that actually sits at the
+    // bottom needs no such arithmetic.
+    const bottomPadding = resolveTerminalBarBottomPadding({
+        keyboardHeight: useKeyboardSpace(),
+        safeAreaBottom: safeArea.bottom,
+    });
     const barColors = {
         bar: theme.colors.surface,
         border: theme.colors.divider,
@@ -57,7 +78,12 @@ export const TerminalKeyBar = memo(({ ctrlActive, onToggleCtrl, onKey, onSend, s
     };
 
     return (
-        <View style={[styles.bar, { backgroundColor: barColors.bar, borderTopColor: barColors.border }]}>
+        <View
+            style={[
+                styles.bar,
+                { backgroundColor: barColors.bar, borderTopColor: barColors.border, paddingBottom: bottomPadding },
+            ]}
+        >
             <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}

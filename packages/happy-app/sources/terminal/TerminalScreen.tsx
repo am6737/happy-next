@@ -9,7 +9,6 @@ import {
     useColorScheme,
     type LayoutChangeEvent,
 } from 'react-native';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useUnistyles } from 'react-native-unistyles';
 import { TerminalGridView } from './TerminalGridView';
 import { TerminalInput, type TerminalInputHandle } from './TerminalInput';
@@ -216,7 +215,9 @@ export const TerminalScreen = memo(({ machineId, terminalId, status, onTitle, on
     const backgroundColor = xtermTheme.background ?? '#1E1E1E';
 
     return (
-        <KeyboardAvoidingView behavior="padding" style={styles.root}>
+        // The key bar at the bottom is what yields to the keyboard, and its own
+        // padding is what makes this column resize when it does; see the bar.
+        <View style={styles.root}>
             <View style={[styles.gridArea, { backgroundColor }]}>
                 {/* Rendered even before a terminal exists: measuring the font is
                     what tells us the grid size, and the grid size is what the
@@ -280,7 +281,7 @@ export const TerminalScreen = memo(({ machineId, terminalId, status, onTitle, on
                 onSend={handleSendRaw}
                 status={status}
             />
-        </KeyboardAvoidingView>
+        </View>
     );
 });
 
