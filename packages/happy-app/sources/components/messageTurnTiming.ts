@@ -109,7 +109,7 @@ export function turnHeaderProps(status: TurnHeaderStatus | undefined): {
  * the oldest loaded prompt belong to a turn that started before what we have, and
  * are grouped as a single leading turn.
  */
-function collectTurns(visibleMessages: Message[]): Turn[] {
+function collectTurns(visibleMessages: Message[], includeFold: boolean): Turn[] {
     const turns: Turn[] = [];
     let current: Turn | null = null;
 
@@ -127,7 +127,7 @@ function collectTurns(visibleMessages: Message[]): Turn[] {
             turns.push(current);
             if (msg.kind === 'user-text') continue;
         }
-        current.rows.push(msg);
+        if (includeFold) current.rows.push(msg);
         // The turn's header sits above its first real agent row. Mode switches and
         // other notices don't open a turn's reply, so they don't take the slot.
         if (current.headerId === null && msg.kind !== 'agent-event') current.headerId = msg.id;
@@ -240,6 +240,8 @@ export function analyzeTurns(params: {
     /** `session.agentState.taskCompleted`. */
     taskCompletedAt?: number | null;
     now?: number;
+    /** Native chat has no process folding; omit its per-turn row snapshots and fold scans. */
+    includeFold?: boolean;
 }): TurnAnalysis {
     const {
         visibleMessages,
@@ -248,9 +250,10 @@ export function analyzeTurns(params: {
         turnEnds,
         taskCompletedAt,
         now = Date.now(),
+        includeFold = true,
     } = params;
 
-    const turns = collectTurns(visibleMessages);
+    const turns = collectTurns(visibleMessages, includeFold);
     const completedIds = new Set<string>();
     const stillCompleted = new Set<string>();
     const headerById = new Map<string, TurnHeaderStatus>();
@@ -268,7 +271,7 @@ export function analyzeTurns(params: {
             running = { lastTextId: turn.lastTextId };
             if (turn.headerId !== null) {
                 headerById.set(turn.headerId, { state: 'running', startedAt: turn.startedAt });
-                foldById.set(turn.headerId, turnProcess(turn, false));
+                if (includeFold) foldById.set(turn.headerId, turnProcess(turn, false));
             }
             continue;
         }
@@ -279,7 +282,7 @@ export function analyzeTurns(params: {
 
         if (turn.headerId !== null) {
             headerById.set(turn.headerId, { state: 'done', startedAt: turn.startedAt, completedAt });
-            foldById.set(turn.headerId, turnProcess(turn, true));
+            if (includeFold) foldById.set(turn.headerId, turnProcess(turn, true));
         }
         if (turn.lastTextId !== null) {
             completedIds.add(turn.lastTextId);
@@ -308,8 +311,10 @@ export function useTurnAnalysis(params: {
     turnInFlight: boolean | undefined;
     /** `session.agentState.taskCompleted`. */
     taskCompletedAt?: number | null;
+    /** Defaults to true for the web list, which renders process folds. */
+    includeFold?: boolean;
 }): Pick<TurnAnalysis, 'completedIds' | 'headerById' | 'foldById'> {
-    const { visibleMessages, turnInFlight, taskCompletedAt } = params;
+    const { visibleMessages, turnInFlight, taskCompletedAt, includeFold = true } = params;
     const completedTurnsRef = React.useRef<Set<string>>(new Set());
     const turnEndsRef = React.useRef<Map<string, number>>(new Map());
     const runningRef = React.useRef<{ lastTextId: string | null } | null>(null);
@@ -321,8 +326,9 @@ export function useTurnAnalysis(params: {
             previouslyCompleted: completedTurnsRef.current,
             turnEnds: turnEndsRef.current,
             taskCompletedAt,
+            includeFold,
         }),
-        [visibleMessages, turnInFlight, taskCompletedAt],
+        [visibleMessages, turnInFlight, taskCompletedAt, includeFold],
     );
     completedTurnsRef.current = analysis.stillCompleted;
 

@@ -495,3 +495,21 @@ describe('folded turns', () => {
         expect(fold(result, 'a2')).toEqual({ hiddenIds: [], steps: 0, snapshotId: null, answerId: 'a2' });
     });
 });
+
+describe('native analysis without unused fold snapshots', () => {
+    it.each([true, false, undefined])('keeps headers, completion latches and actions identical (in flight: %s)', (turnInFlight) => {
+        const visibleMessages = [
+            agent('new-reply', 90), tool('new-tool', 80), user('new-prompt', 70),
+            agent('old-reply', 60), tool('old-tool', 50), user('old-prompt', 40),
+            event('notice', 30), tool('partial-tool', 20), agent('partial-reply', 10),
+        ];
+        const params = {
+            visibleMessages, turnInFlight, previouslyCompleted: new Set<string>(),
+            turnEnds: new Map([['old-reply', 65]]), taskCompletedAt: 95, now: 100,
+        };
+        const full = analyzeTurns(params);
+        const native = analyzeTurns({ ...params, includeFold: false });
+        expect(native).toEqual({ ...full, foldById: new Map() });
+        expect(full.foldById.size).toBeGreaterThan(0); // default web path still computes folds
+    });
+});
