@@ -14,14 +14,16 @@ import React from 'react';
 import {
     View,
     Text,
-    FlatList,
     Pressable,
     ActivityIndicator,
     Platform,
     useWindowDimensions,
     Animated,
+    type ScrollViewProps,
     Easing,
 } from 'react-native';
+import { LegendList } from '@legendapp/list/react-native';
+import type { LegendListRef } from '@legendapp/list/react-native';
 import { AgentContentView } from '@/components/AgentContentView';
 import { randomUUID } from 'expo-crypto';
 import { Image } from 'expo-image';
@@ -35,6 +37,7 @@ import { layout } from '@/components/layout';
 import { getNativeHeaderTitleWidth } from '@/utils/nativeHeaderTitleWidth';
 import { ChatHeaderTitle } from '@/components/ChatHeaderTitle';
 import { isRunningOnMac } from '@/utils/platform';
+import { softHeaderOptions, useSoftHeaderInset } from '@/components/navigation/softHeader';
 import { useIsTablet } from '@/utils/responsive';
 import { MarkdownView } from '@/components/markdown/MarkdownView';
 import { MultiTextInput, KeyPressEvent } from '@/components/MultiTextInput';
@@ -43,9 +46,28 @@ import { useOpenClawMachine } from '@/sync/storage';
 import type { OpenClawChatMessage, OpenClawChatEvent, OpenClawContentBlock, OpenClawToolStreamEvent, OpenClawSession } from '@/openclaw/types';
 import type { BottomSheetModal } from '@gorhom/bottom-sheet';
 import { SessionDetailModal } from '@/components/openclaw/SessionDetailModal';
+import { KeyboardChatScrollView } from 'react-native-keyboard-controller';
+import { KeyboardCenteredEmpty } from '@/components/KeyboardCenteredEmpty';
 
 // Special ID for streaming message
 const STREAMING_MESSAGE_ID = '__streaming__';
+const COMPOSER_MARGIN = 8;
+
+const ChatScrollView = React.forwardRef<
+    React.ElementRef<typeof KeyboardChatScrollView>,
+    ScrollViewProps & { bottomInset: number }
+>(({ bottomInset, ...props }, ref) => (
+    <KeyboardChatScrollView
+        ref={ref}
+        automaticallyAdjustContentInsets={false}
+        contentInsetAdjustmentBehavior="never"
+        keyboardDismissMode="interactive"
+        keyboardLiftBehavior="always"
+        offset={Platform.OS === 'ios' ? bottomInset - COMPOSER_MARGIN : bottomInset}
+        {...props}
+    />
+));
+ChatScrollView.displayName = 'ChatScrollView';
 
 // Local message type with status tracking
 type MessageStatus = 'sending' | 'sent' | 'failed';
@@ -687,6 +709,7 @@ const MessageItem = React.memo(({ message, onRetry }: MessageItemProps) => {
 export default function OpenClawChatPage() {
     const { theme } = useUnistyles();
     const safeArea = useSafeAreaInsets();
+    const softHeaderInset = useSoftHeaderInset();
     const { width: screenWidth } = useWindowDimensions();
     const isTablet = useIsTablet();
     const { machineId, sessionKey, sessionName: sessionNameParam } = useLocalSearchParams<{
@@ -700,6 +723,7 @@ export default function OpenClawChatPage() {
 
     // Narrow phones left-align the header title; tablets, web and Mac stay centered (matches SessionView).
     const isNarrowPhone = Platform.OS !== 'web' && !isRunningOnMac() && !isTablet;
+    const useNativeSoftHeader = Platform.OS === 'ios' && !isRunningOnMac();
     // iOS centers the titleView regardless of alignment options, so give it the full available
     // width and left-align the text inside it. This page has a single right-hand button, so it
     // reserves ~44pt less than SessionView's two-button header (192 → 148).
@@ -824,7 +848,7 @@ export default function OpenClawChatPage() {
     // Track current run for streaming (not used for rendering, only for event filtering)
     const chatRunIdRef = React.useRef<string | null>(null);
 
-    const flatListRef = React.useRef<FlatList<LocalMessage>>(null);
+    const listRef = React.useRef<LegendListRef>(null);
     // Scroll state
     const userNearBottomRef = React.useRef(true);
     const shouldForceScrollRef = React.useRef(false);
@@ -966,13 +990,6 @@ export default function OpenClawChatPage() {
         }
     }, [isConnected, sessionKey, fetchHistory]);
 
-    // Scroll when messages change (if user is near bottom)
-    React.useEffect(() => {
-        if (messages.length > 0 && userNearBottomRef.current) {
-            flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
-        }
-    }, [messages]);
-
     // Check if currently streaming
     const isStreaming = messages.some((msg) => msg.isStreaming);
 
@@ -1021,10 +1038,9 @@ export default function OpenClawChatPage() {
     }, [sessionKey, send]);
 
     // Handle scroll event - track if user is near bottom
-    const handleScroll = React.useCallback((event: { nativeEvent: { contentOffset: { y: number } } }) => {
-        const { contentOffset } = event.nativeEvent;
-        // In inverted list, near bottom means near offset 0
-        userNearBottomRef.current = contentOffset.y < 200;
+    const handleScroll = React.useCallback((event: { nativeEvent: { contentOffset: { y: number }; contentSize: { height: number }; layoutMeasurement: { height: number } } }) => {
+        const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+        userNearBottomRef.current = contentSize.height - layoutMeasurement.height - contentOffset.y < 200;
     }, []);
 
     // Handle new message send
@@ -1053,7 +1069,8 @@ export default function OpenClawChatPage() {
 
         // Scroll to show the new message
         setTimeout(() => {
-            flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+            void listRef.current?.scrollToEnd({ animated: false });
+            shouldForceScrollRef.current = false;
         }, 50);
 
         // Send the message
@@ -1101,36 +1118,15 @@ export default function OpenClawChatPage() {
 
     const canSend = inputText.trim().length > 0 && isConnected && !isStreaming;
 
-    // Content: message list (only when we have messages)
-    const content = messages.length > 0 ? (
-        <FlatList
-            ref={flatListRef}
-            style={styles.messageList}
-            contentContainerStyle={styles.messageListContent}
-            data={[...messages].reverse()}
-            keyExtractor={(item) => item.localId}
-            renderItem={({ item }) => (
-                <MessageItem
-                    message={item}
-                    onRetry={handleRetry}
-                />
-            )}
-            inverted
-            onScroll={handleScroll}
-            scrollEventThrottle={100}
-            onContentSizeChange={() => {
-                if (shouldForceScrollRef.current || userNearBottomRef.current) {
-                    flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
-                    shouldForceScrollRef.current = false;
-                }
-            }}
-            maintainVisibleContentPosition={{
-                minIndexForVisible: 0,
-            }}
-        />
-    ) : null;
+    const renderScrollComponent = React.useCallback(
+        (props: ScrollViewProps) => (
+            <ChatScrollView {...props} bottomInset={safeArea.bottom} />
+        ),
+        [safeArea.bottom],
+    );
 
-    // Placeholder: loading or empty state
+    // Keep the empty state inside the same keyboard-aware message list so it stays
+    // vertically centered when the composer moves with the keyboard.
     const placeholder = isLoading ? (
         <View style={styles.emptyContainer}>
             <ActivityIndicator size="large" color={theme.colors.textSecondary} />
@@ -1147,9 +1143,46 @@ export default function OpenClawChatPage() {
         </View>
     ) : null;
 
+    const content = (
+        <LegendList
+            ref={listRef}
+            style={styles.messageList}
+            contentContainerStyle={styles.messageListContent}
+            data={messages}
+            dataKey={`${machineId}:${sessionKey}`}
+            estimatedItemSize={120}
+            keyExtractor={(item) => item.localId}
+            renderItem={({ item }) => (
+                <MessageItem
+                    message={item}
+                    onRetry={handleRetry}
+                />
+            )}
+            alignItemsAtEnd
+            initialScrollAtEnd
+            maintainScrollAtEnd={{ on: { dataChange: true } }}
+            maintainScrollAtEndThreshold={0.2}
+            maintainVisibleContentPosition
+            ListEmptyComponent={<KeyboardCenteredEmpty>{placeholder}</KeyboardCenteredEmpty>}
+            ListHeaderComponent={<View style={{ height: useNativeSoftHeader ? softHeaderInset + 12 : 12 }} />}
+            estimatedHeaderSize={useNativeSoftHeader ? softHeaderInset + 12 : 12}
+            renderScrollComponent={renderScrollComponent}
+            keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+            keyboardShouldPersistTaps="handled"
+            onScroll={handleScroll}
+            scrollEventThrottle={16}
+            onContentSizeChange={() => {
+                if (shouldForceScrollRef.current) {
+                    void listRef.current?.scrollToEnd({ animated: false });
+                    shouldForceScrollRef.current = false;
+                }
+            }}
+        />
+    );
+
     // Input area
     const input = (
-        <View style={[styles.inputContainer, { paddingBottom: safeArea.bottom + 16 }]}>
+        <View style={[styles.inputContainer, Platform.OS === 'ios' ? undefined : { paddingBottom: safeArea.bottom + 16 }]}>
             <View style={styles.inputInner}>
                 <View style={styles.inputPanel}>
                     <View style={styles.inputWrapper}>
@@ -1189,8 +1222,9 @@ export default function OpenClawChatPage() {
         <View style={styles.container}>
             <Stack.Screen
                 options={{
+                    ...softHeaderOptions,
                     headerTitleAlign: isNarrowPhone ? 'left' : 'center',
-                    headerTitle: () => (
+                    headerTitle: useNativeSoftHeader ? sessionName : () => (
                         <ChatHeaderTitle
                             title={sessionName}
                             subtitle={machineName}
@@ -1198,6 +1232,8 @@ export default function OpenClawChatPage() {
                             width={isNarrowPhone ? (Platform.OS === 'ios' ? leftAlignTitleWidth : undefined) : headerTitleMaxWidth}
                         />
                     ),
+                    headerSubtitle: useNativeSoftHeader ? machineName : undefined,
+                    headerSubtitleColor: useNativeSoftHeader ? theme.colors.textSecondary : undefined,
                     headerRight: () => (
                         <Pressable
                             onPress={handleOpenInfo}
@@ -1216,9 +1252,9 @@ export default function OpenClawChatPage() {
                 loading={loadingDetail}
             />
             <AgentContentView
+                safeAreaLayout
                 content={content}
                 input={input}
-                placeholder={placeholder}
             />
         </View>
     );

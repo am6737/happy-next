@@ -1,18 +1,20 @@
 import * as React from 'react';
-import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, TextInput, View, type ScrollViewProps } from 'react-native';
 import { Stack } from 'expo-router';
 import { useHeaderHeight } from '@react-navigation/elements';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LegendList } from '@legendapp/list/react-native';
 import { BlurView } from 'expo-blur';
 import { GlassView, isLiquidGlassAvailable } from 'expo-glass-effect';
-import { KeyboardStickyView } from 'react-native-keyboard-controller';
+import { KeyboardChatScrollView, KeyboardStickyView } from 'react-native-keyboard-controller';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type DemoMessage = {
     id: string;
     text: string;
     side: 'left' | 'right';
 };
+
+const COMPOSER_MARGIN = 8;
 
 function createInitialMessages(): DemoMessage[] {
     return Array.from({ length: 30 }, (_, index) => ({
@@ -24,6 +26,22 @@ function createInitialMessages(): DemoMessage[] {
     }));
 }
 
+const ChatScrollView = React.forwardRef<
+    React.ElementRef<typeof KeyboardChatScrollView>,
+    ScrollViewProps & { bottomInset: number }
+>(({ bottomInset, ...props }, ref) => (
+    <KeyboardChatScrollView
+        ref={ref}
+        automaticallyAdjustContentInsets={false}
+        contentInsetAdjustmentBehavior="never"
+        keyboardDismissMode="interactive"
+        keyboardLiftBehavior="always"
+        offset={bottomInset - COMPOSER_MARGIN}
+        {...props}
+    />
+));
+ChatScrollView.displayName = 'ChatScrollView';
+
 export default function LegendChatHeaderTest() {
     const [messages, setMessages] = React.useState<DemoMessage[]>(createInitialMessages);
     const [input, setInput] = React.useState('');
@@ -33,8 +51,7 @@ export default function LegendChatHeaderTest() {
     const insets = useSafeAreaInsets();
     const useNativeTransparentHeader = Platform.OS === 'ios';
     const useLiquidGlass = Platform.OS === 'ios' && isLiquidGlassAvailable();
-    const [measuredInputHeight, setMeasuredInputHeight] = React.useState<number | null>(null);
-    const inputHeight = measuredInputHeight ?? (64 + Math.max(insets.bottom, 8));
+    const inputRef = React.useRef<TextInput>(null);
 
     const addMessage = React.useCallback(() => {
         const text = input.trim();
@@ -77,6 +94,13 @@ export default function LegendChatHeaderTest() {
         </View>
     ), [headerHeight, prependOlderPage, useNativeTransparentHeader]);
 
+    const renderScrollComponent = React.useCallback(
+        (props: ScrollViewProps) => (
+            <ChatScrollView {...props} bottomInset={insets.bottom} />
+        ),
+        [insets.bottom],
+    );
+
     return (
         <>
             <Stack.Screen
@@ -91,40 +115,34 @@ export default function LegendChatHeaderTest() {
                 }}
             />
 
-            <View style={styles.container}>
-                <KeyboardStickyView
-                    offset={{ opened: insets.bottom }}
-                    style={styles.listViewport}
-                >
-                    <LegendList
-                        data={messages}
-                        renderItem={renderItem}
-                        keyExtractor={(item) => item.id}
-                        estimatedItemSize={64}
-                        alignItemsAtEnd
-                        maintainScrollAtEnd
-                        maintainScrollAtEndThreshold={0.2}
-                        maintainVisibleContentPosition
-                        initialScrollAtEnd
-                        ListHeaderComponent={listHeader}
-                        contentContainerStyle={{ paddingBottom: inputHeight }}
-                        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
-                        keyboardShouldPersistTaps="handled"
-                        style={styles.list}
-                    />
-                </KeyboardStickyView>
+            <SafeAreaView edges={['bottom']} style={styles.container}>
+                <LegendList
+                    data={messages}
+                    renderItem={renderItem}
+                    keyExtractor={(item) => item.id}
+                    estimatedItemSize={64}
+                    alignItemsAtEnd
+                    maintainScrollAtEnd={{ on: { dataChange: true } }}
+                    maintainScrollAtEndThreshold={0.2}
+                    maintainVisibleContentPosition
+                    initialScrollAtEnd
+                    ListHeaderComponent={listHeader}
+                    estimatedHeaderSize={useNativeTransparentHeader ? headerHeight + 12 : 12}
+                    renderScrollComponent={renderScrollComponent}
+                    contentContainerStyle={{ paddingBottom: COMPOSER_MARGIN }}
+                    keyboardShouldPersistTaps="handled"
+                    style={styles.list}
+                />
 
                 <KeyboardStickyView
-                    offset={{ opened: insets.bottom }}
-                    style={styles.inputOverlay}
+                    offset={{ opened: insets.bottom - COMPOSER_MARGIN }}
+                    style={styles.composer}
                 >
-                    <View
-                        onLayout={(event) => setMeasuredInputHeight(event.nativeEvent.layout.height)}
-                        style={[styles.inputSafeArea, { paddingBottom: Math.max(insets.bottom, 8) }]}
-                    >
+                    <View style={styles.inputSafeArea}>
                         {useLiquidGlass ? (
                             <GlassView glassEffectStyle="regular" style={styles.inputContainer}>
                                 <TextInput
+                                    ref={inputRef}
                                     value={input}
                                     onChangeText={setInput}
                                     onSubmitEditing={addMessage}
@@ -139,6 +157,7 @@ export default function LegendChatHeaderTest() {
                         ) : (
                             <BlurView intensity={80} tint="light" style={[styles.inputContainer, styles.inputContainerFallback]}>
                                 <TextInput
+                                    ref={inputRef}
                                     value={input}
                                     onChangeText={setInput}
                                     onSubmitEditing={addMessage}
@@ -153,7 +172,7 @@ export default function LegendChatHeaderTest() {
                         )}
                     </View>
                 </KeyboardStickyView>
-            </View>
+            </SafeAreaView>
         </>
     );
 }
@@ -166,12 +185,8 @@ const styles = StyleSheet.create({
     list: {
         flex: 1,
     },
-    listViewport: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
+    composer: {
+        minHeight: 64,
     },
     testInfo: {
         marginHorizontal: 16,
@@ -247,13 +262,7 @@ const styles = StyleSheet.create({
     inputSafeArea: {
         paddingTop: 8,
         paddingHorizontal: 12,
-    },
-    inputOverlay: {
-        position: 'absolute',
-        left: 0,
-        right: 0,
-        bottom: 0,
-        zIndex: 10,
+        paddingBottom: COMPOSER_MARGIN,
     },
     input: {
         flex: 1,

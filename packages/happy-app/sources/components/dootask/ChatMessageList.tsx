@@ -1,14 +1,36 @@
 import * as React from 'react';
-import { View, Text, FlatList, ActivityIndicator, Pressable } from 'react-native';
+import { View, Text, ActivityIndicator, Pressable, Platform, type ScrollViewProps } from 'react-native';
+import { LegendList } from '@legendapp/list/react-native';
+import type { LegendListRef } from '@legendapp/list/react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { Ionicons } from '@expo/vector-icons';
 import { t } from '@/text';
 import { Typography } from '@/constants/Typography';
 import { ChatBubble } from './ChatBubble';
 import type { DooTaskDialogMsg, DisplayMessage, PendingMessage } from '@/sync/dootask/types';
+import { useSoftHeaderInset } from '@/components/navigation/softHeader';
+import { KeyboardChatScrollView } from 'react-native-keyboard-controller';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Threshold in pixels for showing the scroll-to-bottom button
 const SCROLL_THRESHOLD = 100;
+const COMPOSER_MARGIN = 8;
+
+const ChatScrollView = React.forwardRef<
+    React.ElementRef<typeof KeyboardChatScrollView>,
+    ScrollViewProps & { bottomInset: number }
+>(({ bottomInset, ...props }, ref) => (
+    <KeyboardChatScrollView
+        ref={ref}
+        automaticallyAdjustContentInsets={false}
+        contentInsetAdjustmentBehavior="never"
+        keyboardDismissMode="interactive"
+        keyboardLiftBehavior="always"
+        offset={Platform.OS === 'ios' ? bottomInset - COMPOSER_MARGIN : bottomInset}
+        {...props}
+    />
+));
+ChatScrollView.displayName = 'ChatScrollView';
 
 const AI_ASSISTANT_USERID = -1;
 
@@ -57,6 +79,8 @@ type ChatMessageListProps = {
     onEmojiPress?: (msgId: number, symbol: string) => void;
     onRetry?: (pendingId: string) => void;
     serverUrl: string;
+    dataKey?: string;
+    emptyComponent?: React.ReactElement | null;
 };
 
 /** Resolve a potentially relative avatar URL to an absolute one, handling {{RemoteURL}} placeholder. */
@@ -69,9 +93,7 @@ function resolveAvatarUrl(avatarPath: string | null | undefined, serverUrl: stri
 }
 
 /**
- * Inverted FlatList that renders a scrollable chat message list with date separators.
- * Messages array is expected newest-first (index 0 = newest).
- * The inverted FlatList renders newest at the bottom of the screen.
+ * Messages arrive newest-first, but LegendList renders chronologically without inversion.
  */
 export const ChatMessageList = React.memo(({
     messages,
@@ -87,9 +109,14 @@ export const ChatMessageList = React.memo(({
     onEmojiPress,
     onRetry,
     serverUrl,
+    dataKey,
+    emptyComponent,
 }: ChatMessageListProps) => {
     const { theme } = useUnistyles();
-    const flatListRef = React.useRef<FlatList>(null);
+    const listRef = React.useRef<LegendListRef>(null);
+    const softHeaderInset = useSoftHeaderInset();
+    const insets = useSafeAreaInsets();
+    const chronologicalMessages = React.useMemo(() => [...messages].reverse(), [messages]);
 
     // Scroll-to-bottom button visibility
     const [showScrollButton, setShowScrollButton] = React.useState(false);
@@ -109,8 +136,9 @@ export const ChatMessageList = React.memo(({
     }
 
     const handleScroll = React.useCallback((event: any) => {
-        const offsetY = event.nativeEvent.contentOffset.y;
-        const shouldShow = offsetY > SCROLL_THRESHOLD;
+        const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+        const distanceFromEnd = contentSize.height - layoutMeasurement.height - contentOffset.y;
+        const shouldShow = distanceFromEnd > SCROLL_THRESHOLD;
         setShowScrollButton(prev => {
             if (shouldShow && !prev) {
                 lastSeenCreatedAtRef.current = messages[0]?.created_at ?? '';
@@ -120,7 +148,7 @@ export const ChatMessageList = React.memo(({
     }, [messages]);
 
     const handleScrollToBottom = React.useCallback(() => {
-        flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+        void listRef.current?.scrollToEnd({ animated: false });
     }, []);
 
     // Build a map from message id -> message for resolving reply_id references
@@ -148,27 +176,26 @@ export const ChatMessageList = React.memo(({
         const isVisiblePending = pending && !isQuietPending;
 
         // Date separator logic:
-        // Since the list is inverted, the NEXT item in the array (index + 1) appears ABOVE in the UI.
-        // We show a date separator above the current bubble when the date differs from the next item.
+        // The previous item is visually above this bubble in the non-inverted list.
         const currentDate = item.created_at.substring(0, 10); // YYYY-MM-DD
-        const nextMsg = index < messages.length - 1 ? messages[index + 1] : null;
-        const nextDate = nextMsg ? nextMsg.created_at.substring(0, 10) : null;
-        const showDateSeparator = !pending && (!nextDate || nextDate !== currentDate);
+        const previousMsg = index > 0 ? chronologicalMessages[index - 1] : null;
+        const previousDate = previousMsg ? previousMsg.created_at.substring(0, 10) : null;
+        const showDateSeparator = !pending && (!previousDate || previousDate !== currentDate);
 
         // Avatar grouping: show avatar on the FIRST message of a sender group (reading top-to-bottom).
-        // In inverted FlatList, "above" = index + 1. Show avatar when the message above is
+        // Show avatar when the message above is
         // from a different user or doesn't exist, OR when a date separator breaks the group.
         const isSystemMsg = (type: string) => type === 'notice' || type === 'tag' || type === 'top' || type === 'todo';
-        const showAvatar = isVisiblePending || !nextMsg || nextMsg.userid !== item.userid || isSystemMsg(nextMsg.type) || showDateSeparator;
+        const showAvatar = isVisiblePending || !previousMsg || previousMsg.userid !== item.userid || isSystemMsg(previousMsg.type) || showDateSeparator;
 
         // Spacing rule:
         // - Compact spacing for consecutive messages from the same sender (same date block)
         // - Larger spacing when a new sender group starts
         const isConsecutiveSameSender =
             !isVisiblePending &&
-            !!nextMsg &&
-            nextMsg.userid === item.userid &&
-            !isSystemMsg(nextMsg.type) &&
+            !!previousMsg &&
+            previousMsg.userid === item.userid &&
+            !isSystemMsg(previousMsg.type) &&
             !isSystemMsg(item.type) &&
             !showDateSeparator;
 
@@ -206,42 +233,58 @@ export const ChatMessageList = React.memo(({
                 />
             </View>
         );
-    }, [messages, currentUserId, userNames, userAvatars, userDisabledAt, replyMsgMap, onImagePress, onMessageLongPress, onEmojiPress, onRetry, serverUrl, theme]);
+    }, [chronologicalMessages, currentUserId, userNames, userAvatars, userDisabledAt, replyMsgMap, onImagePress, onMessageLongPress, onEmojiPress, onRetry, serverUrl, theme]);
 
     const keyExtractor = React.useCallback((msg: DisplayMessage) =>
         isPending(msg) ? msg._pendingId : msg.id.toString()
     , []);
 
-    const listFooter = React.useMemo(() => {
-        if (!loadingMore) return null;
-        return (
-            <View style={styles.loadingFooter}>
-                <ActivityIndicator size="small" />
-            </View>
-        );
-    }, [loadingMore]);
+    const listHeader = React.useMemo(() => (
+        <View>
+            <View style={{ height: softHeaderInset + 12 }} />
+            {loadingMore && (
+                <View style={styles.loadingFooter}>
+                    <ActivityIndicator size="small" />
+                </View>
+            )}
+        </View>
+    ), [loadingMore, softHeaderInset, styles.loadingFooter]);
 
-    // Force FlatList to re-render when avatar data loads asynchronously
+    // Refresh mounted rows when avatar data loads asynchronously.
     const extraData = React.useMemo(() => ({ userAvatars, userNames, userDisabledAt }), [userAvatars, userNames, userDisabledAt]);
+
+    const renderScrollComponent = React.useCallback(
+        (props: ScrollViewProps) => (
+            <ChatScrollView {...props} bottomInset={insets.bottom} />
+        ),
+        [insets.bottom],
+    );
 
     return (
         <View style={styles.wrapper}>
-            <FlatList
-                ref={flatListRef}
-                data={messages}
-                inverted={true}
+            <LegendList
+                ref={listRef}
+                data={chronologicalMessages}
+                dataKey={dataKey}
                 keyExtractor={keyExtractor}
                 renderItem={renderItem}
+                estimatedItemSize={100}
+                estimatedHeaderSize={softHeaderInset + 12 + (loadingMore ? 48 : 0)}
+                alignItemsAtEnd
+                initialScrollAtEnd
+                maintainScrollAtEnd={{ on: { dataChange: true } }}
+                maintainScrollAtEndThreshold={0.2}
+                maintainVisibleContentPosition
                 extraData={extraData}
                 onScroll={handleScroll}
                 scrollEventThrottle={16}
-                onEndReached={handleEndReached}
-                onEndReachedThreshold={0.3}
-                ListFooterComponent={listFooter}
+                onStartReached={handleEndReached}
+                onStartReachedThreshold={0.3}
+                ListHeaderComponent={listHeader}
+                ListEmptyComponent={emptyComponent}
+                renderScrollComponent={renderScrollComponent}
                 contentContainerStyle={styles.contentContainer}
-                initialNumToRender={50}
-                maxToRenderPerBatch={50}
-                windowSize={11}
+                keyboardShouldPersistTaps="handled"
             />
 
             {/* Scroll to bottom button */}
@@ -296,8 +339,9 @@ const styles = StyleSheet.create((theme) => ({
         flex: 1,
     },
     contentContainer: {
-        paddingVertical: theme.margins.sm,
         flexGrow: 1,
+        paddingTop: theme.margins.sm,
+        paddingBottom: COMPOSER_MARGIN,
     },
     itemWithAvatar: {
         marginBottom: 22,

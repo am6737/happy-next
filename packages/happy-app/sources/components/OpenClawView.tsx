@@ -203,7 +203,7 @@ export const OpenClawView = React.memo(() => {
     // List view
     return (
         <View style={styles.container}>
-            <ScrollView contentContainerStyle={{
+            <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{
                 maxWidth: layout.maxWidth,
                 alignSelf: 'center',
                 width: '100%',

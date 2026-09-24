@@ -62,6 +62,7 @@ export default function RootLayout() {
             <Stack.Screen
                 name="inbox/index"
                 options={{
+                    ...softHeaderOptions,
                     headerShown: true,
                     headerTitle: t('tabs.inbox'),
                 }}
@@ -69,6 +70,7 @@ export default function RootLayout() {
             <Stack.Screen
                 name="dootask/index"
                 options={{
+                    ...softHeaderOptions,
                     headerShown: true,
                     headerTitle: t('tabs.dootask'),
                 }}
@@ -91,6 +93,7 @@ export default function RootLayout() {
             <Stack.Screen
                 name="settings/index"
                 options={{
+                    ...softHeaderOptions,
                     headerShown: true,
                     headerTitle: t('settings.title'),
                     headerRight: isCustomServer
@@ -344,6 +347,7 @@ export default function RootLayout() {
             <Stack.Screen
                 name="repos/index"
                 options={{
+                    ...softHeaderOptions,
                     headerShown: true,
                     headerTitle: t('lab.screenTitle'),
                     headerBackTitle: t('common.back'),
@@ -643,6 +647,7 @@ export default function RootLayout() {
 <Stack.Screen
                 name="openclaw/index"
                 options={{
+                    ...softHeaderOptions,
                     headerShown: true,
                     headerTitle: t('tabs.openclaw'),
                 }}

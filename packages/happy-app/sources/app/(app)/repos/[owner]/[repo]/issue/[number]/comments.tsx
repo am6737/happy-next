@@ -1,5 +1,6 @@
 import * as React from 'react';
-import { View, FlatList, Pressable, ActivityIndicator, Platform, useWindowDimensions } from 'react-native';
+import { View, Pressable, ActivityIndicator, Platform, useWindowDimensions, type ScrollViewProps } from 'react-native';
+import { LegendList } from '@legendapp/list/react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { Ionicons } from '@expo/vector-icons';
@@ -13,10 +14,10 @@ import { createGithubIssueComment, updateGithubIssueComment, deleteGithubIssueCo
 import { useAuth } from '@/auth/AuthContext';
 import { useHappyAction } from '@/hooks/useHappyAction';
 import { Modal } from '@/modal';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChatHeaderTitle } from '@/components/ChatHeaderTitle';
 import { getNativeHeaderTitleWidth } from '@/utils/nativeHeaderTitleWidth';
-import { useKeyboardState } from 'react-native-keyboard-controller';
+import { KeyboardChatScrollView, KeyboardStickyView } from 'react-native-keyboard-controller';
 import { ActionMenuModal } from '@/components/ActionMenuModal';
 import type { ActionMenuItem } from '@/components/ActionMenu';
 import type { RepoIssueComment } from '@/data/mockRepos';
@@ -24,12 +25,34 @@ import { useProfile } from '@/sync/storage';
 import { t } from '@/text';
 import { getGithubCommentFallbackRoute } from '@/utils/githubCommentNavigation';
 import { CommentItem } from '@/components/repos/CommentItem';
+import { isRunningOnMac } from '@/utils/platform';
+import { softHeaderOptions, useSoftHeaderInset } from '@/components/navigation/softHeader';
+import { KeyboardCenteredEmpty } from '@/components/KeyboardCenteredEmpty';
+
+const COMPOSER_MARGIN = 8;
+
+const ChatScrollView = React.forwardRef<
+    React.ElementRef<typeof KeyboardChatScrollView>,
+    ScrollViewProps & { bottomInset: number }
+>(({ bottomInset, ...props }, ref) => (
+    <KeyboardChatScrollView
+        ref={ref}
+        automaticallyAdjustContentInsets={false}
+        contentInsetAdjustmentBehavior="never"
+        keyboardDismissMode="interactive"
+        keyboardLiftBehavior="always"
+        offset={Platform.OS === 'ios' ? bottomInset - COMPOSER_MARGIN : bottomInset}
+        {...props}
+    />
+));
+ChatScrollView.displayName = 'ChatScrollView';
 
 export default React.memo(function IssueCommentsPage() {
     const styles = stylesheet;
     const { theme } = useUnistyles();
     const router = useRouter();
     const insets = useSafeAreaInsets();
+    const softHeaderInset = useSoftHeaderInset();
     const { owner, repo, number: numberStr, issueTitle, issueAuthor } = useLocalSearchParams<{ owner: string; repo: string; number: string; issueTitle?: string; issueAuthor?: string }>();
     const issueNumber = parseInt(numberStr, 10);
     const { credentials } = useAuth();
@@ -79,8 +102,6 @@ export default React.memo(function IssueCommentsPage() {
 
     const [submitting, doSubmit] = useHappyAction(submit);
     const canSubmit = draft.trim().length > 0 && !submitting;
-    const keyboard = useKeyboardState();
-    const keyboardPadding = keyboard.isVisible ? keyboard.height - insets.bottom : 0;
 
     const [menuVisible, setMenuVisible] = React.useState(false);
     const [uploading, setUploading] = React.useState(false);
@@ -194,6 +215,7 @@ export default React.memo(function IssueCommentsPage() {
     const headerTitle = React.useCallback(() => (
         <ChatHeaderTitle title={headerTitleText} subtitle={headerSubtitleText} width={headerTitleWidth} />
     ), [headerTitleText, headerSubtitleText, headerTitleWidth]);
+    const useNativeSoftHeader = Platform.OS === 'ios' && !isRunningOnMac();
 
     const listEmpty = React.useMemo(() => (
         <View style={styles.emptyContainer}>
@@ -205,11 +227,19 @@ export default React.memo(function IssueCommentsPage() {
         </View>
     ), [loading, theme]);
 
+    const renderScrollComponent = React.useCallback(
+        (props: ScrollViewProps) => (
+            <ChatScrollView {...props} bottomInset={insets.bottom} />
+        ),
+        [insets.bottom],
+    );
+
     return (
-        <View style={styles.container}>
-            <Stack.Screen options={{ headerTitle, headerLeft }} />
-            <FlatList
+        <SafeAreaView edges={['bottom']} style={styles.container}>
+            <Stack.Screen options={{ ...softHeaderOptions, headerTitle: useNativeSoftHeader ? headerTitleText : headerTitle, headerSubtitle: useNativeSoftHeader ? headerSubtitleText : undefined, headerSubtitleColor: useNativeSoftHeader ? theme.colors.textSecondary : undefined, headerLeft }} />
+            <LegendList
                 data={comments}
+                estimatedItemSize={120}
                 keyExtractor={(item) => String(item.id)}
                 renderItem={({ item }) => (
                     <CommentItem
@@ -220,15 +250,25 @@ export default React.memo(function IssueCommentsPage() {
                 )}
                 onEndReached={hasMore ? loadMore : undefined}
                 onEndReachedThreshold={0.5}
-                ListEmptyComponent={listEmpty}
+                maintainVisibleContentPosition
+                maintainScrollAtEnd={{ on: { dataChange: true } }}
+                initialScrollAtEnd
+                alignItemsAtEnd
+                ListHeaderComponent={useNativeSoftHeader ? <View style={{ height: softHeaderInset + 12 }} /> : null}
+                estimatedHeaderSize={useNativeSoftHeader ? softHeaderInset + 12 : 0}
+                ListEmptyComponent={<KeyboardCenteredEmpty>{listEmpty}</KeyboardCenteredEmpty>}
                 ListFooterComponent={loadingMore ? (
                     <ActivityIndicator style={{ paddingVertical: 16 }} color={theme.colors.textSecondary} />
                 ) : null}
+                renderScrollComponent={renderScrollComponent}
                 contentContainerStyle={[styles.list, { maxWidth: layout.maxWidth, alignSelf: 'center', width: '100%' }]}
                 style={{ flex: 1, backgroundColor: theme.colors.surface }}
                 keyboardShouldPersistTaps="handled"
             />
-            <View style={[styles.composer, { paddingBottom: Math.max(insets.bottom + Math.max(0, keyboardPadding), 12) }]}>
+            <KeyboardStickyView
+                offset={{ opened: Platform.OS === 'ios' ? insets.bottom - COMPOSER_MARGIN : insets.bottom }}
+            >
+                <View style={[styles.composer, { paddingBottom: Platform.OS === 'ios' ? 0 : Math.max(insets.bottom, 12) }]}>
                 {editingComment && (
                         <View style={styles.editingBar}>
                             <Ionicons name="pencil" size={14} color={theme.colors.textLink} />
@@ -292,18 +332,19 @@ export default React.memo(function IssueCommentsPage() {
                         </View>
                     </View>
                 </View>
-                <ActionMenuModal
-                    visible={menuVisible}
-                    items={menuItems}
-                    onClose={() => setMenuVisible(false)}
-                    deferItemPress
-                />
-                <ActionMenuModal
-                    visible={commentMenuVisible}
-                    items={commentMenuItems}
-                    onClose={() => setCommentMenuVisible(false)}
-                />
-            </View>
+            </KeyboardStickyView>
+            <ActionMenuModal
+                visible={menuVisible}
+                items={menuItems}
+                onClose={() => setMenuVisible(false)}
+                deferItemPress
+            />
+            <ActionMenuModal
+                visible={commentMenuVisible}
+                items={commentMenuItems}
+                onClose={() => setCommentMenuVisible(false)}
+            />
+        </SafeAreaView>
     );
 });
 
@@ -313,7 +354,10 @@ const stylesheet = StyleSheet.create((theme) => ({
         backgroundColor: theme.colors.surface,
     },
     list: {
-        padding: 16,
+        flexGrow: 1,
+        paddingTop: 16,
+        paddingHorizontal: 16,
+        paddingBottom: COMPOSER_MARGIN,
         gap: 0,
     },
     emptyContainer: {

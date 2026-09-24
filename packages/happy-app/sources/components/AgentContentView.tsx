@@ -10,6 +10,7 @@ interface AgentContentViewProps {
     content?: React.ReactNode | null;
     placeholder?: React.ReactNode | null;
     betweenContentAndInput?: React.ReactNode | null;
+    safeAreaLayout?: boolean;
 }
 
 export const AgentContentView: React.FC<AgentContentViewProps> = React.memo(({ input, content, placeholder, betweenContentAndInput }) => {

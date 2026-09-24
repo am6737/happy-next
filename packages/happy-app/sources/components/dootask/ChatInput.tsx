@@ -1,14 +1,14 @@
 import * as React from 'react';
-import { View, Text, Pressable } from 'react-native';
+import { View, Text, Pressable, Platform } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { t } from '@/text';
 import { Typography } from '@/constants/Typography';
 import { MultiTextInput } from '@/components/MultiTextInput';
 import { ActionMenuModal } from '@/components/ActionMenuModal';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { ActionMenuItem } from '@/components/ActionMenu';
 import type { DooTaskDialogMsg } from '@/sync/dootask/types';
 
@@ -113,7 +113,7 @@ export const ChatInput = React.memo(({ onSendText, onSendImage, onSendFile, repl
     ], [handlePickFromCamera, handlePickFromAlbum, handlePickFile]);
 
     return (
-        <View style={[styles.container, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+        <View style={[styles.container, { paddingBottom: Platform.OS === 'ios' ? 0 : Math.max(insets.bottom, 12) }]}>
             {replyTo && (
                 <View style={styles.replyBar}>
                     <View style={styles.replyContent}>
