@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { View, Pressable, FlatList, ActivityIndicator } from 'react-native';
+import { View, Pressable, FlatList, ActivityIndicator, Platform } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
@@ -19,6 +19,8 @@ import {
     RepoEmptyState,
 } from '@/components/repos';
 import { t } from '@/text';
+import { softHeaderOptions, useSoftHeaderInset } from '@/components/navigation/softHeader';
+import { isRunningOnMac } from '@/utils/platform';
 
 export default function RepoPullsScreen() {
     const styles = stylesheet;
@@ -26,6 +28,8 @@ export default function RepoPullsScreen() {
     const router = useRouter();
     const navigation = useNavigation();
     const { owner, repo: repoName } = useLocalSearchParams<{ owner: string; repo: string }>();
+    const softHeaderInset = useSoftHeaderInset();
+    const useNativeSoftHeader = Platform.OS === 'ios' && !isRunningOnMac();
 
     const { data: pulls, loading: pullsLoading, loadingMore, hasMore, loadMore, refresh: refreshPulls } = useGithubPulls(owner!, repoName!, 'all');
     const lastRefreshRef = React.useRef(0);
@@ -40,9 +44,11 @@ export default function RepoPullsScreen() {
     const [prFilter, setPrFilter] = React.useState<PRFilter>('open');
     const [searchVisible, setSearchVisible] = React.useState(false);
     const [searchQuery, setSearchQuery] = React.useState('');
+    const [fixedHeaderHeight, setFixedHeaderHeight] = React.useState(0);
 
     React.useEffect(() => {
         navigation.setOptions({
+            ...softHeaderOptions,
             headerTitle: searchVisible ? '' : t('repository.pulls'),
             headerRight: searchVisible ? undefined : () => (
                 <View style={styles.headerRight}>
@@ -89,10 +95,8 @@ export default function RepoPullsScreen() {
         />
     ), [router, owner, repoName, filteredPulls.length]);
 
-    return (
-        <View style={styles.container}>
-            <Stack.Screen options={{ headerBackTitle: t('common.back') }} />
-
+    const fixedControls = (
+        <>
             {searchVisible ? (
                 <RepoSearchBar
                     value={searchQuery}
@@ -104,31 +108,64 @@ export default function RepoPullsScreen() {
                     cancelLabel={t('common.cancel')}
                 />
             ) : null}
-
             <FilterChipRow filters={filtersWithCount} value={prFilter} onChange={setPrFilter} />
+        </>
+    );
 
-            {pullsLoading && pulls.length === 0 ? (
+    const list = (
+        <FlatList
+            style={useNativeSoftHeader ? styles.listWrap : undefined}
+            contentInsetAdjustmentBehavior="automatic"
+            data={pullsLoading && pulls.length === 0 ? [] : filteredPulls}
+            keyExtractor={(item) => String(item.number)}
+            renderItem={renderPullItem}
+            ListHeaderComponent={useNativeSoftHeader ? <View style={{ height: fixedHeaderHeight + 4 }} /> : undefined}
+            ListEmptyComponent={pullsLoading && pulls.length === 0 ? (
                 <IssueListSkeleton count={5} />
-            ) : filteredPulls.length === 0 ? (
+            ) : (
                 <RepoEmptyState
                     icon="git-pull-request-outline"
                     title={t('repository.emptyPullsTitle')}
                     subtitle={t('repository.emptyPullsSubtitle')}
                 />
+            )}
+            contentContainerStyle={{ paddingBottom: 24 }}
+            onEndReached={hasMore ? loadMore : undefined}
+            onEndReachedThreshold={0.5}
+            ListFooterComponent={loadingMore ? (
+                <ActivityIndicator style={{ paddingVertical: 16 }} color={theme.colors.textSecondary} />
+            ) : null}
+        />
+    );
+
+    return (
+        <View style={styles.container}>
+            <Stack.Screen options={{ ...softHeaderOptions, headerBackTitle: t('common.back') }} />
+            {useNativeSoftHeader ? (
+                <>
+                    {list}
+                    <View
+                        style={[styles.fixedHeader, { top: softHeaderInset }]}
+                        onLayout={(event) => setFixedHeaderHeight(event.nativeEvent.layout.height)}
+                    >
+                        {fixedControls}
+                    </View>
+                </>
             ) : (
-                <View style={styles.listWrap}>
-                    <FlatList
-                        data={filteredPulls}
-                        keyExtractor={(item) => String(item.number)}
-                        renderItem={renderPullItem}
-                        contentContainerStyle={{ paddingBottom: 24 }}
-                        onEndReached={hasMore ? loadMore : undefined}
-                        onEndReachedThreshold={0.5}
-                        ListFooterComponent={loadingMore ? (
-                            <ActivityIndicator style={{ paddingVertical: 16 }} color={theme.colors.textSecondary} />
-                        ) : null}
-                    />
-                </View>
+                <>
+                    {fixedControls}
+                    {pullsLoading && pulls.length === 0 ? (
+                        <IssueListSkeleton count={5} />
+                    ) : filteredPulls.length === 0 ? (
+                        <RepoEmptyState
+                            icon="git-pull-request-outline"
+                            title={t('repository.emptyPullsTitle')}
+                            subtitle={t('repository.emptyPullsSubtitle')}
+                        />
+                    ) : (
+                        <View style={[styles.listWrap, { marginTop: 4 }]}>{list}</View>
+                    )}
+                </>
             )}
         </View>
     );
@@ -142,13 +179,19 @@ const stylesheet = StyleSheet.create((theme) => ({
     listWrap: {
         flex: 1,
         marginHorizontal: 16,
-        marginTop: 4,
         marginBottom: 16,
         borderRadius: 14,
         overflow: 'hidden',
         backgroundColor: theme.colors.surface,
         borderWidth: 1,
         borderColor: theme.colors.divider,
+    },
+    fixedHeader: {
+        position: 'absolute',
+        left: 0,
+        right: 0,
+        zIndex: 1,
+        backgroundColor: theme.colors.groupped.background,
     },
     headerRight: {
         flexDirection: 'row',

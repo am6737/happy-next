@@ -129,6 +129,7 @@ export default function RootLayout() {
             <Stack.Screen
                 name="session/[id]/files"
                 options={{
+                    ...softHeaderOptions,
                     headerShown: true,
                     headerTitle: t('files.statusTitle'),
                 }}
@@ -143,6 +144,7 @@ export default function RootLayout() {
             <Stack.Screen
                 name="session/[id]/browser"
                 options={{
+                    ...softHeaderOptions,
                     headerShown: true,
                     headerTitle: t('browser.title'),
                 }}
@@ -360,6 +362,7 @@ export default function RootLayout() {
             <Stack.Screen
                 name="repos/[owner]/[repo]/issues"
                 options={({ navigation }) => ({
+                    ...softHeaderOptions,
                     headerShown: true,
                     headerTitle: t('github.issues'),
                     headerBackTitle: t('common.back'),
@@ -378,6 +381,7 @@ export default function RootLayout() {
             <Stack.Screen
                 name="repos/[owner]/[repo]/pulls"
                 options={{
+                    ...softHeaderOptions,
                     headerShown: true,
                     headerTitle: t('github.pullRequests'),
                     headerBackTitle: t('common.back'),
@@ -386,6 +390,7 @@ export default function RootLayout() {
             <Stack.Screen
                 name="repos/[owner]/[repo]/pulls/[number]"
                 options={{
+                    ...softHeaderOptions,
                     headerShown: true,
                     headerTitle: '',
                     headerBackTitle: t('common.back'),
@@ -394,6 +399,7 @@ export default function RootLayout() {
             <Stack.Screen
                 name="repos/[owner]/[repo]/issue/[number]"
                 options={{
+                    ...softHeaderOptions,
                     headerShown: true,
                     headerTitle: '',
                     headerBackTitle: t('common.back'),

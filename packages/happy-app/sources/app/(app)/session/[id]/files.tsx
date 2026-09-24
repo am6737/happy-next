@@ -21,6 +21,8 @@ import { ActionMenuItem } from '@/components/ActionMenu';
 import { shellEscape } from '@/utils/shellEscape';
 import { getWorkspaceRepos } from '@/utils/workspaceRepos';
 import { RepoSelector } from '@/components/RepoSelector';
+import { softHeaderOptions, useSoftHeaderInset } from '@/components/navigation/softHeader';
+import { isRunningOnMac } from '@/utils/platform';
 
 export default function FilesScreen() {
     const route = useRoute();
@@ -31,6 +33,9 @@ export default function FilesScreen() {
     const [isLoading, setIsLoading] = React.useState(true);
     const [searchQuery, setSearchQuery] = React.useState('');
     const { theme } = useUnistyles();
+    const softHeaderInset = useSoftHeaderInset();
+    const useNativeSoftHeader = Platform.OS === 'ios' && !isRunningOnMac();
+    const [fixedHeaderHeight, setFixedHeaderHeight] = React.useState(0);
     const isWeb = Platform.OS === 'web';
 
     const session = useSession(sessionId);
@@ -378,21 +383,8 @@ export default function FilesScreen() {
         );
     }
 
-    return (
-        <View style={[styles.container, { backgroundColor: theme.colors.surface }]}>
-            <Stack.Screen
-                options={{
-                    headerRight: () => (
-                        <Pressable
-                            onPress={() => router.push(`/session/${sessionId}/commits`)}
-                            style={{ width: 38, height: 38, alignItems: 'center', justifyContent: 'center' }}
-                        >
-                            <Octicons name="git-commit" size={20} color={theme.colors.header.tint} />
-                        </Pressable>
-                    ),
-                }}
-            />
-
+    const fixedHeader = (
+        <>
             {/* Repo Selector for multi-repo workspaces */}
             {workspaceRepos.length > 1 && (
                 <View style={{
@@ -474,8 +466,29 @@ export default function FilesScreen() {
                 </View>
             )}
 
+        </>
+    );
+
+    return (
+        <View style={[styles.container, { backgroundColor: theme.colors.surface, paddingTop: useNativeSoftHeader ? 0 : softHeaderInset }]}>
+            <Stack.Screen
+                options={{
+                    ...softHeaderOptions,
+                    headerRight: () => (
+                        <Pressable
+                            onPress={() => router.push(`/session/${sessionId}/commits`)}
+                            style={{ width: 38, height: 38, alignItems: 'center', justifyContent: 'center' }}
+                        >
+                            <Octicons name="git-commit" size={20} color={theme.colors.header.tint} />
+                        </Pressable>
+                    ),
+                }}
+            />
+
+            {!useNativeSoftHeader && fixedHeader}
+
             {/* Git Status List */}
-            <ItemList style={{ flex: 1 }}>
+            <ItemList style={{ flex: 1 }} containerStyle={useNativeSoftHeader ? { paddingTop: fixedHeaderHeight } : undefined}>
                 {isLoading ? (
                     <View style={{
                         flex: 1,
@@ -679,6 +692,14 @@ export default function FilesScreen() {
                     </>
                 )}
             </ItemList>
+            {useNativeSoftHeader && (
+                <View
+                    style={{ position: 'absolute', top: softHeaderInset, left: 0, right: 0, zIndex: 1, backgroundColor: theme.colors.surface }}
+                    onLayout={(event) => setFixedHeaderHeight(event.nativeEvent.layout.height)}
+                >
+                    {fixedHeader}
+                </View>
+            )}
             <ActionMenuModal visible={menuVisible} items={menuItems} onClose={() => setMenuVisible(false)} />
         </View>
     );

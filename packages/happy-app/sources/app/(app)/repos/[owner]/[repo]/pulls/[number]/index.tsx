@@ -36,6 +36,8 @@ import { t } from '@/text';
 import { useLinkedSessions } from '@/hooks/useLinkedSessions';
 import { useNavigateToSession } from '@/hooks/useNavigateToSession';
 import { getSessionName } from '@/utils/sessionUtils';
+import { isRunningOnMac } from '@/utils/platform';
+import { softHeaderOptions } from '@/components/navigation/softHeader';
 
 function buildPRDiscussionPrompt(
     owner: string,
@@ -72,6 +74,7 @@ function PullRequestDetailScreen() {
     const { theme } = useUnistyles();
     const router = useRouter();
     const { owner, repo, number: numberStr } = useLocalSearchParams<{ owner: string; repo: string; number: string }>();
+    const useNativeSoftHeader = Platform.OS === 'ios' && !isRunningOnMac();
 
     const { credentials } = useAuth();
     const prNumber = parseInt(numberStr, 10);
@@ -208,7 +211,8 @@ function PullRequestDetailScreen() {
             <View style={styles.container}>
                 <Stack.Screen
                     options={{
-                        headerTitle: () => (
+                        ...softHeaderOptions,
+                        headerTitle: useNativeSoftHeader ? `#${numberStr}` : () => (
                             <View style={{ alignItems: 'center', maxWidth: 220 }}>
                                 <Text style={styles.headerTitle}>#{numberStr}</Text>
                                 <Text style={[styles.headerSubtitle, { opacity: 1 }]} numberOfLines={1}>
@@ -216,6 +220,8 @@ function PullRequestDetailScreen() {
                                 </Text>
                             </View>
                         ),
+                        headerSubtitle: useNativeSoftHeader ? `${owner}/${repo}` : undefined,
+                        headerSubtitleColor: useNativeSoftHeader ? theme.colors.textSecondary : undefined,
                         headerRight: () => (
                             <Pressable
                                 onPress={() => setMenuVisible(true)}
@@ -226,7 +232,7 @@ function PullRequestDetailScreen() {
                         ),
                     }}
                 />
-                <ScrollView contentContainerStyle={[styles.content, { maxWidth: layout.maxWidth, alignSelf: 'center', width: '100%' }]} style={{ backgroundColor: theme.colors.surface }}>
+                <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.content, { maxWidth: layout.maxWidth, alignSelf: 'center', width: '100%' }]} style={{ flex: 1, backgroundColor: theme.colors.surface }}>
                     <ShimmerView>
                         <SkeletonBlock w={'85%'} h={22} radius={4} />
                         <SkeletonBlock w={'60%'} h={22} radius={4} mt={6} />
@@ -263,7 +269,7 @@ function PullRequestDetailScreen() {
     if (!pr) {
         return (
             <View style={styles.container}>
-                <Stack.Screen options={{ headerTitle: `PR #${numberStr}` }} />
+                <Stack.Screen options={{ ...softHeaderOptions, headerTitle: `PR #${numberStr}` }} />
                 <RepoEmptyState
                     icon="git-pull-request-outline"
                     title={t('lab.pullRequestNotFound')}
@@ -278,12 +284,15 @@ function PullRequestDetailScreen() {
         <View style={styles.container}>
             <Stack.Screen
                 options={{
-                    headerTitle,
+                    ...softHeaderOptions,
+                    headerTitle: useNativeSoftHeader ? `#${pr.number}` : headerTitle,
+                    headerSubtitle: useNativeSoftHeader ? targetSubtitle : undefined,
+                    headerSubtitleColor: useNativeSoftHeader ? theme.colors.textSecondary : undefined,
                     headerRight,
                 }}
             />
 
-            <ScrollView contentContainerStyle={[styles.content, { maxWidth: layout.maxWidth, alignSelf: 'center', width: '100%' }]} style={{ backgroundColor: theme.colors.surface }} onScroll={handleScroll} scrollEventThrottle={16}>
+            <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.content, { maxWidth: layout.maxWidth, alignSelf: 'center', width: '100%' }]} style={{ flex: 1, backgroundColor: theme.colors.surface }} onScroll={handleScroll} scrollEventThrottle={16}>
                 {/* Title */}
                 <Text style={styles.prTitle}>{pr.title}</Text>
 

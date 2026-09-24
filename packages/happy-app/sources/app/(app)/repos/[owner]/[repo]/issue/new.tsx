@@ -1,5 +1,7 @@
 import * as React from 'react';
 import { View, ScrollView, TextInput, Pressable, KeyboardAvoidingView, Platform } from 'react-native';
+import { isRunningOnMac } from '@/utils/platform';
+import { softHeaderOptions } from '@/components/navigation/softHeader';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@/components/StyledText';
@@ -261,14 +263,17 @@ export default function NewIssueScreen() {
 
     return (
         <View style={styles.container}>
-            <Stack.Screen options={{ headerTitle: t('lab.newIssue') }} />
+            <Stack.Screen options={{ ...softHeaderOptions, headerTitle: t('lab.newIssue') }} />
 
             <KeyboardAvoidingView
                 style={{ flex: 1 }}
                 behavior={Platform.OS === 'ios' ? 'padding' : undefined}
                 keyboardVerticalOffset={88}
+                enabled={Platform.OS !== 'ios' || isRunningOnMac()}
             >
                 <ScrollView
+                    contentInsetAdjustmentBehavior="automatic"
+                    automaticallyAdjustKeyboardInsets={Platform.OS === 'ios' && !isRunningOnMac()}
                     contentContainerStyle={[
                         styles.content,
                         { maxWidth: layout.maxWidth, alignSelf: 'center', width: '100%' },

@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { View, Pressable, FlatList, ActivityIndicator } from 'react-native';
+import { View, Pressable, FlatList, ActivityIndicator, Platform } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { Text } from '@/components/StyledText';
@@ -21,6 +21,8 @@ import {
 } from '@/components/repos';
 import { IssueIcon } from '@/components/repos/IssueIcon';
 import { t } from '@/text';
+import { softHeaderOptions, useSoftHeaderInset } from '@/components/navigation/softHeader';
+import { isRunningOnMac } from '@/utils/platform';
 
 export default function RepoIssuesScreen() {
     const styles = stylesheet;
@@ -28,6 +30,8 @@ export default function RepoIssuesScreen() {
     const router = useRouter();
     const navigation = useNavigation();
     const { owner, repo: repoName } = useLocalSearchParams<{ owner: string; repo: string }>();
+    const softHeaderInset = useSoftHeaderInset();
+    const useNativeSoftHeader = Platform.OS === 'ios' && !isRunningOnMac();
 
     const { data: issues, loading: issuesLoading, loadingMore, hasMore, loadMore, refresh: refreshIssues } = useGithubIssues(owner!, repoName!, 'all');
     const lastRefreshRef = React.useRef(0);
@@ -42,9 +46,11 @@ export default function RepoIssuesScreen() {
     const [issueFilter, setIssueFilter] = React.useState<IssueFilter>('open');
     const [searchVisible, setSearchVisible] = React.useState(false);
     const [searchQuery, setSearchQuery] = React.useState('');
+    const [fixedHeaderHeight, setFixedHeaderHeight] = React.useState(0);
 
     React.useEffect(() => {
         navigation.setOptions({
+            ...softHeaderOptions,
             headerTitle: searchVisible ? '' : t('repository.issues'),
             headerRight: searchVisible ? undefined : () => (
                 <View style={styles.headerRight}>
@@ -92,10 +98,8 @@ export default function RepoIssuesScreen() {
         );
     }, [router, owner, repoName, filteredIssues.length]);
 
-    return (
-        <View style={styles.container}>
-            <Stack.Screen options={{ headerBackTitle: t('common.back') }} />
-
+    const fixedControls = (
+        <>
             {searchVisible ? (
                 <RepoSearchBar
                     value={searchQuery}
@@ -107,31 +111,64 @@ export default function RepoIssuesScreen() {
                     cancelLabel={t('common.cancel')}
                 />
             ) : null}
-
             <FilterChipRow filters={filtersWithCount} value={issueFilter} onChange={setIssueFilter} />
+        </>
+    );
 
-            {issuesLoading && issues.length === 0 ? (
+    const list = (
+        <FlatList
+            style={useNativeSoftHeader ? styles.listWrap : undefined}
+            contentInsetAdjustmentBehavior="automatic"
+            data={issuesLoading && issues.length === 0 ? [] : filteredIssues}
+            keyExtractor={(item) => String(item.number)}
+            renderItem={renderIssueItem}
+            ListHeaderComponent={useNativeSoftHeader ? <View style={{ height: fixedHeaderHeight + 4 }} /> : undefined}
+            ListEmptyComponent={issuesLoading && issues.length === 0 ? (
                 <IssueListSkeleton count={5} />
-            ) : filteredIssues.length === 0 ? (
+            ) : (
                 <RepoEmptyState
                     iconElement={<IssueIcon size={24} color={theme.colors.textSecondary} />}
                     title={t('repository.emptyIssuesTitle')}
                     subtitle={t('repository.emptyIssuesSubtitle')}
                 />
+            )}
+            contentContainerStyle={{ paddingBottom: 24 }}
+            onEndReached={hasMore ? loadMore : undefined}
+            onEndReachedThreshold={0.5}
+            ListFooterComponent={loadingMore ? (
+                <ActivityIndicator style={{ paddingVertical: 16 }} color={theme.colors.textSecondary} />
+            ) : null}
+        />
+    );
+
+    return (
+        <View style={styles.container}>
+            <Stack.Screen options={{ ...softHeaderOptions, headerBackTitle: t('common.back') }} />
+            {useNativeSoftHeader ? (
+                <>
+                    {list}
+                    <View
+                        style={[styles.fixedHeader, { top: softHeaderInset }]}
+                        onLayout={(event) => setFixedHeaderHeight(event.nativeEvent.layout.height)}
+                    >
+                        {fixedControls}
+                    </View>
+                </>
             ) : (
-                <View style={styles.listWrap}>
-                    <FlatList
-                        data={filteredIssues}
-                        keyExtractor={(item) => String(item.number)}
-                        renderItem={renderIssueItem}
-                        contentContainerStyle={{ paddingBottom: 24 }}
-                        onEndReached={hasMore ? loadMore : undefined}
-                        onEndReachedThreshold={0.5}
-                        ListFooterComponent={loadingMore ? (
-                            <ActivityIndicator style={{ paddingVertical: 16 }} color={theme.colors.textSecondary} />
-                        ) : null}
-                    />
-                </View>
+                <>
+                    {fixedControls}
+                    {issuesLoading && issues.length === 0 ? (
+                        <IssueListSkeleton count={5} />
+                    ) : filteredIssues.length === 0 ? (
+                        <RepoEmptyState
+                            iconElement={<IssueIcon size={24} color={theme.colors.textSecondary} />}
+                            title={t('repository.emptyIssuesTitle')}
+                            subtitle={t('repository.emptyIssuesSubtitle')}
+                        />
+                    ) : (
+                        <View style={[styles.listWrap, { marginTop: 4 }]}>{list}</View>
+                    )}
+                </>
             )}
         </View>
     );
@@ -145,13 +182,19 @@ const stylesheet = StyleSheet.create((theme) => ({
     listWrap: {
         flex: 1,
         marginHorizontal: 16,
-        marginTop: 4,
         marginBottom: 16,
         borderRadius: 14,
         overflow: 'hidden',
         backgroundColor: theme.colors.surface,
         borderWidth: 1,
         borderColor: theme.colors.divider,
+    },
+    fixedHeader: {
+        position: 'absolute',
+        left: 0,
+        right: 0,
+        zIndex: 1,
+        backgroundColor: theme.colors.groupped.background,
     },
     headerRight: {
         flexDirection: 'row',

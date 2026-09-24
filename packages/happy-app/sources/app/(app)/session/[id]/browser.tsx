@@ -17,6 +17,8 @@ import { loadBrowserLastPath, saveBrowserLastPath } from '@/sync/persistence';
 import * as Clipboard from 'expo-clipboard';
 import { hapticsLight } from '@/components/haptics';
 import { showCopiedToast } from '@/components/Toast';
+import { softHeaderOptions, useSoftHeaderInset } from '@/components/navigation/softHeader';
+import { isRunningOnMac } from '@/utils/platform';
 
 interface DirectoryEntry {
     name: string;
@@ -50,6 +52,9 @@ function parseGlobalResults(stdout: string): SearchResult[] {
 }
 
 export default function BrowserScreen() {
+    const softHeaderInset = useSoftHeaderInset();
+    const useNativeSoftHeader = Platform.OS === 'ios' && !isRunningOnMac();
+    const [fixedHeaderHeight, setFixedHeaderHeight] = React.useState(0);
     const route = useRoute();
     const router = useRouter();
     const sessionId = (route.params! as any).id as string;
@@ -240,25 +245,8 @@ export default function BrowserScreen() {
         }, 50);
     }, [currentPath]);
 
-    return (
-        <View style={[styles.container, { backgroundColor: theme.colors.surface }]}>
-            <Stack.Screen
-                options={{
-                    headerRight: () => (
-                        <Pressable
-                            onPress={toggleSearch}
-                            style={{ paddingHorizontal: 8, paddingVertical: 4 }}
-                        >
-                            <Ionicons
-                                name={searchActive ? 'close' : 'search'}
-                                size={22}
-                                color={theme.colors.header.tint}
-                            />
-                        </Pressable>
-                    ),
-                }}
-            />
-
+    const fixedHeader = (
+        <>
             {/* Search bar */}
             {searchActive && (
                 <View style={{
@@ -365,8 +353,33 @@ export default function BrowserScreen() {
                 </Pressable>
             )}
 
+        </>
+    );
+
+    return (
+        <View style={[styles.container, { backgroundColor: theme.colors.surface, paddingTop: useNativeSoftHeader ? 0 : softHeaderInset }]}>
+            <Stack.Screen
+                options={{
+                    ...softHeaderOptions,
+                    headerRight: () => (
+                        <Pressable
+                            onPress={toggleSearch}
+                            style={{ paddingHorizontal: 8, paddingVertical: 4 }}
+                        >
+                            <Ionicons
+                                name={searchActive ? 'close' : 'search'}
+                                size={22}
+                                color={theme.colors.header.tint}
+                            />
+                        </Pressable>
+                    ),
+                }}
+            />
+
+            {!useNativeSoftHeader && fixedHeader}
+
             {/* Directory listing / Search results */}
-            <ItemList style={{ flex: 1 }}>
+            <ItemList style={{ flex: 1 }} containerStyle={useNativeSoftHeader ? { paddingTop: fixedHeaderHeight } : undefined}>
                 {isLoading ? (
                     <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 40 }}>
                         <ActivityIndicator size="small" color={theme.colors.textSecondary} />
@@ -482,6 +495,14 @@ export default function BrowserScreen() {
                     </>
                 )}
             </ItemList>
+            {useNativeSoftHeader && (
+                <View
+                    style={{ position: 'absolute', top: softHeaderInset, left: 0, right: 0, zIndex: 1, backgroundColor: theme.colors.surface }}
+                    onLayout={(event) => setFixedHeaderHeight(event.nativeEvent.layout.height)}
+                >
+                    {fixedHeader}
+                </View>
+            )}
         </View>
     );
 }

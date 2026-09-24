@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { View, ScrollView, Pressable } from 'react-native';
+import { View, ScrollView, Pressable, Platform } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Text } from '@/components/StyledText';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
@@ -37,6 +37,8 @@ import { t } from '@/text';
 import { useLinkedSessions } from '@/hooks/useLinkedSessions';
 import { useNavigateToSession } from '@/hooks/useNavigateToSession';
 import { getSessionName } from '@/utils/sessionUtils';
+import { isRunningOnMac } from '@/utils/platform';
+import { softHeaderOptions } from '@/components/navigation/softHeader';
 
 function buildIssueDiscussionPrompt(
     owner: string,
@@ -74,6 +76,7 @@ function IssueDetailScreen() {
     const { theme } = useUnistyles();
     const router = useRouter();
     const { owner, repo, number: numberStr } = useLocalSearchParams<{ owner: string; repo: string; number: string }>();
+    const useNativeSoftHeader = Platform.OS === 'ios' && !isRunningOnMac();
 
     const { credentials } = useAuth();
     const issueNumber = parseInt(numberStr, 10);
@@ -209,7 +212,8 @@ function IssueDetailScreen() {
             <View style={styles.container}>
                 <Stack.Screen
                     options={{
-                        headerTitle: () => (
+                        ...softHeaderOptions,
+                        headerTitle: useNativeSoftHeader ? `#${numberStr}` : () => (
                             <View style={{ alignItems: 'center', maxWidth: 220 }}>
                                 <Text style={styles.headerTitle}>#{numberStr}</Text>
                                 <Text style={[styles.headerSubtitle, { opacity: 1 }]} numberOfLines={1}>
@@ -217,6 +221,8 @@ function IssueDetailScreen() {
                                 </Text>
                             </View>
                         ),
+                        headerSubtitle: useNativeSoftHeader ? `${owner}/${repo}` : undefined,
+                        headerSubtitleColor: useNativeSoftHeader ? theme.colors.textSecondary : undefined,
                         headerRight: () => (
                             <Pressable
                                 onPress={() => setMenuVisible(true)}
@@ -227,7 +233,7 @@ function IssueDetailScreen() {
                         ),
                     }}
                 />
-                <ScrollView contentContainerStyle={[styles.content, { maxWidth: layout.maxWidth, alignSelf: 'center', width: '100%' }]} style={{ backgroundColor: theme.colors.surface }}>
+                <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.content, { maxWidth: layout.maxWidth, alignSelf: 'center', width: '100%' }]} style={{ flex: 1, backgroundColor: theme.colors.surface }}>
                     <ShimmerView>
                         <SkeletonBlock w={'85%'} h={22} radius={4} />
                         <SkeletonBlock w={'60%'} h={22} radius={4} mt={6} />
@@ -264,7 +270,7 @@ function IssueDetailScreen() {
     if (!originalIssue) {
         return (
             <View style={styles.container}>
-                <Stack.Screen options={{ headerTitle: `Issue #${numberStr}` }} />
+                <Stack.Screen options={{ ...softHeaderOptions, headerTitle: `Issue #${numberStr}` }} />
                 <RepoEmptyState
                     iconElement={<IssueIcon size={24} color={theme.colors.textSecondary} />}
                     title={t('lab.issueNotFound')}
@@ -280,12 +286,15 @@ function IssueDetailScreen() {
         <View style={styles.container}>
             <Stack.Screen
                 options={{
-                    headerTitle,
+                    ...softHeaderOptions,
+                    headerTitle: useNativeSoftHeader ? `#${issue.number}` : headerTitle,
+                    headerSubtitle: useNativeSoftHeader ? targetSubtitle : undefined,
+                    headerSubtitleColor: useNativeSoftHeader ? theme.colors.textSecondary : undefined,
                     headerRight,
                 }}
             />
 
-            <ScrollView contentContainerStyle={[styles.content, { maxWidth: layout.maxWidth, alignSelf: 'center', width: '100%' }]} style={{ backgroundColor: theme.colors.surface }} onScroll={handleScroll} scrollEventThrottle={16}>
+            <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.content, { maxWidth: layout.maxWidth, alignSelf: 'center', width: '100%' }]} style={{ flex: 1, backgroundColor: theme.colors.surface }} onScroll={handleScroll} scrollEventThrottle={16}>
                 {/* Title */}
                 <Text style={styles.issueTitle}>{issue.title}</Text>
 
