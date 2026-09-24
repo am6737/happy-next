@@ -150,6 +150,7 @@ export default function RootLayout() {
             <Stack.Screen
                 name="session/[id]/commits"
                 options={{
+                    ...softHeaderOptions,
                     headerShown: true,
                     headerTitle: t('commits.title'),
                 }}
@@ -211,6 +212,13 @@ export default function RootLayout() {
                 options={{
                     ...softHeaderOptions,
                     headerTitle: t('settings.appearance'),
+                }}
+            />
+            <Stack.Screen
+                name="settings/language"
+                options={{
+                    ...softHeaderOptions,
+                    headerTitle: t('settingsLanguage.title'),
                 }}
             />
             <Stack.Screen
@@ -279,6 +287,7 @@ export default function RootLayout() {
             <Stack.Screen
                 name="restore/index"
                 options={{
+                    ...softHeaderOptions,
                     headerShown: !hideUnauthenticatedWindowsHeader,
                     headerTitle: t('navigation.linkNewDevice'),
                 }}
@@ -286,6 +295,7 @@ export default function RootLayout() {
             <Stack.Screen
                 name="restore/manual"
                 options={{
+                    ...softHeaderOptions,
                     headerShown: !hideUnauthenticatedWindowsHeader,
                     headerTitle: t('navigation.restoreWithSecretKey'),
                 }}
@@ -562,6 +572,7 @@ export default function RootLayout() {
             <Stack.Screen
                 name="settings/connect/dootask"
                 options={{
+                    ...softHeaderOptions,
                     headerShown: true,
                     headerTitle: t('settings.connectDootask'),
                 }}
@@ -569,6 +580,7 @@ export default function RootLayout() {
             <Stack.Screen
                 name="dootask/add-task"
                 options={{
+                    ...softHeaderOptions,
                     headerShown: true,
                     headerTitle: t('dootask.createTask'),
                 }}
@@ -576,6 +588,7 @@ export default function RootLayout() {
             <Stack.Screen
                 name="dootask/add-project"
                 options={{
+                    ...softHeaderOptions,
                     headerShown: true,
                     headerTitle: t('dootask.createProject'),
                 }}
@@ -630,6 +643,7 @@ export default function RootLayout() {
             <Stack.Screen
                 name="openclaw/add"
                 options={{
+                    ...softHeaderOptions,
                     headerTitle: t('openclaw.addMachine'),
                 }}
             />

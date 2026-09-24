@@ -22,6 +22,7 @@ import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { useRouter } from 'expo-router';
 import { useHeaderHeight } from '@react-navigation/elements';
 import Constants from 'expo-constants';
+import { isRunningOnMac } from '@/utils/platform';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { randomUUID } from 'expo-crypto';
 import { Typography } from '@/constants/Typography';
@@ -55,6 +56,7 @@ export default React.memo(function DooTaskConnectPage() {
     const router = useRouter();
     const { theme } = useUnistyles();
     const headerHeight = useHeaderHeight();
+    const useNativeKeyboardInsets = Platform.OS === 'ios' && !isRunningOnMac();
     const safeArea = useSafeAreaInsets();
 
     // Form state
@@ -254,12 +256,15 @@ export default React.memo(function DooTaskConnectPage() {
 
     return (
         <KeyboardAvoidingView
+            enabled={!useNativeKeyboardInsets}
             style={styles.container}
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             keyboardVerticalOffset={Platform.OS === 'ios' ? Constants.statusBarHeight + headerHeight : 0}
         >
             <ScrollView
                 style={styles.scrollView}
+                contentInsetAdjustmentBehavior="automatic"
+                automaticallyAdjustKeyboardInsets={useNativeKeyboardInsets}
                 contentContainerStyle={[styles.scrollContent, { paddingBottom: safeArea.bottom + 24 }]}
                 keyboardShouldPersistTaps="handled"
                 keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}

@@ -110,7 +110,7 @@ export default function Restore() {
     };
 
     return (
-        <ScrollView style={styles.scrollView}>
+        <ScrollView style={styles.scrollView} contentInsetAdjustmentBehavior="automatic">
             <View style={styles.container}>
                 <View style={styles.contentWrapper}>
                     <Text style={styles.instructionText}>

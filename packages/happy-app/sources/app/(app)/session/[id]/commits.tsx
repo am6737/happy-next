@@ -453,6 +453,7 @@ export default function CommitsScreen() {
             />
             <FlatList
                 data={commits}
+                contentInsetAdjustmentBehavior="automatic"
                 renderItem={renderCommit}
                 keyExtractor={item => item.hash}
                 onEndReached={handleLoadMore}
