@@ -6,7 +6,7 @@
  */
 
 import React from 'react';
-import { View, Text, ScrollView, Pressable, ActivityIndicator, RefreshControl, useWindowDimensions } from 'react-native';
+import { View, Text, ScrollView, Pressable, ActivityIndicator, RefreshControl, Platform, useWindowDimensions } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { useLocalSearchParams, useRouter, Stack, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -24,6 +24,8 @@ import { Modal } from '@/modal/ModalManager';
 import { ActionMenuModal } from '@/components/ActionMenuModal';
 import type { ActionMenuItem } from '@/components/ActionMenu';
 import type { OpenClawSession } from '@/openclaw/types';
+import { isRunningOnMac } from '@/utils/platform';
+import { softHeaderOptions } from '@/components/navigation/softHeader';
 
 const styles = StyleSheet.create((theme) => ({
     container: {
@@ -157,6 +159,7 @@ export default function OpenClawMachineDetailPage() {
     const safeArea = useSafeAreaInsets();
     const { id: machineId } = useLocalSearchParams<{ id: string }>();
     const { width: screenWidth } = useWindowDimensions();
+    const useNativeSoftHeader = Platform.OS === 'ios' && !isRunningOnMac();
 
     // Left: back button (1), Right: add + menu buttons (2) - use larger side * 2 for symmetry
     const headerTitleMaxWidth = getNativeHeaderTitleWidth({ screenWidth, rightActionCount: 2 });
@@ -517,7 +520,8 @@ export default function OpenClawMachineDetailPage() {
         <View style={styles.container}>
             <Stack.Screen
                 options={{
-                    headerTitle: () => (
+                    ...softHeaderOptions,
+                    headerTitle: useNativeSoftHeader ? machineName : () => (
                         <View style={{ alignItems: 'center', justifyContent: 'center', maxWidth: headerTitleMaxWidth }}>
                             <Text
                                 numberOfLines={1}
@@ -543,6 +547,8 @@ export default function OpenClawMachineDetailPage() {
                             </View>
                         </View>
                     ),
+                    headerSubtitle: useNativeSoftHeader ? statusConfig.text : undefined,
+                    headerSubtitleColor: useNativeSoftHeader ? statusConfig.color : undefined,
                     headerRight: () => (
                         <Pressable
                             onPress={handleMenuPress}
@@ -559,6 +565,7 @@ export default function OpenClawMachineDetailPage() {
                 }}
             />
             <ScrollView
+                contentInsetAdjustmentBehavior="automatic"
                 contentContainerStyle={[
                     styles.scrollContent,
                     { paddingBottom: safeArea.bottom + 24 }

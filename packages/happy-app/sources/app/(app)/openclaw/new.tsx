@@ -11,6 +11,7 @@ import {
     Text,
     ScrollView,
     Pressable,
+    Platform,
     useWindowDimensions,
 } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
@@ -24,6 +25,8 @@ import { getNativeHeaderTitleWidth } from '@/utils/nativeHeaderTitleWidth';
 import { ItemGroup } from '@/components/ItemGroup';
 import { Item } from '@/components/Item';
 import { useOpenClawConnection } from '@/openclaw/connection';
+import { isRunningOnMac } from '@/utils/platform';
+import { softHeaderOptions } from '@/components/navigation/softHeader';
 
 const styles = StyleSheet.create((theme) => ({
     container: {
@@ -88,6 +91,7 @@ export default function OpenClawNewSessionPage() {
     const safeArea = useSafeAreaInsets();
     const { machineId } = useLocalSearchParams<{ machineId: string }>();
     const { width: screenWidth } = useWindowDimensions();
+    const useNativeSoftHeader = Platform.OS === 'ios' && !isRunningOnMac();
 
     // Left: back button (1), Right: placeholder (1) - use larger side * 2 for symmetry
     const headerTitleMaxWidth = getNativeHeaderTitleWidth({ screenWidth, rightActionCount: 1 });
@@ -152,7 +156,8 @@ export default function OpenClawNewSessionPage() {
         <View style={styles.container}>
             <Stack.Screen
                 options={{
-                    headerTitle: () => (
+                    ...softHeaderOptions,
+                    headerTitle: useNativeSoftHeader ? t('openclaw.newSession') : () => (
                         <View style={{ alignItems: 'center', justifyContent: 'center', maxWidth: headerTitleMaxWidth }}>
                             <Text
                                 numberOfLines={1}
@@ -178,9 +183,12 @@ export default function OpenClawNewSessionPage() {
                             </View>
                         </View>
                     ),
+                    headerSubtitle: useNativeSoftHeader ? statusConfig.text : undefined,
+                    headerSubtitleColor: useNativeSoftHeader ? statusConfig.color : undefined,
                 }}
             />
             <ScrollView
+                contentInsetAdjustmentBehavior="automatic"
                 contentContainerStyle={[
                     styles.scrollContent,
                     { paddingBottom: safeArea.bottom + 24 },

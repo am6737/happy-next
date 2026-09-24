@@ -37,6 +37,8 @@ import { useShallow } from 'zustand/react/shallow';
 import { FolderPickerSheet } from '@/components/FolderPickerSheet';
 import { BottomSheetModal } from '@gorhom/bottom-sheet';
 import { getNativeHeaderTitleWidth } from '@/utils/nativeHeaderTitleWidth';
+import { isRunningOnMac } from '@/utils/platform';
+import { softHeaderOptions } from '@/components/navigation/softHeader';
 import { MODEL_MODE_DEFAULT } from 'happy-wire';
 
 type AgentType = 'claude' | 'codex' | 'gemini';
@@ -120,6 +122,7 @@ export default function MachineDetailScreen() {
     const folderPickerRef = useRef<BottomSheetModal>(null);
     const folderSelectHandlerRef = useRef<(path: string) => void>(() => {});
     const { width: screenWidth } = useWindowDimensions();
+    const useNativeSoftHeader = Platform.OS === 'ios' && !isRunningOnMac();
     const registeredRepos = storage(useShallow((state) => state.registeredRepos[machineId!] || [])) as RegisteredRepo[];
     const cliAvailability = useCLIDetection(machineId ?? null);
     const [agentMenu, setAgentMenu] = useState<{ visible: boolean; items: ActionMenuItem[] }>({ visible: false, items: [] });
@@ -620,7 +623,8 @@ export default function MachineDetailScreen() {
             <Stack.Screen
                 options={{
                     headerShown: true,
-                    headerTitle: () => (
+                    ...softHeaderOptions,
+                    headerTitle: useNativeSoftHeader ? machineName : () => (
                         <View style={{ alignItems: 'center', justifyContent: 'center', maxWidth: headerTitleMaxWidth }}>
                             <View style={{ flexDirection: 'row', alignItems: 'center', maxWidth: '100%' }}>
                                 <Ionicons
@@ -654,6 +658,8 @@ export default function MachineDetailScreen() {
                             </View>
                         </View>
                     ),
+                    headerSubtitle: useNativeSoftHeader ? (isMachineOnline(machine) ? t('status.online') : t('status.offline')) : undefined,
+                    headerSubtitleColor: useNativeSoftHeader ? (isMachineOnline(machine) ? '#34C759' : '#999') : undefined,
                     headerRight: () => (
                         <Pressable
                             onPress={handleRenameMachine}
@@ -677,6 +683,7 @@ export default function MachineDetailScreen() {
                 }}
             />
             <ItemList
+                automaticallyAdjustKeyboardInsets={useNativeSoftHeader}
                 refreshControl={
                     <RefreshControl
                         refreshing={isRefreshing}
