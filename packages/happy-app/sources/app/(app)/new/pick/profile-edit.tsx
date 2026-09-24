@@ -10,6 +10,8 @@ import { ProfileEditForm } from '@/components/ProfileEditForm';
 import { AIBackendProfile } from '@/sync/settings';
 import { layout } from '@/components/layout';
 import { callbacks } from '../index';
+import { isRunningOnMac } from '@/utils/platform';
+import { softHeaderOptions } from '@/components/navigation/softHeader';
 
 export default function ProfileEditScreen() {
     const { theme } = useUnistyles();
@@ -17,6 +19,7 @@ export default function ProfileEditScreen() {
     const params = useLocalSearchParams<{ profileData?: string; machineId?: string }>();
     const screenWidth = useWindowDimensions().width;
     const headerHeight = useHeaderHeight();
+    const useNativeSoftHeader = Platform.OS === 'ios' && !isRunningOnMac();
 
     // Deserialize profile from URL params
     const profile: AIBackendProfile = React.useMemo(() => {
@@ -55,10 +58,12 @@ export default function ProfileEditScreen() {
         <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             keyboardVerticalOffset={Platform.OS === 'ios' ? Constants.statusBarHeight + headerHeight : 0}
+            enabled={!useNativeSoftHeader}
             style={profileEditScreenStyles.container}
         >
             <Stack.Screen
                 options={{
+                    ...softHeaderOptions,
                     headerTitle: profile.name ? t('profiles.editProfile') : t('profiles.addProfile'),
                 }}
             />
@@ -73,6 +78,7 @@ export default function ProfileEditScreen() {
                         machineId={params.machineId || null}
                         onSave={handleSave}
                         onCancel={handleCancel}
+                        nativeScrollInsets={useNativeSoftHeader}
                     />
                 </View>
             </View>

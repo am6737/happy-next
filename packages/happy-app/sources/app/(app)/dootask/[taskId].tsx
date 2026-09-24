@@ -28,6 +28,8 @@ import { parseFlowItem, getFlowColor, FLOW_STATUS_COLORS } from '@/sync/dootask/
 import type { DooTaskItem, DooTaskFile } from '@/sync/dootask/types';
 import { openExternalUrl } from '@/utils/tauri';
 import { formatSessionAge } from '@/data/repoUtils';
+import { isRunningOnMac } from '@/utils/platform';
+import { softHeaderOptions } from '@/components/navigation/softHeader';
 
 function formatFileSize(bytes: number): string {
     if (bytes < 1024) return `${bytes} B`;
@@ -66,6 +68,7 @@ function DetailField({ label, value, color, theme, onLongPress }: {
 
 export default function DooTaskDetail() {
     const { taskId } = useLocalSearchParams<{ taskId: string }>();
+    const useNativeSoftHeader = Platform.OS === 'ios' && !isRunningOnMac();
     const router = useRouter();
     const { theme } = useUnistyles();
     const insets = useSafeAreaInsets();
@@ -503,7 +506,11 @@ export default function DooTaskDetail() {
             label: t('dootask.refresh'),
             onPress: () => handleRefresh(),
         },
-    ], [handleStartAiSession, handleOpenChat, handleStatusPress, handleRefresh]);
+        ...(useNativeSoftHeader ? [{
+            label: `${t('common.copy')} #${taskId}`,
+            onPress: () => { Clipboard.setStringAsync(taskId!); hapticsLight(); showCopiedToast(); },
+        }] : []),
+    ], [handleStartAiSession, handleOpenChat, handleStatusPress, handleRefresh, useNativeSoftHeader, taskId]);
 
     const [scrolledPastTitle, setScrolledPastTitle] = React.useState(false);
     const handleScroll = React.useCallback((e: any) => {
@@ -546,12 +553,12 @@ export default function DooTaskDetail() {
     ), [taskId, theme, displayedSubtitle, subtitleAnimStyle]);
 
     if (loading) {
-        return (<><Stack.Screen options={{ headerTitle }} /><ActivityIndicator style={{ flex: 1 }} /></>);
+        return (<><Stack.Screen options={{ ...softHeaderOptions, headerTitle: useNativeSoftHeader ? t('dootask.taskDetail') : headerTitle, headerSubtitle: useNativeSoftHeader ? targetSubtitle : undefined }} /><ActivityIndicator style={{ flex: 1 }} /></>);
     }
 
     if (error || !task) {
         return (
-            <><Stack.Screen options={{ headerTitle }} />
+            <><Stack.Screen options={{ ...softHeaderOptions, headerTitle: useNativeSoftHeader ? t('dootask.taskDetail') : headerTitle, headerSubtitle: useNativeSoftHeader ? targetSubtitle : undefined }} />
             <View style={styles.empty}>
                 <Text style={{ color: theme.colors.textDestructive }}>{error || t('dootask.taskNotFound')}</Text>
             </View></>
@@ -571,7 +578,10 @@ export default function DooTaskDetail() {
         <View style={{ flex: 1 }}>
         <Stack.Screen
             options={{
-                headerTitle,
+                ...softHeaderOptions,
+                headerTitle: useNativeSoftHeader ? t('dootask.taskDetail') : headerTitle,
+                headerSubtitle: useNativeSoftHeader ? targetSubtitle : undefined,
+                headerSubtitleColor: useNativeSoftHeader ? theme.colors.textSecondary : undefined,
                 headerRight: () => (
                     <Pressable
                         onPress={() => setMenuVisible(true)}
@@ -584,6 +594,7 @@ export default function DooTaskDetail() {
         />
         <View style={{ flex: 1, maxWidth: layout.maxWidth, alignSelf: 'center', width: '100%' }}>
         <ScrollView
+            contentInsetAdjustmentBehavior="automatic"
             contentContainerStyle={styles.container}
             style={{ backgroundColor: theme.colors.surface }}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}

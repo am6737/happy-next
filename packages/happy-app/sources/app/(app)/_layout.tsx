@@ -408,6 +408,7 @@ export default function RootLayout() {
             <Stack.Screen
                 name="orchestrator/index"
                 options={{
+                    ...softHeaderOptions,
                     headerShown: true,
                     headerTitle: t('settings.orchestratorRuns'),
                 }}

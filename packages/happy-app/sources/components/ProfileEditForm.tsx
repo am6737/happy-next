@@ -21,6 +21,7 @@ export interface ProfileEditFormProps {
     onSave: (profile: AIBackendProfile) => void;
     onCancel: () => void;
     containerStyle?: ViewStyle;
+    nativeScrollInsets?: boolean;
 }
 
 export function ProfileEditForm({
@@ -28,7 +29,8 @@ export function ProfileEditForm({
     machineId,
     onSave,
     onCancel,
-    containerStyle
+    containerStyle,
+    nativeScrollInsets = false,
 }: ProfileEditFormProps) {
     const { theme } = useUnistyles();
 
@@ -114,6 +116,8 @@ export function ProfileEditForm({
         <ScrollView
             style={[profileEditFormStyles.scrollView, containerStyle]}
             contentContainerStyle={profileEditFormStyles.scrollContent}
+            contentInsetAdjustmentBehavior={nativeScrollInsets ? 'automatic' : undefined}
+            automaticallyAdjustKeyboardInsets={nativeScrollInsets}
             keyboardShouldPersistTaps="handled"
         >
             <View style={profileEditFormStyles.formContainer}>

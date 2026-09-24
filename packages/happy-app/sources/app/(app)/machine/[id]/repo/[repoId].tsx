@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo, useRef } from 'react';
-import { View, Text, Switch } from 'react-native';
+import { View, Text, Switch, Platform } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack, useFocusEffect } from 'expo-router';
 import { Item } from '@/components/Item';
 import { ItemGroup } from '@/components/ItemGroup';
@@ -23,6 +23,8 @@ import { BottomSheetModal } from '@gorhom/bottom-sheet';
 import { FolderPickerSheet } from '@/components/FolderPickerSheet';
 import { storeTempData } from '@/utils/tempDataStore';
 import { formatPathRelativeToHome } from '@/utils/sessionUtils';
+import { isRunningOnMac } from '@/utils/platform';
+import { softHeaderOptions } from '@/components/navigation/softHeader';
 
 /**
  * Repo edit settings page.
@@ -33,6 +35,7 @@ export default React.memo(function RepoEditScreen() {
     const { theme } = useUnistyles();
     const { id: machineId, repoId } = useLocalSearchParams<{ id: string; repoId: string }>();
     const router = useRouter();
+    const useNativeSoftHeader = Platform.OS === 'ios' && !isRunningOnMac();
 
     // Load the repo from Zustand store
     const repos = storage.getState().registeredRepos[machineId!] || [];
@@ -298,7 +301,7 @@ export default React.memo(function RepoEditScreen() {
 
     return (
         <>
-            <Stack.Screen options={{ headerTitle }} />
+            <Stack.Screen options={{ ...softHeaderOptions, headerTitle: useNativeSoftHeader ? t('repoEdit.title') : headerTitle, headerSubtitle: useNativeSoftHeader ? repoBasename : undefined, headerSubtitleColor: useNativeSoftHeader ? theme.colors.textSecondary : undefined }} />
             <ItemList>
                 {/* General section */}
                 <ItemGroup title={t('repoEdit.general')}>

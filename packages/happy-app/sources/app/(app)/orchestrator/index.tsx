@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { View, FlatList, Pressable, ActivityIndicator, ScrollView, RefreshControl } from 'react-native';
+import { View, FlatList, Pressable, ActivityIndicator, ScrollView, RefreshControl, Platform } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { Text } from '@/components/StyledText';
@@ -14,6 +14,8 @@ import { useMachineNameMap } from '@/hooks/useMachineNameMap';
 import { formatDate } from '@/utils/formatDate';
 import { Typography } from '@/constants/Typography';
 import { t } from '@/text';
+import { isRunningOnMac } from '@/utils/platform';
+import { softHeaderOptions, useSoftHeaderInset } from '@/components/navigation/softHeader';
 
 type RunListItem = Pick<OrchestratorRunDetail, 'runId' | 'title' | 'status' | 'createdAt' | 'updatedAt' | 'summary'> & { machines?: string[]; };
 type StatusFilter = 'all' | 'active' | 'terminal' | 'queued' | 'running' | 'canceling' | 'completed' | 'failed' | 'cancelled';
@@ -169,11 +171,15 @@ export default function OrchestratorRunsScreen() {
     ), [searchParams.controllerSessionId]);
     const isConversationScoped = !!controllerSessionId;
     const navigation = useNavigation();
+    const useNativeSoftHeader = Platform.OS === 'ios' && !isRunningOnMac();
+    const softHeaderInset = useSoftHeaderInset();
+    const [filterBarHeight, setFilterBarHeight] = React.useState(0);
 
     React.useEffect(() => {
         if (isConversationScoped) {
             navigation.setOptions({
-                headerTitle: () => (
+                ...softHeaderOptions,
+                headerTitle: useNativeSoftHeader ? t('settings.orchestratorRuns') : () => (
                     <View style={{ alignItems: 'center', justifyContent: 'center' }}>
                         <Text style={[Typography.default('semiBold'), { fontSize: 17, lineHeight: 24, color: theme.colors.header.tint }]}>
                             {t('settings.orchestratorRuns')}
@@ -183,13 +189,16 @@ export default function OrchestratorRunsScreen() {
                         </Text>
                     </View>
                 ),
+                headerSubtitle: useNativeSoftHeader ? t('settings.orchestratorSessionRuns') : undefined,
             });
         } else {
             navigation.setOptions({
+                ...softHeaderOptions,
                 headerTitle: t('settings.orchestratorRuns'),
+                headerSubtitle: undefined,
             });
         }
-    }, [isConversationScoped, navigation, theme]);
+    }, [isConversationScoped, navigation, theme, useNativeSoftHeader]);
 
     const [statusFilter, setStatusFilter] = React.useState<StatusFilter>('all');
     const [runs, setRuns] = React.useState<RunListItem[]>([]);
@@ -339,8 +348,7 @@ export default function OrchestratorRunsScreen() {
         );
     }, [loading, styles, error, isConversationScoped]);
 
-    return (
-        <View style={styles.container}>
+    const filterBar = (
             <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
@@ -362,8 +370,12 @@ export default function OrchestratorRunsScreen() {
                     );
                 })}
             </ScrollView>
+    );
 
+    const list = (
             <FlatList
+                contentInsetAdjustmentBehavior="automatic"
+                scrollIndicatorInsets={useNativeSoftHeader ? { top: filterBarHeight } : undefined}
                 data={runs}
                 keyExtractor={(item) => item.runId}
                 renderItem={renderRunItem}
@@ -379,6 +391,7 @@ export default function OrchestratorRunsScreen() {
                 contentContainerStyle={[
                     styles.listContent,
                     runs.length === 0 && { flex: 1 },
+                    useNativeSoftHeader && { paddingTop: filterBarHeight },
                     { maxWidth: layout.maxWidth, alignSelf: 'center', width: '100%' },
                 ]}
                 ListFooterComponent={loadingMore ? (
@@ -388,6 +401,26 @@ export default function OrchestratorRunsScreen() {
                 ) : null}
                 ListEmptyComponent={listEmpty}
             />
+    );
+
+    return (
+        <View style={styles.container}>
+            {useNativeSoftHeader ? (
+                <>
+                    {list}
+                    <View
+                        style={{ position: 'absolute', top: softHeaderInset, left: 0, right: 0, zIndex: 1 }}
+                        onLayout={(event) => setFilterBarHeight(event.nativeEvent.layout.height)}
+                    >
+                        {filterBar}
+                    </View>
+                </>
+            ) : (
+                <>
+                    {filterBar}
+                    {list}
+                </>
+            )}
         </View>
     );
 }
