@@ -321,6 +321,7 @@ export default function OrchestratorRunDetailScreen() {
                 onClose={() => setMenuVisible(false)}
             />
             <ScrollView
+                contentInsetAdjustmentBehavior="automatic"
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={theme.colors.textSecondary} />}
                 contentContainerStyle={[
                     styles.contentContainer,

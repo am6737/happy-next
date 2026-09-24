@@ -293,6 +293,7 @@ export default function RootLayout() {
             <Stack.Screen
                 name="changelog"
                 options={{
+                    ...softHeaderOptions,
                     headerShown: true,
                     headerTitle: t('navigation.whatsNew'),
                 }}
@@ -300,6 +301,7 @@ export default function RootLayout() {
             <Stack.Screen
                 name="artifacts/index"
                 options={{
+                    ...softHeaderOptions,
                     headerShown: true,
                     headerTitle: t('artifacts.title'),
                 }}
@@ -307,12 +309,14 @@ export default function RootLayout() {
             <Stack.Screen
                 name="artifacts/[id]"
                 options={{
+                    ...softHeaderOptions,
                     headerShown: false, // We'll set header dynamically
                 }}
             />
             <Stack.Screen
                 name="artifacts/new"
                 options={{
+                    ...softHeaderOptions,
                     headerShown: true,
                     headerTitle: t('artifacts.new'),
                 }}
@@ -320,6 +324,7 @@ export default function RootLayout() {
             <Stack.Screen
                 name="artifacts/edit/[id]"
                 options={{
+                    ...softHeaderOptions,
                     headerShown: true,
                     headerTitle: t('artifacts.edit'),
                 }}
@@ -336,6 +341,7 @@ export default function RootLayout() {
             <Stack.Screen
                 name="repos/[owner]/[repo]"
                 options={{
+                    ...softHeaderOptions,
                     headerShown: true,
                     headerTitle: '',
                     headerBackTitle: t('common.back'),
@@ -393,6 +399,7 @@ export default function RootLayout() {
             <Stack.Screen
                 name="orchestrator/[runId]"
                 options={{
+                    ...softHeaderOptions,
                     headerShown: true,
                     headerTitle: t('settings.orchestratorRunDetails'),
                 }}
@@ -400,6 +407,7 @@ export default function RootLayout() {
             <Stack.Screen
                 name="orchestrator/[runId]/task/[taskId]"
                 options={{
+                    ...softHeaderOptions,
                     headerShown: true,
                     headerTitle: t('settings.orchestratorTaskDetails'),
                 }}
@@ -589,12 +597,14 @@ export default function RootLayout() {
             <Stack.Screen
                 name="new/pick/machine"
                 options={{
+                    ...softHeaderOptions,
                     headerTitle: '',
                 }}
             />
             <Stack.Screen
                 name="new/pick/path"
                 options={{
+                    ...softHeaderOptions,
                     headerTitle: '',
                 }}
             />

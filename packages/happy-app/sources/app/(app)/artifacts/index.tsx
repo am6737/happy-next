@@ -247,6 +247,7 @@ export default function ArtifactsScreen() {
         <View style={styles.container}>
             <FlatList
                 data={artifacts}
+                contentInsetAdjustmentBehavior="automatic"
                 renderItem={renderItem}
                 keyExtractor={keyExtractor}
                 contentContainerStyle={[

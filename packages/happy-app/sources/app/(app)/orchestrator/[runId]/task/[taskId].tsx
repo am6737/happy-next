@@ -258,6 +258,7 @@ export default function OrchestratorTaskDetailScreen() {
             <Stack.Screen options={{ headerTitle: t('settings.orchestratorTaskSeq', { seq: task.seq }) }} />
             <SectionList
                 sections={executionSections}
+                contentInsetAdjustmentBehavior="automatic"
                 keyExtractor={(item) => item}
                 stickySectionHeadersEnabled
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => {
