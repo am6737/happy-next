@@ -656,6 +656,7 @@ function SessionHistory() {
         allSessions.length > 0 ? (
             <FlatList
                 data={[]}
+                contentInsetAdjustmentBehavior="automatic"
                 renderItem={() => null}
                 ListHeaderComponent={searchHeader}
                 ListEmptyComponent={
@@ -684,6 +685,7 @@ function SessionHistory() {
     ) : (
         <FlatList
             data={groupedItems}
+            contentInsetAdjustmentBehavior="automatic"
             renderItem={renderItem}
             keyExtractor={keyExtractor}
             ListHeaderComponent={searchHeader}

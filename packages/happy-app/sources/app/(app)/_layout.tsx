@@ -3,6 +3,8 @@ import 'react-native-reanimated';
 import * as React from 'react';
 import { Typography } from '@/constants/Typography';
 import { createHeader } from '@/components/navigation/Header';
+// Opt in per screen: transparent native headers require the page's scroll view to adjust its top inset.
+import { softHeaderOptions } from '@/components/navigation/softHeader';
 import { Platform, TouchableOpacity, Text } from 'react-native';
 import { isRunningOnMac } from '@/utils/platform';
 import { useUnistyles } from 'react-native-unistyles';
@@ -81,6 +83,7 @@ export default function RootLayout() {
             <Stack.Screen
                 name="inbox/notice/[id]"
                 options={{
+                    ...softHeaderOptions,
                     headerShown: true,
                     headerTitle: t('feed.noticeDetail'),
                 }}
@@ -118,6 +121,7 @@ export default function RootLayout() {
             <Stack.Screen
                 name="session/[id]/info"
                 options={{
+                    ...softHeaderOptions,
                     headerShown: true,
                     headerTitle: t('sessionInfo.title'),
                 }}
@@ -153,6 +157,7 @@ export default function RootLayout() {
             <Stack.Screen
                 name="session/[id]/commit"
                 options={{
+                    ...softHeaderOptions,
                     headerShown: true,
                     headerTitle: t('commits.title'),
                 }}
@@ -160,6 +165,7 @@ export default function RootLayout() {
             <Stack.Screen
                 name="session/[id]/status"
                 options={{
+                    ...softHeaderOptions,
                     headerShown: true,
                     headerTitle: t('status.title'),
                 }}
@@ -188,6 +194,7 @@ export default function RootLayout() {
             <Stack.Screen
                 name="session/[id]/sharing"
                 options={{
+                    ...softHeaderOptions,
                     headerShown: true,
                     headerTitle: t('session.sharing.title'),
                 }}
@@ -195,66 +202,77 @@ export default function RootLayout() {
             <Stack.Screen
                 name="settings/account"
                 options={{
+                    ...softHeaderOptions,
                     headerTitle: t('settings.account'),
                 }}
             />
             <Stack.Screen
                 name="settings/appearance"
                 options={{
+                    ...softHeaderOptions,
                     headerTitle: t('settings.appearance'),
                 }}
             />
             <Stack.Screen
                 name="settings/features"
                 options={{
+                    ...softHeaderOptions,
                     headerTitle: t('settings.features'),
                 }}
             />
             <Stack.Screen
                 name="settings/notifications"
                 options={{
+                    ...softHeaderOptions,
                     headerTitle: t('settingsNotifications.title'),
                 }}
             />
             <Stack.Screen
                 name="settings/software-update"
                 options={{
+                    ...softHeaderOptions,
                     headerTitle: t('desktopUpdate.title'),
                 }}
             />
             <Stack.Screen
                 name="settings/voice"
                 options={{
+                    ...softHeaderOptions,
                     headerTitle: t('settings.voiceAssistant'),
                 }}
             />
             <Stack.Screen
                 name="settings/voice/language"
                 options={{
+                    ...softHeaderOptions,
                     headerTitle: t('settingsVoice.preferredLanguage'),
                 }}
             />
             <Stack.Screen
                 name="settings/voice/voice"
                 options={{
+                    ...softHeaderOptions,
                     headerTitle: t('settingsVoice.voiceSelectTitle'),
                 }}
             />
             <Stack.Screen
                 name="settings/voice/welcome-message"
                 options={{
+                    ...softHeaderOptions,
                     headerTitle: t('settingsVoice.welcomeMessage'),
                 }}
             />
             <Stack.Screen
                 name="terminal/connect"
                 options={{
+                    ...softHeaderOptions,
                     headerTitle: t('navigation.connectTerminal'),
                 }}
             />
             <Stack.Screen
                 name="terminal/index"
                 options={{
+                    ...softHeaderOptions,
                     headerTitle: t('navigation.connectTerminal'),
                 }}
             />
@@ -396,6 +414,7 @@ export default function RootLayout() {
             <Stack.Screen
                 name="friends/index"
                 options={({ navigation }) => ({
+                    ...softHeaderOptions,
                     headerShown: true,
                     headerTitle: t('navigation.friends'),
                     headerRight: () => (
@@ -413,6 +432,7 @@ export default function RootLayout() {
             <Stack.Screen
                 name="friends/search"
                 options={{
+                    ...softHeaderOptions,
                     headerShown: true,
                     headerTitle: t('friends.addFriend'),
                 }}
@@ -427,6 +447,7 @@ export default function RootLayout() {
             <Stack.Screen
                 name="user/[id]"
                 options={{
+                    ...softHeaderOptions,
                     headerShown: true,
                     headerTitle: '',
                 }}
@@ -495,6 +516,7 @@ export default function RootLayout() {
             <Stack.Screen
                 name="session/recent"
                 options={{
+                    ...softHeaderOptions,
                     headerShown: true,
                     headerTitle: t('sessionHistory.title'),
                 }}
@@ -502,6 +524,7 @@ export default function RootLayout() {
             <Stack.Screen
                 name="session/claude"
                 options={{
+                    ...softHeaderOptions,
                     headerShown: true,
                     headerTitle: t('claudeHistory.title'),
                 }}
@@ -509,6 +532,7 @@ export default function RootLayout() {
             <Stack.Screen
                 name="session/history"
                 options={{
+                    ...softHeaderOptions,
                     headerShown: true,
                     headerTitle: t('agentHistory.title'),
                 }}
@@ -602,6 +626,7 @@ export default function RootLayout() {
             <Stack.Screen
                 name="machine/[id]/repo/[repoId]"
                 options={{
+                    ...softHeaderOptions,
                     headerShown: true,
                     headerTitle: t('repoEdit.title'),
                 }}

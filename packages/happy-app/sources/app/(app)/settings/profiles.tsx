@@ -11,6 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AIBackendProfile } from '@/sync/settings';
 import { getBuiltInProfile, DEFAULT_PROFILES } from '@/sync/profileUtils';
 import { randomUUID } from 'expo-crypto';
+import { softHeaderOptions } from '@/components/navigation/softHeader';
 
 interface ProfileManagerProps {
     onProfileSelect?: (profile: AIBackendProfile | null) => void;
@@ -101,11 +102,13 @@ function ProfileManager({ onProfileSelect, selectedProfileId }: ProfileManagerPr
         <View style={{ flex: 1, backgroundColor: theme.colors.surface }}>
             <Stack.Screen
                 options={{
+                    ...softHeaderOptions,
                     headerTitle: t('settings.profiles'),
                 }}
             />
             <ScrollView
                 style={{ flex: 1 }}
+                contentInsetAdjustmentBehavior="automatic"
                 contentContainerStyle={{
                     paddingHorizontal: 16,
                     paddingBottom: safeArea.bottom + 100,

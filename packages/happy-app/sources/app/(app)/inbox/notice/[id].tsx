@@ -58,7 +58,7 @@ export default memo(function NoticeDetailPage() {
     }, [item.meta]);
 
     return (
-        <ScrollView style={styles.container} contentContainerStyle={[styles.content, { maxWidth: layout.maxWidth, alignSelf: 'center', width: '100%' }]}>
+        <ScrollView style={styles.container} contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.content, { maxWidth: layout.maxWidth, alignSelf: 'center', width: '100%' }]}>
             <View style={styles.header}>
                 <Ionicons name="notifications" size={28} color={theme.colors.textLink} />
                 <Text style={styles.title}>{item.body.title}</Text>
