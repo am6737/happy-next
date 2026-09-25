@@ -14,6 +14,7 @@ import { layout } from '@/components/layout';
 import { ActionMenuModal } from '@/components/ActionMenuModal';
 import { ActionMenuItem } from '@/components/ActionMenu';
 import { t } from '@/text';
+import { softHeaderOptions } from '@/components/navigation/softHeader';
 
 const PAGE_SIZE = 30;
 
@@ -424,6 +425,7 @@ export default function CommitsScreen() {
         <View style={[styles.container, { backgroundColor: theme.colors.surface }]}>
             <Stack.Screen
                 options={{
+                    ...softHeaderOptions,
                     ...(fileFilter ? { headerTitle: fileFilter.split('/').pop() || t('commits.title') } : {}),
                     headerRight: () => (
                         <Pressable

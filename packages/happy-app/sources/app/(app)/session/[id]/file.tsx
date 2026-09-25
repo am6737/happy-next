@@ -39,6 +39,7 @@ import { getNativeHeaderTitleWidth } from '@/utils/nativeHeaderTitleWidth';
 import { useFileDownload } from '@/components/FilePreview/useFileDownload';
 import { FileDownloadProgress } from '@/components/FilePreview/FileDownloadProgress';
 import { buildFileMenuItems, canMutateFile, canShareFileText } from '@/utils/fileMenu';
+import { softHeaderOptions, useSoftHeaderInset } from '@/components/navigation/softHeader';
 
 function getRepoRelativePath(filePath: string, repoPath: string): string {
     if (repoPath && filePath.startsWith(`${repoPath}/`)) {
@@ -120,6 +121,7 @@ function LegacyFileScreen() {
     const route = useRoute();
     const router = useRouter();
     const { theme } = useUnistyles();
+    const softHeaderInset = useSoftHeaderInset();
     const { width: screenWidth } = useWindowDimensions();
     const { id: sessionId } = useLocalSearchParams<{ id: string }>();
     const searchParams = useLocalSearchParams();
@@ -643,6 +645,7 @@ function LegacyFileScreen() {
 
     const fileActions = <>
         <Stack.Screen options={{
+            ...softHeaderOptions,
             headerTitle,
             headerRight: () => (
                 <Pressable onPress={() => setMenuVisible(true)} accessibilityRole="button" accessibilityLabel={t('files.file')}
@@ -754,6 +757,7 @@ function LegacyFileScreen() {
 
             {/* File path header - single line, scrollable, long press to copy */}
             <View style={{
+                paddingTop: softHeaderInset > 0 ? softHeaderInset : 0,
                 borderBottomWidth: Platform.select({ ios: StyleSheet.hairlineWidth, default: 1 }),
                 borderBottomColor: theme.colors.divider,
                 backgroundColor: theme.colors.surfaceHigh,

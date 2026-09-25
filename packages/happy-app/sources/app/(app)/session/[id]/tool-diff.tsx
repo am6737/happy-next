@@ -11,6 +11,7 @@ import { layout } from '@/components/layout';
 import { FileIcon } from '@/components/FileIcon';
 import { trimIdent } from '@/utils/trimIdent';
 import { LongPressCopy, useCopySelectable } from '@/components/LongPressCopy';
+import { softHeaderOptions, useSoftHeaderInset } from '@/components/navigation/softHeader';
 
 interface DiffDetailResponse {
     success: boolean;
@@ -87,6 +88,7 @@ function getDiffCopyText(params: {
 
 function ToolDiffScreen() {
     const { theme } = useUnistyles();
+    const softHeaderInset = useSoftHeaderInset();
     const { id: sessionId } = useLocalSearchParams<{ id: string }>();
     const params = useLocalSearchParams();
     const callId = params.callId as string;
@@ -210,10 +212,11 @@ function ToolDiffScreen() {
 
     return (
         <View style={[styles.container, { backgroundColor: theme.colors.surface }]}>
-            <Stack.Screen options={{ headerTitle: fileName }} />
+            <Stack.Screen options={{ ...softHeaderOptions, headerTitle: fileName }} />
 
             {/* File path header */}
             <View style={{
+                paddingTop: softHeaderInset > 0 ? softHeaderInset : 0,
                 borderBottomWidth: Platform.select({ ios: StyleSheet.hairlineWidth, default: 1 }),
                 borderBottomColor: theme.colors.divider,
                 backgroundColor: theme.colors.surfaceHigh,

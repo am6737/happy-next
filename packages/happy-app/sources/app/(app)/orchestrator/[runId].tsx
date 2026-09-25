@@ -27,6 +27,8 @@ import { delay } from '@/utils/time';
 import { formatDate } from '@/utils/formatDate';
 import { t } from '@/text';
 
+import { softHeaderOptions } from '@/components/navigation/softHeader';
+
 const stylesheet = StyleSheet.create((theme) => ({
     container: {
         flex: 1,
@@ -283,7 +285,7 @@ export default function OrchestratorRunDetailScreen() {
     if (loading && !run) {
         return (
             <View style={styles.center}>
-                <Stack.Screen options={{ headerTitle: defaultHeaderTitle }} />
+                <Stack.Screen options={{ ...softHeaderOptions, headerTitle: defaultHeaderTitle }} />
                 <ActivityIndicator size="large" />
                 <Text style={styles.metaText}>{t('settings.orchestratorLoadingRun')}</Text>
             </View>
@@ -293,7 +295,7 @@ export default function OrchestratorRunDetailScreen() {
     if (!run) {
         return (
             <View style={styles.center}>
-                <Stack.Screen options={{ headerTitle: defaultHeaderTitle }} />
+                <Stack.Screen options={{ ...softHeaderOptions, headerTitle: defaultHeaderTitle }} />
                 <Text style={styles.sectionTitle}>{t('settings.orchestratorRunNotFound')}</Text>
                 {!!error && <Text style={styles.error}>{error}</Text>}
             </View>
@@ -304,6 +306,7 @@ export default function OrchestratorRunDetailScreen() {
         <View style={styles.container}>
             <Stack.Screen
                 options={{
+                    ...softHeaderOptions,
                     headerTitle: run.title || t('settings.orchestratorRunDetails'),
                     headerRight: canCancel ? () => (
                         <Pressable
