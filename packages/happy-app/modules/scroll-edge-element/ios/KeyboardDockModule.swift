@@ -37,6 +37,8 @@ public final class KeyboardDockView: ExpoView {
   private var interaction: UIInteraction?
   private weak var attachedScrollView: UIScrollView?
   private var watchdog: Timer?
+  private var searchLink: CADisplayLink?
+  private var searchStartedAt: CFTimeInterval = 0
 
   public required init(appContext: AppContext? = nil) {
     super.init(appContext: appContext)
@@ -63,6 +65,7 @@ public final class KeyboardDockView: ExpoView {
 
   deinit {
     stopWatchdog()
+    stopSearching()
   }
 
   // MARK: - Children
@@ -86,9 +89,10 @@ public final class KeyboardDockView: ExpoView {
     super.didMoveToWindow()
     if window != nil {
       startWatchdog()
-      attach()
+      attachOrSearch()
     } else {
       stopWatchdog()
+      stopSearching()
     }
   }
 
@@ -114,7 +118,7 @@ public final class KeyboardDockView: ExpoView {
     let timer = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in
       guard let self, self.window != nil else { return }
       if self.attachedScrollView?.window == nil {
-        self.attach()
+        self.attachOrSearch()
       }
     }
     RunLoop.main.add(timer, forMode: .common)
@@ -124,6 +128,41 @@ public final class KeyboardDockView: ExpoView {
   private func stopWatchdog() {
     watchdog?.invalidate()
     watchdog = nil
+  }
+
+  // The chat list mounts a few frames after the composer, and until it is attached the glass has
+  // no effect under it. So while there is none, look again every frame (for a moment, not for good:
+  // a screen may have no scroll view at all) rather than waiting for the watchdog.
+  private func attachOrSearch() {
+    attach()
+    if attachedScrollView?.window == nil {
+      startSearching()
+    }
+  }
+
+  private func startSearching() {
+    #if compiler(>=6.2)
+    guard #available(iOS 26.0, *) else { return }
+    #else
+    return
+    #endif
+    searchStartedAt = CACurrentMediaTime()
+    guard searchLink == nil else { return }
+    let link = CADisplayLink(target: self, selector: #selector(searchTick))
+    link.add(to: .main, forMode: .common)
+    searchLink = link
+  }
+
+  private func stopSearching() {
+    searchLink?.invalidate()
+    searchLink = nil
+  }
+
+  @objc private func searchTick() {
+    attach()
+    if attachedScrollView?.window != nil || CACurrentMediaTime() - searchStartedAt > 2 {
+      stopSearching()
+    }
   }
 
   private func attach() {
@@ -151,12 +190,17 @@ public final class KeyboardDockView: ExpoView {
 
   /// The scroll view this dock floats over: the largest one beside it, found by widening the search
   /// one ancestor at a time. Scroll views inside the dock (a text input) do not count, and the
-  /// search does not descend into scroll views, so a list's rows are never walked.
+  /// search does not descend into scroll views, so a list's rows are never walked. It stops at the
+  /// screen's own view: before this screen's list has mounted, the screen being pushed over (still
+  /// in the window) must not lend it one.
   private func findScrollView() -> UIScrollView? {
     var ancestor = superview
     while let current = ancestor {
       if let found = largestScrollView(in: current) {
         return found
+      }
+      if current.next is UIViewController {
+        return nil
       }
       ancestor = current.superview
     }
