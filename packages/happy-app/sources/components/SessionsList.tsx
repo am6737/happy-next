@@ -32,6 +32,7 @@ import { HappyError } from '@/utils/errors';
 import { Modal } from '@/modal';
 import { sync } from '@/sync/sync';
 import { SessionContextMenu } from './SessionContextMenu';
+import { PressHighlight } from './PressHighlight';
 import { SessionMarkerBar } from './SessionColorMarker';
 import { getDesktopPlatform } from '@/desktop/desktopWindowUtils';
 
@@ -902,6 +903,8 @@ const SessionItem = React.memo(({ session, selected, isFirst, isLast, isSingle, 
                 navigateToSession(session.id);
             }}
         >
+            {({ pressed }) => (<>
+            {pressed && <PressHighlight style={rowShape} />}
             {/* The session's colour marker, down the leading edge — out of flow, so an
                 unmarked row costs nothing and nothing shifts. See SessionMarkerBar. */}
             <SessionMarkerBar sessionId={session.id} />
@@ -992,6 +995,7 @@ const SessionItem = React.memo(({ session, selected, isFirst, isLast, isSingle, 
                     </>
                 )}
             </View>
+            </>)}
             </Pressable>
         </SessionContextMenu>
     );

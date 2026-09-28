@@ -15,6 +15,7 @@ import { parseFlowItem, FLOW_STATUS_COLORS } from '@/sync/dootask/types';
 import type { DooTaskItem, DooTaskProject } from '@/sync/dootask/types';
 import { useShallow } from 'zustand/react/shallow';
 import { useMainTabBottomPadding } from '@/hooks/useMainTabBottomPadding';
+import { PressHighlight } from '@/components/PressHighlight';
 
 /**
  * Format end_at date as countdown or short date (matches DooTask dashboard logic).
@@ -442,6 +443,8 @@ const TaskCard = React.memo(({ item, projectName, columnName, userCache, flavors
 
     return (
         <Pressable style={[styles.card, { backgroundColor: theme.colors.surface }]} onPress={onPress}>
+            {({ pressed }) => (<>
+            {pressed && <PressHighlight style={styles.cardHighlight} />}
             <View style={styles.cardHeader}>
                 <View style={[styles.priorityBar, { backgroundColor: item.p_color || theme.colors.textSecondary }]} />
                 <Text style={[styles.cardTitle, { color: theme.colors.text }]} numberOfLines={2}>
@@ -503,6 +506,7 @@ const TaskCard = React.memo(({ item, projectName, columnName, userCache, flavors
                     {flavors && flavors.length > 0 ? <FlavorBadges flavors={flavors} /> : null}
                 </View>
             </View>
+            </>)}
         </Pressable>
     );
 });
@@ -685,6 +689,9 @@ const styles = StyleSheet.create((_theme) => ({
         padding: 14,
         borderRadius: 10,
         marginTop: 8,
+    },
+    cardHighlight: {
+        borderRadius: 10,
     },
     cardHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
     priorityBar: { width: 3, alignSelf: 'stretch' as const, borderRadius: 1.5 },

@@ -24,6 +24,7 @@ import { ActionMenuModal } from '@/components/ActionMenuModal';
 import { ActionMenuItem } from '@/components/ActionMenu';
 import { sync } from '@/sync/sync';
 import { SessionContextMenu } from './SessionContextMenu';
+import { PressHighlight } from './PressHighlight';
 import { SessionMarkerBar } from './SessionColorMarker';
 import { SessionProjectGroup, useCollapsedSessionProjectGroups, useSessionProjectGroups } from '@/hooks/useSessionProjectGroups';
 
@@ -512,6 +513,8 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder, isCardFir
                 navigateToSession(session.id);
             }}
         >
+            {({ pressed }) => (<>
+            {pressed && <PressHighlight style={cardRowShape} />}
             {/* The session's colour marker, down the leading edge — out of flow, so an
                 unmarked row costs nothing and nothing shifts. See SessionMarkerBar. */}
             <SessionMarkerBar sessionId={session.id} />
@@ -571,6 +574,7 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder, isCardFir
                     })()}
                 </View>
             </View>
+            </>)}
             </Pressable>
         </SessionContextMenu>
     );
