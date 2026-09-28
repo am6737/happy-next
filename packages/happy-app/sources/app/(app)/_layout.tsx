@@ -189,6 +189,7 @@ export default function RootLayout() {
             <Stack.Screen
                 name="session/[id]/preview"
                 options={{
+                    ...softHeaderOptions,
                     headerShown: true,
                     headerTitle: 'Preview',
                 }}
@@ -716,6 +717,7 @@ export default function RootLayout() {
             <Stack.Screen
                 name="terminals/index"
                 options={{
+                    ...softHeaderOptions,
                     headerShown: !inTerminalWindow,
                     headerTitle: t('terminalSession.title'),
                 }}

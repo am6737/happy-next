@@ -3,12 +3,17 @@ import { View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { consumePreviewHtml } from '@/components/tools/previewHtmlStore';
 import { StyleSheet } from 'react-native-unistyles';
+import { useSoftHeaderInset } from '@/components/navigation/softHeader';
 
 const WebView = require('react-native-webview').default;
 
 export default React.memo(() => {
     const router = useRouter();
     const { html } = React.useMemo(() => consumePreviewHtml(), []);
+    // The header is only made transparent so it matches its neighbours through the push
+    // transition; the page itself starts below it, as an arbitrary web page has no business
+    // scrolling under the header.
+    const softHeaderInset = useSoftHeaderInset();
 
     if (!html) {
         router.back();
@@ -16,13 +21,15 @@ export default React.memo(() => {
     }
 
     return (
-        <View style={styles.container}>
+        <View style={[styles.container, { paddingTop: softHeaderInset }]}>
             <WebView
                 source={{ html }}
                 style={styles.webview}
                 originWhitelist={['*']}
                 javaScriptEnabled={true}
                 scrollEnabled={true}
+                // Keeps the page's end clear of the home indicator; the web view defaults to "never".
+                contentInsetAdjustmentBehavior="automatic"
             />
         </View>
     );

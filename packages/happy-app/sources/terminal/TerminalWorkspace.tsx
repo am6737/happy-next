@@ -12,6 +12,7 @@ import { t } from '@/text';
 import { showToast } from '@/components/Toast';
 import { Modal } from '@/modal';
 import { FolderPickerSheet } from '@/components/FolderPickerSheet';
+import { useSoftHeaderInset } from '@/components/navigation/softHeader';
 import { NewTerminalSheet } from './NewTerminalSheet';
 import { listMachineTerminals, spawnTerminal } from './openTerminal';
 import { TerminalScreen } from './TerminalScreen';
@@ -51,6 +52,7 @@ export const TerminalWorkspace = memo(({ focus = null }: TerminalWorkspaceProps)
     const { theme } = useUnistyles();
     const machines = useAllMachines();
     const machineNameById = useMachineNameMap();
+    const softHeaderInset = useSoftHeaderInset();
 
     const [tabs, setTabs] = useState<TerminalTab[]>([]);
     const [requested, setRequested] = useState(focus);
@@ -334,7 +336,7 @@ export const TerminalWorkspace = memo(({ focus = null }: TerminalWorkspaceProps)
 
     if (!loaded && tabs.length === 0) {
         return (
-            <View style={styles.centered}>
+            <View style={[styles.centered, { paddingTop: softHeaderInset }]}>
                 <ActivityIndicator color={theme.colors.text} />
             </View>
         );
@@ -360,10 +362,17 @@ export const TerminalWorkspace = memo(({ focus = null }: TerminalWorkspaceProps)
             {isTerminalWindow() ? (
                 <TerminalWindowTitleRow>{tabBar}</TerminalWindowTitleRow>
             ) : (
+                // Padded down past the soft header rather than placed under it: the strip's own
+                // surface then runs up behind the header, which reads as one bar instead of a
+                // header floating over a gap.
                 <View
                     style={[
                         styles.tabBarRow,
-                        { backgroundColor: theme.colors.surface, borderBottomColor: theme.colors.divider },
+                        {
+                            backgroundColor: theme.colors.surface,
+                            borderBottomColor: theme.colors.divider,
+                            paddingTop: softHeaderInset,
+                        },
                     ]}
                 >
                     {tabBar}
