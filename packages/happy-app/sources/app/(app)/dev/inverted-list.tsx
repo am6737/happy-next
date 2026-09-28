@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { View, Text, FlatList, TextInput, KeyboardAvoidingView, Platform, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Stack } from 'expo-router';
 import { useKeyboardHandler, useKeyboardState, useReanimatedKeyboardAnimation } from 'react-native-keyboard-controller';
 import Animated, { runOnJS, useSharedValue } from 'react-native-reanimated';
 import { FlashList } from '@shopify/flash-list';
 import { LegendList } from '@legendapp/list/react-native';
+import { useSoftHeaderInset } from '@/components/navigation/softHeader';
 
 type ListType = 'flash' | 'flat' | 'legend';
 type PaddingType = 'animated' | 'non-animated' | 'header-footer';
@@ -16,6 +16,7 @@ export default function InvertedListTest() {
     const [listType, setListType] = useState<ListType>('flash');
     const [paddingType, setPaddingType] = useState<PaddingType>('non-animated');
     const insets = useSafeAreaInsets();
+    const softHeaderInset = useSoftHeaderInset();
     const { height, progress } = useReanimatedKeyboardAnimation();
     const [paddingValue, setPaddingValue] = useState(0);
     const animatedPaddingValue = useSharedValue(0);
@@ -55,13 +56,7 @@ export default function InvertedListTest() {
 
     return (
         <>
-            <Stack.Screen
-                options={{
-                    headerTitle: 'Inverted List Test',
-                }}
-            />
-
-            <Animated.View style={[styles.container, { transform: [{ translateY: height }] }]}>
+            <Animated.View style={[styles.container, { paddingTop: softHeaderInset, transform: [{ translateY: height }] }]}>
                 <View style={styles.controlsContainer}>
                     <View>
                         <Text style={styles.controlLabel}>List Implementation:</Text>

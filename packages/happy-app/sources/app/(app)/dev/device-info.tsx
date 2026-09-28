@@ -1,7 +1,6 @@
 import React from 'react';
 import { View, Text, ScrollView, Dimensions, Platform, PixelRatio } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Stack } from 'expo-router';
 import { Typography } from '@/constants/Typography';
 import { ItemGroup } from '@/components/ItemGroup';
 import { Item } from '@/components/Item';
@@ -32,12 +31,6 @@ export default function DeviceInfo() {
     
     return (
         <>
-            <Stack.Screen
-                options={{
-                    title: 'Device Info',
-                    headerLargeTitle: false,
-                }}
-            />
             <ItemList>
                 <ItemGroup title="Safe Area Insets">
                     <Item

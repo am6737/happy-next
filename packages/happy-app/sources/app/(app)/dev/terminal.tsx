@@ -6,6 +6,7 @@ import { apiSocket } from '@/sync/apiSocket';
 import { useAllMachines } from '@/sync/storage';
 import type { Machine } from '@/sync/storageTypes';
 import { TerminalScreen } from '@/terminal/TerminalScreen';
+import { useSoftHeaderInset } from '@/components/navigation/softHeader';
 
 /**
  * Opens a live terminal on a machine, to exercise the whole path by hand.
@@ -16,6 +17,7 @@ import { TerminalScreen } from '@/terminal/TerminalScreen';
 export default function TerminalDevScreen() {
     const { theme } = useUnistyles();
     const machines = useAllMachines();
+    const softHeaderInset = useSoftHeaderInset();
     const [target, setTarget] = React.useState<{ machineId: string; terminalId: string } | null>(null);
     const [error, setError] = React.useState<string | null>(null);
     const [isSpawning, setIsSpawning] = React.useState(false);
@@ -39,9 +41,9 @@ export default function TerminalDevScreen() {
 
     if (target) {
         return (
-            <View style={styles.root}>
+            <View style={[styles.root, { paddingTop: softHeaderInset }]}>
                 <TerminalScreen machineId={target.machineId} terminalId={target.terminalId} />
-                <Pressable onPress={() => setTarget(null)} style={styles.close}>
+                <Pressable onPress={() => setTarget(null)} style={[styles.close, { top: softHeaderInset + 12 }]}>
                     <Text style={styles.closeText}>Close</Text>
                 </Pressable>
             </View>
@@ -49,7 +51,7 @@ export default function TerminalDevScreen() {
     }
 
     return (
-        <View style={[styles.root, styles.centered]}>
+        <View style={[styles.root, styles.centered, { paddingTop: softHeaderInset }]}>
             {isSpawning ? <ActivityIndicator color={theme.colors.text} /> : null}
             {error ? <Text style={[styles.error, { color: theme.colors.textDestructive }]}>{error}</Text> : null}
             {machines.length === 0 ? (

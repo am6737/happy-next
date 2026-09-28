@@ -181,7 +181,7 @@ export default function UnistylesDemo() {
 
     return (
         <View style={styles.container}>
-            <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.scrollContent}>
+            <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.scrollContent} contentInsetAdjustmentBehavior="automatic">
                 {/* Theme Demo */}
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>🎨 Theme System</Text>

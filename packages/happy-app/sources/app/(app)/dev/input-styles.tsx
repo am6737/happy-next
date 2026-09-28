@@ -1863,8 +1863,9 @@ export default function InputStylesDemo() {
 
     return (
         <View style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
-            <ScrollView 
+            <ScrollView
                 style={{ flex: 1 }}
+                contentInsetAdjustmentBehavior="automatic"
                 contentContainerStyle={{ 
                     paddingBottom: 250 + safeArea.bottom,
                     paddingTop: 16,

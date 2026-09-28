@@ -490,6 +490,7 @@ export default function RootLayout() {
             <Stack.Screen
                 name="dev/index"
                 options={{
+                    ...softHeaderOptions,
                     headerTitle: 'Developer Tools',
                 }}
             />
@@ -497,55 +498,162 @@ export default function RootLayout() {
             <Stack.Screen
                 name="dev/list-demo"
                 options={{
+                    ...softHeaderOptions,
                     headerTitle: 'List Components Demo',
                 }}
             />
             <Stack.Screen
                 name="dev/typography"
                 options={{
+                    ...softHeaderOptions,
                     headerTitle: 'Typography',
                 }}
             />
             <Stack.Screen
                 name="dev/colors"
                 options={{
+                    ...softHeaderOptions,
                     headerTitle: 'Colors',
                 }}
             />
             <Stack.Screen
                 name="dev/tools2"
                 options={{
+                    ...softHeaderOptions,
                     headerTitle: 'Tool Views Demo',
                 }}
             />
             <Stack.Screen
                 name="dev/masked-progress"
                 options={{
+                    ...softHeaderOptions,
                     headerTitle: 'Masked Progress',
                 }}
             />
             <Stack.Screen
                 name="dev/shimmer-demo"
                 options={{
+                    ...softHeaderOptions,
                     headerTitle: 'Shimmer View Demo',
                 }}
             />
             <Stack.Screen
                 name="dev/multi-text-input"
                 options={{
+                    ...softHeaderOptions,
                     headerTitle: 'Multi Text Input',
                 }}
             />
             <Stack.Screen
                 name="dev/toast-demo"
                 options={{
+                    ...softHeaderOptions,
                     headerTitle: 'Toast Demo',
                 }}
             />
             <Stack.Screen
                 name="dev/legend-chat-header"
                 options={{
+                    ...softHeaderOptions,
                     headerTitle: 'Legend Chat Header',
+                }}
+            />
+            <Stack.Screen
+                name="dev/device-info"
+                options={{
+                    ...softHeaderOptions,
+                    headerTitle: 'Device Info',
+                }}
+            />
+            <Stack.Screen
+                name="dev/expo-constants"
+                options={{
+                    ...softHeaderOptions,
+                    headerTitle: 'Expo Constants',
+                }}
+            />
+            <Stack.Screen
+                name="dev/logs"
+                options={{
+                    ...softHeaderOptions,
+                    headerTitle: 'Logs',
+                }}
+            />
+            <Stack.Screen
+                name="dev/messages-demo"
+                options={{
+                    ...softHeaderOptions,
+                    headerTitle: 'Message Demos',
+                }}
+            />
+            <Stack.Screen
+                name="dev/inverted-list"
+                options={{
+                    ...softHeaderOptions,
+                    headerTitle: 'Inverted List Test',
+                }}
+            />
+            <Stack.Screen
+                name="dev/input-styles"
+                options={{
+                    ...softHeaderOptions,
+                    headerTitle: 'Input Styles',
+                }}
+            />
+            <Stack.Screen
+                name="dev/modal-demo"
+                options={{
+                    ...softHeaderOptions,
+                    headerTitle: 'Modal System',
+                }}
+            />
+            <Stack.Screen
+                name="dev/tests"
+                options={{
+                    ...softHeaderOptions,
+                    headerTitle: 'Unit Tests',
+                }}
+            />
+            <Stack.Screen
+                name="dev/unistyles-demo"
+                options={{
+                    ...softHeaderOptions,
+                    headerTitle: 'Unistyles Demo',
+                }}
+            />
+            <Stack.Screen
+                name="dev/qr-test"
+                options={{
+                    ...softHeaderOptions,
+                    headerTitle: 'QR Code Test',
+                }}
+            />
+            <Stack.Screen
+                name="dev/terminal"
+                options={{
+                    ...softHeaderOptions,
+                    headerTitle: 'Terminal',
+                }}
+            />
+            <Stack.Screen
+                name="dev/terminal-harness"
+                options={{
+                    ...softHeaderOptions,
+                    headerTitle: 'Terminal Harness',
+                }}
+            />
+            <Stack.Screen
+                name="settings/desktop-diagnostics"
+                options={{
+                    ...softHeaderOptions,
+                    headerTitle: t('desktopDiagnostics.title'),
+                }}
+            />
+            <Stack.Screen
+                name="github-callback"
+                options={{
+                    ...softHeaderOptions,
+                    headerTitle: '',
                 }}
             />
             <Stack.Screen

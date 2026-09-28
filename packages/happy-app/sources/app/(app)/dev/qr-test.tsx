@@ -67,7 +67,7 @@ export default function QRTest() {
     const errorLevels: Array<'low' | 'medium' | 'quartile' | 'high'> = ['low', 'medium', 'quartile', 'high'];
 
     return (
-        <ScrollView style={styles.container}>
+        <ScrollView style={styles.container} contentInsetAdjustmentBehavior="automatic">
             {/* Custom QR Code */}
             <View style={styles.section}>
                 <Text style={styles.sectionTitle}>Custom QR Code</Text>

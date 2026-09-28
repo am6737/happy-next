@@ -96,7 +96,7 @@ export default function TerminalHarnessScreen() {
     }, []);
 
     return (
-        <ScrollView style={styles.root} contentContainerStyle={styles.content}>
+        <ScrollView style={styles.root} contentContainerStyle={styles.content} contentInsetAdjustmentBehavior="automatic">
             <Text style={styles.heading}>{`rendered grid ${COLS}x${ROWS} (${systemScheme})`}</Text>
             {viewport ? (
                 <TerminalGridView state={viewport} xtermTheme={resolveTerminalTheme(systemScheme)} />

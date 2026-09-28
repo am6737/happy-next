@@ -17,6 +17,7 @@ export default React.memo(function MessagesDemoScreen() {
         <View style={styles.container}>
             {allMessages.length > 0 && (
                 <FlatList
+                    contentInsetAdjustmentBehavior="automatic"
                     data={allMessages}
                     keyExtractor={(item) => item.id}
                     renderItem={({ item }) => (
