@@ -469,6 +469,7 @@ export default function RootLayout() {
             <Stack.Screen
                 name="share/[token]"
                 options={{
+                    ...softHeaderOptions,
                     headerShown: true,
                     headerTitle: t('session.sharing.sharedSession'),
                 }}
@@ -569,6 +570,7 @@ export default function RootLayout() {
             <Stack.Screen
                 name="settings/connect/claude"
                 options={{
+                    ...softHeaderOptions,
                     headerShown: true,
                     headerTitle: 'Connect to Claude',
                     // headerStyle: {

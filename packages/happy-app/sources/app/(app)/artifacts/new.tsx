@@ -5,6 +5,7 @@ import { useRouter, Stack } from 'expo-router';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { t } from '@/text';
 import { layout } from '@/components/layout';
+import { isRunningOnMac } from '@/utils/platform';
 import { Modal } from '@/modal';
 import { sync } from '@/sync/sync';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -128,13 +129,16 @@ export default function NewArtifactScreen() {
         </Pressable>
     ), [handleSave, isSaving, styles]);
     
-    const KeyboardWrapper = Platform.select({
-        ios: KeyboardAvoidingView,
-        default: React.Fragment,
-    });
+    // iOS lets the scroll view inset itself for the keyboard (it already insets for the soft
+    // header); Catalyst has no soft header and keeps the avoiding view.
+    const useNativeKeyboardInsets = Platform.OS === 'ios' && !isRunningOnMac();
+
+    const KeyboardWrapper = Platform.OS === 'ios' && !useNativeKeyboardInsets
+        ? KeyboardAvoidingView
+        : React.Fragment;
     
     const keyboardProps = Platform.select({
-        ios: {
+        ios: useNativeKeyboardInsets ? {} : {
             behavior: 'padding' as const,
             keyboardVerticalOffset: 0,
         },
@@ -160,6 +164,7 @@ export default function NewArtifactScreen() {
                             { maxWidth: layout.maxWidth, alignSelf: 'center', width: '100%' }
                         ]}
                         keyboardShouldPersistTaps="handled"
+                        automaticallyAdjustKeyboardInsets={useNativeKeyboardInsets}
                     >
                         <View style={styles.inputGroup}>
                             <Text style={styles.label}>{t('artifacts.titleLabel')}</Text>
