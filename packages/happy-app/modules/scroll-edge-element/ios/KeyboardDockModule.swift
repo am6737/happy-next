@@ -36,7 +36,6 @@ public final class KeyboardDockView: ExpoView {
 
   private var interaction: UIInteraction?
   private weak var attachedScrollView: UIScrollView?
-  private var attachedSize: CGSize = .zero
   private var watchdog: Timer?
 
   public required init(appContext: AppContext? = nil) {
@@ -87,22 +86,19 @@ public final class KeyboardDockView: ExpoView {
     super.didMoveToWindow()
     if window != nil {
       startWatchdog()
-      remeasure()
+      attach()
     } else {
       stopWatchdog()
     }
   }
 
-  // Layout runs whenever the dock moves with the keyboard (which needs nothing: UIKit follows a view
-  // it lays out), and when the scroll view beside it appears or is replaced. A change of size (a
-  // panel above the input, a taller input) only counts once the interaction is re-added.
+  // Layout runs whenever the dock moves or resizes, which needs nothing (UIKit follows a view it lays
+  // out), and when the scroll view beside it can appear or be replaced. The interaction is only
+  // re-added for another scroll view: re-adding it rebuilds the effect, which the glass above
+  // shows as a flicker.
   public override func layoutSubviews() {
     super.layoutSubviews()
-    if interaction != nil && dockView.bounds.size != attachedSize {
-      remeasure()
-    } else {
-      attach()
-    }
+    attach()
   }
 
   // The scroll view can be swapped without this view laying out: a chat list mounts a moment
@@ -118,7 +114,7 @@ public final class KeyboardDockView: ExpoView {
     let timer = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in
       guard let self, self.window != nil else { return }
       if self.attachedScrollView?.window == nil {
-        self.remeasure()
+        self.attach()
       }
     }
     RunLoop.main.add(timer, forMode: .common)
@@ -128,11 +124,6 @@ public final class KeyboardDockView: ExpoView {
   private func stopWatchdog() {
     watchdog?.invalidate()
     watchdog = nil
-  }
-
-  private func remeasure() {
-    attachedScrollView = nil
-    attach()
   }
 
   private func attach() {
@@ -155,7 +146,6 @@ public final class KeyboardDockView: ExpoView {
 
     interaction = edgeInteraction
     attachedScrollView = scrollView
-    attachedSize = dockView.bounds.size
     #endif
   }
 

@@ -1,6 +1,6 @@
 {
   "platforms": ["apple"],
   "apple": {
-    "modules": ["ScrollEdgeElementModule", "KeyboardDockModule"]
+    "modules": ["KeyboardDockModule"]
   }
 }

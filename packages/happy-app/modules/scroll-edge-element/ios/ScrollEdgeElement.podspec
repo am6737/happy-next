@@ -1,8 +1,8 @@
 Pod::Spec.new do |s|
   s.name           = 'ScrollEdgeElement'
   s.version        = '1.0.0'
-  s.summary        = 'Registers a React Native view as a UIKit scroll edge element container.'
-  s.description    = 'Lets iOS 26 draw a scroll view\'s edge effect underneath a custom floating view.'
+  s.summary        = 'A keyboard-following composer dock that carries the iOS 26 bottom scroll edge effect.'
+  s.description    = 'Pins a React Native composer to keyboardLayoutGuide and registers it as a scroll edge element container, so iOS 26 draws the soft edge effect under it.'
   s.license        = 'MIT'
   s.author         = 'happy-next'
   s.homepage       = 'https://github.com/kuaifan/happy-next'

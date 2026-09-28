@@ -1363,7 +1363,6 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
                 <AgentContentView
                     safeAreaLayout={useNativeChatLayout}
                     floatingInput={useFloatingComposer}
-                    keyboardDock={useFloatingComposer}
                     composerHeight={composerHeight}
                     content={content}
                     input={input}
