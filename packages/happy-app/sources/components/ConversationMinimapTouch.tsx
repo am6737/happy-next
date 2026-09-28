@@ -1,9 +1,8 @@
 import * as React from 'react';
-import { Animated, Easing, StyleSheet, View } from 'react-native';
+import { Animated, Easing, Keyboard, StyleSheet, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useUnistyles } from 'react-native-unistyles';
 import { t } from '@/text';
-import { useKeyboardVisible } from '@/hooks/useKeyboardVisible';
 import type { ConversationMinimapEdgeTouchPhase, ConversationMinimapProps } from './ConversationMinimap';
 import { hapticsHeavy, hapticsLight } from './haptics';
 import { MinimapPreviewCard, PREVIEW_WIDTH } from './minimapPreview';
@@ -93,7 +92,18 @@ const CANCEL_LEFT_RATIO = 2 / 3;
  */
 export function ConversationMinimapTouch(props: ConversationMinimapProps) {
     const { theme } = useUnistyles();
-    const keyboardVisible = useKeyboardVisible();
+    // Flipped on the keyboard's `did` events, not `useKeyboardVisible`'s `will` ones: a `will` flip
+    // re-renders this gesture tree in the very frame the keyboard starts to move, and that commit is
+    // enough to hold the composer and the list back from rising with it.
+    const [keyboardVisible, setKeyboardVisible] = React.useState(() => Keyboard.isVisible());
+    React.useEffect(() => {
+        const show = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
+        const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
+        return () => {
+            show.remove();
+            hide.remove();
+        };
+    }, []);
     const [rootHeight, setRootHeight] = React.useState(0);
     const [visible, setVisible] = React.useState(false);
     /**
