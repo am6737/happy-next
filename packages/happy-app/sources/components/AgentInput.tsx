@@ -489,6 +489,8 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
         );
     });
     const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+    // Keep the settings overlay aligned with the panel in both new and existing sessions.
+    const panelHorizontalInset = props.panelSideMargin ? 8 : 0;
     const useGlassPanel = !!props.glassPanel && Platform.OS === 'ios' && isLiquidGlassAvailable();
     // Wide layout: show the reasoning-effort column beside the model list instead of below it.
     const isWideModelLayout = screenWidth > 700;
@@ -1370,7 +1372,7 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                         </TouchableWithoutFeedback>
                         <View style={[
                             styles.settingsOverlay,
-                            { paddingHorizontal: screenWidth > 700 ? 0 : 8 }
+                            { paddingHorizontal: panelHorizontalInset }
                         ]}>
                             <FloatingOverlay maxHeight={400} keyboardShouldPersistTaps="always">
                                 {/* Tab bar - segmented control style */}
@@ -1748,7 +1750,7 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                 {/* Box 2: Action Area (Input + Send) */}
                 <View
                     ref={dropZoneRef}
-                    style={[styles.unifiedPanel, statusInPanel && styles.unifiedPanelCompact, props.panelSideMargin && { marginHorizontal: 8 }, useGlassPanel && styles.unifiedPanelGlass]}
+                    style={[styles.unifiedPanel, statusInPanel && styles.unifiedPanelCompact, { marginHorizontal: panelHorizontalInset }, useGlassPanel && styles.unifiedPanelGlass]}
                 >
                     {useGlassPanel && (
                         <GlassView pointerEvents="none" glassEffectStyle="regular" style={[styles.glassBackground, statusInPanel && styles.unifiedPanelCompact]} />
