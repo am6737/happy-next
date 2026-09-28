@@ -33,7 +33,10 @@ public final class ScrollEdgeElementView: ExpoView {
   private weak var attachedScrollView: UIScrollView?
   private var keyboardObservers: [NSObjectProtocol] = []
   private var displayLink: CADisplayLink?
-  private var trackingEndsAt: CFTimeInterval = 0
+  private var keyboardVisible = false
+  private var lastFrameInWindow: CGRect?
+  private var lastMovedAt: CFTimeInterval = 0
+  private var settled = true
 
   deinit {
     stopObservingKeyboard()
@@ -82,22 +85,29 @@ public final class ScrollEdgeElementView: ExpoView {
 
   // A composer that rides the keyboard is moved by a transform on an ancestor, which UIKit does
   // not treat as a layout change: the edge effect stays where the element was laid out (behind
-  // the keyboard) until something inside it happens to lay out again. So while the keyboard moves,
-  // the element is laid out on every frame, and once it settles the interaction is re-added, which
-  // makes UIKit measure the element afresh wherever it ended up.
+  // the keyboard) until something inside it happens to lay out again. So from the moment the
+  // keyboard starts to move until it has gone, the element's place on screen is checked every
+  // frame and it is laid out whenever it moved; once it holds still the interaction is re-added,
+  // which makes UIKit measure it afresh wherever it ended up. Following the element rather than
+  // the keyboard's notifications also covers an interactive dismissal, which posts none while
+  // the finger drags the keyboard (and the composer) down.
   private func startObservingKeyboard() {
     guard keyboardObservers.isEmpty else { return }
     let center = NotificationCenter.default
     keyboardObservers = [
-      center.addObserver(forName: UIResponder.keyboardWillChangeFrameNotification, object: nil, queue: .main) { [weak self] note in
-        let duration = (note.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double) ?? 0.25
-        self?.trackKeyboard(for: duration)
+      center.addObserver(forName: UIResponder.keyboardWillShowNotification, object: nil, queue: .main) { [weak self] _ in
+        self?.keyboardVisible = true
+        self?.startTracking()
       },
-      center.addObserver(forName: UIResponder.keyboardDidShowNotification, object: nil, queue: .main) { [weak self] _ in
-        self?.remeasure()
+      center.addObserver(forName: UIResponder.keyboardWillChangeFrameNotification, object: nil, queue: .main) { [weak self] _ in
+        self?.startTracking()
+      },
+      center.addObserver(forName: UIResponder.keyboardWillHideNotification, object: nil, queue: .main) { [weak self] _ in
+        self?.startTracking()
       },
       center.addObserver(forName: UIResponder.keyboardDidHideNotification, object: nil, queue: .main) { [weak self] _ in
-        self?.remeasure()
+        self?.keyboardVisible = false
+        self?.startTracking()
       },
     ]
   }
@@ -105,26 +115,46 @@ public final class ScrollEdgeElementView: ExpoView {
   private func stopObservingKeyboard() {
     keyboardObservers.forEach { NotificationCenter.default.removeObserver($0) }
     keyboardObservers = []
-    displayLink?.invalidate()
-    displayLink = nil
+    keyboardVisible = false
+    stopTracking()
   }
 
-  private func trackKeyboard(for duration: Double) {
-    // A little past the animation, as the view that follows the keyboard lands a frame or two late.
-    trackingEndsAt = CACurrentMediaTime() + duration + 0.15
+  private func startTracking() {
+    // Counts as a fresh move, so tracking outlives a hide that lands later than announced.
+    lastMovedAt = CACurrentMediaTime()
     guard displayLink == nil else { return }
-    let link = CADisplayLink(target: self, selector: #selector(keyboardFrameTick))
+    lastFrameInWindow = convert(bounds, to: nil)
+    let link = CADisplayLink(target: self, selector: #selector(trackingTick))
     link.add(to: .main, forMode: .common)
     displayLink = link
   }
 
-  @objc private func keyboardFrameTick() {
-    setNeedsLayout()
-    layoutIfNeeded()
-    if CACurrentMediaTime() >= trackingEndsAt {
-      displayLink?.invalidate()
-      displayLink = nil
+  private func stopTracking() {
+    displayLink?.invalidate()
+    displayLink = nil
+    lastFrameInWindow = nil
+  }
+
+  @objc private func trackingTick() {
+    let now = CACurrentMediaTime()
+    let frame = convert(bounds, to: nil)
+    if frame != lastFrameInWindow {
+      lastFrameInWindow = frame
+      lastMovedAt = now
+      settled = false
+      setNeedsLayout()
+      layoutIfNeeded()
+      return
+    }
+    // Still for a few frames: the move is over (or a pause in a drag).
+    if !settled && now - lastMovedAt >= 0.1 {
+      settled = true
       remeasure()
+    }
+    // With the keyboard up the composer can be dragged at any time; once it is down and the
+    // composer has held still a while, nothing moves it any more.
+    if !keyboardVisible && settled && now - lastMovedAt >= 0.3 {
+      stopTracking()
     }
   }
 
