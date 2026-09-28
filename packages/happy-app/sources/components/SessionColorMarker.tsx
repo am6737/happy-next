@@ -3,6 +3,7 @@ import { Pressable, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { t } from '@/text';
+import { liquidGlassAvailable } from './GlassSurface';
 import { SESSION_MARKER_COLORS, type SessionMarkerColor } from '@/sync/sessionAppearance';
 import { useSessionMarkerColor } from '@/sync/storage';
 
@@ -124,7 +125,8 @@ export function SessionColorPalette({
                             style={({ pressed }) => [
                                 styles.swatchButton,
                                 compact && { width: 26, height: 26 },
-                                pressed && { backgroundColor: theme.colors.surfacePressed },
+                                // On iOS 26 it sits on the glass action menu, which a solid highlight would cover.
+                                pressed && { backgroundColor: liquidGlassAvailable ? theme.colors.surfaceRipple : theme.colors.surfacePressed },
                             ]}
                         >
                             <View

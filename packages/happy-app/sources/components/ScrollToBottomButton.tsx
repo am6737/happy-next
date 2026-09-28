@@ -44,8 +44,9 @@ const styles = StyleSheet.create((theme) => ({
         shadowRadius: 4,
         elevation: 4,
     },
+    // Not dimmed: glass does not render inside a view that is not fully opaque.
     pressed: {
-        opacity: 0.7,
+        transform: [{ scale: 0.92 }],
     },
     badge: {
         position: 'absolute',

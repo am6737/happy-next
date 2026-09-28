@@ -29,8 +29,9 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
         shadowOpacity: theme.colors.shadow.opacity,
         elevation: 5,
     },
+    // Not dimmed: glass does not render inside a view that is not fully opaque.
     glassPressed: {
-        opacity: 0.8,
+        transform: [{ scale: 0.96 }],
     },
     buttonDefault: {
         backgroundColor: theme.colors.fab.background,

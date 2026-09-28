@@ -12,6 +12,7 @@ import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Typography } from '@/constants/Typography';
 import { t } from '@/text';
+import { GlassSurface, liquidGlassAvailable } from './GlassSurface';
 
 export interface ActionMenuItem {
     label: string;
@@ -42,9 +43,12 @@ const styles = StyleSheet.create((theme) => ({
         paddingHorizontal: 8,
     },
     container: {
-        backgroundColor: theme.colors.surface,
         borderRadius: 14,
         overflow: 'hidden',
+    },
+    // iOS 26: the cards are glass with the rounder corners of its sheets and menus.
+    cardGlass: {
+        borderRadius: 26,
     },
     item: {
         paddingVertical: 16,
@@ -89,7 +93,6 @@ const styles = StyleSheet.create((theme) => ({
     },
     cancelContainer: {
         marginTop: 8,
-        backgroundColor: theme.colors.surface,
         borderRadius: 14,
         overflow: 'hidden',
     },
@@ -108,6 +111,8 @@ const styles = StyleSheet.create((theme) => ({
 export function ActionMenu({ items, onClose, title, headerContent, footerContent, maxHeight = 400 }: ActionMenuProps) {
     const { theme } = useUnistyles();
     const safeArea = useSafeAreaInsets();
+    // A solid highlight would cover the glass; on it the pressed row is only shaded.
+    const pressedColor = liquidGlassAvailable ? theme.colors.surfaceRipple : theme.colors.surfacePressed;
 
     const handleItemPress = (item: ActionMenuItem) => {
         // Call item.onPress first (may be wrapped to defer execution)
@@ -118,7 +123,11 @@ export function ActionMenu({ items, onClose, title, headerContent, footerContent
 
     return (
         <View style={[styles.wrapper, { paddingBottom: safeArea.bottom + 8 }]}>
-            <View style={[styles.container, { maxHeight }]}>
+            <GlassSurface
+                glass={liquidGlassAvailable}
+                color={theme.colors.surface}
+                style={[styles.container, liquidGlassAvailable && styles.cardGlass, { maxHeight }]}
+            >
                 {title ? (
                     <View style={styles.titleContainer}>
                         <Text style={styles.titleText} numberOfLines={2}>{title}</Text>
@@ -133,7 +142,7 @@ export function ActionMenu({ items, onClose, title, headerContent, footerContent
                             style={({ pressed }) => [
                                 styles.item,
                                 index === items.length - 1 && styles.itemLast,
-                                pressed && { backgroundColor: theme.colors.surfacePressed },
+                                pressed && { backgroundColor: pressedColor },
                                 item.disabled && styles.itemDisabled,
                             ]}
                             onPress={() => handleItemPress(item)}
@@ -157,18 +166,22 @@ export function ActionMenu({ items, onClose, title, headerContent, footerContent
                     ))}
                     {footerContent}
                 </ScrollView>
-            </View>
-            <View style={styles.cancelContainer}>
+            </GlassSurface>
+            <GlassSurface
+                glass={liquidGlassAvailable}
+                color={theme.colors.surface}
+                style={[styles.cancelContainer, liquidGlassAvailable && styles.cardGlass]}
+            >
                 <Pressable
                     style={({ pressed }) => [
                         styles.cancelItem,
-                        pressed && { backgroundColor: theme.colors.surfacePressed },
+                        pressed && { backgroundColor: pressedColor },
                     ]}
                     onPress={onClose}
                 >
                     <Text style={styles.cancelText}>{t('common.cancel')}</Text>
                 </Pressable>
-            </View>
+            </GlassSurface>
         </View>
     );
 }
