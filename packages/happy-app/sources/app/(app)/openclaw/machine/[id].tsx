@@ -26,6 +26,7 @@ import type { ActionMenuItem } from '@/components/ActionMenu';
 import type { OpenClawSession } from '@/openclaw/types';
 import { isRunningOnMac } from '@/utils/platform';
 import { softHeaderOptions } from '@/components/navigation/softHeader';
+import { headerMenuOptions } from '@/components/navigation/headerMenu';
 
 const styles = StyleSheet.create((theme) => ({
     container: {
@@ -562,6 +563,7 @@ export default function OpenClawMachineDetailPage() {
                             />
                         </Pressable>
                     ),
+                    ...headerMenuOptions(menuItems, { disabled: isUpdating }),
                 }}
             />
             <ScrollView

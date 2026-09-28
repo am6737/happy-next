@@ -100,6 +100,7 @@ export const en = {
     common: {
         // Simple string constants
         cancel: 'Cancel',
+        more: 'More',
         authenticate: 'Authenticate',
         save: 'Save',
         saveAs: 'Save As',

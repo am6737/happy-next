@@ -54,6 +54,7 @@ import { fileRouteNotice } from './fileNotice';
 import { useFileDownload } from './useFileDownload';
 import { FileDownloadProgress } from './FileDownloadProgress';
 import { buildFileMenuItems, canMutateFile, canShareFileText } from '@/utils/fileMenu';
+import { headerMenuOptions } from '@/components/navigation/headerMenu';
 
 export function FilePreviewScreen({ filePath }: { filePath: string }) {
     const params = useLocalSearchParams<{
@@ -504,6 +505,7 @@ export function FilePreviewScreen({ filePath }: { filePath: string }) {
                         icon('ellipsis-horizontal', t('files.file'), () =>
                             setMenuVisible(true)
                         ),
+                    ...headerMenuOptions(menuItems),
                 }}
             />
             <ActionMenuModal

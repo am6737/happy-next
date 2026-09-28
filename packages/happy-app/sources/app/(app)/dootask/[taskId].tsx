@@ -30,6 +30,7 @@ import { openExternalUrl } from '@/utils/tauri';
 import { formatSessionAge } from '@/data/repoUtils';
 import { isRunningOnMac } from '@/utils/platform';
 import { softHeaderOptions } from '@/components/navigation/softHeader';
+import { headerMenuOptions } from '@/components/navigation/headerMenu';
 
 function formatFileSize(bytes: number): string {
     if (bytes < 1024) return `${bytes} B`;
@@ -590,6 +591,7 @@ export default function DooTaskDetail() {
                         <Ionicons name="ellipsis-horizontal" size={22} color={theme.colors.header.tint} />
                     </Pressable>
                 ),
+                ...headerMenuOptions(menuItems),
             }}
         />
         <View style={{ flex: 1, maxWidth: layout.maxWidth, alignSelf: 'center', width: '100%' }}>

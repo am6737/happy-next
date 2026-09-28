@@ -101,6 +101,7 @@ export const ja: TranslationStructure = {
     common: {
         // Simple string constants
         cancel: 'キャンセル',
+        more: 'その他',
         authenticate: '認証',
         save: '保存',
         error: 'エラー',

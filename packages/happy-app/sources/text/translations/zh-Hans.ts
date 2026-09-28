@@ -100,6 +100,7 @@ export const zhHans: TranslationStructure = {
     common: {
         // Simple string constants
         cancel: '取消',
+        more: '更多',
         authenticate: '认证',
         save: '保存',
         saveAs: '另存为',

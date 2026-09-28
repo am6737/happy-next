@@ -40,6 +40,7 @@ import { useFileDownload } from '@/components/FilePreview/useFileDownload';
 import { FileDownloadProgress } from '@/components/FilePreview/FileDownloadProgress';
 import { buildFileMenuItems, canMutateFile, canShareFileText } from '@/utils/fileMenu';
 import { softHeaderOptions, useSoftHeaderInset } from '@/components/navigation/softHeader';
+import { headerMenuOptions } from '@/components/navigation/headerMenu';
 
 function getRepoRelativePath(filePath: string, repoPath: string): string {
     if (repoPath && filePath.startsWith(`${repoPath}/`)) {
@@ -653,6 +654,7 @@ function LegacyFileScreen() {
                     <Ionicons name="ellipsis-horizontal" size={22} color={theme.colors.header.tint} />
                 </Pressable>
             ),
+            ...headerMenuOptions(menuItems),
         }} />
         <ActionMenuModal visible={menuVisible} items={menuItems} onClose={() => setMenuVisible(false)} />
         <FileDownloadProgress progress={download.progress} onCancel={download.cancel} />

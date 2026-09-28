@@ -28,6 +28,7 @@ import { ActionMenuModal } from '@/components/ActionMenuModal';
 import type { ActionMenuItem } from '@/components/ActionMenu';
 import { loadSharedByMeCache, saveSharedByMeCache } from '@/sync/persistence';
 import { openExternalUrl } from '@/utils/tauri';
+import { headerMenuOptions } from '@/components/navigation/headerMenu';
 
 function getAccessLevelLabel(accessLevel?: 'view' | 'edit' | 'admin') {
     switch (accessLevel) {
@@ -298,6 +299,7 @@ export default function UserProfileScreen() {
                                 <Ionicons name="ellipsis-horizontal" size={22} color={theme.colors.header.tint} />
                             </Pressable>
                         ),
+                        ...headerMenuOptions(menuItems),
                     }}
                 />
             )}

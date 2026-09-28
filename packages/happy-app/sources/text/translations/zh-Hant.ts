@@ -100,6 +100,7 @@ export const zhHant: TranslationStructure = {
     common: {
         // Simple string constants
         cancel: '取消',
+        more: '更多',
         authenticate: '驗證',
         save: '儲存',
         saveAs: '另存為',

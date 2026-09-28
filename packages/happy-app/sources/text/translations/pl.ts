@@ -109,6 +109,7 @@ export const pl: TranslationStructure = {
     common: {
         // Simple string constants
         cancel: 'Anuluj',
+        more: 'Więcej',
         authenticate: 'Uwierzytelnij',
         save: 'Zapisz',
         saveAs: 'Zapisz jako',

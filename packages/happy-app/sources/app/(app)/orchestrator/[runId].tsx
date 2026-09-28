@@ -28,6 +28,7 @@ import { formatDate } from '@/utils/formatDate';
 import { t } from '@/text';
 
 import { softHeaderOptions } from '@/components/navigation/softHeader';
+import { headerMenuOptions } from '@/components/navigation/headerMenu';
 
 const stylesheet = StyleSheet.create((theme) => ({
     container: {
@@ -316,6 +317,7 @@ export default function OrchestratorRunDetailScreen() {
                             <Ionicons name="ellipsis-horizontal" size={22} color={theme.colors.header.tint} />
                         </Pressable>
                     ) : undefined,
+                    ...(canCancel ? headerMenuOptions(menuItems) : {}),
                 }}
             />
             <ActionMenuModal

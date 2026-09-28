@@ -98,6 +98,7 @@ export const it: TranslationStructure = {
     common: {
         // Simple string constants
         cancel: 'Annulla',
+        more: 'Altro',
         authenticate: 'Autentica',
         save: 'Salva',
         error: 'Errore',

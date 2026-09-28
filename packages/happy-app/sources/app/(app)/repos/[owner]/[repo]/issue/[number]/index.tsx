@@ -39,6 +39,7 @@ import { useNavigateToSession } from '@/hooks/useNavigateToSession';
 import { getSessionName } from '@/utils/sessionUtils';
 import { isRunningOnMac } from '@/utils/platform';
 import { softHeaderOptions } from '@/components/navigation/softHeader';
+import { headerMenuOptions } from '@/components/navigation/headerMenu';
 
 function buildIssueDiscussionPrompt(
     owner: string,
@@ -231,6 +232,7 @@ function IssueDetailScreen() {
                                 <Ionicons name="ellipsis-horizontal" size={22} color={theme.colors.header.tint} />
                             </Pressable>
                         ),
+                        ...headerMenuOptions(menuItems),
                     }}
                 />
                 <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.content, { maxWidth: layout.maxWidth, alignSelf: 'center', width: '100%' }]} style={{ flex: 1, backgroundColor: theme.colors.surface }}>
@@ -291,6 +293,7 @@ function IssueDetailScreen() {
                     headerSubtitle: useNativeSoftHeader ? targetSubtitle : undefined,
                     headerSubtitleColor: useNativeSoftHeader ? theme.colors.textSecondary : undefined,
                     headerRight,
+                    ...headerMenuOptions(menuItems),
                 }}
             />
 

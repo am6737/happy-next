@@ -109,6 +109,7 @@ export const ru: TranslationStructure = {
     common: {
         // Simple string constants
         cancel: 'Отмена',
+        more: 'Ещё',
         authenticate: 'Авторизация',
         save: 'Сохранить',
         saveAs: 'Сохранить как',
