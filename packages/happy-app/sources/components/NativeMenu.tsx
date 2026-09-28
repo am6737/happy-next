@@ -7,6 +7,8 @@ export type NativeMenuProps = {
     items: ActionMenuItem[];
     /** Opens the menu on a tap (`press`) or a long press (`longPress`). */
     activation?: 'press' | 'longPress';
+    /** Leaves the trigger as it is, without opening anything (a busy or unavailable action). */
+    disabled?: boolean;
     /** Outer size and placement of the trigger; `children` fill it. */
     style?: StyleProp<ViewStyle>;
     /** Where the native menu is unavailable: show the page's `ActionMenuModal` instead. */
@@ -18,9 +20,10 @@ export type NativeMenuProps = {
  * A trigger that opens its menu natively where it can (see `NativeMenu.ios.tsx`). Here it is a
  * plain pressable that hands over to the page's own `ActionMenuModal`.
  */
-export const NativeMenu = React.memo(({ activation = 'press', style, onFallbackOpen, children }: NativeMenuProps) => (
+export const NativeMenu = React.memo(({ activation = 'press', disabled, style, onFallbackOpen, children }: NativeMenuProps) => (
     <Pressable
         style={style}
+        disabled={disabled}
         onPress={activation === 'press' ? onFallbackOpen : undefined}
         onLongPress={activation === 'longPress' ? onFallbackOpen : undefined}
     >

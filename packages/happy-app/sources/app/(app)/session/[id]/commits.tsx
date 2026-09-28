@@ -15,6 +15,7 @@ import { ActionMenuModal } from '@/components/ActionMenuModal';
 import { ActionMenuItem } from '@/components/ActionMenu';
 import { t } from '@/text';
 import { softHeaderOptions } from '@/components/navigation/softHeader';
+import { NativeMenu } from '@/components/NativeMenu';
 
 const PAGE_SIZE = 30;
 
@@ -250,6 +251,31 @@ export default function CommitsScreen() {
         setHasMore(true);
     }, [currentBranch]);
 
+    const branchMenuItems = React.useMemo<ActionMenuItem[]>(() => {
+        const activeBranch = selectedBranch || currentBranch;
+        const localSet = new Set(localBranches);
+        // Local branches first
+        const items: ActionMenuItem[] = localBranches.map(branch => ({
+            label: branch,
+            selected: branch === activeBranch,
+            onPress: () => handleBranchSelect(branch),
+        }));
+        // Remote-only branches (filter out those that have a local counterpart)
+        for (const remote of remoteBranches) {
+            // remote is like "origin/xxx" — extract the part after first "/"
+            const shortName = remote.includes('/') ? remote.substring(remote.indexOf('/') + 1) : remote;
+            if (!localSet.has(shortName)) {
+                items.push({
+                    label: remote,
+                    selected: remote === activeBranch,
+                    onPress: () => handleBranchSelect(remote),
+                    secondary: true,
+                });
+            }
+        }
+        return items;
+    }, [selectedBranch, currentBranch, localBranches, remoteBranches, handleBranchSelect]);
+
     const loadCommits = React.useCallback(async (offset: number, append: boolean) => {
         if (!activeCwd) return;
         if (!append) setIsLoading(true);
@@ -475,8 +501,8 @@ export default function CommitsScreen() {
                             </View>
                         )}
                         {(localBranches.length > 1 || remoteBranches.length > 0) ? (
-                            <Pressable
-                                onPress={() => setBranchMenuVisible(true)}
+                            <NativeMenu
+                                items={branchMenuItems}
                                 style={{
                                     flexDirection: 'row',
                                     alignItems: 'center',
@@ -486,6 +512,7 @@ export default function CommitsScreen() {
                                     borderBottomColor: theme.colors.divider,
                                     backgroundColor: theme.colors.surfaceHigh,
                                 }}
+                                onFallbackOpen={() => setBranchMenuVisible(true)}
                             >
                                 <Octicons name="git-branch" size={16} color={theme.colors.textSecondary} style={{ marginRight: 8 }} />
                                 <Text style={{
@@ -497,7 +524,7 @@ export default function CommitsScreen() {
                                     {selectedBranch || currentBranch || 'HEAD'}
                                 </Text>
                                 <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
-                            </Pressable>
+                            </NativeMenu>
                         ) : null}
                     </View>
                 ) : null}
@@ -523,30 +550,7 @@ export default function CommitsScreen() {
             <ActionMenuModal
                 visible={branchMenuVisible}
                 title={t('commits.selectBranch')}
-                items={(() => {
-                    const activeBranch = selectedBranch || currentBranch;
-                    const localSet = new Set(localBranches);
-                    // Local branches first
-                    const items: ActionMenuItem[] = localBranches.map(branch => ({
-                        label: branch,
-                        selected: branch === activeBranch,
-                        onPress: () => handleBranchSelect(branch),
-                    }));
-                    // Remote-only branches (filter out those that have a local counterpart)
-                    for (const remote of remoteBranches) {
-                        // remote is like "origin/xxx" — extract the part after first "/"
-                        const shortName = remote.includes('/') ? remote.substring(remote.indexOf('/') + 1) : remote;
-                        if (!localSet.has(shortName)) {
-                            items.push({
-                                label: remote,
-                                selected: remote === activeBranch,
-                                onPress: () => handleBranchSelect(remote),
-                                secondary: true,
-                            });
-                        }
-                    }
-                    return items;
-                })()}
+                items={branchMenuItems}
                 onClose={() => setBranchMenuVisible(false)}
             />
         </View>

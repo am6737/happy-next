@@ -40,6 +40,7 @@ import { getNativeHeaderTitleWidth } from '@/utils/nativeHeaderTitleWidth';
 import { isRunningOnMac } from '@/utils/platform';
 import { softHeaderOptions } from '@/components/navigation/softHeader';
 import { MODEL_MODE_DEFAULT } from 'happy-wire';
+import { NativeMenu } from '@/components/NativeMenu';
 
 type AgentType = 'claude' | 'codex' | 'gemini';
 
@@ -437,6 +438,14 @@ export default function MachineDetailScreen() {
         });
     }, [availableAgents, handleStartSession]);
 
+    const agentMenuItems = useMemo<ActionMenuItem[]>(() => availableAgents.map((agent) => ({
+        label: AGENT_LABELS[agent],
+        onPress: () => {
+            setAgentMenu({ visible: false, items: [] });
+            void handleStartSession(agent);
+        },
+    })), [availableAgents, handleStartSession]);
+
     const pastUsedRelativePath = useCallback((session: Session) => {
         if (!session.metadata) return 'unknown path';
         return formatPathRelativeToHome(session.metadata.path, session.metadata.homeDir);
@@ -617,6 +626,19 @@ export default function MachineDetailScreen() {
 
     const hasWorktreeRepos = sessionType === 'worktree' && selectedRepos.length > 0;
     const spawnButtonDisabled = (!hasWorktreeRepos && !customPath.trim()) || isSpawning || !isMachineOnline(machine!);
+    const startSessionIcon = isSpawning ? (
+        <ActivityIndicator
+            size="small"
+            color={theme.colors.textSecondary}
+        />
+    ) : (
+        <Ionicons
+            name="play"
+            size={16}
+            color={spawnButtonDisabled ? theme.colors.textSecondary : theme.colors.button.primary.tint}
+            style={{ marginLeft: 1 }}
+        />
+    );
 
     return (
         <>
@@ -737,28 +759,31 @@ export default function MachineDetailScreen() {
                                             autoCorrect={false}
                                         />
                                     </View>
-                                    <Pressable
-                                        onPress={handleStartSessionPress}
-                                        disabled={spawnButtonDisabled}
-                                        style={[
-                                            styles.inlineSendButton,
-                                            spawnButtonDisabled ? styles.inlineSendInactive : styles.inlineSendActive
-                                        ]}
-                                    >
-                                        {isSpawning ? (
-                                            <ActivityIndicator
-                                                size="small"
-                                                color={theme.colors.textSecondary}
-                                            />
-                                        ) : (
-                                            <Ionicons
-                                                name="play"
-                                                size={16}
-                                                color={spawnButtonDisabled ? theme.colors.textSecondary : theme.colors.button.primary.tint}
-                                                style={{ marginLeft: 1 }}
-                                            />
-                                        )}
-                                    </Pressable>
+                                    {availableAgents.length > 1 ? (
+                                        // Several agents: the button opens the agent choice from itself.
+                                        <NativeMenu
+                                            items={agentMenuItems}
+                                            disabled={spawnButtonDisabled}
+                                            style={[
+                                                styles.inlineSendButton,
+                                                spawnButtonDisabled ? styles.inlineSendInactive : styles.inlineSendActive
+                                            ]}
+                                            onFallbackOpen={handleStartSessionPress}
+                                        >
+                                            {startSessionIcon}
+                                        </NativeMenu>
+                                    ) : (
+                                        <Pressable
+                                            onPress={handleStartSessionPress}
+                                            disabled={spawnButtonDisabled}
+                                            style={[
+                                                styles.inlineSendButton,
+                                                spawnButtonDisabled ? styles.inlineSendInactive : styles.inlineSendActive
+                                            ]}
+                                        >
+                                            {startSessionIcon}
+                                        </Pressable>
+                                    )}
                                 </View>
                             </View>
                             {!hasWorktreeRepos && pathsToShow.map((display, index) => {

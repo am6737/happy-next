@@ -21,10 +21,13 @@ import { NativeMenu as FallbackMenu, type NativeMenuProps } from './NativeMenu';
  * and the React Native view it had adopted is gone.
  */
 export const NativeMenu = React.memo((props: NativeMenuProps) => {
-    const { items, activation = 'press', style, children } = props;
+    const { items, activation = 'press', disabled, style, children } = props;
 
     if (isRunningOnMac()) {
         return <FallbackMenu {...props} />;
+    }
+    if (disabled) {
+        return <View style={style}>{children}</View>;
     }
 
     const isChoice = items.length > 0 && items.every((item) => typeof item.selected === 'boolean');

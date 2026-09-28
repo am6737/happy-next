@@ -34,6 +34,7 @@ import { Session } from '@/sync/storageTypes';
 import { useHappyAction } from '@/hooks/useHappyAction';
 import { HappyError } from '@/utils/errors';
 import { formatModelDisplay, resolveLocalModelDisplay, isModelFast, FAST_MODE_ICON_COLOR } from 'happy-wire';
+import { NativeMenu } from '@/components/NativeMenu';
 
 // Animated status dot component
 function StatusDot({ color, isPulsing, size = 8 }: { color: string; isPulsing?: boolean; size?: number }) {
@@ -796,6 +797,21 @@ function SessionInfoContent({ session }: { session: Session }) {
         }
     }, [worktreeMachineId, worktreeBranch, worktreePath, worktreeBasePath, session, router, selectedRepo]);
 
+    const reviewMenuItems = React.useMemo<ActionMenuItem[]>(() => [
+            {
+                label: 'Claude',
+                onPress: () => { setReviewMenuVisible(false); doRequestReview('claude'); },
+            },
+            {
+                label: 'Codex',
+                onPress: () => { setReviewMenuVisible(false); doRequestReview('codex'); },
+            },
+            {
+                label: 'Gemini',
+                onPress: () => { setReviewMenuVisible(false); doRequestReview('gemini'); },
+            },
+    ], [doRequestReview]);
+
     const handleRequestReview = React.useCallback(() => {
         if (!selectedRepo?.prUrl) {
             Modal.alert(t('common.error'), t('sessionInfo.worktree.reviewNoPR'));
@@ -1091,14 +1107,21 @@ function SessionInfoContent({ session }: { session: Session }) {
                             disabled={creatingPR}
                         />
                         {selectedRepo?.prUrl && (
-                            <Item
-                                title={t('sessionInfo.worktree.requestReview')}
-                                subtitle={t('sessionInfo.worktree.requestReviewSubtitle')}
-                                icon={<Ionicons name="eye-outline" size={29} color="#5856D6" />}
-                                onPress={handleRequestReview}
-                                loading={requestingReview}
+                            // The agent choice opens from the row itself.
+                            <NativeMenu
+                                items={reviewMenuItems}
                                 disabled={requestingReview}
-                            />
+                                onFallbackOpen={handleRequestReview}
+                            >
+                                <Item
+                                    title={t('sessionInfo.worktree.requestReview')}
+                                    subtitle={t('sessionInfo.worktree.requestReviewSubtitle')}
+                                    icon={<Ionicons name="eye-outline" size={29} color="#5856D6" />}
+                                    onPress={handleRequestReview}
+                                    loading={requestingReview}
+                                    disabled={requestingReview}
+                                />
+                            </NativeMenu>
                         )}
                         <Item
                             title={t('sessionInfo.worktree.mergeBranch')}
@@ -1342,20 +1365,7 @@ function SessionInfoContent({ session }: { session: Session }) {
             <ActionMenuModal
                 visible={reviewMenuVisible}
                 title={t('sessionInfo.worktree.reviewSelectAgentMessage')}
-                items={[
-                    {
-                        label: 'Claude',
-                        onPress: () => { setReviewMenuVisible(false); doRequestReview('claude'); },
-                    },
-                    {
-                        label: 'Codex',
-                        onPress: () => { setReviewMenuVisible(false); doRequestReview('codex'); },
-                    },
-                    {
-                        label: 'Gemini',
-                        onPress: () => { setReviewMenuVisible(false); doRequestReview('gemini'); },
-                    },
-                ]}
+                items={reviewMenuItems}
                 onClose={() => setReviewMenuVisible(false)}
             />
         </>
