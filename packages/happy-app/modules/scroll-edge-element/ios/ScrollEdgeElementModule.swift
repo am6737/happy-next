@@ -31,9 +31,21 @@ public final class ScrollEdgeElementView: ExpoView {
 
   private var interaction: UIInteraction?
   private weak var attachedScrollView: UIScrollView?
+  private var keyboardObservers: [NSObjectProtocol] = []
+  private var displayLink: CADisplayLink?
+  private var trackingEndsAt: CFTimeInterval = 0
+
+  deinit {
+    stopObservingKeyboard()
+  }
 
   public override func didMoveToWindow() {
     super.didMoveToWindow()
+    if window != nil {
+      startObservingKeyboard()
+    } else {
+      stopObservingKeyboard()
+    }
     attach()
   }
 
@@ -66,6 +78,59 @@ public final class ScrollEdgeElementView: ExpoView {
     interaction = edgeInteraction
     attachedScrollView = scrollView
     #endif
+  }
+
+  // A composer that rides the keyboard is moved by a transform on an ancestor, which UIKit does
+  // not treat as a layout change: the edge effect stays where the element was laid out (behind
+  // the keyboard) until something inside it happens to lay out again. So while the keyboard moves,
+  // the element is laid out on every frame, and once it settles the interaction is re-added, which
+  // makes UIKit measure the element afresh wherever it ended up.
+  private func startObservingKeyboard() {
+    guard keyboardObservers.isEmpty else { return }
+    let center = NotificationCenter.default
+    keyboardObservers = [
+      center.addObserver(forName: UIResponder.keyboardWillChangeFrameNotification, object: nil, queue: .main) { [weak self] note in
+        let duration = (note.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double) ?? 0.25
+        self?.trackKeyboard(for: duration)
+      },
+      center.addObserver(forName: UIResponder.keyboardDidShowNotification, object: nil, queue: .main) { [weak self] _ in
+        self?.remeasure()
+      },
+      center.addObserver(forName: UIResponder.keyboardDidHideNotification, object: nil, queue: .main) { [weak self] _ in
+        self?.remeasure()
+      },
+    ]
+  }
+
+  private func stopObservingKeyboard() {
+    keyboardObservers.forEach { NotificationCenter.default.removeObserver($0) }
+    keyboardObservers = []
+    displayLink?.invalidate()
+    displayLink = nil
+  }
+
+  private func trackKeyboard(for duration: Double) {
+    // A little past the animation, as the view that follows the keyboard lands a frame or two late.
+    trackingEndsAt = CACurrentMediaTime() + duration + 0.15
+    guard displayLink == nil else { return }
+    let link = CADisplayLink(target: self, selector: #selector(keyboardFrameTick))
+    link.add(to: .main, forMode: .common)
+    displayLink = link
+  }
+
+  @objc private func keyboardFrameTick() {
+    setNeedsLayout()
+    layoutIfNeeded()
+    if CACurrentMediaTime() >= trackingEndsAt {
+      displayLink?.invalidate()
+      displayLink = nil
+      remeasure()
+    }
+  }
+
+  private func remeasure() {
+    attachedScrollView = nil
+    attach()
   }
 
   /// The scroll view this element floats over: the largest one beside it, found by widening the
