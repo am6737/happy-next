@@ -181,6 +181,7 @@ export default function RootLayout() {
             <Stack.Screen
                 name="session/[id]/edit"
                 options={{
+                    ...softHeaderOptions,
                     headerShown: true,
                     headerTitle: t('files.editFileTitle'),
                 }}
@@ -675,6 +676,7 @@ export default function RootLayout() {
             <Stack.Screen
                 name="machine/[id]/repo/script-editor"
                 options={{
+                    ...softHeaderOptions,
                     headerShown: true,
                     headerTitle: '',
                 }}
