@@ -24,11 +24,12 @@ import { Typography } from '@/constants/Typography';
 import { t } from '@/text';
 import { isUsingCustomServer } from '@/sync/serverConfig';
 import { trackFriendsSearch } from '@/track';
-import { DooTaskCreateSheet } from './dootask/DooTaskCreateSheet';
+import { DooTaskCreateSheet, useDooTaskCreateItems } from './dootask/DooTaskCreateSheet';
 import { getDesktopPlatform, handleDesktopTitleBarMouseDown } from '@/desktop/desktopWindowUtils';
 import { useAuth } from '@/auth/AuthContext';
 import { prefetchGithubData } from '@/hooks/useGithubData';
 import { shouldProvideMainHeaderRight } from './mainHeaderOptions';
+import { headerMenuOptions } from './navigation/headerMenu';
 
 interface MainViewProps {
     variant: 'phone' | 'sidebar';
@@ -335,6 +336,8 @@ export const MainView = React.memo(({ variant }: MainViewProps) => {
         router.push('/dootask/add-project');
     }, [router]);
 
+    const dootaskCreateItems = useDooTaskCreateItems(handleSelectTask, handleSelectProject);
+
     // Web fallback content swap
     const renderTabContent = React.useCallback(() => {
         switch (activeTab) {
@@ -488,6 +491,7 @@ export const MainView = React.memo(({ variant }: MainViewProps) => {
                 headerRight: shouldProvideMainHeaderRight(activeTab) && !(activeTab === 'settings' && !isCustomServer)
                     ? () => <HeaderRight activeTab={activeTab as ActiveTabType} onDootaskCreate={handleCreatePress} />
                     : undefined,
+                ...headerMenuOptions(activeTab === 'dootask' ? dootaskCreateItems : null, { icon: 'plus', label: t('common.create') }),
             }}
         />
     );

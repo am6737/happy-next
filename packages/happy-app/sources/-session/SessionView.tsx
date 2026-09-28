@@ -1297,6 +1297,7 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
                 });
             }}
             onImageButtonPress={handleImageButtonPress}
+            imageMenuItems={imagePickerMenuItems}
             supportsImages={supportsImages}
             isUploadingImages={isUploadingImages}
         />

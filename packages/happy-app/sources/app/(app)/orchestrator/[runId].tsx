@@ -317,7 +317,7 @@ export default function OrchestratorRunDetailScreen() {
                             <Ionicons name="ellipsis-horizontal" size={22} color={theme.colors.header.tint} />
                         </Pressable>
                     ) : undefined,
-                    ...(canCancel ? headerMenuOptions(menuItems) : {}),
+                    ...headerMenuOptions(canCancel ? menuItems : null),
                 }}
             />
             <ActionMenuModal

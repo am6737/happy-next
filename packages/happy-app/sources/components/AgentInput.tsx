@@ -32,6 +32,8 @@ import { Modal } from '@/modal';
 import { useWebImageDrop } from '@/hooks/useWebImageDrop';
 import { GlassView, isLiquidGlassAvailable } from 'expo-glass-effect';
 import { isRunningOnMac } from '@/utils/platform';
+import { NativeMenu } from './NativeMenu';
+import type { ActionMenuItem } from './ActionMenu';
 import {
     buildClaudeModelMode,
     buildCodexModelMode,
@@ -126,6 +128,9 @@ interface AgentInputProps {
     images?: LocalImage[];
     onImagesChange?: (images: LocalImage[]) => void;
     onImageButtonPress?: () => void;
+    // Where the image button offers a choice (camera or library): opened natively from the button
+    // on iOS, while `onImageButtonPress` still opens the page's own sheet elsewhere.
+    imageMenuItems?: ActionMenuItem[];
     supportsImages?: boolean;
     isUploadingImages?: boolean;
     onImageDrop?: (files: File[]) => void;
@@ -1901,7 +1906,16 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                 </View>
 
                                 {/* Image button */}
-                                {props.onImageButtonPress && (
+                                {props.onImageButtonPress && (props.imageMenuItems && props.supportsImages !== false ? (
+                                    <NativeMenu
+                                        items={props.imageMenuItems}
+                                        disabled={props.isUploadingImages}
+                                        style={styles.iconButton}
+                                        onFallbackOpen={props.onImageButtonPress}
+                                    >
+                                        <Ionicons name="image-outline" size={24} color={theme.colors.text} />
+                                    </NativeMenu>
+                                ) : (
                                     <Pressable
                                         onPress={props.supportsImages !== false ? props.onImageButtonPress : () => {
                                             Modal.alert('Not Supported', 'This AI does not support images');
@@ -1918,7 +1932,7 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                             color={props.supportsImages !== false ? theme.colors.text : theme.colors.textSecondary}
                                         />
                                     </Pressable>
-                                )}
+                                ))}
 
                                 {/* Send/Voice/Stop button - aligned with first row */}
                                 <Shaker ref={shakerRef}>

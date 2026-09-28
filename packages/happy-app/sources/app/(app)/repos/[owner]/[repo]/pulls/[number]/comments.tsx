@@ -31,6 +31,7 @@ import { CommentItem } from '@/components/repos/CommentItem';
 import { isRunningOnMac } from '@/utils/platform';
 import { softHeaderOptions, useSoftHeaderInset } from '@/components/navigation/softHeader';
 import { KeyboardCenteredEmpty } from '@/components/KeyboardCenteredEmpty';
+import { NativeMenu } from '@/components/NativeMenu';
 
 export default React.memo(function PRCommentsPage() {
     const styles = stylesheet;
@@ -201,11 +202,11 @@ export default React.memo(function PRCommentsPage() {
     const composer = (
         <View style={[styles.composer, floatingComposerAvailable && styles.composerFloating, { paddingBottom: Platform.OS === 'ios' ? 0 : Math.max(insets.bottom, 12) }]}>
             <View style={styles.inputRow}>
-                <Pressable
-                    onPress={() => setMenuVisible(true)}
+                <NativeMenu
+                    items={menuItems}
                     disabled={uploading}
-                    hitSlop={4}
                     style={styles.addButton}
+                    onFallbackOpen={() => setMenuVisible(true)}
                 >
                     <GlassSurface glass={floatingComposerAvailable} color={theme.colors.surfaceHighest} style={styles.addCircle}>
                         {uploading ? (
@@ -214,7 +215,7 @@ export default React.memo(function PRCommentsPage() {
                             <Ionicons name="add" size={24} color={theme.colors.textSecondary} />
                         )}
                     </GlassSurface>
-                </Pressable>
+                </NativeMenu>
                 <GlassSurface glass={floatingComposerAvailable} color={theme.colors.surfaceHighest} style={styles.inputGroup}>
                     <MultiTextInput
                         style={{ flex: 1, paddingVertical: 6 }}

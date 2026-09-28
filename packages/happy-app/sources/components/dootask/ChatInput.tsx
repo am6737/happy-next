@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { ActionMenuItem } from '@/components/ActionMenu';
 import type { DooTaskDialogMsg } from '@/sync/dootask/types';
 import { GlassSurface } from '@/components/GlassSurface';
+import { NativeMenu } from '@/components/NativeMenu';
 
 type ChatInputProps = {
     onSendText: (text: string) => void;
@@ -137,15 +138,15 @@ export const ChatInput = React.memo(({ onSendText, onSendImage, onSendFile, repl
                 </GlassSurface>
             )}
             <View style={styles.inputRow}>
-                <Pressable
-                    onPress={() => setMenuVisible(true)}
-                    hitSlop={4}
+                <NativeMenu
+                    items={menuItems}
                     style={styles.addButton}
+                    onFallbackOpen={() => setMenuVisible(true)}
                 >
                     <GlassSurface glass={glass} color={theme.colors.surfaceHighest} style={styles.addCircle}>
                         <Ionicons name="add" size={24} color={theme.colors.textSecondary} />
                     </GlassSurface>
-                </Pressable>
+                </NativeMenu>
                 <GlassSurface glass={glass} color={theme.colors.surfaceHighest} style={styles.inputGroup}>
                     <MultiTextInput
                         style={{ flex: 1, paddingVertical: 6 }}

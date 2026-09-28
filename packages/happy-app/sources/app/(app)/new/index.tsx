@@ -1713,6 +1713,7 @@ function NewSessionWizard() {
                                     });
                                 }}
                                 onImageButtonPress={handleImageButtonPress}
+                                imageMenuItems={imagePickerMenuItems}
                                 supportsImages={supportsImages}
                             />
                         </View>
@@ -2480,6 +2481,7 @@ function NewSessionWizard() {
                                 });
                             }}
                             onImageButtonPress={handleImageButtonPress}
+                            imageMenuItems={imagePickerMenuItems}
                             supportsImages={supportsImages}
                         />
                     </View>

@@ -1,10 +1,12 @@
 import * as React from 'react';
 import { View, Pressable } from 'react-native';
 import { DooTaskListView } from '@/components/DooTaskListView';
-import { DooTaskCreateSheet } from '@/components/dootask/DooTaskCreateSheet';
+import { DooTaskCreateSheet, useDooTaskCreateItems } from '@/components/dootask/DooTaskCreateSheet';
 import { useUnistyles } from 'react-native-unistyles';
 import { useRouter, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { headerMenuOptions } from '@/components/navigation/headerMenu';
+import { t } from '@/text';
 
 export default function DooTaskPage() {
     const { theme } = useUnistyles();
@@ -28,6 +30,8 @@ export default function DooTaskPage() {
         router.push('/dootask/add-project');
     }, [router]);
 
+    const createItems = useDooTaskCreateItems(handleSelectTask, handleSelectProject);
+
     return (
         <View style={{ flex: 1 }}>
             <Stack.Screen
@@ -44,6 +48,7 @@ export default function DooTaskPage() {
                             />
                         </Pressable>
                     ),
+                    ...headerMenuOptions(createItems, { icon: 'plus', label: t('common.create') }),
                 }}
             />
             <DooTaskListView />

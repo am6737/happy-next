@@ -10,11 +10,16 @@ type Props = {
     onSelectProject: () => void;
 };
 
-export const DooTaskCreateSheet = React.memo(({ visible, onClose, onSelectTask, onSelectProject }: Props) => {
-    const items: ActionMenuItem[] = React.useMemo(() => [
+/** The DooTask "create" choices, shared by this sheet and the native header menu (iOS). */
+export function useDooTaskCreateItems(onSelectTask: () => void, onSelectProject: () => void): ActionMenuItem[] {
+    return React.useMemo(() => [
         { label: t('dootask.addTask'), onPress: onSelectTask },
         { label: t('dootask.addProject'), onPress: onSelectProject },
     ], [onSelectTask, onSelectProject]);
+}
+
+export const DooTaskCreateSheet = React.memo(({ visible, onClose, onSelectTask, onSelectProject }: Props) => {
+    const items = useDooTaskCreateItems(onSelectTask, onSelectProject);
 
     return (
         <ActionMenuModal
