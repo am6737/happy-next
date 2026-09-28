@@ -23,7 +23,7 @@ import {
     ListRenderItemInfo,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { StyleSheet } from 'react-native-unistyles';
+import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from './StyledText';
 import { layout } from './layout';
@@ -38,6 +38,8 @@ import { createSheetMessageInteractionManager } from './sheetMessageInteraction'
 import { isSessionPreviewMessageTruncated } from './sessionPreviewMenu';
 import { isWebTextTruncated } from './webTextTruncation';
 import type { ClaudeSessionPreviewMessage, ClaudeSessionIndexEntry, AgentSessionIndexEntry } from '@/sync/ops';
+import { GlassSurface, liquidGlassAvailable } from './GlassSurface';
+import { GLASS_SHEET_FILL, GLASS_SHEET_RADIUS, glassSheetFramePadding, SHEET_BACKDROP_OPACITY, SHEET_SLIDE_SPRING } from './glassSheet';
 
 // On web, stop events from propagating to expo-router's modal overlay
 const stopPropagation = (e: { stopPropagation: () => void }) => e.stopPropagation();
@@ -81,6 +83,7 @@ export function SessionPreviewSheet({
     onClosed,
 }: SessionPreviewSheetProps) {
     const insets = useSafeAreaInsets();
+    const { theme } = useUnistyles();
     const { height: windowHeight, width: windowWidth } = useWindowDimensions();
     const [modalVisible, setModalVisible] = useState(false);
     const [sheetHeight, setSheetHeight] = useState(windowHeight * DEFAULT_HEIGHT_RATIO);
@@ -89,7 +92,8 @@ export function SessionPreviewSheet({
     const webCollapsedTextRefs = useRef(new Map<string, HTMLElement>());
     const currentHeightRef = useRef(windowHeight * DEFAULT_HEIGHT_RATIO);
     const fadeAnim = useRef(new Animated.Value(0)).current;
-    const slideAnim = useRef(new Animated.Value(300)).current;
+    // 0 = off screen, 1 = in place: the glass card (iOS 26) slides by its own height, see `glassSheet`.
+    const slideAnim = useRef(new Animated.Value(0)).current;
     const dragStartY = useRef(0);
     const dragStartHeight = useRef(0);
     const messageInteractionManager = useRef(createSheetMessageInteractionManager()).current;
@@ -145,7 +149,7 @@ export function SessionPreviewSheet({
             setModalVisible(true);
             updateSheetHeight(windowHeight * DEFAULT_HEIGHT_RATIO);
             fadeAnim.setValue(0);
-            slideAnim.setValue(300);
+            slideAnim.setValue(0);
             Animated.parallel([
                 Animated.timing(fadeAnim, {
                     toValue: 1,
@@ -153,9 +157,8 @@ export function SessionPreviewSheet({
                     useNativeDriver: true,
                 }),
                 Animated.spring(slideAnim, {
-                    toValue: 0,
-                    damping: 20,
-                    stiffness: 300,
+                    toValue: 1,
+                    ...SHEET_SLIDE_SPRING,
                     useNativeDriver: true,
                 }),
             ]).start();
@@ -167,7 +170,7 @@ export function SessionPreviewSheet({
                     useNativeDriver: true,
                 }),
                 Animated.timing(slideAnim, {
-                    toValue: 300,
+                    toValue: 0,
                     duration: ANIMATION_DURATION,
                     useNativeDriver: true,
                 }),
@@ -347,7 +350,7 @@ export function SessionPreviewSheet({
                             {
                                 opacity: fadeAnim.interpolate({
                                     inputRange: [0, 1],
-                                    outputRange: [0, 0.5],
+                                    outputRange: [0, SHEET_BACKDROP_OPACITY],
                                 }),
                             },
                         ]}
@@ -356,170 +359,184 @@ export function SessionPreviewSheet({
 
                 <Animated.View
                     style={[
-                        styles.sheet as ViewStyle,
+                        styles.sheetFrame as ViewStyle,
+                        liquidGlassAvailable && glassSheetFramePadding(insets.bottom),
                         {
-                            height: sheetHeight,
-                            opacity: fadeAnim,
-                            transform: [{ translateY: slideAnim }],
-                            paddingBottom: insets.bottom,
+                            opacity: liquidGlassAvailable ? 1 : fadeAnim,
+                            transform: [{
+                                translateY: slideAnim.interpolate({
+                                    inputRange: [0, 1],
+                                    outputRange: [liquidGlassAvailable ? sheetHeight + insets.bottom : 300, 0],
+                                }),
+                            }],
                         },
                     ]}
                 >
-                    {/* Handle - draggable */}
-                    <View
-                        style={[styles.handleContainer as ViewStyle, Platform.OS === 'web' && { cursor: 'ns-resize' as any }]}
-                        {...panResponder.panHandlers}
+                    <GlassSurface
+                        glass={liquidGlassAvailable}
+                        color={theme.colors.surface}
+                        style={[
+                            styles.sheet as ViewStyle,
+                            liquidGlassAvailable ? styles.sheetGlass as ViewStyle : styles.sheetSolid as ViewStyle,
+                            { height: sheetHeight, paddingBottom: liquidGlassAvailable ? 0 : insets.bottom },
+                        ]}
                     >
-                        <View style={styles.handle as ViewStyle} />
-                    </View>
+                        {/* Handle - draggable */}
+                        <View
+                            style={[styles.handleContainer as ViewStyle, Platform.OS === 'web' && { cursor: 'ns-resize' as any }]}
+                            {...panResponder.panHandlers}
+                        >
+                            <View style={styles.handle as ViewStyle} />
+                        </View>
 
-                    {/* Header */}
-                    <View style={styles.header as ViewStyle}>
-                        <View style={styles.headerIcon as ViewStyle}>
-                            <Ionicons name="chatbubbles" size={20} color="#fff" />
+                        {/* Header */}
+                        <View style={styles.header as ViewStyle}>
+                            <View style={styles.headerIcon as ViewStyle}>
+                                <Ionicons name="chatbubbles" size={20} color="#fff" />
+                            </View>
+                            <View style={styles.headerContent as ViewStyle}>
+                                <Text style={styles.title as TextStyle} numberOfLines={1}>{title}</Text>
+                                {subtitle ? <Text style={styles.subtitle as TextStyle}>{subtitle}</Text> : null}
+                            </View>
+                            <Pressable style={styles.closeButton as ViewStyle} onPress={handleClose}>
+                                <Ionicons name="close" size={18} color="#8E8E93" />
+                            </Pressable>
                         </View>
-                        <View style={styles.headerContent as ViewStyle}>
-                            <Text style={styles.title as TextStyle} numberOfLines={1}>{title}</Text>
-                            {subtitle ? <Text style={styles.subtitle as TextStyle}>{subtitle}</Text> : null}
-                        </View>
-                        <Pressable style={styles.closeButton as ViewStyle} onPress={handleClose}>
-                            <Ionicons name="close" size={18} color="#8E8E93" />
-                        </Pressable>
-                    </View>
 
-                    {/* Content - using inverted FlatList to avoid scroll flash */}
-                    {loading ? (
-                        <View style={[styles.content as ViewStyle, styles.loadingContainer as ViewStyle]}>
-                            <ActivityIndicator size="small" color="#8E8E93" />
-                            <Text style={styles.loadingText as TextStyle}>{t('common.loading')}</Text>
-                        </View>
-                    ) : (
-                        <FlatList
-                            data={previewMessages}
-                            inverted={true}
-                            style={styles.content as ViewStyle}
-                            contentContainerStyle={styles.contentContainer as ViewStyle}
-                            onScroll={handleMessageInteractionMove}
-                            scrollEventThrottle={16}
-                            onScrollBeginDrag={hideCopyMenu}
-                            showsVerticalScrollIndicator={false}
-                            keyExtractor={getPreviewMessageKey}
-                            renderItem={({ item: msg, index }: ListRenderItemInfo<ClaudeSessionPreviewMessage>) => {
-                                const messageKey = getPreviewMessageKey(msg, index);
-                                const isExpanded = expandedMessageKeys.has(messageKey);
-                                const isLong = truncatedMessageKeys.has(messageKey);
-                                const openCopyMenu = ({ pageX, pageY }: { pageX: number; pageY: number }) => {
-                                    showCopyMenu({ x: pageX, y: pageY, content: msg.content, messageKey });
-                                };
-                                const interactionCallbacks = {
-                                    onTap: () => {
-                                        if (copyMenuRef.current !== null) {
-                                            hideCopyMenu();
-                                            return;
+                        {/* Content - using inverted FlatList to avoid scroll flash */}
+                        {loading ? (
+                            <View style={[styles.content as ViewStyle, styles.loadingContainer as ViewStyle]}>
+                                <ActivityIndicator size="small" color="#8E8E93" />
+                                <Text style={styles.loadingText as TextStyle}>{t('common.loading')}</Text>
+                            </View>
+                        ) : (
+                            <FlatList
+                                data={previewMessages}
+                                inverted={true}
+                                style={styles.content as ViewStyle}
+                                contentContainerStyle={styles.contentContainer as ViewStyle}
+                                onScroll={handleMessageInteractionMove}
+                                scrollEventThrottle={16}
+                                onScrollBeginDrag={hideCopyMenu}
+                                showsVerticalScrollIndicator={false}
+                                keyExtractor={getPreviewMessageKey}
+                                renderItem={({ item: msg, index }: ListRenderItemInfo<ClaudeSessionPreviewMessage>) => {
+                                    const messageKey = getPreviewMessageKey(msg, index);
+                                    const isExpanded = expandedMessageKeys.has(messageKey);
+                                    const isLong = truncatedMessageKeys.has(messageKey);
+                                    const openCopyMenu = ({ pageX, pageY }: { pageX: number; pageY: number }) => {
+                                        showCopyMenu({ x: pageX, y: pageY, content: msg.content, messageKey });
+                                    };
+                                    const interactionCallbacks = {
+                                        onTap: () => {
+                                            if (copyMenuRef.current !== null) {
+                                                hideCopyMenu();
+                                                return;
+                                            }
+
+                                            handleToggleMessageExpanded(messageKey);
+                                        },
+                                        onLongPress: ({ pageX, pageY }: { pageX: number; pageY: number }) => {
+                                            hapticsLight();
+                                            openCopyMenu({ pageX, pageY });
+                                        },
+                                    };
+                                    const webMouseHandlers = Platform.OS === 'web'
+                                        ? {
+                                            onMouseDown: (e: { nativeEvent: { pageX: number; pageY: number } }) => {
+                                                messageInteractionManager.start(e, interactionCallbacks);
+                                            },
+                                            onMouseMove: handleMessageInteractionMove,
+                                            onMouseUp: messageInteractionManager.end,
+                                            onMouseLeave: handleMessageInteractionCancel,
+                                            onContextMenu: (e: { preventDefault: () => void; nativeEvent: { pageX: number; pageY: number } }) => {
+                                                handleCopyMenuContextMenu(e, openCopyMenu);
+                                            },
                                         }
+                                        : {};
 
-                                        handleToggleMessageExpanded(messageKey);
-                                    },
-                                    onLongPress: ({ pageX, pageY }: { pageX: number; pageY: number }) => {
-                                        hapticsLight();
-                                        openCopyMenu({ pageX, pageY });
-                                    },
-                                };
-                                const webMouseHandlers = Platform.OS === 'web'
-                                    ? {
-                                        onMouseDown: (e: { nativeEvent: { pageX: number; pageY: number } }) => {
-                                            messageInteractionManager.start(e, interactionCallbacks);
-                                        },
-                                        onMouseMove: handleMessageInteractionMove,
-                                        onMouseUp: messageInteractionManager.end,
-                                        onMouseLeave: handleMessageInteractionCancel,
-                                        onContextMenu: (e: { preventDefault: () => void; nativeEvent: { pageX: number; pageY: number } }) => {
-                                            handleCopyMenuContextMenu(e, openCopyMenu);
-                                        },
-                                    }
-                                    : {};
-
-                                return (
-                                    <View
-                                        style={[
-                                            styles.message as ViewStyle,
-                                            msg.role === 'user' ? styles.userMessage as ViewStyle : styles.assistantMessage as ViewStyle,
-                                        ]}
-                                    >
+                                    return (
                                         <View
                                             style={[
-                                                styles.messageBubble as ViewStyle,
-                                                msg.role === 'user' ? styles.userBubble as ViewStyle : styles.assistantBubble as ViewStyle,
+                                                styles.message as ViewStyle,
+                                                msg.role === 'user' ? styles.userMessage as ViewStyle : styles.assistantMessage as ViewStyle,
                                             ]}
-                                            onTouchStart={(e) => {
-                                                messageInteractionManager.start(e, interactionCallbacks);
-                                            }}
-                                            onTouchMove={handleMessageInteractionMove}
-                                            onTouchEnd={messageInteractionManager.end}
-                                            onTouchCancel={handleMessageInteractionCancel}
-                                            {...webMouseHandlers}
                                         >
-                                            <Text
-                                                ref={Platform.OS === 'web' && !isExpanded ? setWebCollapsedTextRef(messageKey) : undefined}
+                                            <View
                                                 style={[
-                                                    styles.messageText as TextStyle,
-                                                    msg.role === 'user' ? styles.userText as TextStyle : styles.assistantText as TextStyle,
+                                                    styles.messageBubble as ViewStyle,
+                                                    msg.role === 'user' ? styles.userBubble as ViewStyle : styles.assistantBubble as ViewStyle,
                                                 ]}
-                                                numberOfLines={isExpanded ? undefined : PREVIEW_COLLAPSED_LINES}
-                                                onLayout={Platform.OS === 'web' && !isExpanded ? () => measureWebMessageTruncation(messageKey) : undefined}
+                                                onTouchStart={(e) => {
+                                                    messageInteractionManager.start(e, interactionCallbacks);
+                                                }}
+                                                onTouchMove={handleMessageInteractionMove}
+                                                onTouchEnd={messageInteractionManager.end}
+                                                onTouchCancel={handleMessageInteractionCancel}
+                                                {...webMouseHandlers}
                                             >
-                                                {msg.content}
-                                            </Text>
-                                            {Platform.OS !== 'web' && !isExpanded && !isLong && (
                                                 <Text
+                                                    ref={Platform.OS === 'web' && !isExpanded ? setWebCollapsedTextRef(messageKey) : undefined}
                                                     style={[
                                                         styles.messageText as TextStyle,
-                                                        styles.measureText as TextStyle,
                                                         msg.role === 'user' ? styles.userText as TextStyle : styles.assistantText as TextStyle,
                                                     ]}
-                                                    pointerEvents="none"
-                                                    onTextLayout={(e) => {
-                                                        if (isSessionPreviewMessageTruncated({
-                                                            lineCount: e.nativeEvent.lines.length,
-                                                            collapsedLineCount: PREVIEW_COLLAPSED_LINES,
-                                                        })) {
-                                                            setMessageTruncated(messageKey, true);
-                                                        }
-                                                    }}
+                                                    numberOfLines={isExpanded ? undefined : PREVIEW_COLLAPSED_LINES}
+                                                    onLayout={Platform.OS === 'web' && !isExpanded ? () => measureWebMessageTruncation(messageKey) : undefined}
                                                 >
                                                     {msg.content}
                                                 </Text>
-                                            )}
+                                                {Platform.OS !== 'web' && !isExpanded && !isLong && (
+                                                    <Text
+                                                        style={[
+                                                            styles.messageText as TextStyle,
+                                                            styles.measureText as TextStyle,
+                                                            msg.role === 'user' ? styles.userText as TextStyle : styles.assistantText as TextStyle,
+                                                        ]}
+                                                        pointerEvents="none"
+                                                        onTextLayout={(e) => {
+                                                            if (isSessionPreviewMessageTruncated({
+                                                                lineCount: e.nativeEvent.lines.length,
+                                                                collapsedLineCount: PREVIEW_COLLAPSED_LINES,
+                                                            })) {
+                                                                setMessageTruncated(messageKey, true);
+                                                            }
+                                                        }}
+                                                    >
+                                                        {msg.content}
+                                                    </Text>
+                                                )}
+                                            </View>
                                         </View>
+                                    );
+                                }}
+                                ListEmptyComponent={
+                                    <View style={styles.emptyContainer as ViewStyle}>
+                                        <Text style={styles.emptyText as TextStyle}>{t('sessionPreview.noMessages')}</Text>
                                     </View>
-                                );
-                            }}
-                            ListEmptyComponent={
-                                <View style={styles.emptyContainer as ViewStyle}>
-                                    <Text style={styles.emptyText as TextStyle}>{t('sessionPreview.noMessages')}</Text>
-                                </View>
-                            }
-                            ListFooterComponent={hasOlderMessages ? (
-                                <Text style={styles.olderMessagesHint as TextStyle}>
-                                    {t('sessionPreview.olderMessagesHint')}
-                                </Text>
-                            ) : null}
-                        />
-                    )}
+                                }
+                                ListFooterComponent={hasOlderMessages ? (
+                                    <Text style={styles.olderMessagesHint as TextStyle}>
+                                        {t('sessionPreview.olderMessagesHint')}
+                                    </Text>
+                                ) : null}
+                            />
+                        )}
 
-                    {/* Footer */}
-                    <View style={styles.footer as ViewStyle}>
-                        <Pressable
-                            style={({ pressed }) => [
-                                styles.resumeButton as ViewStyle,
-                                pressed && styles.resumeButtonPressed as ViewStyle,
-                            ]}
-                            onPress={handleResume}
-                        >
-                            <Ionicons name="play" size={18} color="#fff" />
-                            <Text style={styles.resumeButtonText as TextStyle}>{t('sessionPreview.resume')}</Text>
-                        </Pressable>
-                    </View>
+                        {/* Footer */}
+                        <View style={styles.footer as ViewStyle}>
+                            <Pressable
+                                style={({ pressed }) => [
+                                    styles.resumeButton as ViewStyle,
+                                    pressed && styles.resumeButtonPressed as ViewStyle,
+                                ]}
+                                onPress={handleResume}
+                            >
+                                <Ionicons name="play" size={18} color="#fff" />
+                                <Text style={styles.resumeButtonText as TextStyle}>{t('sessionPreview.resume')}</Text>
+                            </Pressable>
+                        </View>
+                    </GlassSurface>
                 </Animated.View>
 
                 {/* Copy menu overlay — rendered at modal level to avoid clipping */}
@@ -627,13 +644,19 @@ const styles = StyleSheet.create((theme) => ({
         bottom: 0,
         backgroundColor: 'black',
     },
-    sheet: {
+    sheetFrame: {
         width: '100%',
         maxWidth: Math.min(layout.maxWidth, 768),
-        backgroundColor: theme.colors.surface,
+    },
+    sheet: {
+        overflow: 'hidden',
+    },
+    sheetSolid: {
         borderTopLeftRadius: 12,
         borderTopRightRadius: 12,
-        overflow: 'hidden',
+    },
+    sheetGlass: {
+        borderRadius: GLASS_SHEET_RADIUS,
     },
     handleContainer: {
         alignItems: 'center',
@@ -680,7 +703,7 @@ const styles = StyleSheet.create((theme) => ({
         width: 30,
         height: 30,
         borderRadius: 15,
-        backgroundColor: theme.colors.surfacePressed,
+        backgroundColor: liquidGlassAvailable ? GLASS_SHEET_FILL : theme.colors.surfacePressed,
         alignItems: 'center',
         justifyContent: 'center',
     },
@@ -737,7 +760,7 @@ const styles = StyleSheet.create((theme) => ({
         borderBottomRightRadius: 4,
     },
     assistantBubble: {
-        backgroundColor: theme.colors.surfacePressed,
+        backgroundColor: liquidGlassAvailable ? GLASS_SHEET_FILL : theme.colors.surfacePressed,
         borderBottomLeftRadius: 4,
     },
     messageText: {
