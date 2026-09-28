@@ -1,8 +1,9 @@
 import * as React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { KeyboardStickyView, useReanimatedKeyboardAnimation } from 'react-native-keyboard-controller';
-import Animated, { useAnimatedStyle } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, type SharedValue } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ScrollEdgeElementContainer } from './ScrollEdgeElementContainer';
 
 const COMPOSER_MARGIN = 8;
 
@@ -13,16 +14,61 @@ interface AgentContentViewProps {
     betweenContentAndInput?: React.ReactNode | null;
     /** Use the demo-style flex-column layout for chat screens. */
     safeAreaLayout?: boolean;
+    /**
+     * Float the composer over the content instead of stacking it below: the content runs to the
+     * bottom of the screen and scrolls under the composer, which iOS 26 marks with the soft scroll
+     * edge effect. The content has to keep its last rows clear of the composer itself — its height
+     * is written to `composerHeight` for that.
+     */
+    floatingInput?: boolean;
+    composerHeight?: SharedValue<number>;
 }
 
-export const AgentContentView: React.FC<AgentContentViewProps> = React.memo(({ input, content, placeholder, betweenContentAndInput, safeAreaLayout = false }) => {
+export const AgentContentView: React.FC<AgentContentViewProps> = React.memo(({ input, content, placeholder, betweenContentAndInput, safeAreaLayout = false, floatingInput = false, composerHeight }) => {
     const safeArea = useSafeAreaInsets();
     const { height } = useReanimatedKeyboardAnimation();
     const placeholderVisibleAreaStyle = useAnimatedStyle(() => ({
         // Keyboard controller reports iOS keyboard height as a negative offset here.
-        // Keep empty states centered in the visible area above the keyboard.
-        bottom: Math.max(0, -height.value),
-    }), []);
+        // Keep empty states centered in the visible area above the keyboard (and, when the
+        // composer floats over the content, above the composer too).
+        bottom: Math.max(0, -height.value) + (floatingInput ? composerHeight?.value ?? 0 : 0),
+    }), [floatingInput, composerHeight]);
+
+    if (floatingInput) {
+        return (
+            <View style={styles.root}>
+                {content && (
+                    <View style={StyleSheet.absoluteFillObject}>
+                        {content}
+                    </View>
+                )}
+                {placeholder && (
+                    <Animated.ScrollView
+                        style={[StyleSheet.absoluteFillObject, placeholderVisibleAreaStyle]}
+                        contentContainerStyle={styles.placeholderContent}
+                        keyboardShouldPersistTaps="handled"
+                        alwaysBounceVertical={false}
+                    >
+                        {placeholder}
+                    </Animated.ScrollView>
+                )}
+                <KeyboardStickyView offset={{ opened: safeArea.bottom - COMPOSER_MARGIN }} style={styles.floatingComposer}>
+                    <ScrollEdgeElementContainer
+                        edge="bottom"
+                        style={{ paddingBottom: safeArea.bottom }}
+                        onLayout={(event) => {
+                            if (composerHeight) {
+                                composerHeight.value = event.nativeEvent.layout.height;
+                            }
+                        }}
+                    >
+                        {betweenContentAndInput}
+                        {input}
+                    </ScrollEdgeElementContainer>
+                </KeyboardStickyView>
+            </View>
+        );
+    }
 
     if (!safeAreaLayout) {
         return (
@@ -90,6 +136,12 @@ const styles = StyleSheet.create({
     legacyContent: {
         flexBasis: 0,
         flexGrow: 1,
+    },
+    floatingComposer: {
+        position: 'absolute',
+        left: 0,
+        right: 0,
+        bottom: 0,
     },
     placeholderContent: {
         flexGrow: 1,

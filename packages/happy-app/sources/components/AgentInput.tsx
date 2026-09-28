@@ -30,6 +30,8 @@ import { ImagePreview, LocalImage } from '@/components/ImagePreview';
 import { Switch } from '@/components/Switch';
 import { Modal } from '@/modal';
 import { useWebImageDrop } from '@/hooks/useWebImageDrop';
+import { GlassView, isLiquidGlassAvailable } from 'expo-glass-effect';
+import { isRunningOnMac } from '@/utils/platform';
 import {
     buildClaudeModelMode,
     buildCodexModelMode,
@@ -116,6 +118,9 @@ interface AgentInputProps {
     // panel's rounded edge lines up with the message column; the new-session page, which
     // stacks the same panel under its own sections, keeps the panel flush.
     panelSideMargin?: boolean;
+    // Draw the panel as Liquid Glass instead of an opaque fill — for a composer that floats over
+    // the conversation. Only honoured where Liquid Glass exists (iOS 26+).
+    glassPanel?: boolean;
     profileId?: string | null;
     onProfileClick?: () => void;
     images?: LocalImage[];
@@ -174,6 +179,17 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
         paddingVertical: 2,
         paddingBottom: 8,
         paddingHorizontal: 8,
+    },
+    unifiedPanelGlass: {
+        backgroundColor: 'transparent',
+    },
+    glassBackground: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        borderRadius: Platform.select({ default: 16, android: 20 }),
     },
     inputContainer: {
         flexDirection: 'row',
@@ -459,6 +475,7 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
         );
     });
     const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+    const useGlassPanel = !!props.glassPanel && Platform.OS === 'ios' && isLiquidGlassAvailable();
     // Wide layout: show the reasoning-effort column beside the model list instead of below it.
     const isWideModelLayout = screenWidth > 700;
 
@@ -1045,6 +1062,263 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
         </Pressable>
     ) : null;
 
+    // Connection status, context warning, and permission mode. On iOS the row sits inside the
+    // input panel's card, as the card's first line; elsewhere it stays above the panel.
+    const statusInPanel = Platform.OS === 'ios' && !isRunningOnMac();
+    const statusBar = (props.connectionStatus || contextWarning || props.permissionMode) ? (
+        <View style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            // Inside the panel the row lines up with the panel's own content padding.
+            paddingHorizontal: statusInPanel ? 8 : 16,
+            paddingTop: statusInPanel ? 8 : 0,
+            paddingBottom: 4,
+            minHeight: 20, // Fixed minimum height to prevent jumping
+        }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 11 }}>
+                {props.connectionStatus && (
+                    <>
+                        {(props.connectionStatus.onPress || props.connectionStatus.action) ? (
+                            <Pressable
+                                hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
+                                onPress={() => {
+                                    if (props.connectionStatus?.action === 'openPermission') {
+                                        hapticsLight();
+                                        setShowSettings(prev => prev === 'permission' ? false : 'permission');
+                                    } else {
+                                        props.connectionStatus?.onPress?.();
+                                    }
+                                }}
+                                style={({ pressed }) => ({
+                                    flexDirection: 'row',
+                                    alignItems: 'center',
+                                    gap: 4,
+                                    opacity: pressed ? 0.7 : 1
+                                })}
+                            >
+                                {connectionStatusIndicator}
+                            </Pressable>
+                        ) : (
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                {connectionStatusIndicator}
+                            </View>
+                        )}
+                        {/* CLI Status - only shown when provided (wizard only) */}
+                        {props.connectionStatus.cliStatus && (
+                            <>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                    <Text style={{
+                                        fontSize: 11,
+                                        color: props.connectionStatus.cliStatus.claude
+                                            ? theme.colors.success
+                                            : theme.colors.textDestructive,
+                                        ...Typography.default()
+                                    }}>
+                                        {props.connectionStatus.cliStatus.claude ? '✓' : '✗'}
+                                    </Text>
+                                    <Text style={{
+                                        fontSize: 11,
+                                        color: props.connectionStatus.cliStatus.claude
+                                            ? theme.colors.success
+                                            : theme.colors.textDestructive,
+                                        ...Typography.default()
+                                    }}>
+                                        claude
+                                    </Text>
+                                </View>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                    <Text style={{
+                                        fontSize: 11,
+                                        color: props.connectionStatus.cliStatus.codex
+                                            ? theme.colors.success
+                                            : theme.colors.textDestructive,
+                                        ...Typography.default()
+                                    }}>
+                                        {props.connectionStatus.cliStatus.codex ? '✓' : '✗'}
+                                    </Text>
+                                    <Text style={{
+                                        fontSize: 11,
+                                        color: props.connectionStatus.cliStatus.codex
+                                            ? theme.colors.success
+                                            : theme.colors.textDestructive,
+                                        ...Typography.default()
+                                    }}>
+                                        codex
+                                    </Text>
+                                </View>
+                                {props.connectionStatus.cliStatus.gemini !== undefined && (
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                        <Text style={{
+                                            fontSize: 11,
+                                            color: props.connectionStatus.cliStatus.gemini
+                                                ? theme.colors.success
+                                                : theme.colors.textDestructive,
+                                            ...Typography.default()
+                                        }}>
+                                            {props.connectionStatus.cliStatus.gemini ? '✓' : '✗'}
+                                        </Text>
+                                        <Text style={{
+                                            fontSize: 11,
+                                            color: props.connectionStatus.cliStatus.gemini
+                                                ? theme.colors.success
+                                                : theme.colors.textDestructive,
+                                            ...Typography.default()
+                                        }}>
+                                            gemini
+                                        </Text>
+                                    </View>
+                                )}
+                            </>
+                        )}
+                    </>
+                )}
+                {contextWarning && (
+                    <>
+                        <View
+                            ref={contextDetailsAnchorRef}
+                            style={{
+                                position: 'relative',
+                                marginLeft: props.connectionStatus ? 8 : 0,
+                                zIndex: isContextDetailsVisible ? 1002 : 1,
+                            }}
+                        >
+                            <Pressable
+                                onPress={() => {
+                                    hapticsLight();
+                                    showContextDetailsFromPress();
+                                }}
+                                onHoverIn={() => {
+                                    if (contextDetailsHoverTimerRef.current) {
+                                        clearTimeout(contextDetailsHoverTimerRef.current);
+                                    }
+                                    contextDetailsHoverTimerRef.current = setTimeout(() => {
+                                        setIsContextDetailsHovered(true);
+                                        contextDetailsHoverTimerRef.current = null;
+                                    }, 600);
+                                }}
+                                onHoverOut={() => {
+                                    if (contextDetailsHoverTimerRef.current) {
+                                        clearTimeout(contextDetailsHoverTimerRef.current);
+                                        contextDetailsHoverTimerRef.current = null;
+                                    }
+                                    setIsContextDetailsHovered(false);
+                                }}
+                                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            >
+                                <Text style={{
+                                    fontSize: 11,
+                                    color: contextWarning.color,
+                                    ...Typography.default()
+                                }}>
+                                    {props.connectionStatus ? '• ' : ''}{contextWarning.text}
+                                </Text>
+                            </Pressable>
+                            {isContextDetailsInlineVisible && (
+                                <View
+                                    style={{
+                                        position: 'absolute',
+                                        left: 0,
+                                        bottom: CONTEXT_DETAILS_TOOLTIP_GAP,
+                                        minWidth: CONTEXT_DETAILS_TOOLTIP_WIDTH,
+                                        paddingHorizontal: 10,
+                                        paddingVertical: 8,
+                                        borderRadius: 10,
+                                        backgroundColor: theme.colors.surface,
+                                        borderWidth: 0.5,
+                                        borderColor: theme.colors.modal.border,
+                                        shadowColor: theme.colors.shadow.color,
+                                        shadowOffset: { width: 0, height: 2 },
+                                        shadowOpacity: theme.colors.shadow.opacity,
+                                        shadowRadius: 6,
+                                        elevation: 8,
+                                    }}
+                                >
+                                    <Text style={{
+                                        fontSize: 12,
+                                        lineHeight: 20,
+                                        color: theme.colors.text,
+                                        ...Typography.default()
+                                    }}>
+                                    {contextWarning.details}
+                                </Text>
+                            </View>
+                        )}
+                        </View>
+                        {Platform.OS === 'ios' ? (
+                            isContextDetailsPinned && contextDetailsAnchor ? (
+                                <FullWindowOverlay>
+                                    {contextDetailsPopover}
+                                </FullWindowOverlay>
+                            ) : null
+                        ) : (
+                            <RNModal
+                                transparent
+                                visible={Platform.OS !== 'web' && isContextDetailsPinned && !!contextDetailsAnchor}
+                                animationType="none"
+                                onRequestClose={() => setIsContextDetailsPinned(false)}
+                            >
+                                {contextDetailsPopover}
+                            </RNModal>
+                        )}
+                    </>
+                )}
+            </View>
+            <View style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 8,
+                zIndex: 1001,
+            }}>
+                {props.onModelModeChange && (
+                    <Pressable hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }} onPress={() => { hapticsLight(); setShowSettings(prev => prev === 'model' ? false : 'model'); }} style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                            {/* The model labels are vendor-less ("5.4", "3.8 Flash"), so the mark
+                                sits here to say whose model this session runs. Not pressable on its
+                                own - the vendor of a session cannot change. */}
+                            <View style={{ width: AGENT_MARK_SLOT, height: AGENT_MARK_SLOT, alignItems: 'center', justifyContent: 'center' }}>
+                                <Image
+                                    source={agentFlavorIcons[agentFlavorKey]}
+                                    style={{ width: agentMarkArtworkSize[agentFlavorKey], height: agentMarkArtworkSize[agentFlavorKey] }}
+                                    contentFit="contain"
+                                    tintColor={agentFlavorKey === 'codex' ? theme.colors.textSecondary : undefined}
+                                />
+                            </View>
+                            <Text style={{
+                                fontSize: 11,
+                                color: theme.colors.textSecondary,
+                                ...Typography.default()
+                            }}>
+                                {currentModelLabel}
+                                {props.fastMode && <>{' '}<MaterialCommunityIcons name="lightning-bolt" size={11} color={FAST_MODE_ICON_COLOR} /></>}
+                            </Text>
+                        </View>
+                    </Pressable>
+                )}
+                {props.permissionMode && (
+                    <Pressable hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }} onPress={handlePermissionPress} style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}>
+                        <Text style={{
+                            fontSize: 11,
+                            color: props.permissionMode === 'acceptEdits' ? theme.colors.permission.acceptEdits :
+                                props.permissionMode === 'bypassPermissions' ? theme.colors.permission.yolo :
+                                    props.permissionMode === 'plan' ? theme.colors.permission.plan :
+                                        props.permissionMode === 'read-only' ? theme.colors.permission.readOnly :
+                                            props.permissionMode === 'on-failure' ? theme.colors.permission.onFailure :
+                                                props.permissionMode === 'full-auto' ? theme.colors.permission.yolo :
+                                                    props.permissionMode === 'auto' ? theme.colors.permission.bypass :
+                                                        props.permissionMode === 'auto_edit' ? theme.colors.permission.acceptEdits :
+                                                            props.permissionMode === 'yolo' ? theme.colors.permission.yolo :
+                                                    theme.colors.textSecondary,
+                            ...Typography.default()
+                        }}>
+                            {getPermissionModeLabel(props.permissionMode, true)}
+                        </Text>
+                    </Pressable>
+                )}
+            </View>
+        </View>
+    ) : null;
+
     return (
         <View style={[
             styles.container,
@@ -1336,258 +1610,7 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                     </>
                 )}
 
-                {/* Connection status, context warning, and permission mode */}
-                {(props.connectionStatus || contextWarning || props.permissionMode) && (
-                    <View style={{
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        paddingHorizontal: 16,
-                        paddingBottom: 4,
-                        minHeight: 20, // Fixed minimum height to prevent jumping
-                    }}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 11 }}>
-                            {props.connectionStatus && (
-                                <>
-                                    {(props.connectionStatus.onPress || props.connectionStatus.action) ? (
-                                        <Pressable
-                                            hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
-                                            onPress={() => {
-                                                if (props.connectionStatus?.action === 'openPermission') {
-                                                    hapticsLight();
-                                                    setShowSettings(prev => prev === 'permission' ? false : 'permission');
-                                                } else {
-                                                    props.connectionStatus?.onPress?.();
-                                                }
-                                            }}
-                                            style={({ pressed }) => ({
-                                                flexDirection: 'row',
-                                                alignItems: 'center',
-                                                gap: 4,
-                                                opacity: pressed ? 0.7 : 1
-                                            })}
-                                        >
-                                            {connectionStatusIndicator}
-                                        </Pressable>
-                                    ) : (
-                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                                            {connectionStatusIndicator}
-                                        </View>
-                                    )}
-                                    {/* CLI Status - only shown when provided (wizard only) */}
-                                    {props.connectionStatus.cliStatus && (
-                                        <>
-                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                                                <Text style={{
-                                                    fontSize: 11,
-                                                    color: props.connectionStatus.cliStatus.claude
-                                                        ? theme.colors.success
-                                                        : theme.colors.textDestructive,
-                                                    ...Typography.default()
-                                                }}>
-                                                    {props.connectionStatus.cliStatus.claude ? '✓' : '✗'}
-                                                </Text>
-                                                <Text style={{
-                                                    fontSize: 11,
-                                                    color: props.connectionStatus.cliStatus.claude
-                                                        ? theme.colors.success
-                                                        : theme.colors.textDestructive,
-                                                    ...Typography.default()
-                                                }}>
-                                                    claude
-                                                </Text>
-                                            </View>
-                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                                                <Text style={{
-                                                    fontSize: 11,
-                                                    color: props.connectionStatus.cliStatus.codex
-                                                        ? theme.colors.success
-                                                        : theme.colors.textDestructive,
-                                                    ...Typography.default()
-                                                }}>
-                                                    {props.connectionStatus.cliStatus.codex ? '✓' : '✗'}
-                                                </Text>
-                                                <Text style={{
-                                                    fontSize: 11,
-                                                    color: props.connectionStatus.cliStatus.codex
-                                                        ? theme.colors.success
-                                                        : theme.colors.textDestructive,
-                                                    ...Typography.default()
-                                                }}>
-                                                    codex
-                                                </Text>
-                                            </View>
-                                            {props.connectionStatus.cliStatus.gemini !== undefined && (
-                                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                                                    <Text style={{
-                                                        fontSize: 11,
-                                                        color: props.connectionStatus.cliStatus.gemini
-                                                            ? theme.colors.success
-                                                            : theme.colors.textDestructive,
-                                                        ...Typography.default()
-                                                    }}>
-                                                        {props.connectionStatus.cliStatus.gemini ? '✓' : '✗'}
-                                                    </Text>
-                                                    <Text style={{
-                                                        fontSize: 11,
-                                                        color: props.connectionStatus.cliStatus.gemini
-                                                            ? theme.colors.success
-                                                            : theme.colors.textDestructive,
-                                                        ...Typography.default()
-                                                    }}>
-                                                        gemini
-                                                    </Text>
-                                                </View>
-                                            )}
-                                        </>
-                                    )}
-                                </>
-                            )}
-                            {contextWarning && (
-                                <>
-                                    <View
-                                        ref={contextDetailsAnchorRef}
-                                        style={{
-                                            position: 'relative',
-                                            marginLeft: props.connectionStatus ? 8 : 0,
-                                            zIndex: isContextDetailsVisible ? 1002 : 1,
-                                        }}
-                                    >
-                                        <Pressable
-                                            onPress={() => {
-                                                hapticsLight();
-                                                showContextDetailsFromPress();
-                                            }}
-                                            onHoverIn={() => {
-                                                if (contextDetailsHoverTimerRef.current) {
-                                                    clearTimeout(contextDetailsHoverTimerRef.current);
-                                                }
-                                                contextDetailsHoverTimerRef.current = setTimeout(() => {
-                                                    setIsContextDetailsHovered(true);
-                                                    contextDetailsHoverTimerRef.current = null;
-                                                }, 600);
-                                            }}
-                                            onHoverOut={() => {
-                                                if (contextDetailsHoverTimerRef.current) {
-                                                    clearTimeout(contextDetailsHoverTimerRef.current);
-                                                    contextDetailsHoverTimerRef.current = null;
-                                                }
-                                                setIsContextDetailsHovered(false);
-                                            }}
-                                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                                        >
-                                            <Text style={{
-                                                fontSize: 11,
-                                                color: contextWarning.color,
-                                                ...Typography.default()
-                                            }}>
-                                                {props.connectionStatus ? '• ' : ''}{contextWarning.text}
-                                            </Text>
-                                        </Pressable>
-                                        {isContextDetailsInlineVisible && (
-                                            <View
-                                                style={{
-                                                    position: 'absolute',
-                                                    left: 0,
-                                                    bottom: CONTEXT_DETAILS_TOOLTIP_GAP,
-                                                    minWidth: CONTEXT_DETAILS_TOOLTIP_WIDTH,
-                                                    paddingHorizontal: 10,
-                                                    paddingVertical: 8,
-                                                    borderRadius: 10,
-                                                    backgroundColor: theme.colors.surface,
-                                                    borderWidth: 0.5,
-                                                    borderColor: theme.colors.modal.border,
-                                                    shadowColor: theme.colors.shadow.color,
-                                                    shadowOffset: { width: 0, height: 2 },
-                                                    shadowOpacity: theme.colors.shadow.opacity,
-                                                    shadowRadius: 6,
-                                                    elevation: 8,
-                                                }}
-                                            >
-                                                <Text style={{
-                                                    fontSize: 12,
-                                                    lineHeight: 20,
-                                                    color: theme.colors.text,
-                                                    ...Typography.default()
-                                                }}>
-                                                {contextWarning.details}
-                                            </Text>
-                                        </View>
-                                    )}
-                                    </View>
-                                    {Platform.OS === 'ios' ? (
-                                        isContextDetailsPinned && contextDetailsAnchor ? (
-                                            <FullWindowOverlay>
-                                                {contextDetailsPopover}
-                                            </FullWindowOverlay>
-                                        ) : null
-                                    ) : (
-                                        <RNModal
-                                            transparent
-                                            visible={Platform.OS !== 'web' && isContextDetailsPinned && !!contextDetailsAnchor}
-                                            animationType="none"
-                                            onRequestClose={() => setIsContextDetailsPinned(false)}
-                                        >
-                                            {contextDetailsPopover}
-                                        </RNModal>
-                                    )}
-                                </>
-                            )}
-                        </View>
-                        <View style={{
-                            flexDirection: 'row',
-                            alignItems: 'center',
-                            gap: 8,
-                            zIndex: 1001,
-                        }}>
-                            {props.onModelModeChange && (
-                                <Pressable hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }} onPress={() => { hapticsLight(); setShowSettings(prev => prev === 'model' ? false : 'model'); }} style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}>
-                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                                        {/* The model labels are vendor-less ("5.4", "3.8 Flash"), so the mark
-                                            sits here to say whose model this session runs. Not pressable on its
-                                            own - the vendor of a session cannot change. */}
-                                        <View style={{ width: AGENT_MARK_SLOT, height: AGENT_MARK_SLOT, alignItems: 'center', justifyContent: 'center' }}>
-                                            <Image
-                                                source={agentFlavorIcons[agentFlavorKey]}
-                                                style={{ width: agentMarkArtworkSize[agentFlavorKey], height: agentMarkArtworkSize[agentFlavorKey] }}
-                                                contentFit="contain"
-                                                tintColor={agentFlavorKey === 'codex' ? theme.colors.textSecondary : undefined}
-                                            />
-                                        </View>
-                                        <Text style={{
-                                            fontSize: 11,
-                                            color: theme.colors.textSecondary,
-                                            ...Typography.default()
-                                        }}>
-                                            {currentModelLabel}
-                                            {props.fastMode && <>{' '}<MaterialCommunityIcons name="lightning-bolt" size={11} color={FAST_MODE_ICON_COLOR} /></>}
-                                        </Text>
-                                    </View>
-                                </Pressable>
-                            )}
-                            {props.permissionMode && (
-                                <Pressable hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }} onPress={handlePermissionPress} style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}>
-                                    <Text style={{
-                                        fontSize: 11,
-                                        color: props.permissionMode === 'acceptEdits' ? theme.colors.permission.acceptEdits :
-                                            props.permissionMode === 'bypassPermissions' ? theme.colors.permission.yolo :
-                                                props.permissionMode === 'plan' ? theme.colors.permission.plan :
-                                                    props.permissionMode === 'read-only' ? theme.colors.permission.readOnly :
-                                                        props.permissionMode === 'on-failure' ? theme.colors.permission.onFailure :
-                                                            props.permissionMode === 'full-auto' ? theme.colors.permission.yolo :
-                                                                props.permissionMode === 'auto' ? theme.colors.permission.bypass :
-                                                                    props.permissionMode === 'auto_edit' ? theme.colors.permission.acceptEdits :
-                                                                        props.permissionMode === 'yolo' ? theme.colors.permission.yolo :
-                                                                theme.colors.textSecondary,
-                                        ...Typography.default()
-                                    }}>
-                                        {getPermissionModeLabel(props.permissionMode, true)}
-                                    </Text>
-                                </Pressable>
-                            )}
-                        </View>
-                    </View>
-                )}
+                {!statusInPanel && statusBar}
 
                 {/* Box 1: Context Information (Machine + Path) - Only show if either exists */}
                 {(props.machineName !== undefined || props.currentPath) && (
@@ -1711,8 +1734,13 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                 {/* Box 2: Action Area (Input + Send) */}
                 <View
                     ref={dropZoneRef}
-                    style={[styles.unifiedPanel, props.panelSideMargin && { marginHorizontal: 8 }]}
+                    style={[styles.unifiedPanel, props.panelSideMargin && { marginHorizontal: 8 }, useGlassPanel && styles.unifiedPanelGlass]}
                 >
+                    {useGlassPanel && (
+                        <GlassView pointerEvents="none" glassEffectStyle="regular" style={styles.glassBackground} />
+                    )}
+
+                    {statusInPanel && statusBar}
                     {/* Drag overlay */}
                     {isDragging && <View style={styles.dragOverlay} />}
 

@@ -31,6 +31,13 @@ import { t } from '@/text';
 import { tracking, trackMessageSent } from '@/track';
 import { handleImagePasteEvent } from '@/utils/imagePaste';
 import { isRunningOnMac } from '@/utils/platform';
+import { softHeaderOptions } from '@/components/navigation/softHeader';
+import { isLiquidGlassAvailable } from 'expo-glass-effect';
+import { useSharedValue } from 'react-native-reanimated';
+
+// iOS 26+ with Liquid Glass: the composer floats over the conversation as glass, and the list
+// scrolls on under it behind the soft bottom scroll edge effect.
+const floatingComposerAvailable = Platform.OS === 'ios' && !isRunningOnMac() && isLiquidGlassAvailable();
 import { useDeviceType, useIsLandscape, useIsTablet } from '@/utils/responsive';
 import { formatPathRelativeToHome, generateCopyTitle, getSessionAvatarId, getSessionName, useSessionStatus, copySessionMetadata, copySessionModeSettings } from '@/utils/sessionUtils';
 import { canEditSession, canForkSession } from '@/utils/sessionLifecycle';
@@ -78,6 +85,12 @@ export const SessionView = React.memo((props: { id: string }) => {
     const shouldUseTransparentNativeHeader = Platform.OS === 'ios' && !isRunningOnMac() && !shouldHideHeader;
     const realtimeStatus = useRealtimeStatus();
     const isTablet = useIsTablet();
+    // Voice status bar below header - not on tablet (shown in sidebar), hidden in landscape phone
+    const showVoiceStatusBar = !(shouldUseCompactLandscapeSessionLayout && Platform.OS !== 'web') && !isTablet && realtimeStatus !== 'disconnected';
+    // On iOS the conversation runs under the transparent header. The voice bar is a fixed row, so
+    // while it shows it takes the header's place at the top and the list starts below it.
+    const headerInset = shouldUseTransparentNativeHeader ? headerHeight : 0;
+    const listUnderHeader = shouldUseTransparentNativeHeader && !showVoiceStatusBar;
     const { width: screenWidth } = useWindowDimensions();
     const runningTaskCount = useOrchestratorRunningTaskCount(sessionId);
     const hasRuns = useOrchestratorHasRuns(sessionId);
@@ -231,9 +244,14 @@ export const SessionView = React.memo((props: { id: string }) => {
             <Stack.Screen
                 options={{
                     headerShown: !shouldHideHeader,
-                    headerTransparent: shouldUseTransparentNativeHeader,
+                    ...(shouldUseTransparentNativeHeader ? softHeaderOptions : {}),
+                    ...(shouldUseTransparentNativeHeader && floatingComposerAvailable
+                        ? { scrollEdgeEffects: { top: 'soft', bottom: 'soft' } as const }
+                        : {}),
                     headerTitleAlign: isNarrowPhone ? 'left' : 'center',
-                    headerTitle: () => (
+                    // The soft scroll-edge effect needs plain strings: a custom title view makes
+                    // UIKit drop both the effect and the subtitle (iOS centers the title regardless).
+                    headerTitle: shouldUseTransparentNativeHeader ? headerProps.title : () => (
                         <ChatHeaderTitle
                             title={headerProps.title}
                             subtitle={headerProps.subtitle}
@@ -241,6 +259,8 @@ export const SessionView = React.memo((props: { id: string }) => {
                             width={isNarrowPhone ? (Platform.OS === 'ios' ? leftAlignTitleWidth : undefined) : headerTitleWidth}
                         />
                     ),
+                    headerSubtitle: shouldUseTransparentNativeHeader ? headerProps.subtitle : undefined,
+                    headerSubtitleColor: shouldUseTransparentNativeHeader ? theme.colors.textSecondary : undefined,
                     headerLeft: Platform.OS === 'web' ? () => (
                         <HeaderBackButton
                             tintColor={theme.colors.header.tint}
@@ -265,13 +285,13 @@ export const SessionView = React.memo((props: { id: string }) => {
             />
 
             {/* Content based on state */}
-            <View style={{ flex: 1, paddingTop: shouldUseTransparentNativeHeader ? headerHeight : 0 }}>
-                {/* Voice status bar below header - not on tablet (shown in sidebar), hidden in landscape phone */}
-                {!(shouldUseCompactLandscapeSessionLayout && Platform.OS !== 'web') && !isTablet && realtimeStatus !== 'disconnected' && (
+            <View style={{ flex: 1 }}>
+                {showVoiceStatusBar && (
                     <VoiceAssistantStatusBar
                         variant="full"
                         style={{
                             position: 'relative',
+                            marginTop: headerInset,
                             zIndex: 20,
                             elevation: 20,
                         }}
@@ -296,7 +316,7 @@ export const SessionView = React.memo((props: { id: string }) => {
                     </View>
                 ) : session ? (
                     // Normal session view
-                    <SessionViewLoaded key={sessionId} sessionId={sessionId} session={session} />
+                    <SessionViewLoaded key={sessionId} sessionId={sessionId} session={session} headerInset={headerInset} listUnderHeader={listUnderHeader} />
                 ) : null}
             </View>
         </>
@@ -304,8 +324,18 @@ export const SessionView = React.memo((props: { id: string }) => {
 });
 
 
-function SessionViewLoaded({ sessionId, session }: { sessionId: string, session: Session }) {
+/**
+ * `headerInset` is the height of a header drawn over this view (the transparent iOS header), zero
+ * otherwise; `listUnderHeader` says whether the conversation starts under it or below a fixed row.
+ */
+function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }: { sessionId: string, session: Session, headerInset: number, listUnderHeader: boolean }) {
     const { theme } = useUnistyles();
+    // iOS (not Catalyst) uses the safe-area chat layout: the composer sits a margin above the
+    // home indicator and rides the keyboard, and the list lifts its content natively to follow.
+    const useNativeChatLayout = Platform.OS === 'ios' && !isRunningOnMac();
+    const useFloatingComposer = useNativeChatLayout && floatingComposerAvailable;
+    // Written by AgentContentView as the floating composer lays out, read by the list on the UI thread.
+    const composerHeight = useSharedValue(0);
     const router = useRouter();
     const safeArea = useSafeAreaInsets();
     const isFocused = useIsFocused();
@@ -1068,19 +1098,24 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
                         onMinimapItemsChange={setMinimapItems}
                         onActiveMessageIdChange={setMinimapActiveMessageId}
                         onRegisterMinimapJump={handleRegisterMinimapJump}
+                        headerOverlayInset={headerInset > 0 ? (listUnderHeader ? headerInset : 0) : undefined}
+                        keyboardChatScroll={useNativeChatLayout}
+                        composerInset={useFloatingComposer ? composerHeight : undefined}
                     />
                 )}
             </Deferred>
         </>
     );
+    // The placeholder fills the area under the header too; padding it by the header keeps it
+    // centered in the part that is actually visible.
     const placeholder = messages.length === 0 ? (
-        <>
+        <View style={{ paddingTop: listUnderHeader ? headerInset : 0 }}>
             {isLoaded ? (
                 <EmptyMessages session={session} />
             ) : (
                 <ActivityIndicator size="small" color={theme.colors.textSecondary} />
             )}
-        </>
+        </View>
     ) : null;
 
     const canEdit = canEditSession(session);
@@ -1147,6 +1182,7 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
         <AgentInput
             ref={inputRef}
             panelSideMargin
+            glassPanel={useFloatingComposer}
             placeholder={t('session.inputPlaceholder')}
             value={message}
             onChangeText={setMessage}
@@ -1291,7 +1327,7 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
                     onPress={handleDismissCliWarning}
                     style={{
                         position: 'absolute',
-                        top: 8, // Position at top of content area (padding handled by parent)
+                        top: 8 + headerInset, // Top of the content area, below a header drawn over it
                         alignSelf: 'center',
                         backgroundColor: '#FFF3CD',
                         borderRadius: 100, // Fully rounded pill
@@ -1324,9 +1360,12 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
                 ref={dropZoneRef}
                 onLayout={(event) => setContentAreaWidth(event.nativeEvent.layout.width)}
                 {...edgeTouchHandlers}
-                style={{ flexBasis: 0, flexGrow: 1, position: 'relative', paddingBottom: safeArea.bottom + ((isRunningOnMac() || Platform.OS === 'web') ? 8 : 0) }}
+                style={{ flexBasis: 0, flexGrow: 1, position: 'relative', paddingBottom: useNativeChatLayout ? 0 : safeArea.bottom + ((isRunningOnMac() || Platform.OS === 'web') ? 8 : 0) }}
             >
                 <AgentContentView
+                    safeAreaLayout={useNativeChatLayout}
+                    floatingInput={useFloatingComposer}
+                    composerHeight={composerHeight}
                     content={content}
                     input={input}
                     placeholder={placeholder}

@@ -4,6 +4,7 @@ import { View } from 'react-native';
 import { ScrollView } from 'react-native-gesture-handler';
 import { useKeyboardState } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import type { SharedValue } from 'react-native-reanimated';
 
 interface AgentContentViewProps {
     input?: React.ReactNode | null;
@@ -11,6 +12,8 @@ interface AgentContentViewProps {
     placeholder?: React.ReactNode | null;
     betweenContentAndInput?: React.ReactNode | null;
     safeAreaLayout?: boolean;
+    floatingInput?: boolean;
+    composerHeight?: SharedValue<number>;
 }
 
 export const AgentContentView: React.FC<AgentContentViewProps> = React.memo(({ input, content, placeholder, betweenContentAndInput }) => {

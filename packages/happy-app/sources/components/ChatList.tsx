@@ -1,9 +1,11 @@
 import * as React from 'react';
 import { useSession, useSessionMessages, useProfile, useSetting, storage } from "@/sync/storage";
-import { ActivityIndicator, Platform, Pressable, Text, View, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type ScrollViewProps } from 'react-native';
 import { useCallback, useRef, useState } from 'react';
 import { LegendList, LegendListRef, LegendListRenderItemProps } from '@legendapp/list/react-native';
 import { useHeaderHeight } from '@/utils/responsive';
+import { KeyboardChatScrollView, useReanimatedKeyboardAnimation } from 'react-native-keyboard-controller';
+import Animated, { useAnimatedStyle, type SharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useUnistyles } from 'react-native-unistyles';
 import { Ionicons } from '@expo/vector-icons';
@@ -45,7 +47,7 @@ export interface ForkMessageRequest {
     skipDraft: boolean;
 }
 
-export const ChatList = React.memo((props: { session: Session; onFillInput?: (text: string, allOptions?: string[]) => void; onLoadMore?: () => void | Promise<void>; onForkMessage?: (request: ForkMessageRequest) => void; forkingMessageId?: string | null; minimapCachedUserMessages?: MinimapMessage[]; onMinimapItemsChange?: (items: ConversationMinimapItem[]) => void; onActiveMessageIdChange?: (id: string | null) => void; onRegisterMinimapJump?: (jump: ((message: MinimapMessage) => void) | null) => void }) => {
+export const ChatList = React.memo((props: { session: Session; onFillInput?: (text: string, allOptions?: string[]) => void; onLoadMore?: () => void | Promise<void>; onForkMessage?: (request: ForkMessageRequest) => void; forkingMessageId?: string | null; minimapCachedUserMessages?: MinimapMessage[]; onMinimapItemsChange?: (items: ConversationMinimapItem[]) => void; onActiveMessageIdChange?: (id: string | null) => void; onRegisterMinimapJump?: (jump: ((message: MinimapMessage) => void) | null) => void; headerOverlayInset?: number; keyboardChatScroll?: boolean; composerInset?: SharedValue<number> }) => {
     const { messages, hasMore } = useSessionMessages(props.session.id);
     const profile = useProfile();
     const isSharedSession = !!(props.session.isShared || props.session.accessLevel);
@@ -69,6 +71,9 @@ export const ChatList = React.memo((props: { session: Session; onFillInput?: (te
             onMinimapItemsChange={props.onMinimapItemsChange}
             onActiveMessageIdChange={props.onActiveMessageIdChange}
             onRegisterMinimapJump={props.onRegisterMinimapJump}
+            headerOverlayInset={props.headerOverlayInset}
+            keyboardChatScroll={props.keyboardChatScroll}
+            composerInset={props.composerInset}
         />
     )
 });
@@ -78,11 +83,46 @@ const LIST_TOP_GAP = 32;
 /** The load-older row's padding (16 × 2) plus its small spinner, for the header size hint below. */
 const LOAD_OLDER_ROW_HEIGHT = 52;
 
-const ListHeader = React.memo(() => {
+/**
+ * How much of the list's top the header covers. A page that knows the real overlay height (the iOS
+ * chat, whose list runs under a transparent native header) passes it in; otherwise this falls back
+ * to the estimated header plus status bar.
+ */
+function useListTopInset(headerOverlayInset: number | undefined): number {
     const headerHeight = useHeaderHeight();
     const safeArea = useSafeAreaInsets();
-    return <View style={{ flexDirection: 'row', alignItems: 'center', height: headerHeight + safeArea.top + LIST_TOP_GAP }} />;
+    return headerOverlayInset ?? headerHeight + safeArea.top;
+}
+
+const ListHeader = React.memo((props: { headerOverlayInset?: number }) => {
+    const topInset = useListTopInset(props.headerOverlayInset);
+    return <View style={{ flexDirection: 'row', alignItems: 'center', height: topInset + LIST_TOP_GAP }} />;
 });
+
+/** The gap between the composer and the keyboard — matches `AgentContentView`'s safe-area layout. */
+const COMPOSER_MARGIN = 8;
+
+/**
+ * Lifts the list's content natively with the keyboard instead of shrinking its frame, so the list's
+ * top edge (and the header effect drawn over it) stays put while the composer rides the keyboard.
+ */
+const ChatScrollView = React.forwardRef<
+    React.ElementRef<typeof KeyboardChatScrollView>,
+    ScrollViewProps & { bottomInset: number; composerInset?: SharedValue<number> }
+>(({ bottomInset, composerInset, ...props }, ref) => (
+    <KeyboardChatScrollView
+        ref={ref}
+        // A composer floating over the list: keep the scroll range clear of it.
+        extraContentPadding={composerInset}
+        automaticallyAdjustContentInsets={false}
+        contentInsetAdjustmentBehavior="never"
+        keyboardDismissMode="interactive"
+        keyboardLiftBehavior="always"
+        offset={bottomInset - COMPOSER_MARGIN}
+        {...props}
+    />
+));
+ChatScrollView.displayName = 'ChatScrollView';
 
 const ListFooter = React.memo((props: { sessionId: string }) => {
     const session = useSession(props.sessionId)!;
@@ -200,9 +240,15 @@ const ChatListInternal = React.memo((props: {
     /** The landmark the rail should mark as the reader's — see `currentLandmark`. */
     onActiveMessageIdChange?: (id: string | null) => void,
     onRegisterMinimapJump?: (jump: ((message: MinimapMessage) => void) | null) => void,
+    /** Height of a header drawn over the list's top; see `useListTopInset`. */
+    headerOverlayInset?: number,
+    /** Scroll inside `KeyboardChatScrollView` (the iOS safe-area chat layout). */
+    keyboardChatScroll?: boolean,
+    /** Height of a composer floating over the list's bottom (see `AgentContentView`'s `floatingInput`). */
+    composerInset?: SharedValue<number>,
 }) => {
     const { theme } = useUnistyles();
-    const headerHeight = useHeaderHeight();
+    const listTopInset = useListTopInset(props.headerOverlayInset);
     const safeArea = useSafeAreaInsets();
     const listRef = useRef<LegendListRef | null>(null);
     const [viewportHeight, setViewportHeight] = useState(0);
@@ -644,18 +690,37 @@ const ChatListInternal = React.memo((props: {
     // content is the oldest message once the list is not inverted.
     const listHeader = React.useMemo(() => (
         <View>
-            <ListHeader />
+            <ListHeader headerOverlayInset={props.headerOverlayInset} />
             {props.hasMore && (
                 <View style={{ paddingVertical: 16, alignItems: 'center' }}>
                     <ActivityIndicator size="small" color={theme.colors.textSecondary} />
                 </View>
             )}
         </View>
-    ), [props.hasMore, theme.colors.textSecondary]);
+    ), [props.hasMore, props.headerOverlayInset, theme.colors.textSecondary]);
 
     // Height of that header, so the list can lay out its first frame without waiting a commit to
     // measure it. Exact, not estimated: it is the same arithmetic `ListHeader` renders with.
-    const listHeaderSize = headerHeight + safeArea.top + LIST_TOP_GAP + (props.hasMore ? LOAD_OLDER_ROW_HEIGHT : 0);
+    const listHeaderSize = listTopInset + LIST_TOP_GAP + (props.hasMore ? LOAD_OLDER_ROW_HEIGHT : 0);
+
+    const keyboardBottomInset = safeArea.bottom;
+    const renderScrollComponent = React.useCallback(
+        (scrollProps: ScrollViewProps) => <ChatScrollView {...scrollProps} bottomInset={keyboardBottomInset} composerInset={props.composerInset} />,
+        [keyboardBottomInset, props.composerInset],
+    );
+
+    // The list's frame no longer shrinks for the keyboard, so the controls floating over its
+    // bottom edge ride the keyboard the same way the composer does (KeyboardStickyView's offset).
+    const { height: keyboardHeight, progress: keyboardProgress } = useReanimatedKeyboardAnimation();
+    // A floating composer covers the list's bottom, so they sit above it as well.
+    const composerInset = props.composerInset;
+    const floatingControlsStyle = useAnimatedStyle(() => (props.keyboardChatScroll ? {
+        transform: [{
+            translateY: keyboardHeight.value
+                + (keyboardBottomInset - COMPOSER_MARGIN) * keyboardProgress.value
+                - (composerInset?.value ?? 0),
+        }],
+    } : {}), [props.keyboardChatScroll, keyboardBottomInset, composerInset]);
 
 
     return (
@@ -699,8 +764,10 @@ const ChatListInternal = React.memo((props: {
                 onStartReachedThreshold={CHAT_HISTORY_THRESHOLD}
                 onViewableItemsChanged={handleViewableItemsChanged}
                 viewabilityConfig={viewabilityConfig}
+                renderScrollComponent={props.keyboardChatScroll ? renderScrollComponent : undefined}
             />
 
+            <Animated.View pointerEvents="box-none" style={[StyleSheet.absoluteFill, floatingControlsStyle]}>
             {/* Bottom-centered hint shown while a minimap jump is paging in older messages */}
             {isLocating && (
                 <View
@@ -800,6 +867,7 @@ const ChatListInternal = React.memo((props: {
                     </View>
                 </View>
             )}
+            </Animated.View>
         </View>
     )
 });
