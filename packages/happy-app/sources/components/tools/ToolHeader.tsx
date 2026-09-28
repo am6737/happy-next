@@ -10,44 +10,48 @@ interface ToolHeaderProps {
     maxWidth?: number;
 }
 
-export function ToolHeader({ tool, maxWidth }: ToolHeaderProps) {
-    const { theme } = useUnistyles();
+/**
+ * The title and subtitle `ToolHeader` shows, as plain strings, for headers that cannot take a
+ * custom title view (the iOS soft header drops its edge effect and subtitle as soon as one is set).
+ */
+export function getToolHeaderText(tool: ToolCall): { title: string; subtitle: string | null } {
     const knownTool = knownTools[tool.name as keyof typeof knownTools] as any;
 
-    // Extract status first for Bash tool to potentially use as title
-    let status: string | null = null;
-    if (knownTool && typeof knownTool.extractStatus === 'function') {
-        const extractedStatus = knownTool.extractStatus({ tool, metadata: null });
-        if (typeof extractedStatus === 'string' && extractedStatus) {
-            status = extractedStatus;
-        }
-    }
-
     // Handle optional title and function type
-    let toolTitle = tool.name;
+    let title = tool.name;
     if (knownTool?.title) {
         if (typeof knownTool.title === 'function') {
-            toolTitle = knownTool.title({ tool, metadata: null });
+            title = knownTool.title({ tool, metadata: null });
         } else {
-            toolTitle = knownTool.title;
+            title = knownTool.title;
         }
     }
-
-    let icon = knownTool?.icon ? knownTool.icon(18, theme.colors.header.tint) : <Ionicons name="construct-outline" size={18} color={theme.colors.header.tint} />;
 
     // Special handling for MCP tools
     if (tool.name.startsWith('mcp__') || tool.name.startsWith('mcp:')) {
-        toolTitle = formatMCPTitle(tool);
-        icon = formatMCPIcon(tool, 18, theme.colors.header.tint);
+        title = formatMCPTitle(tool);
     }
-    
+
     // Extract subtitle using the same logic as ToolView
-    let subtitle = null;
+    let subtitle: string | null = null;
     if (tool.name !== 'view_image' && knownTool && typeof knownTool.extractSubtitle === 'function') {
         const extractedSubtitle = knownTool.extractSubtitle({ tool, metadata: null });
         if (typeof extractedSubtitle === 'string' && extractedSubtitle) {
             subtitle = extractedSubtitle;
         }
+    }
+
+    return { title, subtitle };
+}
+
+export function ToolHeader({ tool, maxWidth }: ToolHeaderProps) {
+    const { theme } = useUnistyles();
+    const knownTool = knownTools[tool.name as keyof typeof knownTools] as any;
+    const { title: toolTitle, subtitle } = getToolHeaderText(tool);
+
+    let icon = knownTool?.icon ? knownTool.icon(18, theme.colors.header.tint) : <Ionicons name="construct-outline" size={18} color={theme.colors.header.tint} />;
+    if (tool.name.startsWith('mcp__') || tool.name.startsWith('mcp:')) {
+        icon = formatMCPIcon(tool, 18, theme.colors.header.tint);
     }
 
     return (

@@ -78,6 +78,7 @@ export default function RootLayout() {
             <Stack.Screen
                 name="github/index"
                 options={{
+                    ...softHeaderOptions,
                     headerShown: true,
                     headerTitle: t('tabs.github'),
                 }}
@@ -117,6 +118,7 @@ export default function RootLayout() {
             <Stack.Screen
                 name="session/[id]/message/[messageId]"
                 options={{
+                    ...softHeaderOptions,
                     headerShown: true,
                     headerTitle: t('common.message')
                 }}
@@ -436,6 +438,7 @@ export default function RootLayout() {
             <Stack.Screen
                 name="text-selection"
                 options={{
+                    ...softHeaderOptions,
                     headerShown: true,
                     headerTitle: t('textSelection.title'),
                 }}

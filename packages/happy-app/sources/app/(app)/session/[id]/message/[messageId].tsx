@@ -1,11 +1,11 @@
 import * as React from 'react';
 import { useLocalSearchParams, Stack, useRouter } from "expo-router";
-import { Text, View, ActivityIndicator, Pressable, useWindowDimensions } from "react-native";
+import { Text, View, ActivityIndicator, Pressable, useWindowDimensions, Platform } from "react-native";
 import { useMessage, useSession, useSessionMessages } from "@/sync/storage";
 import { sync } from '@/sync/sync';
 import { Deferred } from "@/components/Deferred";
 import { ToolFullView } from '@/components/tools/ToolFullView';
-import { ToolHeader } from '@/components/tools/ToolHeader';
+import { ToolHeader, getToolHeaderText } from '@/components/tools/ToolHeader';
 import { ToolStatusIndicator } from '@/components/tools/ToolStatusIndicator';
 import { Message } from '@/sync/typesMessage';
 import type { Metadata } from '@/sync/storageTypes';
@@ -16,6 +16,8 @@ import { layout } from '@/components/layout';
 import { getNativeHeaderTitleWidth } from '@/utils/nativeHeaderTitleWidth';
 import { LongPressCopy, useCopySelectable } from '@/components/LongPressCopy';
 import { getToolImagePath } from '@/utils/toolImagePath';
+import { isRunningOnMac } from '@/utils/platform';
+import { softHeaderOptions, useSoftHeaderInset } from '@/components/navigation/softHeader';
 
 const stylesheet = StyleSheet.create((theme) => ({
     loadingContainer: {
@@ -44,6 +46,7 @@ export default React.memo(() => {
     const { theme } = useUnistyles();
     const styles = stylesheet;
     const { width: screenWidth } = useWindowDimensions();
+    const useNativeSoftHeader = Platform.OS === 'ios' && !isRunningOnMac();
 
     const headerTitleMaxWidth = getNativeHeaderTitleWidth({
         screenWidth: Math.min(screenWidth, layout.headerMaxWidth),
@@ -90,11 +93,19 @@ export default React.memo(() => {
         );
     }
     
+    const toolHeaderText = message.kind === 'tool-call' && message.tool ? getToolHeaderText(message.tool) : null;
+
     return (
         <>
             {message && message.kind === 'tool-call' && message.tool && (
                 <Stack.Screen
-                    options={{
+                    options={useNativeSoftHeader ? {
+                        ...softHeaderOptions,
+                        headerTitle: toolHeaderText!.title,
+                        headerSubtitle: toolHeaderText!.subtitle ?? undefined,
+                        headerSubtitleColor: theme.colors.textSecondary,
+                        headerRight: () => <ToolStatusIndicator tool={message.tool} />,
+                    } : {
                         headerTitle: () => <ToolHeader tool={message.tool} maxWidth={headerTitleMaxWidth} />,
                         headerRight: () => <ToolStatusIndicator tool={message.tool} />,
                         headerStyle: {
@@ -115,6 +126,7 @@ export default React.memo(() => {
 function FullView(props: { message: Message; sessionId: string; metadata: Metadata | null }) {
     const styles = stylesheet;
     const selectable = useCopySelectable();
+    const softHeaderInset = useSoftHeaderInset();
 
     if (props.message.kind === 'tool-call') {
         const tool = props.message.tool;
@@ -125,7 +137,7 @@ function FullView(props: { message: Message; sessionId: string; metadata: Metada
     if (props.message.kind === 'agent-text') {
         return (
             <LongPressCopy text={props.message.text}>
-                <View style={styles.fullViewContainer}>
+                <View style={[styles.fullViewContainer, softHeaderInset > 0 && { paddingTop: 16 + softHeaderInset }]}>
                     <Text selectable={selectable} style={styles.messageText}>{props.message.text}</Text>
                 </View>
             </LongPressCopy>
@@ -134,7 +146,7 @@ function FullView(props: { message: Message; sessionId: string; metadata: Metada
     if (props.message.kind === 'user-text') {
         return (
             <LongPressCopy text={props.message.text}>
-                <View style={styles.fullViewContainer}>
+                <View style={[styles.fullViewContainer, softHeaderInset > 0 && { paddingTop: 16 + softHeaderInset }]}>
                     <Text selectable={selectable} style={styles.messageText}>{props.message.text}</Text>
                 </View>
             </LongPressCopy>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, Pressable, useWindowDimensions } from 'react-native';
+import { View, Text, Pressable, useWindowDimensions, Platform } from 'react-native';
 import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -18,6 +18,8 @@ import { SandboxDocument } from '@/components/FilePreview/SandboxDocument';
 import { buildMarkdownDocument } from '@/components/FilePreview/staticDocument';
 import { layout } from '@/components/layout';
 import { messageDocumentView } from '@/components/messageDocument';
+import { isRunningOnMac } from '@/utils/platform';
+import { useSoftHeaderInset } from '@/components/navigation/softHeader';
 
 /**
  * A block of message text too large to sit in the chat list, opened as its own screen.
@@ -42,6 +44,8 @@ export default function TextSelectionScreen() {
     const [attempt, setAttempt] = React.useState(0);
     const { width: screenWidth } = useWindowDimensions();
     const bottomPadding = insets.bottom + 16;
+    const useNativeSoftHeader = Platform.OS === 'ios' && !isRunningOnMac();
+    const softHeaderInset = useSoftHeaderInset();
 
     const headerTitleMaxWidth = getNativeHeaderTitleWidth({ screenWidth, rightActionCount: 1 });
 
@@ -93,7 +97,7 @@ export default function TextSelectionScreen() {
 
     if (loading) {
         return (
-            <View style={styles.container}>
+            <View style={[styles.container, { paddingTop: softHeaderInset }]}>
                 <Text style={[styles.loadingText, { color: theme.colors.textSecondary }]}>
                     {t('common.loading')}
                 </Text>
@@ -110,7 +114,7 @@ export default function TextSelectionScreen() {
         <View style={[styles.container, { backgroundColor: theme.colors.surface }]}>
             <Stack.Screen
                 options={{
-                    headerTitle: () => (
+                    headerTitle: useNativeSoftHeader ? t(view.titleKey) : () => (
                         <View style={{ alignItems: 'center', justifyContent: 'center', maxWidth: headerTitleMaxWidth }}>
                             <Text
                                 numberOfLines={1}
@@ -144,7 +148,10 @@ export default function TextSelectionScreen() {
                     ),
                 }}
             />
-            <FileViewTabs tabs={tabs} value={mode} onChange={setMode} />
+            {/* The tab bar is the screen's fixed top row, so it clears the soft header itself. */}
+            <View style={{ paddingTop: softHeaderInset }}>
+                <FileViewTabs tabs={tabs} value={mode} onChange={setMode} />
+            </View>
             {mode === 'preview' ? (
                 renderError ? (
                     <View style={styles.previewError}>

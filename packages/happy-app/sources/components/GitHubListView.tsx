@@ -18,6 +18,7 @@ import { useHappyAction } from '@/hooks/useHappyAction';
 import { getGitHubOAuthParams } from '@/sync/apiGithub';
 import { Image } from 'expo-image';
 import { useMainTabBottomPadding } from '@/hooks/useMainTabBottomPadding';
+import { useSoftHeaderInset } from '@/components/navigation/softHeader';
 import { FilterChipRow, IssueIcon, PullRequestIcon } from '@/components/repos';
 import type { GithubIssueScope, GithubPullScope } from '@/sync/apiGithubData';
 
@@ -188,6 +189,7 @@ export const GitHubListView = React.memo(({ onRepoChange, repoPickerTriggerRef }
     const router = useRouter();
     const auth = useAuth();
     const tabBottomPadding = useMainTabBottomPadding();
+    const softHeaderInset = useSoftHeaderInset();
 
     const [repoSearch, setRepoSearch] = React.useState('');
     const [debouncedRepoSearch, setDebouncedRepoSearch] = React.useState('');
@@ -603,7 +605,8 @@ export const GitHubListView = React.memo(({ onRepoChange, repoPickerTriggerRef }
             </Modal>
 
             {(tokenExpired || activeResult.tokenExpired) && !isLoading ? (
-                <View style={styles.listContent}>
+                // Not a scroll view, so UIKit does not inset it below the soft header.
+                <View style={[styles.listContent, { paddingTop: softHeaderInset }]}>
                     {listHeader}
                     <TokenExpiredCard onReconnect={handleReconnect} loading={reconnecting} />
                 </View>
