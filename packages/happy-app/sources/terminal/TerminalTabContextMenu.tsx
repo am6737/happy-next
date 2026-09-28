@@ -7,6 +7,7 @@ import { Typography } from '@/constants/Typography';
 import { ActionMenuModal } from '@/components/ActionMenuModal';
 import type { ActionMenuItem } from '@/components/ActionMenu';
 import { SessionContextMenuPortal } from '@/components/SessionContextMenuPortal';
+import { actionMenuSection, ContextMenuView, nativeContextMenuAvailable } from '@/components/ContextMenuView';
 
 /**
  * A menu on something that was right-clicked, or long-pressed where there is no
@@ -38,6 +39,8 @@ const ITEM_HEIGHT = 42;
 const MENU_PADDING = 8;
 const EDGE_GAP = 8;
 const LONG_PRESS_MS = 450;
+/** The tab's rounding (`TerminalTabBar`), which the lifted tab is clipped to. */
+const TAB_SHAPE = { borderRadius: 6 };
 /** A press this soon after a long press is the back half of that gesture. */
 const PRESS_AFTER_LONG_PRESS_MS = 1_000;
 
@@ -99,6 +102,16 @@ export function TerminalTabContextMenu({ items, title, children }: TerminalTabCo
             window.removeEventListener('scroll', handleScroll, true);
         };
     }, [close, position]);
+
+    if (nativeContextMenuAvailable) {
+        // iOS: the system context menu, lifting the tab with its actions beside it. Its actions
+        // run once the menu has closed, so a rename prompt is not raised over it.
+        return (
+            <ContextMenuView sections={[actionMenuSection(items)]} title={title} previewShape={TAB_SHAPE}>
+                {children}
+            </ContextMenuView>
+        );
+    }
 
     if (Platform.OS !== 'web') {
         const child = React.isValidElement(children)

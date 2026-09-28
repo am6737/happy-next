@@ -2,6 +2,7 @@ import * as React from 'react';
 import { Platform, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { requireNativeViewManager, requireOptionalNativeModule } from 'expo-modules-core';
 import { isRunningOnMac } from '@/utils/platform';
+import type { ActionMenuItem } from './ActionMenu';
 
 export type ContextMenuAction = {
     label: string;
@@ -22,6 +23,19 @@ export type ContextMenuSection = {
     palette?: boolean;
     items: ContextMenuAction[];
 };
+
+/** A page's `ActionMenuItem`s as one menu section, for a menu that was a bottom sheet before. */
+export function actionMenuSection(items: ActionMenuItem[]): ContextMenuSection {
+    return {
+        items: items.map((item) => ({
+            label: item.label,
+            onPress: item.onPress,
+            destructive: item.destructive,
+            disabled: item.disabled,
+            selected: item.selected,
+        })),
+    };
+}
 
 type NativeMenuElement = {
     type: 'action' | 'group';

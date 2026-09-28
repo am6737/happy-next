@@ -34,6 +34,7 @@ import { isRunningOnMac } from '@/utils/platform';
 import { softHeaderOptions, useSoftHeaderInset } from '@/components/navigation/softHeader';
 import { KeyboardCenteredEmpty } from '@/components/KeyboardCenteredEmpty';
 import { NativeMenu } from '@/components/NativeMenu';
+import { actionMenuSection, type ContextMenuSection } from '@/components/ContextMenuView';
 
 export default React.memo(function IssueCommentsPage() {
     const styles = stylesheet;
@@ -123,9 +124,9 @@ export default React.memo(function IssueCommentsPage() {
         setCommentMenuVisible(true);
     }, [githubLogin]);
 
-    const handleDeleteComment = React.useCallback(async () => {
-        if (!selectedComment || !credentials) return;
-        const commentToDelete = selectedComment;
+    const handleDeleteComment = React.useCallback(async (target?: RepoIssueComment) => {
+        const commentToDelete = target ?? selectedComment;
+        if (!commentToDelete || !credentials) return;
         const confirmed = await Modal.confirm(
             t('issueComments.deleteConfirmTitle'),
             t('issueComments.deleteConfirmMessage'),
@@ -151,9 +152,19 @@ export default React.memo(function IssueCommentsPage() {
         {
             label: t('issueComments.delete'),
             destructive: true,
-            onPress: handleDeleteComment,
+            onPress: () => handleDeleteComment(),
         },
     ], [selectedComment, startEditing, handleDeleteComment]);
+
+    // The same actions for the native context menu (iOS), which needs them per comment up front
+    // rather than for the comment a long press picked. Only one's own comments have any.
+    const commentMenuSections = React.useCallback((comment: RepoIssueComment): ContextMenuSection[] | undefined => {
+        if (!githubLogin || comment.author !== githubLogin) return undefined;
+        return [actionMenuSection([
+            { label: t('issueComments.edit'), onPress: () => startEditing(comment) },
+            { label: t('issueComments.delete'), destructive: true, onPress: () => handleDeleteComment(comment) },
+        ])];
+    }, [githubLogin, startEditing, handleDeleteComment]);
 
     const handlePickImage = React.useCallback(async (source: 'camera' | 'gallery') => {
         if (!credentials) return;
@@ -244,6 +255,7 @@ export default React.memo(function IssueCommentsPage() {
                     comment={item}
                     issueAuthor={issueAuthor}
                     onLongPress={() => handleCommentLongPress(item)}
+                    menuSections={commentMenuSections(item)}
                     isLast={index === comments.length - 1}
                 />
             )}

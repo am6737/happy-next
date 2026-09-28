@@ -7,6 +7,7 @@ import { Avatar } from '@/components/Avatar';
 import { MarkdownView } from '@/components/markdown/MarkdownView';
 import { formatTimeAgo, formatAbsoluteTime } from '@/data/repoUtils';
 import type { RepoIssueComment } from '@/data/mockRepos';
+import { ContextMenuView, nativeContextMenuAvailable, type ContextMenuSection } from '@/components/ContextMenuView';
 
 const ASSOCIATION_LABELS: Record<string, string> = {
     OWNER: 'Owner',
@@ -19,11 +20,13 @@ interface CommentItemProps {
     comment: RepoIssueComment;
     issueAuthor?: string;
     onLongPress?: () => void;
+    /** The comment's actions as a native context menu (iOS), in place of `onLongPress`. */
+    menuSections?: ContextMenuSection[];
     /** The thread's last comment: nothing below it to divide from, and the composer follows. */
     isLast?: boolean;
 }
 
-export function CommentItem({ comment, issueAuthor, onLongPress, isLast = false }: CommentItemProps) {
+export function CommentItem({ comment, issueAuthor, onLongPress, menuSections, isLast = false }: CommentItemProps) {
     const styles = stylesheet;
     const { theme } = useUnistyles();
     const [showAbsolute, setShowAbsolute] = React.useState(false);
@@ -73,6 +76,13 @@ export function CommentItem({ comment, issueAuthor, onLongPress, isLast = false 
         </>
     );
 
+    if (menuSections && nativeContextMenuAvailable) {
+        return (
+            <ContextMenuView sections={menuSections} style={[styles.commentItem, isLast && styles.commentItemLast]}>
+                {inner}
+            </ContextMenuView>
+        );
+    }
     if (onLongPress) {
         return (
             <Pressable onLongPress={onLongPress} style={[styles.commentItem, isLast && styles.commentItemLast]}>

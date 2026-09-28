@@ -23,6 +23,7 @@ import { getWorkspaceRepos } from '@/utils/workspaceRepos';
 import { RepoSelector } from '@/components/RepoSelector';
 import { softHeaderOptions, useSoftHeaderInset } from '@/components/navigation/softHeader';
 import { isRunningOnMac } from '@/utils/platform';
+import { actionMenuSection, ContextMenuView, nativeContextMenuAvailable } from '@/components/ContextMenuView';
 
 export default function FilesScreen() {
     const route = useRoute();
@@ -213,7 +214,7 @@ export default function FilesScreen() {
     }, [selectedRepoIndex]);
 
     // Long press menu
-    const handleLongPress = React.useCallback((file: GitFileStatus, staged: boolean) => {
+    const fileMenuItems = React.useCallback((file: GitFileStatus, staged: boolean): ActionMenuItem[] => {
         const items: ActionMenuItem[] = [];
         if (staged) {
             items.push({
@@ -231,9 +232,22 @@ export default function FilesScreen() {
             onPress: () => handleDiscardFile(file),
             destructive: true,
         });
-        setMenuItems(items);
-        setMenuVisible(true);
+        return items;
     }, [handleStageFile, handleUnstageFile, handleDiscardFile]);
+
+    const handleLongPress = React.useCallback((file: GitFileStatus, staged: boolean) => {
+        setMenuItems(fileMenuItems(file, staged));
+        setMenuVisible(true);
+    }, [fileMenuItems]);
+
+    // On iOS a file row's actions are its native context menu; elsewhere a long press opens the sheet.
+    const withFileMenu = (file: GitFileStatus, staged: boolean, row: React.ReactElement) => (
+        nativeContextMenuAvailable ? (
+            <ContextMenuView key={row.key} sections={[actionMenuSection(fileMenuItems(file, staged))]}>
+                {row}
+            </ContextMenuView>
+        ) : row
+    );
 
     // Load on mount and when repo selection changes
     React.useEffect(() => {
@@ -626,17 +640,17 @@ export default function FilesScreen() {
                                     )}
                                 </Pressable>
                                 {stagedFiles.map((file, index) => (
-                                    <Item
+                                    withFileMenu(file, true, <Item
                                         key={`staged-${file.fullPath}-${index}`}
                                         title={file.fileName}
                                         subtitle={renderFileSubtitle(file)}
                                         icon={renderFileIcon(file)}
                                         rightElement={renderRightElement(file, true)}
                                         onPress={() => handleFilePress(file, true)}
-                                        onLongPress={() => handleLongPress(file, true)}
+                                        onLongPress={nativeContextMenuAvailable ? undefined : () => handleLongPress(file, true)}
                                         showChevron={true}
                                         showDivider={index < stagedFiles.length - 1 || unstagedFiles.length > 0}
-                                    />
+                                    />)
                                 ))}
                             </>
                         )}
@@ -679,17 +693,17 @@ export default function FilesScreen() {
                                     )}
                                 </Pressable>
                                 {unstagedFiles.map((file, index) => (
-                                    <Item
+                                    withFileMenu(file, false, <Item
                                         key={`unstaged-${file.fullPath}-${index}`}
                                         title={file.fileName}
                                         subtitle={renderFileSubtitle(file)}
                                         icon={renderFileIcon(file)}
                                         rightElement={renderRightElement(file, false)}
                                         onPress={() => handleFilePress(file)}
-                                        onLongPress={() => handleLongPress(file, false)}
+                                        onLongPress={nativeContextMenuAvailable ? undefined : () => handleLongPress(file, false)}
                                         showChevron={true}
                                         showDivider={index < unstagedFiles.length - 1}
-                                    />
+                                    />)
                                 ))}
                             </>
                         )}
