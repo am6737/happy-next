@@ -1,16 +1,16 @@
 import * as React from 'react';
 import { useSession, useSessionMessages, useProfile, useSetting, storage } from "@/sync/storage";
-import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type ScrollViewProps } from 'react-native';
+import { ActivityIndicator, Platform, StyleSheet, Text, View, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type ScrollViewProps } from 'react-native';
 import { useCallback, useRef, useState } from 'react';
 import { LegendList, LegendListRef, LegendListRenderItemProps } from '@legendapp/list/react-native';
 import { useHeaderHeight } from '@/utils/responsive';
 import { floatingComposerBottomInset } from './floatingComposer';
 import { ChatScrollView } from './ChatScrollView';
+import { ScrollToBottomButton } from './ScrollToBottomButton';
 import { useChatOverlayStyle } from '@/hooks/useChatOverlayStyle';
 import Animated, { type SharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useUnistyles } from 'react-native-unistyles';
-import { Ionicons } from '@expo/vector-icons';
 import { MessageView } from './MessageView';
 import { ConversationMinimapItem } from './ConversationMinimap';
 import { Metadata, Session } from '@/sync/storageTypes';
@@ -795,46 +795,7 @@ const ChatListInternal = React.memo((props: {
                             paddingRight: 16,
                         }}
                     >
-                        <Pressable
-                            onPress={handleScrollToBottom}
-                            style={{
-                                backgroundColor: theme.colors.surfaceHighest,
-                                borderRadius: 20,
-                                width: 40,
-                                height: 40,
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                shadowColor: theme.colors.shadow.color,
-                                shadowOffset: { width: 0, height: 2 },
-                                shadowOpacity: theme.colors.shadow.opacity,
-                                shadowRadius: 4,
-                                elevation: 4,
-                            }}
-                        >
-                            <Ionicons name="chevron-down" size={24} color={theme.colors.text} />
-                            {unreadCount > 0 && (
-                                <View style={{
-                                    position: 'absolute',
-                                    top: -4,
-                                    right: -4,
-                                    backgroundColor: theme.colors.status.connected,
-                                    borderRadius: 10,
-                                    minWidth: 20,
-                                    height: 20,
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    paddingHorizontal: 4,
-                                }}>
-                                    <Text style={{
-                                        color: '#fff',
-                                        fontSize: 12,
-                                        fontWeight: '600',
-                                    }}>
-                                        {unreadCount > 99 ? '99+' : unreadCount}
-                                    </Text>
-                                </View>
-                            )}
-                        </Pressable>
+                        <ScrollToBottomButton onPress={handleScrollToBottom} unreadCount={unreadCount} />
                     </View>
                 </View>
             )}

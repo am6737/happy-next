@@ -1,6 +1,4 @@
-import { Platform } from 'react-native';
-import { isLiquidGlassAvailable } from 'expo-glass-effect';
-import { isRunningOnMac } from '@/utils/platform';
+import { liquidGlassAvailable } from './GlassSurface';
 
 /** The gap between the composer and the keyboard — shared by `AgentContentView` and the chat lists. */
 export const COMPOSER_MARGIN = 8;
@@ -10,7 +8,7 @@ export const COMPOSER_MARGIN = 8;
  * the list runs to the bottom of the screen and iOS draws the soft scroll edge under the composer.
  * Everywhere else the composer stacks below the list.
  */
-export const floatingComposerAvailable = Platform.OS === 'ios' && !isRunningOnMac() && isLiquidGlassAvailable();
+export const floatingComposerAvailable = liquidGlassAvailable;
 
 /**
  * Screen options for a chat screen with a floating composer, spread after `softHeaderOptions`:
