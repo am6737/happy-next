@@ -1121,9 +1121,10 @@ export default function OpenClawChatPage() {
                 bottomInset={composerInset ? floatingComposerBottomInset(safeArea.bottom) : safeArea.bottom}
                 topInset={softHeaderInset}
                 composerInset={composerInset}
+                listRef={listRef}
             />
         ),
-        [composerInset, safeArea.bottom, softHeaderInset],
+        [composerInset, safeArea.bottom, softHeaderInset, listRef],
     );
 
     // Keep the empty state inside the same keyboard-aware message list so it stays

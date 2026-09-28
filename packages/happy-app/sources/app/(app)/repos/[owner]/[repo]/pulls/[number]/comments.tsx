@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { View, Pressable, ActivityIndicator, Platform, useWindowDimensions, type ScrollViewProps } from 'react-native';
-import { LegendList } from '@legendapp/list/react-native';
+import { LegendList, type LegendListRef } from '@legendapp/list/react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { Ionicons } from '@expo/vector-icons';
@@ -150,6 +150,8 @@ export default React.memo(function PRCommentsPage() {
         </View>
     ), [loading, theme]);
 
+    const listRef = React.useRef<LegendListRef>(null);
+
     const renderScrollComponent = React.useCallback(
         (props: ScrollViewProps) => (
             <ChatScrollView
@@ -157,13 +159,15 @@ export default React.memo(function PRCommentsPage() {
                 bottomInset={composerInset ? floatingComposerBottomInset(insets.bottom) : insets.bottom}
                 topInset={softHeaderInset}
                 composerInset={composerInset}
+                listRef={listRef}
             />
         ),
-        [composerInset, insets.bottom, softHeaderInset],
+        [composerInset, insets.bottom, softHeaderInset, listRef],
     );
 
     const list = (
         <LegendList
+            ref={listRef}
             data={comments}
             estimatedItemSize={120}
             keyExtractor={(item) => String(item.id)}
@@ -185,7 +189,7 @@ export default React.memo(function PRCommentsPage() {
                 <ActivityIndicator style={{ paddingVertical: 16 }} color={theme.colors.textSecondary} />
             ) : null}
             renderScrollComponent={renderScrollComponent}
-            contentContainerStyle={[styles.list, { maxWidth: layout.maxWidth, alignSelf: 'center', width: '100%' }]}
+            contentContainerStyle={[styles.list, comments.length === 0 && styles.listEmpty, { maxWidth: layout.maxWidth, alignSelf: 'center', width: '100%' }]}
             style={{ flex: 1, backgroundColor: theme.colors.surface }}
             keyboardShouldPersistTaps="handled"
             // An empty thread only shows its centered placeholder; the composer's inset would
@@ -282,8 +286,12 @@ const stylesheet = StyleSheet.create((theme) => ({
         flex: 1,
         backgroundColor: theme.colors.surface,
     },
-    list: {
+    // Only an empty thread stretches to the viewport, for its centered placeholder: stretched, a
+    // short thread would outgrow the room left above the composer and scroll.
+    listEmpty: {
         flexGrow: 1,
+    },
+    list: {
         paddingTop: 16,
         paddingHorizontal: 16,
         paddingBottom: COMPOSER_MARGIN,

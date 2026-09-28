@@ -686,7 +686,7 @@ const ChatListInternal = React.memo((props: {
     // measured from: the floating composer sits lower than the safe-area layout's.
     const keyboardBottomInset = props.composerInset ? floatingComposerBottomInset(safeArea.bottom) : safeArea.bottom;
     const renderScrollComponent = React.useCallback(
-        (scrollProps: ScrollViewProps) => <ChatScrollView {...scrollProps} bottomInset={keyboardBottomInset} topInset={listTopInset} composerInset={props.composerInset} />,
+        (scrollProps: ScrollViewProps) => <ChatScrollView {...scrollProps} bottomInset={keyboardBottomInset} topInset={listTopInset} composerInset={props.composerInset} listRef={listRef} />,
         [keyboardBottomInset, listTopInset, props.composerInset],
     );
 

@@ -2,6 +2,7 @@ import * as React from 'react';
 import { Platform, type ScrollViewProps } from 'react-native';
 import { KeyboardChatScrollView } from 'react-native-keyboard-controller';
 import type { SharedValue } from 'react-native-reanimated';
+import type { LegendListRef } from '@legendapp/list/react-native';
 import { COMPOSER_MARGIN } from './floatingComposer';
 
 export type ChatScrollViewProps = ScrollViewProps & {
@@ -11,6 +12,8 @@ export type ChatScrollViewProps = ScrollViewProps & {
     topInset?: number;
     /** The height of a composer floating over the list, kept clear of the scroll range. */
     composerInset?: SharedValue<number>;
+    /** The list scrolling in it, told the insets this view sets (keyboard and composer). */
+    listRef: React.RefObject<Pick<LegendListRef, 'reportContentInset'> | null>;
 };
 
 /**
@@ -19,10 +22,15 @@ export type ChatScrollViewProps = ScrollViewProps & {
  * drawn over it) stays put while the composer rides the keyboard.
  */
 export const ChatScrollView = React.forwardRef<React.ElementRef<typeof KeyboardChatScrollView>, ChatScrollViewProps>(
-    ({ bottomInset, topInset = 0, composerInset, ...props }, ref) => (
+    ({ bottomInset, topInset = 0, composerInset, listRef, ...props }, ref) => (
         <KeyboardChatScrollView
             ref={ref}
             extraContentPadding={composerInset}
+            // The list only reads the insets off scroll events otherwise, so until the first one it
+            // bottom-aligns a short chat as if the composer took no room, and that chat scrolls.
+            onContentInsetChange={(insets) => listRef.current?.reportContentInset(insets)}
+            // A chat that fits does not move under the finger.
+            alwaysBounceVertical={false}
             automaticallyAdjustContentInsets={false}
             contentInsetAdjustmentBehavior="never"
             // The indicator's bottom inset already runs to the composer's top (keyboard + composer, the

@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { Platform, Pressable, StyleSheet, Text, TextInput, View, type ScrollViewProps } from 'react-native';
-import { LegendList } from '@legendapp/list/react-native';
+import { LegendList, type LegendListRef } from '@legendapp/list/react-native';
 import { KeyboardStickyView } from 'react-native-keyboard-controller';
 import { useSharedValue } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -79,6 +79,8 @@ export default function LegendChatHeaderTest() {
         </View>
     ), [prependOlderPage, softHeaderInset]);
 
+    const listRef = React.useRef<LegendListRef>(null);
+
     const renderScrollComponent = React.useCallback(
         (props: ScrollViewProps) => (
             <ChatScrollView
@@ -86,13 +88,15 @@ export default function LegendChatHeaderTest() {
                 bottomInset={composerInset ? floatingComposerBottomInset(insets.bottom) : insets.bottom}
                 topInset={softHeaderInset}
                 composerInset={composerInset}
+                listRef={listRef}
             />
         ),
-        [composerInset, insets.bottom, softHeaderInset],
+        [composerInset, insets.bottom, softHeaderInset, listRef],
     );
 
     const list = (
         <LegendList
+            ref={listRef}
             data={messages}
             renderItem={renderItem}
             keyExtractor={(item) => item.id}

@@ -254,9 +254,10 @@ export const ChatMessageList = React.memo(({
                 bottomInset={composerInset ? floatingComposerBottomInset(insets.bottom) : insets.bottom}
                 topInset={softHeaderInset}
                 composerInset={composerInset}
+                listRef={listRef}
             />
         ),
-        [composerInset, insets.bottom, softHeaderInset],
+        [composerInset, insets.bottom, softHeaderInset, listRef],
     );
     // The list's frame does not shrink for the keyboard (or end at a floating composer), so the
     // scroll-to-bottom button is moved above both.
@@ -285,7 +286,7 @@ export const ChatMessageList = React.memo(({
                 ListHeaderComponent={listHeader}
                 ListEmptyComponent={emptyComponent}
                 renderScrollComponent={renderScrollComponent}
-                contentContainerStyle={styles.contentContainer}
+                contentContainerStyle={[styles.contentContainer, chronologicalMessages.length === 0 && styles.contentContainerEmpty]}
                 keyboardShouldPersistTaps="handled"
                 // An empty chat only shows its centered placeholder; the composer's inset would
                 // otherwise leave it a little room to scroll. The keyboard still lifts it (scrollTo).
@@ -345,8 +346,12 @@ const styles = StyleSheet.create((theme) => ({
     wrapper: {
         flex: 1,
     },
-    contentContainer: {
+    // Only an empty chat stretches to the viewport, for its centered placeholder: stretched, a
+    // short chat would outgrow the room left above the composer and scroll.
+    contentContainerEmpty: {
         flexGrow: 1,
+    },
+    contentContainer: {
         paddingTop: theme.margins.sm,
         paddingBottom: COMPOSER_MARGIN,
     },
