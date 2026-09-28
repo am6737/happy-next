@@ -647,6 +647,7 @@ export default function RootLayout() {
             <Stack.Screen
                 name="new/index"
                 options={{
+                    ...softHeaderOptions,
                     headerTitle: t('newSession.title'),
                 }}
             />

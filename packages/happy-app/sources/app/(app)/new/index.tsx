@@ -14,6 +14,7 @@ import { t } from '@/text';
 import { useReanimatedKeyboardAnimation } from 'react-native-keyboard-controller';
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import { useHeaderHeight } from '@/utils/responsive';
+import { useSoftHeaderInset } from '@/components/navigation/softHeader';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { machineBash, machineSpawnNewSession, sessionUpdateMetadataFields } from '@/sync/ops';
 import { Modal } from '@/modal';
@@ -279,6 +280,10 @@ function NewSessionWizard() {
     const { theme, rt } = useUnistyles();
     const router = useRouter();
     const safeArea = useSafeAreaInsets();
+    // The soft header sits over this screen. Both layouts pad their own top by its height rather
+    // than letting UIKit inset the scroll view: the whole column is translated with the keyboard,
+    // and a transformed scroll view would keep having its safe-area inset recomputed mid-animation.
+    const softHeaderInset = useSoftHeaderInset();
     const { height: kbHeight, progress: kbProgress } = useReanimatedKeyboardAnimation();
     const animatedInputStyle = useAnimatedStyle(() => ({
         transform: [{ translateY: kbHeight.value + safeArea.bottom * kbProgress.value }],
@@ -1093,7 +1098,7 @@ function NewSessionWizard() {
                 ref.current.measureLayout(
                     scrollViewRef.current as any,
                     (x, y) => {
-                        scrollViewRef.current?.scrollTo({ y: y - 20, animated: true });
+                        scrollViewRef.current?.scrollTo({ y: y - 20 - softHeaderInset, animated: true });
                     },
                     () => {
                         console.warn('measureLayout failed');
@@ -1101,7 +1106,7 @@ function NewSessionWizard() {
                 );
             }
         });
-    }, []);
+    }, [softHeaderInset]);
 
     const handleAgentInputProfileClick = React.useCallback(() => {
         scrollToSection(profileSectionRef);
@@ -1635,7 +1640,7 @@ function NewSessionWizard() {
     // ========================================================================
     if (!useEnhancedSessionWizard) {
         return (
-            <View ref={dropZoneRef} style={[styles.container, { position: 'relative' }, Platform.OS !== 'web' && { paddingTop: 40 }]}>
+            <View ref={dropZoneRef} style={[styles.container, { position: 'relative' }, Platform.OS !== 'web' && { paddingTop: 40 + softHeaderInset }]}>
                 {imageDropOverlay}
                 <View style={{ flex: 1, justifyContent: 'flex-end' }}>
                     <Animated.View style={animatedInputStyle}>
@@ -1771,7 +1776,7 @@ function NewSessionWizard() {
                 <ScrollView
                     ref={scrollViewRef}
                     style={styles.scrollContainer}
-                    contentContainerStyle={styles.contentContainer}
+                    contentContainerStyle={[styles.contentContainer, softHeaderInset > 0 && { paddingTop: softHeaderInset }]}
                     keyboardShouldPersistTaps="handled"
                 >
                 <View style={[
