@@ -54,7 +54,6 @@ function parseGlobalResults(stdout: string): SearchResult[] {
 export default function BrowserScreen() {
     const softHeaderInset = useSoftHeaderInset();
     const useNativeSoftHeader = Platform.OS === 'ios' && !isRunningOnMac();
-    const [fixedHeaderHeight, setFixedHeaderHeight] = React.useState(0);
     const route = useRoute();
     const router = useRouter();
     const sessionId = (route.params! as any).id as string;
@@ -379,7 +378,14 @@ export default function BrowserScreen() {
             {!useNativeSoftHeader && fixedHeader}
 
             {/* Directory listing / Search results */}
-            <ItemList style={{ flex: 1 }} containerStyle={useNativeSoftHeader ? { paddingTop: fixedHeaderHeight } : undefined}>
+            <ItemList
+                style={{ flex: 1 }}
+                // Opening search starts a fresh list at the top, where the search bar is on iOS.
+                key={useNativeSoftHeader && searchActive ? 'search' : 'browse'}
+            >
+                {/* Under the see-through iOS header the bar scrolls with the list: pinned, it would
+                    hide the list behind an opaque band right under the header's soft edge. */}
+                {useNativeSoftHeader && fixedHeader}
                 {isLoading ? (
                     <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 40 }}>
                         <ActivityIndicator size="small" color={theme.colors.textSecondary} />
@@ -495,14 +501,6 @@ export default function BrowserScreen() {
                     </>
                 )}
             </ItemList>
-            {useNativeSoftHeader && (
-                <View
-                    style={{ position: 'absolute', top: softHeaderInset, left: 0, right: 0, zIndex: 1, backgroundColor: theme.colors.surface }}
-                    onLayout={(event) => setFixedHeaderHeight(event.nativeEvent.layout.height)}
-                >
-                    {fixedHeader}
-                </View>
-            )}
         </View>
     );
 }

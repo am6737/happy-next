@@ -15,7 +15,7 @@ import { formatDate } from '@/utils/formatDate';
 import { Typography } from '@/constants/Typography';
 import { t } from '@/text';
 import { isRunningOnMac } from '@/utils/platform';
-import { softHeaderOptions, useSoftHeaderInset } from '@/components/navigation/softHeader';
+import { softHeaderOptions } from '@/components/navigation/softHeader';
 
 type RunListItem = Pick<OrchestratorRunDetail, 'runId' | 'title' | 'status' | 'createdAt' | 'updatedAt' | 'summary'> & { machines?: string[]; };
 type StatusFilter = 'all' | 'active' | 'terminal' | 'queued' | 'running' | 'canceling' | 'completed' | 'failed' | 'cancelled';
@@ -73,6 +73,10 @@ const stylesheet = StyleSheet.create((theme) => ({
     listContent: {
         paddingHorizontal: 16,
         paddingBottom: 24,
+    },
+    listHeader: {
+        // The filters scroll edge to edge, past the list's side padding.
+        marginHorizontal: -16,
     },
     card: {
         backgroundColor: theme.colors.surface,
@@ -172,8 +176,6 @@ export default function OrchestratorRunsScreen() {
     const isConversationScoped = !!controllerSessionId;
     const navigation = useNavigation();
     const useNativeSoftHeader = Platform.OS === 'ios' && !isRunningOnMac();
-    const softHeaderInset = useSoftHeaderInset();
-    const [filterBarHeight, setFilterBarHeight] = React.useState(0);
 
     React.useEffect(() => {
         if (isConversationScoped) {
@@ -375,7 +377,6 @@ export default function OrchestratorRunsScreen() {
     const list = (
             <FlatList
                 contentInsetAdjustmentBehavior="automatic"
-                scrollIndicatorInsets={useNativeSoftHeader ? { top: filterBarHeight } : undefined}
                 data={runs}
                 keyExtractor={(item) => item.runId}
                 renderItem={renderRunItem}
@@ -391,7 +392,6 @@ export default function OrchestratorRunsScreen() {
                 contentContainerStyle={[
                     styles.listContent,
                     runs.length === 0 && { flex: 1 },
-                    useNativeSoftHeader && { paddingTop: filterBarHeight },
                     { maxWidth: layout.maxWidth, alignSelf: 'center', width: '100%' },
                 ]}
                 ListFooterComponent={loadingMore ? (
@@ -400,22 +400,15 @@ export default function OrchestratorRunsScreen() {
                     </View>
                 ) : null}
                 ListEmptyComponent={listEmpty}
+                // Under the see-through iOS header the filters scroll with the list: pinned, they
+                // would sit on the runs with no backdrop right under the header's soft edge.
+                ListHeaderComponent={useNativeSoftHeader ? <View style={styles.listHeader}>{filterBar}</View> : undefined}
             />
     );
 
     return (
         <View style={styles.container}>
-            {useNativeSoftHeader ? (
-                <>
-                    {list}
-                    <View
-                        style={{ position: 'absolute', top: softHeaderInset, left: 0, right: 0, zIndex: 1 }}
-                        onLayout={(event) => setFilterBarHeight(event.nativeEvent.layout.height)}
-                    >
-                        {filterBar}
-                    </View>
-                </>
-            ) : (
+            {useNativeSoftHeader ? list : (
                 <>
                     {filterBar}
                     {list}

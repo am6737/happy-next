@@ -19,7 +19,7 @@ import {
     RepoEmptyState,
 } from '@/components/repos';
 import { t } from '@/text';
-import { softHeaderOptions, useSoftHeaderInset } from '@/components/navigation/softHeader';
+import { softHeaderOptions } from '@/components/navigation/softHeader';
 import { isRunningOnMac } from '@/utils/platform';
 
 export default function RepoPullsScreen() {
@@ -28,7 +28,6 @@ export default function RepoPullsScreen() {
     const router = useRouter();
     const navigation = useNavigation();
     const { owner, repo: repoName } = useLocalSearchParams<{ owner: string; repo: string }>();
-    const softHeaderInset = useSoftHeaderInset();
     const useNativeSoftHeader = Platform.OS === 'ios' && !isRunningOnMac();
 
     const { data: pulls, loading: pullsLoading, loadingMore, hasMore, loadMore, refresh: refreshPulls } = useGithubPulls(owner!, repoName!, 'all');
@@ -44,7 +43,6 @@ export default function RepoPullsScreen() {
     const [prFilter, setPrFilter] = React.useState<PRFilter>('open');
     const [searchVisible, setSearchVisible] = React.useState(false);
     const [searchQuery, setSearchQuery] = React.useState('');
-    const [fixedHeaderHeight, setFixedHeaderHeight] = React.useState(0);
 
     React.useEffect(() => {
         navigation.setOptions({
@@ -114,12 +112,25 @@ export default function RepoPullsScreen() {
 
     const list = (
         <FlatList
-            style={useNativeSoftHeader ? styles.listWrap : undefined}
+            // Opening search starts a fresh list at the top, where the search bar is on iOS.
+            key={useNativeSoftHeader && searchVisible ? 'search' : 'browse'}
             contentInsetAdjustmentBehavior="automatic"
             data={pullsLoading && pulls.length === 0 ? [] : filteredPulls}
             keyExtractor={(item) => String(item.number)}
-            renderItem={renderPullItem}
-            ListHeaderComponent={useNativeSoftHeader ? <View style={{ height: fixedHeaderHeight + 4 }} /> : undefined}
+            renderItem={useNativeSoftHeader ? (info) => (
+                // The controls scroll in the list's header here, so the list is no longer one card
+                // view: each row draws its slice of the card instead.
+                <View style={[
+                    styles.cardRow,
+                    info.index === 0 && styles.cardRowFirst,
+                    info.index === filteredPulls.length - 1 && styles.cardRowLast,
+                ]}>
+                    {renderPullItem(info)}
+                </View>
+            ) : renderPullItem}
+            // Under the see-through iOS header the controls scroll with the list: pinned, they would
+            // hide it behind an opaque band right under the header's soft edge.
+            ListHeaderComponent={useNativeSoftHeader ? <View style={styles.listHeader}>{fixedControls}</View> : undefined}
             ListEmptyComponent={pullsLoading && pulls.length === 0 ? (
                 <IssueListSkeleton count={5} />
             ) : (
@@ -141,17 +152,7 @@ export default function RepoPullsScreen() {
     return (
         <View style={styles.container}>
             <Stack.Screen options={{ ...softHeaderOptions, headerBackTitle: t('common.back') }} />
-            {useNativeSoftHeader ? (
-                <>
-                    {list}
-                    <View
-                        style={[styles.fixedHeader, { top: softHeaderInset }]}
-                        onLayout={(event) => setFixedHeaderHeight(event.nativeEvent.layout.height)}
-                    >
-                        {fixedControls}
-                    </View>
-                </>
-            ) : (
+            {useNativeSoftHeader ? list : (
                 <>
                     {fixedControls}
                     {pullsLoading && pulls.length === 0 ? (
@@ -186,12 +187,26 @@ const stylesheet = StyleSheet.create((theme) => ({
         borderWidth: 1,
         borderColor: theme.colors.divider,
     },
-    fixedHeader: {
-        position: 'absolute',
-        left: 0,
-        right: 0,
-        zIndex: 1,
-        backgroundColor: theme.colors.groupped.background,
+    listHeader: {
+        marginBottom: 4,
+    },
+    cardRow: {
+        marginHorizontal: 16,
+        backgroundColor: theme.colors.surface,
+        borderLeftWidth: 1,
+        borderRightWidth: 1,
+        borderColor: theme.colors.divider,
+        overflow: 'hidden',
+    },
+    cardRowFirst: {
+        borderTopWidth: 1,
+        borderTopLeftRadius: 14,
+        borderTopRightRadius: 14,
+    },
+    cardRowLast: {
+        borderBottomWidth: 1,
+        borderBottomLeftRadius: 14,
+        borderBottomRightRadius: 14,
     },
     headerRight: {
         flexDirection: 'row',

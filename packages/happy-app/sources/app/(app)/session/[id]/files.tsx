@@ -35,7 +35,6 @@ export default function FilesScreen() {
     const { theme } = useUnistyles();
     const softHeaderInset = useSoftHeaderInset();
     const useNativeSoftHeader = Platform.OS === 'ios' && !isRunningOnMac();
-    const [fixedHeaderHeight, setFixedHeaderHeight] = React.useState(0);
     const isWeb = Platform.OS === 'web';
 
     const session = useSession(sessionId);
@@ -409,7 +408,9 @@ export default function FilesScreen() {
                     <View style={{
                         flexDirection: 'row',
                         alignItems: 'center',
-                        backgroundColor: theme.colors.input.background,
+                        // In the list (iOS) it sits on the grouped background, which the input colour
+                        // barely differs from; it takes the cards' colour there instead.
+                        backgroundColor: useNativeSoftHeader ? theme.colors.surface : theme.colors.input.background,
                         borderRadius: 10,
                         paddingHorizontal: 12,
                         paddingVertical: 8
@@ -488,7 +489,10 @@ export default function FilesScreen() {
             {!useNativeSoftHeader && fixedHeader}
 
             {/* Git Status List */}
-            <ItemList style={{ flex: 1 }} containerStyle={useNativeSoftHeader ? { paddingTop: fixedHeaderHeight } : undefined}>
+            <ItemList style={{ flex: 1 }}>
+                {/* Under the see-through iOS header the bar scrolls with the list: pinned, it would
+                    hide the list behind an opaque band right under the header's soft edge. */}
+                {useNativeSoftHeader && fixedHeader}
                 {isLoading ? (
                     <View style={{
                         flex: 1,
@@ -692,14 +696,6 @@ export default function FilesScreen() {
                     </>
                 )}
             </ItemList>
-            {useNativeSoftHeader && (
-                <View
-                    style={{ position: 'absolute', top: softHeaderInset, left: 0, right: 0, zIndex: 1, backgroundColor: theme.colors.surface }}
-                    onLayout={(event) => setFixedHeaderHeight(event.nativeEvent.layout.height)}
-                >
-                    {fixedHeader}
-                </View>
-            )}
             <ActionMenuModal visible={menuVisible} items={menuItems} onClose={() => setMenuVisible(false)} />
         </View>
     );
