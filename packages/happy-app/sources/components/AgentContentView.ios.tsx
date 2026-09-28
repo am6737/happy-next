@@ -4,8 +4,8 @@ import { KeyboardStickyView, useReanimatedKeyboardAnimation } from 'react-native
 import Animated, { useAnimatedStyle, type SharedValue } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ScrollEdgeElementContainer } from './ScrollEdgeElementContainer';
+import { COMPOSER_MARGIN, floatingComposerBottomInset } from './floatingComposer';
 
-const COMPOSER_MARGIN = 8;
 
 interface AgentContentViewProps {
     input?: React.ReactNode | null;
@@ -35,6 +35,7 @@ export const AgentContentView: React.FC<AgentContentViewProps> = React.memo(({ i
     }), [floatingInput, composerHeight]);
 
     if (floatingInput) {
+        const bottomInset = floatingComposerBottomInset(safeArea.bottom);
         return (
             <View style={styles.root}>
                 {content && (
@@ -52,10 +53,10 @@ export const AgentContentView: React.FC<AgentContentViewProps> = React.memo(({ i
                         {placeholder}
                     </Animated.ScrollView>
                 )}
-                <KeyboardStickyView offset={{ opened: safeArea.bottom - COMPOSER_MARGIN }} style={styles.floatingComposer}>
+                <KeyboardStickyView offset={{ opened: bottomInset - COMPOSER_MARGIN }} style={styles.floatingComposer}>
                     <ScrollEdgeElementContainer
                         edge="bottom"
-                        style={{ paddingBottom: safeArea.bottom }}
+                        style={{ paddingBottom: bottomInset }}
                         onLayout={(event) => {
                             if (composerHeight) {
                                 composerHeight.value = event.nativeEvent.layout.height;

@@ -180,6 +180,12 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
         paddingBottom: 8,
         paddingHorizontal: 8,
     },
+    // The iOS card, whose status row already spaces the input from the top: the action row's own
+    // button padding does the rest at the bottom.
+    unifiedPanelCompact: {
+        paddingBottom: 4,
+        borderRadius: 24,
+    },
     unifiedPanelGlass: {
         backgroundColor: 'transparent',
     },
@@ -199,6 +205,9 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
         paddingRight: 8,
         paddingVertical: 4,
         minHeight: 40,
+    },
+    inputContainerCompact: {
+        minHeight: 34,
     },
 
     // Overlay styles
@@ -1734,10 +1743,10 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                 {/* Box 2: Action Area (Input + Send) */}
                 <View
                     ref={dropZoneRef}
-                    style={[styles.unifiedPanel, props.panelSideMargin && { marginHorizontal: 8 }, useGlassPanel && styles.unifiedPanelGlass]}
+                    style={[styles.unifiedPanel, statusInPanel && styles.unifiedPanelCompact, props.panelSideMargin && { marginHorizontal: 8 }, useGlassPanel && styles.unifiedPanelGlass]}
                 >
                     {useGlassPanel && (
-                        <GlassView pointerEvents="none" glassEffectStyle="regular" style={styles.glassBackground} />
+                        <GlassView pointerEvents="none" glassEffectStyle="regular" style={[styles.glassBackground, statusInPanel && styles.unifiedPanelCompact]} />
                     )}
 
                     {statusInPanel && statusBar}
@@ -1757,12 +1766,12 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                     )}
 
                     {/* Input field */}
-                    <View style={[styles.inputContainer, props.minHeight ? { minHeight: props.minHeight } : undefined]}>
+                    <View style={[styles.inputContainer, statusInPanel && styles.inputContainerCompact, props.minHeight ? { minHeight: props.minHeight } : undefined]}>
                         <MultiTextInput
                             ref={inputRef}
                             value={props.value}
-                            paddingTop={Platform.OS === 'web' ? 10 : 8}
-                            paddingBottom={Platform.OS === 'web' ? 10 : 8}
+                            paddingTop={Platform.OS === 'web' ? 10 : statusInPanel ? 6 : 8}
+                            paddingBottom={Platform.OS === 'web' ? 10 : statusInPanel ? 2 : 8}
                             onChangeText={handleTextChange}
                             placeholder={props.placeholder}
                             onKeyPress={handleKeyPress}
