@@ -192,7 +192,7 @@ export default function RootLayout() {
                 options={{
                     ...softHeaderOptions,
                     headerShown: true,
-                    headerTitle: 'Preview',
+                    headerTitle: t('tools.names.previewHtml'),
                 }}
             />
             <Stack.Screen

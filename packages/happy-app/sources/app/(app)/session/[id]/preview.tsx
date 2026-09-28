@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { consumePreviewHtml } from '@/components/tools/previewHtmlStore';
 import { StyleSheet } from 'react-native-unistyles';
 import { useSoftHeaderInset } from '@/components/navigation/softHeader';
@@ -9,7 +9,7 @@ const WebView = require('react-native-webview').default;
 
 export default React.memo(() => {
     const router = useRouter();
-    const { html } = React.useMemo(() => consumePreviewHtml(), []);
+    const { html, title } = React.useMemo(() => consumePreviewHtml(), []);
     // The header is only made transparent so it matches its neighbours through the push
     // transition; the page itself starts below it, as an arbitrary web page has no business
     // scrolling under the header.
@@ -22,6 +22,8 @@ export default React.memo(() => {
 
     return (
         <View style={[styles.container, { paddingTop: softHeaderInset }]}>
+            {/* The title the agent gave the page; without one the layout's generic title stays. */}
+            {title?.trim() ? <Stack.Screen options={{ headerTitle: title.trim() }} /> : null}
             <WebView
                 source={{ html }}
                 style={styles.webview}
