@@ -32,12 +32,11 @@ import { tracking, trackMessageSent } from '@/track';
 import { handleImagePasteEvent } from '@/utils/imagePaste';
 import { isRunningOnMac } from '@/utils/platform';
 import { softHeaderOptions } from '@/components/navigation/softHeader';
-import { isLiquidGlassAvailable } from 'expo-glass-effect';
+import { floatingComposerAvailable, floatingComposerScreenOptions } from '@/components/floatingComposer';
 import { useSharedValue } from 'react-native-reanimated';
 
 // iOS 26+ with Liquid Glass: the composer floats over the conversation as glass, and the list
 // scrolls on under it behind the soft bottom scroll edge effect.
-const floatingComposerAvailable = Platform.OS === 'ios' && !isRunningOnMac() && isLiquidGlassAvailable();
 import { useDeviceType, useIsLandscape, useIsTablet } from '@/utils/responsive';
 import { formatPathRelativeToHome, generateCopyTitle, getSessionAvatarId, getSessionName, useSessionStatus, copySessionMetadata, copySessionModeSettings } from '@/utils/sessionUtils';
 import { canEditSession, canForkSession } from '@/utils/sessionLifecycle';
@@ -245,9 +244,7 @@ export const SessionView = React.memo((props: { id: string }) => {
                 options={{
                     headerShown: !shouldHideHeader,
                     ...(shouldUseTransparentNativeHeader ? softHeaderOptions : {}),
-                    ...(shouldUseTransparentNativeHeader && floatingComposerAvailable
-                        ? { scrollEdgeEffects: { top: 'soft', bottom: 'soft' } as const }
-                        : {}),
+                    ...(shouldUseTransparentNativeHeader ? floatingComposerScreenOptions : {}),
                     headerTitleAlign: isNarrowPhone ? 'left' : 'center',
                     // The soft scroll-edge effect needs plain strings: a custom title view makes
                     // UIKit drop both the effect and the subtitle (iOS centers the title regardless).

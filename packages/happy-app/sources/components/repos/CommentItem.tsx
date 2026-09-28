@@ -19,9 +19,11 @@ interface CommentItemProps {
     comment: RepoIssueComment;
     issueAuthor?: string;
     onLongPress?: () => void;
+    /** The thread's last comment: nothing below it to divide from, and the composer follows. */
+    isLast?: boolean;
 }
 
-export function CommentItem({ comment, issueAuthor, onLongPress }: CommentItemProps) {
+export function CommentItem({ comment, issueAuthor, onLongPress, isLast = false }: CommentItemProps) {
     const styles = stylesheet;
     const { theme } = useUnistyles();
     const [showAbsolute, setShowAbsolute] = React.useState(false);
@@ -73,12 +75,12 @@ export function CommentItem({ comment, issueAuthor, onLongPress }: CommentItemPr
 
     if (onLongPress) {
         return (
-            <Pressable onLongPress={onLongPress} style={styles.commentItem}>
+            <Pressable onLongPress={onLongPress} style={[styles.commentItem, isLast && styles.commentItemLast]}>
                 {inner}
             </Pressable>
         );
     }
-    return <View style={styles.commentItem}>{inner}</View>;
+    return <View style={[styles.commentItem, isLast && styles.commentItemLast]}>{inner}</View>;
 }
 
 const stylesheet = StyleSheet.create((theme) => ({
@@ -87,6 +89,10 @@ const stylesheet = StyleSheet.create((theme) => ({
         borderBottomWidth: Platform.select({ ios: 0.33, default: 1 }) as number,
         borderBottomColor: theme.colors.divider,
         gap: 10,
+    },
+    commentItemLast: {
+        borderBottomWidth: 0,
+        paddingBottom: 4,
     },
     commentHeader: {
         flexDirection: 'row',

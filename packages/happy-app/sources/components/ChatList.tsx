@@ -4,9 +4,10 @@ import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View, type La
 import { useCallback, useRef, useState } from 'react';
 import { LegendList, LegendListRef, LegendListRenderItemProps } from '@legendapp/list/react-native';
 import { useHeaderHeight } from '@/utils/responsive';
-import { KeyboardChatScrollView, useReanimatedKeyboardAnimation } from 'react-native-keyboard-controller';
-import { COMPOSER_MARGIN, floatingComposerBottomInset } from './floatingComposer';
-import Animated, { useAnimatedStyle, type SharedValue } from 'react-native-reanimated';
+import { floatingComposerBottomInset } from './floatingComposer';
+import { ChatScrollView } from './ChatScrollView';
+import { useChatOverlayStyle } from '@/hooks/useChatOverlayStyle';
+import Animated, { type SharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useUnistyles } from 'react-native-unistyles';
 import { Ionicons } from '@expo/vector-icons';
@@ -101,32 +102,6 @@ const ListHeader = React.memo((props: { headerOverlayInset?: number }) => {
 });
 
 
-/**
- * Lifts the list's content natively with the keyboard instead of shrinking its frame, so the list's
- * top edge (and the header effect drawn over it) stays put while the composer rides the keyboard.
- */
-const ChatScrollView = React.forwardRef<
-    React.ElementRef<typeof KeyboardChatScrollView>,
-    ScrollViewProps & { bottomInset: number; topInset: number; composerInset?: SharedValue<number> }
->(({ bottomInset, topInset, composerInset, ...props }, ref) => (
-    <KeyboardChatScrollView
-        ref={ref}
-        // A composer floating over the list: keep the scroll range clear of it.
-        extraContentPadding={composerInset}
-        automaticallyAdjustContentInsets={false}
-        contentInsetAdjustmentBehavior="never"
-        // The indicator's bottom inset already runs to the composer's top (keyboard + composer, the
-        // composer's height taking in the home indicator); UIKit's own safe-area adjustment would
-        // stack the home indicator on it a second time. Its top clears the header instead.
-        automaticallyAdjustsScrollIndicatorInsets={false}
-        scrollIndicatorInsets={{ top: topInset }}
-        keyboardDismissMode="interactive"
-        keyboardLiftBehavior="always"
-        offset={bottomInset - COMPOSER_MARGIN}
-        {...props}
-    />
-));
-ChatScrollView.displayName = 'ChatScrollView';
 
 const ListFooter = React.memo((props: { sessionId: string }) => {
     const session = useSession(props.sessionId)!;
@@ -715,18 +690,8 @@ const ChatListInternal = React.memo((props: {
         [keyboardBottomInset, listTopInset, props.composerInset],
     );
 
-    // The list's frame no longer shrinks for the keyboard, so the controls floating over its
-    // bottom edge ride the keyboard the same way the composer does (KeyboardStickyView's offset).
-    const { height: keyboardHeight, progress: keyboardProgress } = useReanimatedKeyboardAnimation();
-    // A floating composer covers the list's bottom, so they sit above it as well.
-    const composerInset = props.composerInset;
-    const floatingControlsStyle = useAnimatedStyle(() => (props.keyboardChatScroll ? {
-        transform: [{
-            translateY: keyboardHeight.value
-                + (keyboardBottomInset - COMPOSER_MARGIN) * keyboardProgress.value
-                - (composerInset?.value ?? 0),
-        }],
-    } : {}), [props.keyboardChatScroll, keyboardBottomInset, composerInset]);
+    // Keeps the controls floating over the list's bottom edge above the keyboard and the composer.
+    const floatingControlsStyle = useChatOverlayStyle(!!props.keyboardChatScroll, props.composerInset);
 
 
     return (

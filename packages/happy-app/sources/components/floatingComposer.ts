@@ -1,5 +1,24 @@
-/** The gap between the composer and the keyboard — shared by `AgentContentView` and `ChatList`. */
+import { Platform } from 'react-native';
+import { isLiquidGlassAvailable } from 'expo-glass-effect';
+import { isRunningOnMac } from '@/utils/platform';
+
+/** The gap between the composer and the keyboard — shared by `AgentContentView` and the chat lists. */
 export const COMPOSER_MARGIN = 8;
+
+/**
+ * Whether chat screens float their composer over the list as a glass card (iOS 26, not Catalyst):
+ * the list runs to the bottom of the screen and iOS draws the soft scroll edge under the composer.
+ * Everywhere else the composer stacks below the list.
+ */
+export const floatingComposerAvailable = Platform.OS === 'ios' && !isRunningOnMac() && isLiquidGlassAvailable();
+
+/**
+ * Screen options for a chat screen with a floating composer, spread after `softHeaderOptions`:
+ * those hide the bottom scroll edge, which is exactly the one drawn under the composer.
+ */
+export const floatingComposerScreenOptions = floatingComposerAvailable
+    ? ({ scrollEdgeEffects: { top: 'soft', bottom: 'soft' } } as const)
+    : {};
 
 /**
  * How far the floating composer (iOS 26) pads itself above the bottom of the screen with the keyboard

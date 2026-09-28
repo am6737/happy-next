@@ -46,28 +46,15 @@ import { useOpenClawMachine } from '@/sync/storage';
 import type { OpenClawChatMessage, OpenClawChatEvent, OpenClawContentBlock, OpenClawToolStreamEvent, OpenClawSession } from '@/openclaw/types';
 import type { BottomSheetModal } from '@gorhom/bottom-sheet';
 import { SessionDetailModal } from '@/components/openclaw/SessionDetailModal';
-import { KeyboardChatScrollView } from 'react-native-keyboard-controller';
+import { ChatScrollView } from '@/components/ChatScrollView';
+import { GlassSurface } from '@/components/GlassSurface';
+import { floatingComposerAvailable, floatingComposerBottomInset, floatingComposerScreenOptions } from '@/components/floatingComposer';
+import { useSharedValue } from 'react-native-reanimated';
 import { KeyboardCenteredEmpty } from '@/components/KeyboardCenteredEmpty';
 
 // Special ID for streaming message
 const STREAMING_MESSAGE_ID = '__streaming__';
-const COMPOSER_MARGIN = 8;
 
-const ChatScrollView = React.forwardRef<
-    React.ElementRef<typeof KeyboardChatScrollView>,
-    ScrollViewProps & { bottomInset: number }
->(({ bottomInset, ...props }, ref) => (
-    <KeyboardChatScrollView
-        ref={ref}
-        automaticallyAdjustContentInsets={false}
-        contentInsetAdjustmentBehavior="never"
-        keyboardDismissMode="interactive"
-        keyboardLiftBehavior="always"
-        offset={Platform.OS === 'ios' ? bottomInset - COMPOSER_MARGIN : bottomInset}
-        {...props}
-    />
-));
-ChatScrollView.displayName = 'ChatScrollView';
 
 // Local message type with status tracking
 type MessageStatus = 'sending' | 'sent' | 'failed';
@@ -129,14 +116,20 @@ const styles = StyleSheet.create((theme) => ({
         width: '100%',
         maxWidth: layout.maxWidth,
     },
+    // Floating over the chat as a glass card (see `floatingComposerAvailable`) rather than on a bar.
+    inputContainerFloating: {
+        backgroundColor: 'transparent',
+    },
     inputPanel: {
-        backgroundColor: theme.colors.input.background,
         borderRadius: 16,
         paddingHorizontal: 12,
         paddingVertical: 8,
         flexDirection: 'row',
         alignItems: 'flex-end',
         gap: 8,
+    },
+    inputPanelFloating: {
+        borderRadius: 24,
     },
     inputWrapper: {
         flex: 1,
@@ -710,6 +703,9 @@ export default function OpenClawChatPage() {
     const { theme } = useUnistyles();
     const safeArea = useSafeAreaInsets();
     const softHeaderInset = useSoftHeaderInset();
+    // Written by AgentContentView as the floating composer lays out, read by the list on the UI thread.
+    const composerHeight = useSharedValue(0);
+    const composerInset = floatingComposerAvailable ? composerHeight : undefined;
     const { width: screenWidth } = useWindowDimensions();
     const isTablet = useIsTablet();
     const { machineId, sessionKey, sessionName: sessionNameParam } = useLocalSearchParams<{
@@ -1120,9 +1116,14 @@ export default function OpenClawChatPage() {
 
     const renderScrollComponent = React.useCallback(
         (props: ScrollViewProps) => (
-            <ChatScrollView {...props} bottomInset={safeArea.bottom} />
+            <ChatScrollView
+                {...props}
+                bottomInset={composerInset ? floatingComposerBottomInset(safeArea.bottom) : safeArea.bottom}
+                topInset={softHeaderInset}
+                composerInset={composerInset}
+            />
         ),
-        [safeArea.bottom],
+        [composerInset, safeArea.bottom, softHeaderInset],
     );
 
     // Keep the empty state inside the same keyboard-aware message list so it stays
@@ -1163,12 +1164,15 @@ export default function OpenClawChatPage() {
             maintainScrollAtEnd={{ on: { dataChange: true } }}
             maintainScrollAtEndThreshold={0.2}
             maintainVisibleContentPosition
-            ListEmptyComponent={<KeyboardCenteredEmpty>{placeholder}</KeyboardCenteredEmpty>}
+            ListEmptyComponent={<KeyboardCenteredEmpty composerInset={composerInset}>{placeholder}</KeyboardCenteredEmpty>}
             ListHeaderComponent={<View style={{ height: useNativeSoftHeader ? softHeaderInset + 12 : 12 }} />}
             estimatedHeaderSize={useNativeSoftHeader ? softHeaderInset + 12 : 12}
             renderScrollComponent={renderScrollComponent}
             keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
             keyboardShouldPersistTaps="handled"
+            // An empty chat only shows its centered placeholder; the composer's inset would
+            // otherwise leave it a little room to scroll. The keyboard still lifts it (scrollTo).
+            scrollEnabled={messages.length > 0}
             onScroll={handleScroll}
             scrollEventThrottle={16}
             onContentSizeChange={() => {
@@ -1182,9 +1186,13 @@ export default function OpenClawChatPage() {
 
     // Input area
     const input = (
-        <View style={[styles.inputContainer, Platform.OS === 'ios' ? undefined : { paddingBottom: safeArea.bottom + 16 }]}>
+        <View style={[styles.inputContainer, floatingComposerAvailable && styles.inputContainerFloating, Platform.OS === 'ios' ? undefined : { paddingBottom: safeArea.bottom + 16 }]}>
             <View style={styles.inputInner}>
-                <View style={styles.inputPanel}>
+                <GlassSurface
+                    glass={floatingComposerAvailable}
+                    color={theme.colors.input.background}
+                    style={[styles.inputPanel, floatingComposerAvailable && styles.inputPanelFloating]}
+                >
                     <View style={styles.inputWrapper}>
                         <MultiTextInput
                             value={inputText}
@@ -1213,7 +1221,7 @@ export default function OpenClawChatPage() {
                             color={canSend ? theme.colors.button.primary.tint : theme.colors.textSecondary}
                         />
                     </Pressable>
-                </View>
+                </GlassSurface>
             </View>
         </View>
     );
@@ -1223,6 +1231,7 @@ export default function OpenClawChatPage() {
             <Stack.Screen
                 options={{
                     ...softHeaderOptions,
+                    ...floatingComposerScreenOptions,
                     headerTitleAlign: isNarrowPhone ? 'left' : 'center',
                     headerTitle: useNativeSoftHeader ? sessionName : () => (
                         <ChatHeaderTitle
@@ -1253,6 +1262,8 @@ export default function OpenClawChatPage() {
             />
             <AgentContentView
                 safeAreaLayout
+                floatingInput={floatingComposerAvailable}
+                composerHeight={composerHeight}
                 content={content}
                 input={input}
             />

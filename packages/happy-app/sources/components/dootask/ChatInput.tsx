@@ -11,6 +11,7 @@ import { ActionMenuModal } from '@/components/ActionMenuModal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { ActionMenuItem } from '@/components/ActionMenu';
 import type { DooTaskDialogMsg } from '@/sync/dootask/types';
+import { GlassSurface } from '@/components/GlassSurface';
 
 type ChatInputProps = {
     onSendText: (text: string) => void;
@@ -18,6 +19,8 @@ type ChatInputProps = {
     onSendFile?: (file: { uri: string; name: string; mimeType: string }) => void;
     replyTo?: { msg: DooTaskDialogMsg; senderName: string } | null;
     onCancelReply?: () => void;
+    /** Floating over the chat (see `floatingComposerAvailable`): no bar behind it, glass pieces instead. */
+    glass?: boolean;
 };
 
 function getPreviewText(msg: DooTaskDialogMsg): string {
@@ -28,7 +31,7 @@ function getPreviewText(msg: DooTaskDialogMsg): string {
     return '[Message]';
 }
 
-export const ChatInput = React.memo(({ onSendText, onSendImage, onSendFile, replyTo, onCancelReply }: ChatInputProps) => {
+export const ChatInput = React.memo(({ onSendText, onSendImage, onSendFile, replyTo, onCancelReply, glass = false }: ChatInputProps) => {
     const { theme } = useUnistyles();
     const insets = useSafeAreaInsets();
     const [text, setText] = React.useState('');
@@ -113,9 +116,9 @@ export const ChatInput = React.memo(({ onSendText, onSendImage, onSendFile, repl
     ], [handlePickFromCamera, handlePickFromAlbum, handlePickFile]);
 
     return (
-        <View style={[styles.container, { paddingBottom: Platform.OS === 'ios' ? 0 : Math.max(insets.bottom, 12) }]}>
+        <View style={[styles.container, glass && styles.containerFloating, { paddingBottom: Platform.OS === 'ios' ? 0 : Math.max(insets.bottom, 12) }]}>
             {replyTo && (
-                <View style={styles.replyBar}>
+                <GlassSurface glass={glass} color={theme.colors.surfaceHigh} style={styles.replyBar}>
                     <View style={styles.replyContent}>
                         <Text style={styles.replySender} numberOfLines={1}>
                             {replyTo.senderName}
@@ -131,7 +134,7 @@ export const ChatInput = React.memo(({ onSendText, onSendImage, onSendFile, repl
                     >
                         <Ionicons name="close" size={18} color={theme.colors.textSecondary} />
                     </Pressable>
-                </View>
+                </GlassSurface>
             )}
             <View style={styles.inputRow}>
                 <Pressable
@@ -139,11 +142,11 @@ export const ChatInput = React.memo(({ onSendText, onSendImage, onSendFile, repl
                     hitSlop={4}
                     style={styles.addButton}
                 >
-                    <View style={[styles.addCircle, { backgroundColor: theme.colors.surfaceHighest }]}>
+                    <GlassSurface glass={glass} color={theme.colors.surfaceHighest} style={styles.addCircle}>
                         <Ionicons name="add" size={24} color={theme.colors.textSecondary} />
-                    </View>
+                    </GlassSurface>
                 </Pressable>
-                <View style={[styles.inputGroup, { backgroundColor: theme.colors.surfaceHighest }]}>
+                <GlassSurface glass={glass} color={theme.colors.surfaceHighest} style={styles.inputGroup}>
                     <MultiTextInput
                         style={{ flex: 1, paddingVertical: 6 }}
                         value={text}
@@ -167,7 +170,7 @@ export const ChatInput = React.memo(({ onSendText, onSendImage, onSendFile, repl
                             <Ionicons name="arrow-up" size={20} color={theme.colors.button.primary.tint} />
                         </View>
                     </Pressable>
-                </View>
+                </GlassSurface>
             </View>
             <ActionMenuModal
                 visible={menuVisible}
@@ -185,12 +188,14 @@ const styles = StyleSheet.create((theme) => ({
         paddingHorizontal: 10,
         paddingTop: theme.margins.xs,
     },
+    containerFloating: {
+        backgroundColor: 'transparent',
+    },
     replyBar: {
         flexDirection: 'row',
         alignItems: 'center',
         paddingVertical: theme.margins.sm,
         paddingHorizontal: theme.margins.sm,
-        backgroundColor: theme.colors.surfaceHigh,
         borderLeftWidth: 3,
         borderLeftColor: theme.colors.textLink,
         borderRadius: theme.borderRadius.sm,

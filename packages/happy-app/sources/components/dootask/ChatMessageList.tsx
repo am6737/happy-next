@@ -9,28 +9,14 @@ import { Typography } from '@/constants/Typography';
 import { ChatBubble } from './ChatBubble';
 import type { DooTaskDialogMsg, DisplayMessage, PendingMessage } from '@/sync/dootask/types';
 import { useSoftHeaderInset } from '@/components/navigation/softHeader';
-import { KeyboardChatScrollView } from 'react-native-keyboard-controller';
+import Animated, { type SharedValue } from 'react-native-reanimated';
+import { ChatScrollView } from '@/components/ChatScrollView';
+import { COMPOSER_MARGIN, floatingComposerBottomInset } from '@/components/floatingComposer';
+import { useChatOverlayStyle } from '@/hooks/useChatOverlayStyle';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Threshold in pixels for showing the scroll-to-bottom button
 const SCROLL_THRESHOLD = 100;
-const COMPOSER_MARGIN = 8;
-
-const ChatScrollView = React.forwardRef<
-    React.ElementRef<typeof KeyboardChatScrollView>,
-    ScrollViewProps & { bottomInset: number }
->(({ bottomInset, ...props }, ref) => (
-    <KeyboardChatScrollView
-        ref={ref}
-        automaticallyAdjustContentInsets={false}
-        contentInsetAdjustmentBehavior="never"
-        keyboardDismissMode="interactive"
-        keyboardLiftBehavior="always"
-        offset={Platform.OS === 'ios' ? bottomInset - COMPOSER_MARGIN : bottomInset}
-        {...props}
-    />
-));
-ChatScrollView.displayName = 'ChatScrollView';
 
 const AI_ASSISTANT_USERID = -1;
 
@@ -81,6 +67,8 @@ type ChatMessageListProps = {
     serverUrl: string;
     dataKey?: string;
     emptyComponent?: React.ReactElement | null;
+    /** The height of a composer floating over the list (see `AgentContentView`'s `floatingInput`). */
+    composerInset?: SharedValue<number>;
 };
 
 /** Resolve a potentially relative avatar URL to an absolute one, handling {{RemoteURL}} placeholder. */
@@ -111,6 +99,7 @@ export const ChatMessageList = React.memo(({
     serverUrl,
     dataKey,
     emptyComponent,
+    composerInset,
 }: ChatMessageListProps) => {
     const { theme } = useUnistyles();
     const listRef = React.useRef<LegendListRef>(null);
@@ -206,7 +195,8 @@ export const ChatMessageList = React.memo(({
             : undefined;
 
         return (
-            <View style={isConsecutiveSameSender ? styles.itemWithoutAvatar : styles.itemWithAvatar}>
+            // The last row's spacing would only add to the list's own bottom padding above the composer.
+            <View style={[isConsecutiveSameSender ? styles.itemWithoutAvatar : styles.itemWithAvatar, index === chronologicalMessages.length - 1 && styles.lastItem]}>
                 {showDateSeparator && (
                     <View style={styles.dateSeparator}>
                         <Text style={[styles.dateText, { color: theme.colors.textSecondary, backgroundColor: theme.colors.header.background }]}>
@@ -251,14 +241,26 @@ export const ChatMessageList = React.memo(({
     ), [loadingMore, softHeaderInset, styles.loadingFooter]);
 
     // Refresh mounted rows when avatar data loads asynchronously.
-    const extraData = React.useMemo(() => ({ userAvatars, userNames, userDisabledAt }), [userAvatars, userNames, userDisabledAt]);
+    // The count is in here too: a new message takes the last-row spacing off the row before it.
+    const extraData = React.useMemo(
+        () => ({ userAvatars, userNames, userDisabledAt, count: chronologicalMessages.length }),
+        [userAvatars, userNames, userDisabledAt, chronologicalMessages.length],
+    );
 
     const renderScrollComponent = React.useCallback(
         (props: ScrollViewProps) => (
-            <ChatScrollView {...props} bottomInset={insets.bottom} />
+            <ChatScrollView
+                {...props}
+                bottomInset={composerInset ? floatingComposerBottomInset(insets.bottom) : insets.bottom}
+                topInset={softHeaderInset}
+                composerInset={composerInset}
+            />
         ),
-        [insets.bottom],
+        [composerInset, insets.bottom, softHeaderInset],
     );
+    // The list's frame does not shrink for the keyboard (or end at a floating composer), so the
+    // scroll-to-bottom button is moved above both.
+    const overlayStyle = useChatOverlayStyle(Platform.OS === 'ios', composerInset);
 
     return (
         <View style={styles.wrapper}>
@@ -285,49 +287,54 @@ export const ChatMessageList = React.memo(({
                 renderScrollComponent={renderScrollComponent}
                 contentContainerStyle={styles.contentContainer}
                 keyboardShouldPersistTaps="handled"
+                // An empty chat only shows its centered placeholder; the composer's inset would
+                // otherwise leave it a little room to scroll. The keyboard still lifts it (scrollTo).
+                scrollEnabled={chronologicalMessages.length > 0}
             />
 
             {/* Scroll to bottom button */}
-            {showScrollButton && (
-                <View pointerEvents="box-none" style={{ position: 'absolute', bottom: 16, right: 16 }}>
-                    <Pressable
-                        onPress={handleScrollToBottom}
-                        style={{
-                            backgroundColor: theme.colors.surfaceHighest,
-                            borderRadius: 20,
-                            width: 40,
-                            height: 40,
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            shadowColor: theme.colors.shadow.color,
-                            shadowOffset: { width: 0, height: 2 },
-                            shadowOpacity: theme.colors.shadow.opacity,
-                            shadowRadius: 4,
-                            elevation: 4,
-                        }}
-                    >
-                        <Ionicons name="chevron-down" size={24} color={theme.colors.text} />
-                        {unreadCount > 0 && (
-                            <View style={{
-                                position: 'absolute',
-                                top: -4,
-                                right: -4,
-                                backgroundColor: theme.colors.status.connected,
-                                borderRadius: 10,
-                                minWidth: 20,
-                                height: 20,
+            <Animated.View pointerEvents="box-none" style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }, overlayStyle]}>
+                {showScrollButton && (
+                    <View pointerEvents="box-none" style={{ position: 'absolute', bottom: 16, right: 16 }}>
+                        <Pressable
+                            onPress={handleScrollToBottom}
+                            style={{
+                                backgroundColor: theme.colors.surfaceHighest,
+                                borderRadius: 20,
+                                width: 40,
+                                height: 40,
                                 alignItems: 'center',
                                 justifyContent: 'center',
-                                paddingHorizontal: 4,
-                            }}>
-                                <Text style={{ color: '#fff', fontSize: 12, fontWeight: '600' }}>
-                                    {unreadCount > 99 ? '99+' : unreadCount}
-                                </Text>
-                            </View>
-                        )}
-                    </Pressable>
-                </View>
-            )}
+                                shadowColor: theme.colors.shadow.color,
+                                shadowOffset: { width: 0, height: 2 },
+                                shadowOpacity: theme.colors.shadow.opacity,
+                                shadowRadius: 4,
+                                elevation: 4,
+                            }}
+                        >
+                            <Ionicons name="chevron-down" size={24} color={theme.colors.text} />
+                            {unreadCount > 0 && (
+                                <View style={{
+                                    position: 'absolute',
+                                    top: -4,
+                                    right: -4,
+                                    backgroundColor: theme.colors.status.connected,
+                                    borderRadius: 10,
+                                    minWidth: 20,
+                                    height: 20,
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    paddingHorizontal: 4,
+                                }}>
+                                    <Text style={{ color: '#fff', fontSize: 12, fontWeight: '600' }}>
+                                        {unreadCount > 99 ? '99+' : unreadCount}
+                                    </Text>
+                                </View>
+                            )}
+                        </Pressable>
+                    </View>
+                )}
+            </Animated.View>
         </View>
     );
 });
@@ -348,6 +355,9 @@ const styles = StyleSheet.create((theme) => ({
     },
     itemWithoutAvatar: {
         marginBottom: 10,
+    },
+    lastItem: {
+        marginBottom: 0,
     },
     dateSeparator: {
         alignItems: 'center',

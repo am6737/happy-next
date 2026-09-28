@@ -5,6 +5,7 @@ import { Typography } from '@/constants/Typography';
 import { createHeader } from '@/components/navigation/Header';
 // Opt in per screen: transparent native headers require the page's scroll view to adjust its top inset.
 import { softHeaderOptions } from '@/components/navigation/softHeader';
+import { floatingComposerScreenOptions } from '@/components/floatingComposer';
 import { Platform, TouchableOpacity, Text } from 'react-native';
 import { isRunningOnMac } from '@/utils/platform';
 import { useUnistyles } from 'react-native-unistyles';
@@ -548,6 +549,7 @@ export default function RootLayout() {
                 name="dev/legend-chat-header"
                 options={{
                     ...softHeaderOptions,
+                    ...floatingComposerScreenOptions,
                     headerTitle: 'Legend Chat Header',
                 }}
             />
