@@ -21,6 +21,8 @@ import { useMainTabBottomPadding } from '@/hooks/useMainTabBottomPadding';
 import { useSoftHeaderInset } from '@/components/navigation/softHeader';
 import { FilterChipRow, IssueIcon, PullRequestIcon } from '@/components/repos';
 import type { GithubIssueScope, GithubPullScope } from '@/sync/apiGithubData';
+import { NativeMenu } from '@/components/NativeMenu';
+import type { ActionMenuItem } from '@/components/ActionMenu';
 
 const SheetTextInput = Platform.OS === 'web' ? TextInput : BottomSheetTextInput;
 
@@ -48,7 +50,7 @@ function getStateColor(state: string, theme: ReturnType<typeof useUnistyles>['th
 
 const IssueRow = React.memo(({ item, onPress, theme }: { item: RepoIssue; onPress: () => void; theme: any }) => (
     <View style={issueStyles.item}>
-        <Pressable style={issueStyles.row} onPress={onPress}>
+        <Pressable style={({ pressed }) => [issueStyles.row, pressed && { backgroundColor: theme.colors.surfaceRipple }]} onPress={onPress}>
             <View style={issueStyles.icon}>
                 <IssueIcon size={18} color={getStateColor(item.state, theme)} state={item.state} />
             </View>
@@ -81,7 +83,7 @@ const IssueRow = React.memo(({ item, onPress, theme }: { item: RepoIssue; onPres
 
 const PRRow = React.memo(({ item, onPress, theme }: { item: RepoPR; onPress: () => void; theme: any }) => (
     <View style={issueStyles.item}>
-        <Pressable style={issueStyles.row} onPress={onPress}>
+        <Pressable style={({ pressed }) => [issueStyles.row, pressed && { backgroundColor: theme.colors.surfaceRipple }]} onPress={onPress}>
             <View style={issueStyles.icon}>
                 <PullRequestIcon state={item.status} size={18} color={getStateColor(item.status, theme)} />
             </View>
@@ -396,6 +398,11 @@ export const GitHubListView = React.memo(({ onRepoChange, repoPickerTriggerRef }
         closed: t('github.closed'),
         merged: t('github.merged'),
     };
+    const filterMenuItems: ActionMenuItem[] = filters.map((f) => ({
+        label: filterLabels[f.key],
+        selected: f.key === currentFilter,
+        onPress: () => setFilter(f.key),
+    }));
 
     const renderBackdrop = React.useCallback(
         (props: any) => <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} />,
@@ -521,14 +528,15 @@ export const GitHubListView = React.memo(({ onRepoChange, repoPickerTriggerRef }
                             <Ionicons name="close-circle" size={16} color={theme.colors.textSecondary} />
                         </Pressable>
                     )}
-                    <Pressable
+                    <NativeMenu
+                        items={filterMenuItems}
                         style={[
                             styles.filterButton,
                             currentFilter === 'all'
                                 ? { backgroundColor: theme.colors.surfaceHigh }
                                 : { backgroundColor: theme.colors.text },
                         ]}
-                        onPress={() => setFilterPopoverVisible(true)}
+                        onFallbackOpen={() => setFilterPopoverVisible(true)}
                     >
                         <Ionicons
                             name="filter"
@@ -543,7 +551,7 @@ export const GitHubListView = React.memo(({ onRepoChange, repoPickerTriggerRef }
                         ]}>
                             {filterLabels[currentFilter]}
                         </Text>
-                    </Pressable>
+                    </NativeMenu>
                 </View>
             </View>
 
