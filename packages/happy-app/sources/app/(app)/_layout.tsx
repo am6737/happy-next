@@ -524,13 +524,6 @@ export default function RootLayout() {
                 }}
             />
             <Stack.Screen
-                name="dev/masked-progress"
-                options={{
-                    ...softHeaderOptions,
-                    headerTitle: 'Masked Progress',
-                }}
-            />
-            <Stack.Screen
                 name="dev/shimmer-demo"
                 options={{
                     ...softHeaderOptions,
