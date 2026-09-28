@@ -1,9 +1,10 @@
 import * as React from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, type LayoutChangeEvent } from 'react-native';
 import { KeyboardStickyView, useReanimatedKeyboardAnimation } from 'react-native-keyboard-controller';
 import Animated, { useAnimatedStyle, type SharedValue } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ScrollEdgeElementContainer } from './ScrollEdgeElementContainer';
+import { KeyboardDock } from './KeyboardDock';
 import { COMPOSER_MARGIN, floatingComposerBottomInset } from './floatingComposer';
 
 
@@ -22,9 +23,15 @@ interface AgentContentViewProps {
      */
     floatingInput?: boolean;
     composerHeight?: SharedValue<number>;
+    /**
+     * Let UIKit lift the floating composer over the keyboard (`KeyboardDock`) rather than a
+     * transform from JS, so the soft scroll edge under it moves with it. Being tried on the session
+     * screen before it replaces `KeyboardStickyView` everywhere.
+     */
+    keyboardDock?: boolean;
 }
 
-export const AgentContentView: React.FC<AgentContentViewProps> = React.memo(({ input, content, placeholder, betweenContentAndInput, safeAreaLayout = false, floatingInput = false, composerHeight }) => {
+export const AgentContentView: React.FC<AgentContentViewProps> = React.memo(({ input, content, placeholder, betweenContentAndInput, safeAreaLayout = false, floatingInput = false, composerHeight, keyboardDock = false }) => {
     const safeArea = useSafeAreaInsets();
     const { height } = useReanimatedKeyboardAnimation();
     const placeholderVisibleAreaStyle = useAnimatedStyle(() => ({
@@ -36,6 +43,11 @@ export const AgentContentView: React.FC<AgentContentViewProps> = React.memo(({ i
 
     if (floatingInput) {
         const bottomInset = floatingComposerBottomInset(safeArea.bottom);
+        const onComposerLayout = (event: LayoutChangeEvent) => {
+            if (composerHeight) {
+                composerHeight.value = event.nativeEvent.layout.height;
+            }
+        };
         return (
             <View style={styles.root}>
                 {content && (
@@ -53,20 +65,27 @@ export const AgentContentView: React.FC<AgentContentViewProps> = React.memo(({ i
                         {placeholder}
                     </Animated.ScrollView>
                 )}
-                <KeyboardStickyView offset={{ opened: bottomInset - COMPOSER_MARGIN }} style={styles.floatingComposer}>
-                    <ScrollEdgeElementContainer
-                        edge="bottom"
-                        style={{ paddingBottom: bottomInset }}
-                        onLayout={(event) => {
-                            if (composerHeight) {
-                                composerHeight.value = event.nativeEvent.layout.height;
-                            }
-                        }}
+                {keyboardDock && KeyboardDock ? (
+                    <KeyboardDock
+                        keyboardOffset={Math.max(0, bottomInset - COMPOSER_MARGIN)}
+                        style={[styles.floatingComposer, { paddingBottom: bottomInset }]}
+                        onLayout={onComposerLayout}
                     >
                         {betweenContentAndInput}
                         {input}
-                    </ScrollEdgeElementContainer>
-                </KeyboardStickyView>
+                    </KeyboardDock>
+                ) : (
+                    <KeyboardStickyView offset={{ opened: bottomInset - COMPOSER_MARGIN }} style={styles.floatingComposer}>
+                        <ScrollEdgeElementContainer
+                            edge="bottom"
+                            style={{ paddingBottom: bottomInset }}
+                            onLayout={onComposerLayout}
+                        >
+                            {betweenContentAndInput}
+                            {input}
+                        </ScrollEdgeElementContainer>
+                    </KeyboardStickyView>
+                )}
             </View>
         );
     }

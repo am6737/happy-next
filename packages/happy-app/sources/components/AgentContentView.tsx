@@ -14,6 +14,7 @@ interface AgentContentViewProps {
     safeAreaLayout?: boolean;
     floatingInput?: boolean;
     composerHeight?: SharedValue<number>;
+    keyboardDock?: boolean;
 }
 
 export const AgentContentView: React.FC<AgentContentViewProps> = React.memo(({ input, content, placeholder, betweenContentAndInput }) => {
