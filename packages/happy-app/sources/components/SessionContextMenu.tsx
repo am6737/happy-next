@@ -35,8 +35,8 @@ import { getSessionQuickActionKinds, getSessionQuickActionSections, SessionQuick
 import { resolveTerminalDirectory, spawnTerminal } from '@/terminal/openTerminal';
 import { isTauriDesktop } from '@/utils/tauri';
 import { SessionContextMenuPortal } from './SessionContextMenuPortal';
-import { SessionColorPalette } from './SessionColorMarker';
-import type { SessionMarkerColor } from '@/sync/sessionAppearance';
+import { SESSION_MARKER_COLOR_VALUES, SessionColorPalette, sessionMarkerColorLabels } from './SessionColorMarker';
+import { SESSION_MARKER_COLORS, type SessionMarkerColor } from '@/sync/sessionAppearance';
 import { hasLiveCompletion, hasUnreadCompletionSince } from '@/utils/sessionAttention';
 import { useDismissToHome } from '@/hooks/useDismissToHome';
 import { shouldDismissSessionMenuOnScroll, ScrollTarget } from './sessionContextMenuScroll';
@@ -44,6 +44,7 @@ import { getDesktopPlatform } from '@/desktop/desktopWindowUtils';
 import { getRevealLabelKey, revealItemInFileManager } from '@/desktop/desktopReveal';
 import { useLocalMachineIds } from '@/desktop/desktopLocalMachine';
 import { openDesktopTerminalWindow } from '@/desktop/desktopWindowUtils';
+import { ContextMenuView, nativeContextMenuAvailable, type ContextMenuSection } from './ContextMenuView';
 
 type MenuPosition = { x: number; y: number };
 type ActionIconSpec =
@@ -53,6 +54,8 @@ type QuickAction = {
     kind: SessionQuickActionKind;
     label: string;
     icon: ActionIconSpec;
+    // The same icon as an SF Symbol, for the native iOS menu.
+    sfSymbol: string;
     destructive?: boolean;
     disabled?: boolean;
     // First item of a section: the menu draws a divider above it.
@@ -443,6 +446,18 @@ function useSessionQuickActions(session: Session) {
         archiveSession: { family: 'ionicons', name: 'archive-outline' },
         deleteSession: { family: 'ionicons', name: 'trash-outline' },
     };
+    const sfSymbols: Record<SessionQuickActionKind, string> = {
+        details: 'info.circle',
+        renameSession: 'pencil',
+        toggleRead: isUnread ? 'envelope.open' : 'envelope.badge',
+        newSession: 'plus.circle',
+        terminal: 'terminal',
+        revealInFileManager: 'folder',
+        leaveSharedSession: 'rectangle.portrait.and.arrow.right',
+        forkSession: session.active ? 'doc.on.doc' : 'play.circle',
+        archiveSession: 'archivebox',
+        deleteSession: 'trash',
+    };
     const sections = getSessionQuickActionSections(getSessionQuickActionKinds({
         session,
         isConnected: sessionStatus.isConnected,
@@ -454,6 +469,7 @@ function useSessionQuickActions(session: Session) {
         kind,
         label: labels[kind],
         icon: icons[kind],
+        sfSymbol: sfSymbols[kind],
         destructive: kind === 'leaveSharedSession' || kind === 'archiveSession' || kind === 'deleteSession',
         disabled: (kind === 'forkSession' && forkingSession)
             || (kind === 'toggleRead' && !canToggleRead),
@@ -565,6 +581,50 @@ export function SessionContextMenu({ session, children, highlightShape }: {
             window.removeEventListener('scroll', handleScroll, true);
         };
     }, [closeMenu, position]);
+
+    if (nativeContextMenuAvailable) {
+        // iOS: the system context menu. Long-pressing the row lifts it with the actions beside
+        // it, a tap still opens the session, and the colour marker is a row of swatches at the
+        // bottom (the selected one taps off again).
+        const menuSections: ContextMenuSection[] = [];
+        for (const action of actions) {
+            if (action.startsSection || menuSections.length === 0) {
+                menuSections.push({ items: [] });
+            }
+            menuSections[menuSections.length - 1].items.push({
+                label: action.label,
+                icon: action.sfSymbol,
+                destructive: action.destructive,
+                disabled: action.disabled,
+                onPress: action.onPress,
+            });
+        }
+        menuSections.push({
+            title: t('sessionInfo.colorMarker'),
+            palette: true,
+            items: SESSION_MARKER_COLORS.map((color) => ({
+                label: sessionMarkerColorLabels[color](),
+                icon: 'circle.fill',
+                iconColor: SESSION_MARKER_COLOR_VALUES[color],
+                selected: markerColor === color,
+                onPress: () => selectMarkerColor(markerColor === color ? null : color),
+            })),
+        });
+
+        return (
+            <>
+                <ContextMenuView
+                    sections={menuSections}
+                    title={t('sessionInfo.quickActions')}
+                    previewShape={highlightShape}
+                    style={styles.highlightHost}
+                >
+                    {children}
+                </ContextMenuView>
+                {archiveMenu}
+            </>
+        );
+    }
 
     if (Platform.OS !== 'web') {
         const child = React.isValidElement(children)

@@ -68,7 +68,7 @@ const styles = StyleSheet.create((theme) => ({
     },
 }));
 
-const colorLabels: Record<SessionMarkerColor, () => string> = {
+export const sessionMarkerColorLabels: Record<SessionMarkerColor, () => string> = {
     red: () => t('sessionInfo.markerRed'),
     orange: () => t('sessionInfo.markerOrange'),
     yellow: () => t('sessionInfo.markerYellow'),
@@ -118,7 +118,7 @@ export function SessionColorPalette({
                         <Pressable
                             key={color}
                             accessibilityRole="button"
-                            accessibilityLabel={colorLabels[color]()}
+                            accessibilityLabel={sessionMarkerColorLabels[color]()}
                             accessibilityHint={selected ? t('sessionInfo.clearColorMarker') : undefined}
                             accessibilityState={{ selected }}
                             onPress={() => onSelect(selected ? null : color)}
