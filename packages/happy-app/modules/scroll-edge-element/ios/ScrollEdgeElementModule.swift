@@ -37,26 +37,66 @@ public final class ScrollEdgeElementView: ExpoView {
   private var lastFrameInWindow: CGRect?
   private var lastMovedAt: CFTimeInterval = 0
   private var settled = true
+  private var attachedSize: CGSize = .zero
+  private var watchdog: Timer?
+  private var backGestures: [UIGestureRecognizer] = []
 
   deinit {
     stopObservingKeyboard()
+    stopObservingBackGesture()
+    stopWatchdog()
   }
 
   public override func didMoveToWindow() {
     super.didMoveToWindow()
     if window != nil {
       startObservingKeyboard()
+      startObservingBackGesture()
+      startWatchdog()
+      // Coming back on screen (say, popping back to the chat) the old registration may be stale.
+      remeasure()
     } else {
       stopObservingKeyboard()
+      stopObservingBackGesture()
+      stopWatchdog()
     }
-    attach()
   }
 
   // Layout runs whenever the wrapped view or its surroundings change, which is also when the scroll
-  // view it belongs to can appear (the list mounts after the first frame) or be replaced.
+  // view it belongs to can appear (the list mounts after the first frame) or be replaced. A change
+  // of size (a panel above the input, a taller input) only counts once the interaction is re-added.
   public override func layoutSubviews() {
     super.layoutSubviews()
-    attach()
+    if interaction != nil && bounds.size != attachedSize {
+      remeasure()
+    } else {
+      attach()
+    }
+  }
+
+  // The scroll view can be swapped without this view laying out: a chat list mounts a moment
+  // after the composer (and replaces the empty state's scroll view), or remounts for another
+  // session. A cheap check a few times a second re-attaches once the one it holds has left.
+  private func startWatchdog() {
+    #if compiler(>=6.2)
+    guard #available(iOS 26.0, *) else { return }
+    #else
+    return
+    #endif
+    guard watchdog == nil else { return }
+    let timer = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in
+      guard let self, self.window != nil else { return }
+      if self.attachedScrollView?.window == nil {
+        self.remeasure()
+      }
+    }
+    RunLoop.main.add(timer, forMode: .common)
+    watchdog = timer
+  }
+
+  private func stopWatchdog() {
+    watchdog?.invalidate()
+    watchdog = nil
   }
 
   private func attach() {
@@ -65,7 +105,15 @@ public final class ScrollEdgeElementView: ExpoView {
     guard #available(iOS 26.0, *) else { return }
     guard window != nil, let scrollView = findScrollView() else { return }
     if scrollView === attachedScrollView && interaction != nil { return }
+    register(on: scrollView)
+    #endif
+  }
 
+  /// Re-adds the interaction, the only thing that makes UIKit measure this view again: laying it
+  /// out does not move an edge effect it has already shaped.
+  private func register(on scrollView: UIScrollView) {
+    #if compiler(>=6.2)
+    guard #available(iOS 26.0, *) else { return }
     if let old = interaction {
       removeInteraction(old)
     }
@@ -80,17 +128,17 @@ public final class ScrollEdgeElementView: ExpoView {
 
     interaction = edgeInteraction
     attachedScrollView = scrollView
+    attachedSize = bounds.size
     #endif
   }
 
-  // A composer that rides the keyboard is moved by a transform on an ancestor, which UIKit does
-  // not treat as a layout change: the edge effect stays where the element was laid out (behind
-  // the keyboard) until something inside it happens to lay out again. So from the moment the
-  // keyboard starts to move until it has gone, the element's place on screen is checked every
-  // frame and it is laid out whenever it moved; once it holds still the interaction is re-added,
-  // which makes UIKit measure it afresh wherever it ended up. Following the element rather than
-  // the keyboard's notifications also covers an interactive dismissal, which posts none while
-  // the finger drags the keyboard (and the composer) down.
+  // A composer that rides the keyboard is moved by a transform on an ancestor, and UIKit only
+  // measures an element when its interaction is added: the edge effect stays where it was first
+  // shaped (behind the keyboard, or wherever a drag last paused). So from the moment the keyboard
+  // starts to move until it has gone, the element's place on screen is checked every frame and the
+  // interaction is re-added whenever it moved. Following the element rather than the keyboard's
+  // notifications also covers an interactive dismissal, which posts none while the finger drags
+  // the keyboard (and the composer) down, and a swipe back, which slides the whole screen.
   private func startObservingKeyboard() {
     guard keyboardObservers.isEmpty else { return }
     let center = NotificationCenter.default
@@ -142,11 +190,11 @@ public final class ScrollEdgeElementView: ExpoView {
       lastFrameInWindow = frame
       lastMovedAt = now
       settled = false
-      setNeedsLayout()
-      layoutIfNeeded()
+      refresh()
       return
     }
-    // Still for a few frames: the move is over (or a pause in a drag).
+    // Still for a few frames: the move is over (or a pause in a drag). One more measure there
+    // catches a transform applied after this frame's check.
     if !settled && now - lastMovedAt >= 0.1 {
       settled = true
       remeasure()
@@ -161,6 +209,62 @@ public final class ScrollEdgeElementView: ExpoView {
   private func remeasure() {
     attachedScrollView = nil
     attach()
+  }
+
+  /// `remeasure` without searching for the scroll view again, cheap enough for every frame.
+  private func refresh() {
+    if let scrollView = attachedScrollView, scrollView.window != nil {
+      register(on: scrollView)
+    } else {
+      remeasure()
+    }
+  }
+
+  // A swipe back slides the screen without any keyboard notification, so the navigation
+  // controller's back gestures start the tracking too.
+  private func startObservingBackGesture() {
+    stopObservingBackGesture()
+    guard let navigationController = findNavigationController() else { return }
+    var recognizers: [UIGestureRecognizer] = []
+    if let pop = navigationController.interactivePopGestureRecognizer {
+      recognizers.append(pop)
+    }
+    #if compiler(>=6.2)
+    if #available(iOS 26.0, *), let contentPop = navigationController.interactiveContentPopGestureRecognizer {
+      recognizers.append(contentPop)
+    }
+    #endif
+    // react-native-screens' own full-screen swipe lives on the controller's view.
+    for recognizer in navigationController.view.gestureRecognizers ?? [] where !recognizers.contains(recognizer) {
+      recognizers.append(recognizer)
+    }
+    recognizers.forEach { $0.addTarget(self, action: #selector(backGestureChanged(_:))) }
+    backGestures = recognizers
+  }
+
+  private func stopObservingBackGesture() {
+    backGestures.forEach { $0.removeTarget(self, action: #selector(backGestureChanged(_:))) }
+    backGestures = []
+  }
+
+  @objc private func backGestureChanged(_ recognizer: UIGestureRecognizer) {
+    switch recognizer.state {
+    case .began, .changed, .ended, .cancelled:
+      startTracking()
+    default:
+      break
+    }
+  }
+
+  private func findNavigationController() -> UINavigationController? {
+    var responder: UIResponder? = self
+    while let current = responder {
+      if let navigationController = current as? UINavigationController {
+        return navigationController
+      }
+      responder = current.next
+    }
+    return nil
   }
 
   /// The scroll view this element floats over: the largest one beside it, found by widening the
