@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { CODEX_PACKAGE } from '@/codex/package';
+import { codexPackage } from '@/codex/package';
 import { resolveCodexRuntime } from '@/codex/codexRuntime';
 
 vi.mock('@/claude/claudeLocal', () => ({
@@ -14,7 +14,7 @@ vi.mock('@/ui/logger', () => ({
 const { buildSpawnPlan } = await import('./runOneShot');
 
 /** Whatever this machine resolves for the pinned Codex: a matching local binary or npx. */
-const codexCommand = resolveCodexRuntime(CODEX_PACKAGE, []).command;
+const codexCommand = resolveCodexRuntime(codexPackage(), []).command;
 
 describe('runOneShot spawn plan', () => {
   it('passes claude model and initial session-id arguments', () => {

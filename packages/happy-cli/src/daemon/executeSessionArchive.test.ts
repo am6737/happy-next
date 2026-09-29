@@ -20,11 +20,11 @@ vi.mock('@/codex/appserver/CodexJsonRpcPeer', () => ({ CodexJsonRpcPeer: vi.fn((
 vi.mock('@/ui/logger', () => ({ logger: { debug: vi.fn() } }));
 import { executeSessionArchive, removeCodexSessionIndexEntries, syncCodexArchive, restoreCodexSession } from './executeSessionArchive';
 import { readSessionBinding, listSessionBindings, processIdentity, writeStopSnapshot, type SessionBinding } from './sessionBinding';
-import { CODEX_PACKAGE } from '@/codex/package';
+import { codexPackage } from '@/codex/package';
 import { resolveCodexRuntime } from '@/codex/codexRuntime';
 
 /** Whatever this machine resolves for the pinned Codex: a matching local binary or npx. */
-const codexRuntime = resolveCodexRuntime(CODEX_PACKAGE, ['app-server']);
+const codexRuntime = resolveCodexRuntime(codexPackage(), ['app-server']);
 
 describe('executeSessionArchive', () => {
     beforeEach(() => {

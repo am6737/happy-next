@@ -1,37 +1,13 @@
+import { getModelCatalog, type ModelPricing as CatalogPricing } from 'happy-wire';
 import { Usage } from '../api/types';
 
 /**
- * Pricing rates per million tokens for different models
+ * Pricing rates per million tokens for models that are no longer in the model
+ * catalog. Current models carry their rates (and fast-mode rates) in the
+ * happy-wire catalog instead.
  * Source: https://platform.claude.com/docs/en/about-claude/pricing (as of September 2026)
  */
 export const PRICING = {
-    // --- Claude 5 ---
-    'claude-fable-5-1': {
-        input: 10.0,
-        output: 50.0,
-        cache_write: 12.50,
-        cache_read: 0.25
-    },
-    'claude-fable-5': {
-        input: 10.0,
-        output: 50.0,
-        cache_write: 12.50,
-        cache_read: 1.0
-    },
-    'claude-opus-5': {
-        input: 5.0,
-        output: 25.0,
-        cache_write: 6.25,
-        cache_read: 0.50
-    },
-    // The launch price is now the standard price; the September increase was cancelled.
-    'claude-sonnet-5': {
-        input: 2.0,
-        output: 10.0,
-        cache_write: 2.50,
-        cache_read: 0.20
-    },
-
     // --- Claude 4 ---
     'claude-4.5-opus': {
         input: 5.0,
@@ -124,31 +100,72 @@ type ModelPricing = {
     readonly cache_read: number;
 };
 
+function toModelPricing(pricing: CatalogPricing): ModelPricing {
+    return {
+        input: pricing.input,
+        output: pricing.output,
+        cache_write: pricing.cacheWrite,
+        cache_read: pricing.cacheRead,
+    };
+}
+
+type CatalogRate = { key: string; pricing: ModelPricing };
+
+/** Longest key first, so `claude-fable-5-1` wins over `claude-fable-5`. */
+function byKeyLength(a: CatalogRate, b: CatalogRate): number {
+    return b.key.length - a.key.length;
+}
+
 /**
- * Fast mode (research preview) serves Claude Opus 5 and Claude Opus 4.8 at a
- * premium rate across the full context window — 2x the standard Opus price.
- * Prompt-caching multipliers apply on top. Opus 4.7 rejects fast mode and
- * Opus 4.6 ignores it, so both stay on standard pricing.
+ * Standard rates for catalog models, matched anywhere in the model id so dated
+ * (`claude-opus-5-20260701`) and provider-prefixed ids resolve. Each model is
+ * also keyed without its `claude-` prefix to catch ids like `opus-5`. Built from
+ * the active catalog on every call, so a catalog fetched from the server applies.
+ */
+function catalogRates(): CatalogRate[] {
+    return getModelCatalog().models.flatMap((model) => {
+        if (!model.pricing) return [];
+        const pricing = toModelPricing(model.pricing);
+        const keys = new Set([model.id, model.id.replace(/^claude-/, '')]);
+        return [...keys].map((key) => ({ key, pricing }));
+    }).sort(byKeyLength);
+}
+
+/** Older names for fast-mode models that still appear in usage reports. */
+const FAST_MODE_ALIASES: Record<string, string> = {
+    'claude-4.8-opus': 'claude-opus-4-8',
+};
+
+/**
+ * Fast mode (research preview) is billed at the catalog `fastPricing` rates
+ * across the full context window. Prompt-caching multipliers apply on top.
+ * Models without fast mode (e.g. Opus 4.7, which rejects it, or Opus 4.6,
+ * which ignores it) stay on standard pricing.
  * Source: https://platform.claude.com/docs/en/about-claude/pricing#fast-mode-pricing
  */
-const FAST_MODE_PRICING: ModelPricing = {
-    input: 10.0,
-    output: 50.0,
-    cache_write: 12.50,
-    cache_read: 1.00
-};
+function fastModeRates(): CatalogRate[] {
+    const rates = getModelCatalog().models.flatMap((model) =>
+        model.fastPricing ? [{ key: model.id, pricing: toModelPricing(model.fastPricing) }] : []);
+    const aliasRates = Object.entries(FAST_MODE_ALIASES).flatMap(([alias, id]) => {
+        const rate = rates.find((candidate) => candidate.key === id);
+        return rate ? [{ key: alias, pricing: rate.pricing }] : [];
+    });
+    return [...rates, ...aliasRates].sort(byKeyLength);
+}
 
 /** A trailing `-fast` marks a fast-mode request; a date suffix may follow it. */
 const FAST_MODE_SUFFIX = /-fast(?:-\d{8}|-\d{4}-\d{2}-\d{2})?$/;
-
-/** Fast mode is served only by Claude Opus 5 and Claude Opus 4.8. */
-const FAST_MODE_BASE_MODELS = ['claude-opus-5', 'claude-opus-4-8', 'claude-4.8-opus'];
 
 /** Premium rates for a fast-mode model id, or undefined for a standard model. */
 function resolveFastModePricing(modelId: string): ModelPricing | undefined {
     if (!FAST_MODE_SUFFIX.test(modelId)) return undefined;
     const base = modelId.replace(FAST_MODE_SUFFIX, '');
-    return FAST_MODE_BASE_MODELS.some((model) => base.includes(model)) ? FAST_MODE_PRICING : undefined;
+    return fastModeRates().find((rate) => base.includes(rate.key))?.pricing;
+}
+
+/** Standard rates of the catalog model named in the id, or undefined. */
+function resolveCatalogPricing(modelId: string): ModelPricing | undefined {
+    return catalogRates().find((rate) => modelId.includes(rate.key))?.pricing;
 }
 
 export type ModelId = keyof typeof PRICING;
@@ -163,26 +180,21 @@ const DEFAULT_MODEL = 'claude-3-5-sonnet-20241022';
  */
 export function calculateCost(usage: Usage, modelId?: string): { total: number, input: number, output: number } {
     const id = typeof modelId === 'string' ? modelId : '';
-    let pricing: ModelPricing | undefined = resolveFastModePricing(id) ?? PRICING[id as ModelId];
+    let pricing: ModelPricing | undefined = resolveFastModePricing(id)
+        ?? PRICING[id as ModelId]
+        ?? resolveCatalogPricing(id);
 
     // Fallback if model not found
     if (!pricing) {
-        // Try fuzzy matching for common aliases
-        if (modelId?.includes('fable-5')) {
-            pricing = modelId.includes('fable-5-1')
-                ? PRICING['claude-fable-5-1']
-                : PRICING['claude-fable-5'];
-        }
-        else if (modelId?.includes('opus')) {
-            if (modelId.includes('opus-5')) pricing = PRICING['claude-opus-5'];
-            else if (/opus-4-[5-8](?:\D|$)|4\.[5-8](?:\D|$)/.test(modelId)) pricing = PRICING['claude-4.5-opus'];
+        // Try fuzzy matching for legacy aliases
+        if (modelId?.includes('opus')) {
+            if (/opus-4-[5-8](?:\D|$)|4\.[5-8](?:\D|$)/.test(modelId)) pricing = PRICING['claude-4.5-opus'];
             else if (modelId.includes('opus-4-1') || modelId.includes('4.1')) pricing = PRICING['claude-4.1-opus'];
             else if (modelId.includes('4')) pricing = PRICING['claude-4-opus'];
             else pricing = PRICING['claude-3-opus-20240229'];
         }
         else if (modelId?.includes('sonnet')) {
-            if (modelId.includes('sonnet-5')) pricing = PRICING['claude-sonnet-5'];
-            else if (modelId.includes('4.6')) pricing = PRICING['claude-4.6-sonnet'];
+            if (modelId.includes('4.6')) pricing = PRICING['claude-4.6-sonnet'];
             else if (modelId.includes('4.5')) pricing = PRICING['claude-4.5-sonnet'];
             else if (modelId.includes('4')) pricing = PRICING['claude-4-sonnet'];
             else pricing = PRICING['claude-3-5-sonnet-20241022'];

@@ -2,7 +2,7 @@ import fastify from 'fastify';
 import { serializerCompiler, validatorCompiler, ZodTypeProvider } from 'fastify-type-provider-zod';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { type Fastify } from '@/app/api/types';
-import { CLAUDE_MODEL_MODES, CODEX_MODEL_MODES, GEMINI_MODEL_MODES } from 'happy-wire';
+import { getValidModelModesForAgent } from 'happy-wire';
 
 type RunStatus = 'queued' | 'running' | 'canceling' | 'completed' | 'failed' | 'cancelled';
 type TaskStatus = 'queued' | 'dispatching' | 'running' | 'completed' | 'failed' | 'cancelled' | 'dependency_failed';
@@ -1423,9 +1423,9 @@ describe('orchestrator integration paths', () => {
         expect(response.statusCode).toBe(200);
         const body = response.json();
         expect(body.data.modelModes).toEqual({
-            claude: CLAUDE_MODEL_MODES,
-            codex: CODEX_MODEL_MODES,
-            gemini: GEMINI_MODEL_MODES,
+            claude: getValidModelModesForAgent('claude'),
+            codex: getValidModelModesForAgent('codex'),
+            gemini: getValidModelModesForAgent('gemini'),
         });
         expect(body.data.defaults).toEqual(expect.objectContaining({
             retryMaxAttempts: 1,
@@ -1438,9 +1438,9 @@ describe('orchestrator integration paths', () => {
                 dispatchReady: true,
                 providers: ['claude', 'codex', 'gemini'],
                 modelModes: {
-                    claude: CLAUDE_MODEL_MODES,
-                    codex: CODEX_MODEL_MODES,
-                    gemini: GEMINI_MODEL_MODES,
+                    claude: getValidModelModesForAgent('claude'),
+                    codex: getValidModelModesForAgent('codex'),
+                    gemini: getValidModelModesForAgent('gemini'),
                 },
             }),
             expect.objectContaining({
@@ -1488,14 +1488,14 @@ describe('orchestrator integration paths', () => {
 
         expect(m1.providers).toEqual(['claude', 'codex', 'gemini']);
         expect(m1.modelModes).toEqual({
-            claude: CLAUDE_MODEL_MODES,
-            codex: CODEX_MODEL_MODES,
-            gemini: GEMINI_MODEL_MODES,
+            claude: getValidModelModesForAgent('claude'),
+            codex: getValidModelModesForAgent('codex'),
+            gemini: getValidModelModesForAgent('gemini'),
         });
 
         expect(m2.providers).toEqual(['claude']);
         expect(m2.modelModes).toEqual({
-            claude: CLAUDE_MODEL_MODES,
+            claude: getValidModelModesForAgent('claude'),
         });
         await app.close();
     });

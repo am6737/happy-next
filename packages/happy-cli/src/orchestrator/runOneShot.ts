@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { claudeCliPath } from '@/claude/claudeLocal';
-import { CODEX_PACKAGE } from '@/codex/package';
+import { codexPackage } from '@/codex/package';
 import { resolveCodexRuntime } from '@/codex/codexRuntime';
 import { logger } from '@/ui/logger';
 import { MODEL_MODE_DEFAULT, isModelModeForAgent, parseCodexModelMode, parseClaudeModelMode } from 'happy-wire';
@@ -130,7 +130,7 @@ export function buildSpawnPlan(
           }
         }
       }
-      const runtime = resolveCodexRuntime(CODEX_PACKAGE, codexArgs);
+      const runtime = resolveCodexRuntime(codexPackage(), codexArgs);
       return {
         command: runtime.command,
         args: runtime.args,

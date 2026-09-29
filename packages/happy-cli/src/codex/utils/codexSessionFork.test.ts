@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { forkAndTruncateCodexSession, forkCodexSession } from './codexSessionFork';
 import { generateStableUuid } from './codexSessionReader';
 import { Methods } from '../appserver/types';
-import { CODEX_PACKAGE } from '../package';
+import { codexPackage } from '../package';
 import { CODEX_INITIALIZE_TIMEOUT_MS, resolveCodexRuntime } from '../codexRuntime';
 
 const peer = vi.hoisted(() => ({ spawn: vi.fn(), request: vi.fn(), notify: vi.fn(), close: vi.fn() }));
@@ -65,7 +65,7 @@ describe('Codex session fork', () => {
 
   it('forks paginated history by canonical ID, never by copying or resuming the source', async () => {
     expect(await forkCodexSession(sourceId)).toEqual({ success: true, newFilePath: forkPath });
-    const runtime = resolveCodexRuntime(CODEX_PACKAGE, ['app-server']);
+    const runtime = resolveCodexRuntime(codexPackage(), ['app-server']);
     expect(peer.spawn).toHaveBeenCalledWith(runtime.command, runtime.args, { cwd: process.cwd() });
     expect(peer.request).toHaveBeenNthCalledWith(1, Methods.INITIALIZE, expect.objectContaining({ capabilities: { experimentalApi: true } }), CODEX_INITIALIZE_TIMEOUT_MS);
     expect(peer.notify).toHaveBeenCalledWith(Methods.INITIALIZED);
@@ -88,7 +88,7 @@ describe('Codex session fork', () => {
     });
     expect(await forkCodexSession(sourceId, true)).toEqual({ success: true, newFilePath: forkPath });
     expect(restore).toHaveBeenCalledWith(sourceId);
-    const runtime = resolveCodexRuntime(CODEX_PACKAGE, ['app-server']);
+    const runtime = resolveCodexRuntime(codexPackage(), ['app-server']);
     expect(peer.spawn).toHaveBeenCalledWith(runtime.command, runtime.args, {
       cwd: process.cwd(), env: { CODEX_HOME: originalHome },
     });

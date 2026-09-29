@@ -27,6 +27,7 @@ import { shareRoutes } from "./routes/shareRoutes";
 import { publicShareRoutes } from "./routes/publicShareRoutes";
 import { orchestratorRoutes } from "./routes/orchestratorRoutes";
 import { appConfigRoutes } from "./routes/appConfigRoutes";
+import { modelCatalogRoutes } from "./routes/modelCatalogRoutes";
 import { githubRoutes } from "./routes/githubRoutes";
 
 export async function startApi() {
@@ -65,6 +66,7 @@ export async function startApi() {
 
     // Routes
     appConfigRoutes(typed);
+    modelCatalogRoutes(typed);
     authRoutes(typed);
     pushRoutes(typed);
     sessionRoutes(typed);

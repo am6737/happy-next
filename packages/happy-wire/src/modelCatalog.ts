@@ -1,616 +1,32 @@
-export type AgentFlavor = 'claude' | 'codex' | 'gemini';
+import catalogJson from './modelCatalog.json';
+import { ModelCatalogSchema, type AgentFlavor, type ModelCatalog, type ModelCatalogEntry } from './modelCatalogSchema';
 
 export const MODEL_MODE_DEFAULT = 'default' as const;
 
 export type CodexReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
-export type CodexModelFamily =
-    | typeof MODEL_MODE_DEFAULT
-    | 'gpt-6-astra'
-    | 'gpt-5.6-sol'
-    | 'gpt-5.6-terra'
-    | 'gpt-5.6-luna'
-    | 'gpt-5.5';
 export type ClaudeReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
-export type ClaudeModelFamily =
-    | typeof MODEL_MODE_DEFAULT
-    | 'claude-fable-5-1'
-    | 'claude-fable-5'
-    | 'claude-fable-5[1m]'
-    | 'claude-opus-5'
-    | 'claude-sonnet-5'
-    | 'claude-opus-4-8'
-    | 'claude-opus-4-8[1m]'
-    | 'claude-opus-4-7'
-    | 'claude-opus-4-7[1m]'
-    | 'claude-opus-4-6'
-    | 'claude-opus-4-6[1m]'
-    | 'claude-sonnet-4-6'
-    | 'claude-sonnet-4-6[1m]'
-    | 'claude-haiku-4-5';
-
-export const MODEL_MODES = [
-    MODEL_MODE_DEFAULT,
-    'claude-fable-5-1',
-    'claude-fable-5',
-    'claude-fable-5[1m]',
-    'claude-opus-5',
-    'claude-sonnet-5',
-    'claude-opus-4-8',
-    'claude-opus-4-8[1m]',
-    'claude-opus-4-7',
-    'claude-opus-4-7[1m]',
-    'claude-opus-4-6',
-    'claude-opus-4-6[1m]',
-    'claude-sonnet-4-6',
-    'claude-sonnet-4-6[1m]',
-    'claude-haiku-4-5',
-    'claude-fable-5-1-low',
-    'claude-fable-5-1-medium',
-    'claude-fable-5-1-high',
-    'claude-fable-5-1-xhigh',
-    'claude-fable-5-1-max',
-    'claude-fable-5-low',
-    'claude-fable-5-medium',
-    'claude-fable-5-high',
-    'claude-fable-5-xhigh',
-    'claude-fable-5-max',
-    'claude-fable-5[1m]-low',
-    'claude-fable-5[1m]-medium',
-    'claude-fable-5[1m]-high',
-    'claude-fable-5[1m]-xhigh',
-    'claude-fable-5[1m]-max',
-    'claude-opus-5-low',
-    'claude-opus-5-medium',
-    'claude-opus-5-high',
-    'claude-opus-5-xhigh',
-    'claude-opus-5-max',
-    'claude-sonnet-5-low',
-    'claude-sonnet-5-medium',
-    'claude-sonnet-5-high',
-    'claude-sonnet-5-xhigh',
-    'claude-sonnet-5-max',
-    'claude-opus-4-8-low',
-    'claude-opus-4-8-medium',
-    'claude-opus-4-8-high',
-    'claude-opus-4-8-xhigh',
-    'claude-opus-4-8-max',
-    'claude-opus-4-8[1m]-low',
-    'claude-opus-4-8[1m]-medium',
-    'claude-opus-4-8[1m]-high',
-    'claude-opus-4-8[1m]-xhigh',
-    'claude-opus-4-8[1m]-max',
-    'claude-opus-4-7-low',
-    'claude-opus-4-7-medium',
-    'claude-opus-4-7-high',
-    'claude-opus-4-7-xhigh',
-    'claude-opus-4-7-max',
-    'claude-opus-4-7[1m]-low',
-    'claude-opus-4-7[1m]-medium',
-    'claude-opus-4-7[1m]-high',
-    'claude-opus-4-7[1m]-xhigh',
-    'claude-opus-4-7[1m]-max',
-    'claude-opus-4-6-low',
-    'claude-opus-4-6-medium',
-    'claude-opus-4-6-high',
-    'claude-opus-4-6-max',
-    'claude-opus-4-6[1m]-low',
-    'claude-opus-4-6[1m]-medium',
-    'claude-opus-4-6[1m]-high',
-    'claude-opus-4-6[1m]-max',
-    'claude-sonnet-4-6-low',
-    'claude-sonnet-4-6-medium',
-    'claude-sonnet-4-6-high',
-    'claude-sonnet-4-6-max',
-    'claude-sonnet-4-6[1m]-low',
-    'claude-sonnet-4-6[1m]-medium',
-    'claude-sonnet-4-6[1m]-high',
-    'claude-sonnet-4-6[1m]-max',
-    'gpt-6-astra-low',
-    'gpt-6-astra-medium',
-    'gpt-6-astra-high',
-    'gpt-6-astra-xhigh',
-    'gpt-6-astra-max',
-    'gpt-6-astra-ultra',
-    'gpt-5.6-sol-low',
-    'gpt-5.6-sol-medium',
-    'gpt-5.6-sol-high',
-    'gpt-5.6-sol-xhigh',
-    'gpt-5.6-sol-max',
-    'gpt-5.6-sol-ultra',
-    'gpt-5.6-terra-low',
-    'gpt-5.6-terra-medium',
-    'gpt-5.6-terra-high',
-    'gpt-5.6-terra-xhigh',
-    'gpt-5.6-terra-max',
-    'gpt-5.6-terra-ultra',
-    'gpt-5.6-luna-low',
-    'gpt-5.6-luna-medium',
-    'gpt-5.6-luna-high',
-    'gpt-5.6-luna-xhigh',
-    'gpt-5.6-luna-max',
-    'gpt-5.5-low',
-    'gpt-5.5-medium',
-    'gpt-5.5-high',
-    'gpt-5.5-xhigh',
-    'gemini-3.8-flash',
-    'gemini-3.7-flash',
-    'gemini-3.1-pro-preview',
-    'gemini-3.6-flash',
-    'gemini-3.5-flash',
-    'gemini-3.5-flash-lite',
-    'gemini-3.1-flash-lite',
-    'gemini-2.5-pro',
-    'gemini-2.5-flash-lite',
-] as const;
-
-export type ModelMode = typeof MODEL_MODES[number];
-
-export const CLAUDE_MODEL_MODES = [
-    MODEL_MODE_DEFAULT,
-    'claude-fable-5-1',
-    'claude-fable-5',
-    'claude-fable-5[1m]',
-    'claude-opus-5',
-    'claude-sonnet-5',
-    'claude-opus-4-8',
-    'claude-opus-4-8[1m]',
-    'claude-opus-4-7',
-    'claude-opus-4-7[1m]',
-    'claude-opus-4-6',
-    'claude-opus-4-6[1m]',
-    'claude-sonnet-4-6',
-    'claude-sonnet-4-6[1m]',
-    'claude-haiku-4-5',
-    'claude-fable-5-1-low',
-    'claude-fable-5-1-medium',
-    'claude-fable-5-1-high',
-    'claude-fable-5-1-xhigh',
-    'claude-fable-5-1-max',
-    'claude-fable-5-low',
-    'claude-fable-5-medium',
-    'claude-fable-5-high',
-    'claude-fable-5-xhigh',
-    'claude-fable-5-max',
-    'claude-fable-5[1m]-low',
-    'claude-fable-5[1m]-medium',
-    'claude-fable-5[1m]-high',
-    'claude-fable-5[1m]-xhigh',
-    'claude-fable-5[1m]-max',
-    'claude-opus-5-low',
-    'claude-opus-5-medium',
-    'claude-opus-5-high',
-    'claude-opus-5-xhigh',
-    'claude-opus-5-max',
-    'claude-sonnet-5-low',
-    'claude-sonnet-5-medium',
-    'claude-sonnet-5-high',
-    'claude-sonnet-5-xhigh',
-    'claude-sonnet-5-max',
-    'claude-opus-4-8-low',
-    'claude-opus-4-8-medium',
-    'claude-opus-4-8-high',
-    'claude-opus-4-8-xhigh',
-    'claude-opus-4-8-max',
-    'claude-opus-4-8[1m]-low',
-    'claude-opus-4-8[1m]-medium',
-    'claude-opus-4-8[1m]-high',
-    'claude-opus-4-8[1m]-xhigh',
-    'claude-opus-4-8[1m]-max',
-    'claude-opus-4-7-low',
-    'claude-opus-4-7-medium',
-    'claude-opus-4-7-high',
-    'claude-opus-4-7-xhigh',
-    'claude-opus-4-7-max',
-    'claude-opus-4-7[1m]-low',
-    'claude-opus-4-7[1m]-medium',
-    'claude-opus-4-7[1m]-high',
-    'claude-opus-4-7[1m]-xhigh',
-    'claude-opus-4-7[1m]-max',
-    'claude-opus-4-6-low',
-    'claude-opus-4-6-medium',
-    'claude-opus-4-6-high',
-    'claude-opus-4-6-max',
-    'claude-opus-4-6[1m]-low',
-    'claude-opus-4-6[1m]-medium',
-    'claude-opus-4-6[1m]-high',
-    'claude-opus-4-6[1m]-max',
-    'claude-sonnet-4-6-low',
-    'claude-sonnet-4-6-medium',
-    'claude-sonnet-4-6-high',
-    'claude-sonnet-4-6-max',
-    'claude-sonnet-4-6[1m]-low',
-    'claude-sonnet-4-6[1m]-medium',
-    'claude-sonnet-4-6[1m]-high',
-    'claude-sonnet-4-6[1m]-max',
-] as const satisfies readonly ModelMode[];
-
-export const GEMINI_MODEL_MODES = [
-    MODEL_MODE_DEFAULT,
-    'gemini-3.8-flash',
-    'gemini-3.7-flash',
-    'gemini-3.1-pro-preview',
-    'gemini-3.6-flash',
-    'gemini-3.5-flash',
-    'gemini-3.5-flash-lite',
-    'gemini-3.1-flash-lite',
-    'gemini-2.5-pro',
-    'gemini-2.5-flash-lite',
-] as const satisfies readonly ModelMode[];
-
-export const CODEX_MODEL_MODES = [
-    MODEL_MODE_DEFAULT,
-    'gpt-6-astra-low',
-    'gpt-6-astra-medium',
-    'gpt-6-astra-high',
-    'gpt-6-astra-xhigh',
-    'gpt-6-astra-max',
-    'gpt-6-astra-ultra',
-    'gpt-5.6-sol-low',
-    'gpt-5.6-sol-medium',
-    'gpt-5.6-sol-high',
-    'gpt-5.6-sol-xhigh',
-    'gpt-5.6-sol-max',
-    'gpt-5.6-sol-ultra',
-    'gpt-5.6-terra-low',
-    'gpt-5.6-terra-medium',
-    'gpt-5.6-terra-high',
-    'gpt-5.6-terra-xhigh',
-    'gpt-5.6-terra-max',
-    'gpt-5.6-terra-ultra',
-    'gpt-5.6-luna-low',
-    'gpt-5.6-luna-medium',
-    'gpt-5.6-luna-high',
-    'gpt-5.6-luna-xhigh',
-    'gpt-5.6-luna-max',
-    'gpt-5.5-low',
-    'gpt-5.5-medium',
-    'gpt-5.5-high',
-    'gpt-5.5-xhigh',
-] as const satisfies readonly ModelMode[];
-
-const MODEL_MODE_SET = new Set<ModelMode>(MODEL_MODES);
-const CLAUDE_MODEL_MODE_SET = new Set<ModelMode>(CLAUDE_MODEL_MODES);
-const GEMINI_MODEL_MODE_SET = new Set<ModelMode>(GEMINI_MODEL_MODES);
-const CODEX_MODEL_MODE_SET = new Set<ModelMode>(CODEX_MODEL_MODES);
-
-export function isModelMode(value: string): value is ModelMode {
-    return MODEL_MODE_SET.has(value as ModelMode);
-}
-
-export function isModelModeForAgent(agent: AgentFlavor, mode: string): mode is ModelMode {
-    if (!isModelMode(mode)) return false;
-    if (agent === 'claude') return CLAUDE_MODEL_MODE_SET.has(mode);
-    if (agent === 'gemini') return GEMINI_MODEL_MODE_SET.has(mode);
-    return CODEX_MODEL_MODE_SET.has(mode);
-}
-
-export function getValidModelModesForAgent(agent: AgentFlavor): readonly ModelMode[] {
-    if (agent === 'claude') return CLAUDE_MODEL_MODES;
-    if (agent === 'gemini') return GEMINI_MODEL_MODES;
-    return CODEX_MODEL_MODES;
-}
-
-export const CLAUDE_MODEL_OPTIONS = [
-    { value: MODEL_MODE_DEFAULT, label: 'Use CLI configured model', shortLabel: 'CLI', description: 'Use profile/CLI defaults' },
-    { value: 'claude-fable-5-1', label: 'Fable 5.1', shortLabel: 'Fable 5.1', description: 'Most capable for long-horizon agentic work' },
-    { value: 'claude-fable-5', label: 'Fable 5', shortLabel: 'Fable 5', description: 'Previous generation Fable' },
-    { value: 'claude-opus-5', label: 'Opus 5', shortLabel: 'Opus 5', description: 'Best for complex agentic coding' },
-    { value: 'claude-sonnet-5', label: 'Sonnet 5', shortLabel: 'Sonnet 5', description: 'Best balance of speed and intelligence' },
-    { value: 'claude-opus-4-8', label: 'Opus 4.8', shortLabel: 'Opus 4.8', description: 'Previous generation Opus' },
-    { value: 'claude-opus-4-7', label: 'Opus 4.7', shortLabel: 'Opus 4.7', description: 'Previous generation Opus' },
-    { value: 'claude-opus-4-6', label: 'Opus 4.6', shortLabel: 'Opus 4.6', description: 'Older Opus' },
-    { value: 'claude-sonnet-4-6', label: 'Sonnet 4.6', shortLabel: 'Sonnet 4.6', description: 'Balanced speed and quality' },
-    { value: 'claude-haiku-4-5', label: 'Haiku 4.5', shortLabel: 'Haiku 4.5', description: 'Fastest' },
-] as const;
-
-// Base families only — the 1M context opt-in is a separate toggle in the UI,
-// combined back into the `family[1m]` wire value via claudeFamilyWith1M.
-export const CLAUDE_MODEL_FAMILY_OPTIONS = [
-    { value: MODEL_MODE_DEFAULT, label: 'Use CLI configured model', shortLabel: 'CLI', description: 'Use profile/CLI defaults' },
-    { value: 'claude-fable-5-1', label: 'Fable 5.1', shortLabel: 'Fable 5.1', description: 'Most capable for long-horizon agentic work' },
-    { value: 'claude-fable-5', label: 'Fable 5', shortLabel: 'Fable 5', description: 'Previous generation Fable' },
-    { value: 'claude-opus-5', label: 'Opus 5', shortLabel: 'Opus 5', description: 'Best for complex agentic coding' },
-    { value: 'claude-sonnet-5', label: 'Sonnet 5', shortLabel: 'Sonnet 5', description: 'Best balance of speed and intelligence' },
-    { value: 'claude-opus-4-8', label: 'Opus 4.8', shortLabel: 'Opus 4.8', description: 'Previous generation Opus' },
-    { value: 'claude-opus-4-7', label: 'Opus 4.7', shortLabel: 'Opus 4.7', description: 'Previous generation Opus' },
-    { value: 'claude-opus-4-6', label: 'Opus 4.6', shortLabel: 'Opus 4.6', description: 'Older Opus' },
-    { value: 'claude-sonnet-4-6', label: 'Sonnet 4.6', shortLabel: 'Sonnet 4.6', description: 'Balanced speed and quality' },
-    { value: 'claude-haiku-4-5', label: 'Haiku 4.5', shortLabel: 'Haiku 4.5', description: 'Fastest' },
-] as const satisfies readonly { value: ClaudeModelFamily; label: string; shortLabel: string; description: string }[];
-
-const CLAUDE_MODE_TO_SELECTION: Partial<Record<ModelMode, { family: ClaudeModelFamily; effort: ClaudeReasoningEffort }>> = {
-    'claude-fable-5-1-low': { family: 'claude-fable-5-1', effort: 'low' },
-    'claude-fable-5-1-medium': { family: 'claude-fable-5-1', effort: 'medium' },
-    'claude-fable-5-1-high': { family: 'claude-fable-5-1', effort: 'high' },
-    'claude-fable-5-1-xhigh': { family: 'claude-fable-5-1', effort: 'xhigh' },
-    'claude-fable-5-1-max': { family: 'claude-fable-5-1', effort: 'max' },
-    'claude-fable-5-low': { family: 'claude-fable-5', effort: 'low' },
-    'claude-fable-5-medium': { family: 'claude-fable-5', effort: 'medium' },
-    'claude-fable-5-high': { family: 'claude-fable-5', effort: 'high' },
-    'claude-fable-5-xhigh': { family: 'claude-fable-5', effort: 'xhigh' },
-    'claude-fable-5-max': { family: 'claude-fable-5', effort: 'max' },
-    'claude-fable-5[1m]-low': { family: 'claude-fable-5[1m]', effort: 'low' },
-    'claude-fable-5[1m]-medium': { family: 'claude-fable-5[1m]', effort: 'medium' },
-    'claude-fable-5[1m]-high': { family: 'claude-fable-5[1m]', effort: 'high' },
-    'claude-fable-5[1m]-xhigh': { family: 'claude-fable-5[1m]', effort: 'xhigh' },
-    'claude-fable-5[1m]-max': { family: 'claude-fable-5[1m]', effort: 'max' },
-    'claude-opus-5-low': { family: 'claude-opus-5', effort: 'low' },
-    'claude-opus-5-medium': { family: 'claude-opus-5', effort: 'medium' },
-    'claude-opus-5-high': { family: 'claude-opus-5', effort: 'high' },
-    'claude-opus-5-xhigh': { family: 'claude-opus-5', effort: 'xhigh' },
-    'claude-opus-5-max': { family: 'claude-opus-5', effort: 'max' },
-    'claude-sonnet-5-low': { family: 'claude-sonnet-5', effort: 'low' },
-    'claude-sonnet-5-medium': { family: 'claude-sonnet-5', effort: 'medium' },
-    'claude-sonnet-5-high': { family: 'claude-sonnet-5', effort: 'high' },
-    'claude-sonnet-5-xhigh': { family: 'claude-sonnet-5', effort: 'xhigh' },
-    'claude-sonnet-5-max': { family: 'claude-sonnet-5', effort: 'max' },
-    'claude-opus-4-8-low': { family: 'claude-opus-4-8', effort: 'low' },
-    'claude-opus-4-8-medium': { family: 'claude-opus-4-8', effort: 'medium' },
-    'claude-opus-4-8-high': { family: 'claude-opus-4-8', effort: 'high' },
-    'claude-opus-4-8-xhigh': { family: 'claude-opus-4-8', effort: 'xhigh' },
-    'claude-opus-4-8-max': { family: 'claude-opus-4-8', effort: 'max' },
-    'claude-opus-4-8[1m]-low': { family: 'claude-opus-4-8[1m]', effort: 'low' },
-    'claude-opus-4-8[1m]-medium': { family: 'claude-opus-4-8[1m]', effort: 'medium' },
-    'claude-opus-4-8[1m]-high': { family: 'claude-opus-4-8[1m]', effort: 'high' },
-    'claude-opus-4-8[1m]-xhigh': { family: 'claude-opus-4-8[1m]', effort: 'xhigh' },
-    'claude-opus-4-8[1m]-max': { family: 'claude-opus-4-8[1m]', effort: 'max' },
-    'claude-opus-4-7-low': { family: 'claude-opus-4-7', effort: 'low' },
-    'claude-opus-4-7-medium': { family: 'claude-opus-4-7', effort: 'medium' },
-    'claude-opus-4-7-high': { family: 'claude-opus-4-7', effort: 'high' },
-    'claude-opus-4-7-xhigh': { family: 'claude-opus-4-7', effort: 'xhigh' },
-    'claude-opus-4-7-max': { family: 'claude-opus-4-7', effort: 'max' },
-    'claude-opus-4-7[1m]-low': { family: 'claude-opus-4-7[1m]', effort: 'low' },
-    'claude-opus-4-7[1m]-medium': { family: 'claude-opus-4-7[1m]', effort: 'medium' },
-    'claude-opus-4-7[1m]-high': { family: 'claude-opus-4-7[1m]', effort: 'high' },
-    'claude-opus-4-7[1m]-xhigh': { family: 'claude-opus-4-7[1m]', effort: 'xhigh' },
-    'claude-opus-4-7[1m]-max': { family: 'claude-opus-4-7[1m]', effort: 'max' },
-    'claude-opus-4-6-low': { family: 'claude-opus-4-6', effort: 'low' },
-    'claude-opus-4-6-medium': { family: 'claude-opus-4-6', effort: 'medium' },
-    'claude-opus-4-6-high': { family: 'claude-opus-4-6', effort: 'high' },
-    'claude-opus-4-6-max': { family: 'claude-opus-4-6', effort: 'max' },
-    'claude-opus-4-6[1m]-low': { family: 'claude-opus-4-6[1m]', effort: 'low' },
-    'claude-opus-4-6[1m]-medium': { family: 'claude-opus-4-6[1m]', effort: 'medium' },
-    'claude-opus-4-6[1m]-high': { family: 'claude-opus-4-6[1m]', effort: 'high' },
-    'claude-opus-4-6[1m]-max': { family: 'claude-opus-4-6[1m]', effort: 'max' },
-    'claude-sonnet-4-6-low': { family: 'claude-sonnet-4-6', effort: 'low' },
-    'claude-sonnet-4-6-medium': { family: 'claude-sonnet-4-6', effort: 'medium' },
-    'claude-sonnet-4-6-high': { family: 'claude-sonnet-4-6', effort: 'high' },
-    'claude-sonnet-4-6-max': { family: 'claude-sonnet-4-6', effort: 'max' },
-    'claude-sonnet-4-6[1m]-low': { family: 'claude-sonnet-4-6[1m]', effort: 'low' },
-    'claude-sonnet-4-6[1m]-medium': { family: 'claude-sonnet-4-6[1m]', effort: 'medium' },
-    'claude-sonnet-4-6[1m]-high': { family: 'claude-sonnet-4-6[1m]', effort: 'high' },
-    'claude-sonnet-4-6[1m]-max': { family: 'claude-sonnet-4-6[1m]', effort: 'max' },
-};
-
-export const GEMINI_MODEL_OPTIONS = [
-    { value: MODEL_MODE_DEFAULT, label: 'Use CLI configured model', shortLabel: 'CLI', description: 'Use profile/CLI defaults' },
-    { value: 'gemini-3.8-flash', label: '3.8 Flash', shortLabel: '3.8 Flash', description: 'Latest balance of speed and intelligence' },
-    { value: 'gemini-3.7-flash', label: '3.7 Flash', shortLabel: '3.7 Flash', description: 'Previous generation Flash' },
-    { value: 'gemini-3.6-flash', label: '3.6 Flash', shortLabel: '3.6 Flash', description: 'Previous generation Flash' },
-    { value: 'gemini-3.1-pro-preview', label: '3.1 Pro (Preview)', shortLabel: '3.1 Pro', description: 'Previous generation Pro' },
-    { value: 'gemini-3.5-flash', label: '3.5 Flash', shortLabel: '3.5 Flash', description: 'Fast frontier agentic and coding model' },
-    { value: 'gemini-3.5-flash-lite', label: '3.5 Flash-Lite', shortLabel: '3.5 Flash-Lite', description: 'Fastest, most cost-effective 3.5 model' },
-    { value: 'gemini-3.1-flash-lite', label: '3.1 Flash-Lite', shortLabel: '3.1 Flash-Lite', description: 'Lightweight, optimized for speed and cost' },
-    { value: 'gemini-2.5-pro', label: '2.5 Pro', shortLabel: '2.5 Pro', description: 'Previous generation' },
-    { value: 'gemini-2.5-flash-lite', label: '2.5 Flash-Lite', shortLabel: '2.5 Flash-Lite', description: 'Lightweight free-tier friendly model' },
-] as const;
-
-export const CODEX_MODEL_FAMILY_OPTIONS = [
-    { value: MODEL_MODE_DEFAULT, label: 'Use CLI configured model', shortLabel: 'CLI', description: 'Use profile/CLI defaults' },
-    { value: 'gpt-6-astra', label: 'GPT-6-Astra', shortLabel: '6-Astra', description: 'Most capable model for complex end-to-end work' },
-    { value: 'gpt-5.6-sol', label: 'GPT-5.6-Sol', shortLabel: '5.6-Sol', description: 'Latest frontier agentic coding model' },
-    { value: 'gpt-5.6-terra', label: 'GPT-5.6-Terra', shortLabel: '5.6-Terra', description: 'Balanced agentic coding model for everyday work' },
-    { value: 'gpt-5.6-luna', label: 'GPT-5.6-Luna', shortLabel: '5.6-Luna', description: 'Fast and affordable agentic coding model' },
-    { value: 'gpt-5.5', label: 'GPT-5.5', shortLabel: '5.5', description: 'Frontier model for complex coding and research' },
-] as const satisfies readonly { value: CodexModelFamily; label: string; shortLabel: string; description: string }[];
-
-export const CODEX_MODEL_OPTIONS = [
-    { value: MODEL_MODE_DEFAULT, label: 'Default', description: 'Use CLI default model' },
-    { value: 'gpt-6-astra-low', label: 'GPT-6-Astra (Low)', description: 'Fast responses' },
-    { value: 'gpt-6-astra-medium', label: 'GPT-6-Astra (Medium)', description: 'Balanced responses' },
-    { value: 'gpt-6-astra-high', label: 'GPT-6-Astra (High)', description: 'Strong quality' },
-    { value: 'gpt-6-astra-xhigh', label: 'GPT-6-Astra (XHigh)', description: 'Extra reasoning depth' },
-    { value: 'gpt-6-astra-max', label: 'GPT-6-Astra (Max)', description: 'Maximum reasoning depth' },
-    { value: 'gpt-6-astra-ultra', label: 'GPT-6-Astra (Ultra)', description: 'Maximum reasoning with automatic task delegation' },
-    { value: 'gpt-5.6-sol-low', label: 'GPT-5.6-Sol (Low)', description: 'Fast responses' },
-    { value: 'gpt-5.6-sol-medium', label: 'GPT-5.6-Sol (Medium)', description: 'Balanced responses' },
-    { value: 'gpt-5.6-sol-high', label: 'GPT-5.6-Sol (High)', description: 'Strong quality' },
-    { value: 'gpt-5.6-sol-xhigh', label: 'GPT-5.6-Sol (XHigh)', description: 'Extra reasoning depth' },
-    { value: 'gpt-5.6-sol-max', label: 'GPT-5.6-Sol (Max)', description: 'Maximum reasoning depth' },
-    { value: 'gpt-5.6-sol-ultra', label: 'GPT-5.6-Sol (Ultra)', description: 'Maximum reasoning with automatic task delegation' },
-    { value: 'gpt-5.6-terra-low', label: 'GPT-5.6-Terra (Low)', description: 'Fast responses' },
-    { value: 'gpt-5.6-terra-medium', label: 'GPT-5.6-Terra (Medium)', description: 'Balanced responses' },
-    { value: 'gpt-5.6-terra-high', label: 'GPT-5.6-Terra (High)', description: 'Strong quality' },
-    { value: 'gpt-5.6-terra-xhigh', label: 'GPT-5.6-Terra (XHigh)', description: 'Extra reasoning depth' },
-    { value: 'gpt-5.6-terra-max', label: 'GPT-5.6-Terra (Max)', description: 'Maximum reasoning depth' },
-    { value: 'gpt-5.6-terra-ultra', label: 'GPT-5.6-Terra (Ultra)', description: 'Maximum reasoning with automatic task delegation' },
-    { value: 'gpt-5.6-luna-low', label: 'GPT-5.6-Luna (Low)', description: 'Fastest responses' },
-    { value: 'gpt-5.6-luna-medium', label: 'GPT-5.6-Luna (Medium)', description: 'Balanced speed and quality' },
-    { value: 'gpt-5.6-luna-high', label: 'GPT-5.6-Luna (High)', description: 'Higher quality with good speed' },
-    { value: 'gpt-5.6-luna-xhigh', label: 'GPT-5.6-Luna (XHigh)', description: 'Extra reasoning depth' },
-    { value: 'gpt-5.6-luna-max', label: 'GPT-5.6-Luna (Max)', description: 'Maximum reasoning depth' },
-    { value: 'gpt-5.5-low', label: 'GPT-5.5 (Low)', description: 'Fast responses' },
-    { value: 'gpt-5.5-medium', label: 'GPT-5.5 (Medium)', description: 'Balanced responses' },
-    { value: 'gpt-5.5-high', label: 'GPT-5.5 (High)', description: 'Strong quality' },
-    { value: 'gpt-5.5-xhigh', label: 'GPT-5.5 (XHigh)', description: 'Best quality' },
-] as const satisfies readonly { value: ModelMode; label: string; description: string }[];
-
-const CODEX_MODE_TO_SELECTION: Partial<Record<ModelMode, { family: CodexModelFamily; effort: CodexReasoningEffort }>> = {
-    'gpt-6-astra-low': { family: 'gpt-6-astra', effort: 'low' },
-    'gpt-6-astra-medium': { family: 'gpt-6-astra', effort: 'medium' },
-    'gpt-6-astra-high': { family: 'gpt-6-astra', effort: 'high' },
-    'gpt-6-astra-xhigh': { family: 'gpt-6-astra', effort: 'xhigh' },
-    'gpt-6-astra-max': { family: 'gpt-6-astra', effort: 'max' },
-    'gpt-6-astra-ultra': { family: 'gpt-6-astra', effort: 'ultra' },
-    'gpt-5.6-sol-low': { family: 'gpt-5.6-sol', effort: 'low' },
-    'gpt-5.6-sol-medium': { family: 'gpt-5.6-sol', effort: 'medium' },
-    'gpt-5.6-sol-high': { family: 'gpt-5.6-sol', effort: 'high' },
-    'gpt-5.6-sol-xhigh': { family: 'gpt-5.6-sol', effort: 'xhigh' },
-    'gpt-5.6-sol-max': { family: 'gpt-5.6-sol', effort: 'max' },
-    'gpt-5.6-sol-ultra': { family: 'gpt-5.6-sol', effort: 'ultra' },
-    'gpt-5.6-terra-low': { family: 'gpt-5.6-terra', effort: 'low' },
-    'gpt-5.6-terra-medium': { family: 'gpt-5.6-terra', effort: 'medium' },
-    'gpt-5.6-terra-high': { family: 'gpt-5.6-terra', effort: 'high' },
-    'gpt-5.6-terra-xhigh': { family: 'gpt-5.6-terra', effort: 'xhigh' },
-    'gpt-5.6-terra-max': { family: 'gpt-5.6-terra', effort: 'max' },
-    'gpt-5.6-terra-ultra': { family: 'gpt-5.6-terra', effort: 'ultra' },
-    'gpt-5.6-luna-low': { family: 'gpt-5.6-luna', effort: 'low' },
-    'gpt-5.6-luna-medium': { family: 'gpt-5.6-luna', effort: 'medium' },
-    'gpt-5.6-luna-high': { family: 'gpt-5.6-luna', effort: 'high' },
-    'gpt-5.6-luna-xhigh': { family: 'gpt-5.6-luna', effort: 'xhigh' },
-    'gpt-5.6-luna-max': { family: 'gpt-5.6-luna', effort: 'max' },
-    'gpt-5.5-low': { family: 'gpt-5.5', effort: 'low' },
-    'gpt-5.5-medium': { family: 'gpt-5.5', effort: 'medium' },
-    'gpt-5.5-high': { family: 'gpt-5.5', effort: 'high' },
-    'gpt-5.5-xhigh': { family: 'gpt-5.5', effort: 'xhigh' },
-};
 
 /**
- * Codex families that have been retired from the pickers. `isModelMode` no
- * longer accepts them, but a session saved while they were current still
- * carries a composite mode like `gpt-5.4-high`. Without this map the resolver
- * would hand that string to the CLI verbatim as a model name; with it the
- * session keeps running on the model and effort it was created with.
+ * Model ids and modes come from the catalog, so they are plain strings checked
+ * at runtime (`isModelMode`, `isModelModeForAgent`) rather than literal unions.
+ * A mode is `default`, a bare model id (`claude-opus-5`, `gemini-3.8-flash`) or
+ * a model id with an effort suffix (`claude-opus-5-high`, `gpt-5.5-medium`).
  */
-const RETIRED_CODEX_MODES: Record<string, string> = {
-    'gpt-5.4-low': 'gpt-5.4',
-    'gpt-5.4-medium': 'gpt-5.4',
-    'gpt-5.4-high': 'gpt-5.4',
-    'gpt-5.4-xhigh': 'gpt-5.4',
-    'gpt-5.4-mini-low': 'gpt-5.4-mini',
-    'gpt-5.4-mini-medium': 'gpt-5.4-mini',
-    'gpt-5.4-mini-high': 'gpt-5.4-mini',
-    'gpt-5.4-mini-xhigh': 'gpt-5.4-mini',
-    'gpt-5.2-low': 'gpt-5.2',
-    'gpt-5.2-medium': 'gpt-5.2',
-    'gpt-5.2-high': 'gpt-5.2',
-    'gpt-5.2-xhigh': 'gpt-5.2',
-};
+export type ModelMode = string;
+/** A Claude model id, optionally with the `[1m]` context suffix, or `default`. */
+export type ClaudeModelFamily = string;
+/** A Codex model id, or `default`. */
+export type CodexModelFamily = string;
 
-/** Resolve a retired composite mode to the model and effort it names, or null. */
-function parseRetiredCodexMode(mode: string): { model: string; reasoningEffort: CodexReasoningEffort } | null {
-    const model = RETIRED_CODEX_MODES[mode];
-    if (!model) return null;
-    return { model, reasoningEffort: mode.slice(model.length + 1) as CodexReasoningEffort };
-}
+export type ModelOption = { value: string; label: string; shortLabel: string; description: string };
 
-export function parseClaudeModelMode(mode: ModelMode): { family: ClaudeModelFamily; effort: ClaudeReasoningEffort | null } {
-    const entry = CLAUDE_MODE_TO_SELECTION[mode];
-    if (entry) return entry;
-    if (mode === MODEL_MODE_DEFAULT) return { family: MODEL_MODE_DEFAULT, effort: null };
-    return { family: mode as ClaudeModelFamily, effort: null };
-}
+const EXTENDED_CONTEXT_WINDOW = 1_000_000;
 
-export function getClaudeReasoningOptions(family: ClaudeModelFamily): readonly ClaudeReasoningEffort[] {
-    if (family === 'claude-fable-5-1'
-        || family === 'claude-fable-5' || family === 'claude-fable-5[1m]'
-        || family === 'claude-opus-5' || family === 'claude-sonnet-5'
-        || family === 'claude-opus-4-8' || family === 'claude-opus-4-8[1m]'
-        || family === 'claude-opus-4-7' || family === 'claude-opus-4-7[1m]') return ['max', 'xhigh', 'high', 'medium', 'low'];
-    if (family === 'claude-opus-4-6' || family === 'claude-opus-4-6[1m]'
-        || family === 'claude-sonnet-4-6' || family === 'claude-sonnet-4-6[1m]') return ['max', 'high', 'medium', 'low'];
-    if (family === 'claude-haiku-4-5') return [];
-    return ['high', 'medium', 'low'];
-}
-
-export function claudeSupportsFastMode(family: ClaudeModelFamily): boolean {
-    return family === 'claude-opus-5'
-        || family === 'claude-opus-4-8' || family === 'claude-opus-4-8[1m]';
-}
-
-/** Strip the [1m] suffix to get the base family ("default" passes through). */
-export function claudeBaseFamily(family: ClaudeModelFamily): ClaudeModelFamily {
-    return family.replace('[1m]', '') as ClaudeModelFamily;
-}
-
-/**
- * Families where 1M context is an explicit opt-in via the [1m] suffix.
- * Claude 5 / Opus 4.8 are always-1M (see claudeAlways1M); Haiku has no 1M variant.
- */
-export function claudeHas1MOptIn(family: ClaudeModelFamily): boolean {
-    const base = claudeBaseFamily(family);
-    return base === 'claude-opus-4-7' || base === 'claude-opus-4-6' || base === 'claude-sonnet-4-6';
-}
-
-/** Families whose context window is 1M by default with no 200K tier — the [1m] suffix is a no-op. */
-export function claudeAlways1M(family: ClaudeModelFamily): boolean {
-    const base = claudeBaseFamily(family);
-    return base === 'claude-fable-5-1' || base === 'claude-fable-5' || base === 'claude-opus-5'
-        || base === 'claude-sonnet-5' || base === 'claude-opus-4-8';
-}
-
-/** Combine a base family with the 1M toggle into the wire family value. */
-export function claudeFamilyWith1M(family: ClaudeModelFamily, enable1M: boolean): ClaudeModelFamily {
-    const base = claudeBaseFamily(family);
-    if (!enable1M || !claudeHas1MOptIn(base)) return base;
-    return `${base}[1m]` as ClaudeModelFamily;
-}
-
-export function buildClaudeModelMode(
-    family: ClaudeModelFamily,
-    effort: ClaudeReasoningEffort,
-): ModelMode {
-    if (family === MODEL_MODE_DEFAULT) return MODEL_MODE_DEFAULT;
-    // Haiku 4.5 does not support effort levels — always use the base model mode.
-    if (family === 'claude-haiku-4-5') return 'claude-haiku-4-5';
-    return `${family}-${effort}` as ModelMode;
-}
-
-export function parseCodexModelMode(mode: ModelMode): { family: CodexModelFamily; effort: CodexReasoningEffort } {
-    return CODEX_MODE_TO_SELECTION[mode] ?? { family: MODEL_MODE_DEFAULT, effort: 'medium' };
-}
-
-export function getCodexReasoningOptions(family: CodexModelFamily): readonly CodexReasoningEffort[] {
-    if (family === MODEL_MODE_DEFAULT) return ['high', 'medium', 'low'];
-    // Astra, like Sol/Terra, adds the top-tier `max` and `ultra` (auto multi-agent delegation) efforts.
-    if (family === 'gpt-6-astra') return ['ultra', 'max', 'xhigh', 'high', 'medium', 'low'];
-    // GPT-5.6 Sol/Terra add the top-tier `max` and `ultra` (auto multi-agent delegation) efforts.
-    if (family === 'gpt-5.6-sol' || family === 'gpt-5.6-terra') return ['ultra', 'max', 'xhigh', 'high', 'medium', 'low'];
-    // GPT-5.6 Luna adds `max` but not `ultra`.
-    if (family === 'gpt-5.6-luna') return ['max', 'xhigh', 'high', 'medium', 'low'];
-    return ['xhigh', 'high', 'medium', 'low'];
-}
-
-export function buildCodexModelMode(
-    family: CodexModelFamily,
-    effort: CodexReasoningEffort,
-): ModelMode {
-    if (family === MODEL_MODE_DEFAULT) return MODEL_MODE_DEFAULT;
-    return `${family}-${effort}` as ModelMode;
-}
-
-export type ModelSelection = {
-    model: string | null;
-    reasoningEffort: string | null;
-};
-
-const MODEL_NAME_LABELS: Record<string, string> = {
-    'gpt-6-astra': 'GPT-6-Astra',
-    'gpt-5.6-sol': 'GPT-5.6-Sol',
-    'gpt-5.6-terra': 'GPT-5.6-Terra',
-    'gpt-5.6-luna': 'GPT-5.6-Luna',
-    'gpt-5.5': 'GPT-5.5',
-    'gpt-5.4': 'GPT-5.4',
-    'gpt-5.4-mini': 'GPT-5.4-Mini',
-    'gpt-5.2': 'GPT-5.2',
-    'claude-fable-5-1': 'Claude Fable 5.1',
-    'claude-fable-5': 'Claude Fable 5',
-    'claude-opus-5': 'Claude Opus 5',
-    'claude-sonnet-5': 'Claude Sonnet 5',
-    'claude-opus-4-8': 'Claude Opus 4.8',
-    'claude-opus-4-7': 'Claude Opus 4.7',
-    'claude-opus-4-6': 'Claude Opus 4.6',
-    'claude-sonnet-4-6': 'Claude Sonnet 4.6',
-    'claude-haiku-4-5': 'Claude Haiku 4.5',
-    'gemini-3.8-flash': 'Gemini 3.8 Flash',
-    'gemini-3.7-flash': 'Gemini 3.7 Flash',
-    'gemini-3.1-pro-preview': 'Gemini 3.1 Pro (Preview)',
-    'gemini-3.6-flash': 'Gemini 3.6 Flash',
-    'gemini-3.5-flash': 'Gemini 3.5 Flash',
-    'gemini-3.5-flash-lite': 'Gemini 3.5 Flash-Lite',
-    'gemini-3.1-flash-lite': 'Gemini 3.1 Flash-Lite',
-    'gemini-2.5-pro': 'Gemini 2.5 Pro',
-    'gemini-2.5-flash-lite': 'Gemini 2.5 Flash-Lite',
+const DEFAULT_MODEL_OPTION: ModelOption = {
+    value: MODEL_MODE_DEFAULT,
+    label: 'Use CLI configured model',
+    shortLabel: 'CLI',
+    description: 'Use profile/CLI defaults',
 };
 
 const REASONING_EFFORT_LABELS: Record<string, string> = {
@@ -620,6 +36,251 @@ const REASONING_EFFORT_LABELS: Record<string, string> = {
     max: 'Max',
     xhigh: 'XHigh',
     ultra: 'Ultra',
+};
+
+function toModelOption(model: ModelCatalogEntry): ModelOption {
+    return {
+        value: model.id,
+        label: model.label,
+        shortLabel: model.shortLabel ?? model.label,
+        description: model.description ?? '',
+    };
+}
+
+/** Catalog efforts are strongest-first for pickers; mode lists run weakest-first. */
+function effortsAscending(model: ModelCatalogEntry) {
+    return [...model.efforts].reverse();
+}
+
+/** Lookup tables derived from one catalog; rebuilt whenever the catalog is replaced. */
+function buildCatalogIndex(catalog: ModelCatalog) {
+    const activeModels = (agent: AgentFlavor) =>
+        catalog.models.filter((model) => model.agent === agent && model.status === 'active');
+
+    /**
+     * Claude families as wire values: each active model, followed by its `[1m]`
+     * variant when 1M is an opt-in or the suffix is still accepted for old sessions.
+     */
+    const claudeFamilyModels = new Map<string, ModelCatalogEntry>();
+    for (const model of activeModels('claude')) {
+        claudeFamilyModels.set(model.id, model);
+        if (model.context1m === 'optin' || model.accepts1mSuffix) claudeFamilyModels.set(`${model.id}[1m]`, model);
+    }
+
+    const claudeModeToSelection = new Map<string, { family: ClaudeModelFamily; effort: ClaudeReasoningEffort }>();
+    for (const [family, model] of claudeFamilyModels) {
+        for (const effort of effortsAscending(model)) {
+            claudeModeToSelection.set(`${family}-${effort}`, { family, effort: effort as ClaudeReasoningEffort });
+        }
+    }
+
+    const codexModeToSelection = new Map<string, { family: CodexModelFamily; effort: CodexReasoningEffort }>();
+    for (const model of activeModels('codex')) {
+        for (const effort of effortsAscending(model)) {
+            codexModeToSelection.set(`${model.id}-${effort}`, { family: model.id, effort });
+        }
+    }
+
+    /**
+     * Composite modes of retired Codex models. `isModelMode` no longer accepts them,
+     * but a session saved while they were current still carries a mode like
+     * `gpt-5.4-high`. Without this map the resolver would hand that string to the
+     * CLI verbatim as a model name; with it the session keeps running on the model
+     * and effort it was created with.
+     */
+    const retiredCodexModes = new Map<string, { model: string; reasoningEffort: CodexReasoningEffort }>();
+    for (const model of catalog.models) {
+        if (model.agent !== 'codex' || model.status !== 'retired') continue;
+        for (const effort of effortsAscending(model)) {
+            retiredCodexModes.set(`${model.id}-${effort}`, { model: model.id, reasoningEffort: effort });
+        }
+    }
+
+    const modesByAgent: Record<AgentFlavor, readonly ModelMode[]> = {
+        claude: [MODEL_MODE_DEFAULT, ...claudeFamilyModels.keys(), ...claudeModeToSelection.keys()],
+        codex: [MODEL_MODE_DEFAULT, ...codexModeToSelection.keys()],
+        gemini: [MODEL_MODE_DEFAULT, ...activeModels('gemini').map((model) => model.id)],
+    };
+
+    // Claude options are base families only — the 1M context opt-in is a separate
+    // toggle in the UI, combined back into the `family[1m]` wire value via claudeFamilyWith1M.
+    const familyOptions: Record<AgentFlavor, readonly ModelOption[]> = {
+        claude: [DEFAULT_MODEL_OPTION, ...activeModels('claude').map(toModelOption)],
+        codex: [DEFAULT_MODEL_OPTION, ...activeModels('codex').map(toModelOption)],
+        gemini: [DEFAULT_MODEL_OPTION, ...activeModels('gemini').map(toModelOption)],
+    };
+
+    const codexModeOptions: readonly { value: ModelMode; label: string; description: string }[] = [
+        { value: MODEL_MODE_DEFAULT, label: 'Default', description: 'Use CLI default model' },
+        ...activeModels('codex').flatMap((model) => effortsAscending(model).map((effort) => ({
+            value: `${model.id}-${effort}`,
+            label: `${model.label} (${REASONING_EFFORT_LABELS[effort]})`,
+            description: model.effortDescriptions?.[effort] ?? catalog.effortDescriptions[effort],
+        }))),
+    ];
+
+    /** Context window per model id, plus 1M for each Claude `[1m]` family. */
+    const contextWindows = new Map<string, number>(catalog.models.map((model) => [model.id, model.contextWindow]));
+    for (const family of claudeFamilyModels.keys()) {
+        if (family.endsWith('[1m]')) contextWindows.set(family, EXTENDED_CONTEXT_WINDOW);
+    }
+
+    return {
+        catalog,
+        modelsById: new Map(catalog.models.map((model) => [model.id, model])),
+        claudeFamilyModels,
+        claudeModeToSelection,
+        codexModeToSelection,
+        retiredCodexModes,
+        modesByAgent,
+        modeSet: new Set<ModelMode>(Object.values(modesByAgent).flat()),
+        modeSetByAgent: {
+            claude: new Set(modesByAgent.claude),
+            codex: new Set(modesByAgent.codex),
+            gemini: new Set(modesByAgent.gemini),
+        } satisfies Record<AgentFlavor, Set<ModelMode>>,
+        familyOptions,
+        codexModeOptions,
+        contextWindows,
+    };
+}
+
+/** The catalog shipped with this build — the fallback until a newer one is fetched. */
+export const BUNDLED_MODEL_CATALOG: ModelCatalog = ModelCatalogSchema.parse(catalogJson);
+
+let index = buildCatalogIndex(BUNDLED_MODEL_CATALOG);
+const catalogListeners = new Set<() => void>();
+
+/** The active catalog: the bundled one, or the latest set with setModelCatalog. */
+export function getModelCatalog(): ModelCatalog {
+    return index.catalog;
+}
+
+/**
+ * Replace the active catalog, e.g. with one fetched from the server. Every
+ * lookup in this module reads the new catalog from then on. Listeners are only
+ * notified when the content actually changed.
+ */
+export function setModelCatalog(catalog: ModelCatalog): void {
+    if (JSON.stringify(catalog) === JSON.stringify(index.catalog)) return;
+    index = buildCatalogIndex(catalog);
+    catalogListeners.forEach((listener) => listener());
+}
+
+export function onModelCatalogChanged(listener: () => void): () => void {
+    catalogListeners.add(listener);
+    return () => catalogListeners.delete(listener);
+}
+
+/** Validate an untrusted catalog payload (server response, cache file); null when invalid. */
+export function parseModelCatalog(data: unknown): ModelCatalog | null {
+    const result = ModelCatalogSchema.safeParse(data);
+    return result.success ? result.data : null;
+}
+
+export function isModelMode(value: string): value is ModelMode {
+    return index.modeSet.has(value);
+}
+
+export function isModelModeForAgent(agent: AgentFlavor, mode: string): mode is ModelMode {
+    return (index.modeSetByAgent[agent] ?? index.modeSetByAgent.codex).has(mode);
+}
+
+/** Every mode the agent accepts, `default` first. */
+export function getValidModelModesForAgent(agent: AgentFlavor): readonly ModelMode[] {
+    return index.modesByAgent[agent] ?? index.modesByAgent.codex;
+}
+
+/** Picker options for the agent's models (Claude: base families; Codex: families without effort), `default` first. */
+export function getModelFamilyOptions(agent: AgentFlavor): readonly ModelOption[] {
+    return index.familyOptions[agent];
+}
+
+/** One Codex option per model and effort, `default` first. */
+export function getCodexModelOptions(): readonly { value: ModelMode; label: string; description: string }[] {
+    return index.codexModeOptions;
+}
+
+/** Resolve a retired composite mode to the model and effort it names, or null. */
+function parseRetiredCodexMode(mode: string): { model: string; reasoningEffort: CodexReasoningEffort } | null {
+    return index.retiredCodexModes.get(mode) ?? null;
+}
+
+export function parseClaudeModelMode(mode: ModelMode): { family: ClaudeModelFamily; effort: ClaudeReasoningEffort | null } {
+    const entry = index.claudeModeToSelection.get(mode);
+    if (entry) return entry;
+    if (mode === MODEL_MODE_DEFAULT) return { family: MODEL_MODE_DEFAULT, effort: null };
+    return { family: mode, effort: null };
+}
+
+export function getClaudeReasoningOptions(family: ClaudeModelFamily): readonly ClaudeReasoningEffort[] {
+    const model = index.claudeFamilyModels.get(family);
+    if (model) return model.efforts as ClaudeReasoningEffort[];
+    return ['high', 'medium', 'low'];
+}
+
+export function claudeSupportsFastMode(family: ClaudeModelFamily): boolean {
+    return index.claudeFamilyModels.get(family)?.fastMode === true;
+}
+
+/** Strip the [1m] suffix to get the base family ("default" passes through). */
+export function claudeBaseFamily(family: ClaudeModelFamily): ClaudeModelFamily {
+    return family.replace('[1m]', '');
+}
+
+/** Families where 1M context is an explicit opt-in via the [1m] suffix (see claudeAlways1M). */
+export function claudeHas1MOptIn(family: ClaudeModelFamily): boolean {
+    return index.claudeFamilyModels.get(claudeBaseFamily(family))?.context1m === 'optin';
+}
+
+/** Families whose context window is 1M by default with no 200K tier — the [1m] suffix is a no-op. */
+export function claudeAlways1M(family: ClaudeModelFamily): boolean {
+    return index.claudeFamilyModels.get(claudeBaseFamily(family))?.context1m === 'always';
+}
+
+/** Combine a base family with the 1M toggle into the wire family value. */
+export function claudeFamilyWith1M(family: ClaudeModelFamily, enable1M: boolean): ClaudeModelFamily {
+    const base = claudeBaseFamily(family);
+    if (!enable1M || !claudeHas1MOptIn(base)) return base;
+    return `${base}[1m]`;
+}
+
+export function buildClaudeModelMode(
+    family: ClaudeModelFamily,
+    effort: ClaudeReasoningEffort,
+): ModelMode {
+    if (family === MODEL_MODE_DEFAULT) return MODEL_MODE_DEFAULT;
+    // Models without effort control (e.g. Haiku 4.5) always use the bare model mode.
+    if (index.claudeFamilyModels.get(family)?.efforts.length === 0) return family;
+    return `${family}-${effort}`;
+}
+
+export function parseCodexModelMode(mode: ModelMode): { family: CodexModelFamily; effort: CodexReasoningEffort } {
+    return index.codexModeToSelection.get(mode) ?? { family: MODEL_MODE_DEFAULT, effort: 'medium' };
+}
+
+export function getCodexReasoningOptions(family: CodexModelFamily): readonly CodexReasoningEffort[] {
+    if (family === MODEL_MODE_DEFAULT) return ['high', 'medium', 'low'];
+    const model = index.modelsById.get(family);
+    if (model?.agent === 'codex' && model.status === 'active') return model.efforts;
+    return ['xhigh', 'high', 'medium', 'low'];
+}
+
+export function buildCodexModelMode(
+    family: CodexModelFamily,
+    effort: CodexReasoningEffort,
+): ModelMode {
+    if (family === MODEL_MODE_DEFAULT) return MODEL_MODE_DEFAULT;
+    return `${family}-${effort}`;
+}
+
+function modelDisplayName(model: string): string | undefined {
+    return index.modelsById.get(model)?.displayName;
+}
+
+export type ModelSelection = {
+    model: string | null;
+    reasoningEffort: string | null;
 };
 
 export function resolveModelSelectionForFlavor(flavor: string | null | undefined, modelMode: string): ModelSelection {
@@ -653,7 +314,7 @@ export function resolveLocalModelDisplay(modelMode: string | null | undefined): 
         return { model: parsedCodex.family, reasoningEffort: parsedCodex.effort };
     }
 
-    const parsedClaude = CLAUDE_MODE_TO_SELECTION[modelMode as ModelMode];
+    const parsedClaude = index.claudeModeToSelection.get(modelMode);
     if (parsedClaude) {
         return { model: parsedClaude.family, reasoningEffort: parsedClaude.effort };
     }
@@ -668,15 +329,16 @@ function normalizeModelId(model: string): string {
 
 export function formatModelNameLabel(model: string | null | undefined): string | null {
     if (!model) return null;
-    if (MODEL_NAME_LABELS[model]) return MODEL_NAME_LABELS[model];
+    const label = modelDisplayName(model);
+    if (label) return label;
     if (isModelMode(model)) {
         const codexParsed = parseCodexModelMode(model);
         if (codexParsed.family !== MODEL_MODE_DEFAULT) {
-            return MODEL_NAME_LABELS[codexParsed.family] ?? codexParsed.family;
+            return modelDisplayName(codexParsed.family) ?? codexParsed.family;
         }
     }
     const stripped = normalizeModelId(model);
-    if (stripped !== model && MODEL_NAME_LABELS[stripped]) return MODEL_NAME_LABELS[stripped];
+    if (stripped !== model) return modelDisplayName(stripped) ?? model;
     return model;
 }
 
@@ -699,7 +361,7 @@ export function formatModelDisplay(model: string | null | undefined, reasoningEf
     const effortLabel = formatReasoningEffortLabel(reasoningEffort);
     // Always-1M families have no 200K tier — the "1M" chip distinguishes nothing and
     // would make equivalent CLI/local model strings render as a false mismatch.
-    const show1m = is1m && !claudeAlways1M(stripped as ClaudeModelFamily);
+    const show1m = is1m && !claudeAlways1M(stripped!);
     const parts = [show1m ? '1M' : '', effortLabel ?? ''].filter(Boolean);
     return parts.length > 0 ? `${modelLabel} (${parts.join(', ')})` : modelLabel;
 }
@@ -707,49 +369,10 @@ export function formatModelDisplay(model: string | null | undefined, reasoningEf
 // ─── Context Window Sizes ──────────────────────────────────────
 
 const DEFAULT_CONTEXT_WINDOW = 200_000;
-const EXTENDED_CONTEXT_WINDOW = 1_000_000;
-
 const AGENT_DEFAULT_CONTEXT_WINDOWS: Record<AgentFlavor, number> = {
     claude: 200_000,
     codex: 272_000,
     gemini: 1_000_000,
-};
-
-const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
-    // Claude models (newer families are native 1M; older supported families opt in via [1m])
-    'claude-fable-5-1': 1_000_000,
-    'claude-fable-5': 1_000_000, // Fable 5 defaults to 1M; base name resolves to 1M
-    'claude-fable-5[1m]': 1_000_000,
-    'claude-opus-5': 1_000_000,
-    'claude-sonnet-5': 1_000_000,
-    'claude-opus-4-8': 1_000_000, // 4.8 defaults to 1M (no opt-in needed); base name resolves to 1M
-    'claude-opus-4-8[1m]': 1_000_000,
-    'claude-opus-4-7': 200_000,
-    'claude-opus-4-7[1m]': 1_000_000,
-    'claude-opus-4-6': 200_000,
-    'claude-opus-4-6[1m]': 1_000_000,
-    'claude-sonnet-4-6': 200_000,
-    'claude-sonnet-4-6[1m]': 1_000_000,
-    'claude-haiku-4-5': 200_000,
-    // Codex models (fallback; actual value comes from CLI via context_window_size)
-    'gpt-6-astra': 1_050_000,
-    'gpt-5.6-sol': 272_000,
-    'gpt-5.6-terra': 272_000,
-    'gpt-5.6-luna': 272_000,
-    'gpt-5.5': 272_000,
-    'gpt-5.4': 272_000,
-    'gpt-5.4-mini': 272_000,
-    'gpt-5.2': 272_000,
-    // Gemini models
-    'gemini-3.8-flash': 1_048_576,
-    'gemini-3.7-flash': 1_048_576,
-    'gemini-3.6-flash': 1_000_000,
-    'gemini-3.1-pro-preview': 1_000_000,
-    'gemini-3.5-flash': 1_000_000,
-    'gemini-3.5-flash-lite': 1_000_000,
-    'gemini-3.1-flash-lite': 1_000_000,
-    'gemini-2.5-pro': 1_000_000,
-    'gemini-2.5-flash-lite': 1_000_000,
 };
 
 /**
@@ -757,9 +380,10 @@ const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
  * Falls back to agent default, then global default.
  */
 function findContextWindow(model: string): number | undefined {
-    if (MODEL_CONTEXT_WINDOWS[model]) return MODEL_CONTEXT_WINDOWS[model];
+    const exact = index.contextWindows.get(model);
+    if (exact) return exact;
     const stripped = normalizeModelId(model);
-    if (stripped !== model && MODEL_CONTEXT_WINDOWS[stripped]) return MODEL_CONTEXT_WINDOWS[stripped];
+    if (stripped !== model) return index.contextWindows.get(stripped);
     return undefined;
 }
 
@@ -790,27 +414,27 @@ function computeMaxContextSize(modelMode: string | null | undefined, agentFlavor
 
     // Try exact model mode match (for composite codex modes, extract family)
     if (modelMode && modelMode !== MODEL_MODE_DEFAULT) {
-        if (MODEL_CONTEXT_WINDOWS[modelMode]) return MODEL_CONTEXT_WINDOWS[modelMode];
+        const exact = index.contextWindows.get(modelMode);
+        if (exact) return exact;
 
         // Strip -fast suffix for lookups
         const stripped = modelMode.replace(/-fast$/, '');
-        if (stripped !== modelMode && MODEL_CONTEXT_WINDOWS[stripped]) return MODEL_CONTEXT_WINDOWS[stripped];
+        const strippedWindow = stripped !== modelMode ? index.contextWindows.get(stripped) : undefined;
+        if (strippedWindow) return strippedWindow;
 
         // For codex composite modes like "gpt-5.6-sol-high", extract family
         if (isModelMode(modelMode)) {
             const parsed = parseCodexModelMode(modelMode);
-            if (parsed.family !== MODEL_MODE_DEFAULT && MODEL_CONTEXT_WINDOWS[parsed.family]) {
-                return MODEL_CONTEXT_WINDOWS[parsed.family];
-            }
+            const window = parsed.family !== MODEL_MODE_DEFAULT ? index.contextWindows.get(parsed.family) : undefined;
+            if (window) return window;
         }
 
         // For claude composite modes like "claude-opus-4-6-high", extract family
         const claudeMode = isModelMode(modelMode) ? modelMode : (isModelMode(stripped) ? stripped : null);
         if (claudeMode) {
             const parsedClaude = parseClaudeModelMode(claudeMode);
-            if (parsedClaude.family !== MODEL_MODE_DEFAULT && MODEL_CONTEXT_WINDOWS[parsedClaude.family]) {
-                return MODEL_CONTEXT_WINDOWS[parsedClaude.family];
-            }
+            const window = parsedClaude.family !== MODEL_MODE_DEFAULT ? index.contextWindows.get(parsedClaude.family) : undefined;
+            if (window) return window;
         }
     }
     // Fall back to agent default

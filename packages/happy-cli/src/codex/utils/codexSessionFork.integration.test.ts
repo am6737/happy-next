@@ -7,7 +7,7 @@ import { forkAndTruncateCodexSession, forkCodexSession } from './codexSessionFor
 import { generateStableUuid, getCodexSessionPreview, listCodexSessions, readAllCodexSessionUserMessages } from './codexSessionReader';
 import { backfillCodexSessionHistory } from './codexBackfill';
 import { CodexAppServerBackend } from '../appserver/CodexAppServerBackend';
-import { CODEX_PACKAGE } from '../package';
+import { codexPackage } from '../package';
 
 vi.mock('@/configuration', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/configuration')>();
@@ -79,7 +79,7 @@ describe('native Codex forks', () => {
     await writeFile(path, content);
     // Materialize the fixture's native indexes just as a real source session would have done.
     const sourceBackend = new CodexAppServerBackend({
-      command: 'npx', args: ['-y', CODEX_PACKAGE, 'app-server'], cwd: home, resumeFile: path,
+      command: 'npx', args: ['-y', codexPackage(), 'app-server'], cwd: home, resumeFile: path,
     });
     try {
       await sourceBackend.startSession();
@@ -105,7 +105,7 @@ describe('native Codex forks', () => {
     expect((await getCodexSessionPreview(metadata.id)).filter(message => message.role === 'user').map(message => message.content)).toEqual(expectedQuestions);
 
     backend = new CodexAppServerBackend({
-      command: 'npx', args: ['-y', CODEX_PACKAGE, 'app-server'], cwd: home,
+      command: 'npx', args: ['-y', codexPackage(), 'app-server'], cwd: home,
       resumeFile: fork.newFilePath, model: 'changed-fixture-model',
     });
     expect(await backend.startSession()).toEqual({ sessionId: metadata.id });

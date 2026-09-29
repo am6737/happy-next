@@ -13,6 +13,7 @@ import { initGithub } from "./modules/github";
 import { loadFiles } from "./storage/files";
 import { startMessageDeliveryTimeoutWorker } from "./app/messageDelivery/timeout";
 import { startOrchestratorScheduler } from "./app/orchestrator/scheduler";
+import { startModelCatalogRefresh } from "./app/modelCatalog/modelCatalogRefresh";
 import { backfillGitHubDisplayNames } from "./app/github/backfillGitHubDisplayNames";
 
 async function main() {
@@ -44,6 +45,7 @@ async function main() {
     startTimeout();
     startMessageDeliveryTimeoutWorker();
     startOrchestratorScheduler();
+    startModelCatalogRefresh();
 
     //
     // Ready

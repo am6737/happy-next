@@ -21,7 +21,7 @@ import type {
 } from '../TransportHandler';
 import type { AgentMessage } from '../../core';
 import { logger } from '@/ui/logger';
-import { GEMINI_MODEL_MODES } from 'happy-wire';
+import { getValidModelModesForAgent } from 'happy-wire';
 
 /**
  * Gemini-specific timeout values (in milliseconds)
@@ -207,7 +207,7 @@ export class GeminiTransport implements TransportHandler {
       const errorMessage: AgentMessage = {
         type: 'status',
         status: 'error',
-        detail: `Model not found. Available models: ${GEMINI_MODEL_MODES.join(', ')}`,
+        detail: `Model not found. Available models: ${getValidModelModesForAgent('gemini').join(', ')}`,
       };
       return { message: errorMessage };
     }

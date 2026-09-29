@@ -14,7 +14,8 @@ import { AIBackendProfile, validateProfileForAgent, getProfileEnvironmentVariabl
 import { Modal } from '@/modal';
 import { sync } from '@/sync/sync';
 import { profileSyncService } from '@/sync/profileSync';
-import { CLAUDE_MODEL_OPTIONS, GEMINI_MODEL_OPTIONS, CODEX_MODEL_OPTIONS, MODEL_MODE_DEFAULT, isModelModeForAgent } from 'happy-wire';
+import { MODEL_MODE_DEFAULT, getCodexModelOptions, getModelFamilyOptions, isModelModeForAgent } from 'happy-wire';
+import { useModelCatalog } from '@/hooks/useModelCatalog';
 
 /**
  * @deprecated Legacy wizard implementation.
@@ -1232,6 +1233,7 @@ export function NewSessionWizard({ onComplete, onCancel, initialPrompt = '' }: N
         }
     }, [currentStep, selectedMachineId, selectedPath, prompt, showCustomPathInput, customPath, selectedProfileId, profileApiKeys, profileConfigs, getProfileRequiredFields]);
 
+    const modelCatalog = useModelCatalog();
     const modelModeOptions = useMemo<Array<{ value: ModelMode; label: string; description: string; icon: keyof typeof Ionicons.glyphMap }>>(() => {
         const withIcon = (value: ModelMode, label: string, description: string) => {
             if (value === MODEL_MODE_DEFAULT) return { value, label, description, icon: 'settings-outline' as const };
@@ -1244,14 +1246,11 @@ export function NewSessionWizard({ onComplete, onCancel, initialPrompt = '' }: N
             return { value, label, description, icon: 'diamond-outline' as const };
         };
 
-        if (agentType === 'claude') {
-            return CLAUDE_MODEL_OPTIONS.map((option) => withIcon(option.value, option.label, option.description));
+        if (agentType === 'codex') {
+            return getCodexModelOptions().map((option) => withIcon(option.value, option.label, option.description));
         }
-        if (agentType === 'gemini') {
-            return GEMINI_MODEL_OPTIONS.map((option) => withIcon(option.value, option.label, option.description));
-        }
-        return CODEX_MODEL_OPTIONS.map((option) => withIcon(option.value, option.label, option.description));
-    }, [agentType]);
+        return getModelFamilyOptions(agentType).map((option) => withIcon(option.value, option.label, option.description));
+    }, [agentType, modelCatalog]);
 
     const renderStepContent = () => {
         switch (currentStep) {

@@ -5,7 +5,7 @@ import { basename, isAbsolute } from 'node:path';
 import { z } from 'zod';
 import { restoreCodexSession } from '@/daemon/executeSessionArchive';
 import { logger } from '@/ui/logger';
-import { CODEX_PACKAGE } from '@/codex/package';
+import { codexPackage } from '@/codex/package';
 import { CODEX_INITIALIZE_TIMEOUT_MS, resolveCodexRuntime } from '@/codex/codexRuntime';
 import { CodexJsonRpcPeer } from '../appserver/CodexJsonRpcPeer';
 import { Methods, type InitializeParams, type ThreadForkParams, type ThreadForkResponse, type ThreadTurnsListResponse } from '../appserver/types';
@@ -128,7 +128,7 @@ export async function forkAndTruncateCodexSession(
     }
 
     peer = new CodexJsonRpcPeer();
-    const runtime = resolveCodexRuntime(CODEX_PACKAGE, ['app-server']);
+    const runtime = resolveCodexRuntime(codexPackage(), ['app-server']);
     await peer.spawn(runtime.command, runtime.args, {
       cwd: process.cwd(),
       ...(codexHome ? { env: { CODEX_HOME: codexHome } } : {}),

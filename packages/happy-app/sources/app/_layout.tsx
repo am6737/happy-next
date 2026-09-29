@@ -22,6 +22,7 @@ import { tracking } from '@/track/tracking';
 import { sync, syncRestore } from '@/sync/sync';
 import { resetBadgeCount } from '@/sync/apiPush';
 import { resolveServerConfig } from '@/sync/serverConfig';
+import { startModelCatalogSync } from '@/sync/modelCatalogSync';
 import { useTrackScreens } from '@/track/useTrackScreens';
 import { RealtimeProvider } from '@/realtime/RealtimeProvider';
 import { FaviconPermissionIndicator } from '@/components/web/FaviconPermissionIndicator';
@@ -283,6 +284,7 @@ export default function RootLayout() {
                 await loadFonts();
                 await sodium.ready;
                 await resolveServerConfig();
+                startModelCatalogSync();
                 const credentials = await TokenStorage.getCredentials();
                 console.log('credentials', credentials);
                 if (credentials) {

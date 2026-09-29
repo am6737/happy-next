@@ -30,6 +30,7 @@ import { ImagePreview, LocalImage } from '@/components/ImagePreview';
 import { Switch } from '@/components/Switch';
 import { Modal } from '@/modal';
 import { useWebImageDrop } from '@/hooks/useWebImageDrop';
+import { useModelCatalog } from '@/hooks/useModelCatalog';
 import { GlassView, isLiquidGlassAvailable } from 'expo-glass-effect';
 import { isRunningOnMac } from '@/utils/platform';
 import { NativeMenu } from './NativeMenu';
@@ -37,22 +38,20 @@ import type { ActionMenuItem } from './ActionMenu';
 import {
     buildClaudeModelMode,
     buildCodexModelMode,
-    CLAUDE_MODEL_FAMILY_OPTIONS,
     claudeAlways1M,
     claudeBaseFamily,
     claudeFamilyWith1M,
     claudeHas1MOptIn,
     ClaudeModelFamily,
     ClaudeReasoningEffort,
-    CODEX_MODEL_FAMILY_OPTIONS,
     CodexModelFamily,
     CodexReasoningEffort,
     formatReasoningEffortLabel,
     FAST_MODE_ICON_COLOR,
-    GEMINI_MODEL_OPTIONS,
     getClaudeReasoningOptions,
     getCodexReasoningOptions,
     getMaxContextSize,
+    getModelFamilyOptions,
     MODEL_MODE_DEFAULT,
     parseClaudeModelMode,
     parseCodexModelMode,
@@ -534,17 +533,18 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
     }, [isCodex, isGemini]);
 
     const selectedModelMode: ModelMode = props.modelMode || 'default';
+    const modelCatalog = useModelCatalog();
     const codexSelection = React.useMemo<{ family: CodexModelFamily; effort: CodexReasoningEffort }>(() => {
         return parseCodexModelMode(selectedModelMode);
-    }, [selectedModelMode]);
-    const codexFamilyOptions = CODEX_MODEL_FAMILY_OPTIONS;
+    }, [selectedModelMode, modelCatalog]);
+    const codexFamilyOptions = getModelFamilyOptions('codex');
     const codexReasoningOptions = React.useMemo<Array<{ value: CodexReasoningEffort; label: string }>>(() => {
         const options = getCodexReasoningOptions(codexSelection.family);
         return options.map((value) => ({
             value,
             label: formatReasoningEffortLabel(value) ?? value,
         }));
-    }, [codexSelection.family]);
+    }, [codexSelection.family, modelCatalog]);
     const handleCodexFamilyChange = React.useCallback((family: CodexModelFamily) => {
         if (!props.onModelModeChange) return;
         if (family === MODEL_MODE_DEFAULT) {
@@ -563,20 +563,20 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
     }, [codexSelection.family, props.onModelModeChange]);
     const claudeSelection = React.useMemo<{ family: ClaudeModelFamily; effort: ClaudeReasoningEffort | null }>(() => {
         return parseClaudeModelMode(selectedModelMode);
-    }, [selectedModelMode]);
+    }, [selectedModelMode, modelCatalog]);
     // The wire family may carry the [1m] suffix; the UI splits it into base family + 1M toggle.
     const claudeBase = claudeBaseFamily(claudeSelection.family);
     const claudeIs1M = claudeSelection.family.includes('[1m]');
     const claudeShow1MToggle = claudeBase !== MODEL_MODE_DEFAULT && claudeHas1MOptIn(claudeBase);
     const claudeShow1MBadge = claudeAlways1M(claudeBase);
-    const claudeFamilyOptions = CLAUDE_MODEL_FAMILY_OPTIONS;
+    const claudeFamilyOptions = getModelFamilyOptions('claude');
     const claudeReasoningOptions = React.useMemo<Array<{ value: ClaudeReasoningEffort; label: string }>>(() => {
         const options = getClaudeReasoningOptions(claudeSelection.family);
         return options.map((value) => ({
             value,
             label: formatReasoningEffortLabel(value) ?? value,
         }));
-    }, [claudeSelection.family]);
+    }, [claudeSelection.family, modelCatalog]);
     const handleClaudeFamilyChange = React.useCallback((family: ClaudeModelFamily) => {
         if (!props.onModelModeChange) return;
         if (family === MODEL_MODE_DEFAULT) {
@@ -606,9 +606,9 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
         props.onModelModeChange(buildClaudeModelMode(claudeFamilyWith1M(claudeSelection.family, claudeIs1M), effort));
     }, [claudeSelection.family, claudeIs1M, props.onModelModeChange]);
     const modelOptions = React.useMemo<Array<{ value: ModelMode; label: string; shortLabel: string; description: string }>>(() => {
-        if (isGemini) return [...GEMINI_MODEL_OPTIONS];
+        if (isGemini) return [...getModelFamilyOptions('gemini')];
         return [{ value: MODEL_MODE_DEFAULT, label: 'Use CLI configured model', shortLabel: 'CLI', description: 'Use profile/CLI defaults' }];
-    }, [isGemini]);
+    }, [isGemini, modelCatalog]);
 
     const currentModelLabel = React.useMemo(() => {
         if (isCodex) {

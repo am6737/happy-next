@@ -25,7 +25,7 @@ import {
     ORCHESTRATOR_SEND_MESSAGE_TOOL_SCHEMA,
     ORCHESTRATOR_SUBMIT_TOOL_SCHEMA,
 } from '@/orchestrator/mcpToolSchemas';
-import { CLAUDE_MODEL_MODES, CODEX_MODEL_MODES, GEMINI_MODEL_MODES } from 'happy-wire';
+import { getValidModelModesForAgent } from 'happy-wire';
 import { readPreviewHtmlFile } from '@/utils/previewHtmlFile';
 
 function toToolSuccess(data: unknown) {
@@ -182,9 +182,9 @@ function createMcpServer(client: ApiSessionClient, options: { enableHappyTools: 
                     },
                     providers: ['claude', 'codex', 'gemini'],
                     modelModes: {
-                        claude: CLAUDE_MODEL_MODES,
-                        codex: CODEX_MODEL_MODES,
-                        gemini: GEMINI_MODEL_MODES,
+                        claude: getValidModelModesForAgent('claude'),
+                        codex: getValidModelModesForAgent('codex'),
+                        gemini: getValidModelModesForAgent('gemini'),
                     },
                     machines: [],
                 };

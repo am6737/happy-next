@@ -15,7 +15,7 @@ import {
 import type { AgentBackend, McpServerConfig, AgentFactoryOptions } from '../core';
 import { agentRegistry } from '../core';
 import { logger } from '@/ui/logger';
-import { CODEX_PACKAGE } from '@/codex/package';
+import { codexPackage } from '@/codex/package';
 import { resolveCodexRuntime } from '@/codex/codexRuntime';
 
 /**
@@ -65,7 +65,8 @@ export interface CodexBackendResult {
 export function createCodexBackend(options: CodexBackendOptions): CodexBackendResult {
   // Let Codex choose the default model based on auth method (API key vs ChatGPT)
   const model = options.model ?? process.env.CODEX_MODEL ?? null;
-  const runtime = resolveCodexRuntime(CODEX_PACKAGE, ['app-server']);
+  const packageSpec = codexPackage();
+  const runtime = resolveCodexRuntime(packageSpec, ['app-server']);
 
   const backendOptions: CodexAppServerBackendOptions = {
     cwd: options.cwd,
@@ -93,7 +94,7 @@ export function createCodexBackend(options: CodexBackendOptions): CodexBackendRe
     sandbox: options.sandbox,
     mcpServerCount: options.mcpServers ? Object.keys(options.mcpServers).length : 0,
     hasResumeFile: !!options.resumeFile,
-    codexPackage: CODEX_PACKAGE,
+    codexPackage: packageSpec,
     codexCommand: `${runtime.command} ${runtime.args.slice(0, 2).join(' ')}`,
   });
 
