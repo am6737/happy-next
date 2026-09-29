@@ -1081,39 +1081,36 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
         };
     }, [handlePaste]);
 
+    // The empty state (loading, or a session with no messages) is the list's own, so the list and
+    // the scroll view under the header and the floating composer stay the same from the first
+    // frame: a composer over a separate, shorter empty-state view had no soft edge under it.
+    const emptyComponent = isLoaded ? (
+        <EmptyMessages session={session} />
+    ) : (
+        <ActivityIndicator size="small" color={theme.colors.textSecondary} />
+    );
+
     let content = (
         <>
             <Deferred>
-                {messages.length > 0 && (
-                    <ChatList
-                        session={session}
-                        onFillInput={handleFillInput}
-                        onForkMessage={canForkSession(session) ? handleForkFromMessage : undefined}
-                        forkingMessageId={forkingMessageId}
-                        onLoadMore={handleLoadMore}
-                        minimapCachedUserMessages={minimapCachedMessages}
-                        onMinimapItemsChange={setMinimapItems}
-                        onActiveMessageIdChange={setMinimapActiveMessageId}
-                        onRegisterMinimapJump={handleRegisterMinimapJump}
-                        headerOverlayInset={headerInset > 0 ? (listUnderHeader ? headerInset : 0) : undefined}
-                        keyboardChatScroll={useNativeChatLayout}
-                        composerInset={useFloatingComposer ? composerHeight : undefined}
-                    />
-                )}
+                <ChatList
+                    session={session}
+                    onFillInput={handleFillInput}
+                    onForkMessage={canForkSession(session) ? handleForkFromMessage : undefined}
+                    forkingMessageId={forkingMessageId}
+                    onLoadMore={handleLoadMore}
+                    minimapCachedUserMessages={minimapCachedMessages}
+                    onMinimapItemsChange={setMinimapItems}
+                    onActiveMessageIdChange={setMinimapActiveMessageId}
+                    onRegisterMinimapJump={handleRegisterMinimapJump}
+                    headerOverlayInset={headerInset > 0 ? (listUnderHeader ? headerInset : 0) : undefined}
+                    keyboardChatScroll={useNativeChatLayout}
+                    composerInset={useFloatingComposer ? composerHeight : undefined}
+                    emptyComponent={emptyComponent}
+                />
             </Deferred>
         </>
     );
-    // The placeholder fills the area under the header too; padding it by the header keeps it
-    // centered in the part that is actually visible.
-    const placeholder = messages.length === 0 ? (
-        <View style={{ paddingTop: listUnderHeader ? headerInset : 0 }}>
-            {isLoaded ? (
-                <EmptyMessages session={session} />
-            ) : (
-                <ActivityIndicator size="small" color={theme.colors.textSecondary} />
-            )}
-        </View>
-    ) : null;
 
     const canEdit = canEditSession(session);
 
@@ -1366,7 +1363,6 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
                     composerHeight={composerHeight}
                     content={content}
                     input={input}
-                    placeholder={placeholder}
                     betweenContentAndInput={pendingQueuePanel}
                 />
                 {isDraggingImage && (

@@ -7,7 +7,7 @@ import { useHeaderHeight } from '@/utils/responsive';
 import { floatingComposerBottomInset } from './floatingComposer';
 import { ChatScrollView } from './ChatScrollView';
 import { ScrollToBottomButton } from './ScrollToBottomButton';
-import { useChatOverlayStyle } from '@/hooks/useChatOverlayStyle';
+import { useChatOverlayStyle, useChatVisibleAreaStyle } from '@/hooks/useChatOverlayStyle';
 import Animated, { type SharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useUnistyles } from 'react-native-unistyles';
@@ -49,7 +49,7 @@ export interface ForkMessageRequest {
     skipDraft: boolean;
 }
 
-export const ChatList = React.memo((props: { session: Session; onFillInput?: (text: string, allOptions?: string[]) => void; onLoadMore?: () => void | Promise<void>; onForkMessage?: (request: ForkMessageRequest) => void; forkingMessageId?: string | null; minimapCachedUserMessages?: MinimapMessage[]; onMinimapItemsChange?: (items: ConversationMinimapItem[]) => void; onActiveMessageIdChange?: (id: string | null) => void; onRegisterMinimapJump?: (jump: ((message: MinimapMessage) => void) | null) => void; headerOverlayInset?: number; keyboardChatScroll?: boolean; composerInset?: SharedValue<number> }) => {
+export const ChatList = React.memo((props: { session: Session; onFillInput?: (text: string, allOptions?: string[]) => void; onLoadMore?: () => void | Promise<void>; onForkMessage?: (request: ForkMessageRequest) => void; forkingMessageId?: string | null; minimapCachedUserMessages?: MinimapMessage[]; onMinimapItemsChange?: (items: ConversationMinimapItem[]) => void; onActiveMessageIdChange?: (id: string | null) => void; onRegisterMinimapJump?: (jump: ((message: MinimapMessage) => void) | null) => void; headerOverlayInset?: number; keyboardChatScroll?: boolean; composerInset?: SharedValue<number>; emptyComponent?: React.ReactElement | null }) => {
     const { messages, hasMore } = useSessionMessages(props.session.id);
     const profile = useProfile();
     const isSharedSession = !!(props.session.isShared || props.session.accessLevel);
@@ -76,6 +76,7 @@ export const ChatList = React.memo((props: { session: Session; onFillInput?: (te
             headerOverlayInset={props.headerOverlayInset}
             keyboardChatScroll={props.keyboardChatScroll}
             composerInset={props.composerInset}
+            emptyComponent={props.emptyComponent}
         />
     )
 });
@@ -225,6 +226,12 @@ const ChatListInternal = React.memo((props: {
     keyboardChatScroll?: boolean,
     /** Height of a composer floating over the list's bottom (see `AgentContentView`'s `floatingInput`). */
     composerInset?: SharedValue<number>,
+    /**
+     * Shown while there are no rows yet (loading, or an empty session), centered in what the header,
+     * the keyboard and a floating composer leave visible. The list stays mounted under it, so the
+     * scroll view under the header and a floating composer never changes.
+     */
+    emptyComponent?: React.ReactElement | null,
 }) => {
     const { theme } = useUnistyles();
     const listTopInset = useListTopInset(props.headerOverlayInset);
@@ -667,20 +674,24 @@ const ChatListInternal = React.memo((props: {
     // The oldest end of the conversation: the space the overlay header takes, and the load-older
     // spinner while there is history left to page in. It is the list's HEADER now — the top of the
     // content is the oldest message once the list is not inverted.
+    const isEmpty = listRows.length === 0;
+    // An empty chat has no older history to page in (a session still loading reports `hasMore`
+    // too), and only its centered empty state below the header.
+    const showLoadOlder = props.hasMore && !isEmpty;
     const listHeader = React.useMemo(() => (
         <View>
             <ListHeader headerOverlayInset={props.headerOverlayInset} />
-            {props.hasMore && (
+            {showLoadOlder && (
                 <View style={{ paddingVertical: 16, alignItems: 'center' }}>
                     <ActivityIndicator size="small" color={theme.colors.textSecondary} />
                 </View>
             )}
         </View>
-    ), [props.hasMore, props.headerOverlayInset, theme.colors.textSecondary]);
+    ), [showLoadOlder, props.headerOverlayInset, theme.colors.textSecondary]);
 
     // Height of that header, so the list can lay out its first frame without waiting a commit to
     // measure it. Exact, not estimated: it is the same arithmetic `ListHeader` renders with.
-    const listHeaderSize = listTopInset + LIST_TOP_GAP + (props.hasMore ? LOAD_OLDER_ROW_HEIGHT : 0);
+    const listHeaderSize = listTopInset + LIST_TOP_GAP + (showLoadOlder ? LOAD_OLDER_ROW_HEIGHT : 0);
 
     // Where the composer's padding ends above the screen's bottom, which its keyboard offset is
     // measured from: the floating composer sits lower than the safe-area layout's.
@@ -692,6 +703,10 @@ const ChatListInternal = React.memo((props: {
 
     // Keeps the controls floating over the list's bottom edge above the keyboard and the composer.
     const floatingControlsStyle = useChatOverlayStyle(!!props.keyboardChatScroll, props.composerInset);
+    // Laid over the list rather than inside it: in it, the empty state would move with however far
+    // the scroll view happens to have been lifted for the composer, which depends on whether the
+    // composer was measured before the list mounted.
+    const emptyAreaStyle = useChatVisibleAreaStyle(!!props.keyboardChatScroll, props.composerInset);
 
 
     return (
@@ -727,7 +742,10 @@ const ChatListInternal = React.memo((props: {
                 keyboardShouldPersistTaps="handled"
                 keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'none'}
                 ListHeaderComponent={listHeader}
-                ListFooterComponent={<ListFooter sessionId={props.sessionId} />}
+                ListFooterComponent={isEmpty ? undefined : <ListFooter sessionId={props.sessionId} />}
+                // An empty list has nothing to scroll: the composer's inset would otherwise leave
+                // it a little room to.
+                scrollEnabled={!isEmpty}
                 onLayout={handleListLayout}
                 onScroll={handleScroll}
                 scrollEventThrottle={16}
@@ -737,6 +755,15 @@ const ChatListInternal = React.memo((props: {
                 viewabilityConfig={viewabilityConfig}
                 renderScrollComponent={props.keyboardChatScroll ? renderScrollComponent : undefined}
             />
+
+            {isEmpty && props.emptyComponent && (
+                <Animated.View
+                    pointerEvents="box-none"
+                    style={[{ position: 'absolute', top: listTopInset, left: 0, right: 0, alignItems: 'center', justifyContent: 'center' }, emptyAreaStyle]}
+                >
+                    {props.emptyComponent}
+                </Animated.View>
+            )}
 
             <Animated.View pointerEvents="box-none" style={[StyleSheet.absoluteFill, floatingControlsStyle]}>
             {/* Bottom-centered hint shown while a minimap jump is paging in older messages */}
