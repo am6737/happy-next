@@ -681,16 +681,22 @@ const ChatListInternal = React.memo((props: {
     // An empty chat has no older history to page in (a session still loading reports `hasMore`
     // too), and only its centered empty state below the header.
     const showLoadOlder = props.hasMore && !isEmpty;
+    // LegendList keeps the rows hidden until it has measured them and landed on the newest one, but
+    // not its header — so until then the spinner would sit alone at the top of a blank list. Its
+    // row keeps its height meanwhile: showing it later must not move the rows under it.
+    const [readySessionId, setReadySessionId] = useState<string | null>(null);
+    const listReady = readySessionId === props.sessionId;
+    const handleListReady = useCallback(() => setReadySessionId(props.sessionId), [props.sessionId]);
     const listHeader = React.useMemo(() => (
         <View>
             <ListHeader headerOverlayInset={props.headerOverlayInset} />
             {showLoadOlder && (
                 <View style={{ paddingVertical: 16, alignItems: 'center' }}>
-                    <ActivityIndicator size="small" color={theme.colors.textSecondary} />
+                    <ActivityIndicator size="small" color={theme.colors.textSecondary} animating={listReady} hidesWhenStopped={false} style={!listReady && { opacity: 0 }} />
                 </View>
             )}
         </View>
-    ), [showLoadOlder, props.headerOverlayInset, theme.colors.textSecondary]);
+    ), [showLoadOlder, listReady, props.headerOverlayInset, theme.colors.textSecondary]);
 
     // Height of that header, so the list can lay out its first frame without waiting a commit to
     // measure it. Exact, not estimated: it is the same arithmetic `ListHeader` renders with.
@@ -748,6 +754,7 @@ const ChatListInternal = React.memo((props: {
                 // it a little room to.
                 scrollEnabled={!isEmpty}
                 onLayout={handleListLayout}
+                onReady={handleListReady}
                 onScroll={handleScroll}
                 scrollEventThrottle={16}
                 onStartReached={handleStartReached}
