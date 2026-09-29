@@ -50,7 +50,7 @@ git pull --ff-only origin main
 
 因此发布流程不再修改模型或 Codex 版本的代码，只做检查：
 
-1. 模型：由每日自动同步维护。列出改动了目录的未合并 PR，让用户决定先合并还是忽略；不要在发布流程里手动改模型。
+1. 模型：由每日自动同步维护（`.github/workflows/model-catalog-sync.yml`，固定分支 `automation/model-catalog-sync`，PR 说明里的 “Needs review” 需要人工处理）。列出改动了目录的未合并 PR，让用户决定先合并还是忽略；不要在发布流程里手动改模型。
 
    ```bash
    gh pr list --state open --json number,title,files \
