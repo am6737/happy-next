@@ -78,9 +78,19 @@ public final class KeyboardDockView: ExpoView {
     childComponentView.removeFromSuperview()
   }
 
-  // With the keyboard up the dock sits above this view's own frame; touches follow the dock.
-  public override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
-    return dockView.frame.contains(point)
+  // With the keyboard up the dock sits above this view's own frame, and what the composer opens
+  // above itself (the model and mode picker, autocomplete) sits above the dock's: neither this view
+  // nor the dock may turn a touch away for being outside its bounds. The React Native children
+  // decide, as they account for their own overflowing content.
+  public override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+    guard isUserInteractionEnabled, !isHidden, alpha > 0.01 else { return nil }
+    let dockPoint = convert(point, to: dockView)
+    for child in dockView.subviews.reversed() {
+      if let hit = child.hitTest(dockView.convert(dockPoint, to: child), with: event) {
+        return hit
+      }
+    }
+    return nil
   }
 
   // MARK: - Scroll edge element
