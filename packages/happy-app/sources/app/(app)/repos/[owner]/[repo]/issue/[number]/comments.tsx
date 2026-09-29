@@ -20,7 +20,7 @@ import { getNativeHeaderTitleWidth } from '@/utils/nativeHeaderTitleWidth';
 import { KeyboardStickyView } from 'react-native-keyboard-controller';
 import { useSharedValue } from 'react-native-reanimated';
 import { AgentContentView } from '@/components/AgentContentView';
-import { ChatScrollView } from '@/components/ChatScrollView';
+import { ChatScrollView, useChatListSettled } from '@/components/ChatScrollView';
 import { GlassSurface } from '@/components/GlassSurface';
 import { COMPOSER_MARGIN, floatingComposerAvailable, floatingComposerBottomInset, floatingComposerScreenOptions } from '@/components/floatingComposer';
 import { ActionMenuModal } from '@/components/ActionMenuModal';
@@ -230,6 +230,7 @@ export default React.memo(function IssueCommentsPage() {
     ), [loading, theme]);
 
     const listRef = React.useRef<LegendListRef>(null);
+    const { listSettled, onReady: handleListReady } = useChatListSettled();
 
     const renderScrollComponent = React.useCallback(
         (props: ScrollViewProps) => (
@@ -239,9 +240,10 @@ export default React.memo(function IssueCommentsPage() {
                 topInset={softHeaderInset}
                 composerInset={composerInset}
                 listRef={listRef}
+                listSettled={listSettled}
             />
         ),
-        [composerInset, insets.bottom, softHeaderInset, listRef],
+        [composerInset, insets.bottom, softHeaderInset, listRef, listSettled],
     );
 
     const list = (
@@ -274,6 +276,7 @@ export default React.memo(function IssueCommentsPage() {
                 <ActivityIndicator style={{ paddingVertical: 16 }} color={theme.colors.textSecondary} />
             ) : null}
             renderScrollComponent={renderScrollComponent}
+            onReady={handleListReady}
             contentContainerStyle={[styles.list, comments.length === 0 && styles.listEmpty, { maxWidth: layout.maxWidth, alignSelf: 'center', width: '100%' }]}
             style={{ flex: 1, backgroundColor: theme.colors.surface }}
             keyboardShouldPersistTaps="handled"

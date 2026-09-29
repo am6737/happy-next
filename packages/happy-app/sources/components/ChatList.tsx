@@ -5,7 +5,7 @@ import { useCallback, useRef, useState } from 'react';
 import { LegendList, LegendListRef, LegendListRenderItemProps } from '@legendapp/list/react-native';
 import { useHeaderHeight } from '@/utils/responsive';
 import { floatingComposerBottomInset } from './floatingComposer';
-import { ChatScrollView } from './ChatScrollView';
+import { ChatScrollView, useChatListSettled } from './ChatScrollView';
 import { ScrollToBottomButton } from './ScrollToBottomButton';
 import { useChatOverlayStyle, useChatVisibleAreaStyle } from '@/hooks/useChatOverlayStyle';
 import Animated, { type SharedValue } from 'react-native-reanimated';
@@ -237,6 +237,7 @@ const ChatListInternal = React.memo((props: {
     const listTopInset = useListTopInset(props.headerOverlayInset);
     const safeArea = useSafeAreaInsets();
     const listRef = useRef<LegendListRef | null>(null);
+    const { listSettled, onReady: handleListReady } = useChatListSettled();
     const [viewportHeight, setViewportHeight] = useState(0);
     const showThinkingMessages = useSetting('showThinkingMessages');
     const visibleMessages = React.useMemo(
@@ -697,8 +698,8 @@ const ChatListInternal = React.memo((props: {
     const listHeaderSize = listTopInset + LIST_TOP_GAP + (showLoadOlder ? LOAD_OLDER_ROW_HEIGHT : 0);
 
     const renderScrollComponent = React.useCallback(
-        (scrollProps: ScrollViewProps) => <ChatScrollView {...scrollProps} bottomInset={keyboardBottomInset} topInset={listTopInset} composerInset={props.composerInset} listRef={listRef} />,
-        [keyboardBottomInset, listTopInset, props.composerInset],
+        (scrollProps: ScrollViewProps) => <ChatScrollView {...scrollProps} bottomInset={keyboardBottomInset} topInset={listTopInset} composerInset={props.composerInset} listRef={listRef} listSettled={listSettled} />,
+        [keyboardBottomInset, listTopInset, props.composerInset, listSettled],
     );
 
     // Keeps the controls floating over the list's bottom edge above the keyboard and the composer.
@@ -754,6 +755,7 @@ const ChatListInternal = React.memo((props: {
                 onViewableItemsChanged={handleViewableItemsChanged}
                 viewabilityConfig={viewabilityConfig}
                 renderScrollComponent={props.keyboardChatScroll ? renderScrollComponent : undefined}
+                onReady={handleListReady}
             />
 
             {isEmpty && props.emptyComponent && (
