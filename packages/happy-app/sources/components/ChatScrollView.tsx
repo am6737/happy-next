@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { Platform, type ScrollViewProps } from 'react-native';
-import { KeyboardChatScrollView } from 'react-native-keyboard-controller';
+import { KeyboardChatScrollView, KeyboardController } from 'react-native-keyboard-controller';
 import { runOnJS, useAnimatedReaction, type SharedValue } from 'react-native-reanimated';
 import type { LegendListRef } from '@legendapp/list/react-native';
 import { COMPOSER_MARGIN } from './floatingComposer';
@@ -15,6 +15,21 @@ export type ChatScrollViewProps = ScrollViewProps & {
     /** The list scrolling in it, told how much of its bottom the composer covers. */
     listRef: React.RefObject<Pick<LegendListRef, 'reportContentInset'> | null>;
 };
+
+/** How much of the keyboard's height `ChatScrollView` leaves out of the lift (the part below the composer's padding). */
+function keyboardOffset(bottomInset: number): number {
+    return Platform.OS === 'ios' ? bottomInset - COMPOSER_MARGIN : bottomInset;
+}
+
+/**
+ * How far the keyboard lifts the content of a `ChatScrollView` with this `bottomInset` right now.
+ * The list only knows the composer's share of the bottom inset (see `reportComposerInset`), so its
+ * `scrollToEnd` stops this far above the end while the keyboard is up; pass it as a negative
+ * `viewOffset` to reach the end.
+ */
+export function chatKeyboardLift(bottomInset: number): number {
+    return Math.max(0, KeyboardController.state().height - keyboardOffset(bottomInset));
+}
 
 /**
  * The scroll view under a chat list (`renderScrollComponent`). Lifts the list's content natively
@@ -55,7 +70,7 @@ export const ChatScrollView = React.forwardRef<React.ElementRef<typeof KeyboardC
                 scrollIndicatorInsets={{ top: topInset }}
                 keyboardDismissMode="interactive"
                 keyboardLiftBehavior="always"
-                offset={Platform.OS === 'ios' ? bottomInset - COMPOSER_MARGIN : bottomInset}
+                offset={keyboardOffset(bottomInset)}
                 {...props}
             />
         );

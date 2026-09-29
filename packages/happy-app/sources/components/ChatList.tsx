@@ -5,7 +5,7 @@ import { useCallback, useRef, useState } from 'react';
 import { LegendList, LegendListRef, LegendListRenderItemProps } from '@legendapp/list/react-native';
 import { useHeaderHeight } from '@/utils/responsive';
 import { floatingComposerBottomInset } from './floatingComposer';
-import { ChatScrollView } from './ChatScrollView';
+import { ChatScrollView, chatKeyboardLift } from './ChatScrollView';
 import { ScrollToBottomButton } from './ScrollToBottomButton';
 import { useChatOverlayStyle, useChatVisibleAreaStyle } from '@/hooks/useChatOverlayStyle';
 import Animated, { type SharedValue } from 'react-native-reanimated';
@@ -658,10 +658,15 @@ const ChatListInternal = React.memo((props: {
     }, []);
 
     // Decide at the time of the tap using live geometry (including keyboard/rotation changes).
+    // Where the composer's padding ends above the screen's bottom, which its keyboard offset is
+    // measured from: the floating composer sits lower than the safe-area layout's.
+    const keyboardBottomInset = props.composerInset ? floatingComposerBottomInset(safeArea.bottom) : safeArea.bottom;
     const handleScrollToBottom = useCallback(() => {
         const list = listRef.current;
-        if (list) void list.scrollToEnd(chatScrollToEndOptions(list.getState()));
-    }, []);
+        if (!list) return;
+        const keyboardLift = props.keyboardChatScroll ? chatKeyboardLift(keyboardBottomInset) : 0;
+        void list.scrollToEnd({ ...chatScrollToEndOptions(list.getState()), viewOffset: -keyboardLift });
+    }, [props.keyboardChatScroll, keyboardBottomInset]);
 
     const handleListLayout = useCallback((event: LayoutChangeEvent) => {
         setViewportHeight(event.nativeEvent.layout.height);
@@ -693,9 +698,6 @@ const ChatListInternal = React.memo((props: {
     // measure it. Exact, not estimated: it is the same arithmetic `ListHeader` renders with.
     const listHeaderSize = listTopInset + LIST_TOP_GAP + (showLoadOlder ? LOAD_OLDER_ROW_HEIGHT : 0);
 
-    // Where the composer's padding ends above the screen's bottom, which its keyboard offset is
-    // measured from: the floating composer sits lower than the safe-area layout's.
-    const keyboardBottomInset = props.composerInset ? floatingComposerBottomInset(safeArea.bottom) : safeArea.bottom;
     const renderScrollComponent = React.useCallback(
         (scrollProps: ScrollViewProps) => <ChatScrollView {...scrollProps} bottomInset={keyboardBottomInset} topInset={listTopInset} composerInset={props.composerInset} listRef={listRef} />,
         [keyboardBottomInset, listTopInset, props.composerInset],

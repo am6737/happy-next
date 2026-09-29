@@ -9,7 +9,7 @@ import { ChatBubble } from './ChatBubble';
 import type { DooTaskDialogMsg, DisplayMessage, PendingMessage } from '@/sync/dootask/types';
 import { useSoftHeaderInset } from '@/components/navigation/softHeader';
 import Animated, { type SharedValue } from 'react-native-reanimated';
-import { ChatScrollView } from '@/components/ChatScrollView';
+import { ChatScrollView, chatKeyboardLift } from '@/components/ChatScrollView';
 import { ScrollToBottomButton } from '@/components/ScrollToBottomButton';
 import { COMPOSER_MARGIN, floatingComposerBottomInset } from '@/components/floatingComposer';
 import { useChatOverlayStyle } from '@/hooks/useChatOverlayStyle';
@@ -136,9 +136,11 @@ export const ChatMessageList = React.memo(({
         });
     }, [messages]);
 
+    // Where the composer's padding ends above the screen's bottom, which its keyboard offset is measured from.
+    const keyboardBottomInset = composerInset ? floatingComposerBottomInset(insets.bottom) : insets.bottom;
     const handleScrollToBottom = React.useCallback(() => {
-        void listRef.current?.scrollToEnd({ animated: false });
-    }, []);
+        void listRef.current?.scrollToEnd({ animated: false, viewOffset: -chatKeyboardLift(keyboardBottomInset) });
+    }, [keyboardBottomInset]);
 
     // Build a map from message id -> message for resolving reply_id references
     const replyMsgMap = React.useMemo(() => {
@@ -251,13 +253,13 @@ export const ChatMessageList = React.memo(({
         (props: ScrollViewProps) => (
             <ChatScrollView
                 {...props}
-                bottomInset={composerInset ? floatingComposerBottomInset(insets.bottom) : insets.bottom}
+                bottomInset={keyboardBottomInset}
                 topInset={softHeaderInset}
                 composerInset={composerInset}
                 listRef={listRef}
             />
         ),
-        [composerInset, insets.bottom, softHeaderInset, listRef],
+        [composerInset, keyboardBottomInset, softHeaderInset, listRef],
     );
     // The list's frame does not shrink for the keyboard (or end at a floating composer), so the
     // scroll-to-bottom button is moved above both.
