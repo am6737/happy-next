@@ -29,6 +29,7 @@ import {
 } from './expoPushMigrationState';
 import { cleanupSupersededPushTokens } from './pushTokenCleanup';
 import { getPushInstallationId } from './pushInstallationId';
+import { userAttention } from './userAttention';
 import { Platform, AppState } from 'react-native';
 import { isRunningOnMac } from '@/utils/platform';
 import { NormalizedMessage, normalizeRawMessage, RawRecord, RawRecordSchema, ImageContent } from './typesRaw';
@@ -392,12 +393,21 @@ class Sync {
         this.pushTokenSync = new InvalidateSync(registerPushToken);
         this.activityAccumulator = new ActivityUpdateAccumulator(this.flushActivityUpdates.bind(this), 2000);
 
+        // Web/desktop: an open session left unread while the window was unfocused or idle is read
+        // the moment they are back at it.
+        userAttention.onPresent(() => {
+            if (this.viewingSessionId) {
+                markSessionViewed(this.viewingSessionId);
+                this.rerenderSessionRow(this.viewingSessionId);
+            }
+        });
+
         // Refresh data when app becomes active
         AppState.addEventListener('change', (nextAppState) => {
             if (nextAppState === 'active') {
                 log.log('📱 App became active');
                 // Refresh lastViewedAt so blue dot won't flash for the session user is viewing
-                if (this.viewingSessionId) {
+                if (this.viewingSessionId && userAttention.isPresent()) {
                     markSessionViewed(this.viewingSessionId);
                 }
                 this.profileSync.invalidate();
@@ -802,8 +812,9 @@ class Sync {
             }
         }
 
-        // Record view time for blue dot (taskCompleted) comparison
-        if (userInitiated) {
+        // Record view time for blue dot (taskCompleted) comparison. Opening it in an unfocused or
+        // idle window is not reading it; `userAttention.onPresent` catches up once they are back.
+        if (userInitiated && userAttention.isPresent()) {
             markSessionViewed(sessionId);
             // Trigger re-render so blue dot disappears on tablet sidebar
             this.rerenderSessionRow(sessionId);
@@ -4345,7 +4356,7 @@ class Sync {
 
                 // If user is viewing this session, keep lastViewedAt fresh
                 // so incoming taskCompleted doesn't show a blue dot
-                if (this.viewingSessionId === updateData.body.id) {
+                if (this.viewingSessionId === updateData.body.id && userAttention.isPresent()) {
                     markSessionViewed(updateData.body.id);
                 }
 
