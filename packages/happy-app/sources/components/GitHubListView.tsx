@@ -118,7 +118,7 @@ const TokenExpiredCard = React.memo(({ onReconnect, loading }: { onReconnect: ()
                 disabled={loading}
             >
                 <Text style={[styles.reconnectButtonText, { color: theme.colors.button.primary.tint }]}>
-                    {loading ? t('openclaw.connecting') : t('github.reconnect')}
+                    {loading ? t('github.connecting') : t('github.reconnect')}
                 </Text>
             </Pressable>
         </View>

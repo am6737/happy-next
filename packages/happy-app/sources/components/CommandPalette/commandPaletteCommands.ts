@@ -267,7 +267,6 @@ export function buildCommandPaletteCommands(options: CommandPaletteCommandOption
         { id: 'session-recent', title: t('sessionHistory.title'), subtitle: t('settings.sessionHistorySubtitle'), icon: 'time-outline', path: '/session/recent', priority: 900 },
         { id: 'agent-history', title: t('agentHistory.title'), subtitle: t('settings.agentHistorySubtitle'), icon: 'albums-outline', path: '/session/history', priority: 850 },
         { id: 'orchestrator', title: t('settings.orchestratorRuns'), subtitle: t('settings.orchestratorRunsSubtitle'), icon: 'layers-outline', path: '/orchestrator', priority: 800 },
-        { id: 'openclaw', title: t('tabs.openclaw'), subtitle: t('settings.openclawSubtitle'), icon: 'hardware-chip-outline', path: '/openclaw', priority: 700 },
         { id: 'connect-device', title: t('commandPalette.connectDevice'), subtitle: t('settingsAccount.linkNewDeviceSubtitle'), icon: 'link-outline', path: '/terminal/connect', priority: 600 },
         { id: 'server', title: t('server.serverConfiguration'), icon: 'server-outline', path: '/server', priority: 550 },
         { id: 'changelog', title: t('settings.whatsNew'), subtitle: t('settings.whatsNewSubtitle'), icon: 'sparkles-outline', path: '/changelog', priority: 500 },
@@ -285,7 +284,7 @@ export function buildCommandPaletteCommands(options: CommandPaletteCommandOption
         ...command,
         category: navigationCategory,
         categoryOrder: CATEGORY_ORDER.navigation,
-        showWhenIdle: ['orchestrator', 'openclaw'].includes(command.id),
+        showWhenIdle: command.id === 'orchestrator',
     })));
 
     const settingsCommands: Array<Omit<Command, 'action'> & { path: string }> = [

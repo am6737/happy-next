@@ -208,38 +208,6 @@ export const ApiKvBatchUpdateSchema = z.object({
     }))
 });
 
-// OpenClaw machine update schemas
-export const ApiNewOpenClawMachineSchema = z.object({
-    t: z.literal('new-openclaw-machine'),
-    machineId: z.string(),
-    machineType: z.enum(['happy', 'direct']),
-    happyMachineId: z.string().nullable(),
-    directConfig: z.string().nullable(),
-    metadata: z.string(),
-    metadataVersion: z.number(),
-    pairingData: z.string().nullable(),
-    dataEncryptionKey: z.string().nullable(),
-    seq: z.number(),
-    createdAt: z.number(),
-    updatedAt: z.number()
-});
-
-export const ApiUpdateOpenClawMachineSchema = z.object({
-    t: z.literal('update-openclaw-machine'),
-    machineId: z.string(),
-    metadata: z.object({
-        value: z.string(),
-        version: z.number()
-    }).optional(),
-    pairingData: z.string().nullable().optional(),
-    directConfig: z.string().nullable().optional()
-});
-
-export const ApiDeleteOpenClawMachineSchema = z.object({
-    t: z.literal('delete-openclaw-machine'),
-    machineId: z.string()
-});
-
 // Session sharing update schemas
 export const ApiSessionSharedSchema = z.object({
     t: z.literal('session-shared'),
@@ -312,9 +280,6 @@ export const ApiUpdateSchema = z.discriminatedUnion('t', [
     ApiRelationshipUpdatedSchema,
     ApiNewFeedPostSchema,
     ApiKvBatchUpdateSchema,
-    ApiNewOpenClawMachineSchema,
-    ApiUpdateOpenClawMachineSchema,
-    ApiDeleteOpenClawMachineSchema,
     ApiSessionSharedSchema,
     ApiSessionShareUpdatedSchema,
     ApiSessionShareRevokedSchema,
@@ -325,9 +290,6 @@ export const ApiUpdateSchema = z.discriminatedUnion('t', [
 
 export type ApiUpdateNewMessage = z.infer<typeof ApiUpdateNewMessageSchema>;
 export type ApiRelationshipUpdated = z.infer<typeof ApiRelationshipUpdatedSchema>;
-export type ApiNewOpenClawMachine = z.infer<typeof ApiNewOpenClawMachineSchema>;
-export type ApiUpdateOpenClawMachine = z.infer<typeof ApiUpdateOpenClawMachineSchema>;
-export type ApiDeleteOpenClawMachine = z.infer<typeof ApiDeleteOpenClawMachineSchema>;
 export type ApiUpdate = z.infer<typeof ApiUpdateSchema>;
 
 //

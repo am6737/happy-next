@@ -162,31 +162,6 @@ export type UpdateEvent = {
         version: number; // -1 for deleted keys
     }>;
 } | {
-    type: 'new-openclaw-machine';
-    machineId: string;
-    machineType: 'happy' | 'direct';
-    happyMachineId: string | null;
-    directConfig: string | null;
-    metadata: string;
-    metadataVersion: number;
-    pairingData: string | null;
-    dataEncryptionKey: string | null;
-    seq: number;
-    createdAt: number;
-    updatedAt: number;
-} | {
-    type: 'update-openclaw-machine';
-    machineId: string;
-    metadata?: {
-        value: string;
-        version: number;
-    };
-    pairingData?: string | null;
-    directConfig?: string | null;
-} | {
-    type: 'delete-openclaw-machine';
-    machineId: string;
-} | {
     type: 'session-shared';
     sessionId: string;
     shareId: string;
@@ -955,78 +930,6 @@ export function buildKVBatchUpdateUpdate(
         body: {
             t: 'kv-batch-update',
             changes
-        },
-        createdAt: Date.now()
-    };
-}
-
-export function buildNewOpenClawMachineUpdate(machine: {
-    id: string;
-    type: string;
-    happyMachineId: string | null;
-    directConfig: string | null;
-    metadata: string;
-    metadataVersion: number;
-    pairingData: string | null;
-    dataEncryptionKey: Uint8Array | null;
-    seq: number;
-    createdAt: Date;
-    updatedAt: Date;
-}, updateSeq: number, updateId: string): UpdatePayload {
-    return {
-        id: updateId,
-        seq: updateSeq,
-        body: {
-            t: 'new-openclaw-machine',
-            machineId: machine.id,
-            machineType: machine.type as 'happy' | 'direct',
-            happyMachineId: machine.happyMachineId,
-            directConfig: machine.directConfig,
-            metadata: machine.metadata,
-            metadataVersion: machine.metadataVersion,
-            pairingData: machine.pairingData,
-            dataEncryptionKey: machine.dataEncryptionKey ? Buffer.from(machine.dataEncryptionKey).toString('base64') : null,
-            seq: machine.seq,
-            createdAt: machine.createdAt.getTime(),
-            updatedAt: machine.updatedAt.getTime()
-        },
-        createdAt: Date.now()
-    };
-}
-
-export function buildUpdateOpenClawMachineUpdate(
-    machineId: string,
-    updateSeq: number,
-    updateId: string,
-    updates: {
-        metadata?: { value: string; version: number };
-        pairingData?: string | null;
-        directConfig?: string | null;
-    }
-): UpdatePayload {
-    return {
-        id: updateId,
-        seq: updateSeq,
-        body: {
-            t: 'update-openclaw-machine',
-            machineId,
-            ...updates
-        },
-        createdAt: Date.now()
-    };
-}
-
-export function buildDeleteOpenClawMachineUpdate(
-    machineId: string,
-    updateSeq: number,
-    updateId: string
-): UpdatePayload {
-    return {
-        id: updateId,
-        seq: updateSeq,
-        body: {
-            t: 'delete-openclaw-machine',
-            machineId
         },
         createdAt: Date.now()
     };

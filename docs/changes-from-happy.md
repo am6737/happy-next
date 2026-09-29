@@ -27,7 +27,6 @@ This document summarizes what changed in Happy Next compared to the original Hap
 | Performance | Payload trimming, lazy-load diffs, rendering optimization, incremental session catch-up on open |
 | CLI | Daemon auto-start, Codex fast mode, receipt tracking, self-upgrade |
 | MCP tools | `preview_html`, colon-separated tool naming, dual-mode long-press copy |
-| OpenClaw | External AI machine gateway with tunnel/direct connections and chat UI |
 | Profiles | AI backend profiles with presets for DeepSeek, Z.AI, OpenAI, Azure, Google AI |
 | Rebrand | CLI published as `happy-next-cli`, binary remains `happy` |
 
@@ -199,18 +198,6 @@ Share AI coding sessions with others through direct invites or public links, wit
 - **Access logging** for public share views
 - **Shared-session image uploads**: recipients of a session shared with them can upload chat images
 
-## OpenClaw Integration
-
-Connect to external AI machines through a gateway system with its own chat interface.
-
-- **Machine management**: add, edit, and remove OpenClaw machines from the app
-- **Two connection modes**: Happy relay (tunnel through the Happy server) or direct WebSocket gateway
-- **Ed25519 key exchange** for secure machine pairing
-- **Chat interface** with real-time streaming AI responses, message retry, and typing indicators
-- **Session management**: create, browse, and resume OpenClaw sessions
-- **Server-side CRUD API** with encrypted metadata and optimistic concurrency
-- **CLI tunnel manager** for relay connections
-
 ## AI Backend Profiles
 
 Configure alternative LLM backends for Claude Code through environment variable profiles.
@@ -330,7 +317,7 @@ Extensive improvements to the chat and session management experience.
 - **Dual-mode long-press copy**: long-press to copy in tool detail views (text or JSON)
 - **Colon-separated tool naming**: support MCP tool names with colons (`server:tool`)
 - **Tool input as display name**: use tool input title for MCP tool display name
-- **Unified session header**: left-aligned title across iOS / Android / web, new-session button on the header right, header title in the session info screen, and a dedicated OpenClaw session info sheet
+- **Unified session header**: left-aligned title across iOS / Android / web, new-session button on the header right, header title in the session info screen
 - **Consistent header navigation**: back buttons and header actions align consistently across session and machine screens
 - **Narrow-phone header**: title left-aligns instead of center-overflowing on narrow phones; back icon fixed in dark-theme landscape
 - **Short-screen empty state**: simplified layout keeps the empty conversation state usable on short displays

@@ -176,12 +176,6 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Public share web viewer for link-based access, with paginated message loading so long shared conversations open faster
 - Recipients of a shared session can upload chat images, and a failed send names the real reason
 
-### OpenClaw Gateway
-- Connect to external AI machines via relay tunnel or direct WebSocket
-- Machine pairing with Ed25519 key exchange
-- Chat interface with real-time streaming and session management
-- Rich content block rendering: thinking, tool use, and image blocks from external AI
-
 ### DooTask Integration
 - Task list with filters, search, pagination, and status workflows
 - Task detail with HTML rendering, assignees, files, sub-tasks

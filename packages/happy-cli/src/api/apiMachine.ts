@@ -9,7 +9,6 @@ import { configuration } from '@/configuration';
 import { isDebug } from '@/utils/env';
 import { MachineMetadata, DaemonState, Machine, Update, UpdateMachineBody } from './types';
 import { registerCommonHandlers, SpawnSessionOptions, SpawnSessionResult } from '../modules/common/registerCommonHandlers';
-import { registerOpenClawHandlers, openClawTunnelManager } from '../modules/openclaw';
 import { registerTerminalHandlers } from '../modules/terminal/registerTerminalHandlers';
 import type { TerminalManager } from '../modules/terminal/terminalManager';
 import type { TerminalFrame } from 'happy-wire';
@@ -204,9 +203,6 @@ export class ApiMachineClient {
         });
 
         registerCommonHandlers(this.rpcHandlerManager, '/');
-        registerOpenClawHandlers(this.rpcHandlerManager, {
-            key: this.machine.encryptionKey
-        });
 
         // Terminal output goes out on its own event rather than rpc-call: the
         // RPC path answers every call with a round trip, which a stream of
@@ -231,38 +227,6 @@ export class ApiMachineClient {
             const { displayName, host } = this.machine.metadata;
             const trimmed = displayName?.trim();
             return { name: trimmed || host || undefined };
-        });
-
-        // Set up OpenClaw event forwarding
-        openClawTunnelManager.setEventCallback((tunnelId, event, payload) => {
-            this.broadcastOpenClawEvent(tunnelId, event, payload);
-        });
-    }
-
-    /**
-     * Broadcast an OpenClaw tunnel event to connected clients
-     */
-    private broadcastOpenClawEvent(tunnelId: string, event: string, payload: unknown): void {
-        if (!this.socket?.connected) {
-            return;
-        }
-
-        const eventData = {
-            type: 'openclaw-tunnel-event',
-            tunnelId,
-            event,
-            payload,
-        };
-
-        // Encrypt and send as RPC call to be forwarded to the mobile client
-        const encryptedData = encodeBase64(encrypt(this.machine.encryptionKey, this.machine.encryptionVariant, eventData));
-        const rpcMethod = `${this.machine.id}:openclaw-tunnel-event`;
-
-        this.socket.emit('rpc-call', {
-            method: rpcMethod,
-            params: encryptedData,
-        }, () => {
-            // Callback required but result not needed
         });
     }
 
@@ -936,7 +900,6 @@ export class ApiMachineClient {
 
     shutdown() {
         logger.debug('[API MACHINE] Shutting down');
-        openClawTunnelManager.closeAll();
         this.terminalManager?.stop();
         this.stopKeepAlive();
         if (this.socket) {

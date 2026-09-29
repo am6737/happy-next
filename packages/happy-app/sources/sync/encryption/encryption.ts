@@ -120,7 +120,7 @@ export class Encryption {
             // Create appropriate encryptor based on data key
             const encryptor = await this.openEncryption(dataKey);
 
-            // For legacy decryption (OpenClaw chat.history), use the appropriate key:
+            // For legacy decryption, use the appropriate key:
             // - If dataKey exists, use dataKey (machine-specific key)
             // - Otherwise, use masterSecret (legacy mode)
             const legacyKey = dataKey ?? this.masterSecret;

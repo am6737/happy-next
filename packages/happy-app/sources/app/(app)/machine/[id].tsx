@@ -253,11 +253,11 @@ export default function MachineDetailScreen() {
         if (!machine || !machineId) return;
 
         const newDisplayName = await Modal.prompt(
-            t('openclaw.renameMachine'),
-            t('openclaw.renameMachineDescription'),
+            t('machine.renameMachine'),
+            t('machine.renameMachineDescription'),
             {
                 defaultValue: machine.metadata?.displayName || '',
-                placeholder: machine.metadata?.host || t('openclaw.machineNamePlaceholder'),
+                placeholder: machine.metadata?.host || t('machine.machineNamePlaceholder'),
                 cancelText: t('common.cancel'),
                 confirmText: t('common.rename')
             }
@@ -277,11 +277,11 @@ export default function MachineDetailScreen() {
                     machine.metadataVersion
                 );
                 
-                hapticsLight(); showToast(t('openclaw.machineRenamedSuccess'));
+                hapticsLight(); showToast(t('machine.machineRenamedSuccess'));
             } catch (error) {
                 Modal.alert(
                     t('common.error'),
-                    error instanceof Error ? error.message : t('openclaw.machineRenameFailed')
+                    error instanceof Error ? error.message : t('machine.machineRenameFailed')
                 );
                 // Refresh to get latest state
                 await sync.refreshMachines();

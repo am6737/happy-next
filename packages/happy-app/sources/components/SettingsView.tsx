@@ -427,19 +427,6 @@ export const SettingsView = React.memo(function SettingsView() {
                     />
                 )}
                 <Item
-                    title={t('tabs.openclaw')}
-                    subtitle={t('settings.openclawSubtitle')}
-                    icon={
-                        <Image
-                            source={require('@/assets/images/brutalist/Brutalism 117.png')}
-                            style={{ width: 36, height: 36 }}
-                            contentFit="contain"
-                            tintColor="#5AC8FA"
-                        />
-                    }
-                    onPress={() => router.push('/openclaw')}
-                />
-                <Item
                     title={t('settings.terminal')}
                     subtitle={t('settings.terminalSubtitle')}
                     icon={<FontAwesome6 name="terminal" size={24} color="#5856D6" />}

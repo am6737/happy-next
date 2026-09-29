@@ -117,7 +117,7 @@ graph LR
             R8[userRoutes / feedRoutes]
             R9[pushRoutes]
             R10[connectRoutes / voiceRoutes]
-            R11[openclawRoutes / chatRoutes]
+            R11[chatRoutes]
         end
     end
 
@@ -131,7 +131,6 @@ HTTP routes are organized by domain:
 - Auth (`authRoutes`)
 - Sessions + messages (`sessionRoutes`, `v3SessionRoutes`)
 - Machines (`machinesRoutes`)
-- OpenClaw machines (`openclawRoutes`)
 - Chat uploads (`chatRoutes`)
 - Artifacts (`artifactsRoutes`)
 - Access keys (`accessKeysRoutes`)

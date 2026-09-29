@@ -198,7 +198,6 @@ export class ApiSocket {
             let decrypted = await machineEncryption.decryptRaw(result.result);
 
             // If standard decryption fails, try legacy format
-            // (used for OpenClaw chat.history which uses legacy format for cross-platform compatibility)
             if (decrypted === null) {
                 decrypted = machineEncryption.decryptRawLegacy(result.result);
             }

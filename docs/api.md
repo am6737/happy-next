@@ -102,13 +102,6 @@ Auth flows:
 - `GET /v3/sessions/:sessionId/messages` (seq-based cursor pagination with `after_seq`, `before_seq` for reverse paging, and `limit`)
 - `POST /v3/sessions/:sessionId/messages` (batch write with server-allocated seq numbers)
 
-### OpenClaw machines
-- `GET /v1/openclaw/machines`
-- `POST /v1/openclaw/machines` (create with encrypted metadata)
-- `GET /v1/openclaw/machines/:id`
-- `PUT /v1/openclaw/machines/:id` (versioned update)
-- `DELETE /v1/openclaw/machines/:id`
-
 ### Chat
 - `POST /v1/chat/upload-image` (image upload for chat messages)
 

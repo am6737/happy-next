@@ -755,21 +755,6 @@ export default function RootLayout() {
                     headerTitle: t('newSession.title'),
                 }}
             />
-<Stack.Screen
-                name="openclaw/index"
-                options={{
-                    ...softHeaderOptions,
-                    headerShown: true,
-                    headerTitle: t('tabs.openclaw'),
-                }}
-            />
-            <Stack.Screen
-                name="openclaw/add"
-                options={{
-                    ...softHeaderOptions,
-                    headerTitle: t('openclaw.addMachine'),
-                }}
-            />
             <Stack.Screen
                 name="machine/[id]/repo/[repoId]"
                 options={{
@@ -784,27 +769,6 @@ export default function RootLayout() {
                     ...softHeaderOptions,
                     headerShown: true,
                     headerTitle: '',
-                }}
-            />
-            <Stack.Screen
-                name="openclaw/machine/[id]"
-                options={{
-                    headerShown: true,
-                    headerTitle: '',
-                }}
-            />
-            <Stack.Screen
-                name="openclaw/chat"
-                options={{
-                    headerShown: true,
-                    headerTitle: '',
-                }}
-            />
-            <Stack.Screen
-                name="openclaw/new"
-                options={{
-                    headerShown: true,
-                    headerTitle: t('openclaw.newSession'),
                 }}
             />
             <Stack.Screen

@@ -194,9 +194,9 @@ The Happy CLI gains a built-in orchestrator that fans work out to parallel Claud
 
 ## Version 13 - 2026-06-18
 
-Session header is reworked with a left-aligned title, a new-session button, and OpenClaw session info sheets; the sessions list is reorganized into per-machine tabs; session loading gets a reliability sweep (longer fetch timeout, retry-loop refresh indicator, stuck-load recovery, base64 stack-overflow fix); long user messages collapse and select cleanly on web; the commits list tags the upstream tip; nginx adds a /healthz endpoint; unrecognized tool calls now render as a generic 'other' block and agent-event messages strip ANSI escape codes; Happy CLI updates to v0.5.5 with mid-turn permission-mode forwarding, graceful Stop/ESC interrupts that keep the Claude and Codex backends warm, and hot-swappable model / plan-mode switching on a warm subprocess; and Claude Fable 5 (with 1M-context variant) joins the Claude model catalog.
+Session header is reworked with a left-aligned title and a new-session button; the sessions list is reorganized into per-machine tabs; session loading gets a reliability sweep (longer fetch timeout, retry-loop refresh indicator, stuck-load recovery, base64 stack-overflow fix); long user messages collapse and select cleanly on web; the commits list tags the upstream tip; nginx adds a /healthz endpoint; unrecognized tool calls now render as a generic 'other' block and agent-event messages strip ANSI escape codes; Happy CLI updates to v0.5.5 with mid-turn permission-mode forwarding, graceful Stop/ESC interrupts that keep the Claude and Codex backends warm, and hot-swappable model / plan-mode switching on a warm subprocess; and Claude Fable 5 (with 1M-context variant) joins the Claude model catalog.
 
-- Session header: unified left-aligned title across iOS / Android / web — new-session button on the header right, header title in the session info screen, and a dedicated OpenClaw session info sheet
+- Session header: unified left-aligned title across iOS / Android / web — new-session button on the header right and a header title in the session info screen
 - Session header: left-align the title on narrow phones (was center-overflowing), and fix the invisible back icon in dark-theme landscape
 - Sessions: the active/inactive split is replaced by per-machine tabs — sessions are grouped by the machine they run on, so multi-machine setups are easier to navigate
 - Messages: long user messages (>20k chars) now collapse to a preview with a Show More toggle; web text selection inside messages is fixed
@@ -283,9 +283,8 @@ Native iOS/Android navigation overhaul, deeper DooTask inbox integration, direct
 
 ## Version 8 - 2026-05-07
 
-OpenClaw renders rich AI content blocks, Claude Opus 4.7 and GPT-5.5 support, image upload quality, session title polish, Claude 4.x compatibility fixes, web desktop polish, and mobile text-selection rebuild.
+Claude Opus 4.7 and GPT-5.5 support, image upload quality, session title polish, Claude 4.x compatibility fixes, web desktop polish, and mobile text-selection rebuild.
 
-- OpenClaw: full rendering of thinking, tool use, and image content blocks from external AI machines
 - Models: add Claude Opus 4.7 to available model list
 - Models: add GPT-5.5 to available Codex model list with low/medium/high/xhigh reasoning levels
 - Image uploads: raise max dimension to 1568px and skip redundant compression when originals are already within limits, preserving text sharpness in code and UI screenshots
@@ -298,7 +297,7 @@ OpenClaw renders rich AI content blocks, Claude Opus 4.7 and GPT-5.5 support, im
 - Mobile reliability: fix Android text-selection page crash caused by iOS-only WebView props under the new Fabric architecture
 - AskUserQuestion: fix empty/missing answers — frontend now keys answers by the full question text to match Claude Code CLI's internal lookup
 - iOS 26: align navigation header icons and pin App Store builds to Xcode 26.4.1 (required by Apple for App Store Connect uploads)
-- Header action menus: refine action menus on session edit/status/commits, script editor, and OpenClaw machine detail pages for cleaner interactions
+- Header action menus: refine action menus on session edit/status/commits and script editor pages for cleaner interactions
 - Dependencies: upgrade react-native-audio-api and react-native-keyboard-controller for improved iOS audio recording and keyboard handling
 
 ## Version 7 - 2026-03-18
@@ -325,7 +324,6 @@ The biggest Happy update ever — multi-agent, voice, workspaces, code browser, 
 - Built-in code browser with file navigation, Monaco editor, commit history, branch selector, and a full git changes page for staging, committing, and discarding changes.
 - Session sharing: share sessions with friends via direct invite (NaCl Box E2E encryption) or public links (token-derived keys), with real-time sync, access control, and a public share web viewer.
 - DooTask integration with task lists, detail pages, real-time WebSocket chat, emoji reactions, voice message playback, one-click AI session launch, and in-app task/project creation.
-- OpenClaw gateway for connecting to external AI machines with secure Ed25519 key exchange, real-time streaming chat, and relay or direct connection modes.
 - AI backend profiles with built-in presets for DeepSeek, Z.AI, OpenAI, Azure, and Google AI — switch LLM backends for Claude Code with custom environment variable mapping.
 - Self-hosting with a single `docker-compose` command: Web app, API server, Voice gateway, Postgres, Redis, and MinIO all configured out of the box.
 - Major sync reliability improvements: v3 messages API with seq-based sync, HTTP outbox for offline delivery, server-confirmed sends, and message loss prevention.

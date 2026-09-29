@@ -59,7 +59,6 @@ model Account {
   AccessKey           AccessKey[]
   UserFeedItem        UserFeedItem[]
   UserKVStore         UserKVStore[]
-  OpenClawMachine     OpenClawMachine[]
   sharedBySessions    SessionShare[]           @relation("SharedBySessions")
   sharedWithSessions  SessionShare[]           @relation("SharedWithSessions")
   publicSessionShares PublicSessionShare[]     @relation("PublicSessionShares")
@@ -536,45 +535,6 @@ model UserKVStore {
   updatedAt DateTime @updatedAt
 
   @@unique([accountId, key])
-  @@index([accountId])
-}
-
-//
-// OpenClaw Machines
-//
-
-model OpenClawMachine {
-  id        String  @id @default(cuid())
-  accountId String
-  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
-
-  // Machine type: 'happy' (relay through Happy device) or 'direct' (direct WebSocket)
-  type String // 'happy' | 'direct'
-
-  // Happy device reference (used when type='happy')
-  // Note: This is a soft reference to Machine.id, not a foreign key,
-  // because the Happy machine may be deleted independently
-  happyMachineId String?
-
-  // Direct connection config (used when type='direct', encrypted)
-  directConfig String? // Encrypted JSON: { url: string }
-
-  // General metadata (encrypted)
-  metadata String // Encrypted JSON: { name: string, ... }
-
-  // OpenClaw pairing data (encrypted)
-  pairingData String? // Encrypted JSON: { deviceId, publicKey, privateKey, deviceToken, ... }
-
-  // Data encryption key for this machine's encrypted fields
-  dataEncryptionKey Bytes?
-
-  // Version control for optimistic concurrency
-  metadataVersion Int @default(0)
-
-  seq       Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
   @@index([accountId])
 }
 

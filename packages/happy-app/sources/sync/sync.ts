@@ -59,13 +59,6 @@ import { getFriendsList, getUserProfile } from './apiFriends';
 import { fetchFeed } from './apiFeed';
 import { FeedItem } from './feedTypes';
 import { UserProfile } from './friendTypes';
-import {
-    createOpenClawMachine,
-    updateOpenClawMachine,
-    deleteOpenClawMachine,
-    processNewOpenClawMachineEvent,
-    processUpdateOpenClawMachineEvent,
-} from '../openclaw/storage';
 import { resolveModelSelectionForFlavor } from 'happy-wire';
 import { getOrchestratorActivity, getOrchestratorActivityBatch } from './apiOrchestrator';
 import { sessionUpdateMetadataFields } from './ops';
@@ -293,8 +286,6 @@ class Sync {
     private feedSync: InvalidateSync;
     private feedFullRefresh = false;
     private sharedSessionsSync: InvalidateSync;
-    private openClawMachinesSync: InvalidateSync;
-    private openClawMachineDataKeys = new Map<string, Uint8Array>(); // Store OpenClaw machine data encryption keys
     private activityAccumulator: ActivityUpdateAccumulator;
     private pendingSettings: Partial<Settings> = loadPendingSettings();
     private pendingSessionModePatches: SessionModeConfigPatch[] = [];
@@ -390,7 +381,6 @@ class Sync {
         this.friendRequestsSync = new InvalidateSync(this.fetchFriendRequests);
         this.feedSync = new InvalidateSync(this.fetchFeed);
         this.sharedSessionsSync = new InvalidateSync(this.fetchSharedSessions);
-        this.openClawMachinesSync = new InvalidateSync(this.fetchOpenClawMachines);
 
         const registerPushToken = async () => {
             // Keep push token registration enabled in dev builds too:
@@ -412,7 +402,6 @@ class Sync {
                 }
                 this.profileSync.invalidate();
                 this.machinesSync.invalidate();
-                this.openClawMachinesSync.invalidate();
                 this.pushTokenSync.invalidate();
                 this.sessionsSync.invalidate();
                 this.sessionAppearanceSync.invalidate();
@@ -581,7 +570,6 @@ class Sync {
         this.sessionAppearanceSync.invalidate();
         this.profileSync.invalidate();
         this.machinesSync.invalidate();
-        this.openClawMachinesSync.invalidate();
         this.pushTokenSync.invalidate();
         this.nativeUpdateSync.invalidate();
         this.friendsSync.invalidate();
@@ -2723,275 +2711,6 @@ class Sync {
         log.log('👥 fetchFriendRequests called - now handled by fetchFriends');
     }
 
-    private fetchOpenClawMachines = async () => {
-        if (!this.credentials) return;
-
-        console.log('🤖 Sync: Fetching OpenClaw machines...');
-        const API_ENDPOINT = getServerUrl();
-        const response = await fetch(`${API_ENDPOINT}/v1/openclaw/machines`, {
-            headers: {
-                'Authorization': `Bearer ${this.credentials.token}`,
-                'Content-Type': 'application/json'
-            }
-        });
-
-        if (!response.ok) {
-            console.error(`Failed to fetch OpenClaw machines: ${response.status}`);
-            return;
-        }
-
-        const rawMachines = await response.json() as Array<{
-            id: string;
-            type: string;
-            happyMachineId: string | null;
-            directConfig: string | null;
-            metadata: string;
-            metadataVersion: number;
-            pairingData: string | null;
-            dataEncryptionKey: string | null;
-            seq: number;
-            createdAt: number;
-            updatedAt: number;
-        }>;
-        console.log(`🤖 Sync: Fetched ${rawMachines.length} OpenClaw machines from server`);
-
-        // Decrypt and process machines
-        const decryptedMachines: Array<{
-            id: string;
-            type: 'happy' | 'direct';
-            happyMachineId: string | null;
-            gatewayToken: string | null;
-            directConfig: any | null;
-            metadata: any | null;
-            metadataVersion: number;
-            pairingData: any | null;
-            seq: number;
-            createdAt: number;
-            updatedAt: number;
-        }> = [];
-
-        for (const raw of rawMachines) {
-            try {
-                // Decrypt the data encryption key if present
-                let dataKey: Uint8Array | null = null;
-                if (raw.dataEncryptionKey) {
-                    dataKey = await this.encryption.decryptEncryptionKey(raw.dataEncryptionKey);
-                    if (dataKey) {
-                        this.openClawMachineDataKeys.set(raw.id, dataKey);
-                    }
-                }
-
-                if (!dataKey) {
-                    console.error(`No data encryption key for OpenClaw machine ${raw.id}`);
-                    continue;
-                }
-
-                // Create encryptor for decrypting fields
-                const encryptor = await this.encryption.openEncryption(dataKey);
-
-                // Decrypt fields
-                let metadata: any | null = null;
-                if (raw.metadata) {
-                    const decoded = decodeBase64(raw.metadata);
-                    const results = await encryptor.decrypt([decoded]);
-                    metadata = results[0];
-                }
-
-                let directConfig: any | null = null;
-                if (raw.directConfig) {
-                    const decoded = decodeBase64(raw.directConfig);
-                    const results = await encryptor.decrypt([decoded]);
-                    directConfig = results[0];
-                }
-
-                let pairingData: any | null = null;
-                if (raw.pairingData) {
-                    const decoded = decodeBase64(raw.pairingData);
-                    const results = await encryptor.decrypt([decoded]);
-                    pairingData = results[0];
-                }
-
-                decryptedMachines.push({
-                    id: raw.id,
-                    type: raw.type as 'happy' | 'direct',
-                    happyMachineId: raw.happyMachineId,
-                    gatewayToken: null, // Stored locally only, not synced
-                    directConfig,
-                    metadata,
-                    metadataVersion: raw.metadataVersion,
-                    pairingData,
-                    seq: raw.seq,
-                    createdAt: raw.createdAt,
-                    updatedAt: raw.updatedAt,
-                });
-            } catch (error) {
-                console.error(`Failed to decrypt OpenClaw machine ${raw.id}:`, error);
-            }
-        }
-
-        storage.getState().applyOpenClawMachines(decryptedMachines, true);
-        log.log(`🤖 fetchOpenClawMachines completed - processed ${decryptedMachines.length} machines`);
-    }
-
-    /**
-     * Create a new OpenClaw machine
-     */
-    public async createOpenClawMachine(params: {
-        type: 'happy' | 'direct';
-        happyMachineId?: string;
-        directConfig?: { url: string; token?: string };
-        metadata: { name: string; gatewayToken?: string };
-        pairingData?: { deviceId: string; publicKey: string; privateKey: string };
-    }): Promise<string> {
-        if (!this.credentials || !this.encryption) {
-            throw new Error('Not authenticated');
-        }
-
-        const encryptionAdapter = {
-            decryptWithKey: async (encryptedData: string, key: Uint8Array): Promise<unknown> => {
-                const encryptor = await this.encryption.openEncryption(key);
-                const decoded = decodeBase64(encryptedData);
-                const results = await encryptor.decrypt([decoded]);
-                return results[0];
-            },
-            encryptWithKey: async (data: unknown, key: Uint8Array): Promise<string> => {
-                const encryptor = await this.encryption.openEncryption(key);
-                const results = await encryptor.encrypt([data]);
-                return encodeBase64(results[0]);
-            },
-            decryptEncryptionKey: async (encryptedKey: string): Promise<Uint8Array | null> => {
-                return this.encryption.decryptEncryptionKey(encryptedKey);
-            },
-            generateDataKey: async () => {
-                // Generate 256-bit key for AES-256
-                const key = getRandomBytes(32);
-                const encryptedKey = await this.encryption.encryptEncryptionKey(key);
-                return { key, encryptedKey: encodeBase64(encryptedKey, 'base64') };
-            },
-        };
-
-        const machine = await createOpenClawMachine(
-            this.credentials,
-            encryptionAdapter,
-            {
-                type: params.type,
-                happyMachineId: params.happyMachineId,
-                directConfig: params.directConfig,
-                metadata: params.metadata,
-                pairingData: params.pairingData,
-            }
-        );
-
-        if (machine) {
-            storage.getState().applyOpenClawMachines([machine]);
-            log.log(`🤖 Created OpenClaw machine ${machine.id}`);
-            return machine.id;
-        }
-
-        throw new Error('Failed to create OpenClaw machine');
-    }
-
-    /**
-     * Update a OpenClaw machine's metadata and/or direct config
-     */
-    public async updateOpenClawMachine(
-        machineId: string,
-        updates: {
-            name?: string;
-            gatewayToken?: string;
-            directConfig?: { url: string; password?: string };
-        }
-    ): Promise<void> {
-        if (!this.credentials || !this.encryption) {
-            throw new Error('Not authenticated');
-        }
-
-        // Get current machine from storage
-        const currentMachine = storage.getState().openClawMachines[machineId];
-        if (!currentMachine) {
-            throw new Error('Machine not found');
-        }
-
-        // Get data encryption key
-        const dataKey = this.openClawMachineDataKeys.get(machineId);
-        if (!dataKey) {
-            throw new Error('Encryption key not found for machine');
-        }
-
-        const encryptionAdapter = {
-            decryptWithKey: async (encryptedData: string, key: Uint8Array): Promise<unknown> => {
-                const encryptor = await this.encryption.openEncryption(key);
-                const decoded = decodeBase64(encryptedData);
-                const results = await encryptor.decrypt([decoded]);
-                return results[0];
-            },
-            encryptWithKey: async (data: unknown, key: Uint8Array): Promise<string> => {
-                const encryptor = await this.encryption.openEncryption(key);
-                const results = await encryptor.encrypt([data]);
-                return encodeBase64(results[0]);
-            },
-            decryptEncryptionKey: async (encryptedKey: string): Promise<Uint8Array | null> => {
-                return this.encryption.decryptEncryptionKey(encryptedKey);
-            },
-            generateDataKey: async () => {
-                const key = getRandomBytes(32);
-                const encryptedKey = await this.encryption.encryptEncryptionKey(key);
-                return { key, encryptedKey: encodeBase64(encryptedKey, 'base64') };
-            },
-        };
-
-        // Build updated metadata if name or gatewayToken is provided
-        const updatedMetadata = (updates.name !== undefined || updates.gatewayToken !== undefined) ? {
-            ...currentMachine.metadata,
-            name: updates.name ?? currentMachine.metadata?.name ?? '',
-            gatewayToken: updates.gatewayToken !== undefined ? (updates.gatewayToken || undefined) : currentMachine.metadata?.gatewayToken,
-        } : undefined;
-
-        // Build updated directConfig if provided
-        const updatedDirectConfig = updates.directConfig !== undefined ? {
-            url: updates.directConfig.url,
-            password: updates.directConfig.password,
-        } : undefined;
-
-        const updatedMachine = await updateOpenClawMachine(
-            this.credentials,
-            encryptionAdapter,
-            machineId,
-            dataKey,
-            currentMachine.metadataVersion,
-            {
-                metadata: updatedMetadata,
-                directConfig: updatedDirectConfig,
-            }
-        );
-
-        if (updatedMachine) {
-            storage.getState().applyOpenClawMachines([updatedMachine]);
-            log.log(`🤖 Updated OpenClaw machine ${machineId}`);
-        } else {
-            throw new Error('Failed to update OpenClaw machine');
-        }
-    }
-
-    /**
-     * Delete a OpenClaw machine
-     */
-    public async deleteOpenClawMachine(machineId: string): Promise<void> {
-        if (!this.credentials) {
-            throw new Error('Not authenticated');
-        }
-
-        const success = await deleteOpenClawMachine(this.credentials, machineId);
-
-        if (success) {
-            storage.getState().removeOpenClawMachine(machineId);
-            this.openClawMachineDataKeys.delete(machineId);
-            log.log(`🤖 Deleted OpenClaw machine ${machineId}`);
-        } else {
-            throw new Error('Failed to delete OpenClaw machine');
-        }
-    }
-
     private fetchFeed = async () => {
         if (!this.credentials) return;
 
@@ -5008,124 +4727,6 @@ class Sync {
             
             // Apply to storage (will handle repeatKey replacement)
             storage.getState().applyFeedItems([feedItem]);
-        } else if (updateData.body.t === 'new-openclaw-machine') {
-            log.log('🤖 Received new-openclaw-machine update');
-            const openClawUpdate = updateData.body;
-
-            try {
-                // Create encryption adapter for processing using openEncryption
-                const createEncryptionAdapter = async (key: Uint8Array) => {
-                    const encryptor = await this.encryption.openEncryption(key);
-                    return {
-                        decryptWithKey: async (encryptedData: string, _key: Uint8Array): Promise<unknown> => {
-                            const decoded = decodeBase64(encryptedData);
-                            const results = await encryptor.decrypt([decoded]);
-                            return results[0];
-                        },
-                        encryptWithKey: async (data: unknown, _key: Uint8Array): Promise<string> => {
-                            const results = await encryptor.encrypt([data]);
-                            return encodeBase64(results[0]);
-                        },
-                        decryptEncryptionKey: async (encryptedKey: string): Promise<Uint8Array | null> => {
-                            return this.encryption.decryptEncryptionKey(encryptedKey);
-                        },
-                        generateDataKey: async () => {
-                            throw new Error('Not needed for receiving events');
-                        },
-                    };
-                };
-
-                // First decrypt the data encryption key
-                if (!openClawUpdate.dataEncryptionKey) {
-                    console.error('No data encryption key for new OpenClaw machine');
-                    return;
-                }
-
-                const dataKey = await this.encryption.decryptEncryptionKey(openClawUpdate.dataEncryptionKey);
-                if (!dataKey) {
-                    console.error('Failed to decrypt data encryption key for new OpenClaw machine');
-                    return;
-                }
-
-                const encryptionAdapter = await createEncryptionAdapter(dataKey);
-                const machine = await processNewOpenClawMachineEvent(openClawUpdate, encryptionAdapter);
-                if (machine) {
-                    // Store the data encryption key
-                    this.openClawMachineDataKeys.set(machine.id, dataKey);
-
-                    storage.getState().applyOpenClawMachines([machine]);
-                    log.log(`🤖 Added new OpenClaw machine ${machine.id} to storage`);
-                }
-            } catch (error) {
-                console.error('Failed to process new OpenClaw machine:', error);
-            }
-        } else if (updateData.body.t === 'update-openclaw-machine') {
-            log.log('🤖 Received update-openclaw-machine update');
-            const openClawUpdate = updateData.body;
-            const machineId = openClawUpdate.machineId;
-
-            // Get existing machine
-            const existingMachine = storage.getState().openClawMachines[machineId];
-            if (!existingMachine) {
-                console.error(`OpenClaw machine ${machineId} not found in storage`);
-                // Fetch all machines to sync
-                this.openClawMachinesSync.invalidate();
-                return;
-            }
-
-            // Get the data encryption key from memory
-            const dataKey = this.openClawMachineDataKeys.get(machineId);
-            if (!dataKey) {
-                console.error(`Encryption key not found for OpenClaw machine ${machineId}, fetching machines`);
-                this.openClawMachinesSync.invalidate();
-                return;
-            }
-
-            try {
-                // Create encryption adapter using openEncryption
-                const encryptor = await this.encryption.openEncryption(dataKey);
-                const encryptionAdapter = {
-                    decryptWithKey: async (encryptedData: string, _key: Uint8Array): Promise<unknown> => {
-                        const decoded = decodeBase64(encryptedData);
-                        const results = await encryptor.decrypt([decoded]);
-                        return results[0];
-                    },
-                    encryptWithKey: async (data: unknown, _key: Uint8Array): Promise<string> => {
-                        const results = await encryptor.encrypt([data]);
-                        return encodeBase64(results[0]);
-                    },
-                    decryptEncryptionKey: async (encryptedKey: string): Promise<Uint8Array | null> => {
-                        return this.encryption.decryptEncryptionKey(encryptedKey);
-                    },
-                    generateDataKey: async () => {
-                        throw new Error('Not needed for receiving events');
-                    },
-                };
-
-                const updatedMachine = await processUpdateOpenClawMachineEvent(
-                    openClawUpdate,
-                    existingMachine,
-                    encryptionAdapter,
-                    dataKey
-                );
-
-                storage.getState().applyOpenClawMachines([updatedMachine]);
-                log.log(`🤖 Updated OpenClaw machine ${machineId} in storage`);
-            } catch (error) {
-                console.error(`Failed to process OpenClaw machine update ${machineId}:`, error);
-            }
-        } else if (updateData.body.t === 'delete-openclaw-machine') {
-            log.log('🤖 Received delete-openclaw-machine update');
-            const openClawUpdate = updateData.body;
-            const machineId = openClawUpdate.machineId;
-
-            // Remove from storage
-            storage.getState().removeOpenClawMachine(machineId);
-
-            // Remove encryption key from memory
-            this.openClawMachineDataKeys.delete(machineId);
-
-            log.log(`🤖 Deleted OpenClaw machine ${machineId} from storage`);
         }
     }
 

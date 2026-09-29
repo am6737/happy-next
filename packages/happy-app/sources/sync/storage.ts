@@ -21,7 +21,6 @@ import { isMutableTool } from "@/components/tools/knownTools";
 import { projectManager } from "./projectManager";
 import { DecryptedArtifact } from "./artifactTypes";
 import { FeedItem } from "./feedTypes";
-import type { OpenClawMachine, OpenClawConnectionStatus } from "../openclaw/types";
 import type { RegisteredRepo } from "@/utils/workspaceRepos";
 import {
     applySessionModeConfigPatch,
@@ -131,8 +130,6 @@ interface StorageState {
     sessionMessagesFetching: Record<string, boolean>;
     sessionGitStatus: Record<string, GitStatus | null>;
     machines: Record<string, Machine>;
-    openClawMachines: Record<string, OpenClawMachine>;  // OpenClaw machine configurations
-    openClawDirectStatus: Record<string, OpenClawConnectionStatus>;  // Last known status for direct OpenClaw machines
     // Registered repositories per machine (loaded from UserKVStore)
     registeredRepos: Record<string, RegisteredRepo[]>;
     registeredReposVersions: Record<string, number>;  // KV versions for optimistic concurrency
@@ -180,9 +177,6 @@ interface StorageState {
     applySessions: (sessions: (Omit<Session, 'presence'> & { presence?: "online" | number })[]) => void;
     applySessionCapabilities: (sessionId: string, capabilities: SessionCapabilities, version: number, updatedAt?: number) => void;
     applyMachines: (machines: Machine[], replace?: boolean) => void;
-    applyOpenClawMachines: (machines: OpenClawMachine[], replace?: boolean) => void;
-    removeOpenClawMachine: (machineId: string) => void;
-    setOpenClawDirectStatus: (machineId: string, status: OpenClawConnectionStatus) => void;
     applyLoaded: () => void;
     applyReady: () => void;
     applyMessages: (sessionId: string, messages: NormalizedMessage[]) => { changed: string[], hasReadyEvent: boolean };
@@ -443,8 +437,6 @@ export const storage = create<StorageState>()((set, get) => {
         sessions: {},
         sessionCapabilities: {},
         machines: {},
-        openClawMachines: {},  // Initialize OpenClaw machines
-        openClawDirectStatus: {},  // Initialize direct OpenClaw machine status
         registeredRepos: cachedRepos.repos as Record<string, RegisteredRepo[]>,
         registeredReposVersions: cachedRepos.versions,
         artifacts: {},  // Initialize artifacts
@@ -1696,43 +1688,6 @@ export const storage = create<StorageState>()((set, get) => {
                 sessionListViewData
             };
         }),
-        // OpenClaw machine methods
-        applyOpenClawMachines: (machines: OpenClawMachine[], replace: boolean = false) => set((state) => {
-            let mergedMachines: Record<string, OpenClawMachine>;
-
-            if (replace) {
-                mergedMachines = {};
-                machines.forEach(machine => {
-                    mergedMachines[machine.id] = machine;
-                });
-            } else {
-                mergedMachines = { ...state.openClawMachines };
-                machines.forEach(machine => {
-                    mergedMachines[machine.id] = machine;
-                });
-            }
-
-            console.log(`🤖 Storage.applyOpenClawMachines: Total OpenClaw machines after merge: ${Object.keys(mergedMachines).length}`);
-
-            return {
-                ...state,
-                openClawMachines: mergedMachines
-            };
-        }),
-        removeOpenClawMachine: (machineId: string) => set((state) => {
-            const { [machineId]: removed, ...remaining } = state.openClawMachines;
-            const { [machineId]: removedStatus, ...remainingStatus } = state.openClawDirectStatus;
-            console.log(`🤖 Storage.removeOpenClawMachine: Removed machine ${machineId}`);
-            return {
-                ...state,
-                openClawMachines: remaining,
-                openClawDirectStatus: remainingStatus,
-            };
-        }),
-        setOpenClawDirectStatus: (machineId: string, status: OpenClawConnectionStatus) => set((state) => ({
-            ...state,
-            openClawDirectStatus: { ...state.openClawDirectStatus, [machineId]: status },
-        })),
         // Artifact methods
         applyArtifacts: (artifacts: DecryptedArtifact[]) => set((state) => {
             console.log(`🗂️ Storage.applyArtifacts: Applying ${artifacts.length} artifacts`);
@@ -2446,21 +2401,6 @@ export function useAllMachines(): Machine[] {
 
 export function useMachine(machineId: string): Machine | null {
     return storage(useShallow((state) => state.machines[machineId] ?? null));
-}
-
-export function useAllOpenClawMachines(): OpenClawMachine[] {
-    return storage(useShallow((state) => {
-        if (!state.isDataReady) return [];
-        return Object.values(state.openClawMachines).sort((a, b) => b.updatedAt - a.updatedAt);
-    }));
-}
-
-export function useOpenClawMachine(machineId: string): OpenClawMachine | null {
-    return storage(useShallow((state) => state.openClawMachines[machineId] ?? null));
-}
-
-export function useOpenClawDirectStatus(machineId: string): OpenClawConnectionStatus | null {
-    return storage((state) => state.openClawDirectStatus[machineId] ?? null);
 }
 
 export function useSessionListViewData(): SessionListViewItem[] | null {
