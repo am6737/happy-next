@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { CHAT_BURST_ROWS, CHAT_BURST_SETTLE_MS, CHAT_END_THRESHOLD_PX, CHAT_MAINTAIN_SCROLL_AT_END, createChatBurstTracker, chatEndThreshold, chatScrollToEndOptions, createChatHistoryPager, waitForChatHistoryLayout } from './chatListScrollController';
+import { CHAT_END_THRESHOLD_PX, CHAT_MAINTAIN_SCROLL_AT_END, chatEndThreshold, chatScrollToEndOptions, createChatHistoryPager, waitForChatHistoryLayout } from './chatListScrollController';
 
 function deferred<T>() {
     let resolve!: (value: T) => void;
@@ -224,24 +224,5 @@ describe('history layout settling', () => {
         await vi.runAllTimersAsync();
         expect(await work).toBe(false);
         expect(readGeometry).not.toHaveBeenCalled();
-    });
-});
-
-describe('chat burst tracker', () => {
-    it('follows instantly for a while after a burst of rows, then animates again', () => {
-        let time = 0;
-        const tracker = createChatBurstTracker(() => time);
-        expect(tracker.update(20)).toBe(false);
-        expect(tracker.update(21)).toBe(false);
-        expect(tracker.update(21 + CHAT_BURST_ROWS)).toBe(true);
-        time += CHAT_BURST_SETTLE_MS - 1;
-        expect(tracker.update(21 + CHAT_BURST_ROWS)).toBe(true);
-        time += 1;
-        expect(tracker.update(22 + CHAT_BURST_ROWS)).toBe(false);
-    });
-
-    it('does not treat the first rows it sees as a burst', () => {
-        const tracker = createChatBurstTracker(() => 0);
-        expect(tracker.update(100)).toBe(false);
     });
 });

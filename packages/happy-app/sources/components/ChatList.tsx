@@ -22,7 +22,7 @@ import { AWAITING_RESPONSE_MAX_MS } from '@/utils/sessionUtils';
 import { layout } from './layout';
 import { createScrollButtonVisibilityController } from './scrollButtonVisibilityController';
 import { buildChatRowModels, chatRowModelsAreEqual, distanceFromEnd, listIndexFromNewestFirst, toListOrder, type ChatRowModel } from './chatListRowModel';
-import { CHAT_END_THRESHOLD_PX, CHAT_HISTORY_THRESHOLD, CHAT_MAINTAIN_SCROLL_AT_END, CHAT_MAINTAIN_SCROLL_AT_END_INSTANT, chatEndThreshold, createChatBurstTracker, chatScrollToEndOptions, createChatHistoryPager, waitForChatHistoryLayout } from './chatListScrollController';
+import { CHAT_END_THRESHOLD_PX, CHAT_HISTORY_THRESHOLD, CHAT_MAINTAIN_SCROLL_AT_END, chatEndThreshold, chatScrollToEndOptions, createChatHistoryPager, waitForChatHistoryLayout } from './chatListScrollController';
 import { buildChatKeyIndex, buildChatLandmarkRows, selectChatLandmarkMessages } from './chatListDerivedData';
 import { t } from '@/text';
 
@@ -318,11 +318,6 @@ const ChatListInternal = React.memo((props: {
     // indexes, `visibleMessages` itself — stays newest-first. The two orders meet at the index
     // translations in `scrollToLoadedMessage` and `handleViewableItemsChanged`, and nowhere else.
     const listRows = React.useMemo(() => toListOrder(rows), [rows]);
-
-    // Following the tail through a burst of new rows (see `createChatBurstTracker`). Read while
-    // rendering: the list takes the option with the same render that brings it the rows.
-    const [burstTracker] = React.useState(createChatBurstTracker);
-    const followInstantly = burstTracker.update(listRows.length);
 
     // Where each row sits in the newest-first order, by key. A viewability report arrives with the
     // list's own positions in it, and this is how they are placed in the order the rail's landmarks
@@ -738,7 +733,7 @@ const ChatListInternal = React.memo((props: {
                 // arriving while the reader is up in the history, both leave them where they were.
                 alignItemsAtEnd
                 initialScrollAtEnd
-                maintainScrollAtEnd={followInstantly ? CHAT_MAINTAIN_SCROLL_AT_END_INSTANT : CHAT_MAINTAIN_SCROLL_AT_END}
+                maintainScrollAtEnd={CHAT_MAINTAIN_SCROLL_AT_END}
                 maintainScrollAtEndThreshold={chatEndThreshold(viewportHeight)}
                 maintainVisibleContentPosition
                 // `extraData` is the whole-list invalidation switch: it re-renders the mounted rows

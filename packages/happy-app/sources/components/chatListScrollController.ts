@@ -21,33 +21,6 @@ export function chatScrollToEndOptions(metrics: {
 // maintainScrollAtEndThreshold still owns eligibility, so reading history never opts into it.
 export const CHAT_MAINTAIN_SCROLL_AT_END = { animated: true } as const;
 
-// A burst of rows at once (the messages an agent wrote while the app was closed) is followed
-// without the animation. An animated follow scrolls to where the end was when it started; the rows
-// it brought in are measured during the animation and move the end further down, and the list's
-// scroll events meanwhile put the reader outside the follow threshold, so those later growths are
-// not followed and it stops short. An instant follow lands at the end at once and stays within
-// the threshold while the new rows settle.
-export const CHAT_MAINTAIN_SCROLL_AT_END_INSTANT = { animated: false } as const;
-/** Rows added in one update that count as a burst. */
-export const CHAT_BURST_ROWS = 5;
-/** How long after a burst the follow stays instant, while its rows are measured. */
-export const CHAT_BURST_SETTLE_MS = 1500;
-
-/** Tracks row-count growth and says whether the tail follow should be instant right now. */
-export function createChatBurstTracker(now: () => number = Date.now) {
-    let previousCount: number | null = null;
-    let instantUntil = 0;
-    return {
-        update(rowCount: number): boolean {
-            if (previousCount !== null && rowCount - previousCount >= CHAT_BURST_ROWS) {
-                instantUntil = now() + CHAT_BURST_SETTLE_MS;
-            }
-            previousCount = rowCount;
-            return now() < instantUntil;
-        },
-    };
-}
-
 
 export function chatEndThreshold(viewportHeight: number): number {
     return viewportHeight > 0 ? CHAT_END_THRESHOLD_PX / viewportHeight : 0;
