@@ -507,10 +507,10 @@ export const es: TranslationStructure = {
         tokenExpired: 'Conexión de GitHub expirada',
         tokenExpiredDesc: 'Tu token de GitHub ha expirado. Reconecta tu cuenta para continuar.',
         reconnect: 'Reconectar',
-        createIssue: 'Create Issue',
-        creatingIssue: 'Creating issue…',
-        createPullRequest: 'Create Pull Request',
-        creatingPullRequest: 'Creating pull request…',
+        createIssue: 'Crear incidencia',
+        creatingIssue: 'Creando incidencia…',
+        createPullRequest: 'Crear pull request',
+        creatingPullRequest: 'Creando pull request…',
     },
 
     settingsAppearance: {

@@ -468,10 +468,10 @@ export const ru: TranslationStructure = {
         tokenExpired: 'Подключение GitHub истекло',
         tokenExpiredDesc: 'Срок действия вашего токена GitHub истёк. Переподключите аккаунт для продолжения.',
         reconnect: 'Переподключить',
-        createIssue: 'Create Issue',
-        creatingIssue: 'Creating issue…',
-        createPullRequest: 'Create Pull Request',
-        creatingPullRequest: 'Creating pull request…',
+        createIssue: 'Создать задачу',
+        creatingIssue: 'Создание задачи…',
+        createPullRequest: 'Создать пул-реквест',
+        creatingPullRequest: 'Создание пул-реквеста…',
     },
 
     settingsAppearance: {

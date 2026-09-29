@@ -509,10 +509,10 @@ export const zhHans: TranslationStructure = {
         tokenExpired: 'GitHub 连接已过期',
         tokenExpiredDesc: '你的 GitHub 令牌已过期，请重新连接账户以继续使用。',
         reconnect: '重新连接',
-        createIssue: 'Create Issue',
-        creatingIssue: 'Creating issue…',
-        createPullRequest: 'Create Pull Request',
-        creatingPullRequest: 'Creating pull request…',
+        createIssue: '创建议题',
+        creatingIssue: '正在创建议题…',
+        createPullRequest: '创建拉取请求',
+        creatingPullRequest: '正在创建拉取请求…',
     },
 
     settingsAppearance: {

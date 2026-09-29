@@ -536,10 +536,10 @@ export const it: TranslationStructure = {
         tokenExpired: 'Connessione GitHub scaduta',
         tokenExpiredDesc: 'Il tuo token GitHub è scaduto. Riconnetti il tuo account per continuare.',
         reconnect: 'Riconnetti',
-        createIssue: 'Create Issue',
-        creatingIssue: 'Creating issue…',
-        createPullRequest: 'Create Pull Request',
-        creatingPullRequest: 'Creating pull request…',
+        createIssue: 'Crea segnalazione',
+        creatingIssue: 'Creazione segnalazione…',
+        createPullRequest: 'Crea pull request',
+        creatingPullRequest: 'Creazione pull request…',
     },
 
     settingsAppearance: {

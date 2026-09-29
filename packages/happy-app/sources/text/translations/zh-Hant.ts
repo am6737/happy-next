@@ -508,10 +508,10 @@ export const zhHant: TranslationStructure = {
         tokenExpired: 'GitHub 連線已過期',
         tokenExpiredDesc: '你的 GitHub 權杖已過期，請重新連接帳戶以繼續使用。',
         reconnect: '重新連接',
-        createIssue: 'Create Issue',
-        creatingIssue: 'Creating issue…',
-        createPullRequest: 'Create Pull Request',
-        creatingPullRequest: 'Creating pull request…',
+        createIssue: '建立議題',
+        creatingIssue: '正在建立議題…',
+        createPullRequest: '建立拉取請求',
+        creatingPullRequest: '正在建立拉取請求…',
     },
 
     settingsAppearance: {

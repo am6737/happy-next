@@ -518,10 +518,10 @@ export const pl: TranslationStructure = {
         tokenExpired: 'Połączenie z GitHub wygasło',
         tokenExpiredDesc: 'Twój token GitHub wygasł. Połącz ponownie konto, aby kontynuować.',
         reconnect: 'Połącz ponownie',
-        createIssue: 'Create Issue',
-        creatingIssue: 'Creating issue…',
-        createPullRequest: 'Create Pull Request',
-        creatingPullRequest: 'Creating pull request…',
+        createIssue: 'Utwórz zgłoszenie',
+        creatingIssue: 'Tworzenie zgłoszenia…',
+        createPullRequest: 'Utwórz pull request',
+        creatingPullRequest: 'Tworzenie pull requesta…',
     },
 
     settingsAppearance: {

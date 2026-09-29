@@ -539,10 +539,10 @@ export const ja: TranslationStructure = {
         tokenExpired: 'GitHub接続の有効期限切れ',
         tokenExpiredDesc: 'GitHubトークンの有効期限が切れました。続行するにはアカウントを再接続してください。',
         reconnect: '再接続',
-        createIssue: 'Create Issue',
-        creatingIssue: 'Creating issue…',
-        createPullRequest: 'Create Pull Request',
-        creatingPullRequest: 'Creating pull request…',
+        createIssue: 'Issue を作成',
+        creatingIssue: 'Issue を作成中…',
+        createPullRequest: 'プルリクエストを作成',
+        creatingPullRequest: 'プルリクエストを作成中…',
     },
 
     settingsAppearance: {
