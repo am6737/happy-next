@@ -21,34 +21,28 @@ import type {
     RepoIssueComment,
     RepoPR,
 } from '@/data/mockRepos';
+import { createPersistedLruCache } from '@/utils/persistedLruCache';
 // Loaded lazily so Vitest/web consumers do not parse the native MMKV module.
 function githubPersistence() {
     if (process.env.NODE_ENV === 'test') return null;
     return require('@/sync/persistence') as typeof import('@/sync/persistence');
 }
 
-const MAX_CACHE_SIZE = 100;
-const dataCache = new Map<string, unknown>();
-for (const [key, value] of Object.entries(githubPersistence()?.loadGithubDataCache() ?? {})) dataCache.set(key, value);
+// Paginated queries cache their first pages together with the server total so
+// count badges can render immediately from cache.
+type PageCache<T> = { items: T[]; totalCount?: number };
+
+const dataCache = createPersistedLruCache<unknown>({
+    maxSize: 100,
+    storage: githubPersistence()?.githubDataCacheStorage(),
+});
 // Share requests between concurrently mounted screens/hooks. Without this,
 // navigation transitions can issue the same GitHub query several times.
 const inFlight = new Map<string, Promise<unknown>>();
 onGithubReset(() => {
     dataCache.clear();
-    githubPersistence()?.clearGithubDataCache();
     inFlight.clear();
 });
-
-function cacheSet(key: string, value: unknown): void {
-    if (dataCache.has(key)) {
-        dataCache.delete(key);
-    } else if (dataCache.size >= MAX_CACHE_SIZE) {
-        const firstKey = dataCache.keys().next().value!;
-        dataCache.delete(firstKey);
-    }
-    dataCache.set(key, value);
-    githubPersistence()?.saveGithubDataCache(Object.fromEntries(dataCache));
-}
 
 function cacheKey(deps: unknown[]): string {
     return JSON.stringify([getServerUrl(), githubRevision(), ...deps]);
@@ -56,7 +50,6 @@ function cacheKey(deps: unknown[]): string {
 
 export function clearGithubCache(): void {
     dataCache.clear();
-    githubPersistence()?.clearGithubDataCache();
     inFlight.clear();
     clearGithubSession();
 }
@@ -120,7 +113,7 @@ function useGithubFetch<T>(
             const result = await requestOnce(key, fetcher, force);
             if (isCurrent()) {
                 setData(result);
-                cacheSet(key, result);
+                dataCache.set(key, result);
                 setTokenExpired(false);
             }
         } catch (e) {
@@ -149,7 +142,7 @@ function useGithubFetch<T>(
     const mutate = useCallback((updater: (prev: T) => T) => {
         setData((prev) => {
             const next = updater(prev);
-            cacheSet(keyRef.current, next);
+            dataCache.set(keyRef.current, next);
             return next;
         });
     }, []);
@@ -164,6 +157,7 @@ function useGithubPaginatedFetch<T>(
 ): {
     data: T[];
     loading: boolean;
+    refreshing: boolean;
     loadingMore: boolean;
     hasMore: boolean;
     totalCount: number | undefined;
@@ -175,14 +169,16 @@ function useGithubPaginatedFetch<T>(
 } {
     useSyncExternalStore(onGithubReset, githubRevision, githubRevision);
     const key = cacheKey(deps);
-    const [data, setData] = useState<T[]>(() => {
-        const cached = dataCache.get(key);
-        return cached !== undefined ? (cached as T[]) : [];
-    });
+    const [data, setData] = useState<T[]>(() => (dataCache.get(key) as PageCache<T> | undefined)?.items ?? []);
     const [loading, setLoading] = useState(() => enabled && !dataCache.has(key));
+    // True only while an explicit refresh is in flight, so callers can show
+    // progress over cached values without reacting to silent revalidation.
+    const [refreshing, setRefreshing] = useState(false);
     const [loadingMore, setLoadingMore] = useState(false);
     const [hasMore, setHasMore] = useState(false);
-    const [totalCount, setTotalCount] = useState<number | undefined>(undefined);
+    const [totalCount, setTotalCount] = useState<number | undefined>(() => (dataCache.get(key) as PageCache<T> | undefined)?.totalCount);
+    const totalCountRef = useRef(totalCount);
+    totalCountRef.current = totalCount;
     const [tokenExpired, setTokenExpired] = useState(false);
     const [error, setError] = useState<Error | null>(null);
     const mountedRef = useRef(true);
@@ -195,16 +191,18 @@ function useGithubPaginatedFetch<T>(
     if (prevKeyRef.current !== key) {
         prevKeyRef.current = key;
         cursorRef.current = null;
-        const cached = dataCache.get(key);
+        const cached = dataCache.get(key) as PageCache<T> | undefined;
         if (cached !== undefined) {
-            setData(cached as T[]);
+            setData(cached.items);
             setLoading(false);
         } else {
             setData([]);
             setLoading(enabled);
         }
+        setRefreshing(false);
         setHasMore(false);
-        setTotalCount(undefined);
+        setTotalCount(cached?.totalCount);
+        totalCountRef.current = cached?.totalCount;
         setError(null);
     }
 
@@ -220,17 +218,20 @@ function useGithubPaginatedFetch<T>(
         if (force || !dataCache.has(key)) {
             setLoading(true);
         }
+        if (force) setRefreshing(true);
         setError(null);
         try {
             // Use the data key for the first page so prefetches and mounted
             // lists share the same in-flight request.
             const result = await requestOnce(key, () => fetcher(undefined, force), force);
             if (isCurrent()) {
+                const nextTotal = result.totalCount ?? totalCountRef.current;
                 setData(result.items);
-                cacheSet(key, result.items);
+                dataCache.set(key, { items: result.items, totalCount: nextTotal } satisfies PageCache<T>);
                 cursorRef.current = result.nextCursor;
                 setHasMore(result.hasMore);
-                if (result.totalCount !== undefined) setTotalCount(result.totalCount);
+                setTotalCount(nextTotal);
+                totalCountRef.current = nextTotal;
                 setTokenExpired(false);
             }
         } catch (e) {
@@ -245,6 +246,7 @@ function useGithubPaginatedFetch<T>(
         } finally {
             if (isCurrent()) {
                 setLoading(false);
+                setRefreshing(false);
             }
         }
     }, [key, enabled]);
@@ -272,7 +274,7 @@ function useGithubPaginatedFetch<T>(
                 if (isCurrent()) {
                     setData((prev) => {
                         const next = [...prev, ...result.items];
-                        cacheSet(key, next);
+                        dataCache.set(key, { items: next, totalCount: totalCountRef.current } satisfies PageCache<T>);
                         return next;
                     });
                     cursorRef.current = result.nextCursor;
@@ -301,12 +303,12 @@ function useGithubPaginatedFetch<T>(
     const mutate = useCallback((updater: (prev: T[]) => T[]) => {
         setData((prev) => {
             const next = updater(prev);
-            cacheSet(keyRef.current, next);
+            dataCache.set(keyRef.current, { items: next, totalCount: totalCountRef.current } satisfies PageCache<T>);
             return next;
         });
     }, []);
 
-    return { data, loading, loadingMore, hasMore, totalCount, loadMore, refresh, mutate, tokenExpired, error };
+    return { data, loading, refreshing, loadingMore, hasMore, totalCount, loadMore, refresh, mutate, tokenExpired, error };
 }
 
 export function useGithubRepos(opts?: { sort?: string; search?: string }) {
@@ -438,9 +440,9 @@ export async function prefetchGithubData(credentials: AuthCredentials): Promise<
             // Keep the prefetch on the same key as useGithubRepos so an
             // already-mounted list can share its in-flight request.
             const result = await requestOnce(reposKey, () => fetchGithubRepos(credentials));
-            cacheSet(reposKey, result.items);
+            dataCache.set(reposKey, { items: result.items, totalCount: result.totalCount } satisfies PageCache<RepoInfo>);
         }
-        const repos = dataCache.get(reposKey) as RepoInfo[];
+        const repos = (dataCache.get(reposKey) as PageCache<RepoInfo> | undefined)?.items;
 
         if (repos && repos.length > 0) {
             const { fullName } = repos[0];
@@ -455,7 +457,7 @@ export async function prefetchGithubData(credentials: AuthCredentials): Promise<
                         `${issuesKey}:first`,
                         () => fetchGithubIssues(credentials, owner, repo, { state: 'open' })
                     )
-                        .then((d) => { cacheSet(issuesKey, d.items); })
+                        .then((d) => { dataCache.set(issuesKey, { items: d.items, totalCount: d.totalCount } satisfies PageCache<RepoIssue>); })
                 );
             }
             if (!dataCache.has(pullsKey)) {
@@ -464,7 +466,7 @@ export async function prefetchGithubData(credentials: AuthCredentials): Promise<
                         `${pullsKey}:first`,
                         () => fetchGithubPulls(credentials, owner, repo, { state: 'open' })
                     )
-                        .then((d) => { cacheSet(pullsKey, d.items); })
+                        .then((d) => { dataCache.set(pullsKey, { items: d.items, totalCount: d.totalCount } satisfies PageCache<RepoPR>); })
                 );
             }
             await Promise.all(pending);

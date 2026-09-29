@@ -201,7 +201,7 @@ export const GitHubListView = React.memo(({ onRepoChange, repoPickerTriggerRef }
         return () => clearTimeout(timer);
     }, [repoSearch]);
 
-    const { data: repos, loading: reposLoading, loadingMore: reposLoadingMore, hasMore: reposHasMore, totalCount: reposTotalCount, loadMore: loadMoreRepos, refresh: refreshRepos, tokenExpired } = useGithubRepos({
+    const { data: repos, loading: reposLoading, refreshing: reposRefreshing, loadingMore: reposLoadingMore, hasMore: reposHasMore, totalCount: reposTotalCount, loadMore: loadMoreRepos, refresh: refreshRepos, tokenExpired } = useGithubRepos({
         search: debouncedRepoSearch || undefined,
     });
 
@@ -463,6 +463,11 @@ export const GitHubListView = React.memo(({ onRepoChange, repoPickerTriggerRef }
     const otherTabCountLoading = isGlobal
         ? (activeTab === 'issues' ? workPulls.loading : workIssues.loading)
         : reposLoading;
+    // Explicit refreshes replace the stale count with a spinner; silent
+    // revalidation keeps showing the cached count.
+    const otherTabCountRefreshing = isGlobal
+        ? (activeTab === 'issues' ? workPulls.refreshing : workIssues.refreshing)
+        : reposRefreshing;
     const currentTabLabel = activeTab === 'issues' ? t('github.issues') : t('github.pullRequests');
     const currentCount = activeTab === 'issues' ? issuesCount : pullsCount;
 
@@ -494,7 +499,7 @@ export const GitHubListView = React.memo(({ onRepoChange, repoPickerTriggerRef }
                         {otherTabLabel}
                     </Text>
                     <View style={[styles.swapPillBadge, { backgroundColor: theme.colors.divider }]}>
-                        {otherTabCountLoading && typeof otherTabCount !== 'number' ? (
+                        {otherTabCountRefreshing || (otherTabCountLoading && typeof otherTabCount !== 'number') ? (
                             <ActivityIndicator
                                 size={Platform.OS === 'ios' ? 'small' : 12}
                                 color={theme.colors.textSecondary}

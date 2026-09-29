@@ -7,6 +7,7 @@ import type { Session, SessionDraft } from './storageTypes';
 import { parseAskUserQuestionDrafts, pruneAskUserQuestionDrafts, type AskUserQuestionDraftMap } from './askUserQuestionDraft';
 import { DooTaskProfile, DooTaskProfileSchema } from './dootask/types';
 import type { DooTaskUser } from './dootask/types';
+import type { PersistedCacheStorage } from '@/utils/persistedLruCache';
 
 const mmkv = new MMKV();
 const NEW_SESSION_DRAFT_KEY = 'new-session-draft-v1';
@@ -16,22 +17,26 @@ const ASK_USER_QUESTION_DRAFTS_KEY = 'ask-user-question-drafts-v1';
 const ASK_USER_QUESTION_DRAFT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const SESSIONS_CACHE_VERSION = 2;
 const savedSessionsCacheContent = new Map<string, string>();
-const GITHUB_DATA_CACHE_KEY = 'github-data-cache-v1';
+const LEGACY_GITHUB_DATA_CACHE_KEY = 'github-data-cache-v1';
 
-export function loadGithubDataCache(): Record<string, unknown> {
-    try {
-        const raw = mmkv.getString(GITHUB_DATA_CACHE_KEY);
-        if (!raw) return {};
-        const parsed = JSON.parse(raw);
-        return parsed && typeof parsed === 'object' ? parsed : {};
-    } catch { return {}; }
+/** MMKV-backed storage for `createPersistedLruCache`. */
+export function mmkvCacheStorage(key: string): PersistedCacheStorage {
+    return {
+        load: () => mmkv.getString(key),
+        save: (raw) => mmkv.set(key, raw),
+        remove: () => mmkv.delete(key),
+    };
 }
 
-export function saveGithubDataCache(cache: Record<string, unknown>): void {
-    try { mmkv.set(GITHUB_DATA_CACHE_KEY, JSON.stringify(cache)); } catch { /* best effort */ }
+export function githubDataCacheStorage(): PersistedCacheStorage {
+    // v1 stored bare item arrays; paginated entries now also carry totalCount.
+    mmkv.delete(LEGACY_GITHUB_DATA_CACHE_KEY);
+    return mmkvCacheStorage('github-data-cache-v2');
 }
 
-export function clearGithubDataCache(): void { mmkv.delete(GITHUB_DATA_CACHE_KEY); }
+export function dootaskTasksCacheStorage(): PersistedCacheStorage {
+    return mmkvCacheStorage('dootask-tasks-cache-v1');
+}
 
 export type NewSessionAgentType = 'claude' | 'codex' | 'gemini';
 export type NewSessionSessionType = 'simple' | 'worktree';
