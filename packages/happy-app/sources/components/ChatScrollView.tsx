@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { Platform, type ScrollViewProps } from 'react-native';
-import { KeyboardChatScrollView, KeyboardController } from 'react-native-keyboard-controller';
-import { runOnJS, useAnimatedReaction, type SharedValue } from 'react-native-reanimated';
+import { KeyboardChatScrollView, useKeyboardHandler } from 'react-native-keyboard-controller';
+import { runOnJS, useAnimatedReaction, useSharedValue, type SharedValue } from 'react-native-reanimated';
 import type { LegendListRef } from '@legendapp/list/react-native';
 import { COMPOSER_MARGIN } from './floatingComposer';
 
@@ -12,23 +12,13 @@ export type ChatScrollViewProps = ScrollViewProps & {
     topInset?: number;
     /** The height of a composer floating over the list, kept clear of the scroll range. */
     composerInset?: SharedValue<number>;
-    /** The list scrolling in it, told how much of its bottom the composer covers. */
+    /** The list scrolling in it, told how much of its bottom the composer and the keyboard cover. */
     listRef: React.RefObject<Pick<LegendListRef, 'reportContentInset'> | null>;
 };
 
 /** How much of the keyboard's height `ChatScrollView` leaves out of the lift (the part below the composer's padding). */
 function keyboardOffset(bottomInset: number): number {
     return Platform.OS === 'ios' ? bottomInset - COMPOSER_MARGIN : bottomInset;
-}
-
-/**
- * How far the keyboard lifts the content of a `ChatScrollView` with this `bottomInset` right now.
- * The list only knows the composer's share of the bottom inset (see `reportComposerInset`), so its
- * `scrollToEnd` stops this far above the end while the keyboard is up; pass it as a negative
- * `viewOffset` to reach the end.
- */
-export function chatKeyboardLift(bottomInset: number): number {
-    return Math.max(0, KeyboardController.state().height - keyboardOffset(bottomInset));
 }
 
 /**
@@ -40,20 +30,33 @@ export const ChatScrollView = React.forwardRef<React.ElementRef<typeof KeyboardC
     ({ bottomInset, topInset = 0, composerInset, listRef, ...props }, ref) => {
         // The list only reads the insets off scroll events otherwise, so until the first one it
         // bottom-aligns a short chat as if the composer took no room, and that chat scrolls.
-        // Only the composer is reported: the keyboard's share changes every frame while it moves,
-        // and the list re-aligning to it from JS fights the native lift (`scrollTo`) above.
-        const reportComposerInset = React.useCallback(
+        // The reported inset replaces the native one, so it has to take in the keyboard too, or
+        // following new messages to the end stops where the end was with the keyboard down. The
+        // keyboard's share is only reported once it settles: it changes every frame while the
+        // keyboard moves, and the list re-aligning to it from JS fights the native lift.
+        const offset = keyboardOffset(bottomInset);
+        const keyboardLift = useSharedValue(0);
+        useKeyboardHandler(
+            {
+                onEnd: (e) => {
+                    'worklet';
+                    keyboardLift.value = Math.max(0, e.height - offset);
+                },
+            },
+            [offset],
+        );
+        const reportBottomInset = React.useCallback(
             (bottom: number) => listRef.current?.reportContentInset({ bottom }),
             [listRef],
         );
         useAnimatedReaction(
-            () => composerInset?.value ?? 0,
+            () => (composerInset?.value ?? 0) + keyboardLift.value,
             (bottom, previous) => {
                 if (bottom !== previous) {
-                    runOnJS(reportComposerInset)(bottom);
+                    runOnJS(reportBottomInset)(bottom);
                 }
             },
-            [composerInset, reportComposerInset],
+            [composerInset, reportBottomInset],
         );
         return (
             <KeyboardChatScrollView

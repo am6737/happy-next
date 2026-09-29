@@ -9,7 +9,7 @@ import { ChatBubble } from './ChatBubble';
 import type { DooTaskDialogMsg, DisplayMessage, PendingMessage } from '@/sync/dootask/types';
 import { useSoftHeaderInset } from '@/components/navigation/softHeader';
 import Animated, { type SharedValue } from 'react-native-reanimated';
-import { ChatScrollView, chatKeyboardLift } from '@/components/ChatScrollView';
+import { ChatScrollView } from '@/components/ChatScrollView';
 import { ScrollToBottomButton } from '@/components/ScrollToBottomButton';
 import { COMPOSER_MARGIN, floatingComposerBottomInset } from '@/components/floatingComposer';
 import { useChatOverlayStyle } from '@/hooks/useChatOverlayStyle';
@@ -139,8 +139,8 @@ export const ChatMessageList = React.memo(({
     // Where the composer's padding ends above the screen's bottom, which its keyboard offset is measured from.
     const keyboardBottomInset = composerInset ? floatingComposerBottomInset(insets.bottom) : insets.bottom;
     const handleScrollToBottom = React.useCallback(() => {
-        void listRef.current?.scrollToEnd({ animated: false, viewOffset: -chatKeyboardLift(keyboardBottomInset) });
-    }, [keyboardBottomInset]);
+        void listRef.current?.scrollToEnd({ animated: false });
+    }, []);
 
     // Build a map from message id -> message for resolving reply_id references
     const replyMsgMap = React.useMemo(() => {
