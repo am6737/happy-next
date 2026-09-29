@@ -2,7 +2,7 @@
     "schemaVersion": 1,
     "codexCli": {
         "package": "@openai/codex",
-        "version": "0.159.0"
+        "version": "0.159.1"
     },
     "effortDescriptions": {
         "low": "Fast responses",
@@ -153,6 +153,17 @@
             "pricing": { "input": 1, "output": 5, "cacheWrite": 1.25, "cacheRead": 0.1 }
         },
         {
+            "id": "gpt-6.1-sol",
+            "agent": "codex",
+            "status": "active",
+            "label": "GPT-6.1-Sol",
+            "shortLabel": "6.1-Sol",
+            "displayName": "GPT-6.1-Sol",
+            "description": "Latest workhorse model for coding and everyday work.",
+            "efforts": ["ultra", "max", "xhigh", "high", "medium", "low"],
+            "contextWindow": 1050000
+        },
+        {
             "id": "gpt-6-astra",
             "agent": "codex",
             "status": "active",
@@ -170,7 +181,7 @@
             "label": "GPT-6-Sol",
             "shortLabel": "6-Sol",
             "displayName": "GPT-6-Sol",
-            "description": "Workhorse model for coding and everyday work.",
+            "description": "Previous generation workhorse model.",
             "efforts": ["ultra", "max", "xhigh", "high", "medium", "low"],
             "contextWindow": 1050000
         },
