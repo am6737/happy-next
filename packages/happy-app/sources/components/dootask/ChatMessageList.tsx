@@ -11,6 +11,7 @@ import { useSoftHeaderInset } from '@/components/navigation/softHeader';
 import Animated, { type SharedValue } from 'react-native-reanimated';
 import { ChatScrollView } from '@/components/ChatScrollView';
 import { ScrollToBottomButton } from '@/components/ScrollToBottomButton';
+import { distanceFromEnd } from '@/components/chatListRowModel';
 import { COMPOSER_MARGIN, floatingComposerBottomInset } from '@/components/floatingComposer';
 import { useChatOverlayStyle } from '@/hooks/useChatOverlayStyle';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -125,9 +126,7 @@ export const ChatMessageList = React.memo(({
     }
 
     const handleScroll = React.useCallback((event: any) => {
-        const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
-        const distanceFromEnd = contentSize.height - layoutMeasurement.height - contentOffset.y;
-        const shouldShow = distanceFromEnd > SCROLL_THRESHOLD;
+        const shouldShow = distanceFromEnd(event.nativeEvent) > SCROLL_THRESHOLD;
         setShowScrollButton(prev => {
             if (shouldShow && !prev) {
                 lastSeenCreatedAtRef.current = messages[0]?.created_at ?? '';

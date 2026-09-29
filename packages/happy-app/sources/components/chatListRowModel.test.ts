@@ -252,6 +252,15 @@ describe('distanceFromEnd', () => {
         })).toBe(0);
     });
 
+    it('measures to the end past the bottom content inset', () => {
+        expect(distanceFromEnd({
+            contentOffset: { y: 1500 },
+            contentSize: { height: 2000 },
+            layoutMeasurement: { height: 800 },
+            contentInset: { bottom: 400 },
+        })).toBe(100);
+    });
+
     it('clamps an overscroll past the end to zero', () => {
         expect(distanceFromEnd({
             contentOffset: { y: 1400 },

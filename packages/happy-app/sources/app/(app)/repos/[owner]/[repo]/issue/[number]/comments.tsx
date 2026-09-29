@@ -18,9 +18,12 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { ChatHeaderTitle } from '@/components/ChatHeaderTitle';
 import { getNativeHeaderTitleWidth } from '@/utils/nativeHeaderTitleWidth';
 import { KeyboardStickyView } from 'react-native-keyboard-controller';
-import { useSharedValue } from 'react-native-reanimated';
+import Animated, { useSharedValue } from 'react-native-reanimated';
 import { AgentContentView } from '@/components/AgentContentView';
 import { ChatScrollView } from '@/components/ChatScrollView';
+import { ScrollToBottomButton } from '@/components/ScrollToBottomButton';
+import { distanceFromEnd } from '@/components/chatListRowModel';
+import { useChatOverlayStyle } from '@/hooks/useChatOverlayStyle';
 import { GlassSurface } from '@/components/GlassSurface';
 import { COMPOSER_MARGIN, floatingComposerAvailable, floatingComposerBottomInset, floatingComposerScreenOptions } from '@/components/floatingComposer';
 import { ActionMenuModal } from '@/components/ActionMenuModal';
@@ -34,6 +37,9 @@ import { isRunningOnMac } from '@/utils/platform';
 import { softHeaderOptions, useSoftHeaderInset } from '@/components/navigation/softHeader';
 import { KeyboardCenteredEmpty } from '@/components/KeyboardCenteredEmpty';
 import { NativeMenu } from '@/components/NativeMenu';
+
+// How far above the end the reader has to be for the scroll-to-bottom button to show.
+const SCROLL_THRESHOLD = 100;
 import { actionMenuSection, type ContextMenuSection } from '@/components/ContextMenuView';
 
 export default React.memo(function IssueCommentsPage() {
@@ -244,42 +250,64 @@ export default React.memo(function IssueCommentsPage() {
         [composerInset, insets.bottom, softHeaderInset, listRef],
     );
 
+    const [showScrollButton, setShowScrollButton] = React.useState(false);
+    const handleScroll = React.useCallback((event: any) => {
+        setShowScrollButton(distanceFromEnd(event.nativeEvent) > SCROLL_THRESHOLD);
+    }, []);
+    const handleScrollToBottom = React.useCallback(() => {
+        void listRef.current?.scrollToEnd({ animated: false });
+    }, []);
+    // The list's frame does not shrink for the keyboard (or end at a floating composer), so the
+    // scroll-to-bottom button is moved above both.
+    const overlayStyle = useChatOverlayStyle(Platform.OS === 'ios', composerInset);
+
     const list = (
-        <LegendList
-            ref={listRef}
-            data={comments}
-            estimatedItemSize={120}
-            keyExtractor={(item) => String(item.id)}
-            renderItem={({ item, index }) => (
-                <CommentItem
-                    comment={item}
-                    issueAuthor={issueAuthor}
-                    onLongPress={() => handleCommentLongPress(item)}
-                    menuSections={commentMenuSections(item)}
-                    isLast={index === comments.length - 1}
-                />
-            )}
-            // A new comment takes the last-row styling off the one before it.
-            extraData={comments.length}
-            onEndReached={hasMore ? loadMore : undefined}
-            onEndReachedThreshold={0.5}
-            maintainVisibleContentPosition
-            maintainScrollAtEnd={{ on: { dataChange: true } }}
-            initialScrollAtEnd
-            ListHeaderComponent={useNativeSoftHeader ? <View style={{ height: softHeaderInset + 12 }} /> : null}
-            estimatedHeaderSize={useNativeSoftHeader ? softHeaderInset + 12 : 0}
-            ListEmptyComponent={<KeyboardCenteredEmpty composerInset={composerInset}>{listEmpty}</KeyboardCenteredEmpty>}
-            ListFooterComponent={loadingMore ? (
-                <ActivityIndicator style={{ paddingVertical: 16 }} color={theme.colors.textSecondary} />
-            ) : null}
-            renderScrollComponent={renderScrollComponent}
-            contentContainerStyle={[styles.list, comments.length === 0 && styles.listEmpty, { maxWidth: layout.maxWidth, alignSelf: 'center', width: '100%' }]}
-            style={{ flex: 1, backgroundColor: theme.colors.surface }}
-            keyboardShouldPersistTaps="handled"
-            // An empty thread only shows its centered placeholder; the composer's inset would
-            // otherwise leave it a little room to scroll. The keyboard still lifts it (scrollTo).
-            scrollEnabled={comments.length > 0}
-        />
+        <View style={styles.listWrapper}>
+            <LegendList
+                ref={listRef}
+                data={comments}
+                estimatedItemSize={120}
+                keyExtractor={(item) => String(item.id)}
+                renderItem={({ item, index }) => (
+                    <CommentItem
+                        comment={item}
+                        issueAuthor={issueAuthor}
+                        onLongPress={() => handleCommentLongPress(item)}
+                        menuSections={commentMenuSections(item)}
+                        isLast={index === comments.length - 1}
+                    />
+                )}
+                // A new comment takes the last-row styling off the one before it.
+                extraData={comments.length}
+                onEndReached={hasMore ? loadMore : undefined}
+                onEndReachedThreshold={0.5}
+                maintainVisibleContentPosition
+                maintainScrollAtEnd={{ on: { dataChange: true } }}
+                initialScrollAtEnd
+                ListHeaderComponent={useNativeSoftHeader ? <View style={{ height: softHeaderInset + 12 }} /> : null}
+                estimatedHeaderSize={useNativeSoftHeader ? softHeaderInset + 12 : 0}
+                ListEmptyComponent={<KeyboardCenteredEmpty composerInset={composerInset}>{listEmpty}</KeyboardCenteredEmpty>}
+                ListFooterComponent={loadingMore ? (
+                    <ActivityIndicator style={{ paddingVertical: 16 }} color={theme.colors.textSecondary} />
+                ) : null}
+                renderScrollComponent={renderScrollComponent}
+                contentContainerStyle={[styles.list, comments.length === 0 && styles.listEmpty, { maxWidth: layout.maxWidth, alignSelf: 'center', width: '100%' }]}
+                style={{ flex: 1, backgroundColor: theme.colors.surface }}
+                keyboardShouldPersistTaps="handled"
+                // An empty thread only shows its centered placeholder; the composer's inset would
+                // otherwise leave it a little room to scroll. The keyboard still lifts it (scrollTo).
+                scrollEnabled={comments.length > 0}
+                onScroll={handleScroll}
+                scrollEventThrottle={16}
+            />
+            <Animated.View pointerEvents="box-none" style={[StyleSheet.absoluteFill, overlayStyle]}>
+                {showScrollButton && (
+                    <View pointerEvents="box-none" style={styles.scrollButton}>
+                        <ScrollToBottomButton onPress={handleScrollToBottom} unreadCount={0} />
+                    </View>
+                )}
+            </Animated.View>
+        </View>
     );
 
     const composer = (
@@ -383,6 +411,14 @@ const stylesheet = StyleSheet.create((theme) => ({
     container: {
         flex: 1,
         backgroundColor: theme.colors.surface,
+    },
+    listWrapper: {
+        flex: 1,
+    },
+    scrollButton: {
+        position: 'absolute',
+        bottom: 16,
+        right: 16,
     },
     // Only an empty thread stretches to the viewport, for its centered placeholder: stretched, a
     // short thread would outgrow the room left above the composer and scroll.

@@ -166,6 +166,10 @@ export function listIndexFromNewestFirst(index: number, count: number): number {
  * zero WAS the newest end. LegendList reports a plain non-inverted geometry, so the distance is
  * the arithmetic rather than the offset.
  *
+ * The end sits past the bottom content inset (iOS), which is what the keyboard and a floating
+ * composer cover when the list scrolls in a `ChatScrollView`: left out, the keyboard's height
+ * would count as being that much nearer the end.
+ *
  * Never negative: an end-aligned list being pulled past its end reports a layout measurement the
  * content cannot reach, and a negative distance would read as "at the end" from a rubber-band.
  */
@@ -173,6 +177,8 @@ export function distanceFromEnd(metrics: {
     contentOffset: { y: number };
     contentSize: { height: number };
     layoutMeasurement: { height: number };
+    contentInset?: { bottom: number };
 }): number {
-    return Math.max(0, metrics.contentSize.height - metrics.contentOffset.y - metrics.layoutMeasurement.height);
+    const endInset = metrics.contentInset?.bottom ?? 0;
+    return Math.max(0, metrics.contentSize.height + endInset - metrics.contentOffset.y - metrics.layoutMeasurement.height);
 }
