@@ -14,37 +14,7 @@ export type ChatScrollViewProps = ScrollViewProps & {
     composerInset?: SharedValue<number>;
     /** The list scrolling in it, told how much of its bottom the composer and the keyboard cover. */
     listRef: React.RefObject<Pick<LegendListRef, 'reportContentInset'> | null>;
-    /** Whether the list has let go of its initial end target (`useChatListSettled`); settled if left out. */
-    listSettled?: SharedValue<boolean>;
 };
-
-/**
- * How long LegendList (3.4.0) keeps re-aligning to its initial end target after `onReady`
- * (`PRESERVED_INITIAL_SCROLL_FALLBACK_CLEAR_DELAY_MS`), plus a margin.
- */
-const INITIAL_END_TARGET_MS = 2200;
-
-/**
- * Tells `ChatScrollView` when the list is done placing itself: pass `onReady` to the list and
- * `listSettled` to the scroll view. For a while after the list is ready it keeps pulling back to
- * its initial end target whenever the reported inset changes, and it measures that pull from the
- * last native offset: the keyboard's share arriving then, in a short chat, gets pulled from the
- * offset the keyboard lifted it to, which the shrinking end space is about to undo, and the
- * message flashes out of place.
- */
-export function useChatListSettled(): { listSettled: SharedValue<boolean>; onReady: () => void } {
-    const listSettled = useSharedValue(false);
-    const timer = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-    const onReady = React.useCallback(() => {
-        listSettled.value = false;
-        clearTimeout(timer.current);
-        timer.current = setTimeout(() => {
-            listSettled.value = true;
-        }, INITIAL_END_TARGET_MS);
-    }, [listSettled]);
-    React.useEffect(() => () => clearTimeout(timer.current), []);
-    return { listSettled, onReady };
-}
 
 /** How much of the keyboard's height `ChatScrollView` leaves out of the lift (the part below the composer's padding). */
 function keyboardOffset(bottomInset: number): number {
@@ -57,35 +27,19 @@ function keyboardOffset(bottomInset: number): number {
  * drawn over it) stays put while the composer rides the keyboard.
  */
 export const ChatScrollView = React.forwardRef<React.ElementRef<typeof KeyboardChatScrollView>, ChatScrollViewProps>(
-    ({ bottomInset, topInset = 0, composerInset, listRef, listSettled, ...props }, ref) => {
+    ({ bottomInset, topInset = 0, composerInset, listRef, ...props }, ref) => {
         // The list only reads the insets off scroll events otherwise, so until the first one it
-        // bottom-aligns a short chat as if the composer took no room, and that chat scrolls.
+        // measures its end as if the composer took no room, and the last message ends under it.
         // The reported inset replaces the native one, so it has to take in the keyboard too, or
         // following new messages to the end stops where the end was with the keyboard down. The
         // keyboard's share is only reported once it settles: it changes every frame while the
         // keyboard moves, and the list re-aligning to it from JS fights the native lift.
-        // Closing is the exception: a short chat already sits at offset 0, so nothing native
-        // brings it down, and it would hang in the air until the keyboard was gone.
-        // Until the list settles (`useChatListSettled`) the keyboard's share is held back; the
-        // native lift covers it meanwhile.
         const offset = keyboardOffset(bottomInset);
         const keyboardLift = useSharedValue(0);
-        const keyboardClosing = useSharedValue(false);
         useKeyboardHandler(
             {
-                onStart: (e) => {
-                    'worklet';
-                    keyboardClosing.value = e.height - offset < keyboardLift.value;
-                },
-                onMove: (e) => {
-                    'worklet';
-                    if (keyboardClosing.value) {
-                        keyboardLift.value = Math.min(keyboardLift.value, Math.max(0, e.height - offset));
-                    }
-                },
                 onEnd: (e) => {
                     'worklet';
-                    keyboardClosing.value = false;
                     keyboardLift.value = Math.max(0, e.height - offset);
                 },
             },
@@ -96,13 +50,13 @@ export const ChatScrollView = React.forwardRef<React.ElementRef<typeof KeyboardC
             [listRef],
         );
         useAnimatedReaction(
-            () => (composerInset?.value ?? 0) + (listSettled?.value === false ? 0 : keyboardLift.value),
+            () => (composerInset?.value ?? 0) + keyboardLift.value,
             (bottom, previous) => {
                 if (bottom !== previous) {
                     runOnJS(reportBottomInset)(bottom);
                 }
             },
-            [composerInset, listSettled, reportBottomInset],
+            [composerInset, reportBottomInset],
         );
         return (
             <KeyboardChatScrollView

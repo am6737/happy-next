@@ -9,7 +9,7 @@ import { ChatBubble } from './ChatBubble';
 import type { DooTaskDialogMsg, DisplayMessage, PendingMessage } from '@/sync/dootask/types';
 import { useSoftHeaderInset } from '@/components/navigation/softHeader';
 import Animated, { type SharedValue } from 'react-native-reanimated';
-import { ChatScrollView, useChatListSettled } from '@/components/ChatScrollView';
+import { ChatScrollView } from '@/components/ChatScrollView';
 import { ScrollToBottomButton } from '@/components/ScrollToBottomButton';
 import { COMPOSER_MARGIN, floatingComposerBottomInset } from '@/components/floatingComposer';
 import { useChatOverlayStyle } from '@/hooks/useChatOverlayStyle';
@@ -103,7 +103,6 @@ export const ChatMessageList = React.memo(({
 }: ChatMessageListProps) => {
     const { theme } = useUnistyles();
     const listRef = React.useRef<LegendListRef>(null);
-    const { listSettled, onReady: handleListReady } = useChatListSettled();
     const softHeaderInset = useSoftHeaderInset();
     const insets = useSafeAreaInsets();
     const chronologicalMessages = React.useMemo(() => [...messages].reverse(), [messages]);
@@ -258,10 +257,9 @@ export const ChatMessageList = React.memo(({
                 topInset={softHeaderInset}
                 composerInset={composerInset}
                 listRef={listRef}
-                listSettled={listSettled}
             />
         ),
-        [composerInset, keyboardBottomInset, softHeaderInset, listRef, listSettled],
+        [composerInset, keyboardBottomInset, softHeaderInset, listRef],
     );
     // The list's frame does not shrink for the keyboard (or end at a floating composer), so the
     // scroll-to-bottom button is moved above both.
@@ -277,7 +275,6 @@ export const ChatMessageList = React.memo(({
                 renderItem={renderItem}
                 estimatedItemSize={100}
                 estimatedHeaderSize={softHeaderInset + 12 + (loadingMore ? 48 : 0)}
-                alignItemsAtEnd
                 initialScrollAtEnd
                 maintainScrollAtEnd={{ on: { dataChange: true } }}
                 maintainScrollAtEndThreshold={0.2}
@@ -290,7 +287,6 @@ export const ChatMessageList = React.memo(({
                 ListHeaderComponent={listHeader}
                 ListEmptyComponent={emptyComponent}
                 renderScrollComponent={renderScrollComponent}
-                onReady={handleListReady}
                 contentContainerStyle={[styles.contentContainer, chronologicalMessages.length === 0 && styles.contentContainerEmpty]}
                 keyboardShouldPersistTaps="handled"
                 // An empty chat only shows its centered placeholder; the composer's inset would

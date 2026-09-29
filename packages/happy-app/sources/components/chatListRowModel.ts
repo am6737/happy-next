@@ -143,7 +143,7 @@ export function chatRowModelsAreEqual(a: ChatRowModel, b: ChatRowModel): boolean
 /**
  * The rows in the order the list renders them: oldest first.
  *
- * A non-inverted list is what lets LegendList keep chat content pinned with `alignItemsAtEnd` and
+ * A non-inverted list is what lets LegendList keep chat content pinned to its end with
  * `maintainScrollAtEnd` instead of a transform, which is what the inverted list needed
  * (`@legendapp/list` v3 has no `inverted`). Only the array is reversed — the models keep their
  * newest-first index semantics, and the two places that meet the list's own indexes translate
