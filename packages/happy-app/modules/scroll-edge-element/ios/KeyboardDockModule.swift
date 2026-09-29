@@ -47,8 +47,11 @@ public final class KeyboardDockView: ExpoView {
     addSubview(dockView)
 
     // With the keyboard down the guide's top is this view's bottom, so the dock rests there; with
-    // it up the dock's bottom follows the keyboard's top.
-    keyboardLayoutGuide.usesBottomSafeArea = false
+    // it up the dock's bottom follows the keyboard's top. Before iOS 17 the guide always rests on the
+    // bottom safe area, so there the dock rests above the home indicator.
+    if #available(iOS 17.0, *) {
+      keyboardLayoutGuide.usesBottomSafeArea = false
+    }
     let keyboard = dockView.bottomAnchor.constraint(lessThanOrEqualTo: keyboardLayoutGuide.topAnchor, constant: keyboardOffset)
     let resting = dockView.bottomAnchor.constraint(equalTo: bottomAnchor)
     resting.priority = .defaultLow
