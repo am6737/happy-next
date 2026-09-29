@@ -96,6 +96,7 @@ The original Happy only supported Claude Code. Happy Next treats Claude Code, Co
 - **Claude Fable 5.1 and Fable 5** added to the model catalog, with 1M context and low / medium / high / xhigh / max reasoning effort presets
 - **Claude Opus 5 and Claude Sonnet 5** added with 1M context, current reasoning-effort presets, fast-mode capability detection, and updated cost tracking
 - **Refreshed Gemini catalog** adds Gemini 3.8 Flash and Gemini 3.7 Flash alongside the existing Gemini models
+- **Remote model catalog**: models are served by the server, so new ones show up without an app update — now with Claude Opus 5.5, Claude Sonnet 5.5, GPT-6.1-Sol, GPT-6-Sol, and GPT-6-Luna
 - **Streamlined model picker**: Claude 1M-context variants collapse into a single toggle (7 models instead of 12); reasoning-effort presets show side by side on wide screens and Claude defaults to High effort
 - **GPT-6 Astra and GPT-5.6 catalog support**: current model families include their reasoning-effort and context settings
 - **Codex v0.155.1**: bundled Codex CLI updated with current App-Server interaction support
@@ -123,6 +124,8 @@ The original Happy only supported Claude Code. Happy Next treats Claude Code, Co
 - **Issue and pull request workflows**: create, comment on, close, and reopen work items from the app
 - **Linked AI sessions**: start a session with issue or pull request context, then return to associated sessions from the detail page
 - **Octicons and cached lists**: GitHub lists use Octicons, and the repository list is cached locally so returning to it is instant
+- **Cached list totals**: list totals are cached with a spinner while they refresh
+- **Scroll to bottom in comments**: issue and pull request comments get a scroll-to-bottom button
 
 ## Voice Assistant (Happy Voice)
 
@@ -231,6 +234,7 @@ Deep integration with DooTask project management, from browsing tasks to launchi
 - **Persistent connection**: DooTask connection saved to server via UserKVStore
 - **Simple status badge**: tasks without workflow show a simple status badge
 - **Centered empty chats**: the empty state stays centered consistently when a chat has no messages
+- **Cached task list**: the task list is cached per filter and refreshed in the background
 
 ## Self-Hosting
 
@@ -350,6 +354,10 @@ Extensive improvements to the chat and session management experience.
 - **Permission steps stay out of the fold**: a step waiting on a permission is never folded away, so the question stays where it can be answered
 - **Fold line holds its place**: the fold line keeps the position it was tapped at on web and native alike, instead of snapping when the page settles around it
 
+- **Docked glass composer**: on iOS a glass composer floats over every chat screen, docked to the keyboard, so new messages, short chats, and empty states stay in step as it opens and closes
+- **LegendList message list**: the native message list scrolls more smoothly, follows new messages to the end even in bursts, and starts short chats at the top
+- **Read state and presence**: an open session is no longer marked read while the window is unfocused or idle, and archived sessions stay offline
+
 ## CLI Improvements
 
 The CLI (`happy-next-cli`) received substantial upgrades.
@@ -398,6 +406,8 @@ The CLI (`happy-next-cli`) received substantial upgrades.
 - **Cold Codex download**: a first-run Codex download is no longer reported as a failed handshake
 - **Codex model lineup**: GPT-6-Astra gains its `ultra` effort, and the families OpenAI retired from Codex (GPT-5.4, GPT-5.4-Mini, GPT-5.2) are no longer offered; a session saved on one of them keeps the model and effort it was created with, resolved from a retired-mode table rather than passed through as a model name
 
+- **Happy CLI v0.10.0 with Codex v0.159.1**: follows the server's model catalog and drops the deprecated OpenClaw integration
+
 ## Server
 
 - **v3 messages API** with batch seq allocation and cursor pagination
@@ -427,6 +437,12 @@ The CLI (`happy-next-cli`) received substantial upgrades.
 
 - **Vendor mark**: a small logo derived from the session's flavor — the same source the model list uses — sits in front of the model's short label, so a session's vendor no longer needs the model list opened to be known
 - **SVG wordmark**: the desktop sidebar, the welcome screen and the settings logo view draw the brand wordmark from the outlined SVG exports instead of rasterised PNGs
+
+- **iOS 26 Liquid Glass**: floating buttons, the action menu, and bottom sheets use Liquid Glass
+- **Native iOS menus**: header, row, long-press, picker, filter, and attachment menus open as native iOS menus
+- **Soft header everywhere**: every screen sits under the soft scroll-edge header, with connection status in its subtitle
+- **Pressed-row highlight**: session rows, task cards, and GitHub rows highlight when pressed, like the other lists
+- **Terminal entry and preview titles**: terminals open from the Features group in Settings, and the HTML preview takes the page's own title
 
 ## Bug Fixes & Stability
 

@@ -129,6 +129,7 @@ Happy Next 是原版 Happy 的重大演进，以下是亮点：
 - 精简模型选择器：Claude 1M 上下文变体收进单个开关（模型从 12 个减到 7 个），宽屏下推理强度并排显示，Claude 默认 High 强度
 - 模型目录支持 GPT-6 Astra，并更新 GPT-5.6 Sol、Terra、Luna 的推理强度和上下文配置
 - 刷新 Gemini 模型目录，加入 Gemini 3.8 Flash 和 Gemini 3.7 Flash，并保留现有 Gemini 模型
+- 模型目录由服务端下发，新模型无需更新 App 即可出现——现已加入 Claude Opus 5.5、Claude Sonnet 5.5、GPT-6.1-Sol、GPT-6-Sol 和 GPT-6-Luna
 
 ### 语音助手（Happy Voice）
 - 语音网关认证改用短效 token，安全性提升
@@ -148,6 +149,7 @@ Happy Next 是原版 Happy 的重大演进，以下是亮点：
 - 在应用中创建、评论、关闭和重新打开 Issue 与 PR
 - 携带 Issue 或 PR 上下文启动 AI 会话，并从详情页返回关联会话
 - GitHub 列表改用 Octicons 图标，仓库列表本地缓存，返回时即时呈现
+- 列表总数本地缓存，刷新时显示加载指示；Issue 和 Pull Request 评论新增"滚到底部"按钮
 
 ### 多仓库工作树工作区
 - 从应用中创建、切换和归档多仓库工作区
@@ -189,6 +191,7 @@ Happy Next 是原版 Happy 的重大演进，以下是亮点：
 - DooTask 关联会话显示头像，chat header 按对话类型自适应
 - 空白聊天状态始终保持居中显示
 - DooTask 设备会识别为 Happy Next，连接登录流程更简单，并支持跨设备同步连接
+- 任务列表按筛选条件缓存，并在后台静默刷新
 
 ### 自托管
 - 一条命令 `docker-compose up`（Web + API + Voice + Postgres + Redis + MinIO）
@@ -271,6 +274,10 @@ Happy Next 是原版 Happy 的重大演进，以下是亮点：
 - 等待权限的步骤留在折叠之外，问题不会被折进去
 - 折叠线保持在它被点按的位置，Web 与原生一致，页面在其周围落定时不再跳走
 
+- iOS 上每个聊天页面都有悬浮的玻璃输入框，停靠在键盘上，新消息、短对话和空状态随键盘开合保持同步
+- 原生消息列表改用 LegendList，滚动更顺滑，连续到达的新消息也能跟随到底，短对话从顶部开始显示
+- 窗口失焦或空闲时，打开的会话不再被标记为已读；已归档的会话保持离线
+
 ### CLI
 - `happy update` 自更新、`happy --version` 显示所有 Agent 版本
 - 守护进程开机自启动（`happy daemon enable/disable`）、重启命令
@@ -293,6 +300,8 @@ Happy Next 是原版 Happy 的重大演进，以下是亮点：
 
 - Happy CLI v0.9.2 内置 Codex v0.155.1；终端 shell 采用更合理的默认值、输入处理更可预期，冷启动下载 Codex 不再被报告为握手失败
 - Codex 模型列表新增 GPT-6-Astra 的 Ultra 档，并下架 OpenAI 已退役的模型（GPT-5.4、GPT-5.4-Mini、GPT-5.2）；已在退役模型上运行的会话仍保持它创建时的模型与档位
+
+- Happy CLI v0.10.0 捆绑 Codex v0.159.1，跟随服务端模型目录，并移除已废弃的 OpenClaw 集成
 
 ### Bug 修复和稳定性
 - 255+ Bug 修复：消息发送可靠性、会话生命周期、Markdown 渲染、导航、语音、DooTask、共享
@@ -322,6 +331,10 @@ Happy Next 是原版 Happy 的重大演进，以下是亮点：
 
 - 状态栏在模型标签前加上厂商 logo，与会话的模型列表同源推导
 - 桌面侧栏、欢迎页和设置改用轮廓化 SVG 字标渲染品牌标识
+
+- iOS 26：悬浮按钮、操作菜单和底部弹层采用 Liquid Glass；header、行操作、长按、选择器、筛选和附件菜单以原生 iOS 菜单打开；所有页面都位于柔和滚动边缘 header 之下，连接状态显示在副标题中
+- 按下会话行、任务卡片和 GitHub 行时与其他列表一样高亮
+- 可从设置的"功能"分组打开终端，HTML 预览以页面自身标题命名
 
 ## 项目组件
 

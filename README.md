@@ -127,6 +127,7 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Streamlined model picker: Claude 1M-context variants collapse into a single toggle (7 models instead of 12), reasoning-effort presets show side by side on wide screens, and Claude defaults to High effort
 - GPT-6 Astra catalog support plus GPT-5.6 Sol, Terra, and Luna with their current reasoning-effort and context settings
 - Gemini 3.8 Flash and Gemini 3.7 Flash join the refreshed Gemini catalog alongside the existing Gemini models
+- The model catalog is served by the server, so new models show up without an app update — now with Claude Opus 5.5, Claude Sonnet 5.5, GPT-6.1-Sol, GPT-6-Sol, and GPT-6-Luna
 
 ### Voice Assistant (Happy Voice)
 - Voice gateway auth now uses short-lived tokens for improved security
@@ -146,6 +147,7 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Create, comment on, close, and reopen issues and pull requests from the app
 - Start an AI session with issue or pull request context, and return to linked sessions from the detail page
 - GitHub lists use Octicons, and the repository list is cached locally so returning to it is instant
+- List totals are cached with a spinner while they refresh, and issue and pull request comments get a scroll-to-bottom button
 
 ### Multi-Repo Worktree Workspaces
 - Create, switch, and archive multi-repo workspaces from the app
@@ -187,6 +189,7 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Session avatars on DooTask-related sessions, chat header adapts to dialog type
 - Empty chats show a consistently centered empty state
 - DooTask devices are identified as Happy Next, with a simpler connection login and cross-device connection sync
+- The task list is cached per filter and refreshed in the background
 
 ### Self-Hosting
 - One-command `docker-compose up` (Web + API + Voice + Postgres + Redis + MinIO)
@@ -269,6 +272,10 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - A step waiting on a permission stays out of the fold, so the question is never folded away
 - The fold line holds the position it was tapped at on web and native alike, instead of snapping when the page settles around it
 
+- On iOS a glass composer floats over every chat screen, docked to the keyboard, so new messages, short chats, and empty states stay in step as it opens and closes
+- The native message list runs on LegendList for smoother scrolling, follows new messages to the end even in bursts, and starts short chats at the top
+- An open session is no longer marked read while the window is unfocused or idle, and archived sessions stay offline
+
 ### CLI
 - `happy update` self-upgrade, `happy --version` with all agent versions
 - Daemon auto-start on boot (`happy daemon enable/disable`), restart command
@@ -291,6 +298,8 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 
 - Happy CLI v0.9.2 bundles Codex v0.155.1; terminal shells start with better defaults and handle input more predictably, and a cold Codex download no longer reads as a failed handshake
 - The Codex model list gains GPT-6-Astra's Ultra effort and drops the models OpenAI retired (GPT-5.4, GPT-5.4-Mini, GPT-5.2), while a session already running on a retired model keeps the model and effort it was created with
+
+- Happy CLI v0.10.0 bundles Codex v0.159.1, follows the server's model catalog, and drops the deprecated OpenClaw integration
 
 ### Bug Fixes & Stability
 - 255+ bug fixes: message sending reliability, session lifecycle, Markdown rendering, navigation, voice, DooTask, sharing
@@ -319,6 +328,10 @@ Full changelog: [docs/changes-from-happy.md](docs/changes-from-happy.md)
 
 - The status row marks the session's vendor with a small logo in front of the model label, derived from the same source as the model list
 - The desktop sidebar, welcome screen and settings draw the brand wordmark from the outlined SVG logos
+
+- iOS 26: floating buttons, the action menu, and bottom sheets use Liquid Glass; header, row, long-press, picker, filter, and attachment menus open as native iOS menus; and every screen sits under the soft scroll-edge header with connection status in its subtitle
+- Pressed session rows, task cards, and GitHub rows highlight like the other lists
+- Terminals open from the Features group in Settings, and the HTML preview takes the page's own title
 
 ## 📦 Project Components
 

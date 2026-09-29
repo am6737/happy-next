@@ -1,6 +1,27 @@
 {
   "entries": [
     {
+      "version": 27,
+      "date": "2026-09-29",
+      "summary": "Happy Next v2.13.0 gives iOS 26 its native look — Liquid Glass buttons, menus and sheets, a soft header across the app, and a floating composer docked to the keyboard — and moves the chat onto a faster native list. Models now arrive from the server without an app update, adding Claude Opus 5.5, Sonnet 5.5 and the GPT-6 family, and Happy CLI is updated to v0.10.0 with Codex v0.159.1.",
+      "changes": [
+        "iOS: float buttons, the action menu and bottom sheets as Liquid Glass on iOS 26",
+        "iOS: open header \"more\" menus, session row actions, long-press menus, pickers, filters and composer attachment menus as native iOS menus",
+        "iOS: put every screen under the soft scroll-edge header, with connection status in the header subtitle and forms following the keyboard natively",
+        "Composer: float a glass composer over every iOS chat screen, docked to the keyboard, so new messages, short chats and empty states stay in step as it opens and closes",
+        "Conversation: render the native message list with LegendList for smoother scrolling, follow new messages to the end even in bursts, and start short chats at the top",
+        "Models: pick up new models from the server without an app update, now including Claude Opus 5.5, Claude Sonnet 5.5, GPT-6.1-Sol, GPT-6-Sol and GPT-6-Luna",
+        "Sessions: an open session is no longer marked read while the window is unfocused or idle, and archived sessions stay offline",
+        "Lists: highlight pressed session rows, task cards and GitHub rows",
+        "GitHub: cache list totals with a spinner while refreshing, and add a scroll-to-bottom button to issue and pull request comments",
+        "DooTask: cache the task list per filter and refresh it in the background",
+        "Terminal: open terminals from the Features group in Settings, sized to the keyboard and clear of the home indicator",
+        "Preview: title the HTML preview with the page's own title",
+        "CLI: Happy CLI v0.10.0 bundles Codex v0.159.1, follows the server's model catalog, and drops the deprecated OpenClaw integration"
+      ],
+      "rawMarkdown": "## Version 27 - 2026-09-29\n\n\nHappy Next v2.13.0 gives iOS 26 its native look — Liquid Glass buttons, menus and sheets, a soft header across the app, and a floating composer docked to the keyboard — and moves the chat onto a faster native list. Models now arrive from the server without an app update, adding Claude Opus 5.5, Sonnet 5.5 and the GPT-6 family, and Happy CLI is updated to v0.10.0 with Codex v0.159.1.\n\n- iOS: float buttons, the action menu and bottom sheets as Liquid Glass on iOS 26\n- iOS: open header \"more\" menus, session row actions, long-press menus, pickers, filters and composer attachment menus as native iOS menus\n- iOS: put every screen under the soft scroll-edge header, with connection status in the header subtitle and forms following the keyboard natively\n- Composer: float a glass composer over every iOS chat screen, docked to the keyboard, so new messages, short chats and empty states stay in step as it opens and closes\n- Conversation: render the native message list with LegendList for smoother scrolling, follow new messages to the end even in bursts, and start short chats at the top\n- Models: pick up new models from the server without an app update, now including Claude Opus 5.5, Claude Sonnet 5.5, GPT-6.1-Sol, GPT-6-Sol and GPT-6-Luna\n- Sessions: an open session is no longer marked read while the window is unfocused or idle, and archived sessions stay offline\n- Lists: highlight pressed session rows, task cards and GitHub rows\n- GitHub: cache list totals with a spinner while refreshing, and add a scroll-to-bottom button to issue and pull request comments\n- DooTask: cache the task list per filter and refresh it in the background\n- Terminal: open terminals from the Features group in Settings, sized to the keyboard and clear of the home indicator\n- Preview: title the HTML preview with the page's own title\n- CLI: Happy CLI v0.10.0 bundles Codex v0.159.1, follows the server's model catalog, and drops the deprecated OpenClaw integration"
+    },
+    {
       "version": 26,
       "date": "2026-09-23",
       "summary": "Happy Next v2.12.1 adds terminals that live on the machine — a shell owned by the daemon rather than by the window showing it, with its own desktop window and tabs — and folds a turn's working-out into one line you can open. Plan proposals now show folded at the shape of a proposal, the fold line holds where you tapped it, the minimap becomes a swipe-in landmark rail on touch, HTML previews render as authored, and Happy CLI is updated to v0.9.2 with Codex v0.155.1 and GPT-6-Astra's Ultra effort.",
@@ -458,5 +479,5 @@
       "rawMarkdown": "## Version 1 - 2025-05-12\n\n\nWelcome to Happy - your secure, encrypted mobile companion for Claude Code. This inaugural release establishes the foundation for private, powerful AI interactions on the go.\n\n- Implemented end-to-end encrypted session management ensuring complete privacy\n- Integrated intelligent voice assistant with natural conversation capabilities\n- Added experimental file manager with syntax highlighting and tree navigation\n- Built seamless real-time synchronization across all your devices\n- Established native support for iOS, Android, and responsive web interfaces"
     }
   ],
-  "latestVersion": 26
+  "latestVersion": 27
 }
