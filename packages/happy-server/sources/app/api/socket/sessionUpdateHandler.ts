@@ -236,6 +236,11 @@ export function sessionUpdateHandler(userId: string, socket: Socket, connection:
 
             const { sid, thinking } = data;
 
+            // A heartbeat sent before session-end but processed after it must not mark the session online again
+            if (!activityCache.isHeartbeatAfterEnd(sid, t)) {
+                return;
+            }
+
             // Check session validity using cache
             const isValid = await activityCache.isSessionValid(sid, userId);
             if (!isValid) {
@@ -610,6 +615,8 @@ export function sessionUpdateHandler(userId: string, socket: Socket, connection:
             if (!session) {
                 return;
             }
+
+            activityCache.markSessionEnded(sid, t);
 
             // Update last active at
             await db.session.update({

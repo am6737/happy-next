@@ -637,9 +637,16 @@ export const storage = create<StorageState>()((set, get) => {
                     ? false
                     : session.active;
                 const isPreservingArchive = resolvedActive !== session.active;
+                // An archived session is never online, even if a late server heartbeat says active.
+                // Resuming writes lifecycleState: 'running', which lifts this again.
+                const mergedMetadata = useExistingMetadata ? existing.metadata : session.metadata;
+                const isArchived = mergedMetadata?.lifecycleState === 'archived';
+                const finalActive = resolvedActive && !isArchived;
                 const resolvedPresence = isPreservingArchive
                     ? resolveSessionOnlineState({ active: false, activeAt: existing!.activeAt })
-                    : presence;
+                    : isArchived
+                        ? resolveSessionOnlineState({ active: false, activeAt: session.activeAt })
+                        : presence;
 
                 // Keep the more recent thinking state so stale fetchSessions
                 // data doesn't overwrite a fresh ephemeral activity update.
@@ -649,17 +656,17 @@ export const storage = create<StorageState>()((set, get) => {
                 // Preserve the local optimistic "awaiting response" marker across routine
                 // session refreshes, but drop it once a real signal arrives: the CLI is now
                 // thinking, or the session went offline.
-                const mergedAwaitingResponseSince = (mergedThinking || resolvedActive === false)
+                const mergedAwaitingResponseSince = (mergedThinking || finalActive === false)
                     ? null
                     : (existing?.awaitingResponseSince ?? null);
 
                 const mergedSession: Session = {
                     ...session,
                     // Preserve optimistic archive state
-                    active: resolvedActive,
+                    active: finalActive,
                     activeAt: isPreservingArchive ? existing!.activeAt : session.activeAt,
                     // Use existing metadata/agentState if their versions are higher
-                    metadata: useExistingMetadata ? existing.metadata : session.metadata,
+                    metadata: mergedMetadata,
                     metadataVersion: useExistingMetadata ? existing.metadataVersion : session.metadataVersion,
                     agentState: useExistingAgentState ? existing.agentState : session.agentState,
                     agentStateVersion: useExistingAgentState ? existing.agentStateVersion : session.agentStateVersion,
