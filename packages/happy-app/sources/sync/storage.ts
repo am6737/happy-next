@@ -10,9 +10,11 @@ import { applySettings, Settings } from "./settings";
 import { LocalSettings, applyLocalSettings } from "./localSettings";
 import { Profile } from "./profile";
 import { UserProfile } from "./friendTypes";
-import { loadSettings, loadLocalSettings, saveLocalSettings, saveSettings, loadProfile, saveProfile, loadSessionDrafts, saveSessionDrafts, loadAskUserQuestionDrafts, saveAskUserQuestionDrafts, normalizeDraft, loadDooTaskProfile, saveDooTaskProfile, loadDooTaskUserCache, saveDooTaskUserCache, clearDooTaskUserCache, loadDooTaskProjects, saveDooTaskProjects, clearDooTaskProjects, loadDooTaskPriorities, saveDooTaskPriorities, clearDooTaskPriorities, loadDooTaskColumns, saveDooTaskColumns, clearDooTaskColumns, loadRegisteredReposLocal, saveRegisteredReposLocal } from "./persistence";
+import { loadSettings, loadLocalSettings, saveLocalSettings, saveSettings, loadProfile, saveProfile, loadSessionDrafts, saveSessionDrafts, loadAskUserQuestionDrafts, saveAskUserQuestionDrafts, normalizeDraft, loadDooTaskProfile, saveDooTaskProfile, loadDooTaskUserCache, saveDooTaskUserCache, clearDooTaskUserCache, loadDooTaskProjects, saveDooTaskProjects, clearDooTaskProjects, loadDooTaskPriorities, saveDooTaskPriorities, clearDooTaskPriorities, loadDooTaskColumns, saveDooTaskColumns, clearDooTaskColumns, loadRegisteredReposLocal, saveRegisteredReposLocal, dootaskTasksCacheStorage } from "./persistence";
 import { DooTaskProfile, DooTaskProject, DooTaskItem, DooTaskFilters, DooTaskPager, DooTaskPriority, DooTaskColumn } from './dootask/types';
 import { dootaskFetchProjects, dootaskFetchTasks, dootaskFetchUsersBasic, dootaskFetchPriorities, dootaskFetchProjectColumns } from './dootask/api';
+import { dootaskTasksCacheKey, DOOTASK_TASKS_CACHE_MAX_AGE_MS, DOOTASK_TASKS_CACHE_MAX_SIZE, type DooTaskTasksCacheEntry } from './dootask/tasksCache';
+import { createPersistedLruCache } from '@/utils/persistedLruCache';
 import type { PermissionMode } from '@/components/PermissionModeSelector';
 import React from "react";
 import { sync } from "./sync";
@@ -158,7 +160,9 @@ interface StorageState {
     dootaskProfile: DooTaskProfile | null;
     dootaskTasks: DooTaskItem[];
     dootaskProjects: DooTaskProject[];
+    /** First-page load with nothing cached to show. Silent revalidation keeps this false. */
     dootaskLoading: boolean;
+    dootaskLoadingMore: boolean;
     dootaskError: string | null;
     dootaskFilters: DooTaskFilters;
     dootaskPager: DooTaskPager;
@@ -416,6 +420,32 @@ function hasReferenceMapChanges<T>(prev: Record<string, T>, next: Record<string,
     return false;
 }
 
+const DOOTASK_DEFAULT_FILTERS: DooTaskFilters = { status: 'uncompleted' };
+const DOOTASK_DEFAULT_PAGER: DooTaskPager = { page: 1, pagesize: 20, total: 0, hasMore: false };
+
+// First page of each task-list filter combination, shown instantly while the
+// list revalidates in the background.
+const dootaskTasksCache = createPersistedLruCache<DooTaskTasksCacheEntry>({
+    maxSize: DOOTASK_TASKS_CACHE_MAX_SIZE,
+    maxAgeMs: DOOTASK_TASKS_CACHE_MAX_AGE_MS,
+    storage: dootaskTasksCacheStorage(),
+});
+// Bumped by every first-page request so older responses cannot overwrite newer ones.
+let dootaskTasksRequestSeq = 0;
+
+function readDootaskTasksCache(profile: DooTaskProfile | null, filters: DooTaskFilters): DooTaskTasksCacheEntry | undefined {
+    const key = dootaskTasksCacheKey(profile, filters);
+    return key ? dootaskTasksCache.get(key) : undefined;
+}
+
+function sameDootaskFilters(a: DooTaskFilters, b: DooTaskFilters): boolean {
+    return a.projectId === b.projectId
+        && a.status === b.status
+        && (a.search?.trim() || undefined) === (b.search?.trim() || undefined)
+        && a.time === b.time
+        && a.role === b.role;
+}
+
 export const storage = create<StorageState>()((set, get) => {
     let { settings, version } = loadSettings();
     let localSettings = loadLocalSettings();
@@ -424,6 +454,8 @@ export const storage = create<StorageState>()((set, get) => {
     const _cachedUsers = loadDooTaskUserCache();
     const _cachedPriorities = loadDooTaskPriorities();
     const _cachedColumns = loadDooTaskColumns();
+    const _dootaskProfile = loadDooTaskProfile();
+    const _cachedTasks = readDootaskTasksCache(_dootaskProfile, DOOTASK_DEFAULT_FILTERS);
     const cachedRepos = loadRegisteredReposLocal();
     return {
         settings,
@@ -469,13 +501,14 @@ export const storage = create<StorageState>()((set, get) => {
         isDataReady: false,
         nativeUpdateStatus: null,
         // DooTask integration
-        dootaskProfile: loadDooTaskProfile(),
-        dootaskTasks: [],
+        dootaskProfile: _dootaskProfile,
+        dootaskTasks: _cachedTasks?.tasks ?? [],
         dootaskProjects: _cachedProjects.projects,
         dootaskLoading: false,
+        dootaskLoadingMore: false,
         dootaskError: null,
-        dootaskFilters: { status: 'uncompleted' },
-        dootaskPager: { page: 1, pagesize: 20, total: 0, hasMore: false },
+        dootaskFilters: DOOTASK_DEFAULT_FILTERS,
+        dootaskPager: _cachedTasks?.pager ?? DOOTASK_DEFAULT_PAGER,
         dootaskUserCache: _cachedUsers.cache,
         dootaskUserAvatars: _cachedUsers.avatars,
         dootaskUserDisabledAt: _cachedUsers.disabledAt,
@@ -2003,6 +2036,8 @@ export const storage = create<StorageState>()((set, get) => {
                 }));
             } else {
                 // Account switch or first login: clear all data
+                dootaskTasksCache.clear();
+                dootaskTasksRequestSeq++;
                 clearDooTaskUserCache();
                 clearDooTaskProjects();
                 clearDooTaskPriorities();
@@ -2013,7 +2048,8 @@ export const storage = create<StorageState>()((set, get) => {
                     dootaskError: null,
                     dootaskTasks: [],
                     dootaskLoading: false,
-                    dootaskPager: { page: 1, pagesize: 20, total: 0, hasMore: false },
+                    dootaskLoadingMore: false,
+                    dootaskPager: DOOTASK_DEFAULT_PAGER,
                     dootaskProjects: [],
                     dootaskProjectsFetchedAt: null,
                     dootaskUserCache: {},
@@ -2107,13 +2143,33 @@ export const storage = create<StorageState>()((set, get) => {
         },
 
         fetchDootaskTasks: async (opts) => {
-            const { dootaskProfile, dootaskFilters, dootaskPager, dootaskTasks } = get();
+            const { dootaskProfile, dootaskFilters, dootaskPager, dootaskLoadingMore } = get();
             if (!dootaskProfile) return;
             const loadMore = opts?.loadMore ?? false;
+            if (loadMore && dootaskLoadingMore) return;
             const page = loadMore ? dootaskPager.page + 1 : 1;
             const profileKey = `${dootaskProfile.serverUrl}|${dootaskProfile.userId}|${dootaskProfile.token}`;
+            const cacheKey = dootaskTasksCacheKey(dootaskProfile, dootaskFilters);
+            const requestSeq = loadMore ? dootaskTasksRequestSeq : ++dootaskTasksRequestSeq;
+            // Drop responses for another account, another filter set, or a
+            // superseded first-page request.
+            const isCurrent = () => {
+                const state = get();
+                const cur = state.dootaskProfile;
+                return !!cur
+                    && `${cur.serverUrl}|${cur.userId}|${cur.token}` === profileKey
+                    && sameDootaskFilters(state.dootaskFilters, dootaskFilters)
+                    && dootaskTasksRequestSeq === requestSeq;
+            };
 
-            set((state) => ({ ...state, dootaskLoading: true, dootaskError: null }));
+            if (loadMore) {
+                set((state) => ({ ...state, dootaskLoadingMore: true, dootaskError: null }));
+            } else {
+                // With a cached first page the list stays visible and revalidates silently.
+                const hasCache = cacheKey !== null && dootaskTasksCache.has(cacheKey);
+                set((state) => ({ ...state, dootaskLoading: !hasCache, dootaskLoadingMore: false, dootaskError: null }));
+            }
+            const loadingKey = loadMore ? 'dootaskLoadingMore' : 'dootaskLoading';
             try {
                 const keys: Record<string, string> = {};
                 const search = dootaskFilters.search?.trim();
@@ -2135,47 +2191,62 @@ export const storage = create<StorageState>()((set, get) => {
                     with_extend: 'project_name,column_name',
                 });
 
-                const cur = get().dootaskProfile;
-                if (!cur || `${cur.serverUrl}|${cur.userId}|${cur.token}` !== profileKey) return; // account switched
+                if (!isCurrent()) return;
 
                 if (res.ret === -1 || /身份已失效|请登录后继续/.test(res.msg)) {
-                    set((state) => ({ ...state, dootaskLoading: false, dootaskError: 'token_expired' }));
+                    set((state) => ({ ...state, [loadingKey]: false, dootaskError: 'token_expired' }));
                     return;
                 }
 
                 if (res.ret === 1) {
                     const newTasks: DooTaskItem[] = res.data.data || [];
-                    const merged = loadMore ? [...dootaskTasks, ...newTasks] : newTasks;
-                    set((state) => ({
-                        ...state,
-                        dootaskTasks: merged,
-                        dootaskLoading: false,
-                        dootaskPager: {
+                    set((state) => {
+                        const pager: DooTaskPager = {
                             ...state.dootaskPager,
                             page: res.data.current_page,
                             total: res.data.total,
                             hasMore: res.data.current_page < res.data.last_page,
-                        },
-                    }));
+                        };
+                        // Only the first page is cached so a cold start never shows more
+                        // rows than the background refresh will return.
+                        if (!loadMore && cacheKey) dootaskTasksCache.set(cacheKey, { tasks: newTasks, pager });
+                        return {
+                            ...state,
+                            dootaskTasks: loadMore ? [...state.dootaskTasks, ...newTasks] : newTasks,
+                            [loadingKey]: false,
+                            dootaskPager: pager,
+                        };
+                    });
                 } else {
-                    set((state) => ({ ...state, dootaskLoading: false, dootaskError: res.msg }));
+                    set((state) => ({ ...state, [loadingKey]: false, dootaskError: res.msg }));
                 }
             } catch (e) {
-                const cur = get().dootaskProfile;
-                if (!cur || `${cur.serverUrl}|${cur.userId}|${cur.token}` !== profileKey) return;
+                if (!isCurrent()) return;
                 set((state) => ({
                     ...state,
-                    dootaskLoading: false,
+                    [loadingKey]: false,
                     dootaskError: e instanceof Error ? e.message : 'Failed to load tasks',
                 }));
             }
         },
 
         setDootaskFilter: (filters) => {
-            set((state) => ({
-                ...state,
-                dootaskFilters: { ...state.dootaskFilters, ...filters },
-            }));
+            set((state) => {
+                const nextFilters = { ...state.dootaskFilters, ...filters };
+                if (sameDootaskFilters(state.dootaskFilters, nextFilters)) {
+                    return { ...state, dootaskFilters: nextFilters };
+                }
+                // Show the new filter's cached first page right away; callers
+                // follow up with a refresh that revalidates it.
+                const cached = readDootaskTasksCache(state.dootaskProfile, nextFilters);
+                return {
+                    ...state,
+                    dootaskFilters: nextFilters,
+                    dootaskTasks: cached?.tasks ?? [],
+                    dootaskPager: cached?.pager ?? DOOTASK_DEFAULT_PAGER,
+                    dootaskLoadingMore: false,
+                };
+            });
         },
 
         setDootaskLastSelection: (projectId: number, columnId: number) => {
@@ -2234,31 +2305,44 @@ export const storage = create<StorageState>()((set, get) => {
             return get().dootaskUserCache;
         },
 
-        updateDootaskTask: (taskId, updates) => set((state) => {
-            const idx = state.dootaskTasks.findIndex((t) => t.id === taskId);
-            const newState: Partial<StorageState> = {};
-
-            // Update task in list
-            if (idx !== -1) {
-                const updated = [...state.dootaskTasks];
-                updated[idx] = { ...updated[idx], ...updates };
-                newState.dootaskTasks = updated;
+        updateDootaskTask: (taskId, updates) => {
+            const { dootaskProfile, dootaskFilters } = get();
+            const cacheKey = dootaskTasksCacheKey(dootaskProfile, dootaskFilters);
+            const cachedList = cacheKey ? dootaskTasksCache.get(cacheKey) : undefined;
+            if (cacheKey && cachedList?.tasks.some((t) => t.id === taskId)) {
+                dootaskTasksCache.set(cacheKey, {
+                    ...cachedList,
+                    tasks: cachedList.tasks.map((t) => t.id === taskId ? { ...t, ...updates } : t),
+                });
             }
+            set((state) => {
+                const idx = state.dootaskTasks.findIndex((t) => t.id === taskId);
+                const newState: Partial<StorageState> = {};
 
-            // Update task in detail cache (so detail page reacts too)
-            const cached = state.dootaskTaskDetailCache[taskId];
-            if (cached) {
-                newState.dootaskTaskDetailCache = {
-                    ...state.dootaskTaskDetailCache,
-                    [taskId]: { ...cached, task: { ...cached.task, ...updates } },
-                };
-            }
+                // Update task in list
+                if (idx !== -1) {
+                    const updated = [...state.dootaskTasks];
+                    updated[idx] = { ...updated[idx], ...updates };
+                    newState.dootaskTasks = updated;
+                }
 
-            return Object.keys(newState).length > 0 ? { ...state, ...newState } : state;
-        }),
+                // Update task in detail cache (so detail page reacts too)
+                const cached = state.dootaskTaskDetailCache[taskId];
+                if (cached) {
+                    newState.dootaskTaskDetailCache = {
+                        ...state.dootaskTaskDetailCache,
+                        [taskId]: { ...cached, task: { ...cached.task, ...updates } },
+                    };
+                }
+
+                return Object.keys(newState).length > 0 ? { ...state, ...newState } : state;
+            });
+        },
 
         clearDootaskData: () => {
             saveDooTaskProfile(null);
+            dootaskTasksCache.clear();
+            dootaskTasksRequestSeq++;
             clearDooTaskUserCache();
             clearDooTaskProjects();
             clearDooTaskPriorities();
@@ -2269,9 +2353,10 @@ export const storage = create<StorageState>()((set, get) => {
                 dootaskTasks: [],
                 dootaskProjects: [],
                 dootaskLoading: false,
+                dootaskLoadingMore: false,
                 dootaskError: null,
-                dootaskFilters: { status: 'uncompleted' },
-                dootaskPager: { page: 1, pagesize: 20, total: 0, hasMore: false },
+                dootaskFilters: DOOTASK_DEFAULT_FILTERS,
+                dootaskPager: DOOTASK_DEFAULT_PAGER,
                 dootaskUserCache: {},
                 dootaskUserAvatars: {},
                 dootaskUserDisabledAt: {},
@@ -2613,6 +2698,7 @@ export function useDootaskTasks() {
     return storage(useShallow((s) => ({
         tasks: s.dootaskTasks,
         loading: s.dootaskLoading,
+        loadingMore: s.dootaskLoadingMore,
         error: s.dootaskError,
         pager: s.dootaskPager,
     })));

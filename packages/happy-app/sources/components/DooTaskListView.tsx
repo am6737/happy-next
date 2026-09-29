@@ -515,7 +515,7 @@ const TaskCard = React.memo(({ item, projectName, columnName, userCache, flavors
 export const DooTaskListView = React.memo(() => {
     const router = useRouter();
     const { theme } = useUnistyles();
-    const { tasks, loading, error, pager } = useDootaskTasks();
+    const { tasks, loading, loadingMore, error, pager } = useDootaskTasks();
     const profile = useDootaskProfile();
     const userCache = useDootaskUserCache();
     const taskFlavorsMap = useTaskFlavorsMap(profile?.serverUrl);
@@ -551,6 +551,12 @@ export const DooTaskListView = React.memo(() => {
     const triggerRefreshWithFeedback = React.useCallback(() => {
         void handlePullRefresh();
     }, [handlePullRefresh]);
+
+    // Filter changes already show the new filter's cached page (or the empty
+    // state spinner), so they revalidate without pull-to-refresh feedback.
+    const refreshTasksSilently = React.useCallback(() => {
+        void storage.getState().fetchDootaskTasks({ refresh: true });
+    }, []);
 
     React.useEffect(() => {
         if (profile) {
@@ -621,12 +627,12 @@ export const DooTaskListView = React.memo(() => {
                         />
                     }
                     onEndReached={() => {
-                        if (pager.hasMore && !loading) {
+                        if (pager.hasMore && !loading && !loadingMore) {
                             storage.getState().fetchDootaskTasks({ loadMore: true });
                         }
                     }}
                     onEndReachedThreshold={0.5}
-                    ListHeaderComponent={<FilterBar onRefreshTasks={triggerRefreshWithFeedback} />}
+                    ListHeaderComponent={<FilterBar onRefreshTasks={refreshTasksSilently} />}
                     ListEmptyComponent={
                         loading && !isPullRefreshing ? (
                             <ActivityIndicator style={{ marginTop: 40 }} />
@@ -642,7 +648,7 @@ export const DooTaskListView = React.memo(() => {
                         )
                     }
                     ListFooterComponent={
-                        loading && !isPullRefreshing && tasks.length > 0 ? <ActivityIndicator style={{ padding: 16 }} /> : null
+                        loadingMore ? <ActivityIndicator style={{ padding: 16 }} /> : null
                     }
                     contentContainerStyle={[styles.list, { paddingBottom: tabBottomPadding }]}
                 />
