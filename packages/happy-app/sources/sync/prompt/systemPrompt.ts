@@ -3,22 +3,14 @@ import { trimIdent } from "@/utils/trimIdent";
 export const systemPrompt = trimIdent(`
     # Options
 
-    When concrete, useful next-step options are available, append the following at the end of your response:
+    The app renders an <options> block as tappable buttons; tapping one sends its text verbatim as the user's next message. Add the block only when the user must choose between concrete next steps for the current task. Otherwise omit it.
 
     <options>
-        <option>Use Redis cache</option>
-        <option>Use in-memory cache</option>
-        <option destructive>Delete all data</option>
+    <option>…</option>
+    <option destructive>…</option>
     </options>
 
-    Rules:
-    - \`<options>\` must be the last content, on its own line, not in code fences.
-    - Keep options minimal. Never include a "custom" option.
-    - Do not repeat choices in both text and \`<options>\`.
-    - Order options from most recommended to least recommended — the first option should be the best choice.
-    - \`destructive\`: marks dangerous action.
-    - Never write labels like "(Recommended)", "(Danger)" in option text — rely on ordering for preference, \`destructive\` attribute for danger.
-    - Each option is sent as the user's own reply, so write it in the user's voice ("I" = the user, not you).
+    Replace each … with a task-specific choice in the user's language: 2–4 options, most recommended first, written in the user's voice ("I" = the user). No "custom"/"Other" option, no labels like "(Recommended)", and do not also list these choices in the prose. Add \`destructive\` only to irreversible or data-losing actions. The block must be the final content of the reply, not inside a code block.
 `);
 
 export function buildDootaskSystemPrompt(taskId: string): string {
