@@ -39,12 +39,26 @@
             "pricing": { "input": 10, "output": 50, "cacheWrite": 12.5, "cacheRead": 1 }
         },
         {
+            "id": "claude-opus-5-5",
+            "agent": "claude",
+            "status": "active",
+            "label": "Opus 5.5",
+            "displayName": "Claude Opus 5.5",
+            "description": "Best for complex agentic coding",
+            "efforts": ["max", "xhigh", "high", "medium", "low"],
+            "contextWindow": 1000000,
+            "context1m": "always",
+            "fastMode": true,
+            "pricing": { "input": 4, "output": 20, "cacheWrite": 5, "cacheRead": 0.2 },
+            "fastPricing": { "input": 8, "output": 40, "cacheWrite": 10, "cacheRead": 0.4 }
+        },
+        {
             "id": "claude-opus-5",
             "agent": "claude",
             "status": "active",
             "label": "Opus 5",
             "displayName": "Claude Opus 5",
-            "description": "Best for complex agentic coding",
+            "description": "Previous generation Opus",
             "efforts": ["max", "xhigh", "high", "medium", "low"],
             "contextWindow": 1000000,
             "context1m": "always",
@@ -53,12 +67,24 @@
             "fastPricing": { "input": 10, "output": 50, "cacheWrite": 12.5, "cacheRead": 1 }
         },
         {
+            "id": "claude-sonnet-5-5",
+            "agent": "claude",
+            "status": "active",
+            "label": "Sonnet 5.5",
+            "displayName": "Claude Sonnet 5.5",
+            "description": "Best balance of speed and intelligence",
+            "efforts": ["max", "xhigh", "high", "medium", "low"],
+            "contextWindow": 1000000,
+            "context1m": "always",
+            "pricing": { "input": 2, "output": 10, "cacheWrite": 2.5, "cacheRead": 0.2 }
+        },
+        {
             "id": "claude-sonnet-5",
             "agent": "claude",
             "status": "active",
             "label": "Sonnet 5",
             "displayName": "Claude Sonnet 5",
-            "description": "Best balance of speed and intelligence",
+            "description": "Previous generation Sonnet",
             "efforts": ["max", "xhigh", "high", "medium", "low"],
             "contextWindow": 1000000,
             "context1m": "always",
@@ -70,7 +96,7 @@
             "status": "active",
             "label": "Opus 4.8",
             "displayName": "Claude Opus 4.8",
-            "description": "Previous generation Opus",
+            "description": "Older Opus",
             "efforts": ["max", "xhigh", "high", "medium", "low"],
             "contextWindow": 1000000,
             "context1m": "always",
@@ -85,7 +111,7 @@
             "status": "active",
             "label": "Opus 4.7",
             "displayName": "Claude Opus 4.7",
-            "description": "Previous generation Opus",
+            "description": "Older Opus",
             "efforts": ["max", "xhigh", "high", "medium", "low"],
             "contextWindow": 200000,
             "context1m": "optin",
@@ -109,7 +135,7 @@
             "status": "active",
             "label": "Sonnet 4.6",
             "displayName": "Claude Sonnet 4.6",
-            "description": "Balanced speed and quality",
+            "description": "Older Sonnet",
             "efforts": ["max", "high", "medium", "low"],
             "contextWindow": 200000,
             "context1m": "optin",
@@ -133,8 +159,35 @@
             "label": "GPT-6-Astra",
             "shortLabel": "6-Astra",
             "displayName": "GPT-6-Astra",
-            "description": "Most capable model for complex end-to-end work",
+            "description": "Frontier intelligence for the most demanding work.",
             "efforts": ["ultra", "max", "xhigh", "high", "medium", "low"],
+            "contextWindow": 1050000
+        },
+        {
+            "id": "gpt-6-sol",
+            "agent": "codex",
+            "status": "active",
+            "label": "GPT-6-Sol",
+            "shortLabel": "6-Sol",
+            "displayName": "GPT-6-Sol",
+            "description": "Workhorse model for coding and everyday work.",
+            "efforts": ["ultra", "max", "xhigh", "high", "medium", "low"],
+            "contextWindow": 1050000
+        },
+        {
+            "id": "gpt-6-luna",
+            "agent": "codex",
+            "status": "active",
+            "label": "GPT-6-Luna",
+            "shortLabel": "6-Luna",
+            "displayName": "GPT-6-Luna",
+            "description": "Fast and affordable model for easier tasks.",
+            "efforts": ["max", "xhigh", "high", "medium", "low"],
+            "effortDescriptions": {
+                "low": "Fastest responses",
+                "medium": "Balanced speed and quality",
+                "high": "Higher quality with good speed"
+            },
             "contextWindow": 1050000
         },
         {
@@ -144,7 +197,7 @@
             "label": "GPT-5.6-Sol",
             "shortLabel": "5.6-Sol",
             "displayName": "GPT-5.6-Sol",
-            "description": "Latest frontier agentic coding model",
+            "description": "Older coding model for complex work.",
             "efforts": ["ultra", "max", "xhigh", "high", "medium", "low"],
             "contextWindow": 272000
         },
@@ -155,7 +208,7 @@
             "label": "GPT-5.6-Terra",
             "shortLabel": "5.6-Terra",
             "displayName": "GPT-5.6-Terra",
-            "description": "Balanced agentic coding model for everyday work",
+            "description": "Older balanced model for straightforward work.",
             "efforts": ["ultra", "max", "xhigh", "high", "medium", "low"],
             "contextWindow": 272000
         },
@@ -166,7 +219,7 @@
             "label": "GPT-5.6-Luna",
             "shortLabel": "5.6-Luna",
             "displayName": "GPT-5.6-Luna",
-            "description": "Fast and affordable agentic coding model",
+            "description": "Older fast and efficient model.",
             "efforts": ["max", "xhigh", "high", "medium", "low"],
             "effortDescriptions": {
                 "low": "Fastest responses",
@@ -182,7 +235,7 @@
             "label": "GPT-5.5",
             "shortLabel": "5.5",
             "displayName": "GPT-5.5",
-            "description": "Frontier model for complex coding and research",
+            "description": "Legacy coding model.",
             "efforts": ["xhigh", "high", "medium", "low"],
             "effortDescriptions": {
                 "xhigh": "Best quality"
