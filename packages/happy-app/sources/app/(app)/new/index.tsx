@@ -30,6 +30,7 @@ import { PermissionMode, ModelMode, PermissionModeSelector } from '@/components/
 import { AIBackendProfile, getProfileEnvironmentVariables, validateProfileForAgent } from '@/sync/settings';
 import { getBuiltInProfile, DEFAULT_PROFILES } from '@/sync/profileUtils';
 import { AgentInput } from '@/components/AgentInput';
+import { isRunningOnMac } from '@/utils/platform';
 import { StyleSheet } from 'react-native-unistyles';
 import { randomUUID } from 'expo-crypto';
 import { Image } from 'expo-image';
@@ -1639,6 +1640,11 @@ function NewSessionWizard() {
     // Shows machine/path selection via chips that navigate to picker screens
     // ========================================================================
     if (!useEnhancedSessionWizard) {
+        // On iOS the composer's status row sits inside its card, leaving a plain stack of cards.
+        // AgentInput adds 8pt above itself, so whatever sits directly above it takes 8pt to keep
+        // every gap in the stack at 16pt.
+        const iosCardStack = Platform.OS === 'ios' && !isRunningOnMac();
+        const showRepoPicker = sessionType === 'worktree' && !!selectedMachineId;
         return (
             <View ref={dropZoneRef} style={[styles.container, { position: 'relative' }, Platform.OS !== 'web' && { paddingTop: 40 + softHeaderInset }]}>
                 {imageDropOverlay}
@@ -1654,7 +1660,7 @@ function NewSessionWizard() {
                     )}
 
                     {/* Session type selector */}
-                    <View style={{ paddingHorizontal: 16, marginBottom: 16 }}>
+                    <View style={{ paddingHorizontal: 16, marginBottom: iosCardStack && !showRepoPicker ? 8 : 16 }}>
                         <View style={{ maxWidth: layout.maxWidth, width: '100%', paddingHorizontal: screenWidth > 700 ? 16 : 0, alignSelf: 'center' }}>
                             <SessionTypeSelector
                                 value={sessionType}
@@ -1664,8 +1670,8 @@ function NewSessionWizard() {
                     </View>
 
                     {/* Repo picker for worktree mode */}
-                    {sessionType === 'worktree' && selectedMachineId && (
-                        <View style={{ paddingHorizontal: 16, marginBottom: 12 }}>
+                    {showRepoPicker && (
+                        <View style={{ paddingHorizontal: 16, marginBottom: iosCardStack ? 8 : 12 }}>
                             <View style={{ maxWidth: layout.maxWidth, width: '100%', paddingHorizontal: screenWidth > 700 ? 16 : 0, alignSelf: 'center' }}>
                                 <RepoPickerBar
                                     machineId={selectedMachineId}
