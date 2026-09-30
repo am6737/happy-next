@@ -65,21 +65,6 @@ jobs:
         with:
           ref: ${{ inputs.release_tag }}
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: yarn
-
-      - name: Install dependencies
-        run: yarn install --frozen-lockfile
-        working-directory: .
-
-      - name: Setup EAS
-        uses: expo/expo-github-action@v8
-        with:
-          eas-version: latest
-          token: ${{ secrets.EXPO_TOKEN }}
-
       - name: Download the exact GitHub Release IPA
         env:
           GH_TOKEN: ${{ github.token }}
@@ -96,35 +81,26 @@ jobs:
           ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
           ASC_API_KEY_P8_BASE64: ${{ secrets.ASC_API_KEY_P8_BASE64 }}
         run: |
+          # altool only looks for the key in fixed directories such as this one.
+          mkdir -p ~/.appstoreconnect/private_keys
           printf '%s' "$ASC_API_KEY_P8_BASE64" |
-            base64 -D > "$RUNNER_TEMP/AuthKey_${ASC_API_KEY_ID}.p8"
-          chmod 600 "$RUNNER_TEMP/AuthKey_${ASC_API_KEY_ID}.p8"
+            base64 -D > ~/.appstoreconnect/private_keys/AuthKey_${ASC_API_KEY_ID}.p8
+          chmod 600 ~/.appstoreconnect/private_keys/AuthKey_${ASC_API_KEY_ID}.p8
 
-      - name: Submit existing IPA
+      - name: Upload existing IPA to App Store Connect
         env:
           ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
           IPA_NAME: ${{ needs.preflight.outputs.ipa_name }}
         run: |
-          jq \
-            --arg keyPath "$RUNNER_TEMP/AuthKey_${ASC_API_KEY_ID}.p8" \
-            --arg keyId "$ASC_API_KEY_ID" \
-            --arg issuerId "$ASC_ISSUER_ID" \
-            '.submit.production.ios += {
-              "ascApiKeyPath": $keyPath,
-              "ascApiKeyId": $keyId,
-              "ascApiKeyIssuerId": $issuerId
-            }' eas.json > eas.submit.json
-
-          mv eas.submit.json eas.json
-          eas submit \
-            -p ios \
-            --profile production \
-            --path "./$IPA_NAME" \
-            --non-interactive
+          xcrun altool --upload-app \
+            --type ios \
+            --file "./$IPA_NAME" \
+            --apiKey "$ASC_API_KEY_ID" \
+            --apiIssuer "$ASC_ISSUER_ID"
 
       - name: Remove temporary App Store Connect key
         if: always()
         env:
           ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
-        run: rm -f "$RUNNER_TEMP/AuthKey_${ASC_API_KEY_ID}.p8"
+        run: rm -f ~/.appstoreconnect/private_keys/AuthKey_${ASC_API_KEY_ID}.p8
