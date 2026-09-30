@@ -4,6 +4,7 @@ import { join, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { configuration } from '@/configuration';
 import { CodexJsonRpcPeer } from '@/codex/appserver/CodexJsonRpcPeer';
+import { CodexControlSocketClient, codexControlSocketPath } from '@/codex/appserver/CodexControlSocketClient';
 import { codexPackage } from '@/codex/package';
 import { resolveCodexRuntime } from '@/codex/codexRuntime';
 import { readSessionBinding, listSessionBindings, isBindingRunning, processIdentity, readStopSnapshot, writeStopSnapshot, type SessionBinding } from './sessionBinding';
@@ -86,28 +87,40 @@ export async function stopBoundSession(binding: SessionBinding, signal?: AbortSi
     if (processes.some(isBindingRunning)) throw new Error('stop-not-confirmed');
 }
 
-export async function syncCodexArchive(binding: SessionBinding, archived: boolean, signal?: AbortSignal): Promise<void> {
-    signal?.throwIfAborted();
-    if (!binding.nativeSessionIds.length) return;
-    const peer = new CodexJsonRpcPeer();
-    const controller = new AbortController();
-    const abort = () => controller.abort();
-    signal?.addEventListener('abort', abort, { once: true });
-    const timeout = setTimeout(() => controller.abort(), 75_000);
+type ArchivePeer = Pick<CodexJsonRpcPeer, 'request' | 'notify' | 'close'>;
+
+/**
+ * A running Codex app-server daemon (used by desktop clients) caches the thread list, so
+ * archiving through a separate app-server leaves those clients showing the thread. Prefer
+ * the daemon when it is reachable; otherwise a standalone helper updates the history on disk.
+ */
+async function connectCodexDaemon(codexHome: string, signal: AbortSignal): Promise<ArchivePeer | null> {
+    const socketPath = codexControlSocketPath(codexHome);
+    if (!socketPath) return null;
     try {
-        let cwd = binding.cwd;
-        try {
-            if (!statSync(cwd).isDirectory()) throw Object.assign(new Error('Not a directory'), { code: 'ENOTDIR' });
-        } catch (error) {
-            if (!['ENOENT', 'ENOTDIR'].includes((error as NodeJS.ErrnoException).code ?? '')) throw error;
-            cwd = join(configuration.happyHomeDir, 'archive-runtime');
-            mkdirSync(cwd, { recursive: true, mode: 0o700 });
-        }
-        const codexHome = binding.codexHome ? resolve(binding.cwd, binding.codexHome) : join(homedir(), '.codex');
+        return await CodexControlSocketClient.connect(socketPath, { timeoutMs: 5_000, signal });
+    } catch (error) {
+        signal.throwIfAborted();
+        logger.debug('[CodexArchive] App-server daemon unreachable, using a standalone helper', error);
+        return null;
+    }
+}
+
+async function spawnArchiveHelper(binding: SessionBinding, codexHome: string, signal: AbortSignal): Promise<ArchivePeer> {
+    let cwd = binding.cwd;
+    try {
+        if (!statSync(cwd).isDirectory()) throw Object.assign(new Error('Not a directory'), { code: 'ENOTDIR' });
+    } catch (error) {
+        if (!['ENOENT', 'ENOTDIR'].includes((error as NodeJS.ErrnoException).code ?? '')) throw error;
+        cwd = join(configuration.happyHomeDir, 'archive-runtime');
+        mkdirSync(cwd, { recursive: true, mode: 0o700 });
+    }
+    const peer = new CodexJsonRpcPeer();
+    try {
         const runtime = resolveCodexRuntime(binding.codexPackage ?? codexPackage(), ['app-server']);
         await peer.spawn(runtime.command, runtime.args, {
             cwd,
-            signal: controller.signal,
+            signal,
             env: { CODEX_HOME: codexHome },
         });
         // Persist the native helper before issuing side effects, so a replacement daemon
@@ -117,6 +130,25 @@ export async function syncCodexArchive(binding: SessionBinding, archived: boolea
             if (!identity) throw new Error('process-verification-unsupported');
             writeStopSnapshot(binding, [...readStopSnapshot(binding), { pid: peer.pid, identity }]);
         }
+        return peer;
+    } catch (error) {
+        await peer.close();
+        throw error;
+    }
+}
+
+export async function syncCodexArchive(binding: SessionBinding, archived: boolean, signal?: AbortSignal): Promise<void> {
+    signal?.throwIfAborted();
+    if (!binding.nativeSessionIds.length) return;
+    let peer: ArchivePeer | null = null;
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    signal?.addEventListener('abort', abort, { once: true });
+    const timeout = setTimeout(() => controller.abort(), 75_000);
+    try {
+        const codexHome = binding.codexHome ? resolve(binding.cwd, binding.codexHome) : join(homedir(), '.codex');
+        peer = await connectCodexDaemon(codexHome, controller.signal)
+            ?? await spawnArchiveHelper(binding, codexHome, controller.signal);
         await peer.request('initialize', { clientInfo: { name: 'happy-archive', version: '1.0.0' } }, 15_000);
         peer.notify('initialized', {});
         // No resume/start: archive existing persisted threads without creating a new conversation.
@@ -156,7 +188,7 @@ export async function syncCodexArchive(binding: SessionBinding, archived: boolea
     } finally {
         clearTimeout(timeout);
         signal?.removeEventListener('abort', abort);
-        await peer.close();
+        await peer?.close();
     }
 }
 
