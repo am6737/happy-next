@@ -413,9 +413,9 @@ RUN_ID=$(gh run list --workflow=ios-submit.yml --limit 1 --json databaseId -q '.
 gh run watch "$RUN_ID"
 ```
 
-workflow 会下载 GitHub Release 中的同一份 IPA，并通过 EAS 提交 App Store Connect。
+workflow 会下载 GitHub Release 中的同一份 IPA，用 App Store Connect API Key 通过 `xcrun altool` 直接上传到 App Store Connect，不经过 EAS 队列，通常几分钟完成。
 
-成功只代表上传/提交请求完成；审核状态需要在 App Store Connect 中另行核对。
+成功只代表 IPA 上传完成；构建处理、送审和审核状态需要在 App Store Connect 中另行处理和核对。
 
 ---
 
