@@ -1,3 +1,28 @@
+diff --git a/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenStackHeaderConfigViewManager.kt b/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenStackHeaderConfigViewManager.kt
+index 22a5710..0032a8a 100644
+--- a/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenStackHeaderConfigViewManager.kt
++++ b/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenStackHeaderConfigViewManager.kt
+@@ -229,6 +229,20 @@ class ScreenStackHeaderConfigViewManager :
+         Log.w("[RNScreens]", "$propName prop is not available on Android")
+     }
+ 
++    override fun setSubtitle(
++        view: ScreenStackHeaderConfig?,
++        value: String?,
++    ) {
++        logNotAvailable("subtitle")
++    }
++
++    override fun setSubtitleColor(
++        view: ScreenStackHeaderConfig?,
++        value: Int?,
++    ) {
++        logNotAvailable("subtitleColor")
++    }
++
+     override fun setBackTitle(
+         view: ScreenStackHeaderConfig?,
+         value: String?,
 diff --git a/node_modules/react-native-screens/ios/RNSScreenStackHeaderConfig.h b/node_modules/react-native-screens/ios/RNSScreenStackHeaderConfig.h
 index d5ea95f..900349e 100644
 --- a/node_modules/react-native-screens/ios/RNSScreenStackHeaderConfig.h
@@ -15,7 +40,7 @@ diff --git a/node_modules/react-native-screens/ios/RNSScreenStackHeaderConfig.mm
 index 3270127..537d9e1 100644
 --- a/node_modules/react-native-screens/ios/RNSScreenStackHeaderConfig.mm
 +++ b/node_modules/react-native-screens/ios/RNSScreenStackHeaderConfig.mm
-@@ -504,6 +504,14 @@ + (UINavigationBarAppearance *)buildAppearance:(UIViewController *)vc withConfig
+@@ -504,6 +504,14 @@ RNS_IGNORE_SUPER_CALL_END
      appearance.titleTextAttributes = attrs;
    }
  
@@ -30,7 +55,7 @@ index 3270127..537d9e1 100644
    if (config.largeTitleFontFamily || config.largeTitleFontSize || config.largeTitleFontWeight ||
        config.largeTitleColor || config.titleColor) {
      NSMutableDictionary *largeAttrs = [NSMutableDictionary new];
-@@ -718,6 +726,12 @@ + (void)updateViewController:(UIViewController *)vc
+@@ -718,6 +726,12 @@ RNS_IGNORE_SUPER_CALL_END
    // This assignment should be done after `navitem.titleView = ...` assignment (iOS 16.0 bug).
    // See: https://github.com/software-mansion/react-native-screens/issues/1570 (comments)
    navitem.title = config.title;
@@ -43,7 +68,7 @@ index 3270127..537d9e1 100644
    navitem.leftBarButtonItems = [config barButtonItemsFromConfigs:config.headerLeftBarButtonItems
                                                  withCurrentItems:navitem.leftBarButtonItems];
    navitem.rightBarButtonItems = [config barButtonItemsFromConfigs:config.headerRightBarButtonItems
-@@ -1119,6 +1133,8 @@ - (void)updateProps:(react::Props::Shared const &)props oldProps:(react::Props::
+@@ -1119,6 +1133,8 @@ static RCTResizeMode resizeModeFromCppEquiv(react::ImageResizeMode resizeMode)
    }
  
    _title = RCTNSStringFromStringNilIfEmpty(newScreenProps.title);
@@ -52,7 +77,7 @@ index 3270127..537d9e1 100644
    if (newScreenProps.titleFontFamily != oldScreenProps.titleFontFamily) {
      _titleFontFamily = RCTNSStringFromStringNilIfEmpty(newScreenProps.titleFontFamily);
    }
-@@ -1277,6 +1293,8 @@ - (RCTShadowView *)shadowView
+@@ -1277,6 +1293,8 @@ RCT_EXPORT_VIEW_PROPERTY(titleFontFamily, NSString)
  RCT_EXPORT_VIEW_PROPERTY(titleFontSize, NSNumber)
  RCT_EXPORT_VIEW_PROPERTY(titleFontWeight, NSString)
  RCT_EXPORT_VIEW_PROPERTY(titleColor, UIColor)
