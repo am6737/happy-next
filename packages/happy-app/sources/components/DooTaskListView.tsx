@@ -653,17 +653,23 @@ export const DooTaskListView = React.memo(() => {
                     contentContainerStyle={[styles.list, { paddingBottom: tabBottomPadding }]}
                 />
                 {error && error !== 'token_expired' ? (
-                    <View style={[styles.errorBanner, { backgroundColor: theme.colors.deleteAction + '20' }]}>
-                        <Text style={[styles.errorText, { color: theme.colors.deleteAction }]}>{error}</Text>
-                        <Pressable onPress={triggerRefreshWithFeedback}>
-                            <Text style={styles.retryText}>{t('common.retry')}</Text>
-                        </Pressable>
+                    // Floats above the tab bar: the scene extends underneath it and the bottom safe area.
+                    <View style={[styles.errorBannerContainer, { bottom: tabBottomPadding - ERROR_BANNER_TAB_GAP, backgroundColor: theme.colors.surface }]}>
+                        <View style={[styles.errorBanner, { backgroundColor: theme.colors.deleteAction + '20' }]}>
+                            <Text style={[styles.errorText, { color: theme.colors.deleteAction }]} numberOfLines={2}>{error}</Text>
+                            <Pressable onPress={triggerRefreshWithFeedback} hitSlop={10}>
+                                <Text style={[styles.retryText, { color: theme.colors.text }]}>{t('common.retry')}</Text>
+                            </Pressable>
+                        </View>
                     </View>
                 ) : null}
             </View>
         </View>
     );
 });
+
+// useMainTabBottomPadding leaves 128pt of scroll room; the tab bar itself only covers ~56pt of it.
+const ERROR_BANNER_TAB_GAP = 64;
 
 const styles = StyleSheet.create((_theme) => ({
     filterBar: { paddingVertical: 8, gap: 12 },
@@ -713,13 +719,21 @@ const styles = StyleSheet.create((_theme) => ({
     emptyText: { ...Typography.default(), fontSize: 14, textAlign: 'center', marginTop: 4 },
     retryButton: { marginTop: 16, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 },
     retryText: { ...Typography.default('semiBold'), fontSize: 14 },
+    errorBannerContainer: {
+        position: 'absolute',
+        left: 16,
+        right: 16,
+        borderRadius: 10,
+        overflow: 'hidden',
+    },
     errorBanner: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
         padding: 12,
+        gap: 12,
     },
-    errorText: { fontSize: 13, ...Typography.default() },
+    errorText: { fontSize: 13, flex: 1, ...Typography.default() },
     // --- Filter Panel ---
     filterSectionHeader: {
         paddingHorizontal: 20,
