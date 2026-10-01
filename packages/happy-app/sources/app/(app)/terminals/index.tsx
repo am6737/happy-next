@@ -1,7 +1,8 @@
-import { memo, useMemo } from 'react';
-import { Stack, useLocalSearchParams } from 'expo-router';
+import { memo, useEffect, useMemo, useRef } from 'react';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { t } from '@/text';
 import { TerminalWorkspace } from '@/terminal/TerminalWorkspace';
+import { isTerminalPopupWindow, listenForTerminalPopupFocus } from '@/terminal/terminalPopupWindow';
 
 /**
  * Every shell on every machine, one tab each.
@@ -25,6 +26,20 @@ export default memo(function TerminalsPage() {
         () => (machineId && terminalId ? { machineId, terminalId } : null),
         [machineId, terminalId, request],
     );
+
+    // In a browser popup, the page that opened it asks for tabs over a channel instead of
+    // navigating the popup, which would restart the app and every stream in it.
+    const router = useRouter();
+    const routerRef = useRef(router);
+    routerRef.current = router;
+    useEffect(() => {
+        if (!isTerminalPopupWindow()) {
+            return;
+        }
+        return listenForTerminalPopupFocus((requested) => {
+            routerRef.current.setParams({ ...requested, request: String(Date.now()) });
+        });
+    }, []);
 
     return (
         <>

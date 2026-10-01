@@ -6,6 +6,7 @@ import type { TerminalOkResponse, TerminalRefRequest } from 'happy-wire';
 import { apiSocket } from '@/sync/apiSocket';
 import { isTerminalWindow } from '@/desktop/desktopWindowUtils';
 import { useTerminalWindowCloseRequest } from '@/desktop/useTerminalWindowCloseRequest';
+import { useTerminalPopupCloseConfirm } from './useTerminalPopupCloseConfirm';
 import { useAllMachines, useLocalSettingMutable, useMachine } from '@/sync/storage';
 import { useMachineNameMap } from '@/hooks/useMachineNameMap';
 import { t } from '@/text';
@@ -333,6 +334,7 @@ export const TerminalWorkspace = memo(({ focus = null }: TerminalWorkspaceProps)
         tabCount: tabs.length,
         closeTab: activeTab ? () => handleClose(activeTab) : null,
     });
+    useTerminalPopupCloseConfirm(tabs.length);
 
     if (!loaded && tabs.length === 0) {
         return (

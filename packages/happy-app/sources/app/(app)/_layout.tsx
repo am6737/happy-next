@@ -13,7 +13,8 @@ import { t } from '@/text';
 import { Ionicons } from '@expo/vector-icons';
 import { isUsingCustomServer } from '@/sync/serverConfig';
 import { useAuth } from '@/auth/AuthContext';
-import { getDesktopPlatform, isTerminalWindow } from '@/desktop/desktopWindowUtils';
+import { getDesktopPlatform } from '@/desktop/desktopWindowUtils';
+import { isDedicatedTerminalWindow } from '@/terminal/terminalPopupWindow';
 
 export const unstable_settings = {
     initialRouteName: 'index',
@@ -30,7 +31,7 @@ export default function RootLayout() {
     // The terminal window already says what it is in its tab strip, and a header
     // would only push the tabs down. On a phone the same screen is a page in the
     // app, where the header is how you get back out.
-    const inTerminalWindow = isTerminalWindow();
+    const inTerminalWindow = isDedicatedTerminalWindow();
 
     return (
         <Stack
