@@ -72,6 +72,8 @@ export interface TerminalGridViewProps {
   style?: StyleProp<ViewStyle>;
   onCellMetricsChange?: (metrics: TerminalGridCellMetrics) => void;
   cursorVisible?: boolean;
+  /** Whether the terminal has input focus. An unfocused cursor is drawn as an outline. */
+  cursorFocused?: boolean;
 }
 
 function estimateCellMetrics(fontSize: number): CellMetrics {
@@ -297,6 +299,7 @@ export function TerminalGridView({
   style,
   onCellMetricsChange,
   cursorVisible = true,
+  cursorFocused = true,
 }: TerminalGridViewProps) {
   const [metrics, setMetrics] = useState<CellMetrics>(() => estimateCellMetrics(fontSize));
   const measuredMetricsRef = useRef<TerminalGridCellMetrics | null>(null);
@@ -345,14 +348,18 @@ export function TerminalGridView({
     });
     return [
       styles.cursor,
+      // Borders are drawn inside the box, so the hollow cursor covers the same cell as the solid one.
+      cursorFocused
+        ? { backgroundColor: resolver.cursorColor }
+        : styles.cursorHollow,
       {
-        backgroundColor: resolver.cursorColor,
+        borderColor: resolver.cursorColor,
         width: metrics.cellWidth,
         height: metrics.cellHeight,
         transform: [{ translateX: cursorOffset.x }, { translateY: cursorOffset.y }],
       },
     ];
-  }, [metrics, state.cursor.col, state.cursor.row, resolver.cursorColor]);
+  }, [metrics, state.cursor.col, state.cursor.row, resolver.cursorColor, cursorFocused]);
 
   const handleMeasure = useCallback(
     (event: LayoutChangeEvent) => {
@@ -446,5 +453,9 @@ const styles = StyleSheet.create({
     opacity: 0.45,
     position: "absolute",
     top: 0,
+  },
+  cursorHollow: {
+    borderWidth: 1,
+    opacity: 0.8,
   },
 });

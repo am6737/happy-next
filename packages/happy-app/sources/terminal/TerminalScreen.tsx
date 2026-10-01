@@ -228,6 +228,7 @@ export const TerminalScreen = memo(({ machineId, terminalId, status, onTitle, on
                         state={viewport ?? UNMEASURED_VIEWPORT}
                         xtermTheme={xtermTheme}
                         cursorVisible={cursorVisible}
+                        cursorFocused={isInputFocused}
                         onCellMetricsChange={setCellMetrics}
                     />
                 </Pressable>
