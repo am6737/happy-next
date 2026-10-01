@@ -24,6 +24,13 @@ interface TerminalRunBase {
   styleKey: string;
   style: TextStyle;
   foregroundColor: string;
+  /**
+   * A run that holds one double-width character and is never merged with its neighbours.
+   * Fallback fonts give CJK glyphs their own advance, which is not two cells of the terminal
+   * font; letting such characters share a `Text` makes the row drift away from the cursor by
+   * the difference for every one of them.
+   */
+  isolated: boolean;
 }
 
 export interface TerminalTextRun extends TerminalRunBase {
@@ -96,6 +103,7 @@ function appendRun(input: {
   style: TextStyle;
   foregroundColor: string;
   customGlyph: TerminalCustomGlyph | null;
+  isolated: boolean;
   col: number;
 }): void {
   const renderKind = input.customGlyph ? "custom-glyph" : "text";
@@ -103,7 +111,9 @@ function appendRun(input: {
   if (
     previousRun &&
     previousRun.styleKey === input.styleKey &&
-    previousRun.renderKind === renderKind
+    previousRun.renderKind === renderKind &&
+    !previousRun.isolated &&
+    !input.isolated
   ) {
     const offset = previousRun.cellCount;
     previousRun.text += input.text;
@@ -125,6 +135,7 @@ function appendRun(input: {
     styleKey: input.styleKey,
     style: input.style,
     foregroundColor: input.foregroundColor,
+    isolated: input.isolated,
   };
   if (input.customGlyph) {
     input.runs.push({
@@ -159,6 +170,7 @@ function buildRowModel(input: {
       style: resolvedStyle.style,
       foregroundColor: resolvedStyle.foregroundColor,
       customGlyph,
+      isolated: cellCount > 1,
       col,
     });
     hash = hashStringPart(hash, text);

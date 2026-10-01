@@ -39,7 +39,12 @@ export function resolveMeasuredTerminalCellMetrics(
 ): TerminalGridCellMetrics {
   const textLength = Math.max(1, input.measureTextLength);
   return {
-    cellWidth: snapCellMetric(input.measuredTextWidth / textLength, input.roundToNearestPixel),
+    // Not snapped to a pixel: a run is laid out as `cellCount * cellWidth` while the text inside
+    // it advances by the font's own, fractional, width. Rounding 7.8 up to 8 puts every run
+    // 0.2px per cell past where its text ends, so whatever follows a styled run — the file
+    // names in `ls -l` — lands further right the longer the run before it is. Height is
+    // snapped because rows stack on it and nothing advances inside a row's height.
+    cellWidth: Math.max(1, input.measuredTextWidth / textLength),
     cellHeight: snapCellMetric(input.measuredTextHeight, input.roundToNearestPixel),
   };
 }

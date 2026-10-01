@@ -1,6 +1,7 @@
 import { memo, useCallback, useMemo, useRef, useState } from "react";
 import {
   PixelRatio,
+  Platform,
   StyleSheet,
   Text,
   View,
@@ -111,8 +112,8 @@ function TerminalGridRun({ run, cellWidth, cellHeight, textStyle }: TerminalGrid
     [cellHeight, cellWidth, run.cellCount, run.style.backgroundColor],
   );
   const runTextStyle = useMemo<StyleProp<TextStyle>>(
-    () => [textStyle, run.style],
-    [run.style, textStyle],
+    () => [textStyle, run.style, run.isolated && styles.isolatedRunText],
+    [run.isolated, run.style, textStyle],
   );
 
   return (
@@ -120,7 +121,9 @@ function TerminalGridRun({ run, cellWidth, cellHeight, textStyle }: TerminalGrid
       {run.renderKind === "custom-glyph" ? (
         <TerminalGridCustomGlyphRun run={run} cellWidth={cellWidth} cellHeight={cellHeight} />
       ) : (
-        <Text numberOfLines={1} style={runTextStyle}>
+        // `clip`, not the default ellipsis: a run box is `cellCount * cellWidth`, and the text in it
+        // can come out a hair wider than that. The default turns the hair into a "…".
+        <Text numberOfLines={1} ellipsizeMode="clip" style={runTextStyle}>
           {run.text}
         </Text>
       )}
@@ -442,6 +445,16 @@ const styles = StyleSheet.create({
     includeFontPadding: false,
     margin: 0,
     padding: 0,
+    // On the web a single-line Text is `white-space: nowrap`, which collapses runs of spaces.
+    // A column of `ls -l` output is mostly such runs, so the padding vanishes and the text
+    // behind it slides left of the cells it belongs to. `textOverflow` is the web's side of
+    // `ellipsizeMode="clip"`, which react-native-web does not read.
+    ...(Platform.OS === "web" ? ({ whiteSpace: "pre", textOverflow: "clip" } as TextStyle) : null),
+  },
+  // The glyph of a double-width character is centred in its two cells rather than left against
+  // the first, so a fallback font's narrower advance does not leave the gap on one side.
+  isolatedRunText: {
+    textAlign: "center",
   },
   measureText: {
     includeFontPadding: false,
