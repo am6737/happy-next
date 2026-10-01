@@ -8,7 +8,8 @@ import type {
 } from 'happy-wire';
 import { apiSocket } from '@/sync/apiSocket';
 import { storage } from '@/sync/storage';
-import { createNativeHeadlessTerminal, type NativeHeadlessTerminal, type TerminalViewportState } from './headlessTerminalState';
+import { createNativeHeadlessTerminal, type TerminalViewportState } from './headlessTerminalState';
+import type { TerminalMirror } from './terminalMirror';
 
 export interface TerminalStreamStatus {
     attaching: boolean;
@@ -61,7 +62,13 @@ export interface TerminalStreamOptions {
     machineId: string;
     terminalId: string;
     size: { rows: number; cols: number };
-    /** Called with a fresh screen whenever the mirror changes. */
+    /**
+     * A mirror that something else displays, in place of the headless one the stream would
+     * make for itself. The caller owns it — it outlives snapshots, which reset it rather than
+     * replace it, and `dispose` leaves it alone.
+     */
+    mirror?: TerminalMirror;
+    /** Called with a fresh screen whenever the mirror changes. Not called for a `mirror` with no grid. */
     onViewport: (state: TerminalViewportState) => void;
     onStatus: (status: TerminalStreamStatus) => void;
     onTitle: (title: string | undefined) => void;
@@ -79,7 +86,7 @@ export interface TerminalStreamOptions {
  * every delta that follows.
  */
 export class TerminalStream {
-    private mirror: NativeHeadlessTerminal;
+    private mirror: TerminalMirror;
     private size: { rows: number; cols: number };
     private unsubscribeFrame: (() => void) | null = null;
     private unsubscribeReconnect: (() => void) | null = null;
@@ -98,7 +105,7 @@ export class TerminalStream {
 
     constructor(private readonly options: TerminalStreamOptions) {
         this.size = options.size;
-        this.mirror = createNativeHeadlessTerminal({
+        this.mirror = options.mirror ?? createNativeHeadlessTerminal({
             rows: options.size.rows,
             cols: options.size.cols,
         });
@@ -246,8 +253,13 @@ export class TerminalStream {
         revision: number,
         body: Extract<TerminalFrameBody, { type: 'snapshot' }>,
     ): Promise<void> {
-        this.mirror.dispose();
-        this.mirror = createNativeHeadlessTerminal({ rows: body.rows, cols: body.cols });
+        if (this.options.mirror) {
+            this.options.mirror.reset();
+            this.options.mirror.resize({ rows: body.rows, cols: body.cols });
+        } else {
+            this.mirror.dispose();
+            this.mirror = createNativeHeadlessTerminal({ rows: body.rows, cols: body.cols });
+        }
         this.size = { rows: body.rows, cols: body.cols };
 
         await this.mirror.write(body.ansi);
@@ -275,7 +287,10 @@ export class TerminalStream {
         if (this.disposed) {
             return;
         }
-        this.options.onViewport(this.mirror.getViewportState());
+        const viewport = this.mirror.getViewportState?.();
+        if (viewport) {
+            this.options.onViewport(viewport);
+        }
     }
 
     /** Sends keystrokes to the shell. */
@@ -330,7 +345,9 @@ export class TerminalStream {
         this.unsubscribeFrame = null;
         this.unsubscribeReconnect = null;
         this.unsubscribeMachine = null;
-        this.mirror.dispose();
+        if (!this.options.mirror) {
+            this.mirror.dispose();
+        }
 
         // The subscription is per-socket and the socket outlives this screen,
         // so release it explicitly — otherwise frames keep arriving for a

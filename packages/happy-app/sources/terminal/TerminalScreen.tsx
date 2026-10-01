@@ -13,6 +13,8 @@ import { useUnistyles } from 'react-native-unistyles';
 import { TerminalGridView } from './TerminalGridView';
 import { TerminalInput, type TerminalInputHandle } from './TerminalInput';
 import { TerminalKeyBar } from './TerminalKeyBar';
+import { TerminalXtermView, TERMINAL_XTERM_VIEW_SUPPORTED } from './TerminalXtermView';
+import type { TerminalMirror } from './terminalMirror';
 import type { TerminalViewportState } from './headlessTerminalState';
 import { TerminalStream, type TerminalStreamStatus } from './terminalStream';
 import { encodeTerminalKeyInput } from './terminalKeyInput';
@@ -74,6 +76,10 @@ export const TerminalScreen = memo(({ machineId, terminalId, status, onTitle, on
     const [isInputFocused, setIsInputFocused] = useState(false);
     const [cursorVisible, setCursorVisible] = useState(true);
     const physicalKeyRef = useRef<string | null>(null);
+    // Only where xterm.js draws the terminal: it brings its own screen and its own size, so the
+    // stream is handed that screen instead of measuring a grid of our own.
+    const [xtermMirror, setXtermMirror] = useState<TerminalMirror | null>(null);
+    const [xtermSize, setXtermSize] = useState<{ rows: number; cols: number } | null>(null);
 
     useEffect(() => {
         if (!isInputFocused) {
@@ -88,8 +94,10 @@ export const TerminalScreen = memo(({ machineId, terminalId, status, onTitle, on
     const inputRef = useRef<TerminalInputHandle>(null);
 
     const size = useMemo(
-        () => resolveMeasuredNativeTerminalSize({ layout, metrics: cellMetrics }),
-        [layout, cellMetrics],
+        () => TERMINAL_XTERM_VIEW_SUPPORTED
+            ? xtermSize
+            : resolveMeasuredNativeTerminalSize({ layout, metrics: cellMetrics }),
+        [layout, cellMetrics, xtermSize],
     );
     const sizeRef = useRef(size);
     sizeRef.current = size;
@@ -119,10 +127,15 @@ export const TerminalScreen = memo(({ machineId, terminalId, status, onTitle, on
         if (!initialSize) {
             return;
         }
+        // The screen xterm draws is what the stream writes to, so it has to exist first.
+        if (TERMINAL_XTERM_VIEW_SUPPORTED && !xtermMirror) {
+            return;
+        }
         const stream = new TerminalStream({
             machineId,
             terminalId,
             size: initialSize,
+            mirror: xtermMirror ?? undefined,
             onViewport: setViewport,
             onStatus: setStreamStatus,
             onTitle: (title) => onTitleRef.current?.(title),
@@ -134,7 +147,7 @@ export const TerminalScreen = memo(({ machineId, terminalId, status, onTitle, on
             stream.dispose();
             streamRef.current = null;
         };
-    }, [hasSize, machineId, terminalId]);
+    }, [hasSize, machineId, terminalId, xtermMirror]);
 
     useEffect(() => {
         if (size) {
@@ -220,27 +233,38 @@ export const TerminalScreen = memo(({ machineId, terminalId, status, onTitle, on
     }, []);
 
     const backgroundColor = xtermTheme.background ?? '#1E1E1E';
+    // The grid renderer shows nothing until its first viewport; xterm has no viewport to wait for.
+    const showSpinner = streamStatus.attaching && (TERMINAL_XTERM_VIEW_SUPPORTED || !viewport);
 
     return (
         // The key bar at the bottom is what yields to the keyboard, and its own
         // padding is what makes this column resize when it does; see the bar.
         <View style={styles.root}>
             <View style={[styles.gridArea, { backgroundColor }]}>
-                {/* Rendered even before a terminal exists: measuring the font is
-                    what tells us the grid size, and the grid size is what the
-                    stream needs to attach. Gating this on the size would mean
-                    neither ever happens. */}
-                <Pressable onPress={focusKeyboard} onLayout={handleLayout} style={styles.gridHitbox}>
-                    <TerminalGridView
-                        state={viewport ?? UNMEASURED_VIEWPORT}
+                {TERMINAL_XTERM_VIEW_SUPPORTED ? (
+                    <TerminalXtermView
                         xtermTheme={xtermTheme}
-                        cursorVisible={cursorVisible}
-                        cursorFocused={isInputFocused}
-                        onCellMetricsChange={setCellMetrics}
+                        onMirror={setXtermMirror}
+                        onSize={setXtermSize}
+                        onInput={handleInput}
                     />
-                </Pressable>
+                ) : (
+                    // Rendered even before a terminal exists: measuring the font is
+                    // what tells us the grid size, and the grid size is what the
+                    // stream needs to attach. Gating this on the size would mean
+                    // neither ever happens.
+                    <Pressable onPress={focusKeyboard} onLayout={handleLayout} style={styles.gridHitbox}>
+                        <TerminalGridView
+                            state={viewport ?? UNMEASURED_VIEWPORT}
+                            xtermTheme={xtermTheme}
+                            cursorVisible={cursorVisible}
+                            cursorFocused={isInputFocused}
+                            onCellMetricsChange={setCellMetrics}
+                        />
+                    </Pressable>
+                )}
 
-                {!viewport && streamStatus.attaching ? (
+                {showSpinner ? (
                     <View style={styles.overlay} pointerEvents="none">
                         <ActivityIndicator color={xtermTheme.foreground} />
                     </View>
@@ -255,15 +279,17 @@ export const TerminalScreen = memo(({ machineId, terminalId, status, onTitle, on
                     </View>
                 ) : null}
 
-                <TerminalInput
-                    ref={inputRef}
-                    isKeyboardVisible={isKeyboardVisible}
-                    onInput={handleInput}
-                    onFocus={() => setIsInputFocused(true)}
-                    onBlur={() => setIsInputFocused(false)}
-                    onTerminalKey={handleTerminalKey}
-                    onPhysicalKey={handlePhysicalKey}
-                />
+                {TERMINAL_XTERM_VIEW_SUPPORTED ? null : (
+                    <TerminalInput
+                        ref={inputRef}
+                        isKeyboardVisible={isKeyboardVisible}
+                        onInput={handleInput}
+                        onFocus={() => setIsInputFocused(true)}
+                        onBlur={() => setIsInputFocused(false)}
+                        onTerminalKey={handleTerminalKey}
+                        onPhysicalKey={handlePhysicalKey}
+                    />
+                )}
             </View>
 
             {/* Sits between the screen and the keys rather than over the screen:
