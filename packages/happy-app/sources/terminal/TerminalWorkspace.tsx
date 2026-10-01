@@ -23,6 +23,7 @@ import {
     applyTerminalTabOrder,
     resolveActiveTerminalTab,
     resolveTerminalTabLabels,
+    retainMountedTerminals,
     shortenTerminalDirectory,
     sortTerminalTabs,
     terminalTabKey,
@@ -45,9 +46,10 @@ export interface TerminalWorkspaceProps {
  *
  * The tab set comes from each machine's daemon rather than from anything
  * remembered here, so it is the same set in every window and on every device,
- * and a terminal that outlives the app simply reappears. One `TerminalScreen`
- * is mounted at a time — the inactive tabs are live on their daemons, not in
- * this view, so there is nothing to keep mounted for them.
+ * and a terminal that outlives the app simply reappears. The inactive tabs are live on their daemons, not in
+ * this view. The few shown most recently stay mounted but hidden, so switching back finds the
+ * screen and its scrollback as they were; past `MAX_MOUNTED_TERMINALS` the one shown longest ago
+ * is let go and comes back from a fresh snapshot.
  */
 export const TerminalWorkspace = memo(({ focus = null }: TerminalWorkspaceProps) => {
     const { theme } = useUnistyles();
@@ -126,6 +128,12 @@ export const TerminalWorkspace = memo(({ focus = null }: TerminalWorkspaceProps)
 
     const activeTab = useMemo(() => resolveActiveTerminalTab(tabs, requested), [requested, tabs]);
     const activeKey = activeTab ? terminalTabKey(activeTab) : null;
+    // Worked out while rendering rather than in an effect: a tab shown for the first time has to
+    // mount in the render that selects it, and an effect would leave a frame of empty space first.
+    // Idempotent for the same inputs, so a repeated render changes nothing.
+    const mountedKeysRef = useRef<string[]>([]);
+    mountedKeysRef.current = retainMountedTerminals(mountedKeysRef.current, activeKey, tabs.map(terminalTabKey));
+    const mountedKeys = mountedKeysRef.current;
     const labels = useMemo(
         () => resolveTerminalTabLabels(tabs, (machineId) => machineNameById.get(machineId), tabNames),
         [machineNameById, tabNames, tabs],
@@ -381,14 +389,28 @@ export const TerminalWorkspace = memo(({ focus = null }: TerminalWorkspaceProps)
                 </View>
             )}
             {activeTab && activeKey ? (
-                // Keyed so switching tabs tears down the previous stream instead
-                // of leaving it subscribed to a terminal nobody is looking at.
-                <TerminalScreen
-                    key={activeKey}
-                    machineId={activeTab.machineId}
-                    status={status}
-                    terminalId={activeTab.terminal.id}
-                />
+                // Keyed by tab, so a tab keeps its screen as long as it stays mounted; the ones not
+                // on screen are hidden rather than torn down, which is what keeps their scrollback.
+                // Rendered in strip order, not in the order they were shown in, so that showing a
+                // tab never moves the others.
+                <View style={styles.screens}>
+                    {tabs
+                        .filter((tab) => mountedKeys.includes(terminalTabKey(tab)))
+                        .map((tab) => {
+                            const key = terminalTabKey(tab);
+                            const isActive = key === activeKey;
+                            return (
+                                <View key={key} style={isActive ? styles.screen : styles.hiddenScreen}>
+                                    <TerminalScreen
+                                        active={isActive}
+                                        machineId={tab.machineId}
+                                        status={isActive ? status : undefined}
+                                        terminalId={tab.terminal.id}
+                                    />
+                                </View>
+                            );
+                        })}
+                </View>
             ) : (
                 <View style={styles.centered}>
                     <Text style={[styles.emptyText, { color: theme.colors.text }]}>
@@ -422,6 +444,16 @@ export const TerminalWorkspace = memo(({ focus = null }: TerminalWorkspaceProps)
 
 const styles = StyleSheet.create({
     root: {
+        flex: 1,
+    },
+    screens: {
+        flex: 1,
+    },
+    screen: {
+        flex: 1,
+    },
+    hiddenScreen: {
+        display: 'none',
         flex: 1,
     },
     tabBarRow: {

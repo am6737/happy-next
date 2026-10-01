@@ -5,6 +5,7 @@ import {
     moveTerminalTab,
     resolveActiveTerminalTab,
     resolveTerminalTabLabels,
+    retainMountedTerminals,
     shortenTerminalDirectory,
     sortTerminalTabs,
     terminalTabKey,
@@ -396,5 +397,37 @@ describe('shortenTerminalDirectory', () => {
 
     it('leaves the path alone when the home directory is unknown', () => {
         expect(shortenTerminalDirectory('/srv/app', undefined)).toBe('/srv/app');
+    });
+});
+
+describe('retainMountedTerminals', () => {
+    it('starts with the active tab alone', () => {
+        expect(retainMountedTerminals([], 'a', ['a', 'b', 'c'])).toEqual(['a']);
+    });
+
+    it('keeps tabs that were shown before and puts the active one last', () => {
+        expect(retainMountedTerminals(['a', 'b'], 'c', ['a', 'b', 'c'])).toEqual(['a', 'b', 'c']);
+        expect(retainMountedTerminals(['a', 'b', 'c'], 'a', ['a', 'b', 'c'])).toEqual(['b', 'c', 'a']);
+    });
+
+    it('lets go of the least recently shown tab past the limit', () => {
+        expect(retainMountedTerminals(['a', 'b', 'c'], 'd', ['a', 'b', 'c', 'd'], 3)).toEqual(['b', 'c', 'd']);
+    });
+
+    it('never lets go of the active tab', () => {
+        expect(retainMountedTerminals(['a', 'b'], 'c', ['a', 'b', 'c'], 0)).toEqual(['c']);
+    });
+
+    it('drops tabs that no longer exist', () => {
+        expect(retainMountedTerminals(['a', 'b', 'c'], 'c', ['a', 'c'])).toEqual(['a', 'c']);
+    });
+
+    it('is stable when the same tab stays active', () => {
+        const once = retainMountedTerminals(['a', 'b'], 'b', ['a', 'b']);
+        expect(retainMountedTerminals(once, 'b', ['a', 'b'])).toEqual(once);
+    });
+
+    it('holds nothing when there is no active tab to show', () => {
+        expect(retainMountedTerminals(['a'], null, [])).toEqual([]);
     });
 });

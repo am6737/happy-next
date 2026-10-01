@@ -8,6 +8,7 @@ import type {
 } from 'happy-wire';
 import { apiSocket } from '@/sync/apiSocket';
 import { storage } from '@/sync/storage';
+import { subscribeTerminalFrames } from './terminalFrameRelay';
 import { createNativeHeadlessTerminal, type TerminalViewportState } from './headlessTerminalState';
 import type { TerminalMirror } from './terminalMirror';
 
@@ -121,9 +122,13 @@ export class TerminalStream {
             offline: !machineIsConnected(this.options.machineId),
         });
 
-        this.unsubscribeFrame = apiSocket.onMessage('terminal-frame', (frame: TerminalRelayedFrame) => {
-            void this.handleFrame(frame);
-        });
+        this.unsubscribeFrame = subscribeTerminalFrames(
+            this.options.machineId,
+            this.options.terminalId,
+            (frame: TerminalRelayedFrame) => {
+                void this.handleFrame(frame);
+            },
+        );
         // The server drops subscriptions when the socket goes away, so a
         // reconnect has to re-subscribe and re-attach from scratch.
         this.unsubscribeReconnect = apiSocket.onReconnected(() => {

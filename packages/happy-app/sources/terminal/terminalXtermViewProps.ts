@@ -5,6 +5,11 @@ import type { TerminalMirror } from "./terminalMirror";
 export interface TerminalXtermViewProps {
   xtermTheme: ITheme;
   /**
+   * Whether this terminal is the one on screen. A terminal that is kept mounted while another
+   * tab is shown is hidden, and takes the keyboard back when it is shown again.
+   */
+  active: boolean;
+  /**
    * The terminal that is drawn here, once it exists, and `null` when it goes away. The
    * stream is given this as its mirror, so what the shell writes lands on this screen.
    */

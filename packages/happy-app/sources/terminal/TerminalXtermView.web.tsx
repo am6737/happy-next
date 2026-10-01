@@ -24,7 +24,7 @@ const SCROLLBACK_LINES = 5000;
  * It parses nothing here that the stream does not hand it: output is written to it by
  * `TerminalStream`, and what it reads from the keyboard goes back out through `onInput`.
  */
-export const TerminalXtermView = memo(({ xtermTheme, onMirror, onSize, onInput }: TerminalXtermViewProps) => {
+export const TerminalXtermView = memo(({ xtermTheme, active, onMirror, onSize, onInput }: TerminalXtermViewProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
 
@@ -108,6 +108,13 @@ export const TerminalXtermView = memo(({ xtermTheme, onMirror, onSize, onInput }
       terminal.dispose();
     };
   }, []);
+
+  // Hiding the terminal takes the focus off it with the element; showing it has to put it back.
+  useEffect(() => {
+    if (active) {
+      terminalRef.current?.focus();
+    }
+  }, [active]);
 
   useEffect(() => {
     if (terminalRef.current) {

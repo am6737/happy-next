@@ -223,3 +223,34 @@ export function moveTerminalTab(
     const at = Math.max(0, Math.min(toIndex, rest.length));
     return [...rest.slice(0, at), fromKey, ...rest.slice(at)];
 }
+
+/**
+ * How many terminals stay mounted at once.
+ *
+ * Each one keeps its stream subscribed and its screen — and, on the web, its scrollback — alive
+ * while it is out of sight, so switching back finds it as it was left. That has a price per tab,
+ * which is why it is bounded: past this, the one used longest ago is let go and the next visit
+ * to it starts from a fresh snapshot.
+ */
+export const MAX_MOUNTED_TERMINALS = 5;
+
+/**
+ * Which tabs stay mounted after `activeKey` is brought to the front.
+ *
+ * `mounted` is ordered from the least to the most recently shown. The active tab moves to the end,
+ * tabs that no longer exist are dropped, and what exceeds `limit` is cut from the old end — the
+ * active tab is last, so it can never be the one cut.
+ */
+export function retainMountedTerminals(
+    mounted: readonly string[],
+    activeKey: string | null,
+    existingKeys: readonly string[],
+    limit: number = MAX_MOUNTED_TERMINALS,
+): string[] {
+    const existing = new Set(existingKeys);
+    const kept = mounted.filter((key) => key !== activeKey && existing.has(key));
+    if (activeKey !== null && existing.has(activeKey)) {
+        kept.push(activeKey);
+    }
+    return kept.slice(Math.max(0, kept.length - Math.max(1, limit)));
+}

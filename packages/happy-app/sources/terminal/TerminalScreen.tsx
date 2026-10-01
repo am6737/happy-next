@@ -27,6 +27,12 @@ import { t } from '@/text';
 export interface TerminalScreenProps {
     machineId: string;
     terminalId: string;
+    /**
+     * Whether this is the terminal on screen. The workspace keeps recently shown terminals mounted
+     * but hidden, so their stream and screen — scrollback included — are still there when the tab
+     * is shown again; a hidden one must not hold the keyboard.
+     */
+    active?: boolean;
     /** Which shell this is, for the end of the key bar. */
     status?: string;
     onTitle?: (title: string | undefined) => void;
@@ -57,7 +63,7 @@ const UNMEASURED_VIEWPORT: TerminalViewportState = {
  * makes programs that redraw on SIGWINCH (anything full-screen) flash a
  * mis-wrapped frame on entry.
  */
-export const TerminalScreen = memo(({ machineId, terminalId, status, onTitle, onExit }: TerminalScreenProps) => {
+export const TerminalScreen = memo(({ machineId, terminalId, active = true, status, onTitle, onExit }: TerminalScreenProps) => {
     const { rt, theme } = useUnistyles();
     const systemScheme = useColorScheme();
     const scheme = rt.themeName === 'light' || rt.themeName === 'dark' ? rt.themeName : systemScheme ?? 'dark';
@@ -92,6 +98,12 @@ export const TerminalScreen = memo(({ machineId, terminalId, status, onTitle, on
 
     const streamRef = useRef<TerminalStream | null>(null);
     const inputRef = useRef<TerminalInputHandle>(null);
+
+    useEffect(() => {
+        if (!active) {
+            inputRef.current?.blur();
+        }
+    }, [active]);
 
     const size = useMemo(
         () => TERMINAL_XTERM_VIEW_SUPPORTED
@@ -155,8 +167,13 @@ export const TerminalScreen = memo(({ machineId, terminalId, status, onTitle, on
         }
     }, [size]);
 
+    // A hidden terminal is laid out at nothing. That is not a size to adopt: it would drop the
+    // measurement the stream is keyed on, and tear the stream down for being out of sight.
     const handleLayout = useCallback((event: LayoutChangeEvent) => {
         const { width, height } = event.nativeEvent.layout;
+        if (width <= 0 || height <= 0) {
+            return;
+        }
         setLayout((current) =>
             current?.width === width && current.height === height ? current : { width, height },
         );
@@ -244,6 +261,7 @@ export const TerminalScreen = memo(({ machineId, terminalId, status, onTitle, on
                 {TERMINAL_XTERM_VIEW_SUPPORTED ? (
                     <TerminalXtermView
                         xtermTheme={xtermTheme}
+                        active={active}
                         onMirror={setXtermMirror}
                         onSize={setXtermSize}
                         onInput={handleInput}
