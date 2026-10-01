@@ -357,7 +357,7 @@ export const pt: TranslationStructure = {
         todoDone: '{name} completed "{desc}"',
         todoRemoved: '{name} removed todo "{desc}"',
         todoTarget: ' → {names}',
-        chatEmpty: 'No messages yet',
+        chatEmpty: 'Nenhuma mensagem ainda',
         aiAssistant: 'AI Assistant',
         takePhoto: 'Tirar foto',
         chooseFromAlbum: 'Escolher do álbum',
@@ -748,6 +748,8 @@ export const pt: TranslationStructure = {
     },
 
     session: {
+        noMessagesYet: 'Nenhuma mensagem ainda',
+        createdAgo: ({ time }: { time: string }) => `Criado ${time}`,
         tabs: {
             active: 'Ativas',
             inactive: 'Inativas',

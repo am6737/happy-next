@@ -750,6 +750,8 @@ export const zhHans: TranslationStructure = {
     },
 
     session: {
+        noMessagesYet: '暂无消息',
+        createdAgo: ({ time }: { time: string }) => `创建于${time}`,
         tabs: {
             active: '活跃',
             inactive: '非活跃',

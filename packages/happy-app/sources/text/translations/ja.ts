@@ -780,6 +780,8 @@ export const ja: TranslationStructure = {
     },
 
     session: {
+        noMessagesYet: 'メッセージはまだありません',
+        createdAgo: ({ time }: { time: string }) => `${time}に作成`,
         tabs: {
             active: 'アクティブ',
             inactive: '非アクティブ',

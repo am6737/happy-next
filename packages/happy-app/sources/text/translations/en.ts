@@ -764,6 +764,8 @@ export const en: TranslationStructure = {
     },
 
     session: {
+        noMessagesYet: 'No messages yet',
+        createdAgo: ({ time }: { time: string }) => `Created ${time}`,
         tabs: {
             active: 'Active',
             inactive: 'Inactive',

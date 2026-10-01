@@ -750,6 +750,8 @@ export const zhHant: TranslationStructure = {
     },
 
     session: {
+        noMessagesYet: '暫無訊息',
+        createdAgo: ({ time }: { time: string }) => `建立於${time}`,
         tabs: {
             active: '活躍',
             inactive: '非活躍',
