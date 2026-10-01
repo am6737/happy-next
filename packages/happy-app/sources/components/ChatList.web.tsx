@@ -136,7 +136,7 @@ export interface ForkMessageRequest {
 // A loaded user message paired with its index in the newest-first `listedMessages`.
 type LoadedUserMessage = { message: UserTextMessage; index: number };
 
-export const ChatList = React.memo((props: { session: Session; onFillInput?: (text: string, allOptions?: string[]) => void; onLoadMore?: () => void; onForkMessage?: (request: ForkMessageRequest) => void; forkingMessageId?: string | null; minimapCachedUserMessages?: MinimapMessage[]; onMinimapItemsChange?: (items: ConversationMinimapItem[]) => void; onActiveMessageIdChange?: (id: string | null) => void; onRegisterMinimapJump?: (jump: ((message: MinimapMessage) => void) | null) => void }) => {
+export const ChatList = React.memo((props: { session: Session; onFillInput?: (text: string, allOptions?: string[]) => void; onLoadMore?: () => void; onForkMessage?: (request: ForkMessageRequest) => void; forkingMessageId?: string | null; minimapCachedUserMessages?: MinimapMessage[]; onMinimapItemsChange?: (items: ConversationMinimapItem[]) => void; onActiveMessageIdChange?: (id: string | null) => void; onRegisterMinimapJump?: (jump: ((message: MinimapMessage) => void) | null) => void; emptyComponent?: React.ReactElement | null }) => {
     const { messages, hasMore } = useSessionMessages(props.session.id);
     const profile = useProfile();
     const isSharedSession = !!(props.session.isShared || props.session.accessLevel);
@@ -159,6 +159,7 @@ export const ChatList = React.memo((props: { session: Session; onFillInput?: (te
             onMinimapItemsChange={props.onMinimapItemsChange}
             onActiveMessageIdChange={props.onActiveMessageIdChange}
             onRegisterMinimapJump={props.onRegisterMinimapJump}
+            emptyComponent={props.emptyComponent}
         />
     )
 });
@@ -511,6 +512,8 @@ const ChatListInternal = React.memo((props: {
     /** The landmark the rail should mark as the reader's — see `currentLandmark`. */
     onActiveMessageIdChange?: (id: string | null) => void,
     onRegisterMinimapJump?: (jump: ((message: MinimapMessage) => void) | null) => void,
+    /** Shown in place of the list while there are no rows (loading, or a session with no messages). */
+    emptyComponent?: React.ReactElement | null,
 }) => {
     const { theme } = useUnistyles();
     const showThinkingMessages = useSetting('showThinkingMessages');
@@ -2254,13 +2257,13 @@ const ChatListInternal = React.memo((props: {
     return (
         <View style={{ flex: 1 }}>
             {listedMessages.length === 0 ? (
-                // No rows to render yet — show the paging spinner centered (the
-                // session-level first-load spinner lives in SessionView).
+                // No rows to render yet — show the caller's empty state (first-load spinner or the
+                // "no messages" placeholder), else the paging spinner, centered.
                 <View style={{ flex: 1 }}>
-                    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-                        {props.hasMore && (
+                    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: headerInsetPx }}>
+                        {props.emptyComponent ?? (props.hasMore && (
                             <ActivityIndicator size="small" color={theme.colors.textSecondary} />
-                        )}
+                        ))}
                     </View>
                     <ListFooter sessionId={props.sessionId} />
                 </View>
