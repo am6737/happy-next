@@ -2,7 +2,7 @@ import React, { useCallback } from 'react';
 import { View, Text, Animated, Pressable, Platform } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
-import { Ionicons, AntDesign, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons, AntDesign, MaterialCommunityIcons, FontAwesome6 } from '@expo/vector-icons';
 import { Typography } from '@/constants/Typography';
 import { Item } from '@/components/Item';
 import { ItemGroup } from '@/components/ItemGroup';
@@ -25,6 +25,7 @@ import { ActionMenuModal } from '@/components/ActionMenuModal';
 import { ActionMenuItem } from '@/components/ActionMenu';
 import { buildReviewPrompt } from '@/utils/reviewPrompt';
 import { sync } from '@/sync/sync';
+import { openSessionTerminal } from '@/terminal/openSessionTerminal';
 import { useUnistyles } from 'react-native-unistyles';
 import { layout } from '@/components/layout';
 import { t } from '@/text';
@@ -134,6 +135,12 @@ function SessionInfoContent({ session }: { session: Session }) {
         if (path) params.set('path', path);
         const query = params.toString();
         router.push(query ? `/new?${query}` : '/new');
+    }, [router, session.metadata?.machineId, session.metadata?.path]);
+
+    const handleOpenTerminal = useCallback(() => {
+        const machineId = session.metadata?.machineId;
+        if (!machineId) return;
+        openSessionTerminal({ machineId, sessionPath: session.metadata?.path, push: router.push });
     }, [router, session.metadata?.machineId, session.metadata?.path]);
 
     const handleOpenOrchestratorRuns = useCallback(() => {
@@ -984,6 +991,14 @@ function SessionInfoContent({ session }: { session: Session }) {
                             subtitle={t('sessionInfo.newSessionSubtitle')}
                             icon={<Ionicons name="add-circle-outline" size={29} color="#007AFF" />}
                             onPress={handleNewSession}
+                        />
+                    )}
+                    {isOwner && session.metadata?.machineId && (
+                        <Item
+                            title={t('sessionInfo.openTerminal')}
+                            subtitle={t('sessionInfo.openTerminalSubtitle')}
+                            icon={<FontAwesome6 name="terminal" size={23} color="#007AFF" />}
+                            onPress={handleOpenTerminal}
                         />
                     )}
                     {hasOrchestratorRuns && (

@@ -32,8 +32,7 @@ import { getWorkspaceRepos } from '@/utils/workspaceRepos';
 import { ActionMenuModal } from './ActionMenuModal';
 import { ActionMenuItem } from './ActionMenu';
 import { getSessionQuickActionKinds, getSessionQuickActionSections, SessionQuickActionKind } from './sessionQuickActions';
-import { resolveTerminalDirectory, spawnTerminal } from '@/terminal/openTerminal';
-import { isTauriDesktop } from '@/utils/tauri';
+import { openSessionTerminal } from '@/terminal/openSessionTerminal';
 import { SessionContextMenuPortal } from './SessionContextMenuPortal';
 import { SESSION_MARKER_COLOR_VALUES, SessionColorPalette, sessionMarkerColorLabels } from './SessionColorMarker';
 import { SESSION_MARKER_COLORS, type SessionMarkerColor } from '@/sync/sessionAppearance';
@@ -43,7 +42,6 @@ import { shouldDismissSessionMenuOnScroll, ScrollTarget } from './sessionContext
 import { getDesktopPlatform } from '@/desktop/desktopWindowUtils';
 import { getRevealLabelKey, revealItemInFileManager } from '@/desktop/desktopReveal';
 import { useLocalMachineIds } from '@/desktop/desktopLocalMachine';
-import { openDesktopTerminalWindow } from '@/desktop/desktopWindowUtils';
 import { ContextMenuView, nativeContextMenuAvailable, type ContextMenuSection } from './ContextMenuView';
 
 type MenuPosition = { x: number; y: number };
@@ -217,30 +215,7 @@ function useSessionQuickActions(session: Session) {
     const handleOpenTerminal = React.useCallback(() => {
         const machineId = session.metadata?.machineId;
         if (!machineId) return;
-        // The session's checkout is the directory someone wants a shell in; a session that has
-        // not been given one yet still deserves a terminal, so fall back to the machine's home.
-        const homeDir = storage.getState().machines[machineId]?.metadata?.homeDir;
-        const cwd = resolveTerminalDirectory({ sessionPath: session.metadata?.path, homeDir });
-        void (async () => {
-            try {
-                // A second shell rather than the one already in that directory:
-                // asking for a terminal is asking for a prompt, and being handed
-                // the shell that is already open — perhaps in a window that is
-                // already showing it — reads as the command having done nothing.
-                const terminal = await spawnTerminal({ machineId, cwd });
-                // On the desktop the terminals get their own window — they are a
-                // place you go and stay, not a page inside the session list. Any-
-                // where without windows, the workspace is an ordinary screen.
-                if (isTauriDesktop()) {
-                    await openDesktopTerminalWindow({ machineId, terminalId: terminal.id });
-                    return;
-                }
-                router.push(`/terminals?machineId=${machineId}&terminalId=${terminal.id}`);
-            } catch (error) {
-                console.warn('Failed to open a terminal:', error);
-                showToast(t('terminalSession.openFailed'));
-            }
-        })();
+        openSessionTerminal({ machineId, sessionPath: session.metadata?.path, push: router.push });
     }, [router, session.metadata?.machineId, session.metadata?.path]);
 
     const handleArchive = React.useCallback(() => {
