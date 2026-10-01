@@ -185,7 +185,14 @@ export const TerminalScreen = memo(({ machineId, terminalId, status, onTitle, on
     const handlePhysicalKey = useCallback((event: { key: string; ctrlKey?: boolean; metaKey?: boolean; altKey?: boolean; shiftKey?: boolean }) => {
         const stream = streamRef.current;
         if (!stream || event.key.length !== 1) return;
-        if (event.ctrlKey || event.metaKey || event.altKey) {
+        // Command is not a terminal modifier: there is no byte for it, so encoding the chord
+        // would send the bare letter — Cmd+V typing a `v` ahead of the paste. Leave it to the
+        // system, which delivers the pasted text through the input's own change event.
+        if (event.metaKey && !event.ctrlKey && !event.altKey) {
+            physicalKeyRef.current = null;
+            return;
+        }
+        if (event.ctrlKey || event.altKey) {
             stream.write(encodeTerminalKeyInput({ key: event.key, ctrl: event.ctrlKey, meta: event.metaKey, alt: event.altKey, shift: event.shiftKey }, { inputMode: stream.getInputMode() }));
             physicalKeyRef.current = event.key;
             return;
