@@ -157,7 +157,8 @@ describe('desktop security configuration', () => {
         expect(iosSubmit).toContain('SUBMIT-IOS');
         expect(iosSubmit).toContain('happy-next-${RELEASE_TAG}-ios.ipa');
         expect(iosSubmit).toContain('gh release download "$RELEASE_TAG"');
-        expect(iosSubmit).toContain('eas submit');
+        expect(iosSubmit).toContain('xcrun altool --upload-app');
+        expect(iosSubmit).not.toContain('eas submit');
         expect(iosSubmit).not.toContain('eas build --local');
     });
 });
