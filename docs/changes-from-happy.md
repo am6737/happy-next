@@ -407,6 +407,7 @@ The CLI (`happy-next-cli`) received substantial upgrades.
 - **Codex model lineup**: GPT-6-Astra gains its `ultra` effort, and the families OpenAI retired from Codex (GPT-5.4, GPT-5.4-Mini, GPT-5.2) are no longer offered; a session saved on one of them keeps the model and effort it was created with, resolved from a retired-mode table rather than passed through as a model name
 
 - **Happy CLI v0.10.0 with Codex v0.159.1**: follows the server's model catalog and drops the deprecated OpenClaw integration
+- **Codex v0.159.3 and archiving**: new Codex sessions start on Codex v0.159.3, and archiving a Codex session goes through the running app-server daemon
 
 ## Server
 
@@ -443,6 +444,11 @@ The CLI (`happy-next-cli`) received substantial upgrades.
 - **Soft header everywhere**: every screen sits under the soft scroll-edge header, with connection status in its subtitle
 - **Pressed-row highlight**: session rows, task cards, and GitHub rows highlight when pressed, like the other lists
 - **Terminal entry and preview titles**: terminals open from the Features group in Settings, and the HTML preview takes the page's own title
+- **Terminal quick action**: a terminal also opens from the quick actions in a session's details
+- **Terminals on the web**: terminals are drawn with xterm.js, keeping CJK text, spaces and styled runs on their cells; desktop browsers open them in a popup window, and recently shown terminals stay mounted while hidden
+- **Terminal input**: the cursor is drawn hollow while the input is unfocused, and a Command chord no longer types its letter
+- **Empty-session placeholder**: the placeholder shows on web and desktop and is localized in every language, including DooTask's empty chat
+- **Small layout fixes**: the iOS new session card spacing is even, and the DooTask error banner floats above the tab bar
 
 ## Bug Fixes & Stability
 

@@ -1,5 +1,19 @@
 # Changelog
 
+## Version 28 - 2026-10-01
+
+Happy Next v2.13.1 brings the terminal to the web and the session details — drawn with xterm.js, openable in a popup window on desktop browsers and kept alive while hidden — and shows the empty-session placeholder everywhere. New Codex sessions start on Codex v0.159.3.
+
+- Terminal: open a terminal from the quick actions in a session's details
+- Terminal: draw the terminal with xterm.js on the web, keeping CJK text, spaces and styled runs on their cells
+- Terminal: open terminals in a popup window in desktop browsers, and keep recently shown terminals mounted while hidden
+- Terminal: draw the cursor hollow when the input is unfocused, and stop typing the letter when a Command chord is pressed
+- Sessions: show the empty-session placeholder on web and desktop, localized in every language, including DooTask's empty chat
+- Sessions: even out the spacing of the new session card on iOS
+- DooTask: float the error banner above the tab bar
+- CLI: archive Codex sessions through the running app-server daemon
+- Codex: new Codex sessions start on Codex v0.159.3
+
 ## Version 27 - 2026-09-29
 
 Happy Next v2.13.0 gives iOS 26 its native look — Liquid Glass buttons, menus and sheets, a soft header across the app, and a floating composer docked to the keyboard — and moves the chat onto a faster native list. Models now arrive from the server without an app update, adding Claude Opus 5.5, Sonnet 5.5 and the GPT-6 family, and Happy CLI is updated to v0.10.0 with Codex v0.159.1.

@@ -300,6 +300,7 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - The Codex model list gains GPT-6-Astra's Ultra effort and drops the models OpenAI retired (GPT-5.4, GPT-5.4-Mini, GPT-5.2), while a session already running on a retired model keeps the model and effort it was created with
 
 - Happy CLI v0.10.0 bundles Codex v0.159.1, follows the server's model catalog, and drops the deprecated OpenClaw integration
+- New Codex sessions start on Codex v0.159.3, and archiving a Codex session goes through the running app-server daemon
 
 ### Bug Fixes & Stability
 - 255+ bug fixes: message sending reliability, session lifecycle, Markdown rendering, navigation, voice, DooTask, sharing
@@ -332,6 +333,8 @@ Full changelog: [docs/changes-from-happy.md](docs/changes-from-happy.md)
 - iOS 26: floating buttons, the action menu, and bottom sheets use Liquid Glass; header, row, long-press, picker, filter, and attachment menus open as native iOS menus; and every screen sits under the soft scroll-edge header with connection status in its subtitle
 - Pressed session rows, task cards, and GitHub rows highlight like the other lists
 - Terminals open from the Features group in Settings, and the HTML preview takes the page's own title
+- Terminals also open from a session's quick actions, are drawn with xterm.js on the web with CJK text, spaces and styled runs kept on their cells, open in a popup window in desktop browsers, stay mounted while recently shown, and show a hollow cursor when unfocused
+- The empty-session placeholder shows on web and desktop in every language, the iOS new session card spacing is even, and the DooTask error banner floats above the tab bar
 
 ## 📦 Project Components
 
