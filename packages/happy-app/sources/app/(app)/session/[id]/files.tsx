@@ -21,6 +21,9 @@ import { ActionMenuItem } from '@/components/ActionMenu';
 import { shellEscape } from '@/utils/shellEscape';
 import { getWorkspaceRepos } from '@/utils/workspaceRepos';
 import { RepoSelector } from '@/components/RepoSelector';
+import { softHeaderOptions, useSoftHeaderInset } from '@/components/navigation/softHeader';
+import { isRunningOnMac } from '@/utils/platform';
+import { actionMenuSection, ContextMenuView, nativeContextMenuAvailable } from '@/components/ContextMenuView';
 
 export default function FilesScreen() {
     const route = useRoute();
@@ -31,6 +34,8 @@ export default function FilesScreen() {
     const [isLoading, setIsLoading] = React.useState(true);
     const [searchQuery, setSearchQuery] = React.useState('');
     const { theme } = useUnistyles();
+    const softHeaderInset = useSoftHeaderInset();
+    const useNativeSoftHeader = Platform.OS === 'ios' && !isRunningOnMac();
     const isWeb = Platform.OS === 'web';
 
     const session = useSession(sessionId);
@@ -209,7 +214,7 @@ export default function FilesScreen() {
     }, [selectedRepoIndex]);
 
     // Long press menu
-    const handleLongPress = React.useCallback((file: GitFileStatus, staged: boolean) => {
+    const fileMenuItems = React.useCallback((file: GitFileStatus, staged: boolean): ActionMenuItem[] => {
         const items: ActionMenuItem[] = [];
         if (staged) {
             items.push({
@@ -227,9 +232,22 @@ export default function FilesScreen() {
             onPress: () => handleDiscardFile(file),
             destructive: true,
         });
-        setMenuItems(items);
-        setMenuVisible(true);
+        return items;
     }, [handleStageFile, handleUnstageFile, handleDiscardFile]);
+
+    const handleLongPress = React.useCallback((file: GitFileStatus, staged: boolean) => {
+        setMenuItems(fileMenuItems(file, staged));
+        setMenuVisible(true);
+    }, [fileMenuItems]);
+
+    // On iOS a file row's actions are its native context menu; elsewhere a long press opens the sheet.
+    const withFileMenu = (file: GitFileStatus, staged: boolean, row: React.ReactElement) => (
+        nativeContextMenuAvailable ? (
+            <ContextMenuView key={row.key} sections={[actionMenuSection(fileMenuItems(file, staged))]}>
+                {row}
+            </ContextMenuView>
+        ) : row
+    );
 
     // Load on mount and when repo selection changes
     React.useEffect(() => {
@@ -269,7 +287,9 @@ export default function FilesScreen() {
             ? `${repoBaseCwd}/${file.fullPath}`
             : file.fullPath;
         const encodedPath = btoa(new TextEncoder().encode(absolutePath).reduce((s, b) => s + String.fromCharCode(b), ''));
-        const stagedParam = staged ? '&staged=1' : '';
+        // The staged section already knows the version, so the header subtitle starts out filled
+        // instead of waiting for the preview RPC to report it.
+        const stagedParam = staged ? `&staged=1&note=${encodeURIComponent(t('files.preview.index'))}` : '';
         router.push(`/session/${sessionId}/file?path=${encodeURIComponent(encodedPath)}${stagedParam}&view=diff`);
     }, [router, sessionId, selectedRepo, repoBaseCwd]);
 
@@ -376,21 +396,8 @@ export default function FilesScreen() {
         );
     }
 
-    return (
-        <View style={[styles.container, { backgroundColor: theme.colors.surface }]}>
-            <Stack.Screen
-                options={{
-                    headerRight: () => (
-                        <Pressable
-                            onPress={() => router.push(`/session/${sessionId}/commits`)}
-                            style={{ width: 38, height: 38, alignItems: 'center', justifyContent: 'center' }}
-                        >
-                            <Octicons name="git-commit" size={20} color={theme.colors.header.tint} />
-                        </Pressable>
-                    ),
-                }}
-            />
-
+    const fixedHeader = (
+        <>
             {/* Repo Selector for multi-repo workspaces */}
             {workspaceRepos.length > 1 && (
                 <View style={{
@@ -415,7 +422,9 @@ export default function FilesScreen() {
                     <View style={{
                         flexDirection: 'row',
                         alignItems: 'center',
-                        backgroundColor: theme.colors.input.background,
+                        // In the list (iOS) it sits on the grouped background, which the input colour
+                        // barely differs from; it takes the cards' colour there instead.
+                        backgroundColor: useNativeSoftHeader ? theme.colors.surface : theme.colors.input.background,
                         borderRadius: 10,
                         paddingHorizontal: 12,
                         paddingVertical: 8
@@ -472,8 +481,32 @@ export default function FilesScreen() {
                 </View>
             )}
 
+        </>
+    );
+
+    return (
+        <View style={[styles.container, { backgroundColor: theme.colors.surface, paddingTop: useNativeSoftHeader ? 0 : softHeaderInset }]}>
+            <Stack.Screen
+                options={{
+                    ...softHeaderOptions,
+                    headerRight: () => (
+                        <Pressable
+                            onPress={() => router.push(`/session/${sessionId}/commits`)}
+                            style={{ width: 38, height: 38, alignItems: 'center', justifyContent: 'center' }}
+                        >
+                            <Octicons name="git-commit" size={20} color={theme.colors.header.tint} />
+                        </Pressable>
+                    ),
+                }}
+            />
+
+            {!useNativeSoftHeader && fixedHeader}
+
             {/* Git Status List */}
             <ItemList style={{ flex: 1 }}>
+                {/* Under the see-through iOS header the bar scrolls with the list: pinned, it would
+                    hide the list behind an opaque band right under the header's soft edge. */}
+                {useNativeSoftHeader && fixedHeader}
                 {isLoading ? (
                     <View style={{
                         flex: 1,
@@ -607,17 +640,17 @@ export default function FilesScreen() {
                                     )}
                                 </Pressable>
                                 {stagedFiles.map((file, index) => (
-                                    <Item
+                                    withFileMenu(file, true, <Item
                                         key={`staged-${file.fullPath}-${index}`}
                                         title={file.fileName}
                                         subtitle={renderFileSubtitle(file)}
                                         icon={renderFileIcon(file)}
                                         rightElement={renderRightElement(file, true)}
                                         onPress={() => handleFilePress(file, true)}
-                                        onLongPress={() => handleLongPress(file, true)}
+                                        onLongPress={nativeContextMenuAvailable ? undefined : () => handleLongPress(file, true)}
                                         showChevron={true}
                                         showDivider={index < stagedFiles.length - 1 || unstagedFiles.length > 0}
-                                    />
+                                    />)
                                 ))}
                             </>
                         )}
@@ -660,17 +693,17 @@ export default function FilesScreen() {
                                     )}
                                 </Pressable>
                                 {unstagedFiles.map((file, index) => (
-                                    <Item
+                                    withFileMenu(file, false, <Item
                                         key={`unstaged-${file.fullPath}-${index}`}
                                         title={file.fileName}
                                         subtitle={renderFileSubtitle(file)}
                                         icon={renderFileIcon(file)}
                                         rightElement={renderRightElement(file, false)}
                                         onPress={() => handleFilePress(file)}
-                                        onLongPress={() => handleLongPress(file, false)}
+                                        onLongPress={nativeContextMenuAvailable ? undefined : () => handleLongPress(file, false)}
                                         showChevron={true}
                                         showDivider={index < unstagedFiles.length - 1}
-                                    />
+                                    />)
                                 ))}
                             </>
                         )}

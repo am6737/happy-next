@@ -3,6 +3,7 @@ import { Pressable, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { t } from '@/text';
+import { liquidGlassAvailable } from './GlassSurface';
 import { SESSION_MARKER_COLORS, type SessionMarkerColor } from '@/sync/sessionAppearance';
 import { useSessionMarkerColor } from '@/sync/storage';
 
@@ -17,12 +18,14 @@ export const SESSION_MARKER_COLOR_VALUES: Record<SessionMarkerColor, string> = {
 };
 
 const styles = StyleSheet.create((theme) => ({
-    marker: {
-        width: 8,
-        height: 8,
-        borderRadius: 4,
-        marginLeft: 7,
-        flexShrink: 0,
+    // The marker as a bar down the row's leading edge. Full row height, so the parent must clip
+    // it (`overflow: 'hidden'`) if the row has rounded corners.
+    markerBar: {
+        position: 'absolute',
+        left: 0,
+        top: 0,
+        bottom: 0,
+        width: 4,
     },
     paletteSection: {
         height: 64,
@@ -65,7 +68,7 @@ const styles = StyleSheet.create((theme) => ({
     },
 }));
 
-const colorLabels: Record<SessionMarkerColor, () => string> = {
+export const sessionMarkerColorLabels: Record<SessionMarkerColor, () => string> = {
     red: () => t('sessionInfo.markerRed'),
     orange: () => t('sessionInfo.markerOrange'),
     yellow: () => t('sessionInfo.markerYellow'),
@@ -75,18 +78,22 @@ const colorLabels: Record<SessionMarkerColor, () => string> = {
     gray: () => t('sessionInfo.markerGray'),
 };
 
-export function SessionColorMarker({ color }: { color: SessionMarkerColor | null }) {
+/**
+ * The marker as a bar down the row's leading edge — how every session row draws it.
+ *
+ * A bar is out of flow, so "no marker" needs no placeholder and nothing moves when one is added
+ * or removed. It also holds still: a trailing dot rides the end of a `flex: 1` title, so its
+ * horizontal position drifts with the title's length and a column of them can't be scanned.
+ */
+export function SessionMarkerBar({ sessionId }: { sessionId: string }) {
+    const color = useSessionMarkerColor(sessionId);
     if (!color) return null;
     return (
         <View
-            style={[styles.marker, { backgroundColor: SESSION_MARKER_COLOR_VALUES[color] }]}
-            accessibilityLabel={colorLabels[color]()}
+            pointerEvents="none"
+            style={[styles.markerBar, { backgroundColor: SESSION_MARKER_COLOR_VALUES[color] }]}
         />
     );
-}
-
-export function SessionColorMarkerForSession({ sessionId }: { sessionId: string }) {
-    return <SessionColorMarker color={useSessionMarkerColor(sessionId)} />;
 }
 
 export function SessionColorPalette({
@@ -111,14 +118,15 @@ export function SessionColorPalette({
                         <Pressable
                             key={color}
                             accessibilityRole="button"
-                            accessibilityLabel={colorLabels[color]()}
+                            accessibilityLabel={sessionMarkerColorLabels[color]()}
                             accessibilityHint={selected ? t('sessionInfo.clearColorMarker') : undefined}
                             accessibilityState={{ selected }}
                             onPress={() => onSelect(selected ? null : color)}
                             style={({ pressed }) => [
                                 styles.swatchButton,
                                 compact && { width: 26, height: 26 },
-                                pressed && { backgroundColor: theme.colors.surfacePressed },
+                                // On iOS 26 it sits on the glass action menu, which a solid highlight would cover.
+                                pressed && { backgroundColor: liquidGlassAvailable ? theme.colors.surfaceRipple : theme.colors.surfacePressed },
                             ]}
                         >
                             <View

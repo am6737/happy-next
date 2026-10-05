@@ -21,6 +21,7 @@ import type { PermissionMode } from "@/api/types";
 import type { QueueMessageContent } from "./runClaude";
 import { buildClaudeSlashCommandMetadata } from "./utils/slashCommandMetadata";
 import { enhancedModeRestartHash } from "./utils/enhancedModeHash";
+import { inlinePreviewHtmlFileArgs } from "@/utils/previewHtmlFile";
 
 interface PermissionsField {
     date: number;
@@ -370,6 +371,25 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
                             return c;
                         })
                     }
+                }
+            }
+        }
+
+        // Inline preview_html documents that were passed as a file path, so the client receives
+        // the document itself instead of a path it has no way to read.
+        if (msg.type === 'assistant') {
+            const amessage = msg as SDKAssistantMessage;
+            if (Array.isArray(amessage.message.content)) {
+                let inlined = false;
+                const content = amessage.message.content.map((c) => {
+                    if (c.type !== 'tool_use') return c;
+                    const input = inlinePreviewHtmlFileArgs(c.name, c.input as Record<string, unknown> | undefined);
+                    if (input === c.input) return c;
+                    inlined = true;
+                    return { ...c, input };
+                });
+                if (inlined) {
+                    msg = { ...amessage, message: { ...amessage.message, content } };
                 }
             }
         }

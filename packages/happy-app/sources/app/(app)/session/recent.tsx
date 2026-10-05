@@ -8,6 +8,8 @@ import { Avatar } from '@/components/Avatar';
 import { generateCopyTitle, getSessionName, getSessionSubtitle, getSessionAvatarId, useSessionStatus, copySessionMetadata, copySessionModeSettings } from '@/utils/sessionUtils';
 import { StatusDot } from '@/components/StatusDot';
 import { ActionMenuModal } from '@/components/ActionMenuModal';
+import type { ActionMenuItem } from '@/components/ActionMenu';
+import { NativeMenu } from '@/components/NativeMenu';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { Typography } from '@/constants/Typography';
@@ -195,6 +197,10 @@ const styles = StyleSheet.create((theme) => ({
         paddingTop: 6,
         paddingBottom: 4,
         gap: 8,
+    },
+    filterSlot: {
+        flex: 1,
+        height: 36,
     },
     filterTrigger: {
         flex: 1,
@@ -586,6 +592,25 @@ function SessionHistory() {
         return `item-${index}`;
     }, []);
     
+    const machineMenuItems = React.useMemo<ActionMenuItem[]>(() => [
+        {
+            label: t('sessionHistory.allDevices'),
+            selected: selectedMachineId === null,
+            onPress: () => setSelectedMachineId(null),
+        },
+        ...machines.map((machine) => ({
+            label: machine.metadata?.displayName || machine.metadata?.host || 'Unknown',
+            selected: machine.id === selectedMachineId,
+            onPress: () => setSelectedMachineId(machine.id),
+        })),
+    ], [machines, selectedMachineId]);
+
+    const agentMenuItems = React.useMemo<ActionMenuItem[]>(() => AGENT_FILTERS.map((filter) => ({
+        label: filter.label(),
+        selected: selectedAgent === filter.key,
+        onPress: () => setSelectedAgent(filter.key),
+    })), [selectedAgent]);
+
     const searchHeader = React.useMemo(() => (
         <View>
             <View style={styles.searchContainer}>
@@ -608,41 +633,47 @@ function SessionHistory() {
                 </View>
             </View>
             <View style={styles.filterRow}>
-                <Pressable
-                    style={styles.filterTrigger}
-                    onPress={() => setMachineMenuVisible(true)}
+                <NativeMenu
+                    items={machineMenuItems}
+                    style={styles.filterSlot}
+                    onFallbackOpen={() => setMachineMenuVisible(true)}
                 >
-                    <Ionicons name="desktop-outline" size={16} color={theme.colors.textSecondary} style={{ marginRight: 6 }} />
-                    <Text style={styles.filterTriggerText} numberOfLines={1}>
-                        {selectedMachine
-                            ? (selectedMachine.metadata?.displayName || selectedMachine.metadata?.host || 'Unknown')
-                            : t('sessionHistory.allDevices')}
-                    </Text>
-                    <Ionicons name="chevron-down" size={14} color={theme.colors.textSecondary} />
-                </Pressable>
+                    <View style={styles.filterTrigger}>
+                        <Ionicons name="desktop-outline" size={16} color={theme.colors.textSecondary} style={{ marginRight: 6 }} />
+                        <Text style={styles.filterTriggerText} numberOfLines={1}>
+                            {selectedMachine
+                                ? (selectedMachine.metadata?.displayName || selectedMachine.metadata?.host || 'Unknown')
+                                : t('sessionHistory.allDevices')}
+                        </Text>
+                        <Ionicons name="chevron-down" size={14} color={theme.colors.textSecondary} />
+                    </View>
+                </NativeMenu>
 
-                <Pressable
-                    style={styles.filterTrigger}
-                    onPress={() => setAgentMenuVisible(true)}
+                <NativeMenu
+                    items={agentMenuItems}
+                    style={styles.filterSlot}
+                    onFallbackOpen={() => setAgentMenuVisible(true)}
                 >
-                    {selectedAgent !== 'all' ? (
-                        <Image
-                            source={agentIcons[selectedAgent]}
-                            style={{ width: 16, height: 16, marginRight: 6 }}
-                            contentFit="contain"
-                            tintColor={selectedAgent === 'codex' ? theme.colors.text : undefined}
-                        />
-                    ) : (
-                        <Ionicons name="grid-outline" size={16} color={theme.colors.textSecondary} style={{ marginRight: 6 }} />
-                    )}
-                    <Text style={styles.filterTriggerText} numberOfLines={1}>
-                        {AGENT_FILTERS.find(f => f.key === selectedAgent)?.label() || selectedAgent}
-                    </Text>
-                    <Ionicons name="chevron-down" size={14} color={theme.colors.textSecondary} />
-                </Pressable>
+                    <View style={styles.filterTrigger}>
+                        {selectedAgent !== 'all' ? (
+                            <Image
+                                source={agentIcons[selectedAgent]}
+                                style={{ width: 16, height: 16, marginRight: 6 }}
+                                contentFit="contain"
+                                tintColor={selectedAgent === 'codex' ? theme.colors.text : undefined}
+                            />
+                        ) : (
+                            <Ionicons name="grid-outline" size={16} color={theme.colors.textSecondary} style={{ marginRight: 6 }} />
+                        )}
+                        <Text style={styles.filterTriggerText} numberOfLines={1}>
+                            {AGENT_FILTERS.find(f => f.key === selectedAgent)?.label() || selectedAgent}
+                        </Text>
+                        <Ionicons name="chevron-down" size={14} color={theme.colors.textSecondary} />
+                    </View>
+                </NativeMenu>
             </View>
         </View>
-    ), [searchQuery, theme, selectedMachine, selectedAgent]);
+    ), [searchQuery, theme, selectedMachine, selectedAgent, machineMenuItems, agentMenuItems]);
 
     if (!allSessions) {
         return (
@@ -656,6 +687,7 @@ function SessionHistory() {
         allSessions.length > 0 ? (
             <FlatList
                 data={[]}
+                contentInsetAdjustmentBehavior="automatic"
                 renderItem={() => null}
                 ListHeaderComponent={searchHeader}
                 ListEmptyComponent={
@@ -684,6 +716,7 @@ function SessionHistory() {
     ) : (
         <FlatList
             data={groupedItems}
+            contentInsetAdjustmentBehavior="automatic"
             renderItem={renderItem}
             keyExtractor={keyExtractor}
             ListHeaderComponent={searchHeader}
@@ -706,28 +739,13 @@ function SessionHistory() {
             <ActionMenuModal
                 visible={machineMenuVisible}
                 title={t('sessionHistory.allDevices')}
-                items={[
-                    {
-                        label: t('sessionHistory.allDevices'),
-                        selected: selectedMachineId === null,
-                        onPress: () => setSelectedMachineId(null),
-                    },
-                    ...machines.map((machine) => ({
-                        label: machine.metadata?.displayName || machine.metadata?.host || 'Unknown',
-                        selected: machine.id === selectedMachineId,
-                        onPress: () => setSelectedMachineId(machine.id),
-                    })),
-                ]}
+                items={machineMenuItems}
                 onClose={() => setMachineMenuVisible(false)}
             />
             <ActionMenuModal
                 visible={agentMenuVisible}
                 title={t('sessionHistory.allAgents')}
-                items={AGENT_FILTERS.map((filter) => ({
-                    label: filter.label(),
-                    selected: selectedAgent === filter.key,
-                    onPress: () => setSelectedAgent(filter.key),
-                }))}
+                items={agentMenuItems}
                 onClose={() => setAgentMenuVisible(false)}
             />
         </View>

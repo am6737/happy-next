@@ -12,9 +12,24 @@
  */
 
 import { spawn, execSync, type ChildProcess } from 'node:child_process';
+import { basename } from 'node:path';
 import { createInterface, type Interface as ReadlineInterface } from 'node:readline';
 import { logger } from '@/ui/logger';
 import { recordManagedProcess } from '@/daemon/sessionBinding';
+
+/**
+ * Package managers install the pinned package on first use, and an interrupted install leaves
+ * a broken npx cache entry behind that makes every later attempt fail. A spawn that is still
+ * installing therefore has to be spared when the peer gives up on it.
+ */
+const INSTALLING_COMMAND = /^(npx|npm)(\.cmd|\.exe)?$/;
+
+/** How long a spared install may keep running before the escape hatch fires. */
+const INSTALL_GRACE_MS = 5 * 60_000;
+
+/** stderr lines carried into error messages — enough to see what went wrong, never a wall of it. */
+const STDERR_TAIL_LINES = 5;
+const STDERR_TAIL_LINE_LENGTH = 300;
 
 export interface SpawnOptions {
   cwd: string;
@@ -42,6 +57,8 @@ export class CodexJsonRpcPeer {
   private closeHandler: (() => void) | null = null;
   private closed = false;
   private exited = false;
+  private mayInstall = false;
+  private handshakeAnswered = false;
   private exitPromise: Promise<number | null> | null = null;
   private stderrBuffer: string[] = [];
   private readonly MAX_STDERR_LINES = 100;
@@ -64,6 +81,8 @@ export class CodexJsonRpcPeer {
     };
 
     logger.debug(`[CodexRPC] Spawning: ${command} ${args.join(' ')} in ${opts.cwd}`);
+
+    this.mayInstall = INSTALLING_COMMAND.test(basename(command));
 
     this.process = spawn(command, args, {
       cwd: opts.cwd,
@@ -117,10 +136,7 @@ export class CodexJsonRpcPeer {
 
     this.readline.on('close', () => {
       logger.debug('[CodexRPC] stdout closed');
-      const stderrSuffix = this.stderrBuffer.length > 0
-        ? '. stderr:\n' + this.stderrBuffer.join('\n')
-        : '';
-      this.rejectAllPending(new Error(`Codex process stdout closed${stderrSuffix}`));
+      this.rejectAllPending(new Error(`Codex process stdout closed${this.stderrTail()}`));
       this.closeHandler?.();
     });
   }
@@ -138,7 +154,7 @@ export class CodexJsonRpcPeer {
     return new Promise<T>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pendingRequests.delete(id);
-        reject(new Error(`CodexJsonRpcPeer: '${method}' request timed out after ${timeoutMs}ms`));
+        reject(new Error(`CodexJsonRpcPeer: '${method}' request timed out after ${timeoutMs}ms${this.stderrTail()}`));
       }, timeoutMs);
 
       this.pendingRequests.set(id, {
@@ -232,10 +248,19 @@ export class CodexJsonRpcPeer {
     this.readline = null;
 
     const child = this.process;
+    this.process = null;
     const pid = child?.pid;
     if (pid && !this.exited) {
       // Close stdin first to signal the process
       child!.stdin?.end();
+
+      if (this.isInstalling()) {
+        // A cold Codex start spends its first minutes inside `npx` fetching the pinned
+        // version. Killing that install group corrupts the cache entry it is writing, so
+        // let it finish: once installed, the app-server reads stdin, sees EOF and exits by
+        // itself. The timer is the escape hatch for a process that never gets that far.
+        return this.deferInstallKill(child!, pid);
+      }
 
       // SIGTERM the entire process group (kills Codex + any bash children).
       const termResult = this.killProcessGroup(child!, pid, 'SIGTERM');
@@ -273,8 +298,6 @@ export class CodexJsonRpcPeer {
         logger.warn(`[CodexRPC] Process ${pid} did not confirm exit — may have leaked`);
       }
     }
-
-    this.process = null;
   }
 
   /**
@@ -292,6 +315,37 @@ export class CodexJsonRpcPeer {
   }
 
   // ─── Internal ──────────────────────────────────────────────────
+
+  /**
+   * An installing process that never answered `initialize` is a package manager fetching the
+   * pinned version, not a Codex we can talk to.
+   */
+  private isInstalling(): boolean {
+    return this.mayInstall && !this.handshakeAnswered;
+  }
+
+  /**
+   * Leave the install running and only kill it if it is still there after the grace period.
+   * The timer must not hold the process alive: if Happy exits first, its end of the stdin
+   * pipe closes and the freshly installed app-server exits on EOF.
+   */
+  private deferInstallKill(child: ChildProcess, pid: number): void {
+    logger.debug(`[CodexRPC] Letting npx install (pid ${pid}) finish; not killing the process group`);
+    const escape = setTimeout(() => {
+      if (this.exited) return;
+      logger.warn(`[CodexRPC] Process ${pid} still running after the install grace period, sending SIGKILL`);
+      this.killProcessGroup(child, pid, 'SIGKILL');
+    }, INSTALL_GRACE_MS);
+    escape.unref();
+  }
+
+  /** A quiet process is usually a download in progress; its stderr is the only clue the caller gets. */
+  private stderrTail(): string {
+    const tail = this.stderrBuffer
+      .slice(-STDERR_TAIL_LINES)
+      .map((line) => line.length > STDERR_TAIL_LINE_LENGTH ? `${line.slice(0, STDERR_TAIL_LINE_LENGTH)}...` : line);
+    return tail.length > 0 ? '. stderr:\n' + tail.join('\n') : '';
+  }
 
   private writeLine(json: string): void {
     try {
@@ -349,6 +403,10 @@ export class CodexJsonRpcPeer {
 
     this.pendingRequests.delete(id);
     clearTimeout(pending.timer);
+
+    if (pending.label === 'initialize') {
+      this.handshakeAnswered = true;
+    }
 
     if ('error' in msg && msg.error) {
       const err = msg.error as { code: number; message: string; data?: unknown };

@@ -136,7 +136,7 @@ describe('stop-based archive with Codex native synchronization', () => {
         current.active = false;
         current.metadata!.lifecycleState = 'archived';
         expect(canArchiveSession(current, false)).toBe(true);
-        expect(getSessionQuickActionKinds({ session: current, hasOrchestratorRuns: false, isConnected: false })).toContain('archiveSession');
+        expect(getSessionQuickActionKinds({ session: current, isConnected: false, isLocalMachine: false })).toContain('archiveSession');
 
         mocks.sessionRPC.mockRejectedValue(new Error('RPC method not available'));
         expect(await sessionArchive('s1')).toEqual({ success: true });

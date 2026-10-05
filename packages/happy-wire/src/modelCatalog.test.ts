@@ -1,5 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+    BUNDLED_MODEL_CATALOG,
+    getModelCatalog,
+    getModelFamilyOptions,
+    onModelCatalogChanged,
+    parseModelCatalog,
+    setModelCatalog,
     buildCodexModelMode,
     claudeAlways1M,
     claudeBaseFamily,
@@ -7,26 +13,28 @@ import {
     claudeHas1MOptIn,
     claudeSupportsFastMode,
     formatModelDisplay,
-    CODEX_MODEL_MODES,
-    GEMINI_MODEL_MODES,
     getClaudeReasoningOptions,
     getCodexReasoningOptions,
     getMaxContextSize,
+    getValidModelModesForAgent,
     isModelMode,
     isModelModeForAgent,
     MODEL_MODE_DEFAULT,
     parseCodexModelMode,
+    resolveLocalModelDisplay,
     resolveModelSelectionForFlavor,
 } from './modelCatalog';
 
 describe('modelCatalog', () => {
     it('validates model mode and flavor-specific mode', () => {
         expect(isModelMode('gpt-6-astra-max')).toBe(true);
+        expect(isModelMode('gpt-6-astra-ultra')).toBe(true);
         expect(isModelMode('gpt-5.6-sol-ultra')).toBe(true);
         expect(isModelMode('gpt-5.5-xhigh')).toBe(true);
         expect(isModelMode('unknown-model')).toBe(false);
 
         expect(isModelModeForAgent('codex', 'gpt-5.6-sol-ultra')).toBe(true);
+        expect(isModelModeForAgent('codex', 'gpt-6-astra-ultra')).toBe(true);
         expect(isModelModeForAgent('claude', 'claude-fable-5-1-max')).toBe(true);
         expect(isModelModeForAgent('gemini', 'gpt-5.6-sol-ultra')).toBe(false);
         expect(isModelModeForAgent('claude', 'claude-opus-4-6')).toBe(true);
@@ -41,8 +49,8 @@ describe('modelCatalog', () => {
     });
 
     it('parses codex model mode into family and effort', () => {
-        expect(parseCodexModelMode('gpt-5.2-medium')).toEqual({
-            family: 'gpt-5.2',
+        expect(parseCodexModelMode('gpt-5.5-medium')).toEqual({
+            family: 'gpt-5.5',
             effort: 'medium',
         });
         expect(parseCodexModelMode('claude-opus-4-6')).toEqual({
@@ -53,16 +61,17 @@ describe('modelCatalog', () => {
 
     it('builds codex model mode and default', () => {
         expect(buildCodexModelMode('gpt-6-astra', 'max')).toBe('gpt-6-astra-max');
-        expect(buildCodexModelMode('gpt-5.4-mini', 'low')).toBe('gpt-5.4-mini-low');
-        expect(buildCodexModelMode('gpt-5.4-mini', 'xhigh')).toBe('gpt-5.4-mini-xhigh');
+        expect(buildCodexModelMode('gpt-6-astra', 'ultra')).toBe('gpt-6-astra-ultra');
+        expect(buildCodexModelMode('gpt-5.6-luna', 'low')).toBe('gpt-5.6-luna-low');
+        expect(buildCodexModelMode('gpt-5.6-luna', 'xhigh')).toBe('gpt-5.6-luna-xhigh');
         expect(buildCodexModelMode('gpt-5.6-sol', 'ultra')).toBe('gpt-5.6-sol-ultra');
         expect(buildCodexModelMode('gpt-5.6-luna', 'max')).toBe('gpt-5.6-luna-max');
         expect(buildCodexModelMode(MODEL_MODE_DEFAULT, 'high')).toBe(MODEL_MODE_DEFAULT);
     });
 
     it('returns valid reasoning options per codex family', () => {
-        expect(getCodexReasoningOptions('gpt-6-astra')).toEqual(['max', 'xhigh', 'high', 'medium', 'low']);
-        expect(getCodexReasoningOptions('gpt-5.4-mini')).toEqual(['xhigh', 'high', 'medium', 'low']);
+        expect(getCodexReasoningOptions('gpt-6-astra')).toEqual(['ultra', 'max', 'xhigh', 'high', 'medium', 'low']);
+        expect(getCodexReasoningOptions('gpt-5.5')).toEqual(['xhigh', 'high', 'medium', 'low']);
         expect(getCodexReasoningOptions('gpt-5.6-sol')).toEqual(['ultra', 'max', 'xhigh', 'high', 'medium', 'low']);
         expect(getCodexReasoningOptions('gpt-5.6-terra')).toEqual(['ultra', 'max', 'xhigh', 'high', 'medium', 'low']);
         expect(getCodexReasoningOptions('gpt-5.6-luna')).toEqual(['max', 'xhigh', 'high', 'medium', 'low']);
@@ -146,19 +155,55 @@ describe('modelCatalog', () => {
     });
 
     it('keeps codex model list in catalog shape', () => {
-        expect(CODEX_MODEL_MODES[0]).toBe(MODEL_MODE_DEFAULT);
-        expect(CODEX_MODEL_MODES).toContain('gpt-6-astra-max');
-        expect(CODEX_MODEL_MODES).toContain('gpt-5.4-mini-high');
+        expect(getValidModelModesForAgent('codex')[0]).toBe(MODEL_MODE_DEFAULT);
+        expect(getValidModelModesForAgent('codex')).toContain('gpt-6-astra-max');
+        expect(getValidModelModesForAgent('codex')).toContain('gpt-6-astra-ultra');
+        expect(getValidModelModesForAgent('codex')).toContain('gpt-5.5-high');
+    });
+
+    it('drops retired codex families from the pickers but keeps old sessions resolving', () => {
+        // Retired from the pickers: no longer a valid mode, no longer offered.
+        expect(isModelMode('gpt-5.4-high')).toBe(false);
+        expect(isModelMode('gpt-5.4-mini-low')).toBe(false);
+        expect(isModelMode('gpt-5.2-xhigh')).toBe(false);
+        expect(isModelModeForAgent('codex', 'gpt-5.4-high')).toBe(false);
+        expect(getValidModelModesForAgent('codex')).not.toContain('gpt-5.4-high');
+        expect(getValidModelModesForAgent('codex')).not.toContain('gpt-5.4-mini-high');
+        expect(getValidModelModesForAgent('codex')).not.toContain('gpt-5.2-high');
+
+        // A session saved while they were current still runs on what it was created with —
+        // without the retired map the composite string would be sent as a model name.
+        expect(resolveModelSelectionForFlavor('codex', 'gpt-5.4-high')).toEqual({
+            model: 'gpt-5.4',
+            reasoningEffort: 'high',
+        });
+        expect(resolveModelSelectionForFlavor('codex', 'gpt-5.4-mini-xhigh')).toEqual({
+            model: 'gpt-5.4-mini',
+            reasoningEffort: 'xhigh',
+        });
+        expect(resolveLocalModelDisplay('gpt-5.2-medium')).toEqual({
+            model: 'gpt-5.2',
+            reasoningEffort: 'medium',
+        });
+        // The retired map is codex-only: another flavor still passes the raw id through.
+        expect(resolveModelSelectionForFlavor('claude', 'gpt-5.4-high')).toEqual({
+            model: 'gpt-5.4-high',
+            reasoningEffort: null,
+        });
+
+        // Retired families keep their label and context window so old sessions still render.
+        expect(formatModelDisplay('gpt-5.4', 'high')).toBe('GPT-5.4 (High)');
+        expect(getMaxContextSize('gpt-5.4-high', 'codex')).toBe(272_000);
     });
 
     it('keeps gemini free-tier fallback model in catalog', () => {
-        expect(GEMINI_MODEL_MODES[0]).toBe(MODEL_MODE_DEFAULT);
-        expect(GEMINI_MODEL_MODES).toContain('gemini-3.8-flash');
-        expect(GEMINI_MODEL_MODES).toContain('gemini-3.7-flash');
-        expect(GEMINI_MODEL_MODES).toContain('gemini-3.6-flash');
-        expect(GEMINI_MODEL_MODES).toContain('gemini-3.5-flash-lite');
-        expect(GEMINI_MODEL_MODES as readonly string[]).not.toContain('gemini-3.5-pro-preview');
-        expect(GEMINI_MODEL_MODES).toContain('gemini-2.5-flash-lite');
+        expect(getValidModelModesForAgent('gemini')[0]).toBe(MODEL_MODE_DEFAULT);
+        expect(getValidModelModesForAgent('gemini')).toContain('gemini-3.8-flash');
+        expect(getValidModelModesForAgent('gemini')).toContain('gemini-3.7-flash');
+        expect(getValidModelModesForAgent('gemini')).toContain('gemini-3.6-flash');
+        expect(getValidModelModesForAgent('gemini')).toContain('gemini-3.5-flash-lite');
+        expect(getValidModelModesForAgent('gemini')).not.toContain('gemini-3.5-pro-preview');
+        expect(getValidModelModesForAgent('gemini')).toContain('gemini-2.5-flash-lite');
     });
 
     it('resolves context windows for claude composite and fast model modes', () => {
@@ -211,5 +256,43 @@ describe('modelCatalog', () => {
         expect(getMaxContextSize('default', 'claude', 'claude-opus-4-7')).toBe(200_000);
         // Never shrinks an already-larger window.
         expect(getMaxContextSize('claude-opus-4-7[1m]', 'claude', undefined, 5_000)).toBe(1_000_000);
+    });
+});
+
+describe('runtime model catalog', () => {
+    const withOpus6 = {
+        ...BUNDLED_MODEL_CATALOG,
+        models: [
+            { ...BUNDLED_MODEL_CATALOG.models.find((model) => model.id === 'claude-opus-5')!, id: 'claude-opus-6', label: 'Opus 6', displayName: 'Claude Opus 6' },
+            ...BUNDLED_MODEL_CATALOG.models,
+        ],
+    };
+
+    afterEach(() => setModelCatalog(BUNDLED_MODEL_CATALOG));
+
+    it('serves lookups from the catalog set at runtime', () => {
+        expect(isModelMode('claude-opus-6-high')).toBe(false);
+        setModelCatalog(withOpus6);
+        expect(getModelCatalog()).toBe(withOpus6);
+        expect(isModelModeForAgent('claude', 'claude-opus-6-high')).toBe(true);
+        expect(resolveModelSelectionForFlavor('claude', 'claude-opus-6-max')).toEqual({ model: 'claude-opus-6', reasoningEffort: 'max' });
+        expect(getModelFamilyOptions('claude')[1]).toMatchObject({ value: 'claude-opus-6', label: 'Opus 6' });
+        expect(getMaxContextSize('claude-opus-6-high', 'claude')).toBe(1_000_000);
+        expect(formatModelDisplay('claude-opus-6', 'high')).toBe('Claude Opus 6 (High)');
+    });
+
+    it('notifies listeners only when the content changes', () => {
+        const listener = vi.fn();
+        const unsubscribe = onModelCatalogChanged(listener);
+        setModelCatalog(JSON.parse(JSON.stringify(BUNDLED_MODEL_CATALOG)));
+        expect(listener).not.toHaveBeenCalled();
+        setModelCatalog(withOpus6);
+        expect(listener).toHaveBeenCalledTimes(1);
+        unsubscribe();
+    });
+
+    it('rejects invalid payloads', () => {
+        expect(parseModelCatalog({ schemaVersion: 2 })).toBeNull();
+        expect(parseModelCatalog(JSON.parse(JSON.stringify(withOpus6)))).toEqual(withOpus6);
     });
 });

@@ -3,7 +3,9 @@ import { Item } from '@/components/Item';
 import { ItemGroup } from '@/components/ItemGroup';
 import { ItemList } from '@/components/ItemList';
 import { useSettingMutable, useLocalSettingMutable } from '@/sync/storage';
+import { useCompactSessionViewMutable } from '@/hooks/useCompactSessionView';
 import { useRouter } from 'expo-router';
+import { Platform } from 'react-native';
 import * as Localization from 'expo-localization';
 import { useUnistyles } from 'react-native-unistyles';
 import { Switch } from '@/components/Switch';
@@ -28,7 +30,8 @@ export default function AppearanceSettingsScreen() {
     const [avatarStyle, setAvatarStyle] = useSettingMutable('avatarStyle');
     const [showFlavorIcons, setShowFlavorIcons] = useSettingMutable('showFlavorIcons');
     const [showThinkingMessages, setShowThinkingMessages] = useSettingMutable('showThinkingMessages');
-    const [compactSessionView, setCompactSessionView] = useSettingMutable('compactSessionView');
+    const [foldTurnProcess, setFoldTurnProcess] = useSettingMutable('foldTurnProcess');
+    const [compactSessionView, setCompactSessionView] = useCompactSessionViewMutable();
     const [themePreference, setThemePreference] = useLocalSettingMutable('themePreference');
     const [preferredLanguage] = useSettingMutable('preferredLanguage');
     
@@ -146,6 +149,21 @@ export default function AppearanceSettingsScreen() {
                         />
                     }
                 />
+                {/* Folding reads the list's own layout model to hold the row that was tapped still,
+                    which the native list does not have. It is offered where it works. */}
+                {Platform.OS === 'web' && (
+                    <Item
+                        title={t('settingsAppearance.foldTurnProcess')}
+                        subtitle={t('settingsAppearance.foldTurnProcessDescription')}
+                        icon={<Ionicons name="chevron-collapse-outline" size={29} color="#5856D6" />}
+                        rightElement={
+                            <Switch
+                                value={foldTurnProcess}
+                                onValueChange={setFoldTurnProcess}
+                            />
+                        }
+                    />
+                )}
                 <Item
                     title={t('settingsAppearance.showLineNumbersInDiffs')}
                     subtitle={t('settingsAppearance.showLineNumbersInDiffsDescription')}

@@ -1031,6 +1031,30 @@ describe('Zod Transform - WOLOG Content Normalization', () => {
             }
         });
 
+        it('carries the compaction flag from a user record into its meta', () => {
+            const summary = 'This session is being continued from a previous conversation that ran out of context.';
+            const normalized = normalizeRawMessage('summary-1', null, 1000, {
+                role: 'user',
+                content: { type: 'text', text: summary },
+                meta: { sentFrom: 'cli', isCompactSummary: true }
+            });
+
+            // The minimap filters on this flag (see shouldHideMessageInMinimap); if it were stripped
+            // here the summary would come back as an ordinary prompt marker.
+            expect(normalized?.meta?.isCompactSummary).toBe(true);
+            expect(normalized?.role).toBe('user');
+        });
+
+        it('leaves the flag off ordinary user records', () => {
+            const normalized = normalizeRawMessage('prompt-1', null, 1000, {
+                role: 'user',
+                content: { type: 'text', text: 'hello' },
+                meta: { sentFrom: 'cli' }
+            });
+
+            expect(normalized?.meta?.isCompactSummary).toBeUndefined();
+        });
+
         it('handles user role messages with text content', () => {
             const userMessage = {
                 role: 'user',

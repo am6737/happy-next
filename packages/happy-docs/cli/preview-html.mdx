@@ -16,8 +16,14 @@ instead of the agent just printing HTML as text.
 
 - **Description** — describe the page you want. The agent generates a complete HTML document (all
   CSS and JS inlined, no external network resources) and previews it.
-- **File path** — point at an existing `.html` file. The agent reads it and previews its contents.
+- **File path** — point at an existing `.html` file. The agent hands the path to the tool, which
+  reads the file and previews its contents.
 - **No argument** — the agent uses the current conversation context, or asks what to preview.
+
+The tool takes the document either inline (`html`) or as a path (`filePath`). When the agent writes
+the page to a file, it passes that path instead of repeating the whole document in the tool call —
+the CLI reads the file from the session's working directory and sends it to the app. A `.html` file
+up to 2 MiB can be previewed this way.
 
 The command is model-mediated: it expands into a prompt that instructs the agent to build the
 document and call the `preview_html` tool. What you typed (`/preview-html ...`) is what stays in the

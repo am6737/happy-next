@@ -29,6 +29,7 @@ import {
 } from './expoPushMigrationState';
 import { cleanupSupersededPushTokens } from './pushTokenCleanup';
 import { getPushInstallationId } from './pushInstallationId';
+import { userAttention } from './userAttention';
 import { Platform, AppState } from 'react-native';
 import { isRunningOnMac } from '@/utils/platform';
 import { NormalizedMessage, normalizeRawMessage, RawRecord, RawRecordSchema, ImageContent } from './typesRaw';
@@ -48,7 +49,7 @@ import { gitStatusSync } from './gitStatusSync';
 import { projectManager } from './projectManager';
 import { AsyncLock } from '@/utils/lock';
 import { voiceHooks } from '@/realtime/hooks/voiceHooks';
-import { Message, UserTextMessage } from './typesMessage';
+import { ASK_USER_QUESTION_TOOL, AskUserQuestionMessage, buildAskUserQuestionMessage, buildPreviewHtmlMessage, Message, MinimapMessage, normalizePreviewHtmlToolName, PREVIEW_HTML_TOOL, PreviewHtmlMessage, UserTextMessage } from './typesMessage';
 import { EncryptionCache } from './encryption/encryptionCache';
 import { systemPrompt, buildDootaskSystemPrompt } from './prompt/systemPrompt';
 import { getDootaskFromServer } from './dootask/api';
@@ -59,13 +60,6 @@ import { getFriendsList, getUserProfile } from './apiFriends';
 import { fetchFeed } from './apiFeed';
 import { FeedItem } from './feedTypes';
 import { UserProfile } from './friendTypes';
-import {
-    createOpenClawMachine,
-    updateOpenClawMachine,
-    deleteOpenClawMachine,
-    processNewOpenClawMachineEvent,
-    processUpdateOpenClawMachineEvent,
-} from '../openclaw/storage';
 import { resolveModelSelectionForFlavor } from 'happy-wire';
 import { getOrchestratorActivity, getOrchestratorActivityBatch } from './apiOrchestrator';
 import { sessionUpdateMetadataFields } from './ops';
@@ -260,9 +254,9 @@ class Sync {
     // after the clear and resurrect obsolete messages on the next bootstrap.
     private messageCacheGeneration = new Map<string, number>();
     private messageCacheResetPromises = new Map<string, Promise<void>>();
-    /** Memoized minimap user-message lists per session, keyed by a cache-state freshness signature,
-     *  so refocusing a session doesn't re-decrypt its whole history. See getCachedUserMessagesForMinimap. */
-    private minimapUserMessagesCache = new Map<string, { signature: string; messages: UserTextMessage[] }>();
+    /** Memoized minimap message lists per session, keyed by a cache-state freshness signature,
+     *  so refocusing a session doesn't re-decrypt its whole history. See getCachedMinimapMessages. */
+    private minimapMessagesCache = new Map<string, { signature: string; messages: MinimapMessage[] }>();
     /** Decrypted local message text used by Command+K search. Invalidated whenever cached rows change. */
     private cachedMessageSearchIndex = new Map<string, { signature: string; entries: CachedMessageSearchEntry[] }>();
     /** Per-session last-known seq for v3 incremental fetch */
@@ -293,8 +287,6 @@ class Sync {
     private feedSync: InvalidateSync;
     private feedFullRefresh = false;
     private sharedSessionsSync: InvalidateSync;
-    private openClawMachinesSync: InvalidateSync;
-    private openClawMachineDataKeys = new Map<string, Uint8Array>(); // Store OpenClaw machine data encryption keys
     private activityAccumulator: ActivityUpdateAccumulator;
     private pendingSettings: Partial<Settings> = loadPendingSettings();
     private pendingSessionModePatches: SessionModeConfigPatch[] = [];
@@ -390,7 +382,6 @@ class Sync {
         this.friendRequestsSync = new InvalidateSync(this.fetchFriendRequests);
         this.feedSync = new InvalidateSync(this.fetchFeed);
         this.sharedSessionsSync = new InvalidateSync(this.fetchSharedSessions);
-        this.openClawMachinesSync = new InvalidateSync(this.fetchOpenClawMachines);
 
         const registerPushToken = async () => {
             // Keep push token registration enabled in dev builds too:
@@ -402,17 +393,25 @@ class Sync {
         this.pushTokenSync = new InvalidateSync(registerPushToken);
         this.activityAccumulator = new ActivityUpdateAccumulator(this.flushActivityUpdates.bind(this), 2000);
 
+        // Web/desktop: an open session left unread while the window was unfocused or idle is read
+        // the moment they are back at it.
+        userAttention.onPresent(() => {
+            if (this.viewingSessionId) {
+                markSessionViewed(this.viewingSessionId);
+                this.rerenderSessionRow(this.viewingSessionId);
+            }
+        });
+
         // Refresh data when app becomes active
         AppState.addEventListener('change', (nextAppState) => {
             if (nextAppState === 'active') {
                 log.log('📱 App became active');
                 // Refresh lastViewedAt so blue dot won't flash for the session user is viewing
-                if (this.viewingSessionId) {
+                if (this.viewingSessionId && userAttention.isPresent()) {
                     markSessionViewed(this.viewingSessionId);
                 }
                 this.profileSync.invalidate();
                 this.machinesSync.invalidate();
-                this.openClawMachinesSync.invalidate();
                 this.pushTokenSync.invalidate();
                 this.sessionsSync.invalidate();
                 this.sessionAppearanceSync.invalidate();
@@ -581,7 +580,6 @@ class Sync {
         this.sessionAppearanceSync.invalidate();
         this.profileSync.invalidate();
         this.machinesSync.invalidate();
-        this.openClawMachinesSync.invalidate();
         this.pushTokenSync.invalidate();
         this.nativeUpdateSync.invalidate();
         this.friendsSync.invalidate();
@@ -643,7 +641,7 @@ class Sync {
         const next = this.getMessageCacheGeneration(sessionId) + 1;
         this.messageCacheGeneration.set(sessionId, next);
         // Any cache clear/invalidate must drop the memoized minimap list too.
-        this.minimapUserMessagesCache.delete(sessionId);
+        this.minimapMessagesCache.delete(sessionId);
         this.cachedMessageSearchIndex.delete(sessionId);
         return next;
     }
@@ -814,14 +812,12 @@ class Sync {
             }
         }
 
-        // Record view time for blue dot (taskCompleted) comparison
-        if (userInitiated) {
+        // Record view time for blue dot (taskCompleted) comparison. Opening it in an unfocused or
+        // idle window is not reading it; `userAttention.onPresent` catches up once they are back.
+        if (userInitiated && userAttention.isPresent()) {
             markSessionViewed(sessionId);
             // Trigger re-render so blue dot disappears on tablet sidebar
-            const s = storage.getState().sessions[sessionId];
-            if (s) {
-                this.applySessions([{ ...s }]);
-            }
+            this.rerenderSessionRow(sessionId);
         }
     }
 
@@ -829,6 +825,66 @@ class Sync {
         this.viewingSessionId = null;
         voiceHooks.onSessionBlur();
     }
+
+    /** Whether the session screen is open on this session. See `markSessionUnread`. */
+    isViewingSession = (sessionId: string): boolean => this.viewingSessionId === sessionId;
+
+    /** Reading is exactly what opening the session already writes. */
+    markSessionRead = (sessionId: string) => {
+        markSessionViewed(sessionId);
+        this.rerenderSessionRow(sessionId);
+    };
+
+    /**
+     * There is no stored read flag — the blue dot is derived (`hasUnreadCompletionSince`) — so
+     * unreading moves `lastViewedAt` and the synced `completionDismissedAt` back across
+     * `taskCompleted`. Callers decide in advance whether there is anything to move across: a no-op
+     * here is invisible to the person who clicked.
+     */
+    markSessionUnread = (sessionId: string) => {
+        const session = storage.getState().sessions[sessionId];
+
+        // 0 says "never seen", which is below any `taskCompleted` and readable in the stored map.
+        sessionLastViewedAt.set(sessionId, 0);
+        saveSessionLastViewedAt(sessionLastViewedAt);
+
+        // Stop counting my own presence as reading it. `markSessionViewed` runs on every update to
+        // the session being viewed, so a session left open re-reads itself before the dot could
+        // show. Whether the screen stays open is the caller's business — see the context menu,
+        // which leaves it.
+        if (this.viewingSessionId === sessionId) {
+            this.onSessionHidden();
+        }
+
+        // Rewind the synced dismissal too, or the `Math.max` in `hasUnreadCompletionSince` keeps
+        // hiding the dot. Owners only: a session shared with me carries the owner's metadata,
+        // which I cannot write, so there the dot stays hidden if the owner has already dismissed
+        // it.
+        if (session?.metadata && session.active && !session.accessLevel) {
+            sessionUpdateMetadataFields(
+                sessionId,
+                session.metadata,
+                { completionDismissedAt: 0 },
+                session.metadataVersion
+            ).catch(() => {
+                // Local state is already rewritten; a later sync may bring the old value back.
+            });
+        }
+
+        this.rerenderSessionRow(sessionId);
+    };
+
+    /**
+     * The dot is derived at render time from `sessionLastViewedAt`, and that map is not reactive,
+     * so moving it changes nothing on screen by itself. A copy with a fresh identity is enough —
+     * the same nudge `onSessionVisible` makes on the way in.
+     */
+    private rerenderSessionRow = (sessionId: string) => {
+        const session = storage.getState().sessions[sessionId];
+        if (session) {
+            this.applySessions([{ ...session }]);
+        }
+    };
 
     private fetchOrchestratorActivity = (sessionId: string) => {
         if (!this.credentials) return;
@@ -2666,275 +2722,6 @@ class Sync {
         log.log('👥 fetchFriendRequests called - now handled by fetchFriends');
     }
 
-    private fetchOpenClawMachines = async () => {
-        if (!this.credentials) return;
-
-        console.log('🤖 Sync: Fetching OpenClaw machines...');
-        const API_ENDPOINT = getServerUrl();
-        const response = await fetch(`${API_ENDPOINT}/v1/openclaw/machines`, {
-            headers: {
-                'Authorization': `Bearer ${this.credentials.token}`,
-                'Content-Type': 'application/json'
-            }
-        });
-
-        if (!response.ok) {
-            console.error(`Failed to fetch OpenClaw machines: ${response.status}`);
-            return;
-        }
-
-        const rawMachines = await response.json() as Array<{
-            id: string;
-            type: string;
-            happyMachineId: string | null;
-            directConfig: string | null;
-            metadata: string;
-            metadataVersion: number;
-            pairingData: string | null;
-            dataEncryptionKey: string | null;
-            seq: number;
-            createdAt: number;
-            updatedAt: number;
-        }>;
-        console.log(`🤖 Sync: Fetched ${rawMachines.length} OpenClaw machines from server`);
-
-        // Decrypt and process machines
-        const decryptedMachines: Array<{
-            id: string;
-            type: 'happy' | 'direct';
-            happyMachineId: string | null;
-            gatewayToken: string | null;
-            directConfig: any | null;
-            metadata: any | null;
-            metadataVersion: number;
-            pairingData: any | null;
-            seq: number;
-            createdAt: number;
-            updatedAt: number;
-        }> = [];
-
-        for (const raw of rawMachines) {
-            try {
-                // Decrypt the data encryption key if present
-                let dataKey: Uint8Array | null = null;
-                if (raw.dataEncryptionKey) {
-                    dataKey = await this.encryption.decryptEncryptionKey(raw.dataEncryptionKey);
-                    if (dataKey) {
-                        this.openClawMachineDataKeys.set(raw.id, dataKey);
-                    }
-                }
-
-                if (!dataKey) {
-                    console.error(`No data encryption key for OpenClaw machine ${raw.id}`);
-                    continue;
-                }
-
-                // Create encryptor for decrypting fields
-                const encryptor = await this.encryption.openEncryption(dataKey);
-
-                // Decrypt fields
-                let metadata: any | null = null;
-                if (raw.metadata) {
-                    const decoded = decodeBase64(raw.metadata);
-                    const results = await encryptor.decrypt([decoded]);
-                    metadata = results[0];
-                }
-
-                let directConfig: any | null = null;
-                if (raw.directConfig) {
-                    const decoded = decodeBase64(raw.directConfig);
-                    const results = await encryptor.decrypt([decoded]);
-                    directConfig = results[0];
-                }
-
-                let pairingData: any | null = null;
-                if (raw.pairingData) {
-                    const decoded = decodeBase64(raw.pairingData);
-                    const results = await encryptor.decrypt([decoded]);
-                    pairingData = results[0];
-                }
-
-                decryptedMachines.push({
-                    id: raw.id,
-                    type: raw.type as 'happy' | 'direct',
-                    happyMachineId: raw.happyMachineId,
-                    gatewayToken: null, // Stored locally only, not synced
-                    directConfig,
-                    metadata,
-                    metadataVersion: raw.metadataVersion,
-                    pairingData,
-                    seq: raw.seq,
-                    createdAt: raw.createdAt,
-                    updatedAt: raw.updatedAt,
-                });
-            } catch (error) {
-                console.error(`Failed to decrypt OpenClaw machine ${raw.id}:`, error);
-            }
-        }
-
-        storage.getState().applyOpenClawMachines(decryptedMachines, true);
-        log.log(`🤖 fetchOpenClawMachines completed - processed ${decryptedMachines.length} machines`);
-    }
-
-    /**
-     * Create a new OpenClaw machine
-     */
-    public async createOpenClawMachine(params: {
-        type: 'happy' | 'direct';
-        happyMachineId?: string;
-        directConfig?: { url: string; token?: string };
-        metadata: { name: string; gatewayToken?: string };
-        pairingData?: { deviceId: string; publicKey: string; privateKey: string };
-    }): Promise<string> {
-        if (!this.credentials || !this.encryption) {
-            throw new Error('Not authenticated');
-        }
-
-        const encryptionAdapter = {
-            decryptWithKey: async (encryptedData: string, key: Uint8Array): Promise<unknown> => {
-                const encryptor = await this.encryption.openEncryption(key);
-                const decoded = decodeBase64(encryptedData);
-                const results = await encryptor.decrypt([decoded]);
-                return results[0];
-            },
-            encryptWithKey: async (data: unknown, key: Uint8Array): Promise<string> => {
-                const encryptor = await this.encryption.openEncryption(key);
-                const results = await encryptor.encrypt([data]);
-                return encodeBase64(results[0]);
-            },
-            decryptEncryptionKey: async (encryptedKey: string): Promise<Uint8Array | null> => {
-                return this.encryption.decryptEncryptionKey(encryptedKey);
-            },
-            generateDataKey: async () => {
-                // Generate 256-bit key for AES-256
-                const key = getRandomBytes(32);
-                const encryptedKey = await this.encryption.encryptEncryptionKey(key);
-                return { key, encryptedKey: encodeBase64(encryptedKey, 'base64') };
-            },
-        };
-
-        const machine = await createOpenClawMachine(
-            this.credentials,
-            encryptionAdapter,
-            {
-                type: params.type,
-                happyMachineId: params.happyMachineId,
-                directConfig: params.directConfig,
-                metadata: params.metadata,
-                pairingData: params.pairingData,
-            }
-        );
-
-        if (machine) {
-            storage.getState().applyOpenClawMachines([machine]);
-            log.log(`🤖 Created OpenClaw machine ${machine.id}`);
-            return machine.id;
-        }
-
-        throw new Error('Failed to create OpenClaw machine');
-    }
-
-    /**
-     * Update a OpenClaw machine's metadata and/or direct config
-     */
-    public async updateOpenClawMachine(
-        machineId: string,
-        updates: {
-            name?: string;
-            gatewayToken?: string;
-            directConfig?: { url: string; password?: string };
-        }
-    ): Promise<void> {
-        if (!this.credentials || !this.encryption) {
-            throw new Error('Not authenticated');
-        }
-
-        // Get current machine from storage
-        const currentMachine = storage.getState().openClawMachines[machineId];
-        if (!currentMachine) {
-            throw new Error('Machine not found');
-        }
-
-        // Get data encryption key
-        const dataKey = this.openClawMachineDataKeys.get(machineId);
-        if (!dataKey) {
-            throw new Error('Encryption key not found for machine');
-        }
-
-        const encryptionAdapter = {
-            decryptWithKey: async (encryptedData: string, key: Uint8Array): Promise<unknown> => {
-                const encryptor = await this.encryption.openEncryption(key);
-                const decoded = decodeBase64(encryptedData);
-                const results = await encryptor.decrypt([decoded]);
-                return results[0];
-            },
-            encryptWithKey: async (data: unknown, key: Uint8Array): Promise<string> => {
-                const encryptor = await this.encryption.openEncryption(key);
-                const results = await encryptor.encrypt([data]);
-                return encodeBase64(results[0]);
-            },
-            decryptEncryptionKey: async (encryptedKey: string): Promise<Uint8Array | null> => {
-                return this.encryption.decryptEncryptionKey(encryptedKey);
-            },
-            generateDataKey: async () => {
-                const key = getRandomBytes(32);
-                const encryptedKey = await this.encryption.encryptEncryptionKey(key);
-                return { key, encryptedKey: encodeBase64(encryptedKey, 'base64') };
-            },
-        };
-
-        // Build updated metadata if name or gatewayToken is provided
-        const updatedMetadata = (updates.name !== undefined || updates.gatewayToken !== undefined) ? {
-            ...currentMachine.metadata,
-            name: updates.name ?? currentMachine.metadata?.name ?? '',
-            gatewayToken: updates.gatewayToken !== undefined ? (updates.gatewayToken || undefined) : currentMachine.metadata?.gatewayToken,
-        } : undefined;
-
-        // Build updated directConfig if provided
-        const updatedDirectConfig = updates.directConfig !== undefined ? {
-            url: updates.directConfig.url,
-            password: updates.directConfig.password,
-        } : undefined;
-
-        const updatedMachine = await updateOpenClawMachine(
-            this.credentials,
-            encryptionAdapter,
-            machineId,
-            dataKey,
-            currentMachine.metadataVersion,
-            {
-                metadata: updatedMetadata,
-                directConfig: updatedDirectConfig,
-            }
-        );
-
-        if (updatedMachine) {
-            storage.getState().applyOpenClawMachines([updatedMachine]);
-            log.log(`🤖 Updated OpenClaw machine ${machineId}`);
-        } else {
-            throw new Error('Failed to update OpenClaw machine');
-        }
-    }
-
-    /**
-     * Delete a OpenClaw machine
-     */
-    public async deleteOpenClawMachine(machineId: string): Promise<void> {
-        if (!this.credentials) {
-            throw new Error('Not authenticated');
-        }
-
-        const success = await deleteOpenClawMachine(this.credentials, machineId);
-
-        if (success) {
-            storage.getState().removeOpenClawMachine(machineId);
-            this.openClawMachineDataKeys.delete(machineId);
-            log.log(`🤖 Deleted OpenClaw machine ${machineId}`);
-        } else {
-            throw new Error('Failed to delete OpenClaw machine');
-        }
-    }
-
     private fetchFeed = async () => {
         if (!this.credentials) return;
 
@@ -3479,13 +3266,13 @@ class Sync {
         }
     }
 
-    // Read ALL locally-cached user messages for a session, decrypted+normalized into
-    // UserTextMessage objects. Used only to populate the conversation minimap so it can show
-    // user prompts that live in the offline cache but haven't been loaded into the message list
-    // yet. This deliberately does NOT touch `sessionReceivedMessages` (the dedup set used by
-    // `decryptAndNormalizeMessages`): if it did, the real fetch paths would later treat these
-    // messages as "already received" and skip applying them to the list.
-    getCachedUserMessagesForMinimap = async (sessionId: string): Promise<UserTextMessage[]> => {
+    // Read ALL locally-cached minimap landmarks for a session, decrypted+normalized into
+    // UserTextMessage / AskUserQuestionMessage objects. Used only to populate the conversation
+    // minimap so it can show prompts and questions that live in the offline cache but haven't been
+    // loaded into the message list yet. This deliberately does NOT touch `sessionReceivedMessages`
+    // (the dedup set used by `decryptAndNormalizeMessages`): if it did, the real fetch paths would
+    // later treat these messages as "already received" and skip applying them to the list.
+    getCachedMinimapMessages = async (sessionId: string): Promise<MinimapMessage[]> => {
         const accountKey = this.getMessageAccountKey();
         if (!accountKey) {
             return [];
@@ -3502,26 +3289,48 @@ class Sync {
         const signature = cacheState
             ? `${cacheState.updatedAt}:${cacheState.contiguousMinSeq}:${cacheState.contiguousMaxSeq}:${cacheState.oldestLoadedSeq}`
             : 'empty';
-        const memo = this.minimapUserMessagesCache.get(sessionId);
+        const memo = this.minimapMessagesCache.get(sessionId);
         if (memo && memo.signature === signature) {
             return memo.messages;
         }
 
-        // Proactively seed the minimap with only the newest MAX_USER_MESSAGES prompts. As the user
-        // scrolls the list, older prompts are merged in unbounded (via the loaded messages), so the
-        // cap only limits what we load up front. Page backwards from the newest message and decrypt
-        // PER PAGE so we can stop as soon as we have enough — decryption is the dominant cost, and a
-        // long history would otherwise be decrypted in full just to keep the last handful of prompts.
-        // MAX_SCAN bounds pathological sparse sessions (few prompts among many tool-call messages).
+        // Proactively seed the minimap with only the newest MAX_USER_MESSAGES prompts, MAX_QUESTIONS
+        // questions and MAX_PREVIEWS previews. As the user scrolls the list, older landmarks are
+        // merged in unbounded (via the loaded messages), so the caps only limit what we load up
+        // front. Page backwards from the newest message and decrypt PER PAGE so we can stop as soon
+        // as we have enough — decryption is the dominant cost, and a long history would otherwise be
+        // decrypted in full just to keep the last handful of landmarks. MAX_SCAN bounds pathological
+        // sparse sessions (few prompts/questions among many tool-call messages).
         const MAX_USER_MESSAGES = 50;
+        const MAX_QUESTIONS = 50;
+        const MAX_PREVIEWS = 50;
         const MAX_SCAN = 5000;
         const PAGE = Sync.INITIAL_MESSAGES_LIMIT;
         const collectedUserMessages: UserTextMessage[] = [];
+        const pendingQuestions: {
+            id: string;
+            localId: string | null;
+            createdAt: number;
+            seq?: number | null;
+            input: unknown;
+            toolUseId: string | null;
+        }[] = [];
+        const pendingPreviews: {
+            id: string;
+            localId: string | null;
+            createdAt: number;
+            seq?: number | null;
+            input: unknown;
+            toolUseId: string | null;
+        }[] = [];
+        // Answers land in a NEWER record than the call that asked the question, and we scan
+        // newest→oldest, so the result is always seen before its call. Stash them and attach below.
+        const resultsByToolUseId = new Map<string, unknown>();
         let scanned = 0;
         let hitScanCap = false;
         try {
             let beforeSeq: number | null = null;
-            while (collectedUserMessages.length < MAX_USER_MESSAGES) {
+            while (collectedUserMessages.length < MAX_USER_MESSAGES || pendingQuestions.length < MAX_QUESTIONS || pendingPreviews.length < MAX_PREVIEWS) {
                 if (scanned >= MAX_SCAN) {
                     hitScanCap = true;
                     break;
@@ -3534,35 +3343,75 @@ class Sync {
                 }
                 scanned += page.messages.length;
 
-                // Decrypt this page and pull out top-level user prompts. Build UserTextMessage objects
-                // directly from the normalized rows (no reducer): we only need user prompts, so a full
-                // reducer pass — traceMessages, sidechain separation, event conversion — would be pure
-                // overhead. The real message id also keeps ids stable across refreshes (a fresh reducer
-                // would allocate new random ids each run, remounting every marker).
+                // Decrypt this page and pull out the top-level landmarks the rail draws. Build the
+                // message views directly from the normalized rows (no reducer): we only need prompts
+                // and the two tool calls the rail marks, so a full reducer pass — traceMessages,
+                // sidechain separation, event conversion — would be pure overhead. The real message
+                // id also keeps ids stable across refreshes (a fresh reducer would allocate new
+                // random ids each run, remounting every marker).
                 const decrypted = await encryption.decryptMessages(page.messages);
                 for (const item of decrypted) {
                     if (!item) {
                         continue;
                     }
                     const normalized = normalizeRawMessage(item.id, item.localId, item.createdAt, item.content);
-                    // Exclude sub-agent (sidechain) prompts, matching what the list shows. `isSidechain`
-                    // is set at normalize time and is exactly what the reducer's tracer keys on.
-                    if (!normalized || normalized.role !== 'user' || normalized.isSidechain) {
+                    if (!normalized) {
                         continue;
                     }
-                    collectedUserMessages.push({
-                        kind: 'user-text',
-                        id: normalized.id,
-                        localId: normalized.localId,
-                        createdAt: normalized.createdAt,
-                        seq: item.seq,
-                        text: normalized.content.text,
-                        ...(normalized.meta?.displayText ? { displayText: normalized.meta.displayText } : {}),
-                        ...(normalized.content.type === 'mixed' ? { images: normalized.content.images } : {}),
-                        meta: normalized.meta,
-                        sentBy: item.sentBy,
-                        sentByName: item.sentByName,
-                    });
+                    // Exclude sub-agent (sidechain) content, matching what the list shows at top level.
+                    // `isSidechain` is set at normalize time and is exactly what the reducer's tracer
+                    // keys on.
+                    if (normalized.isSidechain) {
+                        continue;
+                    }
+                    if (normalized.role === 'user') {
+                        // Post-compaction summaries are not minimap landmarks (see
+                        // shouldHideMessageInMinimap) — skip them here rather than let one burn a
+                        // MAX_USER_MESSAGES slot that a real prompt further back would have used.
+                        if (normalized.meta?.isCompactSummary) {
+                            continue;
+                        }
+                        collectedUserMessages.push({
+                            kind: 'user-text',
+                            id: normalized.id,
+                            localId: normalized.localId,
+                            createdAt: normalized.createdAt,
+                            seq: item.seq,
+                            text: normalized.content.text,
+                            ...(normalized.meta?.displayText ? { displayText: normalized.meta.displayText } : {}),
+                            ...(normalized.content.type === 'mixed' ? { images: normalized.content.images } : {}),
+                            meta: normalized.meta,
+                            sentBy: item.sentBy,
+                            sentByName: item.sentByName,
+                        });
+                        continue;
+                    }
+                    if (normalized.role !== 'agent') {
+                        continue;
+                    }
+                    for (const content of normalized.content) {
+                        if (content.type === 'tool-call' && content.name === ASK_USER_QUESTION_TOOL) {
+                            pendingQuestions.push({
+                                id: normalized.id,
+                                localId: normalized.localId,
+                                createdAt: normalized.createdAt,
+                                seq: item.seq,
+                                input: content.input,
+                                toolUseId: content.id ?? null,
+                            });
+                        } else if (content.type === 'tool-call' && normalizePreviewHtmlToolName(content.name) === PREVIEW_HTML_TOOL) {
+                            pendingPreviews.push({
+                                id: normalized.id,
+                                localId: normalized.localId,
+                                createdAt: normalized.createdAt,
+                                seq: item.seq,
+                                input: content.input,
+                                toolUseId: content.id ?? null,
+                            });
+                        } else if (content.type === 'tool-result' && content.tool_use_id) {
+                            resultsByToolUseId.set(content.tool_use_id, content.content);
+                        }
+                    }
                 }
 
                 if (!page.hasMoreLocal || page.minSeq === null) {
@@ -3575,15 +3424,48 @@ class Sync {
             return [];
         }
         if (hitScanCap && collectedUserMessages.length < MAX_USER_MESSAGES) {
-            log.log(`💬 getCachedUserMessagesForMinimap scanned MAX_SCAN=${MAX_SCAN} cached messages for ${sessionId} without reaching ${MAX_USER_MESSAGES} prompts; older prompts are omitted from the minimap`);
+            log.log(`💬 getCachedMinimapMessages scanned MAX_SCAN=${MAX_SCAN} cached messages for ${sessionId} without reaching ${MAX_USER_MESSAGES} prompts; older prompts are omitted from the minimap`);
         }
 
-        // Keep only the newest MAX_USER_MESSAGES, ordered oldest→newest (matching the list order).
-        collectedUserMessages.sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0) || a.createdAt - b.createdAt);
-        const result = collectedUserMessages.length > MAX_USER_MESSAGES
-            ? collectedUserMessages.slice(collectedUserMessages.length - MAX_USER_MESSAGES)
-            : collectedUserMessages;
-        this.minimapUserMessagesCache.set(sessionId, { signature, messages: result });
+        // Now that the whole scan is done the answers are known, so the question views can be built.
+        const collectedQuestions = pendingQuestions
+            .map((pending) => buildAskUserQuestionMessage({
+                id: pending.id,
+                localId: pending.localId,
+                createdAt: pending.createdAt,
+                seq: pending.seq,
+                input: pending.input,
+                result: pending.toolUseId !== null ? resultsByToolUseId.get(pending.toolUseId) : undefined,
+            }))
+            .filter((message): message is AskUserQuestionMessage => message !== null);
+
+        // A preview only becomes a card once its call has a result; the scan is newest→oldest, so
+        // the result is always seen before the call it belongs to.
+        const collectedPreviews = pendingPreviews
+            .map((pending) => buildPreviewHtmlMessage({
+                id: pending.id,
+                localId: pending.localId,
+                createdAt: pending.createdAt,
+                seq: pending.seq,
+                input: pending.input,
+                completed: pending.toolUseId !== null && resultsByToolUseId.has(pending.toolUseId),
+            }))
+            .filter((message): message is PreviewHtmlMessage => message !== null);
+
+        // Keep only the newest of each kind, ordered oldest→newest (matching the list order). Each
+        // collection is in scan order (newest first), so each is sorted before the front is trimmed
+        // — the kinds are capped independently so a question-heavy stretch cannot crowd out prompts.
+        const byOldestFirst = (a: MinimapMessage, b: MinimapMessage) =>
+            (a.seq ?? 0) - (b.seq ?? 0) || a.createdAt - b.createdAt;
+        const keepNewest = (items: MinimapMessage[], cap: number) =>
+            items.length > cap ? items.sort(byOldestFirst).slice(items.length - cap) : items;
+        const result: MinimapMessage[] = [
+            ...keepNewest(collectedUserMessages, MAX_USER_MESSAGES),
+            ...keepNewest(collectedQuestions, MAX_QUESTIONS),
+            ...keepNewest(collectedPreviews, MAX_PREVIEWS),
+        ];
+        result.sort(byOldestFirst);
+        this.minimapMessagesCache.set(sessionId, { signature, messages: result });
         return result;
     }
 
@@ -4474,7 +4356,7 @@ class Sync {
 
                 // If user is viewing this session, keep lastViewedAt fresh
                 // so incoming taskCompleted doesn't show a blue dot
-                if (this.viewingSessionId === updateData.body.id) {
+                if (this.viewingSessionId === updateData.body.id && userAttention.isPresent()) {
                     markSessionViewed(updateData.body.id);
                 }
 
@@ -4856,124 +4738,6 @@ class Sync {
             
             // Apply to storage (will handle repeatKey replacement)
             storage.getState().applyFeedItems([feedItem]);
-        } else if (updateData.body.t === 'new-openclaw-machine') {
-            log.log('🤖 Received new-openclaw-machine update');
-            const openClawUpdate = updateData.body;
-
-            try {
-                // Create encryption adapter for processing using openEncryption
-                const createEncryptionAdapter = async (key: Uint8Array) => {
-                    const encryptor = await this.encryption.openEncryption(key);
-                    return {
-                        decryptWithKey: async (encryptedData: string, _key: Uint8Array): Promise<unknown> => {
-                            const decoded = decodeBase64(encryptedData);
-                            const results = await encryptor.decrypt([decoded]);
-                            return results[0];
-                        },
-                        encryptWithKey: async (data: unknown, _key: Uint8Array): Promise<string> => {
-                            const results = await encryptor.encrypt([data]);
-                            return encodeBase64(results[0]);
-                        },
-                        decryptEncryptionKey: async (encryptedKey: string): Promise<Uint8Array | null> => {
-                            return this.encryption.decryptEncryptionKey(encryptedKey);
-                        },
-                        generateDataKey: async () => {
-                            throw new Error('Not needed for receiving events');
-                        },
-                    };
-                };
-
-                // First decrypt the data encryption key
-                if (!openClawUpdate.dataEncryptionKey) {
-                    console.error('No data encryption key for new OpenClaw machine');
-                    return;
-                }
-
-                const dataKey = await this.encryption.decryptEncryptionKey(openClawUpdate.dataEncryptionKey);
-                if (!dataKey) {
-                    console.error('Failed to decrypt data encryption key for new OpenClaw machine');
-                    return;
-                }
-
-                const encryptionAdapter = await createEncryptionAdapter(dataKey);
-                const machine = await processNewOpenClawMachineEvent(openClawUpdate, encryptionAdapter);
-                if (machine) {
-                    // Store the data encryption key
-                    this.openClawMachineDataKeys.set(machine.id, dataKey);
-
-                    storage.getState().applyOpenClawMachines([machine]);
-                    log.log(`🤖 Added new OpenClaw machine ${machine.id} to storage`);
-                }
-            } catch (error) {
-                console.error('Failed to process new OpenClaw machine:', error);
-            }
-        } else if (updateData.body.t === 'update-openclaw-machine') {
-            log.log('🤖 Received update-openclaw-machine update');
-            const openClawUpdate = updateData.body;
-            const machineId = openClawUpdate.machineId;
-
-            // Get existing machine
-            const existingMachine = storage.getState().openClawMachines[machineId];
-            if (!existingMachine) {
-                console.error(`OpenClaw machine ${machineId} not found in storage`);
-                // Fetch all machines to sync
-                this.openClawMachinesSync.invalidate();
-                return;
-            }
-
-            // Get the data encryption key from memory
-            const dataKey = this.openClawMachineDataKeys.get(machineId);
-            if (!dataKey) {
-                console.error(`Encryption key not found for OpenClaw machine ${machineId}, fetching machines`);
-                this.openClawMachinesSync.invalidate();
-                return;
-            }
-
-            try {
-                // Create encryption adapter using openEncryption
-                const encryptor = await this.encryption.openEncryption(dataKey);
-                const encryptionAdapter = {
-                    decryptWithKey: async (encryptedData: string, _key: Uint8Array): Promise<unknown> => {
-                        const decoded = decodeBase64(encryptedData);
-                        const results = await encryptor.decrypt([decoded]);
-                        return results[0];
-                    },
-                    encryptWithKey: async (data: unknown, _key: Uint8Array): Promise<string> => {
-                        const results = await encryptor.encrypt([data]);
-                        return encodeBase64(results[0]);
-                    },
-                    decryptEncryptionKey: async (encryptedKey: string): Promise<Uint8Array | null> => {
-                        return this.encryption.decryptEncryptionKey(encryptedKey);
-                    },
-                    generateDataKey: async () => {
-                        throw new Error('Not needed for receiving events');
-                    },
-                };
-
-                const updatedMachine = await processUpdateOpenClawMachineEvent(
-                    openClawUpdate,
-                    existingMachine,
-                    encryptionAdapter,
-                    dataKey
-                );
-
-                storage.getState().applyOpenClawMachines([updatedMachine]);
-                log.log(`🤖 Updated OpenClaw machine ${machineId} in storage`);
-            } catch (error) {
-                console.error(`Failed to process OpenClaw machine update ${machineId}:`, error);
-            }
-        } else if (updateData.body.t === 'delete-openclaw-machine') {
-            log.log('🤖 Received delete-openclaw-machine update');
-            const openClawUpdate = updateData.body;
-            const machineId = openClawUpdate.machineId;
-
-            // Remove from storage
-            storage.getState().removeOpenClawMachine(machineId);
-
-            // Remove encryption key from memory
-            this.openClawMachineDataKeys.delete(machineId);
-
-            log.log(`🤖 Deleted OpenClaw machine ${machineId} from storage`);
         }
     }
 

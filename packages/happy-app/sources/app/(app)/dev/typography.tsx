@@ -22,7 +22,7 @@ const CodeSample = ({ title, style }: { title: string; style: any }) => (
 
 export default function TypographyScreen() {
     return (
-        <ScrollView style={styles.container}>
+        <ScrollView style={styles.container} contentInsetAdjustmentBehavior="automatic">
             <View style={styles.content}>
                 {/* IBM Plex Sans (Default) */}
                 <View style={styles.section}>

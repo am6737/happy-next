@@ -15,10 +15,8 @@ import { feedPost } from "@/app/feed/feedPost";
 import { Context } from "@/context";
 import { randomUUID } from "node:crypto";
 import {
-    CLAUDE_MODEL_MODES,
-    CODEX_MODEL_MODES,
-    GEMINI_MODEL_MODES,
     MODEL_MODE_DEFAULT,
+    getValidModelModesForAgent,
     isModelMode,
     isModelModeForAgent,
 } from "happy-wire";
@@ -46,11 +44,6 @@ const CLI_DETECTION_COMMAND =
     '(command -v gemini >/dev/null 2>&1 && echo "gemini:true" || echo "gemini:false") && ' +
     'echo "hostname:$(hostname 2>/dev/null || echo \'\')"';
 const CLI_DETECTION_TIMEOUT_MS = 20_000;
-const MODEL_MODES_BY_PROVIDER: Record<string, readonly string[]> = {
-    claude: CLAUDE_MODEL_MODES,
-    codex: CODEX_MODEL_MODES,
-    gemini: GEMINI_MODEL_MODES,
-};
 const IDEMPOTENCY_RETRY_DELAY_MS = 10;
 const DEFAULT_CONTEXT_MAX_CONCURRENCY = 2;
 const DEFAULT_CONTEXT_WAIT_TIMEOUT_MS = 120_000;
@@ -864,7 +857,7 @@ export function orchestratorRoutes(app: Fastify) {
             const providers = detection?.providers ?? [];
             const modelModes: Record<string, readonly string[]> = {};
             for (const provider of providers) {
-                modelModes[provider] = MODEL_MODES_BY_PROVIDER[provider];
+                modelModes[provider] = getValidModelModesForAgent(provider);
             }
             const name = identityNames.get(machine.id) ?? detection?.hostname;
             return {
@@ -892,9 +885,9 @@ export function orchestratorRoutes(app: Fastify) {
             data: {
                 providers: PROVIDERS,
                 modelModes: {
-                    claude: CLAUDE_MODEL_MODES,
-                    codex: CODEX_MODEL_MODES,
-                    gemini: GEMINI_MODEL_MODES,
+                    claude: getValidModelModesForAgent('claude'),
+                    codex: getValidModelModesForAgent('codex'),
+                    gemini: getValidModelModesForAgent('gemini'),
                 },
                 defaults: {
                     mode: 'async',

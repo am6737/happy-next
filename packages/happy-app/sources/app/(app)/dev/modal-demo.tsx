@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, ScrollView, Platform } from 'react-native';
 import { Item } from '@/components/Item';
 import { ItemGroup } from '@/components/ItemGroup';
-import { ItemList } from '@/components/ItemList';
+import { ItemListStatic } from '@/components/ItemList';
 import { Modal } from '@/modal';
 import { Typography } from '@/constants/Typography';
 import { RoundButton } from '@/components/RoundButton';
@@ -95,7 +95,7 @@ export default function ModalDemoScreen() {
     };
 
     return (
-        <ScrollView style={styles.container}>
+        <ScrollView style={styles.container} contentInsetAdjustmentBehavior="automatic">
             <View style={styles.header}>
                 <Text style={[styles.title, Typography.default('semiBold')]}>Modal Demo</Text>
                 <Text style={[styles.subtitle, Typography.default()]}>
@@ -103,7 +103,7 @@ export default function ModalDemoScreen() {
                 </Text>
             </View>
 
-            <ItemList>
+            <ItemListStatic>
                 <ItemGroup title="Alert Modals">
                     <Item
                         title="Simple Alert"
@@ -156,7 +156,7 @@ export default function ModalDemoScreen() {
                         </Text>
                     </View>
                 </ItemGroup>
-            </ItemList>
+            </ItemListStatic>
         </ScrollView>
     );
 }

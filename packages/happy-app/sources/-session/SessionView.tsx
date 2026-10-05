@@ -7,8 +7,8 @@ import { getSuggestions } from '@/components/autocomplete/suggestions';
 import { ChatHeaderTitle } from '@/components/ChatHeaderTitle';
 import { HeaderBackButton } from '@/components/navigation/Header';
 import { ChatList, type ForkMessageRequest } from '@/components/ChatList';
-import { ConversationMinimap, type ConversationMinimapItem } from '@/components/ConversationMinimap';
-import type { UserTextMessage } from '@/sync/typesMessage';
+import { ConversationMinimap, type ConversationMinimapEdgeTouch, type ConversationMinimapItem } from '@/components/ConversationMinimap';
+import type { MinimapMessage } from '@/sync/typesMessage';
 import { Deferred } from '@/components/Deferred';
 import { DuplicateSheet } from '@/components/DuplicateSheet';
 import { ActionMenuModal } from '@/components/ActionMenuModal';
@@ -31,6 +31,12 @@ import { t } from '@/text';
 import { tracking, trackMessageSent } from '@/track';
 import { handleImagePasteEvent } from '@/utils/imagePaste';
 import { isRunningOnMac } from '@/utils/platform';
+import { softHeaderOptions } from '@/components/navigation/softHeader';
+import { floatingComposerAvailable, floatingComposerScreenOptions } from '@/components/floatingComposer';
+import { useSharedValue } from 'react-native-reanimated';
+
+// iOS 26+ with Liquid Glass: the composer floats over the conversation as glass, and the list
+// scrolls on under it behind the soft bottom scroll edge effect.
 import { useDeviceType, useIsLandscape, useIsTablet } from '@/utils/responsive';
 import { formatPathRelativeToHome, generateCopyTitle, getSessionAvatarId, getSessionName, useSessionStatus, copySessionMetadata, copySessionModeSettings } from '@/utils/sessionUtils';
 import { canEditSession, canForkSession } from '@/utils/sessionLifecycle';
@@ -44,7 +50,7 @@ import { useFocusEffect, useIsFocused, useNavigation } from '@react-navigation/n
 import { Stack, useRouter } from 'expo-router';
 import * as React from 'react';
 import { useMemo } from 'react';
-import { ActivityIndicator, Platform, Pressable, Text, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, Text, useWindowDimensions, View, type GestureResponderEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useUnistyles } from 'react-native-unistyles';
 
@@ -78,6 +84,12 @@ export const SessionView = React.memo((props: { id: string }) => {
     const shouldUseTransparentNativeHeader = Platform.OS === 'ios' && !isRunningOnMac() && !shouldHideHeader;
     const realtimeStatus = useRealtimeStatus();
     const isTablet = useIsTablet();
+    // Voice status bar below header - not on tablet (shown in sidebar), hidden in landscape phone
+    const showVoiceStatusBar = !(shouldUseCompactLandscapeSessionLayout && Platform.OS !== 'web') && !isTablet && realtimeStatus !== 'disconnected';
+    // On iOS the conversation runs under the transparent header. The voice bar is a fixed row, so
+    // while it shows it takes the header's place at the top and the list starts below it.
+    const headerInset = shouldUseTransparentNativeHeader ? headerHeight : 0;
+    const listUnderHeader = shouldUseTransparentNativeHeader && !showVoiceStatusBar;
     const { width: screenWidth } = useWindowDimensions();
     const runningTaskCount = useOrchestratorRunningTaskCount(sessionId);
     const hasRuns = useOrchestratorHasRuns(sessionId);
@@ -231,9 +243,12 @@ export const SessionView = React.memo((props: { id: string }) => {
             <Stack.Screen
                 options={{
                     headerShown: !shouldHideHeader,
-                    headerTransparent: shouldUseTransparentNativeHeader,
+                    ...(shouldUseTransparentNativeHeader ? softHeaderOptions : {}),
+                    ...(shouldUseTransparentNativeHeader ? floatingComposerScreenOptions : {}),
                     headerTitleAlign: isNarrowPhone ? 'left' : 'center',
-                    headerTitle: () => (
+                    // The soft scroll-edge effect needs plain strings: a custom title view makes
+                    // UIKit drop both the effect and the subtitle (iOS centers the title regardless).
+                    headerTitle: shouldUseTransparentNativeHeader ? headerProps.title : () => (
                         <ChatHeaderTitle
                             title={headerProps.title}
                             subtitle={headerProps.subtitle}
@@ -241,6 +256,8 @@ export const SessionView = React.memo((props: { id: string }) => {
                             width={isNarrowPhone ? (Platform.OS === 'ios' ? leftAlignTitleWidth : undefined) : headerTitleWidth}
                         />
                     ),
+                    headerSubtitle: shouldUseTransparentNativeHeader ? headerProps.subtitle : undefined,
+                    headerSubtitleColor: shouldUseTransparentNativeHeader ? theme.colors.textSecondary : undefined,
                     headerLeft: Platform.OS === 'web' ? () => (
                         <HeaderBackButton
                             tintColor={theme.colors.header.tint}
@@ -255,20 +272,23 @@ export const SessionView = React.memo((props: { id: string }) => {
                             hasRuns={hasRuns}
                             runningTaskCount={runningTaskCount}
                             onOpenRuns={handleOpenSessionRuns}
-                            onNewSession={handleNewSession}
+                            // The + opens /new pre-filled with this session's machine and path,
+                            // which only works on a machine of my own — a session shared with me
+                            // points at the owner's.
+                            onNewSession={session.accessLevel ? undefined : handleNewSession}
                         />
                     ) : undefined,
                 }}
             />
 
             {/* Content based on state */}
-            <View style={{ flex: 1, paddingTop: shouldUseTransparentNativeHeader ? headerHeight : 0 }}>
-                {/* Voice status bar below header - not on tablet (shown in sidebar), hidden in landscape phone */}
-                {!(shouldUseCompactLandscapeSessionLayout && Platform.OS !== 'web') && !isTablet && realtimeStatus !== 'disconnected' && (
+            <View style={{ flex: 1 }}>
+                {showVoiceStatusBar && (
                     <VoiceAssistantStatusBar
                         variant="full"
                         style={{
                             position: 'relative',
+                            marginTop: headerInset,
                             zIndex: 20,
                             elevation: 20,
                         }}
@@ -293,7 +313,7 @@ export const SessionView = React.memo((props: { id: string }) => {
                     </View>
                 ) : session ? (
                     // Normal session view
-                    <SessionViewLoaded key={sessionId} sessionId={sessionId} session={session} />
+                    <SessionViewLoaded key={sessionId} sessionId={sessionId} session={session} headerInset={headerInset} listUnderHeader={listUnderHeader} />
                 ) : null}
             </View>
         </>
@@ -301,8 +321,18 @@ export const SessionView = React.memo((props: { id: string }) => {
 });
 
 
-function SessionViewLoaded({ sessionId, session }: { sessionId: string, session: Session }) {
+/**
+ * `headerInset` is the height of a header drawn over this view (the transparent iOS header), zero
+ * otherwise; `listUnderHeader` says whether the conversation starts under it or below a fixed row.
+ */
+function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }: { sessionId: string, session: Session, headerInset: number, listUnderHeader: boolean }) {
     const { theme } = useUnistyles();
+    // iOS (not Catalyst) uses the safe-area chat layout: the composer sits a margin above the
+    // home indicator and rides the keyboard, and the list lifts its content natively to follow.
+    const useNativeChatLayout = Platform.OS === 'ios' && !isRunningOnMac();
+    const useFloatingComposer = useNativeChatLayout && floatingComposerAvailable;
+    // Written by AgentContentView as the floating composer lays out, read by the list on the UI thread.
+    const composerHeight = useSharedValue(0);
     const router = useRouter();
     const safeArea = useSafeAreaInsets();
     const isFocused = useIsFocused();
@@ -956,35 +986,58 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
 
     // Handle loading more older messages when scrolling to top
     const [minimapItems, setMinimapItems] = React.useState<ConversationMinimapItem[]>([]);
-    const [minimapActiveMessageIds, setMinimapActiveMessageIds] = React.useState<Set<string>>(() => new Set());
-    const [minimapCachedUserMessages, setMinimapCachedUserMessages] = React.useState<UserTextMessage[]>([]);
+    const [minimapActiveMessageId, setMinimapActiveMessageId] = React.useState<string | null>(null);
+    const [minimapCachedMessages, setMinimapCachedMessages] = React.useState<MinimapMessage[]>([]);
     const [contentAreaWidth, setContentAreaWidth] = React.useState(0);
-    const minimapJumpRef = React.useRef<((message: UserTextMessage) => void) | null>(null);
-    const handleRegisterMinimapJump = React.useCallback((jump: ((message: UserTextMessage) => void) | null) => {
+    const minimapJumpRef = React.useRef<((message: MinimapMessage) => void | Promise<void>) | null>(null);
+    const handleRegisterMinimapJump = React.useCallback((jump: ((message: MinimapMessage) => void | Promise<void>) | null) => {
         minimapJumpRef.current = jump;
     }, []);
-    const handleMinimapJump = React.useCallback((message: UserTextMessage) => {
-        minimapJumpRef.current?.(message);
+    // The answer is handed back rather than dropped: a jump that has to page older messages in takes a
+    // while, and the rail holds itself up until it lands.
+    const handleMinimapJump = React.useCallback((message: MinimapMessage) => {
+        return minimapJumpRef.current?.(message);
+    }, []);
+
+    // The minimap's summoning swipe, listened for from here: the rail cannot watch the screen edge itself
+    // without putting a touch zone between the list and the thumb, and this View is the nearest ancestor
+    // of the list that can hear the edge instead. The touch props below are bubbling events — they read
+    // touches the list is already handling, and change nothing about how the list scrolls.
+    const minimapEdgeTouchRef = React.useRef<ConversationMinimapEdgeTouch | null>(null);
+    const handleRegisterMinimapEdgeTouch = React.useCallback((listener: ConversationMinimapEdgeTouch | null) => {
+        minimapEdgeTouchRef.current = listener;
+    }, []);
+    // One stable handler per phase: this view re-renders constantly, and a new identity would make RN
+    // re-register the touch handlers with it every time.
+    const edgeTouchHandlers = React.useMemo(() => {
+        const report = (phase: 'start' | 'move' | 'end') => (event: GestureResponderEvent) => {
+            minimapEdgeTouchRef.current?.(phase, event.nativeEvent.pageX, event.nativeEvent.pageY);
+        };
+        return {
+            onTouchStart: report('start'),
+            onTouchMove: report('move'),
+            onTouchEnd: report('end'),
+            onTouchCancel: report('end'),
+        };
     }, []);
 
     // Tracks which session the cached minimap list currently belongs to, so we only blank it on a
     // real session switch (not on every refocus of the same session, which would flicker the rail).
     const cachedMinimapSessionRef = React.useRef<string | null>(null);
-    // Load all user prompts from the persistent offline cache so the minimap can display prompts
-    // that haven't been paged into the message list yet. Refreshed on focus / session change.
+    // Load all minimap landmarks (prompts and AskUserQuestion calls) from the persistent offline
+    // cache so the rail can display ones that haven't been paged into the message list yet.
+    // Refreshed on focus / session change.
     useFocusEffect(
         React.useCallback(() => {
-            // The minimap is web-only (see ConversationMinimap); don't pay the scan+decrypt on native.
-            if (Platform.OS !== 'web') return;
             let cancelled = false;
             if (cachedMinimapSessionRef.current !== sessionId) {
                 cachedMinimapSessionRef.current = sessionId;
-                setMinimapCachedUserMessages([]);
+                setMinimapCachedMessages([]);
             }
-            void sync.getCachedUserMessagesForMinimap(sessionId)
+            void sync.getCachedMinimapMessages(sessionId)
                 .then((messages) => {
                     if (!cancelled) {
-                        setMinimapCachedUserMessages(messages);
+                        setMinimapCachedMessages(messages);
                     }
                 })
                 .catch(() => {
@@ -1028,34 +1081,36 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
         };
     }, [handlePaste]);
 
+    // The empty state (loading, or a session with no messages) is the list's own, so the list and
+    // the scroll view under the header and the floating composer stay the same from the first
+    // frame: a composer over a separate, shorter empty-state view had no soft edge under it.
+    const emptyComponent = isLoaded ? (
+        <EmptyMessages session={session} />
+    ) : (
+        <ActivityIndicator size="small" color={theme.colors.textSecondary} />
+    );
+
     let content = (
         <>
             <Deferred>
-                {messages.length > 0 && (
-                    <ChatList
-                        session={session}
-                        onFillInput={handleFillInput}
-                        onForkMessage={canForkSession(session) ? handleForkFromMessage : undefined}
-                        forkingMessageId={forkingMessageId}
-                        onLoadMore={handleLoadMore}
-                        minimapCachedUserMessages={minimapCachedUserMessages}
-                        onMinimapItemsChange={setMinimapItems}
-                        onActiveMessageIdsChange={setMinimapActiveMessageIds}
-                        onRegisterMinimapJump={handleRegisterMinimapJump}
-                    />
-                )}
+                <ChatList
+                    session={session}
+                    onFillInput={handleFillInput}
+                    onForkMessage={canForkSession(session) ? handleForkFromMessage : undefined}
+                    forkingMessageId={forkingMessageId}
+                    onLoadMore={handleLoadMore}
+                    minimapCachedUserMessages={minimapCachedMessages}
+                    onMinimapItemsChange={setMinimapItems}
+                    onActiveMessageIdChange={setMinimapActiveMessageId}
+                    onRegisterMinimapJump={handleRegisterMinimapJump}
+                    headerOverlayInset={headerInset > 0 ? (listUnderHeader ? headerInset : 0) : undefined}
+                    keyboardChatScroll={useNativeChatLayout}
+                    composerInset={useFloatingComposer ? composerHeight : undefined}
+                    emptyComponent={emptyComponent}
+                />
             </Deferred>
         </>
     );
-    const placeholder = messages.length === 0 ? (
-        <>
-            {isLoaded ? (
-                <EmptyMessages session={session} />
-            ) : (
-                <ActivityIndicator size="small" color={theme.colors.textSecondary} />
-            )}
-        </>
-    ) : null;
 
     const canEdit = canEditSession(session);
 
@@ -1120,6 +1175,8 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
     const input = canEdit ? (
         <AgentInput
             ref={inputRef}
+            panelSideMargin
+            glassPanel={useFloatingComposer}
             placeholder={t('session.inputPlaceholder')}
             value={message}
             onChangeText={setMessage}
@@ -1201,7 +1258,10 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
             onMicPress={micButtonState.onMicPress}
             isMicActive={micButtonState.isMicActive}
             onAbort={() => sessionAbort(sessionId)}
-            showAbortButton={sessionStatus.state === 'thinking' || sessionStatus.state === 'awaiting' || sessionStatus.state === 'waiting'}
+            // A turn is in flight while it is thinking, while the send is still awaiting its
+            // first signal, and while it is blocked on a permission request - all three can be
+            // aborted; only the online-and-idle `waiting` state cannot.
+            isBusy={sessionStatus.state === 'thinking' || sessionStatus.state === 'awaiting' || sessionStatus.state === 'permission_required'}
             onFileViewerPress={() => router.push(`/session/${sessionId}/files`)}
             // Autocomplete configuration
             autocompletePrefixes={(session.metadata?.flavor === 'codex' || session.metadata?.codexSessionId) ? ['@', '/', '$'] : ['@', '/']}
@@ -1234,6 +1294,7 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
                 });
             }}
             onImageButtonPress={handleImageButtonPress}
+            imageMenuItems={imagePickerMenuItems}
             supportsImages={supportsImages}
             isUploadingImages={isUploadingImages}
         />
@@ -1261,7 +1322,7 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
                     onPress={handleDismissCliWarning}
                     style={{
                         position: 'absolute',
-                        top: 8, // Position at top of content area (padding handled by parent)
+                        top: 8 + headerInset, // Top of the content area, below a header drawn over it
                         alignSelf: 'center',
                         backgroundColor: '#FFF3CD',
                         borderRadius: 100, // Fully rounded pill
@@ -1293,12 +1354,15 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
             <View
                 ref={dropZoneRef}
                 onLayout={(event) => setContentAreaWidth(event.nativeEvent.layout.width)}
-                style={{ flexBasis: 0, flexGrow: 1, position: 'relative', paddingBottom: safeArea.bottom + ((isRunningOnMac() || Platform.OS === 'web') ? 8 : 0) }}
+                {...edgeTouchHandlers}
+                style={{ flexBasis: 0, flexGrow: 1, position: 'relative', paddingBottom: useNativeChatLayout ? 0 : safeArea.bottom + ((isRunningOnMac() || Platform.OS === 'web') ? 8 : 0) }}
             >
                 <AgentContentView
+                    safeAreaLayout={useNativeChatLayout}
+                    floatingInput={useFloatingComposer}
+                    composerHeight={composerHeight}
                     content={content}
                     input={input}
-                    placeholder={placeholder}
                     betweenContentAndInput={pendingQueuePanel}
                 />
                 {isDraggingImage && (
@@ -1327,9 +1391,10 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
 
             <ConversationMinimap
                 userMessages={minimapItems}
-                activeMessageIds={minimapActiveMessageIds}
+                activeMessageId={minimapActiveMessageId}
                 onJumpToMessage={handleMinimapJump}
                 contentWidth={contentAreaWidth}
+                onRegisterMinimapEdgeTouch={handleRegisterMinimapEdgeTouch}
             />
 
             {/* Back button for landscape phone mode when header is hidden */}
@@ -1403,7 +1468,7 @@ const ChatHeaderRight = React.memo((props: {
     hasRuns: boolean;
     runningTaskCount: number;
     onOpenRuns: () => void;
-    onNewSession: () => void;
+    onNewSession?: () => void;
 }) => {
     const { theme } = useUnistyles();
     return (
@@ -1450,7 +1515,7 @@ const ChatHeaderRight = React.memo((props: {
                         </View>
                     )}
                 </Pressable>
-            ) : (
+            ) : props.onNewSession ? (
                 <Pressable
                     onPress={props.onNewSession}
                     hitSlop={15}
@@ -1470,7 +1535,7 @@ const ChatHeaderRight = React.memo((props: {
                         color={theme.colors.header.tint}
                     />
                 </Pressable>
-            )}
+            ) : null}
             {props.avatarId && props.onAvatarPress && (
                 <Pressable
                     onPress={props.onAvatarPress}

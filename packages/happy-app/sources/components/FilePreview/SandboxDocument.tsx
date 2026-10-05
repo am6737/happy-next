@@ -1,6 +1,11 @@
 import * as React from 'react';
 import { Platform, View } from 'react-native';
+import { DARK_DOCUMENT_BACKGROUND } from './staticDocument';
 
+/**
+ * The frame paints the document's own reading background, so the gap before the document loads is
+ * the color the document will be rather than white.
+ */
 export function SandboxDocument({
     html,
     scripts = false,
@@ -39,7 +44,7 @@ export function SandboxDocument({
                 width: '100%',
                 height: '100%',
                 border: 0,
-                backgroundColor: '#fff',
+                backgroundColor: dark ? DARK_DOCUMENT_BACKGROUND : '#fff',
                 display: 'block',
             },
             onError,
@@ -71,7 +76,7 @@ export function SandboxDocument({
                 onError={onError}
                 onContentProcessDidTerminate={onError}
                 onRenderProcessGone={onError}
-                style={{ flex: 1, backgroundColor: '#fff' }}
+                style={{ flex: 1, backgroundColor: dark ? DARK_DOCUMENT_BACKGROUND : '#fff' }}
             />
         </View>
     );

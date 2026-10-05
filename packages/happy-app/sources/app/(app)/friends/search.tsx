@@ -14,6 +14,7 @@ import { ItemGroup } from '@/components/ItemGroup';
 import { useSearch } from '@/hooks/useSearch';
 import { useProfile } from '@/sync/storage';
 import { sync } from '@/sync/sync';
+import { isRunningOnMac } from '@/utils/platform';
 
 export default function SearchFriendsScreen() {
     const { credentials } = useAuth();
@@ -21,6 +22,7 @@ export default function SearchFriendsScreen() {
     const hasGithub = !!profile.github;
     const [searchQuery, setSearchQuery] = useState('');
     const [processingUserId, setProcessingUserId] = useState<string | null>(null);
+    const useNativeKeyboardInsets = Platform.OS === 'ios' && !isRunningOnMac();
     
     // Use the new search hook
     const { results: searchResults, isSearching } = useSearch(
@@ -75,12 +77,14 @@ export default function SearchFriendsScreen() {
 
     return (
         <KeyboardAvoidingView
+            enabled={!useNativeKeyboardInsets}
             style={styles.container}
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
             <ItemList
                 style={{ paddingTop: 0 }}
                 keyboardShouldPersistTaps="handled"
+                automaticallyAdjustKeyboardInsets={useNativeKeyboardInsets}
             >
                 {!hasGithub ? (
                     <ItemGroup style={styles.resultsGroup}>

@@ -1,13 +1,52 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, statSync } from 'node:fs';
+import { mkdirSync, readFileSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { configuration } from '@/configuration';
 import { CodexJsonRpcPeer } from '@/codex/appserver/CodexJsonRpcPeer';
-import { CODEX_PACKAGE } from '@/codex/package';
+import { CodexControlSocketClient, codexControlSocketPath } from '@/codex/appserver/CodexControlSocketClient';
+import { codexPackage } from '@/codex/package';
+import { resolveCodexRuntime } from '@/codex/codexRuntime';
 import { readSessionBinding, listSessionBindings, isBindingRunning, processIdentity, readStopSnapshot, writeStopSnapshot, type SessionBinding } from './sessionBinding';
+import { atomicFileWrite } from '@/utils/fileAtomic';
+import { logger } from '@/ui/logger';
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+/**
+ * Older Codex session pickers use session_index.jsonl even though app-server archives
+ * the rollout and state-db row. Remove stale names so an archived thread cannot be
+ * resurrected in the picker after Codex restarts.
+ */
+export async function removeCodexSessionIndexEntries(codexHome: string, threadIds: readonly string[]): Promise<void> {
+    if (!threadIds.length) return;
+    const indexPath = join(codexHome, 'session_index.jsonl');
+    let contents: string;
+    try {
+        contents = readFileSync(indexPath, 'utf8');
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+        throw error;
+    }
+    const ids = new Set(threadIds);
+    let removed = false;
+    const remaining = contents.split('\n').filter(line => {
+        if (!line.trim()) return false;
+        try {
+            const entry = JSON.parse(line) as { id?: unknown };
+            if (typeof entry.id === 'string' && ids.has(entry.id)) {
+                removed = true;
+                return false;
+            }
+        } catch {
+            // Keep malformed entries intact; Codex will handle them on its next scan.
+        }
+        return true;
+    }).join('\n');
+    if (!removed) return;
+    // split/join above means `remaining` has no trailing newline; re-add one for the writer.
+    await atomicFileWrite(indexPath, `${remaining}\n`, 0o600);
+}
 
 export async function stopBoundSession(binding: SessionBinding, signal?: AbortSignal): Promise<void> {
     signal?.throwIfAborted();
@@ -48,27 +87,41 @@ export async function stopBoundSession(binding: SessionBinding, signal?: AbortSi
     if (processes.some(isBindingRunning)) throw new Error('stop-not-confirmed');
 }
 
-export async function syncCodexArchive(binding: SessionBinding, archived: boolean, signal?: AbortSignal): Promise<void> {
-    signal?.throwIfAborted();
-    if (!binding.nativeSessionIds.length) return;
-    const peer = new CodexJsonRpcPeer();
-    const controller = new AbortController();
-    const abort = () => controller.abort();
-    signal?.addEventListener('abort', abort, { once: true });
-    const timeout = setTimeout(() => controller.abort(), 75_000);
+type ArchivePeer = Pick<CodexJsonRpcPeer, 'request' | 'notify' | 'close'>;
+
+/**
+ * A running Codex app-server daemon (used by desktop clients) caches the thread list, so
+ * archiving through a separate app-server leaves those clients showing the thread. Prefer
+ * the daemon when it is reachable; otherwise a standalone helper updates the history on disk.
+ */
+async function connectCodexDaemon(codexHome: string, signal: AbortSignal): Promise<ArchivePeer | null> {
+    const socketPath = codexControlSocketPath(codexHome);
+    if (!socketPath) return null;
     try {
-        let cwd = binding.cwd;
-        try {
-            if (!statSync(cwd).isDirectory()) throw Object.assign(new Error('Not a directory'), { code: 'ENOTDIR' });
-        } catch (error) {
-            if (!['ENOENT', 'ENOTDIR'].includes((error as NodeJS.ErrnoException).code ?? '')) throw error;
-            cwd = join(configuration.happyHomeDir, 'archive-runtime');
-            mkdirSync(cwd, { recursive: true, mode: 0o700 });
-        }
-        await peer.spawn('npx', ['-y', binding.codexPackage ?? CODEX_PACKAGE, 'app-server'], {
+        return await CodexControlSocketClient.connect(socketPath, { timeoutMs: 5_000, signal });
+    } catch (error) {
+        signal.throwIfAborted();
+        logger.debug('[CodexArchive] App-server daemon unreachable, using a standalone helper', error);
+        return null;
+    }
+}
+
+async function spawnArchiveHelper(binding: SessionBinding, codexHome: string, signal: AbortSignal): Promise<ArchivePeer> {
+    let cwd = binding.cwd;
+    try {
+        if (!statSync(cwd).isDirectory()) throw Object.assign(new Error('Not a directory'), { code: 'ENOTDIR' });
+    } catch (error) {
+        if (!['ENOENT', 'ENOTDIR'].includes((error as NodeJS.ErrnoException).code ?? '')) throw error;
+        cwd = join(configuration.happyHomeDir, 'archive-runtime');
+        mkdirSync(cwd, { recursive: true, mode: 0o700 });
+    }
+    const peer = new CodexJsonRpcPeer();
+    try {
+        const runtime = resolveCodexRuntime(binding.codexPackage ?? codexPackage(), ['app-server']);
+        await peer.spawn(runtime.command, runtime.args, {
             cwd,
-            signal: controller.signal,
-            env: { CODEX_HOME: binding.codexHome ? resolve(binding.cwd, binding.codexHome) : join(homedir(), '.codex') },
+            signal,
+            env: { CODEX_HOME: codexHome },
         });
         // Persist the native helper before issuing side effects, so a replacement daemon
         // can stop an orphaned helper before reconciling the same threads.
@@ -77,6 +130,25 @@ export async function syncCodexArchive(binding: SessionBinding, archived: boolea
             if (!identity) throw new Error('process-verification-unsupported');
             writeStopSnapshot(binding, [...readStopSnapshot(binding), { pid: peer.pid, identity }]);
         }
+        return peer;
+    } catch (error) {
+        await peer.close();
+        throw error;
+    }
+}
+
+export async function syncCodexArchive(binding: SessionBinding, archived: boolean, signal?: AbortSignal): Promise<void> {
+    signal?.throwIfAborted();
+    if (!binding.nativeSessionIds.length) return;
+    let peer: ArchivePeer | null = null;
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    signal?.addEventListener('abort', abort, { once: true });
+    const timeout = setTimeout(() => controller.abort(), 75_000);
+    try {
+        const codexHome = binding.codexHome ? resolve(binding.cwd, binding.codexHome) : join(homedir(), '.codex');
+        peer = await connectCodexDaemon(codexHome, controller.signal)
+            ?? await spawnArchiveHelper(binding, codexHome, controller.signal);
         await peer.request('initialize', { clientInfo: { name: 'happy-archive', version: '1.0.0' } }, 15_000);
         peer.notify('initialized', {});
         // No resume/start: archive existing persisted threads without creating a new conversation.
@@ -105,10 +177,18 @@ export async function syncCodexArchive(binding: SessionBinding, archived: boolea
                 }
             }
         }
+        if (archived) {
+            try {
+                await removeCodexSessionIndexEntries(codexHome, binding.nativeSessionIds);
+            } catch (error) {
+                // Native archive already succeeded; stale index cleanup is best effort.
+                logger.debug('[CodexArchive] Stale session index cleanup failed', error);
+            }
+        }
     } finally {
         clearTimeout(timeout);
         signal?.removeEventListener('abort', abort);
-        await peer.close();
+        await peer?.close();
     }
 }
 

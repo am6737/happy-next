@@ -27,6 +27,8 @@ import { layout } from './layout';
 import { useVoicePreview } from '@/hooks/useVoicePreview';
 import { getVoiceName, getVoiceDescription, type Voice } from '@/constants/Voices';
 import { t } from '@/text';
+import { GlassSurface, liquidGlassAvailable } from './GlassSurface';
+import { GLASS_SHEET_FILL, GLASS_SHEET_RADIUS, glassSheetFramePadding, SHEET_BACKDROP_OPACITY, SHEET_SLIDE_SPRING } from './glassSheet';
 
 const ANIMATION_DURATION = 250;
 
@@ -44,7 +46,12 @@ export function VoiceDetailSheet({ visible, voice, selected, onClose, onUse, onC
     const { theme } = useUnistyles();
     const [modalVisible, setModalVisible] = useState(false);
     const fadeAnim = useRef(new Animated.Value(0)).current;
-    const slideAnim = useRef(new Animated.Value(300)).current;
+    // 0 = off screen, 1 = in place.
+    const slideAnim = useRef(new Animated.Value(0)).current;
+    // The glass card slides by its own height (a screen's until measured, see `glassSheet`); the
+    // solid sheet by 300.
+    const [sheetHeight, setSheetHeight] = useState(0);
+    const slideDistance = liquidGlassAvailable ? (sheetHeight || 1000) : 300;
 
     const { isPlaying, loading, toggle } = useVoicePreview(voice?.voiceType ?? '', voice?.trialUrl);
 
@@ -66,15 +73,15 @@ export function VoiceDetailSheet({ visible, voice, selected, onClose, onUse, onC
         if (visible) {
             setModalVisible(true);
             fadeAnim.setValue(0);
-            slideAnim.setValue(300);
+            slideAnim.setValue(0);
             Animated.parallel([
                 Animated.timing(fadeAnim, { toValue: 1, duration: ANIMATION_DURATION, useNativeDriver: true }),
-                Animated.spring(slideAnim, { toValue: 0, damping: 20, stiffness: 300, useNativeDriver: true }),
+                Animated.spring(slideAnim, { toValue: 1, ...SHEET_SLIDE_SPRING, useNativeDriver: true }),
             ]).start();
         } else if (modalVisible) {
             Animated.parallel([
                 Animated.timing(fadeAnim, { toValue: 0, duration: ANIMATION_DURATION, useNativeDriver: true }),
-                Animated.timing(slideAnim, { toValue: 300, duration: ANIMATION_DURATION, useNativeDriver: true }),
+                Animated.timing(slideAnim, { toValue: 0, duration: ANIMATION_DURATION, useNativeDriver: true }),
             ]).start(() => {
                 setModalVisible(false);
                 onClosed?.();
@@ -93,72 +100,94 @@ export function VoiceDetailSheet({ visible, voice, selected, onClose, onUse, onC
                     <Animated.View
                         style={[
                             styles.backdrop as ViewStyle,
-                            { opacity: fadeAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 0.5] }) },
+                            { opacity: fadeAnim.interpolate({ inputRange: [0, 1], outputRange: [0, SHEET_BACKDROP_OPACITY] }) },
                         ]}
                     />
                 </TouchableWithoutFeedback>
 
                 <Animated.View
                     style={[
-                        styles.sheet as ViewStyle,
-                        { opacity: fadeAnim, transform: [{ translateY: slideAnim }], paddingBottom: insets.bottom + 16 },
+                        styles.sheetFrame as ViewStyle,
+                        liquidGlassAvailable && glassSheetFramePadding(insets.bottom),
+                        {
+                            opacity: liquidGlassAvailable ? 1 : fadeAnim,
+                            transform: [{
+                                translateY: slideAnim.interpolate({ inputRange: [0, 1], outputRange: [slideDistance, 0] }),
+                            }],
+                        },
                     ]}
+                    onLayout={(event) => setSheetHeight(event.nativeEvent.layout.height)}
                 >
-                    <View style={styles.handleContainer as ViewStyle} {...panResponder.panHandlers}>
-                        <View style={styles.handle as ViewStyle} />
-                    </View>
+                    <GlassSurface
+                        glass={liquidGlassAvailable}
+                        color={theme.colors.surface}
+                        style={[
+                            styles.sheet as ViewStyle,
+                            liquidGlassAvailable
+                                ? styles.sheetGlass as ViewStyle
+                                : [styles.sheetSolid as ViewStyle, { paddingBottom: insets.bottom + 16 }],
+                        ]}
+                    >
+                        <View style={styles.handleContainer as ViewStyle} {...panResponder.panHandlers}>
+                            <View style={styles.handle as ViewStyle} />
+                        </View>
 
-                    {/* Avatar + name + meta */}
-                    <View style={styles.headerRow as ViewStyle}>
-                        <Image
-                            source={{ uri: voice.avatar }}
-                            style={{ width: 72, height: 72, borderRadius: 36 }}
-                            contentFit="cover"
-                            transition={150}
-                        />
-                        <View style={styles.headerInfo as ViewStyle}>
-                            <View style={styles.nameRow as ViewStyle}>
-                                <Text style={styles.name as TextStyle} numberOfLines={2}>
-                                    {getVoiceName(voice)}
-                                </Text>
-                                {selected && (
-                                    <Ionicons name="checkmark-circle" size={20} color="#007AFF" />
-                                )}
-                            </View>
-                            <View style={styles.metaRow as ViewStyle}>
-                                {!!voice.gender && <Text style={styles.metaText as TextStyle}>{voice.gender}</Text>}
-                                {!!voice.flags && <Text style={styles.metaText as TextStyle}>{voice.flags}</Text>}
+                        {/* Avatar + name + meta */}
+                        <View style={styles.headerRow as ViewStyle}>
+                            <Image
+                                source={{ uri: voice.avatar }}
+                                style={{ width: 72, height: 72, borderRadius: 36 }}
+                                contentFit="cover"
+                                transition={150}
+                            />
+                            <View style={styles.headerInfo as ViewStyle}>
+                                <View style={styles.nameRow as ViewStyle}>
+                                    <Text style={styles.name as TextStyle} numberOfLines={2}>
+                                        {getVoiceName(voice)}
+                                    </Text>
+                                    {selected && (
+                                        <Ionicons name="checkmark-circle" size={20} color="#007AFF" />
+                                    )}
+                                </View>
+                                <View style={styles.metaRow as ViewStyle}>
+                                    {!!voice.gender && <Text style={styles.metaText as TextStyle}>{voice.gender}</Text>}
+                                    {!!voice.flags && <Text style={styles.metaText as TextStyle}>{voice.flags}</Text>}
+                                </View>
                             </View>
                         </View>
-                    </View>
 
-                    {/* Description */}
-                    {!!getVoiceDescription(voice) && (
-                        <Text style={styles.description as TextStyle}>{getVoiceDescription(voice)}</Text>
-                    )}
-
-                    {/* Preview */}
-                    <Pressable
-                        style={({ pressed }) => [styles.previewButton as ViewStyle, pressed && { opacity: 0.7 }]}
-                        onPress={toggle}
-                    >
-                        {loading ? (
-                            <ActivityIndicator size="small" color="#007AFF" />
-                        ) : (
-                            <Ionicons name={isPlaying ? 'pause' : 'play'} size={18} color="#007AFF" />
+                        {/* Description */}
+                        {!!getVoiceDescription(voice) && (
+                            <Text style={styles.description as TextStyle}>{getVoiceDescription(voice)}</Text>
                         )}
-                        <Text style={styles.previewText as TextStyle}>{t('settingsVoice.voicePreview')}</Text>
-                    </Pressable>
 
-                    {/* Use this voice */}
-                    <Pressable
-                        style={({ pressed }) => [styles.useButton as ViewStyle, pressed && styles.useButtonPressed as ViewStyle]}
-                        onPress={() => onUse(voice.voiceType)}
-                    >
-                        <Text style={styles.useButtonText as TextStyle}>
-                            {selected ? t('settingsVoice.voiceInUse') : t('settingsVoice.voiceUse')}
-                        </Text>
-                    </Pressable>
+                        {/* Preview */}
+                        <Pressable
+                            style={({ pressed }) => [
+                                styles.previewButton as ViewStyle,
+                                liquidGlassAvailable && styles.previewButtonGlass as ViewStyle,
+                                pressed && { opacity: 0.7 },
+                            ]}
+                            onPress={toggle}
+                        >
+                            {loading ? (
+                                <ActivityIndicator size="small" color="#007AFF" />
+                            ) : (
+                                <Ionicons name={isPlaying ? 'pause' : 'play'} size={18} color="#007AFF" />
+                            )}
+                            <Text style={styles.previewText as TextStyle}>{t('settingsVoice.voicePreview')}</Text>
+                        </Pressable>
+
+                        {/* Use this voice */}
+                        <Pressable
+                            style={({ pressed }) => [styles.useButton as ViewStyle, pressed && styles.useButtonPressed as ViewStyle]}
+                            onPress={() => onUse(voice.voiceType)}
+                        >
+                            <Text style={styles.useButtonText as TextStyle}>
+                                {selected ? t('settingsVoice.voiceInUse') : t('settingsVoice.voiceUse')}
+                            </Text>
+                        </Pressable>
+                    </GlassSurface>
                 </Animated.View>
             </View>
         </Modal>
@@ -179,13 +208,20 @@ const styles = StyleSheet.create((theme) => ({
         bottom: 0,
         backgroundColor: 'black',
     },
-    sheet: {
+    sheetFrame: {
         width: '100%',
         maxWidth: Math.min(layout.maxWidth, 768),
-        backgroundColor: theme.colors.surface,
+    },
+    sheet: {
+        paddingHorizontal: 20,
+    },
+    sheetSolid: {
         borderTopLeftRadius: 12,
         borderTopRightRadius: 12,
-        paddingHorizontal: 20,
+    },
+    sheetGlass: {
+        borderRadius: GLASS_SHEET_RADIUS,
+        paddingBottom: 20,
     },
     handleContainer: {
         alignItems: 'center',
@@ -243,6 +279,9 @@ const styles = StyleSheet.create((theme) => ({
         paddingVertical: 12,
         borderRadius: 10,
         backgroundColor: theme.colors.surfacePressed,
+    },
+    previewButtonGlass: {
+        backgroundColor: GLASS_SHEET_FILL,
     },
     previewText: {
         fontSize: 16,

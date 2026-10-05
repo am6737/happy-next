@@ -27,7 +27,7 @@ const ColorPair = ({ name, bg, text }: { name: string; bg: string; text: string 
 
 export default function ColorsScreen() {
     return (
-        <ScrollView style={styles.container}>
+        <ScrollView style={styles.container} contentInsetAdjustmentBehavior="automatic">
             <View style={styles.content}>
                 {/* iOS System Colors */}
                 <View style={styles.section}>

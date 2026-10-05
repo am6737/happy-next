@@ -45,7 +45,7 @@ describe('GitHub reconnect state wiring', () => {
 
     test('shows switch count loading, zero and unavailable states in the same badge', () => {
         expect(source).toContain("activeTab === 'issues' ? workPulls.loading : workIssues.loading");
-        expect(source).toContain("{otherTabCountLoading && typeof otherTabCount !== 'number' ? (");
+        expect(source).toContain("{otherTabCountRefreshing || (otherTabCountLoading && typeof otherTabCount !== 'number') ? (");
         expect(source).toContain("size={Platform.OS === 'ios' ? 'small' : 12}");
         expect(source).toContain("style={Platform.OS === 'ios' ? { transform: [{ scale: 0.6 }] } : undefined}");
         expect(source).toContain("typeof otherTabCount === 'number' ? otherTabCount : '\\u2014'");

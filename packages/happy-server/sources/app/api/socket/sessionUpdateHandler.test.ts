@@ -153,6 +153,8 @@ vi.mock("@/app/presence/sessionCache", () => ({
     activityCache: {
         isSessionValid: vi.fn(async () => true),
         queueSessionUpdate: vi.fn(),
+        isHeartbeatAfterEnd: vi.fn(() => true),
+        markSessionEnded: vi.fn(),
     }
 }));
 

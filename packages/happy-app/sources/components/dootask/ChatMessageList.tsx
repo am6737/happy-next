@@ -1,11 +1,20 @@
 import * as React from 'react';
-import { View, Text, FlatList, ActivityIndicator, Pressable } from 'react-native';
+import { View, Text, ActivityIndicator, Platform, type ScrollViewProps } from 'react-native';
+import { LegendList } from '@legendapp/list/react-native';
+import type { LegendListRef } from '@legendapp/list/react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
-import { Ionicons } from '@expo/vector-icons';
 import { t } from '@/text';
 import { Typography } from '@/constants/Typography';
 import { ChatBubble } from './ChatBubble';
 import type { DooTaskDialogMsg, DisplayMessage, PendingMessage } from '@/sync/dootask/types';
+import { useSoftHeaderInset } from '@/components/navigation/softHeader';
+import Animated, { type SharedValue } from 'react-native-reanimated';
+import { ChatScrollView } from '@/components/ChatScrollView';
+import { ScrollToBottomButton } from '@/components/ScrollToBottomButton';
+import { distanceFromEnd } from '@/components/chatListRowModel';
+import { COMPOSER_MARGIN, floatingComposerBottomInset } from '@/components/floatingComposer';
+import { useChatOverlayStyle } from '@/hooks/useChatOverlayStyle';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Threshold in pixels for showing the scroll-to-bottom button
 const SCROLL_THRESHOLD = 100;
@@ -57,6 +66,10 @@ type ChatMessageListProps = {
     onEmojiPress?: (msgId: number, symbol: string) => void;
     onRetry?: (pendingId: string) => void;
     serverUrl: string;
+    dataKey?: string;
+    emptyComponent?: React.ReactElement | null;
+    /** The height of a composer floating over the list (see `AgentContentView`'s `floatingInput`). */
+    composerInset?: SharedValue<number>;
 };
 
 /** Resolve a potentially relative avatar URL to an absolute one, handling {{RemoteURL}} placeholder. */
@@ -69,9 +82,7 @@ function resolveAvatarUrl(avatarPath: string | null | undefined, serverUrl: stri
 }
 
 /**
- * Inverted FlatList that renders a scrollable chat message list with date separators.
- * Messages array is expected newest-first (index 0 = newest).
- * The inverted FlatList renders newest at the bottom of the screen.
+ * Messages arrive newest-first, but LegendList renders chronologically without inversion.
  */
 export const ChatMessageList = React.memo(({
     messages,
@@ -87,9 +98,15 @@ export const ChatMessageList = React.memo(({
     onEmojiPress,
     onRetry,
     serverUrl,
+    dataKey,
+    emptyComponent,
+    composerInset,
 }: ChatMessageListProps) => {
     const { theme } = useUnistyles();
-    const flatListRef = React.useRef<FlatList>(null);
+    const listRef = React.useRef<LegendListRef>(null);
+    const softHeaderInset = useSoftHeaderInset();
+    const insets = useSafeAreaInsets();
+    const chronologicalMessages = React.useMemo(() => [...messages].reverse(), [messages]);
 
     // Scroll-to-bottom button visibility
     const [showScrollButton, setShowScrollButton] = React.useState(false);
@@ -109,8 +126,7 @@ export const ChatMessageList = React.memo(({
     }
 
     const handleScroll = React.useCallback((event: any) => {
-        const offsetY = event.nativeEvent.contentOffset.y;
-        const shouldShow = offsetY > SCROLL_THRESHOLD;
+        const shouldShow = distanceFromEnd(event.nativeEvent) > SCROLL_THRESHOLD;
         setShowScrollButton(prev => {
             if (shouldShow && !prev) {
                 lastSeenCreatedAtRef.current = messages[0]?.created_at ?? '';
@@ -119,8 +135,10 @@ export const ChatMessageList = React.memo(({
         });
     }, [messages]);
 
+    // Where the composer's padding ends above the screen's bottom, which its keyboard offset is measured from.
+    const keyboardBottomInset = composerInset ? floatingComposerBottomInset(insets.bottom) : insets.bottom;
     const handleScrollToBottom = React.useCallback(() => {
-        flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+        void listRef.current?.scrollToEnd({ animated: false });
     }, []);
 
     // Build a map from message id -> message for resolving reply_id references
@@ -148,27 +166,26 @@ export const ChatMessageList = React.memo(({
         const isVisiblePending = pending && !isQuietPending;
 
         // Date separator logic:
-        // Since the list is inverted, the NEXT item in the array (index + 1) appears ABOVE in the UI.
-        // We show a date separator above the current bubble when the date differs from the next item.
+        // The previous item is visually above this bubble in the non-inverted list.
         const currentDate = item.created_at.substring(0, 10); // YYYY-MM-DD
-        const nextMsg = index < messages.length - 1 ? messages[index + 1] : null;
-        const nextDate = nextMsg ? nextMsg.created_at.substring(0, 10) : null;
-        const showDateSeparator = !pending && (!nextDate || nextDate !== currentDate);
+        const previousMsg = index > 0 ? chronologicalMessages[index - 1] : null;
+        const previousDate = previousMsg ? previousMsg.created_at.substring(0, 10) : null;
+        const showDateSeparator = !pending && (!previousDate || previousDate !== currentDate);
 
         // Avatar grouping: show avatar on the FIRST message of a sender group (reading top-to-bottom).
-        // In inverted FlatList, "above" = index + 1. Show avatar when the message above is
+        // Show avatar when the message above is
         // from a different user or doesn't exist, OR when a date separator breaks the group.
         const isSystemMsg = (type: string) => type === 'notice' || type === 'tag' || type === 'top' || type === 'todo';
-        const showAvatar = isVisiblePending || !nextMsg || nextMsg.userid !== item.userid || isSystemMsg(nextMsg.type) || showDateSeparator;
+        const showAvatar = isVisiblePending || !previousMsg || previousMsg.userid !== item.userid || isSystemMsg(previousMsg.type) || showDateSeparator;
 
         // Spacing rule:
         // - Compact spacing for consecutive messages from the same sender (same date block)
         // - Larger spacing when a new sender group starts
         const isConsecutiveSameSender =
             !isVisiblePending &&
-            !!nextMsg &&
-            nextMsg.userid === item.userid &&
-            !isSystemMsg(nextMsg.type) &&
+            !!previousMsg &&
+            previousMsg.userid === item.userid &&
+            !isSystemMsg(previousMsg.type) &&
             !isSystemMsg(item.type) &&
             !showDateSeparator;
 
@@ -179,7 +196,8 @@ export const ChatMessageList = React.memo(({
             : undefined;
 
         return (
-            <View style={isConsecutiveSameSender ? styles.itemWithoutAvatar : styles.itemWithAvatar}>
+            // The last row's spacing would only add to the list's own bottom padding above the composer.
+            <View style={[isConsecutiveSameSender ? styles.itemWithoutAvatar : styles.itemWithAvatar, index === chronologicalMessages.length - 1 && styles.lastItem]}>
                 {showDateSeparator && (
                     <View style={styles.dateSeparator}>
                         <Text style={[styles.dateText, { color: theme.colors.textSecondary, backgroundColor: theme.colors.header.background }]}>
@@ -206,85 +224,83 @@ export const ChatMessageList = React.memo(({
                 />
             </View>
         );
-    }, [messages, currentUserId, userNames, userAvatars, userDisabledAt, replyMsgMap, onImagePress, onMessageLongPress, onEmojiPress, onRetry, serverUrl, theme]);
+    }, [chronologicalMessages, currentUserId, userNames, userAvatars, userDisabledAt, replyMsgMap, onImagePress, onMessageLongPress, onEmojiPress, onRetry, serverUrl, theme]);
 
     const keyExtractor = React.useCallback((msg: DisplayMessage) =>
         isPending(msg) ? msg._pendingId : msg.id.toString()
     , []);
 
-    const listFooter = React.useMemo(() => {
-        if (!loadingMore) return null;
-        return (
-            <View style={styles.loadingFooter}>
-                <ActivityIndicator size="small" />
-            </View>
-        );
-    }, [loadingMore]);
+    const listHeader = React.useMemo(() => (
+        <View>
+            <View style={{ height: softHeaderInset + 12 }} />
+            {loadingMore && (
+                <View style={styles.loadingFooter}>
+                    <ActivityIndicator size="small" />
+                </View>
+            )}
+        </View>
+    ), [loadingMore, softHeaderInset, styles.loadingFooter]);
 
-    // Force FlatList to re-render when avatar data loads asynchronously
-    const extraData = React.useMemo(() => ({ userAvatars, userNames, userDisabledAt }), [userAvatars, userNames, userDisabledAt]);
+    // Refresh mounted rows when avatar data loads asynchronously.
+    // The count is in here too: a new message takes the last-row spacing off the row before it.
+    const extraData = React.useMemo(
+        () => ({ userAvatars, userNames, userDisabledAt, count: chronologicalMessages.length }),
+        [userAvatars, userNames, userDisabledAt, chronologicalMessages.length],
+    );
+
+    const renderScrollComponent = React.useCallback(
+        (props: ScrollViewProps) => (
+            <ChatScrollView
+                {...props}
+                bottomInset={keyboardBottomInset}
+                topInset={softHeaderInset}
+                composerInset={composerInset}
+                listRef={listRef}
+            />
+        ),
+        [composerInset, keyboardBottomInset, softHeaderInset, listRef],
+    );
+    // The list's frame does not shrink for the keyboard (or end at a floating composer), so the
+    // scroll-to-bottom button is moved above both.
+    const overlayStyle = useChatOverlayStyle(Platform.OS === 'ios', composerInset);
 
     return (
         <View style={styles.wrapper}>
-            <FlatList
-                ref={flatListRef}
-                data={messages}
-                inverted={true}
+            <LegendList
+                ref={listRef}
+                data={chronologicalMessages}
+                dataKey={dataKey}
                 keyExtractor={keyExtractor}
                 renderItem={renderItem}
+                estimatedItemSize={100}
+                estimatedHeaderSize={softHeaderInset + 12 + (loadingMore ? 48 : 0)}
+                initialScrollAtEnd
+                maintainScrollAtEnd={{ on: { dataChange: true } }}
+                maintainScrollAtEndThreshold={0.2}
+                maintainVisibleContentPosition
                 extraData={extraData}
                 onScroll={handleScroll}
                 scrollEventThrottle={16}
-                onEndReached={handleEndReached}
-                onEndReachedThreshold={0.3}
-                ListFooterComponent={listFooter}
-                contentContainerStyle={styles.contentContainer}
-                initialNumToRender={50}
-                maxToRenderPerBatch={50}
-                windowSize={11}
+                onStartReached={handleEndReached}
+                onStartReachedThreshold={0.3}
+                ListHeaderComponent={listHeader}
+                ListEmptyComponent={emptyComponent}
+                renderScrollComponent={renderScrollComponent}
+                contentContainerStyle={[styles.contentContainer, chronologicalMessages.length === 0 && styles.contentContainerEmpty]}
+                keyboardShouldPersistTaps="handled"
+                // An empty chat only shows its centered placeholder; the composer's inset would
+                // otherwise leave it a little room to scroll. The keyboard still lifts it (scrollTo).
+                scrollEnabled={chronologicalMessages.length > 0}
             />
 
             {/* Scroll to bottom button */}
-            {showScrollButton && (
-                <View pointerEvents="box-none" style={{ position: 'absolute', bottom: 16, right: 16 }}>
-                    <Pressable
-                        onPress={handleScrollToBottom}
-                        style={{
-                            backgroundColor: theme.colors.surfaceHighest,
-                            borderRadius: 20,
-                            width: 40,
-                            height: 40,
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            shadowColor: theme.colors.shadow.color,
-                            shadowOffset: { width: 0, height: 2 },
-                            shadowOpacity: theme.colors.shadow.opacity,
-                            shadowRadius: 4,
-                            elevation: 4,
-                        }}
-                    >
-                        <Ionicons name="chevron-down" size={24} color={theme.colors.text} />
-                        {unreadCount > 0 && (
-                            <View style={{
-                                position: 'absolute',
-                                top: -4,
-                                right: -4,
-                                backgroundColor: theme.colors.status.connected,
-                                borderRadius: 10,
-                                minWidth: 20,
-                                height: 20,
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                paddingHorizontal: 4,
-                            }}>
-                                <Text style={{ color: '#fff', fontSize: 12, fontWeight: '600' }}>
-                                    {unreadCount > 99 ? '99+' : unreadCount}
-                                </Text>
-                            </View>
-                        )}
-                    </Pressable>
-                </View>
-            )}
+            <Animated.View pointerEvents="box-none" style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }, overlayStyle]}>
+                {showScrollButton && (
+                    <View pointerEvents="box-none" style={{ position: 'absolute', bottom: 16, right: 16 }}>
+                        <ScrollToBottomButton onPress={handleScrollToBottom} unreadCount={unreadCount} />
+                    </View>
+                )}
+            </Animated.View>
         </View>
     );
 });
@@ -295,15 +311,23 @@ const styles = StyleSheet.create((theme) => ({
     wrapper: {
         flex: 1,
     },
-    contentContainer: {
-        paddingVertical: theme.margins.sm,
+    // Only an empty chat stretches to the viewport, for its centered placeholder: stretched, a
+    // short chat would outgrow the room left above the composer and scroll.
+    contentContainerEmpty: {
         flexGrow: 1,
+    },
+    contentContainer: {
+        paddingTop: theme.margins.sm,
+        paddingBottom: COMPOSER_MARGIN,
     },
     itemWithAvatar: {
         marginBottom: 22,
     },
     itemWithoutAvatar: {
         marginBottom: 10,
+    },
+    lastItem: {
+        marginBottom: 0,
     },
     dateSeparator: {
         alignItems: 'center',

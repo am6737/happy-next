@@ -1,14 +1,29 @@
 diff --git a/node_modules/react-native-bottom-tabs/ios/Extensions.swift b/node_modules/react-native-bottom-tabs/ios/Extensions.swift
-index fed3dd2..a7411f8 100644
+index fed3dd2..447643e 100644
 --- a/node_modules/react-native-bottom-tabs/ios/Extensions.swift
 +++ b/node_modules/react-native-bottom-tabs/ios/Extensions.swift
-@@ -53,6 +53,32 @@ extension PlatformImage {
+@@ -53,6 +53,47 @@ extension PlatformImage {
    }
  }
  
 +#if os(iOS)
 +extension UIImage {
-+  func addingDotBadge(tintColor: UIColor?) -> UIImage {
++  /// The color the system itself draws tab bar items with on this OS version.
++  /// iOS 26 tab bars ignore the per-item tint colors and paint every item with a
++  /// vibrant label color, so an icon whose dot badge is baked into the bitmap has to
++  /// use that same color to keep looking like its neighbours. Older systems respect
++  /// the tint colors, so there the app provided tint stays in charge.
++  static func systemTabItemTint(for colorScheme: ColorScheme) -> UIColor? {
++    if #available(iOS 26.0, *) {
++      let style: UIUserInterfaceStyle = colorScheme == .dark ? .dark : .light
++      return UIColor.label
++        .resolvedColor(with: UITraitCollection(userInterfaceStyle: style))
++        .withAlphaComponent(0.9)
++    }
++    return nil
++  }
++
++  func addingDotBadge(tintColor: UIColor?, colorScheme: ColorScheme) -> UIImage {
 +    let verticalInset: CGFloat = 6
 +    let horizontalInset: CGFloat = 6
 +    let canvasSize = CGSize(
@@ -17,7 +32,7 @@ index fed3dd2..a7411f8 100644
 +    )
 +    let renderer = UIGraphicsImageRenderer(size: canvasSize)
 +    let rendered = renderer.image { _ in
-+      let baseImage = tintColor.map {
++      let baseImage = (UIImage.systemTabItemTint(for: colorScheme) ?? tintColor).map {
 +        withTintColor($0, renderingMode: .alwaysOriginal)
 +      } ?? self
 +      baseImage.draw(at: CGPoint(x: horizontalInset, y: verticalInset))
@@ -36,10 +51,20 @@ index fed3dd2..a7411f8 100644
  #if os(macOS)
    @MainActor
 diff --git a/node_modules/react-native-bottom-tabs/ios/TabView/LegacyTabView.swift b/node_modules/react-native-bottom-tabs/ios/TabView/LegacyTabView.swift
-index 5bfc58f..f0592a8 100644
+index 5bfc58f..04d15e2 100644
 --- a/node_modules/react-native-bottom-tabs/ios/TabView/LegacyTabView.swift
 +++ b/node_modules/react-native-bottom-tabs/ios/TabView/LegacyTabView.swift
-@@ -39,7 +39,17 @@ struct LegacyTabView: AnyTabView {
+@@ -3,6 +3,9 @@ import SwiftUI
+ struct LegacyTabView: AnyTabView {
+   @ObservedObject var props: TabViewProps
+ 
++  /// Keeps the baked dot badge icon in sync with the appearance.
++  @Environment(\.colorScheme) private var colorScheme
++
+   var onLayout: (CGSize) -> Void
+   var onSelect: (String) -> Void
+   var updateTabBarAppearance: () -> Void
+@@ -39,7 +42,18 @@ struct LegacyTabView: AnyTabView {
        let isFocused = props.selectedPage == tabData.key
  
        if !tabData.hidden || isFocused {
@@ -48,7 +73,8 @@ index 5bfc58f..f0592a8 100644
 +          ? props.icons[index]?.addingDotBadge(
 +              tintColor: isFocused
 +                ? (tabData.activeTintColor ?? props.activeTintColor)
-+                : props.inactiveTintColor
++                : props.inactiveTintColor,
++              colorScheme: colorScheme
 +            )
 +          : props.icons[index]
 +        #else
@@ -57,7 +83,7 @@ index 5bfc58f..f0592a8 100644
          let child = props.children[safe: index]?.view ?? PlatformView()
          let context = TabAppearContext(
            index: index,
-@@ -61,7 +71,7 @@ struct LegacyTabView: AnyTabView {
+@@ -61,7 +75,7 @@ struct LegacyTabView: AnyTabView {
              .accessibilityIdentifier(tabData.testID ?? "")
            }
            .tag(tabData.key)
@@ -67,10 +93,20 @@ index 5bfc58f..f0592a8 100644
        }
      }
 diff --git a/node_modules/react-native-bottom-tabs/ios/TabView/NewTabView.swift b/node_modules/react-native-bottom-tabs/ios/TabView/NewTabView.swift
-index 22c52cd..db56078 100644
+index 22c52cd..8a3170d 100644
 --- a/node_modules/react-native-bottom-tabs/ios/TabView/NewTabView.swift
 +++ b/node_modules/react-native-bottom-tabs/ios/TabView/NewTabView.swift
-@@ -28,7 +28,17 @@ struct NewTabView: AnyTabView {
+@@ -5,6 +5,9 @@ import SwiftUI
+ struct NewTabView: AnyTabView {
+   @ObservedObject var props: TabViewProps
+ 
++  /// Keeps the baked dot badge icon in sync with the appearance.
++  @Environment(\.colorScheme) private var colorScheme
++
+   var onLayout: (CGSize) -> Void
+   var onSelect: (String) -> Void
+   var updateTabBarAppearance: () -> Void
+@@ -28,7 +31,18 @@ struct NewTabView: AnyTabView {
            let isFocused = props.selectedPage == tabData.key
  
            if !tabData.hidden || isFocused {
@@ -79,7 +115,8 @@ index 22c52cd..db56078 100644
 +              ? props.icons[index]?.addingDotBadge(
 +                  tintColor: isFocused
 +                    ? (tabData.activeTintColor ?? props.activeTintColor)
-+                    : props.inactiveTintColor
++                    : props.inactiveTintColor,
++                  colorScheme: colorScheme
 +                )
 +              : props.icons[index]
 +            #else
@@ -88,7 +125,7 @@ index 22c52cd..db56078 100644
  
              let context = TabAppearContext(
                index: index,
-@@ -52,7 +62,7 @@ struct NewTabView: AnyTabView {
+@@ -52,7 +66,7 @@ struct NewTabView: AnyTabView {
                )
              }
              #if !os(tvOS)

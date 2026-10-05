@@ -22,6 +22,10 @@ export const LocalSettingsSchema = z.object({
     machineNameCache: z.record(z.string(), z.string()).describe('Cached machineId -> display name, so machine tabs keep their names before machines sync on restart'),
     collapsedSessionProjectGroups: z.record(z.string(), z.boolean()).describe('Collapsed project paths in the active session list'),
     webSidebarWidth: z.number().finite().nullable().describe('Persisted web sidebar width in pixels'),
+    // Terminal UI state (device-specific)
+    terminalTabOrder: z.array(z.string()).describe('Order the terminal tabs were dragged into, by terminalTabKey'),
+    terminalTabNames: z.record(z.string(), z.string()).describe('Names given to terminal tabs by hand, by terminalTabKey'),
+    terminalNewTarget: z.object({ machineId: z.string(), cwd: z.string() }).nullable().describe('Machine and directory chosen the last time a terminal was started'),
 });
 
 //
@@ -52,6 +56,9 @@ export const localSettingsDefaults: LocalSettings = {
     machineNameCache: {},
     collapsedSessionProjectGroups: {},
     webSidebarWidth: null,
+    terminalTabOrder: [],
+    terminalTabNames: {},
+    terminalNewTarget: null,
 };
 Object.freeze(localSettingsDefaults);
 

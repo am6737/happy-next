@@ -1,12 +1,14 @@
 import * as React from 'react';
-import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { Stack } from 'expo-router';
-import { useHeaderHeight } from '@react-navigation/elements';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { LegendList } from '@legendapp/list/react-native';
-import { BlurView } from 'expo-blur';
-import { GlassView, isLiquidGlassAvailable } from 'expo-glass-effect';
+import { Platform, Pressable, StyleSheet, Text, TextInput, View, type ScrollViewProps } from 'react-native';
+import { LegendList, type LegendListRef } from '@legendapp/list/react-native';
 import { KeyboardStickyView } from 'react-native-keyboard-controller';
+import { useSharedValue } from 'react-native-reanimated';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { AgentContentView } from '@/components/AgentContentView';
+import { ChatScrollView } from '@/components/ChatScrollView';
+import { GlassSurface } from '@/components/GlassSurface';
+import { COMPOSER_MARGIN, floatingComposerAvailable, floatingComposerBottomInset } from '@/components/floatingComposer';
+import { useSoftHeaderInset } from '@/components/navigation/softHeader';
 
 type DemoMessage = {
     id: string;
@@ -29,12 +31,12 @@ export default function LegendChatHeaderTest() {
     const [input, setInput] = React.useState('');
     const nextMessageIdRef = React.useRef(31);
     const olderPageRef = React.useRef(0);
-    const headerHeight = useHeaderHeight();
+    const softHeaderInset = useSoftHeaderInset();
     const insets = useSafeAreaInsets();
-    const useNativeTransparentHeader = Platform.OS === 'ios';
-    const useLiquidGlass = Platform.OS === 'ios' && isLiquidGlassAvailable();
-    const [measuredInputHeight, setMeasuredInputHeight] = React.useState<number | null>(null);
-    const inputHeight = measuredInputHeight ?? (64 + Math.max(insets.bottom, 8));
+    // Written by AgentContentView as the floating composer lays out, read by the list on the UI thread.
+    const composerHeight = useSharedValue(0);
+    const composerInset = floatingComposerAvailable ? composerHeight : undefined;
+    const inputRef = React.useRef<TextInput>(null);
 
     const addMessage = React.useCallback(() => {
         const text = input.trim();
@@ -64,7 +66,7 @@ export default function LegendChatHeaderTest() {
 
     const listHeader = React.useMemo(() => (
         <View>
-            <View style={{ height: useNativeTransparentHeader ? headerHeight + 12 : 12 }} />
+            <View style={{ height: softHeaderInset + 12 }} />
             <View style={styles.testInfo}>
                 <Text style={styles.testInfoTitle}>LegendList without inverted</Text>
                 <Text style={styles.testInfoText}>
@@ -75,86 +77,82 @@ export default function LegendChatHeaderTest() {
                 </Pressable>
             </View>
         </View>
-    ), [headerHeight, prependOlderPage, useNativeTransparentHeader]);
+    ), [prependOlderPage, softHeaderInset]);
+
+    const listRef = React.useRef<LegendListRef>(null);
+
+    const renderScrollComponent = React.useCallback(
+        (props: ScrollViewProps) => (
+            <ChatScrollView
+                {...props}
+                bottomInset={composerInset ? floatingComposerBottomInset(insets.bottom) : insets.bottom}
+                topInset={softHeaderInset}
+                composerInset={composerInset}
+                listRef={listRef}
+            />
+        ),
+        [composerInset, insets.bottom, softHeaderInset, listRef],
+    );
+
+    const list = (
+        <LegendList
+            ref={listRef}
+            data={messages}
+            renderItem={renderItem}
+            keyExtractor={(item) => item.id}
+            estimatedItemSize={64}
+            alignItemsAtEnd
+            maintainScrollAtEnd={{ on: { dataChange: true } }}
+            maintainScrollAtEndThreshold={0.2}
+            maintainVisibleContentPosition
+            initialScrollAtEnd
+            ListHeaderComponent={listHeader}
+            estimatedHeaderSize={softHeaderInset + 12}
+            renderScrollComponent={renderScrollComponent}
+            contentContainerStyle={{ paddingBottom: COMPOSER_MARGIN }}
+            keyboardShouldPersistTaps="handled"
+            style={styles.list}
+        />
+    );
+
+    const composer = (
+        <View style={styles.inputSafeArea}>
+            <GlassSurface
+                glass={floatingComposerAvailable}
+                style={[styles.inputContainer, !floatingComposerAvailable && styles.inputContainerFallback]}
+            >
+                <TextInput
+                    ref={inputRef}
+                    value={input}
+                    onChangeText={setInput}
+                    onSubmitEditing={addMessage}
+                    placeholder="Add a message"
+                    returnKeyType="send"
+                    // On glass the card is the field's background; a second one inside it is noise.
+                    style={[styles.input, floatingComposerAvailable && styles.inputOnGlass]}
+                />
+                <Pressable onPress={addMessage} style={styles.sendButton}>
+                    <Text style={styles.sendButtonText}>Send</Text>
+                </Pressable>
+            </GlassSurface>
+        </View>
+    );
+
+    if (floatingComposerAvailable) {
+        return (
+            <View style={styles.container}>
+                <AgentContentView floatingInput composerHeight={composerHeight} content={list} input={composer} />
+            </View>
+        );
+    }
 
     return (
-        <>
-            <Stack.Screen
-                options={{
-                    headerTitle: 'Legend Chat Header',
-                    headerTransparent: useNativeTransparentHeader,
-                    headerStyle: useNativeTransparentHeader ? { backgroundColor: 'transparent' } : undefined,
-                    headerShadowVisible: false,
-                    scrollEdgeEffects: useNativeTransparentHeader
-                        ? { top: 'soft', bottom: 'hidden' }
-                        : undefined,
-                }}
-            />
-
-            <View style={styles.container}>
-                <KeyboardStickyView
-                    offset={{ opened: insets.bottom }}
-                    style={styles.listViewport}
-                >
-                    <LegendList
-                        data={messages}
-                        renderItem={renderItem}
-                        keyExtractor={(item) => item.id}
-                        estimatedItemSize={64}
-                        alignItemsAtEnd
-                        maintainScrollAtEnd
-                        maintainScrollAtEndThreshold={0.2}
-                        maintainVisibleContentPosition
-                        initialScrollAtEnd
-                        ListHeaderComponent={listHeader}
-                        contentContainerStyle={{ paddingBottom: inputHeight }}
-                        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
-                        keyboardShouldPersistTaps="handled"
-                        style={styles.list}
-                    />
-                </KeyboardStickyView>
-
-                <KeyboardStickyView
-                    offset={{ opened: insets.bottom }}
-                    style={styles.inputOverlay}
-                >
-                    <View
-                        onLayout={(event) => setMeasuredInputHeight(event.nativeEvent.layout.height)}
-                        style={[styles.inputSafeArea, { paddingBottom: Math.max(insets.bottom, 8) }]}
-                    >
-                        {useLiquidGlass ? (
-                            <GlassView glassEffectStyle="regular" style={styles.inputContainer}>
-                                <TextInput
-                                    value={input}
-                                    onChangeText={setInput}
-                                    onSubmitEditing={addMessage}
-                                    placeholder="Add a message"
-                                    returnKeyType="send"
-                                    style={styles.input}
-                                />
-                                <Pressable onPress={addMessage} style={styles.sendButton}>
-                                    <Text style={styles.sendButtonText}>Send</Text>
-                                </Pressable>
-                            </GlassView>
-                        ) : (
-                            <BlurView intensity={80} tint="light" style={[styles.inputContainer, styles.inputContainerFallback]}>
-                                <TextInput
-                                    value={input}
-                                    onChangeText={setInput}
-                                    onSubmitEditing={addMessage}
-                                    placeholder="Add a message"
-                                    returnKeyType="send"
-                                    style={styles.input}
-                                />
-                                <Pressable onPress={addMessage} style={styles.sendButton}>
-                                    <Text style={styles.sendButtonText}>Send</Text>
-                                </Pressable>
-                            </BlurView>
-                        )}
-                    </View>
-                </KeyboardStickyView>
-            </View>
-        </>
+        <SafeAreaView edges={['bottom']} style={styles.container}>
+            {list}
+            <KeyboardStickyView offset={{ opened: Platform.OS === 'ios' ? insets.bottom - COMPOSER_MARGIN : insets.bottom }}>
+                {composer}
+            </KeyboardStickyView>
+        </SafeAreaView>
     );
 }
 
@@ -165,13 +163,6 @@ const styles = StyleSheet.create({
     },
     list: {
         flex: 1,
-    },
-    listViewport: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
     },
     testInfo: {
         marginHorizontal: 16,
@@ -247,13 +238,7 @@ const styles = StyleSheet.create({
     inputSafeArea: {
         paddingTop: 8,
         paddingHorizontal: 12,
-    },
-    inputOverlay: {
-        position: 'absolute',
-        left: 0,
-        right: 0,
-        bottom: 0,
-        zIndex: 10,
+        paddingBottom: COMPOSER_MARGIN,
     },
     input: {
         flex: 1,
@@ -263,6 +248,9 @@ const styles = StyleSheet.create({
         borderRadius: 20,
         backgroundColor: '#FFFFFF',
         color: '#1C1C1E',
+    },
+    inputOnGlass: {
+        backgroundColor: 'transparent',
     },
     sendButton: {
         minHeight: 40,

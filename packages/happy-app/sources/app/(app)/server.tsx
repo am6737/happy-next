@@ -14,6 +14,7 @@ import { getCustomServerUrl, resolveServerConfig, setServerUrl, validateServerUr
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { useAuth } from '@/auth/AuthContext';
 import { getDesktopPlatform } from '@/desktop/desktopWindowUtils';
+import { softHeaderOptions } from '@/components/navigation/softHeader';
 
 const stylesheet = StyleSheet.create((theme) => ({
     keyboardAvoidingView: {
@@ -193,6 +194,7 @@ export default function ServerConfigScreen() {
         <>
             <Stack.Screen
                 options={{
+                    ...softHeaderOptions,
                     headerShown: !hideUnauthenticatedWindowsHeader,
                     headerTitle: t('server.serverConfiguration'),
                 }}

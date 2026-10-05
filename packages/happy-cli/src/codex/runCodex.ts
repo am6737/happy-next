@@ -2,6 +2,8 @@ import { render } from "ink";
 import React from "react";
 import { ApiClient } from '@/api/api';
 import { createCodexBackend } from '@/agent/factories/codex';
+import { codexPackage } from './package';
+import { codexPackageVersion, isCodexRuntimeWarm } from './codexRuntime';
 import type { CodexAppServerBackend } from './appserver/CodexAppServerBackend';
 import type { ApprovalPolicy, SandboxMode } from './appserver/types';
 import type { PermissionMode } from '@/api/types';
@@ -18,6 +20,7 @@ import { initialMachineMetadata } from '@/daemon/run';
 import { MessageQueue2 } from '@/utils/MessageQueue2';
 import { hashObject } from '@/utils/deterministicJson';
 import { createMcpContext } from '@/agent/mcp';
+import { inlinePreviewHtmlFileArgs } from '@/utils/previewHtmlFile';
 import { createSessionMetadata } from '@/utils/createSessionMetadata';
 import { discoverCodexSkills, getCodexSkillsSignature } from './utils/skillDiscovery';
 import { syncOrchestratorAssets } from '@/orchestrator/skillSync';
@@ -759,7 +762,7 @@ export async function runCodex(opts: {
                     type: 'tool-call',
                     callId: msg.callId,
                     name: msg.toolName,
-                    input: msg.args,
+                    input: inlinePreviewHtmlFileArgs(msg.toolName, msg.args),
                     id: randomUUID(),
                 });
                 messageSentThisTurn = true;
@@ -1327,6 +1330,12 @@ Tokens used: ${goal.tokensUsed}${goal.tokenBudget ? ` / ${goal.tokenBudget}` : '
                     thinking = true;
                     sendRemoteKeepAlive(thinking);
                     session.sendAgentMessage('codex', { type: 'task_started', id: randomUUID() });
+                    if (!isCodexRuntimeWarm(codexPackage())) {
+                        const notice = `Preparing Codex ${codexPackageVersion(codexPackage()) ?? 'runtime'}`
+                            + ' — first run downloads it, this can take a minute';
+                        messageBuffer.addMessage(notice, 'status');
+                        session.sendSessionEvent({ type: 'message', message: notice });
+                    }
 
                     // Create backend with the new configuration
                     await createBackend({

@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { View, FlatList, Pressable, ActivityIndicator, ScrollView, RefreshControl } from 'react-native';
+import { View, FlatList, Pressable, ActivityIndicator, ScrollView, RefreshControl, Platform } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { Text } from '@/components/StyledText';
@@ -14,6 +14,8 @@ import { useMachineNameMap } from '@/hooks/useMachineNameMap';
 import { formatDate } from '@/utils/formatDate';
 import { Typography } from '@/constants/Typography';
 import { t } from '@/text';
+import { isRunningOnMac } from '@/utils/platform';
+import { softHeaderOptions } from '@/components/navigation/softHeader';
 
 type RunListItem = Pick<OrchestratorRunDetail, 'runId' | 'title' | 'status' | 'createdAt' | 'updatedAt' | 'summary'> & { machines?: string[]; };
 type StatusFilter = 'all' | 'active' | 'terminal' | 'queued' | 'running' | 'canceling' | 'completed' | 'failed' | 'cancelled';
@@ -71,6 +73,10 @@ const stylesheet = StyleSheet.create((theme) => ({
     listContent: {
         paddingHorizontal: 16,
         paddingBottom: 24,
+    },
+    listHeader: {
+        // The filters scroll edge to edge, past the list's side padding.
+        marginHorizontal: -16,
     },
     card: {
         backgroundColor: theme.colors.surface,
@@ -169,11 +175,13 @@ export default function OrchestratorRunsScreen() {
     ), [searchParams.controllerSessionId]);
     const isConversationScoped = !!controllerSessionId;
     const navigation = useNavigation();
+    const useNativeSoftHeader = Platform.OS === 'ios' && !isRunningOnMac();
 
     React.useEffect(() => {
         if (isConversationScoped) {
             navigation.setOptions({
-                headerTitle: () => (
+                ...softHeaderOptions,
+                headerTitle: useNativeSoftHeader ? t('settings.orchestratorRuns') : () => (
                     <View style={{ alignItems: 'center', justifyContent: 'center' }}>
                         <Text style={[Typography.default('semiBold'), { fontSize: 17, lineHeight: 24, color: theme.colors.header.tint }]}>
                             {t('settings.orchestratorRuns')}
@@ -183,13 +191,16 @@ export default function OrchestratorRunsScreen() {
                         </Text>
                     </View>
                 ),
+                headerSubtitle: useNativeSoftHeader ? t('settings.orchestratorSessionRuns') : undefined,
             });
         } else {
             navigation.setOptions({
+                ...softHeaderOptions,
                 headerTitle: t('settings.orchestratorRuns'),
+                headerSubtitle: undefined,
             });
         }
-    }, [isConversationScoped, navigation, theme]);
+    }, [isConversationScoped, navigation, theme, useNativeSoftHeader]);
 
     const [statusFilter, setStatusFilter] = React.useState<StatusFilter>('all');
     const [runs, setRuns] = React.useState<RunListItem[]>([]);
@@ -339,8 +350,7 @@ export default function OrchestratorRunsScreen() {
         );
     }, [loading, styles, error, isConversationScoped]);
 
-    return (
-        <View style={styles.container}>
+    const filterBar = (
             <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
@@ -362,8 +372,11 @@ export default function OrchestratorRunsScreen() {
                     );
                 })}
             </ScrollView>
+    );
 
+    const list = (
             <FlatList
+                contentInsetAdjustmentBehavior="automatic"
                 data={runs}
                 keyExtractor={(item) => item.runId}
                 renderItem={renderRunItem}
@@ -387,7 +400,20 @@ export default function OrchestratorRunsScreen() {
                     </View>
                 ) : null}
                 ListEmptyComponent={listEmpty}
+                // Under the see-through iOS header the filters scroll with the list: pinned, they
+                // would sit on the runs with no backdrop right under the header's soft edge.
+                ListHeaderComponent={useNativeSoftHeader ? <View style={styles.listHeader}>{filterBar}</View> : undefined}
             />
+    );
+
+    return (
+        <View style={styles.container}>
+            {useNativeSoftHeader ? list : (
+                <>
+                    {filterBar}
+                    {list}
+                </>
+            )}
         </View>
     );
 }

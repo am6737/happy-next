@@ -7,6 +7,8 @@ expo-env.d.ts
 
 android/
 ios/
+# Local Expo modules keep their native sources in ios/, which the generated-project rule above would drop.
+!modules/*/ios/
 build-*
 sources/components/FilePreview/generated/
 

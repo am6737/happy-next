@@ -22,6 +22,7 @@ import packageJson from '../../package.json';
 import { MessageQueue2 } from '@/utils/MessageQueue2';
 import { hashObject } from '@/utils/deterministicJson';
 import { createMcpContext } from '@/agent/mcp';
+import { inlinePreviewHtmlFileArgs } from '@/utils/previewHtmlFile';
 import { MessageBuffer } from '@/ui/ink/messageBuffer';
 import { notifyDaemonSessionStarted } from '@/daemon/controlClient';
 import { registerKillSessionHandler } from '@/claude/registerKillSessionHandler';
@@ -779,14 +780,16 @@ export async function runGemini(opts: {
         }
         
         messageBuffer.addMessage(`Executing: ${msg.toolName}${toolArgs ? ` ${toolArgs}${toolArgs.length >= 100 ? '...' : ''}` : ''}`, 'tool');
+        // Resolve preview_html file references once, so the app and the local session log agree
+        const resolvedInput = inlinePreviewHtmlFileArgs(msg.toolName, msg.args);
         session.sendAgentMessage('gemini', {
           type: 'tool-call',
           name: msg.toolName,
           callId: msg.callId,
-          input: msg.args,
+          input: resolvedInput,
           id: randomUUID(),
         });
-        sessionWriter.writeToolCall(msg.toolName, msg.callId, msg.args);
+        sessionWriter.writeToolCall(msg.toolName, msg.callId, resolvedInput);
         break;
 
       case 'tool-result':

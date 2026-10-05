@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { View, Text, ScrollView, Pressable, Platform, NativeModules } from 'react-native';
-import { Stack } from 'expo-router';
 import Constants from 'expo-constants';
 import * as Updates from 'expo-updates';
 import { Ionicons } from '@expo/vector-icons';
@@ -185,12 +184,6 @@ export default function ExpoConstantsScreen() {
     
     return (
         <>
-            <Stack.Screen
-                options={{
-                    title: 'Expo Constants',
-                    headerLargeTitle: false,
-                }}
-            />
             <ItemList>
                 {/* Main Configuration */}
                 <ItemGroup title="Configuration from Constants API">

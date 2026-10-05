@@ -198,7 +198,6 @@ export class ApiSocket {
             let decrypted = await machineEncryption.decryptRaw(result.result);
 
             // If standard decryption fails, try legacy format
-            // (used for OpenClaw chat.history which uses legacy format for cross-platform compatibility)
             if (decrypted === null) {
                 decrypted = machineEncryption.decryptRawLegacy(result.result);
             }
@@ -277,6 +276,22 @@ export class ApiSocket {
             throw new Error('Socket not connected');
         }
         return await this.socket.timeout(timeout).emitWithAck(event, data);
+    }
+
+    /**
+     * Decrypts a payload the daemon encrypted with a machine key.
+     *
+     * Streamed events (terminal frames) carry ciphertext that has to be opened
+     * before the caller can even tell what kind of message it is, so unlike
+     * `machineRPC` there is no request to pair the encryption with — the caller
+     * supplies the payload directly.
+     */
+    async decryptMachinePayload<D>(machineId: string, payload: string): Promise<D | null> {
+        const machineEncryption = this.encryption?.getMachineEncryption(machineId);
+        if (!machineEncryption) {
+            return null;
+        }
+        return (await machineEncryption.decryptRaw(payload)) as D | null;
     }
 
     //

@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { useShallow } from 'zustand/react/shallow'
-import { Session, SessionDraft, Machine, GitStatus, PendingMessage, SessionCapabilities } from "./storageTypes";
+import { Session, SessionDraft, AskUserQuestionDraft, Machine, GitStatus, PendingMessage, SessionCapabilities } from "./storageTypes";
+import { AskUserQuestionDraftMap, writeAskUserQuestionDraft } from "./askUserQuestionDraft";
 import { createReducer, reducer, ReducerState } from "./reducer/reducer";
 import { Message } from "./typesMessage";
 import { NormalizedMessage } from "./typesRaw";
@@ -9,9 +10,11 @@ import { applySettings, Settings } from "./settings";
 import { LocalSettings, applyLocalSettings } from "./localSettings";
 import { Profile } from "./profile";
 import { UserProfile } from "./friendTypes";
-import { loadSettings, loadLocalSettings, saveLocalSettings, saveSettings, loadProfile, saveProfile, loadSessionDrafts, saveSessionDrafts, normalizeDraft, loadDooTaskProfile, saveDooTaskProfile, loadDooTaskUserCache, saveDooTaskUserCache, clearDooTaskUserCache, loadDooTaskProjects, saveDooTaskProjects, clearDooTaskProjects, loadDooTaskPriorities, saveDooTaskPriorities, clearDooTaskPriorities, loadDooTaskColumns, saveDooTaskColumns, clearDooTaskColumns, loadRegisteredReposLocal, saveRegisteredReposLocal } from "./persistence";
+import { loadSettings, loadLocalSettings, saveLocalSettings, saveSettings, loadProfile, saveProfile, loadSessionDrafts, saveSessionDrafts, loadAskUserQuestionDrafts, saveAskUserQuestionDrafts, normalizeDraft, loadDooTaskProfile, saveDooTaskProfile, loadDooTaskUserCache, saveDooTaskUserCache, clearDooTaskUserCache, loadDooTaskProjects, saveDooTaskProjects, clearDooTaskProjects, loadDooTaskPriorities, saveDooTaskPriorities, clearDooTaskPriorities, loadDooTaskColumns, saveDooTaskColumns, clearDooTaskColumns, loadRegisteredReposLocal, saveRegisteredReposLocal, dootaskTasksCacheStorage } from "./persistence";
 import { DooTaskProfile, DooTaskProject, DooTaskItem, DooTaskFilters, DooTaskPager, DooTaskPriority, DooTaskColumn } from './dootask/types';
 import { dootaskFetchProjects, dootaskFetchTasks, dootaskFetchUsersBasic, dootaskFetchPriorities, dootaskFetchProjectColumns } from './dootask/api';
+import { dootaskTasksCacheKey, DOOTASK_TASKS_CACHE_MAX_AGE_MS, DOOTASK_TASKS_CACHE_MAX_SIZE, type DooTaskTasksCacheEntry } from './dootask/tasksCache';
+import { createPersistedLruCache } from '@/utils/persistedLruCache';
 import type { PermissionMode } from '@/components/PermissionModeSelector';
 import React from "react";
 import { sync } from "./sync";
@@ -20,7 +23,6 @@ import { isMutableTool } from "@/components/tools/knownTools";
 import { projectManager } from "./projectManager";
 import { DecryptedArtifact } from "./artifactTypes";
 import { FeedItem } from "./feedTypes";
-import type { OpenClawMachine, OpenClawConnectionStatus } from "../openclaw/types";
 import type { RegisteredRepo } from "@/utils/workspaceRepos";
 import {
     applySessionModeConfigPatch,
@@ -119,14 +121,17 @@ interface StorageState {
     // MMKV key on every write. Deliberately NOT a field on Session — drafts must never
     // take part in session sync/merge/cache. See useDraft.
     drafts: Record<string, SessionDraft>;
+    // Per-`AskUserQuestion` call drafts (ticked options + "Other" text), keyed
+    // `sessionId -> CLI tool id`. Same reasoning as `drafts`: deliberately its own map, so the
+    // row unmounting (virtualized list) or the whole list re-keying (message-syncing) can't
+    // take an in-progress answer with it. Mirrored to the `ask-user-question-drafts-v1` MMKV key.
+    askUserQuestionDrafts: AskUserQuestionDraftMap;
     // Per-session "message-list bootstrap (re)fetch is in flight" flag (transient, not persisted).
     // Set true while a focus/retry-triggered full reload (fetchMessagesV3 bootstrap) is loading,
     // cleared on success OR error. Drives the "refreshing" indicator in SessionView.
     sessionMessagesFetching: Record<string, boolean>;
     sessionGitStatus: Record<string, GitStatus | null>;
     machines: Record<string, Machine>;
-    openClawMachines: Record<string, OpenClawMachine>;  // OpenClaw machine configurations
-    openClawDirectStatus: Record<string, OpenClawConnectionStatus>;  // Last known status for direct OpenClaw machines
     // Registered repositories per machine (loaded from UserKVStore)
     registeredRepos: Record<string, RegisteredRepo[]>;
     registeredReposVersions: Record<string, number>;  // KV versions for optimistic concurrency
@@ -155,7 +160,9 @@ interface StorageState {
     dootaskProfile: DooTaskProfile | null;
     dootaskTasks: DooTaskItem[];
     dootaskProjects: DooTaskProject[];
+    /** First-page load with nothing cached to show. Silent revalidation keeps this false. */
     dootaskLoading: boolean;
+    dootaskLoadingMore: boolean;
     dootaskError: string | null;
     dootaskFilters: DooTaskFilters;
     dootaskPager: DooTaskPager;
@@ -174,9 +181,6 @@ interface StorageState {
     applySessions: (sessions: (Omit<Session, 'presence'> & { presence?: "online" | number })[]) => void;
     applySessionCapabilities: (sessionId: string, capabilities: SessionCapabilities, version: number, updatedAt?: number) => void;
     applyMachines: (machines: Machine[], replace?: boolean) => void;
-    applyOpenClawMachines: (machines: OpenClawMachine[], replace?: boolean) => void;
-    removeOpenClawMachine: (machineId: string) => void;
-    setOpenClawDirectStatus: (machineId: string, status: OpenClawConnectionStatus) => void;
     applyLoaded: () => void;
     applyReady: () => void;
     applyMessages: (sessionId: string, messages: NormalizedMessage[]) => { changed: string[], hasReadyEvent: boolean };
@@ -209,6 +213,7 @@ interface StorageState {
     getActiveSessions: () => Session[];
     applyCachedSessions: (sessions: Record<string, Session>, sharedSessions: Record<string, Session>) => void;
     setDraft: (sessionId: string, draft: SessionDraft | null) => void;
+    setAskUserQuestionDraft: (sessionId: string, toolKey: string, draft: AskUserQuestionDraft | null) => void;
     updateSessionActivity: (sessionId: string, active: boolean) => void;
     setAwaitingResponse: (sessionId: string, value: number | null) => void;
     setSessionMessagesFetching: (sessionId: string, fetching: boolean) => void;
@@ -415,6 +420,32 @@ function hasReferenceMapChanges<T>(prev: Record<string, T>, next: Record<string,
     return false;
 }
 
+const DOOTASK_DEFAULT_FILTERS: DooTaskFilters = { status: 'uncompleted' };
+const DOOTASK_DEFAULT_PAGER: DooTaskPager = { page: 1, pagesize: 20, total: 0, hasMore: false };
+
+// First page of each task-list filter combination, shown instantly while the
+// list revalidates in the background.
+const dootaskTasksCache = createPersistedLruCache<DooTaskTasksCacheEntry>({
+    maxSize: DOOTASK_TASKS_CACHE_MAX_SIZE,
+    maxAgeMs: DOOTASK_TASKS_CACHE_MAX_AGE_MS,
+    storage: dootaskTasksCacheStorage(),
+});
+// Bumped by every first-page request so older responses cannot overwrite newer ones.
+let dootaskTasksRequestSeq = 0;
+
+function readDootaskTasksCache(profile: DooTaskProfile | null, filters: DooTaskFilters): DooTaskTasksCacheEntry | undefined {
+    const key = dootaskTasksCacheKey(profile, filters);
+    return key ? dootaskTasksCache.get(key) : undefined;
+}
+
+function sameDootaskFilters(a: DooTaskFilters, b: DooTaskFilters): boolean {
+    return a.projectId === b.projectId
+        && a.status === b.status
+        && (a.search?.trim() || undefined) === (b.search?.trim() || undefined)
+        && a.time === b.time
+        && a.role === b.role;
+}
+
 export const storage = create<StorageState>()((set, get) => {
     let { settings, version } = loadSettings();
     let localSettings = loadLocalSettings();
@@ -423,6 +454,8 @@ export const storage = create<StorageState>()((set, get) => {
     const _cachedUsers = loadDooTaskUserCache();
     const _cachedPriorities = loadDooTaskPriorities();
     const _cachedColumns = loadDooTaskColumns();
+    const _dootaskProfile = loadDooTaskProfile();
+    const _cachedTasks = readDootaskTasksCache(_dootaskProfile, DOOTASK_DEFAULT_FILTERS);
     const cachedRepos = loadRegisteredReposLocal();
     return {
         settings,
@@ -436,8 +469,6 @@ export const storage = create<StorageState>()((set, get) => {
         sessions: {},
         sessionCapabilities: {},
         machines: {},
-        openClawMachines: {},  // Initialize OpenClaw machines
-        openClawDirectStatus: {},  // Initialize direct OpenClaw machine status
         registeredRepos: cachedRepos.repos as Record<string, RegisteredRepo[]>,
         registeredReposVersions: cachedRepos.versions,
         artifacts: {},  // Initialize artifacts
@@ -456,6 +487,7 @@ export const storage = create<StorageState>()((set, get) => {
         sessionMessages: {},
         sessionPendingMessages: {},
         drafts: loadSessionDrafts(),
+        askUserQuestionDrafts: loadAskUserQuestionDrafts(),
         sessionMessagesFetching: {},
         sessionGitStatus: {},
         realtimeStatus: 'disconnected',
@@ -469,13 +501,14 @@ export const storage = create<StorageState>()((set, get) => {
         isDataReady: false,
         nativeUpdateStatus: null,
         // DooTask integration
-        dootaskProfile: loadDooTaskProfile(),
-        dootaskTasks: [],
+        dootaskProfile: _dootaskProfile,
+        dootaskTasks: _cachedTasks?.tasks ?? [],
         dootaskProjects: _cachedProjects.projects,
         dootaskLoading: false,
+        dootaskLoadingMore: false,
         dootaskError: null,
-        dootaskFilters: { status: 'uncompleted' },
-        dootaskPager: { page: 1, pagesize: 20, total: 0, hasMore: false },
+        dootaskFilters: DOOTASK_DEFAULT_FILTERS,
+        dootaskPager: _cachedTasks?.pager ?? DOOTASK_DEFAULT_PAGER,
         dootaskUserCache: _cachedUsers.cache,
         dootaskUserAvatars: _cachedUsers.avatars,
         dootaskUserDisabledAt: _cachedUsers.disabledAt,
@@ -604,9 +637,16 @@ export const storage = create<StorageState>()((set, get) => {
                     ? false
                     : session.active;
                 const isPreservingArchive = resolvedActive !== session.active;
+                // An archived session is never online, even if a late server heartbeat says active.
+                // Resuming writes lifecycleState: 'running', which lifts this again.
+                const mergedMetadata = useExistingMetadata ? existing.metadata : session.metadata;
+                const isArchived = mergedMetadata?.lifecycleState === 'archived';
+                const finalActive = resolvedActive && !isArchived;
                 const resolvedPresence = isPreservingArchive
                     ? resolveSessionOnlineState({ active: false, activeAt: existing!.activeAt })
-                    : presence;
+                    : isArchived
+                        ? resolveSessionOnlineState({ active: false, activeAt: session.activeAt })
+                        : presence;
 
                 // Keep the more recent thinking state so stale fetchSessions
                 // data doesn't overwrite a fresh ephemeral activity update.
@@ -616,17 +656,17 @@ export const storage = create<StorageState>()((set, get) => {
                 // Preserve the local optimistic "awaiting response" marker across routine
                 // session refreshes, but drop it once a real signal arrives: the CLI is now
                 // thinking, or the session went offline.
-                const mergedAwaitingResponseSince = (mergedThinking || resolvedActive === false)
+                const mergedAwaitingResponseSince = (mergedThinking || finalActive === false)
                     ? null
                     : (existing?.awaitingResponseSince ?? null);
 
                 const mergedSession: Session = {
                     ...session,
                     // Preserve optimistic archive state
-                    active: resolvedActive,
+                    active: finalActive,
                     activeAt: isPreservingArchive ? existing!.activeAt : session.activeAt,
                     // Use existing metadata/agentState if their versions are higher
-                    metadata: useExistingMetadata ? existing.metadata : session.metadata,
+                    metadata: mergedMetadata,
                     metadataVersion: useExistingMetadata ? existing.metadataVersion : session.metadataVersion,
                     agentState: useExistingAgentState ? existing.agentState : session.agentState,
                     agentStateVersion: useExistingAgentState ? existing.agentStateVersion : session.agentStateVersion,
@@ -1403,6 +1443,14 @@ export const storage = create<StorageState>()((set, get) => {
             saveSessionDrafts(nextDrafts);
             return { ...state, drafts: nextDrafts };
         }),
+        setAskUserQuestionDraft: (sessionId: string, toolKey: string, draft: AskUserQuestionDraft | null) => set((state) => {
+            // Same rules as setDraft: normalize, bail out on a no-op, persist on a real write.
+            // writeAskUserQuestionDraft returns the same map when nothing changed.
+            const nextDrafts = writeAskUserQuestionDraft(state.askUserQuestionDrafts, sessionId, toolKey, draft);
+            if (nextDrafts === state.askUserQuestionDrafts) return state;
+            saveAskUserQuestionDrafts(nextDrafts);
+            return { ...state, askUserQuestionDrafts: nextDrafts };
+        }),
         setAwaitingResponse: (sessionId: string, value: number | null) => set((state) => {
             const session = state.sessions[sessionId];
             if (!session) return state;
@@ -1680,43 +1728,6 @@ export const storage = create<StorageState>()((set, get) => {
                 sessionListViewData
             };
         }),
-        // OpenClaw machine methods
-        applyOpenClawMachines: (machines: OpenClawMachine[], replace: boolean = false) => set((state) => {
-            let mergedMachines: Record<string, OpenClawMachine>;
-
-            if (replace) {
-                mergedMachines = {};
-                machines.forEach(machine => {
-                    mergedMachines[machine.id] = machine;
-                });
-            } else {
-                mergedMachines = { ...state.openClawMachines };
-                machines.forEach(machine => {
-                    mergedMachines[machine.id] = machine;
-                });
-            }
-
-            console.log(`🤖 Storage.applyOpenClawMachines: Total OpenClaw machines after merge: ${Object.keys(mergedMachines).length}`);
-
-            return {
-                ...state,
-                openClawMachines: mergedMachines
-            };
-        }),
-        removeOpenClawMachine: (machineId: string) => set((state) => {
-            const { [machineId]: removed, ...remaining } = state.openClawMachines;
-            const { [machineId]: removedStatus, ...remainingStatus } = state.openClawDirectStatus;
-            console.log(`🤖 Storage.removeOpenClawMachine: Removed machine ${machineId}`);
-            return {
-                ...state,
-                openClawMachines: remaining,
-                openClawDirectStatus: remainingStatus,
-            };
-        }),
-        setOpenClawDirectStatus: (machineId: string, status: OpenClawConnectionStatus) => set((state) => ({
-            ...state,
-            openClawDirectStatus: { ...state.openClawDirectStatus, [machineId]: status },
-        })),
         // Artifact methods
         applyArtifacts: (artifacts: DecryptedArtifact[]) => set((state) => {
             console.log(`🗂️ Storage.applyArtifacts: Applying ${artifacts.length} artifacts`);
@@ -1794,6 +1805,13 @@ export const storage = create<StorageState>()((set, get) => {
                 Object.entries(state.drafts).filter(([id]) => !deleteSet.has(id))
             );
             saveSessionDrafts(remainingDrafts);
+
+            // Same for the AskUserQuestion drafts filed under the deleted sessions.
+            const remainingQuestionDrafts = Object.fromEntries(
+                Object.entries(state.askUserQuestionDrafts).filter(([id]) => !deleteSet.has(id))
+            );
+            saveAskUserQuestionDrafts(remainingQuestionDrafts);
+
             for (const sessionId of deleteSet) {
                 projectManager.removeSession(sessionId);
             }
@@ -1812,6 +1830,7 @@ export const storage = create<StorageState>()((set, get) => {
                 sessionPendingMessages: remainingPendingMessages as Record<string, PendingMessage[]>,
                 sessionGitStatus: remainingGitStatus as Record<string, GitStatus | null>,
                 drafts: remainingDrafts,
+                askUserQuestionDrafts: remainingQuestionDrafts,
                 sessionListViewData
             };
         }),
@@ -2024,6 +2043,8 @@ export const storage = create<StorageState>()((set, get) => {
                 }));
             } else {
                 // Account switch or first login: clear all data
+                dootaskTasksCache.clear();
+                dootaskTasksRequestSeq++;
                 clearDooTaskUserCache();
                 clearDooTaskProjects();
                 clearDooTaskPriorities();
@@ -2034,7 +2055,8 @@ export const storage = create<StorageState>()((set, get) => {
                     dootaskError: null,
                     dootaskTasks: [],
                     dootaskLoading: false,
-                    dootaskPager: { page: 1, pagesize: 20, total: 0, hasMore: false },
+                    dootaskLoadingMore: false,
+                    dootaskPager: DOOTASK_DEFAULT_PAGER,
                     dootaskProjects: [],
                     dootaskProjectsFetchedAt: null,
                     dootaskUserCache: {},
@@ -2128,13 +2150,33 @@ export const storage = create<StorageState>()((set, get) => {
         },
 
         fetchDootaskTasks: async (opts) => {
-            const { dootaskProfile, dootaskFilters, dootaskPager, dootaskTasks } = get();
+            const { dootaskProfile, dootaskFilters, dootaskPager, dootaskLoadingMore } = get();
             if (!dootaskProfile) return;
             const loadMore = opts?.loadMore ?? false;
+            if (loadMore && dootaskLoadingMore) return;
             const page = loadMore ? dootaskPager.page + 1 : 1;
             const profileKey = `${dootaskProfile.serverUrl}|${dootaskProfile.userId}|${dootaskProfile.token}`;
+            const cacheKey = dootaskTasksCacheKey(dootaskProfile, dootaskFilters);
+            const requestSeq = loadMore ? dootaskTasksRequestSeq : ++dootaskTasksRequestSeq;
+            // Drop responses for another account, another filter set, or a
+            // superseded first-page request.
+            const isCurrent = () => {
+                const state = get();
+                const cur = state.dootaskProfile;
+                return !!cur
+                    && `${cur.serverUrl}|${cur.userId}|${cur.token}` === profileKey
+                    && sameDootaskFilters(state.dootaskFilters, dootaskFilters)
+                    && dootaskTasksRequestSeq === requestSeq;
+            };
 
-            set((state) => ({ ...state, dootaskLoading: true, dootaskError: null }));
+            if (loadMore) {
+                set((state) => ({ ...state, dootaskLoadingMore: true, dootaskError: null }));
+            } else {
+                // With a cached first page the list stays visible and revalidates silently.
+                const hasCache = cacheKey !== null && dootaskTasksCache.has(cacheKey);
+                set((state) => ({ ...state, dootaskLoading: !hasCache, dootaskLoadingMore: false, dootaskError: null }));
+            }
+            const loadingKey = loadMore ? 'dootaskLoadingMore' : 'dootaskLoading';
             try {
                 const keys: Record<string, string> = {};
                 const search = dootaskFilters.search?.trim();
@@ -2156,47 +2198,62 @@ export const storage = create<StorageState>()((set, get) => {
                     with_extend: 'project_name,column_name',
                 });
 
-                const cur = get().dootaskProfile;
-                if (!cur || `${cur.serverUrl}|${cur.userId}|${cur.token}` !== profileKey) return; // account switched
+                if (!isCurrent()) return;
 
                 if (res.ret === -1 || /身份已失效|请登录后继续/.test(res.msg)) {
-                    set((state) => ({ ...state, dootaskLoading: false, dootaskError: 'token_expired' }));
+                    set((state) => ({ ...state, [loadingKey]: false, dootaskError: 'token_expired' }));
                     return;
                 }
 
                 if (res.ret === 1) {
                     const newTasks: DooTaskItem[] = res.data.data || [];
-                    const merged = loadMore ? [...dootaskTasks, ...newTasks] : newTasks;
-                    set((state) => ({
-                        ...state,
-                        dootaskTasks: merged,
-                        dootaskLoading: false,
-                        dootaskPager: {
+                    set((state) => {
+                        const pager: DooTaskPager = {
                             ...state.dootaskPager,
                             page: res.data.current_page,
                             total: res.data.total,
                             hasMore: res.data.current_page < res.data.last_page,
-                        },
-                    }));
+                        };
+                        // Only the first page is cached so a cold start never shows more
+                        // rows than the background refresh will return.
+                        if (!loadMore && cacheKey) dootaskTasksCache.set(cacheKey, { tasks: newTasks, pager });
+                        return {
+                            ...state,
+                            dootaskTasks: loadMore ? [...state.dootaskTasks, ...newTasks] : newTasks,
+                            [loadingKey]: false,
+                            dootaskPager: pager,
+                        };
+                    });
                 } else {
-                    set((state) => ({ ...state, dootaskLoading: false, dootaskError: res.msg }));
+                    set((state) => ({ ...state, [loadingKey]: false, dootaskError: res.msg }));
                 }
             } catch (e) {
-                const cur = get().dootaskProfile;
-                if (!cur || `${cur.serverUrl}|${cur.userId}|${cur.token}` !== profileKey) return;
+                if (!isCurrent()) return;
                 set((state) => ({
                     ...state,
-                    dootaskLoading: false,
+                    [loadingKey]: false,
                     dootaskError: e instanceof Error ? e.message : 'Failed to load tasks',
                 }));
             }
         },
 
         setDootaskFilter: (filters) => {
-            set((state) => ({
-                ...state,
-                dootaskFilters: { ...state.dootaskFilters, ...filters },
-            }));
+            set((state) => {
+                const nextFilters = { ...state.dootaskFilters, ...filters };
+                if (sameDootaskFilters(state.dootaskFilters, nextFilters)) {
+                    return { ...state, dootaskFilters: nextFilters };
+                }
+                // Show the new filter's cached first page right away; callers
+                // follow up with a refresh that revalidates it.
+                const cached = readDootaskTasksCache(state.dootaskProfile, nextFilters);
+                return {
+                    ...state,
+                    dootaskFilters: nextFilters,
+                    dootaskTasks: cached?.tasks ?? [],
+                    dootaskPager: cached?.pager ?? DOOTASK_DEFAULT_PAGER,
+                    dootaskLoadingMore: false,
+                };
+            });
         },
 
         setDootaskLastSelection: (projectId: number, columnId: number) => {
@@ -2255,31 +2312,44 @@ export const storage = create<StorageState>()((set, get) => {
             return get().dootaskUserCache;
         },
 
-        updateDootaskTask: (taskId, updates) => set((state) => {
-            const idx = state.dootaskTasks.findIndex((t) => t.id === taskId);
-            const newState: Partial<StorageState> = {};
-
-            // Update task in list
-            if (idx !== -1) {
-                const updated = [...state.dootaskTasks];
-                updated[idx] = { ...updated[idx], ...updates };
-                newState.dootaskTasks = updated;
+        updateDootaskTask: (taskId, updates) => {
+            const { dootaskProfile, dootaskFilters } = get();
+            const cacheKey = dootaskTasksCacheKey(dootaskProfile, dootaskFilters);
+            const cachedList = cacheKey ? dootaskTasksCache.get(cacheKey) : undefined;
+            if (cacheKey && cachedList?.tasks.some((t) => t.id === taskId)) {
+                dootaskTasksCache.set(cacheKey, {
+                    ...cachedList,
+                    tasks: cachedList.tasks.map((t) => t.id === taskId ? { ...t, ...updates } : t),
+                });
             }
+            set((state) => {
+                const idx = state.dootaskTasks.findIndex((t) => t.id === taskId);
+                const newState: Partial<StorageState> = {};
 
-            // Update task in detail cache (so detail page reacts too)
-            const cached = state.dootaskTaskDetailCache[taskId];
-            if (cached) {
-                newState.dootaskTaskDetailCache = {
-                    ...state.dootaskTaskDetailCache,
-                    [taskId]: { ...cached, task: { ...cached.task, ...updates } },
-                };
-            }
+                // Update task in list
+                if (idx !== -1) {
+                    const updated = [...state.dootaskTasks];
+                    updated[idx] = { ...updated[idx], ...updates };
+                    newState.dootaskTasks = updated;
+                }
 
-            return Object.keys(newState).length > 0 ? { ...state, ...newState } : state;
-        }),
+                // Update task in detail cache (so detail page reacts too)
+                const cached = state.dootaskTaskDetailCache[taskId];
+                if (cached) {
+                    newState.dootaskTaskDetailCache = {
+                        ...state.dootaskTaskDetailCache,
+                        [taskId]: { ...cached, task: { ...cached.task, ...updates } },
+                    };
+                }
+
+                return Object.keys(newState).length > 0 ? { ...state, ...newState } : state;
+            });
+        },
 
         clearDootaskData: () => {
             saveDooTaskProfile(null);
+            dootaskTasksCache.clear();
+            dootaskTasksRequestSeq++;
             clearDooTaskUserCache();
             clearDooTaskProjects();
             clearDooTaskPriorities();
@@ -2290,9 +2360,10 @@ export const storage = create<StorageState>()((set, get) => {
                 dootaskTasks: [],
                 dootaskProjects: [],
                 dootaskLoading: false,
+                dootaskLoadingMore: false,
                 dootaskError: null,
-                dootaskFilters: { status: 'uncompleted' },
-                dootaskPager: { page: 1, pagesize: 20, total: 0, hasMore: false },
+                dootaskFilters: DOOTASK_DEFAULT_FILTERS,
+                dootaskPager: DOOTASK_DEFAULT_PAGER,
                 dootaskUserCache: {},
                 dootaskUserAvatars: {},
                 dootaskUserDisabledAt: {},
@@ -2422,21 +2493,6 @@ export function useAllMachines(): Machine[] {
 
 export function useMachine(machineId: string): Machine | null {
     return storage(useShallow((state) => state.machines[machineId] ?? null));
-}
-
-export function useAllOpenClawMachines(): OpenClawMachine[] {
-    return storage(useShallow((state) => {
-        if (!state.isDataReady) return [];
-        return Object.values(state.openClawMachines).sort((a, b) => b.updatedAt - a.updatedAt);
-    }));
-}
-
-export function useOpenClawMachine(machineId: string): OpenClawMachine | null {
-    return storage(useShallow((state) => state.openClawMachines[machineId] ?? null));
-}
-
-export function useOpenClawDirectStatus(machineId: string): OpenClawConnectionStatus | null {
-    return storage((state) => state.openClawDirectStatus[machineId] ?? null);
 }
 
 export function useSessionListViewData(): SessionListViewItem[] | null {
@@ -2649,6 +2705,7 @@ export function useDootaskTasks() {
     return storage(useShallow((s) => ({
         tasks: s.dootaskTasks,
         loading: s.dootaskLoading,
+        loadingMore: s.dootaskLoadingMore,
         error: s.dootaskError,
         pager: s.dootaskPager,
     })));

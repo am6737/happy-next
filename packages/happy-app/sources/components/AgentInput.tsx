@@ -1,4 +1,4 @@
-import { Ionicons, Octicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons, Octicons, MaterialCommunityIcons, FontAwesome6 } from '@expo/vector-icons';
 import * as React from 'react';
 import { View, Platform, useWindowDimensions, ViewStyle, Text, ActivityIndicator, TouchableWithoutFeedback, Image as RNImage, Pressable, Keyboard, Modal as RNModal } from 'react-native';
 import { Image } from 'expo-image';
@@ -13,9 +13,10 @@ import { useActiveWord } from './autocomplete/useActiveWord';
 import { useActiveSuggestions } from './autocomplete/useActiveSuggestions';
 import { AgentInputAutocomplete } from './AgentInputAutocomplete';
 import { FloatingOverlay } from './FloatingOverlay';
+import { FullWindowOverlay } from 'react-native-screens';
 import { TextInputState, MultiTextInputHandle } from './MultiTextInput';
 import { applySuggestion } from './autocomplete/applySuggestion';
-import { shouldSendOnEnter } from './agentInputKeyboard';
+import { ABORT_ESCAPE_WINDOW_MS, resolveEscapeAbort, shouldSendOnEnter } from './agentInputKeyboard';
 import { GitStatusBadge, useHasLoadedGitStatus } from './GitStatusBadge';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { useSetting } from '@/sync/storage';
@@ -29,25 +30,28 @@ import { ImagePreview, LocalImage } from '@/components/ImagePreview';
 import { Switch } from '@/components/Switch';
 import { Modal } from '@/modal';
 import { useWebImageDrop } from '@/hooks/useWebImageDrop';
+import { useModelCatalog } from '@/hooks/useModelCatalog';
+import { GlassView, isLiquidGlassAvailable } from 'expo-glass-effect';
+import { isRunningOnMac } from '@/utils/platform';
+import { NativeMenu } from './NativeMenu';
+import type { ActionMenuItem } from './ActionMenu';
 import {
     buildClaudeModelMode,
     buildCodexModelMode,
-    CLAUDE_MODEL_FAMILY_OPTIONS,
     claudeAlways1M,
     claudeBaseFamily,
     claudeFamilyWith1M,
     claudeHas1MOptIn,
     ClaudeModelFamily,
     ClaudeReasoningEffort,
-    CODEX_MODEL_FAMILY_OPTIONS,
     CodexModelFamily,
     CodexReasoningEffort,
     formatReasoningEffortLabel,
     FAST_MODE_ICON_COLOR,
-    GEMINI_MODEL_OPTIONS,
     getClaudeReasoningOptions,
     getCodexReasoningOptions,
     getMaxContextSize,
+    getModelFamilyOptions,
     MODEL_MODE_DEFAULT,
     parseClaudeModelMode,
     parseCodexModelMode,
@@ -68,7 +72,9 @@ interface AgentInputProps {
     onModelModeChange?: (mode: ModelMode) => void;
     metadata?: Metadata | null;
     onAbort?: () => void | Promise<void>;
-    showAbortButton?: boolean;
+    // True while the agent is working on a turn: the round button turns into a stop
+    // button and a double press of Escape aborts the turn.
+    isBusy?: boolean;
     connectionStatus?: {
         text: string;
         color: string;
@@ -109,11 +115,21 @@ interface AgentInputProps {
     // initial message). Defaults to the usual "only send when there is text".
     allowEmptySend?: boolean;
     minHeight?: number;
+    // Extra 8px of side margin on the input panel. The session composer asks for it so the
+    // panel's rounded edge lines up with the message column; the new-session page, which
+    // stacks the same panel under its own sections, keeps the panel flush.
+    panelSideMargin?: boolean;
+    // Draw the panel as Liquid Glass instead of an opaque fill — for a composer that floats over
+    // the conversation. Only honoured where Liquid Glass exists (iOS 26+).
+    glassPanel?: boolean;
     profileId?: string | null;
     onProfileClick?: () => void;
     images?: LocalImage[];
     onImagesChange?: (images: LocalImage[]) => void;
     onImageButtonPress?: () => void;
+    // Where the image button offers a choice (camera or library): opened natively from the button
+    // on iOS, while `onImageButtonPress` still opens the page's own sheet elsewhere.
+    imageMenuItems?: ActionMenuItem[];
     supportsImages?: boolean;
     isUploadingImages?: boolean;
     onImageDrop?: (files: File[]) => void;
@@ -123,6 +139,17 @@ const agentFlavorIcons = {
     claude: require('@/assets/images/icon-claude.png'),
     codex: require('@/assets/images/icon-gpt.png'),
     gemini: require('@/assets/images/icon-gemini.png'),
+};
+
+// The vendor mark keeps one slot across flavors so the row cannot shift, and only the artwork
+// inside it is scaled. Codex's knot fills its frame while Claude's starburst carries ~18%
+// padding of its own, so identical frames would still read as different sizes - measured ink
+// in a 12px frame: Codex 12px, Claude 9.8px.
+const AGENT_MARK_SLOT = 12;
+const agentMarkArtworkSize: Record<keyof typeof agentFlavorIcons, number> = {
+    claude: 12,
+    codex: 10,
+    gemini: 12,
 };
 
 const stylesheet = StyleSheet.create((theme, runtime) => ({
@@ -157,6 +184,23 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
         paddingBottom: 8,
         paddingHorizontal: 8,
     },
+    // The iOS card, whose status row already spaces the input from the top: the action row's own
+    // button padding does the rest at the bottom.
+    unifiedPanelCompact: {
+        paddingBottom: 4,
+        borderRadius: 24,
+    },
+    unifiedPanelGlass: {
+        backgroundColor: 'transparent',
+    },
+    glassBackground: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        borderRadius: Platform.select({ default: 16, android: 20 }),
+    },
     inputContainer: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -165,6 +209,9 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
         paddingRight: 8,
         paddingVertical: 4,
         minHeight: 40,
+    },
+    inputContainerCompact: {
+        minHeight: 34,
     },
 
     // Overlay styles
@@ -441,6 +488,9 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
         );
     });
     const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+    // Keep the settings overlay aligned with the panel in both new and existing sessions.
+    const panelHorizontalInset = props.panelSideMargin ? 8 : 0;
+    const useGlassPanel = !!props.glassPanel && Platform.OS === 'ios' && isLiquidGlassAvailable();
     // Wide layout: show the reasoning-effort column beside the model list instead of below it.
     const isWideModelLayout = screenWidth > 700;
 
@@ -449,6 +499,8 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
     const isCodex = props.metadata?.flavor === 'codex' || props.agentType === 'codex';
     const isGemini = props.metadata?.flavor === 'gemini' || props.agentType === 'gemini';
     const isClaude = !isCodex && !isGemini;
+    // Vendor mark beside the model label. Claude is the fallback for sessions without a flavor.
+    const agentFlavorKey: keyof typeof agentFlavorIcons = isCodex ? 'codex' : isGemini ? 'gemini' : 'claude';
 
     const permissionModeOptions: PermissionMode[] = isCodex
         ? ['default', 'read-only', 'on-failure', 'full-auto']
@@ -481,17 +533,18 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
     }, [isCodex, isGemini]);
 
     const selectedModelMode: ModelMode = props.modelMode || 'default';
+    const modelCatalog = useModelCatalog();
     const codexSelection = React.useMemo<{ family: CodexModelFamily; effort: CodexReasoningEffort }>(() => {
         return parseCodexModelMode(selectedModelMode);
-    }, [selectedModelMode]);
-    const codexFamilyOptions = CODEX_MODEL_FAMILY_OPTIONS;
+    }, [selectedModelMode, modelCatalog]);
+    const codexFamilyOptions = getModelFamilyOptions('codex');
     const codexReasoningOptions = React.useMemo<Array<{ value: CodexReasoningEffort; label: string }>>(() => {
         const options = getCodexReasoningOptions(codexSelection.family);
         return options.map((value) => ({
             value,
             label: formatReasoningEffortLabel(value) ?? value,
         }));
-    }, [codexSelection.family]);
+    }, [codexSelection.family, modelCatalog]);
     const handleCodexFamilyChange = React.useCallback((family: CodexModelFamily) => {
         if (!props.onModelModeChange) return;
         if (family === MODEL_MODE_DEFAULT) {
@@ -510,20 +563,20 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
     }, [codexSelection.family, props.onModelModeChange]);
     const claudeSelection = React.useMemo<{ family: ClaudeModelFamily; effort: ClaudeReasoningEffort | null }>(() => {
         return parseClaudeModelMode(selectedModelMode);
-    }, [selectedModelMode]);
+    }, [selectedModelMode, modelCatalog]);
     // The wire family may carry the [1m] suffix; the UI splits it into base family + 1M toggle.
     const claudeBase = claudeBaseFamily(claudeSelection.family);
     const claudeIs1M = claudeSelection.family.includes('[1m]');
     const claudeShow1MToggle = claudeBase !== MODEL_MODE_DEFAULT && claudeHas1MOptIn(claudeBase);
     const claudeShow1MBadge = claudeAlways1M(claudeBase);
-    const claudeFamilyOptions = CLAUDE_MODEL_FAMILY_OPTIONS;
+    const claudeFamilyOptions = getModelFamilyOptions('claude');
     const claudeReasoningOptions = React.useMemo<Array<{ value: ClaudeReasoningEffort; label: string }>>(() => {
         const options = getClaudeReasoningOptions(claudeSelection.family);
         return options.map((value) => ({
             value,
             label: formatReasoningEffortLabel(value) ?? value,
         }));
-    }, [claudeSelection.family]);
+    }, [claudeSelection.family, modelCatalog]);
     const handleClaudeFamilyChange = React.useCallback((family: ClaudeModelFamily) => {
         if (!props.onModelModeChange) return;
         if (family === MODEL_MODE_DEFAULT) {
@@ -553,9 +606,9 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
         props.onModelModeChange(buildClaudeModelMode(claudeFamilyWith1M(claudeSelection.family, claudeIs1M), effort));
     }, [claudeSelection.family, claudeIs1M, props.onModelModeChange]);
     const modelOptions = React.useMemo<Array<{ value: ModelMode; label: string; shortLabel: string; description: string }>>(() => {
-        if (isGemini) return [...GEMINI_MODEL_OPTIONS];
+        if (isGemini) return [...getModelFamilyOptions('gemini')];
         return [{ value: MODEL_MODE_DEFAULT, label: 'Use CLI configured model', shortLabel: 'CLI', description: 'Use profile/CLI defaults' }];
-    }, [isGemini]);
+    }, [isGemini, modelCatalog]);
 
     const currentModelLabel = React.useMemo(() => {
         if (isCodex) {
@@ -653,9 +706,46 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
     }, [isContextDetailsPinned]);
 
 
-    // Abort button state
+    // Abort state - the round button doubles as a stop button while the agent works
     const [isAborting, setIsAborting] = React.useState(false);
     const shakerRef = React.useRef<ShakeInstance>(null);
+    // Timestamp of the Escape press that armed the double-press abort, 0 when disarmed
+    const escapeAbortArmedAtRef = React.useRef(0);
+    // Mirrors the armed gesture for rendering: the stop icon hides until the window lapses
+    const [isAbortArmed, setIsAbortArmed] = React.useState(false);
+    const escapeAbortTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const disarmEscapeAbort = React.useCallback(() => {
+        escapeAbortArmedAtRef.current = 0;
+        if (escapeAbortTimerRef.current) {
+            clearTimeout(escapeAbortTimerRef.current);
+            escapeAbortTimerRef.current = null;
+        }
+        setIsAbortArmed(false);
+    }, []);
+
+    const armEscapeAbort = React.useCallback((now: number) => {
+        escapeAbortArmedAtRef.current = now;
+        setIsAbortArmed(true);
+        if (escapeAbortTimerRef.current) {
+            clearTimeout(escapeAbortTimerRef.current);
+        }
+        escapeAbortTimerRef.current = setTimeout(disarmEscapeAbort, ABORT_ESCAPE_WINDOW_MS);
+    }, [disarmEscapeAbort]);
+
+    // A finished turn ends the gesture, and unmount must not leave a timer behind
+    React.useEffect(() => {
+        if (!props.isBusy) {
+            disarmEscapeAbort();
+        }
+    }, [props.isBusy, disarmEscapeAbort]);
+
+    React.useEffect(() => () => {
+        if (escapeAbortTimerRef.current) {
+            clearTimeout(escapeAbortTimerRef.current);
+        }
+    }, []);
+
     const inputRef = React.useRef<MultiTextInputHandle>(null);
 
     const { dropZoneRef, isDragging } = useWebImageDrop({
@@ -675,6 +765,10 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
     // Attached images alone are enough to send (e.g. an image-only chat message),
     // even when the text input is empty.
     const hasImages = (props.images?.length ?? 0) > 0;
+    // While the agent works and there is nothing to send, the round button stops the turn
+    // instead of starting a voice session. Text/images keep the send button so messages can
+    // still be queued.
+    const showStopButton = !!(props.isBusy && props.onAbort && !hasText && !hasImages && !props.isSending);
 
     // Keep a latest text snapshot to avoid stale parent-state reads during fast click-after-type sends.
     const latestTextRef = React.useRef(props.value);
@@ -861,9 +955,23 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
             }
         }
 
-        // Handle Escape for abort when no suggestions are visible
-        if (event.key === 'Escape' && props.showAbortButton && props.onAbort && !isAborting) {
-            handleAbortPress();
+        // Handle Escape for abort when no suggestions are visible. A single press only arms
+        // the gesture - a second press inside the window confirms it.
+        const escapeAbortNow = Date.now();
+        const escapeAbort = resolveEscapeAbort({
+            key: event.key,
+            isBusy: !!props.isBusy,
+            isAborting,
+            armedAt: escapeAbortArmedAtRef.current,
+            now: escapeAbortNow,
+        });
+        if (escapeAbort !== 'ignore') {
+            if (escapeAbort === 'abort') {
+                disarmEscapeAbort();
+                handleAbortPress();
+            } else {
+                armEscapeAbort(escapeAbortNow);
+            }
             return true;
         }
 
@@ -898,7 +1006,7 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
 
         }
         return false; // Key was not handled
-    }, [suggestions, moveUp, moveDown, selected, handleSuggestionSelect, props.showAbortButton, props.onAbort, isAborting, handleAbortPress, agentInputEnterToSend, resolveSendSnapshot, props.onSend, props.permissionMode, props.onPermissionModeChange, props.isSending, props.isSendDisabled, permissionModeOptions]);
+    }, [suggestions, moveUp, moveDown, selected, handleSuggestionSelect, props.isBusy, props.onAbort, isAborting, handleAbortPress, armEscapeAbort, disarmEscapeAbort, agentInputEnterToSend, resolveSendSnapshot, props.onSend, props.permissionMode, props.onPermissionModeChange, props.isSending, props.isSendDisabled, permissionModeOptions]);
 
     const connectionStatusIndicator = props.connectionStatus ? (
         <>
@@ -915,6 +1023,316 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                 {props.connectionStatus.text}
             </Text>
         </>
+    ) : null;
+
+    // Rendered outside the input tree on native. A React Native Modal presented while the
+    // keyboard is up blanks everything behind it on iOS, and the keyboard is open by
+    // definition whenever this indicator is tapped (see 1f51968d / b1fd050d).
+    const contextDetailsPopover = contextWarning ? (
+        <Pressable
+            style={{ flex: 1, backgroundColor: 'transparent' }}
+            onPress={() => setIsContextDetailsPinned(false)}
+        >
+            <Pressable
+                onPress={(event) => event.stopPropagation()}
+                style={{
+                    position: 'absolute',
+                    left: contextDetailsAnchor
+                        ? Math.min(
+                            Math.max(contextDetailsAnchor.x, CONTEXT_DETAILS_SCREEN_MARGIN),
+                            Math.max(CONTEXT_DETAILS_SCREEN_MARGIN, screenWidth - CONTEXT_DETAILS_TOOLTIP_WIDTH - CONTEXT_DETAILS_SCREEN_MARGIN)
+                        )
+                        : CONTEXT_DETAILS_SCREEN_MARGIN,
+                    top: contextDetailsAnchor
+                        ? Math.min(
+                            Math.max(
+                                CONTEXT_DETAILS_SCREEN_MARGIN,
+                                contextDetailsAnchor.y + contextDetailsAnchor.height - CONTEXT_DETAILS_TOOLTIP_GAP - CONTEXT_DETAILS_TOOLTIP_HEIGHT
+                            ),
+                            Math.max(CONTEXT_DETAILS_SCREEN_MARGIN, screenHeight - CONTEXT_DETAILS_TOOLTIP_HEIGHT - CONTEXT_DETAILS_SCREEN_MARGIN)
+                        )
+                        : CONTEXT_DETAILS_SCREEN_MARGIN,
+                    minWidth: CONTEXT_DETAILS_TOOLTIP_WIDTH,
+                    paddingHorizontal: 10,
+                    paddingVertical: 8,
+                    borderRadius: 10,
+                    backgroundColor: theme.colors.surface,
+                    borderWidth: 0.5,
+                    borderColor: theme.colors.modal.border,
+                    shadowColor: theme.colors.shadow.color,
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: theme.colors.shadow.opacity,
+                    shadowRadius: 6,
+                    elevation: 8,
+                }}
+            >
+                <Text style={{
+                    fontSize: 12,
+                    lineHeight: 20,
+                    color: theme.colors.text,
+                    ...Typography.default()
+                }}>
+                    {contextWarning.details}
+                </Text>
+            </Pressable>
+        </Pressable>
+    ) : null;
+
+    // Connection status, context warning, and permission mode. On iOS the row sits inside the
+    // input panel's card, as the card's first line; elsewhere it stays above the panel.
+    const statusInPanel = Platform.OS === 'ios' && !isRunningOnMac();
+    const statusBar = (props.connectionStatus || contextWarning || props.permissionMode) ? (
+        <View style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            // Inside the panel the row lines up with the panel's own content padding.
+            paddingHorizontal: statusInPanel ? 8 : 16,
+            paddingTop: statusInPanel ? 8 : 0,
+            paddingBottom: 4,
+            minHeight: 20, // Fixed minimum height to prevent jumping
+        }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 11 }}>
+                {props.connectionStatus && (
+                    <>
+                        {(props.connectionStatus.onPress || props.connectionStatus.action) ? (
+                            <Pressable
+                                hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
+                                onPress={() => {
+                                    if (props.connectionStatus?.action === 'openPermission') {
+                                        hapticsLight();
+                                        setShowSettings(prev => prev === 'permission' ? false : 'permission');
+                                    } else {
+                                        props.connectionStatus?.onPress?.();
+                                    }
+                                }}
+                                style={({ pressed }) => ({
+                                    flexDirection: 'row',
+                                    alignItems: 'center',
+                                    gap: 4,
+                                    opacity: pressed ? 0.7 : 1
+                                })}
+                            >
+                                {connectionStatusIndicator}
+                            </Pressable>
+                        ) : (
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                {connectionStatusIndicator}
+                            </View>
+                        )}
+                        {/* CLI Status - only shown when provided (wizard only) */}
+                        {props.connectionStatus.cliStatus && (
+                            <>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                    <Text style={{
+                                        fontSize: 11,
+                                        color: props.connectionStatus.cliStatus.claude
+                                            ? theme.colors.success
+                                            : theme.colors.textDestructive,
+                                        ...Typography.default()
+                                    }}>
+                                        {props.connectionStatus.cliStatus.claude ? '✓' : '✗'}
+                                    </Text>
+                                    <Text style={{
+                                        fontSize: 11,
+                                        color: props.connectionStatus.cliStatus.claude
+                                            ? theme.colors.success
+                                            : theme.colors.textDestructive,
+                                        ...Typography.default()
+                                    }}>
+                                        claude
+                                    </Text>
+                                </View>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                    <Text style={{
+                                        fontSize: 11,
+                                        color: props.connectionStatus.cliStatus.codex
+                                            ? theme.colors.success
+                                            : theme.colors.textDestructive,
+                                        ...Typography.default()
+                                    }}>
+                                        {props.connectionStatus.cliStatus.codex ? '✓' : '✗'}
+                                    </Text>
+                                    <Text style={{
+                                        fontSize: 11,
+                                        color: props.connectionStatus.cliStatus.codex
+                                            ? theme.colors.success
+                                            : theme.colors.textDestructive,
+                                        ...Typography.default()
+                                    }}>
+                                        codex
+                                    </Text>
+                                </View>
+                                {props.connectionStatus.cliStatus.gemini !== undefined && (
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                        <Text style={{
+                                            fontSize: 11,
+                                            color: props.connectionStatus.cliStatus.gemini
+                                                ? theme.colors.success
+                                                : theme.colors.textDestructive,
+                                            ...Typography.default()
+                                        }}>
+                                            {props.connectionStatus.cliStatus.gemini ? '✓' : '✗'}
+                                        </Text>
+                                        <Text style={{
+                                            fontSize: 11,
+                                            color: props.connectionStatus.cliStatus.gemini
+                                                ? theme.colors.success
+                                                : theme.colors.textDestructive,
+                                            ...Typography.default()
+                                        }}>
+                                            gemini
+                                        </Text>
+                                    </View>
+                                )}
+                            </>
+                        )}
+                    </>
+                )}
+                {contextWarning && (
+                    <>
+                        <View
+                            ref={contextDetailsAnchorRef}
+                            style={{
+                                position: 'relative',
+                                marginLeft: props.connectionStatus ? 8 : 0,
+                                zIndex: isContextDetailsVisible ? 1002 : 1,
+                            }}
+                        >
+                            <Pressable
+                                onPress={() => {
+                                    hapticsLight();
+                                    showContextDetailsFromPress();
+                                }}
+                                onHoverIn={() => {
+                                    if (contextDetailsHoverTimerRef.current) {
+                                        clearTimeout(contextDetailsHoverTimerRef.current);
+                                    }
+                                    contextDetailsHoverTimerRef.current = setTimeout(() => {
+                                        setIsContextDetailsHovered(true);
+                                        contextDetailsHoverTimerRef.current = null;
+                                    }, 600);
+                                }}
+                                onHoverOut={() => {
+                                    if (contextDetailsHoverTimerRef.current) {
+                                        clearTimeout(contextDetailsHoverTimerRef.current);
+                                        contextDetailsHoverTimerRef.current = null;
+                                    }
+                                    setIsContextDetailsHovered(false);
+                                }}
+                                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            >
+                                <Text style={{
+                                    fontSize: 11,
+                                    color: contextWarning.color,
+                                    ...Typography.default()
+                                }}>
+                                    {props.connectionStatus ? '• ' : ''}{contextWarning.text}
+                                </Text>
+                            </Pressable>
+                            {isContextDetailsInlineVisible && (
+                                <View
+                                    style={{
+                                        position: 'absolute',
+                                        left: 0,
+                                        bottom: CONTEXT_DETAILS_TOOLTIP_GAP,
+                                        minWidth: CONTEXT_DETAILS_TOOLTIP_WIDTH,
+                                        paddingHorizontal: 10,
+                                        paddingVertical: 8,
+                                        borderRadius: 10,
+                                        backgroundColor: theme.colors.surface,
+                                        borderWidth: 0.5,
+                                        borderColor: theme.colors.modal.border,
+                                        shadowColor: theme.colors.shadow.color,
+                                        shadowOffset: { width: 0, height: 2 },
+                                        shadowOpacity: theme.colors.shadow.opacity,
+                                        shadowRadius: 6,
+                                        elevation: 8,
+                                    }}
+                                >
+                                    <Text style={{
+                                        fontSize: 12,
+                                        lineHeight: 20,
+                                        color: theme.colors.text,
+                                        ...Typography.default()
+                                    }}>
+                                    {contextWarning.details}
+                                </Text>
+                            </View>
+                        )}
+                        </View>
+                        {Platform.OS === 'ios' ? (
+                            isContextDetailsPinned && contextDetailsAnchor ? (
+                                <FullWindowOverlay>
+                                    {contextDetailsPopover}
+                                </FullWindowOverlay>
+                            ) : null
+                        ) : (
+                            <RNModal
+                                transparent
+                                visible={Platform.OS !== 'web' && isContextDetailsPinned && !!contextDetailsAnchor}
+                                animationType="none"
+                                onRequestClose={() => setIsContextDetailsPinned(false)}
+                            >
+                                {contextDetailsPopover}
+                            </RNModal>
+                        )}
+                    </>
+                )}
+            </View>
+            <View style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 8,
+                zIndex: 1001,
+            }}>
+                {props.onModelModeChange && (
+                    <Pressable hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }} onPress={() => { hapticsLight(); setShowSettings(prev => prev === 'model' ? false : 'model'); }} style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                            {/* The model labels are vendor-less ("5.4", "3.8 Flash"), so the mark
+                                sits here to say whose model this session runs. Not pressable on its
+                                own - the vendor of a session cannot change. */}
+                            <View style={{ width: AGENT_MARK_SLOT, height: AGENT_MARK_SLOT, alignItems: 'center', justifyContent: 'center' }}>
+                                <Image
+                                    source={agentFlavorIcons[agentFlavorKey]}
+                                    style={{ width: agentMarkArtworkSize[agentFlavorKey], height: agentMarkArtworkSize[agentFlavorKey] }}
+                                    contentFit="contain"
+                                    tintColor={agentFlavorKey === 'codex' ? theme.colors.textSecondary : undefined}
+                                />
+                            </View>
+                            <Text style={{
+                                fontSize: 11,
+                                color: theme.colors.textSecondary,
+                                ...Typography.default()
+                            }}>
+                                {currentModelLabel}
+                                {props.fastMode && <>{' '}<MaterialCommunityIcons name="lightning-bolt" size={11} color={FAST_MODE_ICON_COLOR} /></>}
+                            </Text>
+                        </View>
+                    </Pressable>
+                )}
+                {props.permissionMode && (
+                    <Pressable hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }} onPress={handlePermissionPress} style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}>
+                        <Text style={{
+                            fontSize: 11,
+                            color: props.permissionMode === 'acceptEdits' ? theme.colors.permission.acceptEdits :
+                                props.permissionMode === 'bypassPermissions' ? theme.colors.permission.yolo :
+                                    props.permissionMode === 'plan' ? theme.colors.permission.plan :
+                                        props.permissionMode === 'read-only' ? theme.colors.permission.readOnly :
+                                            props.permissionMode === 'on-failure' ? theme.colors.permission.onFailure :
+                                                props.permissionMode === 'full-auto' ? theme.colors.permission.yolo :
+                                                    props.permissionMode === 'auto' ? theme.colors.permission.bypass :
+                                                        props.permissionMode === 'auto_edit' ? theme.colors.permission.acceptEdits :
+                                                            props.permissionMode === 'yolo' ? theme.colors.permission.yolo :
+                                                    theme.colors.textSecondary,
+                            ...Typography.default()
+                        }}>
+                            {getPermissionModeLabel(props.permissionMode, true)}
+                        </Text>
+                    </Pressable>
+                )}
+            </View>
+        </View>
     ) : null;
 
     return (
@@ -954,7 +1372,7 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                         </TouchableWithoutFeedback>
                         <View style={[
                             styles.settingsOverlay,
-                            { paddingHorizontal: screenWidth > 700 ? 0 : 8 }
+                            { paddingHorizontal: panelHorizontalInset }
                         ]}>
                             <FloatingOverlay maxHeight={400} keyboardShouldPersistTaps="always">
                                 {/* Tab bar - segmented control style */}
@@ -1208,283 +1626,7 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                     </>
                 )}
 
-                {/* Connection status, context warning, and permission mode */}
-                {(props.connectionStatus || contextWarning || props.permissionMode) && (
-                    <View style={{
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        paddingHorizontal: 16,
-                        paddingBottom: 4,
-                        minHeight: 20, // Fixed minimum height to prevent jumping
-                    }}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 11 }}>
-                            {props.connectionStatus && (
-                                <>
-                                    {(props.connectionStatus.onPress || props.connectionStatus.action) ? (
-                                        <Pressable
-                                            hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
-                                            onPress={() => {
-                                                if (props.connectionStatus?.action === 'openPermission') {
-                                                    hapticsLight();
-                                                    setShowSettings(prev => prev === 'permission' ? false : 'permission');
-                                                } else {
-                                                    props.connectionStatus?.onPress?.();
-                                                }
-                                            }}
-                                            style={({ pressed }) => ({
-                                                flexDirection: 'row',
-                                                alignItems: 'center',
-                                                gap: 4,
-                                                opacity: pressed ? 0.7 : 1
-                                            })}
-                                        >
-                                            {connectionStatusIndicator}
-                                        </Pressable>
-                                    ) : (
-                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                                            {connectionStatusIndicator}
-                                        </View>
-                                    )}
-                                    {/* CLI Status - only shown when provided (wizard only) */}
-                                    {props.connectionStatus.cliStatus && (
-                                        <>
-                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                                                <Text style={{
-                                                    fontSize: 11,
-                                                    color: props.connectionStatus.cliStatus.claude
-                                                        ? theme.colors.success
-                                                        : theme.colors.textDestructive,
-                                                    ...Typography.default()
-                                                }}>
-                                                    {props.connectionStatus.cliStatus.claude ? '✓' : '✗'}
-                                                </Text>
-                                                <Text style={{
-                                                    fontSize: 11,
-                                                    color: props.connectionStatus.cliStatus.claude
-                                                        ? theme.colors.success
-                                                        : theme.colors.textDestructive,
-                                                    ...Typography.default()
-                                                }}>
-                                                    claude
-                                                </Text>
-                                            </View>
-                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                                                <Text style={{
-                                                    fontSize: 11,
-                                                    color: props.connectionStatus.cliStatus.codex
-                                                        ? theme.colors.success
-                                                        : theme.colors.textDestructive,
-                                                    ...Typography.default()
-                                                }}>
-                                                    {props.connectionStatus.cliStatus.codex ? '✓' : '✗'}
-                                                </Text>
-                                                <Text style={{
-                                                    fontSize: 11,
-                                                    color: props.connectionStatus.cliStatus.codex
-                                                        ? theme.colors.success
-                                                        : theme.colors.textDestructive,
-                                                    ...Typography.default()
-                                                }}>
-                                                    codex
-                                                </Text>
-                                            </View>
-                                            {props.connectionStatus.cliStatus.gemini !== undefined && (
-                                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                                                    <Text style={{
-                                                        fontSize: 11,
-                                                        color: props.connectionStatus.cliStatus.gemini
-                                                            ? theme.colors.success
-                                                            : theme.colors.textDestructive,
-                                                        ...Typography.default()
-                                                    }}>
-                                                        {props.connectionStatus.cliStatus.gemini ? '✓' : '✗'}
-                                                    </Text>
-                                                    <Text style={{
-                                                        fontSize: 11,
-                                                        color: props.connectionStatus.cliStatus.gemini
-                                                            ? theme.colors.success
-                                                            : theme.colors.textDestructive,
-                                                        ...Typography.default()
-                                                    }}>
-                                                        gemini
-                                                    </Text>
-                                                </View>
-                                            )}
-                                        </>
-                                    )}
-                                </>
-                            )}
-                            {contextWarning && (
-                                <>
-                                    <View
-                                        ref={contextDetailsAnchorRef}
-                                        style={{
-                                            position: 'relative',
-                                            marginLeft: props.connectionStatus ? 8 : 0,
-                                            zIndex: isContextDetailsVisible ? 1002 : 1,
-                                        }}
-                                    >
-                                        <Pressable
-                                            onPress={() => {
-                                                hapticsLight();
-                                                showContextDetailsFromPress();
-                                            }}
-                                            onHoverIn={() => {
-                                                if (contextDetailsHoverTimerRef.current) {
-                                                    clearTimeout(contextDetailsHoverTimerRef.current);
-                                                }
-                                                contextDetailsHoverTimerRef.current = setTimeout(() => {
-                                                    setIsContextDetailsHovered(true);
-                                                    contextDetailsHoverTimerRef.current = null;
-                                                }, 600);
-                                            }}
-                                            onHoverOut={() => {
-                                                if (contextDetailsHoverTimerRef.current) {
-                                                    clearTimeout(contextDetailsHoverTimerRef.current);
-                                                    contextDetailsHoverTimerRef.current = null;
-                                                }
-                                                setIsContextDetailsHovered(false);
-                                            }}
-                                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                                        >
-                                            <Text style={{
-                                                fontSize: 11,
-                                                color: contextWarning.color,
-                                                ...Typography.default()
-                                            }}>
-                                                {props.connectionStatus ? '• ' : ''}{contextWarning.text}
-                                            </Text>
-                                        </Pressable>
-                                        {isContextDetailsInlineVisible && (
-                                            <View
-                                                style={{
-                                                    position: 'absolute',
-                                                    left: 0,
-                                                    bottom: CONTEXT_DETAILS_TOOLTIP_GAP,
-                                                    minWidth: CONTEXT_DETAILS_TOOLTIP_WIDTH,
-                                                    paddingHorizontal: 10,
-                                                    paddingVertical: 8,
-                                                    borderRadius: 10,
-                                                    backgroundColor: theme.colors.surface,
-                                                    borderWidth: 0.5,
-                                                    borderColor: theme.colors.modal.border,
-                                                    shadowColor: theme.colors.shadow.color,
-                                                    shadowOffset: { width: 0, height: 2 },
-                                                    shadowOpacity: theme.colors.shadow.opacity,
-                                                    shadowRadius: 6,
-                                                    elevation: 8,
-                                                }}
-                                            >
-                                                <Text style={{
-                                                    fontSize: 12,
-                                                    lineHeight: 20,
-                                                    color: theme.colors.text,
-                                                    ...Typography.default()
-                                                }}>
-                                                {contextWarning.details}
-                                            </Text>
-                                        </View>
-                                    )}
-                                    </View>
-                                    <RNModal
-                                        transparent
-                                        visible={Platform.OS !== 'web' && isContextDetailsPinned && !!contextDetailsAnchor}
-                                        animationType="none"
-                                        onRequestClose={() => setIsContextDetailsPinned(false)}
-                                    >
-                                        <Pressable
-                                            style={{ flex: 1, backgroundColor: 'transparent' }}
-                                            onPress={() => setIsContextDetailsPinned(false)}
-                                        >
-                                            <Pressable
-                                                onPress={(event) => event.stopPropagation()}
-                                                style={{
-                                                    position: 'absolute',
-                                                    left: contextDetailsAnchor
-                                                        ? Math.min(
-                                                            Math.max(contextDetailsAnchor.x, CONTEXT_DETAILS_SCREEN_MARGIN),
-                                                            Math.max(CONTEXT_DETAILS_SCREEN_MARGIN, screenWidth - CONTEXT_DETAILS_TOOLTIP_WIDTH - CONTEXT_DETAILS_SCREEN_MARGIN)
-                                                        )
-                                                        : CONTEXT_DETAILS_SCREEN_MARGIN,
-                                                    top: contextDetailsAnchor
-                                                        ? Math.min(
-                                                            Math.max(
-                                                                CONTEXT_DETAILS_SCREEN_MARGIN,
-                                                                contextDetailsAnchor.y + contextDetailsAnchor.height - CONTEXT_DETAILS_TOOLTIP_GAP - CONTEXT_DETAILS_TOOLTIP_HEIGHT
-                                                            ),
-                                                            Math.max(CONTEXT_DETAILS_SCREEN_MARGIN, screenHeight - CONTEXT_DETAILS_TOOLTIP_HEIGHT - CONTEXT_DETAILS_SCREEN_MARGIN)
-                                                        )
-                                                        : CONTEXT_DETAILS_SCREEN_MARGIN,
-                                                    minWidth: CONTEXT_DETAILS_TOOLTIP_WIDTH,
-                                                    paddingHorizontal: 10,
-                                                    paddingVertical: 8,
-                                                    borderRadius: 10,
-                                                    backgroundColor: theme.colors.surface,
-                                                    borderWidth: 0.5,
-                                                    borderColor: theme.colors.modal.border,
-                                                    shadowColor: theme.colors.shadow.color,
-                                                    shadowOffset: { width: 0, height: 2 },
-                                                    shadowOpacity: theme.colors.shadow.opacity,
-                                                    shadowRadius: 6,
-                                                    elevation: 8,
-                                                }}
-                                            >
-                                                <Text style={{
-                                                    fontSize: 12,
-                                                    lineHeight: 20,
-                                                    color: theme.colors.text,
-                                                    ...Typography.default()
-                                                }}>
-                                                    {contextWarning.details}
-                                                </Text>
-                                            </Pressable>
-                                        </Pressable>
-                                    </RNModal>
-                                </>
-                            )}
-                        </View>
-                        <View style={{
-                            flexDirection: 'row',
-                            alignItems: 'center',
-                            gap: 8,
-                            zIndex: 1001,
-                        }}>
-                            {props.onModelModeChange && (
-                                <Pressable hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }} onPress={() => { hapticsLight(); setShowSettings(prev => prev === 'model' ? false : 'model'); }} style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}>
-                                    <Text style={{
-                                        fontSize: 11,
-                                        color: theme.colors.textSecondary,
-                                        ...Typography.default()
-                                    }}>
-                                        {currentModelLabel}
-                                        {props.fastMode && <>{' '}<MaterialCommunityIcons name="lightning-bolt" size={11} color={FAST_MODE_ICON_COLOR} /></>}
-                                    </Text>
-                                </Pressable>
-                            )}
-                            {props.permissionMode && (
-                                <Pressable hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }} onPress={handlePermissionPress} style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}>
-                                    <Text style={{
-                                        fontSize: 11,
-                                        color: props.permissionMode === 'acceptEdits' ? theme.colors.permission.acceptEdits :
-                                            props.permissionMode === 'bypassPermissions' ? theme.colors.permission.yolo :
-                                                props.permissionMode === 'plan' ? theme.colors.permission.plan :
-                                                    props.permissionMode === 'read-only' ? theme.colors.permission.readOnly :
-                                                        props.permissionMode === 'on-failure' ? theme.colors.permission.onFailure :
-                                                            props.permissionMode === 'full-auto' ? theme.colors.permission.yolo :
-                                                                props.permissionMode === 'auto' ? theme.colors.permission.bypass :
-                                                                    props.permissionMode === 'auto_edit' ? theme.colors.permission.acceptEdits :
-                                                                        props.permissionMode === 'yolo' ? theme.colors.permission.yolo :
-                                                                theme.colors.textSecondary,
-                                        ...Typography.default()
-                                    }}>
-                                        {getPermissionModeLabel(props.permissionMode, true)}
-                                    </Text>
-                                </Pressable>
-                            )}
-                        </View>
-                    </View>
-                )}
+                {!statusInPanel && statusBar}
 
                 {/* Box 1: Context Information (Machine + Path) - Only show if either exists */}
                 {(props.machineName !== undefined || props.currentPath) && (
@@ -1492,7 +1634,8 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                         backgroundColor: theme.colors.surfacePressed,
                         borderRadius: 12,
                         padding: 8,
-                        marginBottom: 8,
+                        // On iOS the status row lives inside the card, so nothing else separates the two.
+                        marginBottom: statusInPanel ? 16 : 8,
                         gap: 4,
                     }}>
                         {/* Machine chip */}
@@ -1606,7 +1749,15 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                 )}
 
                 {/* Box 2: Action Area (Input + Send) */}
-                <View ref={dropZoneRef} style={styles.unifiedPanel}>
+                <View
+                    ref={dropZoneRef}
+                    style={[styles.unifiedPanel, statusInPanel && styles.unifiedPanelCompact, { marginHorizontal: panelHorizontalInset }, useGlassPanel && styles.unifiedPanelGlass]}
+                >
+                    {useGlassPanel && (
+                        <GlassView pointerEvents="none" glassEffectStyle="regular" style={[styles.glassBackground, statusInPanel && styles.unifiedPanelCompact]} />
+                    )}
+
+                    {statusInPanel && statusBar}
                     {/* Drag overlay */}
                     {isDragging && <View style={styles.dragOverlay} />}
 
@@ -1623,12 +1774,12 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                     )}
 
                     {/* Input field */}
-                    <View style={[styles.inputContainer, props.minHeight ? { minHeight: props.minHeight } : undefined]}>
+                    <View style={[styles.inputContainer, statusInPanel && styles.inputContainerCompact, props.minHeight ? { minHeight: props.minHeight } : undefined]}>
                         <MultiTextInput
                             ref={inputRef}
                             value={props.value}
-                            paddingTop={Platform.OS === 'web' ? 10 : 8}
-                            paddingBottom={Platform.OS === 'web' ? 10 : 8}
+                            paddingTop={Platform.OS === 'web' ? 10 : statusInPanel ? 6 : 8}
+                            paddingBottom={Platform.OS === 'web' ? 10 : statusInPanel ? 2 : 8}
                             onChangeText={handleTextChange}
                             placeholder={props.placeholder}
                             onKeyPress={handleKeyPress}
@@ -1753,46 +1904,21 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                     </Pressable>
                                 )}
 
-                                {/* Abort button */}
-                                {props.onAbort && (
-                                    <Shaker ref={shakerRef}>
-                                        <Pressable
-                                            style={(p) => ({
-                                                flexDirection: 'row',
-                                                alignItems: 'center',
-                                                borderRadius: Platform.select({ default: 16, android: 20 }),
-                                                paddingHorizontal: 8,
-                                                paddingVertical: 6,
-                                                justifyContent: 'center',
-                                                height: 32,
-                                                opacity: p.pressed ? 0.7 : 1,
-                                            })}
-                                            hitSlop={{ top: 5, bottom: 10, left: 0, right: 0 }}
-                                            onPress={handleAbortPress}
-                                            disabled={isAborting}
-                                        >
-                                            {isAborting ? (
-                                                <ActivityIndicator
-                                                    size="small"
-                                                    color={theme.colors.button.secondary.tint}
-                                                />
-                                            ) : (
-                                                <Octicons
-                                                    name={"stop"}
-                                                    size={16}
-                                                    color={theme.colors.button.secondary.tint}
-                                                />
-                                            )}
-                                        </Pressable>
-                                    </Shaker>
-                                )}
-
                                 {/* Git Status Badge */}
                                 <GitStatusButton sessionId={props.sessionId} onPress={props.onFileViewerPress} onBlank={() => inputRef.current?.focus()} />
                                 </View>
 
                                 {/* Image button */}
-                                {props.onImageButtonPress && (
+                                {props.onImageButtonPress && (props.imageMenuItems && props.supportsImages !== false ? (
+                                    <NativeMenu
+                                        items={props.imageMenuItems}
+                                        disabled={props.isUploadingImages}
+                                        style={styles.iconButton}
+                                        onFallbackOpen={props.onImageButtonPress}
+                                    >
+                                        <Ionicons name="image-outline" size={24} color={theme.colors.text} />
+                                    </NativeMenu>
+                                ) : (
                                     <Pressable
                                         onPress={props.supportsImages !== false ? props.onImageButtonPress : () => {
                                             Modal.alert('Not Supported', 'This AI does not support images');
@@ -1809,13 +1935,14 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                             color={props.supportsImages !== false ? theme.colors.text : theme.colors.textSecondary}
                                         />
                                     </Pressable>
-                                )}
+                                ))}
 
-                                {/* Send/Voice button - aligned with first row */}
+                                {/* Send/Voice/Stop button - aligned with first row */}
+                                <Shaker ref={shakerRef}>
                                 <View
                                     style={[
                                         styles.sendButton,
-                                        (hasText || hasImages || props.isSending || props.allowEmptySend || (props.onMicPress && !props.isMicActive))
+                                        (hasText || hasImages || props.isSending || props.allowEmptySend || showStopButton || (props.onMicPress && !props.isMicActive))
                                             ? styles.sendButtonActive
                                             : styles.sendButtonInactive
                                     ]}
@@ -1830,6 +1957,10 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                         })}
                                         hitSlop={{ top: 5, bottom: 10, left: 0, right: 0 }}
                                         onPress={() => {
+                                            if (showStopButton) {
+                                                handleAbortPress();
+                                                return;
+                                            }
                                             const textSnapshot = resolveSendSnapshot();
                                             log.log(`[SEND_DEBUG][INPUT] press hasText=${hasText} latestLen=${latestTextRef.current.trim().length} stateLen=${inputState.text.trim().length} propLen=${props.value.trim().length} pickedLen=${textSnapshot.trim().length} mic=${props.onMicPress ? 'yes' : 'no'} disabled=${props.isSendDisabled || props.isSending ? 'yes' : 'no'}`);
                                             if (textSnapshot.trim() || hasImages || props.allowEmptySend) {
@@ -1843,11 +1974,11 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                             }
                                         }}
                                         accessibilityState={{
-                                            disabled: !!(props.isSendDisabled || props.isSending || (!hasText && !hasImages && !props.onMicPress && !props.allowEmptySend)),
+                                            disabled: !!(props.isSending || (!showStopButton && (props.isSendDisabled || (!hasText && !hasImages && !props.onMicPress && !props.allowEmptySend)))),
                                         }}
-                                        disabled={props.isSendDisabled || props.isSending}
+                                        disabled={props.isSending || (!!props.isSendDisabled && !showStopButton)}
                                     >
-                                        {props.isSending ? (
+                                        {props.isSending || isAborting ? (
                                             <ActivityIndicator
                                                 size="small"
                                                 color={theme.colors.button.primary.tint}
@@ -1862,6 +1993,16 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                                     { marginTop: Platform.OS === 'web' ? 2 : 0 }
                                                 ]}
                                             />
+                                        ) : showStopButton ? (
+                                            // Armed by the first Escape: the button goes blank
+                                            // until the double press lands or the window lapses
+                                            isAbortArmed ? null : (
+                                                <FontAwesome6
+                                                    name="stop"
+                                                    size={14}
+                                                    color={theme.colors.button.primary.tint}
+                                                />
+                                            )
                                         ) : props.onMicPress && !props.isMicActive ? (
                                             <Image
                                                 source={require('@/assets/images/icon-voice-white.png')}
@@ -1885,6 +2026,7 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                         )}
                                     </Pressable>
                                 </View>
+                                </Shaker>
                             </View>
                         </View>
                     </View>

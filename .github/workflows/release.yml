@@ -95,6 +95,13 @@ jobs:
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # Google removed the legacy `tools` package from the SDK repository in
+          # September 2026, so the action's default `tools platform-tools` fails
+          # with "Failed to find package 'tools'". cmdline-tools (installed by
+          # the action) plus platform-tools are enough: Gradle resolves
+          # build-tools and platforms itself during `eas build --local`.
+          packages: platform-tools
 
       - name: Install dependencies
         run: yarn install --frozen-lockfile

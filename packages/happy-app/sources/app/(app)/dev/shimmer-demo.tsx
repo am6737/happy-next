@@ -1,6 +1,5 @@
 import React from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
-import { Stack } from 'expo-router';
 import { ShimmerView } from '@/components/ShimmerView';
 import { ItemGroup } from '@/components/ItemGroup';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,13 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 export default function ShimmerDemoScreen() {
     return (
         <>
-            <Stack.Screen
-                options={{
-                    headerTitle: 'Shimmer View Demo',
-                }}
-            />
-            
-            <ScrollView style={styles.container}>
+            <ScrollView style={styles.container} contentInsetAdjustmentBehavior="automatic">
                 <View style={styles.content}>
                     <Text style={styles.pageTitle}>Shimmer View Examples</Text>
                     <Text style={styles.description}>

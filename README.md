@@ -94,6 +94,8 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Signed automatic updates are checked periodically and when the app regains focus, download quietly in the background, and wait for the user to install and restart
 - Desktop diagnostics, rotating local logs, WebKit storage maintenance, upload retry recovery, microphone/camera support, native context menus, reliable theme-isolated HTML preview windows, CSP-compatible code editing, system-browser external links, and restricted native capabilities
 
+- Terminals open in a dedicated desktop window with a tab bar of their own, titled by the directory the shell is in
+
 ### Orchestrator
 - Define task dependency graphs (DAGs) with per-task model and working directory
 - Auto-schedule execution across Claude, Codex, and Gemini agents
@@ -114,7 +116,7 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - All three agents are first-class citizens with session resume, duplicate/fork, and history
 - Multi-agent history page with per-provider tabs, device and agent filter dropdowns
 - Per-agent model selection, cost tracking, and context window display
-- ACP and App-Server (JSON-RPC) backends for Codex, with Codex v0.154.0 and fast mode
+- ACP and App-Server (JSON-RPC) backends for Codex, with Codex v0.155.1 and fast mode
 - Codex archive actions synchronize with native history, show archived state consistently, and support restoring archived sessions when continuing work
 - Reliable Codex duplication and forking, with clear active-session conflict errors
 - Codex interactive questions and approval requests render in the app, including choices, custom Other values, free-form text, and masked sensitive answers
@@ -125,6 +127,7 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Streamlined model picker: Claude 1M-context variants collapse into a single toggle (7 models instead of 12), reasoning-effort presets show side by side on wide screens, and Claude defaults to High effort
 - GPT-6 Astra catalog support plus GPT-5.6 Sol, Terra, and Luna with their current reasoning-effort and context settings
 - Gemini 3.8 Flash and Gemini 3.7 Flash join the refreshed Gemini catalog alongside the existing Gemini models
+- The model catalog is served by the server, so new models show up without an app update — now with Claude Opus 5.5, Claude Sonnet 5.5, GPT-6.1-Sol, GPT-6-Sol, and GPT-6-Luna
 
 ### Voice Assistant (Happy Voice)
 - Voice gateway auth now uses short-lived tokens for improved security
@@ -143,6 +146,8 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Connect your GitHub account and browse repositories, issues, and pull requests
 - Create, comment on, close, and reopen issues and pull requests from the app
 - Start an AI session with issue or pull request context, and return to linked sessions from the detail page
+- GitHub lists use Octicons, and the repository list is cached locally so returning to it is instant
+- List totals are cached with a spinner while they refresh, and issue and pull request comments get a scroll-to-bottom button
 
 ### Multi-Repo Worktree Workspaces
 - Create, switch, and archive multi-repo workspaces from the app
@@ -171,12 +176,7 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Access control with view, edit, and admin permission levels
 - "All / Shared with me / Shared by me" filter tabs and share indicator in session list
 - Public share web viewer for link-based access, with paginated message loading so long shared conversations open faster
-
-### OpenClaw Gateway
-- Connect to external AI machines via relay tunnel or direct WebSocket
-- Machine pairing with Ed25519 key exchange
-- Chat interface with real-time streaming and session management
-- Rich content block rendering: thinking, tool use, and image blocks from external AI
+- Recipients of a shared session can upload chat images, and a failed send names the real reason
 
 ### DooTask Integration
 - Task list with filters, search, pagination, and status workflows
@@ -189,6 +189,7 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Session avatars on DooTask-related sessions, chat header adapts to dialog type
 - Empty chats show a consistently centered empty state
 - DooTask devices are identified as Happy Next, with a simpler connection login and cross-device connection sync
+- The task list is cached per filter and refreshed in the background
 
 ### Self-Hosting
 - One-command `docker-compose up` (Web + API + Voice + Postgres + Redis + MinIO)
@@ -251,6 +252,29 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Long user messages (>20k characters) collapse to a preview with a Show More toggle; text selection inside messages on web is fixed
 - Installed Codex skills appear in slash-command autocomplete; short-screen empty states and initial web-message layout are more reliable
 - Codex interactive questions support choices, custom Other values, free-form text, and masked sensitive answers
+- Session rename and mark-as-read / mark-as-unread from the session context menu, with the acting row ringed so the menu's target stays unambiguous
+- Session color markers are drawn as a bar down the row edge, so a column of them can be scanned and unmarked rows reserve no space; the compact list now marks every session state
+- Compact list view is stored per platform, so the denser desktop list and the mobile list keep their own setting
+- A new session is no longer offered from a session shared with you
+- Assistant turns carry a timer above the reply — counting up while the turn runs and reading as a duration once it settles (hover on web, tap on native)
+- The conversation minimap marks AskUserQuestion calls and HTML previews, and keeps compaction summaries off the rail
+- In-progress AskUserQuestion answers survive scrolling away, new messages, and reloads as drafts
+- Images opened by file-reading tools render as previews, and `preview_html` can read a document from a file path
+- Thinking and image placeholder rows are hidden, and "show thinking messages" now defaults to off for new users
+
+- A turn's process folds into one line — how long it took and how many tool calls it hid — that opens on a tap, with the line naming what the agent is doing while the turn runs
+- A compacted conversation's summary collapses to a single tap-to-view line, however short it is
+- The landmark minimap rail is summoned by a swipe in from the right edge on touch — slide to pick a mark, release to jump — with a card previewing the mark under your finger
+- The composer's standalone abort button is gone: the round button becomes a stop button while the agent is busy and there is nothing to send, and Escape aborts on a double press
+- A local session's folder can be revealed in Finder, or in Explorer on Windows, from a session menu now split into sections
+
+- A plan proposal shows folded at the shape of a proposal — marked on the landmark rail and kept out of the turn's fold — and submitting one sends it as the request it is
+- A step waiting on a permission stays out of the fold, so the question is never folded away
+- The fold line holds the position it was tapped at on web and native alike, instead of snapping when the page settles around it
+
+- On iOS a glass composer floats over every chat screen, docked to the keyboard, so new messages, short chats, and empty states stay in step as it opens and closes
+- The native message list runs on LegendList for smoother scrolling, follows new messages to the end even in bursts, and starts short chats at the top
+- An open session is no longer marked read while the window is unfocused or idle, and archived sessions stay offline
 
 ### CLI
 - `happy update` self-upgrade, `happy --version` with all agent versions
@@ -262,9 +286,21 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Switching model or toggling plan mode hot-swaps on the already-warm Claude subprocess instead of cold-restarting, so changes apply instantly mid-session
 - Switching a session from remote back to local cleans up terminal stdin so leftover raw-mode input no longer leaks into the terminal
 - Multiline skill metadata parses correctly, and enabled Codex plugin skills are discovered consistently
-- Happy CLI v0.8.0 bundles Codex v0.154.0 with current App-Server interaction support
+- Happy CLI v0.9.1 bundles Codex v0.155.1 with current App-Server interaction support
+- Cost estimates bill Claude fast mode (Opus 5 and Opus 4.8) at its premium rate
+- Stale archived Codex session index entries are cleaned up
 - Resume Codex sessions from a scrolling picker, by session ID, or from the latest session, with working-directory selection
 - Codex exits cleanly without leaving the terminal hanging
+
+- Terminals run on the machine rather than in the app: each shell lives in a forked worker of its own so a misbehaving shell cannot take the daemon down, output streams as its own event rather than riding RPC, and the server relays the frames with the control bytes inside the opaque payload escaped
+- Where tmux is installed those shells outlive the daemon — the next daemon attaches to what the last one left, so a restart costs the connection and not the session
+- Automatic compaction summaries are flagged the same way manual ones are, and Happy's own UI tools are never put to the user as permission questions
+
+- Happy CLI v0.9.2 bundles Codex v0.155.1; terminal shells start with better defaults and handle input more predictably, and a cold Codex download no longer reads as a failed handshake
+- The Codex model list gains GPT-6-Astra's Ultra effort and drops the models OpenAI retired (GPT-5.4, GPT-5.4-Mini, GPT-5.2), while a session already running on a retired model keeps the model and effort it was created with
+
+- Happy CLI v0.10.0 bundles Codex v0.159.1, follows the server's model catalog, and drops the deprecated OpenClaw integration
+- New Codex sessions start on Codex v0.159.3, and archiving a Codex session goes through the running app-server daemon
 
 ### Bug Fixes & Stability
 - 255+ bug fixes: message sending reliability, session lifecycle, Markdown rendering, navigation, voice, DooTask, sharing
@@ -290,6 +326,15 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Keyboard handling, loading states, navigation stability, icon font preloading
 
 Full changelog: [docs/changes-from-happy.md](docs/changes-from-happy.md)
+
+- The status row marks the session's vendor with a small logo in front of the model label, derived from the same source as the model list
+- The desktop sidebar, welcome screen and settings draw the brand wordmark from the outlined SVG logos
+
+- iOS 26: floating buttons, the action menu, and bottom sheets use Liquid Glass; header, row, long-press, picker, filter, and attachment menus open as native iOS menus; and every screen sits under the soft scroll-edge header with connection status in its subtitle
+- Pressed session rows, task cards, and GitHub rows highlight like the other lists
+- Terminals open from the Features group in Settings, and the HTML preview takes the page's own title
+- Terminals also open from a session's quick actions, are drawn with xterm.js on the web with CJK text, spaces and styled runs kept on their cells, open in a popup window in desktop browsers, stay mounted while recently shown, and show a hollow cursor when unfocused
+- The empty-session placeholder shows on web and desktop in every language, the iOS new session card spacing is even, and the DooTask error banner floats above the tab bar
 
 ## 📦 Project Components
 

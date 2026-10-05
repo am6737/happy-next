@@ -44,14 +44,29 @@ git pull --ff-only origin main
 
 如果不干净，提供“先提交指定改动 / 用户自行处理”选项，不要自作主张。
 
-## 发布前更新
+## 发布前检查模型目录
 
-进入发布流程前：
+模型、定价和 Codex CLI 版本都在 `packages/happy-wire/src/modelCatalog.json`。服务端每 10 分钟从 `main` 分支拉取这份文件，经 `/v1/model-catalog` 下发给 App 和 CLI，所以**目录改动合并到 `main` 后即远程生效，不需要发布**。发布只是把当时的目录打包进客户端，作为离线/首次启动时的兜底。
 
-1. 查询 `@openai/codex` 最新稳定版，更新 `packages/happy-cli/src/codex/package.ts` 及相关版本引用。
-2. 根据官方最新资料，更新 `packages/happy-wire/src/modelCatalog.ts` 中 Codex、Claude Code、Gemini 的模型，以及对应的 reasoning effort、上下文窗口、Fast Mode 和定价等关联配置。
-3. 更新相关测试；修改 `happy-wire` 后先运行 `yarn build`，并运行受影响包规定的类型检查和测试。
-4. 展示改动和验证结果。有改动时先让用户确认提交并推送，重新通过共用前置检查后再继续发布；没有改动则直接继续。
+因此发布流程不再修改模型或 Codex 版本的代码，只做检查：
+
+1. 模型：由每日自动同步维护（`.github/workflows/model-catalog-sync.yml`，固定分支 `automation/model-catalog-sync`，PR 说明里的 “Needs review” 需要人工处理）。列出改动了目录的未合并 PR，让用户决定先合并还是忽略；不要在发布流程里手动改模型。
+
+   ```bash
+   gh pr list --state open --json number,title,files \
+     --jq '.[] | select(any(.files[]; .path == "packages/happy-wire/src/modelCatalog.json")) | "#\(.number) \(.title)"'
+   ```
+2. Codex CLI 版本：**只允许手动更新，自动化不得修改 `codexCli`**。对比最新稳定版与当前版本：
+
+   ```bash
+   npm view @openai/codex version
+   node -p "require('./packages/happy-wire/src/modelCatalog.json').codexCli.version"
+   ```
+
+   有新版本时询问用户是否升级，并提醒：合并后会远程下发给所有 CLI，新启动的 Codex 会话都会使用新版本（已有会话按其记录的版本恢复），需先确认兼容性。用户同意后只改 `codexCli.version`，然后运行 `packages/happy-wire` 的 `yarn build`、`yarn test`，以及 happy-cli 的 `yarn typecheck`。
+3. 有改动时展示改动和验证结果，让用户确认提交并推送，重新通过共用前置检查后再继续发布；没有改动则直接继续。
+
+A1 审计时注意：如果 CLI/wire 的改动只有 `modelCatalog.json`，它已经远程生效，不构成发布 CLI 的理由。
 
 ## 发布入口选择
 
@@ -398,9 +413,9 @@ RUN_ID=$(gh run list --workflow=ios-submit.yml --limit 1 --json databaseId -q '.
 gh run watch "$RUN_ID"
 ```
 
-workflow 会下载 GitHub Release 中的同一份 IPA，并通过 EAS 提交 App Store Connect。
+workflow 会下载 GitHub Release 中的同一份 IPA，用 App Store Connect API Key 通过 `xcrun altool` 直接上传到 App Store Connect，不经过 EAS 队列，通常几分钟完成。
 
-成功只代表上传/提交请求完成；审核状态需要在 App Store Connect 中另行核对。
+成功只代表 IPA 上传完成；构建处理、送审和审核状态需要在 App Store Connect 中另行处理和核对。
 
 ---
 

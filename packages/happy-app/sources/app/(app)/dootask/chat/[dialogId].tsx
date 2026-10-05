@@ -21,9 +21,13 @@ import { MessageContextMenu, ContextMenuAction, MessagePreview } from '@/compone
 import { layout } from '@/components/layout';
 import { getNativeHeaderTitleWidth } from '@/utils/nativeHeaderTitleWidth';
 import { isRunningOnMac } from '@/utils/platform';
+import { softHeaderOptions } from '@/components/navigation/softHeader';
 import { useIsTablet } from '@/utils/responsive';
 import type { DooTaskDialogMsg, PendingMessage, DisplayMessage, DooTaskDialog, DooTaskDialogUser } from '@/sync/dootask/types';
 import { generateMockMessages, MOCK_USER_NAMES, MOCK_USER_AVATARS } from '@/components/dootask/__dev__/mockChatMessages';
+import { KeyboardCenteredEmpty } from '@/components/KeyboardCenteredEmpty';
+import { floatingComposerAvailable, floatingComposerScreenOptions } from '@/components/floatingComposer';
+import { useSharedValue } from 'react-native-reanimated';
 
 function dedupeMessagesById(list: DooTaskDialogMsg[]): DooTaskDialogMsg[] {
     const seen = new Set<number>();
@@ -146,7 +150,7 @@ export default React.memo(function DooTaskChat() {
         return urls;
     }, [messages, profile?.serverUrl]);
 
-    // Merge pending + real messages for display (pending at front = bottom of inverted list)
+    // Keep the API's newest-first order; ChatMessageList reverses it for LegendList.
     const displayMessages: DisplayMessage[] = React.useMemo(
         () => [...pendingMessages, ...messages],
         [pendingMessages, messages],
@@ -171,7 +175,7 @@ export default React.memo(function DooTaskChat() {
             if (requestId !== idRef.current) return;
             if (res.ret === 1 && res.data?.list) {
                 const list: DooTaskDialogMsg[] = res.data.list;
-                // API returns newest-first, which is what inverted FlatList needs
+                // API returns newest-first; ChatMessageList displays it chronologically.
                 setMessages(dedupeMessagesById(list));
                 setHasMore(list.length >= 50);
                 // Fetch user names
@@ -616,6 +620,9 @@ export default React.memo(function DooTaskChat() {
 
     // Narrow phones left-align the header title; tablets, web and Mac stay centered (matches SessionView).
     const isNarrowPhone = Platform.OS !== 'web' && !isRunningOnMac() && !isTablet;
+    const useNativeSoftHeader = Platform.OS === 'ios' && !isRunningOnMac();
+    // Written by AgentContentView as the floating composer lays out, read by the list on the UI thread.
+    const composerHeight = useSharedValue(0);
     // iOS centers the titleView regardless of alignment options, so give it the full available
     // width and left-align the text inside it. This page has a single right-hand button, so it
     // reserves ~44pt less than SessionView's two-button header (192 → 148).
@@ -671,7 +678,21 @@ export default React.memo(function DooTaskChat() {
     const effectiveUserAvatars = isMock ? { ...userAvatars, ...MOCK_USER_AVATARS } : userAvatars;
     const effectiveUserDisabledAt = isMock ? {} : userDisabledAt;
 
-    const content = displayMessages.length > 0 ? (
+    const placeholder = (
+        <View style={styles.center}>
+            {loading ? (
+                <ActivityIndicator size="small" color={theme.colors.textSecondary} />
+            ) : error ? (
+                <Text style={{ color: theme.colors.textDestructive }}>{error}</Text>
+            ) : (
+                <Text style={{ color: theme.colors.textSecondary }}>
+                    {t('dootask.chatEmpty')}
+                </Text>
+            )}
+        </View>
+    );
+
+    const content = (
         <ChatMessageList
             messages={displayMessages}
             currentUserId={profile?.userId || 0}
@@ -686,22 +707,11 @@ export default React.memo(function DooTaskChat() {
             onEmojiPress={handleEmojiToggle}
             onRetry={handleRetry}
             serverUrl={profile?.serverUrl || ''}
+            dataKey={String(id)}
+            emptyComponent={<KeyboardCenteredEmpty composerInset={floatingComposerAvailable ? composerHeight : undefined}>{placeholder}</KeyboardCenteredEmpty>}
+            composerInset={floatingComposerAvailable ? composerHeight : undefined}
         />
-    ) : null;
-
-    const placeholder = displayMessages.length === 0 ? (
-        <View style={styles.center}>
-            {loading ? (
-                <ActivityIndicator size="small" color={theme.colors.textSecondary} />
-            ) : error ? (
-                <Text style={{ color: theme.colors.textDestructive }}>{error}</Text>
-            ) : (
-                <Text style={{ color: theme.colors.textSecondary }}>
-                    {t('dootask.chatEmpty')}
-                </Text>
-            )}
-        </View>
-    ) : null;
+    );
 
     const input = (
         <ChatInput
@@ -710,16 +720,19 @@ export default React.memo(function DooTaskChat() {
             onSendFile={handleSendFile}
             replyTo={replyTo}
             onCancelReply={() => setReplyTo(null)}
+            glass={floatingComposerAvailable}
         />
     );
 
     return (
         <>
-            <Stack.Screen options={{ headerTitle, headerRight, headerTitleAlign: isNarrowPhone ? 'left' : 'center' }} />
+            <Stack.Screen options={{ ...softHeaderOptions, ...floatingComposerScreenOptions, headerTitle: useNativeSoftHeader ? headerTitleText : headerTitle, headerSubtitle: useNativeSoftHeader ? headerSubtitleText : undefined, headerSubtitleColor: useNativeSoftHeader ? theme.colors.textSecondary : undefined, headerRight, headerTitleAlign: isNarrowPhone ? 'left' : 'center' }} />
             <View style={[styles.body, { backgroundColor: theme.colors.surface, maxWidth: layout.maxWidth, alignSelf: 'center', width: '100%' }]}>
                 <AgentContentView
+                    safeAreaLayout
+                    floatingInput={floatingComposerAvailable}
+                    composerHeight={composerHeight}
                     content={content}
-                    placeholder={placeholder}
                     input={input}
                 />
             </View>

@@ -21,9 +21,11 @@ Both app and CLI need the download RPCs; shared sessions need the server update.
   for an initial commit).
 - Deleted entries explicitly identify the previous version being displayed.
   Renames resolve the corresponding old/new path. Failed reads never substitute
-  current working-tree content for historical/index content.
+  current working-tree content for historical/index content. Whatever version is
+  being shown, plus a failed diff or an unrendered change, is named in the file
+  page header's subtitle rather than in a band above the content.
 - Editing is available only for existing working-tree text. Exports contain
-  original file bytes, not the sanitized preview representation.
+  original file bytes, not the preview representation.
 
 ## Rendering and Security
 
@@ -59,10 +61,11 @@ Both app and CLI need the download RPCs; shared sessions need the server update.
 - SVG is loaded as an image inside an isolated document, never inserted into
   the app DOM. The image document has no script capability or external resource
   permissions. Zoom, background contrast and full-screen viewing are available.
-- HTML is parsed with htmlparser2 and reconstructed from allowed static nodes.
-  Inline CSS and embedded raster images are supported. Scripts, events, forms,
-  navigation, nested documents and external/relative resource loading are not.
-  A restrictive CSP is applied in addition to the iframe/WebView restrictions.
+- HTML renders the file as authored inside the sandbox. Scripts, inline handlers and
+  external resources all work, because nothing is rewritten: this path has no sanitizer and
+  no CSP, so the sandboxed frame is the only boundary. A document can therefore navigate its
+  own frame to a remote address on web; native blocks that with
+  `onShouldStartLoadWithRequest`.
 - Markdown reuses the app's parser, with a separate escaped HTML serializer.
   Headings, lists, quotations, tables and code blocks are supported. Raw HTML
   remains text; Mermaid remains code; chat options become inert list items.
@@ -76,7 +79,8 @@ Both app and CLI need the download RPCs; shared sessions need the server update.
   budget and a 16-million-pixel embedded-image limit.
 - Web/Tauri use sandboxed iframes without `allow-same-origin`. Native uses
   WebViews without file access, navigation, cookies or application messaging.
-  Native script execution is enabled only for the bundled PDF reader.
+  Scripts run in HTML previews and in the bundled PDF reader only; Markdown and
+  SVG documents stay script-free.
 
 ## Transport and Limits
 
@@ -124,11 +128,12 @@ PDF.js 5.4.624 is pinned for compatibility with the repository's Node 20 CI.
 Run `yarn build` in happy-wire after protocol changes, then `yarn typecheck` in
 happy-app and happy-cli. Focused Vitest coverage lives alongside the new preview
 modules and covers versions, deletion/rename, bounds, chunk integrity,
-cancellation, path restrictions, HTML sanitization and Markdown rendering.
+cancellation, path restrictions, HTML passthrough and Markdown rendering.
 
 For browser QA, run `npx tsx sources/scripts/filePreviewFixtures.ts` in happy-app.
 This generates local sandbox fixtures under `output/playwright/file-preview`.
 Test both desktop and narrow viewports, PDF navigation/search, canvas pixels,
-malformed PDFs and external-request blocking. Native iOS/Android and Tauri
+malformed PDFs and sandbox isolation (script execution plus a failed same-origin
+probe). Native iOS/Android and Tauri
 rendering must be validated separately; Chromium viewport tests are not evidence
 of native compatibility or native memory performance.

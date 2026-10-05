@@ -19,6 +19,7 @@ import * as Clipboard from 'expo-clipboard';
 import { t } from '@/text';
 import { hapticsLight } from '@/components/haptics';
 import { showCopiedToast } from '@/components/Toast';
+import { headerMenuOptions } from '@/components/navigation/headerMenu';
 
 interface CommitDetail {
     hash: string;
@@ -209,6 +210,7 @@ export default function CommitScreen() {
                             <Ionicons name="ellipsis-horizontal" size={22} color={theme.colors.header.tint} />
                         </Pressable>
                     ),
+                    ...headerMenuOptions(menuItems),
                 }}
             />
             <ActionMenuModal

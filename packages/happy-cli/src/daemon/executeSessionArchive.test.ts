@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -17,8 +17,23 @@ vi.mock('./sessionBinding', () => ({
     readStopSnapshot: vi.fn(() => []), writeStopSnapshot: vi.fn(),
 }));
 vi.mock('@/codex/appserver/CodexJsonRpcPeer', () => ({ CodexJsonRpcPeer: vi.fn(() => rpc) }));
-import { executeSessionArchive, syncCodexArchive, restoreCodexSession } from './executeSessionArchive';
+const daemon = vi.hoisted(() => ({
+    socketPath: vi.fn((): string | null => null),
+    connect: vi.fn(),
+    client: { request: vi.fn(), notify: vi.fn(), close: vi.fn() },
+}));
+vi.mock('@/codex/appserver/CodexControlSocketClient', () => ({
+    codexControlSocketPath: daemon.socketPath,
+    CodexControlSocketClient: { connect: daemon.connect },
+}));
+vi.mock('@/ui/logger', () => ({ logger: { debug: vi.fn() } }));
+import { executeSessionArchive, removeCodexSessionIndexEntries, syncCodexArchive, restoreCodexSession } from './executeSessionArchive';
 import { readSessionBinding, listSessionBindings, processIdentity, writeStopSnapshot, type SessionBinding } from './sessionBinding';
+import { codexPackage } from '@/codex/package';
+import { resolveCodexRuntime } from '@/codex/codexRuntime';
+
+/** Whatever this machine resolves for the pinned Codex: a matching local binary or npx. */
+const codexRuntime = resolveCodexRuntime(codexPackage(), ['app-server']);
 
 describe('executeSessionArchive', () => {
     beforeEach(() => {
@@ -30,13 +45,29 @@ describe('executeSessionArchive', () => {
         vi.mocked(readSessionBinding).mockReturnValue(binding as SessionBinding);
         vi.mocked(listSessionBindings).mockReturnValue([binding as SessionBinding]);
         rpc.request.mockResolvedValue({ data: [], nextCursor: null });
+        daemon.socketPath.mockReturnValue(null);
+        daemon.client.request.mockResolvedValue({ data: [], nextCursor: null });
     });
     afterEach(() => { if (home.value) rmSync(home.value, { recursive: true, force: true }); });
+    it('removes archived thread names from the legacy Codex session index', async () => {
+        home.value = mkdtempSync(join(tmpdir(), 'happy-archive-index-'));
+        const indexPath = join(home.value, 'session_index.jsonl');
+        const entries = [
+            { id: 'native-1', thread_name: 'Archived', updated_at: '2026-01-01T00:00:00Z' },
+            { id: 'keep', thread_name: 'Keep', updated_at: '2026-01-01T00:00:00Z' },
+            { id: 'native-1', thread_name: 'Renamed', updated_at: '2026-01-01T00:01:00Z' },
+        ];
+        writeFileSync(indexPath, entries.map(entry => JSON.stringify(entry)).join('\n') + '\n');
+
+        await removeCodexSessionIndexEntries(home.value, ['native-1']);
+
+        expect(readFileSync(indexPath, 'utf8')).toBe(`${JSON.stringify(entries[1])}\n`);
+    });
     it('restores native history after worktree cleanup using a stable cwd and the original Codex home', async () => {
         home.value = mkdtempSync(join(tmpdir(), 'happy-archive-cwd-'));
         const removedCwd = join(home.value, 'deleted-worktree');
         await syncCodexArchive({ ...binding, provider: 'codex', cwd: removedCwd, codexHome: '../codex-data' } as SessionBinding, false);
-        expect(rpc.spawn).toHaveBeenCalledWith('npx', expect.any(Array), expect.objectContaining({
+        expect(rpc.spawn).toHaveBeenCalledWith(codexRuntime.command, codexRuntime.args, expect.objectContaining({
             cwd: join(home.value, 'archive-runtime'), env: { CODEX_HOME: join(home.value, 'codex-data') },
         }));
         expect(rpc.request).toHaveBeenCalledWith('thread/unarchive', { threadId: 'native-1' }, 20000);
@@ -170,6 +201,24 @@ describe('executeSessionArchive', () => {
             .mockResolvedValueOnce({ data: [{ id: 'native-1' }], nextCursor: null });
         await syncCodexArchive(binding as SessionBinding, true);
         expect(rpc.request.mock.calls.some(([method]) => method === 'thread/archive')).toBe(false);
+    });
+    it('archives through a running app-server daemon so its clients drop the thread', async () => {
+        daemon.socketPath.mockReturnValue('/codex/app-server-control/app-server-control.sock');
+        daemon.connect.mockResolvedValue(daemon.client);
+        await syncCodexArchive({ ...binding, codexHome: '/codex' } as SessionBinding, true);
+        expect(daemon.socketPath).toHaveBeenCalledWith('/codex');
+        expect(daemon.client.request).toHaveBeenCalledWith('thread/archive', { threadId: 'native-1' }, 20000);
+        expect(daemon.client.close).toHaveBeenCalled();
+        expect(rpc.spawn).not.toHaveBeenCalled();
+        expect(writeStopSnapshot).not.toHaveBeenCalled();
+    });
+    it('falls back to a standalone helper when the daemon socket is stale', async () => {
+        daemon.socketPath.mockReturnValue('/codex/app-server-control/app-server-control.sock');
+        daemon.connect.mockRejectedValue(new Error('ECONNREFUSED'));
+        await syncCodexArchive(binding as SessionBinding, true);
+        expect(rpc.spawn).toHaveBeenCalled();
+        expect(rpc.request).toHaveBeenCalledWith('thread/archive', { threadId: 'native-1' }, 20000);
+        expect(daemon.client.request).not.toHaveBeenCalled();
     });
     it('unarchives without starting a new conversation', async () => {
         await syncCodexArchive(binding as SessionBinding, false);

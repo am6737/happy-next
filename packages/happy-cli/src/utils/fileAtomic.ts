@@ -6,12 +6,12 @@
 import { writeFile, rename, unlink } from 'fs/promises';
 import { randomUUID } from 'crypto';
 
-export async function atomicFileWrite(filePath: string, content: string): Promise<void> {
+export async function atomicFileWrite(filePath: string, content: string, mode?: number): Promise<void> {
   const tmpFile = `${filePath}.${randomUUID()}.tmp`;
   
   try {
     // Write to temp file
-    await writeFile(tmpFile, content);
+    await writeFile(tmpFile, content, { mode });
     
     // Atomic rename (on POSIX systems)
     await rename(tmpFile, filePath);

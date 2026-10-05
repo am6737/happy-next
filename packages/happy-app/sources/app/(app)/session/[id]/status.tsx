@@ -19,6 +19,7 @@ import { ActionMenuModal } from '@/components/ActionMenuModal';
 import { ActionMenuItem } from '@/components/ActionMenu';
 import { t } from '@/text';
 import { shellEscape } from '@/utils/shellEscape';
+import { actionMenuSection, ContextMenuView, nativeContextMenuAvailable } from '@/components/ContextMenuView';
 
 export default function StatusScreen() {
     const route = useRoute();
@@ -218,7 +219,9 @@ export default function StatusScreen() {
         const encodedPath = btoa(
             new TextEncoder().encode(file.fullPath).reduce((s, b) => s + String.fromCharCode(b), '')
         );
-        const stagedParam = staged ? '&staged=1' : '';
+        // The staged section already knows the version, so the header subtitle starts out filled
+        // instead of waiting for the preview RPC to report it.
+        const stagedParam = staged ? `&staged=1&note=${encodeURIComponent(t('files.preview.index'))}` : '';
         router.push(`/session/${sessionId}/file?path=${encodeURIComponent(encodedPath)}${stagedParam}&view=diff`);
     }, [router, sessionId]);
 
@@ -226,7 +229,7 @@ export default function StatusScreen() {
     const [menuVisible, setMenuVisible] = React.useState(false);
     const [menuItems, setMenuItems] = React.useState<ActionMenuItem[]>([]);
 
-    const handleLongPress = React.useCallback((file: GitFileStatus, staged: boolean) => {
+    const fileMenuItems = React.useCallback((file: GitFileStatus, staged: boolean): ActionMenuItem[] => {
         const items: ActionMenuItem[] = [];
         if (staged) {
             items.push({
@@ -244,9 +247,22 @@ export default function StatusScreen() {
             onPress: () => handleDiscardFile(file),
             destructive: true,
         });
-        setMenuItems(items);
-        setMenuVisible(true);
+        return items;
     }, [handleStageFile, handleUnstageFile, handleDiscardFile]);
+
+    const handleLongPress = React.useCallback((file: GitFileStatus, staged: boolean) => {
+        setMenuItems(fileMenuItems(file, staged));
+        setMenuVisible(true);
+    }, [fileMenuItems]);
+
+    // On iOS a file row's actions are its native context menu; elsewhere a long press opens the sheet.
+    const withFileMenu = (file: GitFileStatus, staged: boolean, row: React.ReactElement) => (
+        nativeContextMenuAvailable ? (
+            <ContextMenuView key={row.key} sections={[actionMenuSection(fileMenuItems(file, staged))]}>
+                {row}
+            </ContextMenuView>
+        ) : row
+    );
 
     const isWeb = Platform.OS === 'web';
 
@@ -404,17 +420,17 @@ export default function StatusScreen() {
                                     )}
                                 </Pressable>
                                 {gitStatus.stagedFiles.map((file, index) => (
-                                    <Item
+                                    withFileMenu(file, true, <Item
                                         key={`staged-${file.fullPath}-${index}`}
                                         title={file.fileName}
                                         subtitle={renderFileSubtitle(file)}
                                         icon={<FileIcon fileName={file.fileName} size={32} />}
                                         rightElement={renderRightElement(file, true)}
                                         onPress={() => handleFilePress(file, true)}
-                                        onLongPress={() => handleLongPress(file, true)}
+                                        onLongPress={nativeContextMenuAvailable ? undefined : () => handleLongPress(file, true)}
                                         showChevron={true}
                                         showDivider={index < gitStatus.stagedFiles.length - 1 || gitStatus.unstagedFiles.length > 0}
-                                    />
+                                    />)
                                 ))}
                             </>
                         )}
@@ -457,17 +473,17 @@ export default function StatusScreen() {
                                     )}
                                 </Pressable>
                                 {gitStatus.unstagedFiles.map((file, index) => (
-                                    <Item
+                                    withFileMenu(file, false, <Item
                                         key={`unstaged-${file.fullPath}-${index}`}
                                         title={file.fileName}
                                         subtitle={renderFileSubtitle(file)}
                                         icon={<FileIcon fileName={file.fileName} size={32} />}
                                         rightElement={renderRightElement(file, false)}
                                         onPress={() => handleFilePress(file)}
-                                        onLongPress={() => handleLongPress(file, false)}
+                                        onLongPress={nativeContextMenuAvailable ? undefined : () => handleLongPress(file, false)}
                                         showChevron={true}
                                         showDivider={index < gitStatus.unstagedFiles.length - 1}
-                                    />
+                                    />)
                                 ))}
                             </>
                         )}

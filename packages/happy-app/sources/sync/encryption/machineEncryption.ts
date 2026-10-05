@@ -126,7 +126,6 @@ export class MachineEncryption {
 
     /**
      * Decrypt raw data using legacy (secretbox) format
-     * Used for OpenClaw chat.history responses that use legacy format for cross-platform compatibility
      */
     decryptRawLegacy(encrypted: string): any | null {
         try {

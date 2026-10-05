@@ -27,7 +27,6 @@ This document summarizes what changed in Happy Next compared to the original Hap
 | Performance | Payload trimming, lazy-load diffs, rendering optimization, incremental session catch-up on open |
 | CLI | Daemon auto-start, Codex fast mode, receipt tracking, self-upgrade |
 | MCP tools | `preview_html`, colon-separated tool naming, dual-mode long-press copy |
-| OpenClaw | External AI machine gateway with tunnel/direct connections and chat UI |
 | Profiles | AI backend profiles with presets for DeepSeek, Z.AI, OpenAI, Azure, Google AI |
 | Rebrand | CLI published as `happy-next-cli`, binary remains `happy` |
 
@@ -47,6 +46,8 @@ Happy Next now ships as a native-feeling desktop client instead of requiring a b
 - **Diagnostics and recovery**: sanitized desktop diagnostics, rotating local logs, WebKit storage maintenance, upload timeouts and retry handling, and preserved composer content after failures
 - **Security and media**: restricted Tauri capabilities, hardened CSP and navigation boundaries, native context menus, reliable theme-isolated HTML preview child windows, CSP-compatible code editing, system-browser external links, and explicit microphone/camera support
 - **Platform visuals**: refreshed logos, favicons, splash screens, notification assets, and independent macOS and Windows icons, including the macOS 26 layered icon format and compatibility fallback for older macOS versions
+
+- **Terminal windows**: a terminal opens in a window of its own with a tab bar, titled by the directory the shell is in
 
 ## Orchestrator
 
@@ -95,9 +96,10 @@ The original Happy only supported Claude Code. Happy Next treats Claude Code, Co
 - **Claude Fable 5.1 and Fable 5** added to the model catalog, with 1M context and low / medium / high / xhigh / max reasoning effort presets
 - **Claude Opus 5 and Claude Sonnet 5** added with 1M context, current reasoning-effort presets, fast-mode capability detection, and updated cost tracking
 - **Refreshed Gemini catalog** adds Gemini 3.8 Flash and Gemini 3.7 Flash alongside the existing Gemini models
+- **Remote model catalog**: models are served by the server, so new ones show up without an app update — now with Claude Opus 5.5, Claude Sonnet 5.5, GPT-6.1-Sol, GPT-6-Sol, and GPT-6-Luna
 - **Streamlined model picker**: Claude 1M-context variants collapse into a single toggle (7 models instead of 12); reasoning-effort presets show side by side on wide screens and Claude defaults to High effort
 - **GPT-6 Astra and GPT-5.6 catalog support**: current model families include their reasoning-effort and context settings
-- **Codex v0.154.0**: bundled Codex CLI updated with current App-Server interaction support
+- **Codex v0.155.1**: bundled Codex CLI updated with current App-Server interaction support
 - **Cost tracking** with accurate token usage for Claude models (cache tokens, reasoning tokens)
 - **Codex reasoning effort** configuration (low / medium / high / xhigh)
 - **ACP (Agent Client Protocol) backend**: JSON-RPC agent protocol (originally introduced for Codex to replace the MCP client approach, now used for Gemini)
@@ -121,6 +123,9 @@ The original Happy only supported Claude Code. Happy Next treats Claude Code, Co
 - **Connected repositories**: connect your GitHub account and browse repositories, issues, and pull requests
 - **Issue and pull request workflows**: create, comment on, close, and reopen work items from the app
 - **Linked AI sessions**: start a session with issue or pull request context, then return to associated sessions from the detail page
+- **Octicons and cached lists**: GitHub lists use Octicons, and the repository list is cached locally so returning to it is instant
+- **Cached list totals**: list totals are cached with a spinner while they refresh
+- **Scroll to bottom in comments**: issue and pull request comments get a scroll-to-bottom button
 
 ## Voice Assistant (Happy Voice)
 
@@ -194,18 +199,7 @@ Share AI coding sessions with others through direct invites or public links, wit
 - **Permission-aware UI**: input bar, voice button, and session actions adapt to access level
 - **Server-side access control** module with permission validation for messages, RPC calls, and voice
 - **Access logging** for public share views
-
-## OpenClaw Integration
-
-Connect to external AI machines through a gateway system with its own chat interface.
-
-- **Machine management**: add, edit, and remove OpenClaw machines from the app
-- **Two connection modes**: Happy relay (tunnel through the Happy server) or direct WebSocket gateway
-- **Ed25519 key exchange** for secure machine pairing
-- **Chat interface** with real-time streaming AI responses, message retry, and typing indicators
-- **Session management**: create, browse, and resume OpenClaw sessions
-- **Server-side CRUD API** with encrypted metadata and optimistic concurrency
-- **CLI tunnel manager** for relay connections
+- **Shared-session image uploads**: recipients of a session shared with them can upload chat images
 
 ## AI Backend Profiles
 
@@ -240,6 +234,7 @@ Deep integration with DooTask project management, from browsing tasks to launchi
 - **Persistent connection**: DooTask connection saved to server via UserKVStore
 - **Simple status badge**: tasks without workflow show a simple status badge
 - **Centered empty chats**: the empty state stays centered consistently when a chat has no messages
+- **Cached task list**: the task list is cached per filter and refreshed in the background
 
 ## Self-Hosting
 
@@ -326,7 +321,7 @@ Extensive improvements to the chat and session management experience.
 - **Dual-mode long-press copy**: long-press to copy in tool detail views (text or JSON)
 - **Colon-separated tool naming**: support MCP tool names with colons (`server:tool`)
 - **Tool input as display name**: use tool input title for MCP tool display name
-- **Unified session header**: left-aligned title across iOS / Android / web, new-session button on the header right, header title in the session info screen, and a dedicated OpenClaw session info sheet
+- **Unified session header**: left-aligned title across iOS / Android / web, new-session button on the header right, header title in the session info screen
 - **Consistent header navigation**: back buttons and header actions align consistently across session and machine screens
 - **Narrow-phone header**: title left-aligns instead of center-overflowing on narrow phones; back icon fixed in dark-theme landscape
 - **Short-screen empty state**: simplified layout keeps the empty conversation state usable on short displays
@@ -338,6 +333,30 @@ Extensive improvements to the chat and session management experience.
 - **Generic 'other' tool block**: unrecognized tool calls render with a dynamic title and icon instead of an empty placeholder
 - **Agent event ANSI strip**: agent event messages strip ANSI escape codes from child-CLI stderr so subprocess banner color sequences no longer leak into the chat as raw `[90m…[0m`
 - **iOS modal reliability**: image viewing waits for the keyboard to dismiss, and the duplicate-session sheet no longer leaves a white overlay when opened with the keyboard visible
+- **Session context menu actions**: rename a session, or mark it read or unread, from the session menu (web right-click, native long-press); the acting row carries a ring and a wash so the menu's target stays unambiguous
+- **Session color marker as an edge bar**: the marker is a 4dp bar down the row's leading edge, shared by the flat compact list, the grouped rows, and the session cards, so a column of markers can be scanned and an unmarked row reserves no space
+- **Every session state marked in the compact list**: the compact row is a single line with no status text, so `syncing` and `awaiting` — the two states that mean the session is working — no longer fall through to a blank spacer, and a disconnected session gets a hollow ring rather than sharing the idle grey fill
+- **Compact list view per platform**: `compactSessionViewDesktop` (default on) and `compactSessionViewMobile` (default off) let the denser desktop list and the mobile list keep their own setting; the legacy flag migrates to the desktop setting as-is, including an explicit "off"
+- **Assistant turn timing**: each assistant turn carries a status line above its first row — counting up while the turn runs, reading as a duration once it settles, with the exact start and end on hover (web) or tap (native); a reply from before the app was open still shows its duration
+- **Minimap landmarks**: AskUserQuestion calls and HTML previews are landmarks on the conversation rail with a hover preview, and post-compaction summaries are kept off the rail so they cannot swamp the real prompts around them
+- **AskUserQuestion drafts**: in-progress answers — ticks and typed "Other" text — survive scrolling the row out of the window, a stream of new messages, and a message-syncing reload, and are aged out after 7 days
+- **File-reading tool image previews**: images opened by file-reading tools render as previews
+- **`preview_html` from a file path**: the tool takes `filePath` as an alternative to an inline document — the CLI reads the file on the machine that owns it and folds the contents into the tool call args, so previews survive offline, archived, and shared sessions
+- **New session requires ownership**: "Start a session in this directory" is no longer offered from a session shared with you, on the context menu, the directory header, the session info screen, or the session header
+- **Thinking rows hidden**: thinking and image placeholder rows are hidden, and "show thinking messages" now defaults to off for new users
+
+- **Turn folding**: a long turn's tool calls, their output and the notes between them fold into one line reading how long the turn took and how many tool calls it hid; tapping opens it, and while the turn runs the line names the newest hidden step under a band of light travelling across it. A running turn folds from its first hidden row, while a settled one keeps the threshold — a rule about reading a turn, not about watching one work
+- **Compaction summary collapse**: a post-compaction summary — a machine record of what the context window dropped, not something anyone typed — collapses to a single tap-to-view line however short it is, opening in the text-selection screen's rendered and as-authored tabs
+- **Landmark rail on touch**: the minimap rail is summoned by a swipe in from the right edge, the finger slides over a fixed window of marks while a card previews the mark under it, and release jumps. Web and touch light the same mark from one rule, so a question, an HTML preview or a compaction summary can no longer leave the rail dark or light the wrong mark
+- **Composer abort**: the standalone abort button is gone — the round button becomes a stop button while the agent is busy and there is nothing to send — and Escape aborts on a double press within 1.5s
+- **Session menu**: reveal a local session's folder in Finder, or in Explorer on Windows, matched against the ids the local CLI is registered under rather than a hostname guess; the nine-item menu is split into three sections — the session, where it runs, and leaving it behind
+- **Plan proposal shape**: a plan proposal renders folded at the shape of a proposal rather than as a generic tool block — marked on the landmark rail, kept out of the turn's fold, and submitted as the request it is
+- **Permission steps stay out of the fold**: a step waiting on a permission is never folded away, so the question stays where it can be answered
+- **Fold line holds its place**: the fold line keeps the position it was tapped at on web and native alike, instead of snapping when the page settles around it
+
+- **Docked glass composer**: on iOS a glass composer floats over every chat screen, docked to the keyboard, so new messages, short chats, and empty states stay in step as it opens and closes
+- **LegendList message list**: the native message list scrolls more smoothly, follows new messages to the end even in bursts, and starts short chats at the top
+- **Read state and presence**: an open session is no longer marked read while the window is unfocused or idle, and archived sessions stay offline
 
 ## CLI Improvements
 
@@ -351,6 +370,7 @@ The CLI (`happy-next-cli`) received substantial upgrades.
 - **MCP config centralization** with per-agent adapter pattern (Claude HTTP, Codex stdio, Gemini HTTP)
 - **Worktree detection** using native git instead of hardcoded path matching
 - **Accurate cost calculation** for Claude models, including corrected rate matching for Opus 4.5-4.8 and Haiku model IDs
+- **Fast mode cost**: fast mode bills at $10/$50 per MTok across the full context window, so a `-fast` model id no longer falls through to the standard Opus rate and under-reports by half; Opus 4.7 and 4.6 keep standard rates
 - **Shell command injection fix** with unified escaping
 - **Settings persistence**: "don't ask again" for tool approvals saved to `settings.local.json`
 - **Session title management**: `change_title` tool with lock support
@@ -361,7 +381,7 @@ The CLI (`happy-next-cli`) received substantial upgrades.
 - **Latest CLI version** fetched from npm instead of hardcoded minimum
 - **Daemon auto-start on boot**: `happy daemon enable` / `happy daemon disable`
 - **Daemon restart command**: restart the daemon without manual kill
-- **Happy CLI v0.8.0 with Codex v0.154.0**: current App-Server interaction support and fast mode
+- **Happy CLI v0.9.1 with Codex v0.155.1**: current App-Server interaction support and fast mode
 - **Codex session resume**: select from a scrolling session picker, resume by ID or continue the latest session, and choose the working directory
 - **Clean Codex exit**: avoid leaving the terminal hanging when a session ends
 - **Attribution setting**: new setting to control commit attribution, default off
@@ -376,6 +396,18 @@ The CLI (`happy-next-cli`) received substantial upgrades.
 - **Hot-swap model & plan mode**: switching the model or toggling plan mode no longer cold-restarts the Claude subprocess. When only the model or permission/plan mode changes on an already-warm process, the change is applied in place via the stream-json control channel, so it takes effect instantly mid-session instead of paying a session-resume restart
 - **Remote→local stdin cleanup**: switching a session from remote back to local now cleans up terminal stdin, so leftover raw-mode input no longer leaks into the terminal
 - **Skill metadata and plugin discovery**: multiline skill metadata parses correctly, and enabled Codex plugin skills are discovered consistently
+
+- **Terminals on the machine**: a terminal is a shell owned by the daemon rather than by the window showing it. Each one runs in a forked worker of its own, so a misbehaving shell cannot take the daemon down; creating, attaching, input, resize and disposal are RPC, while output streams as its own event rather than riding RPC; and the server relays the frames with the control bytes inside the opaque payload escaped, so a terminal's own output cannot be read as the envelope around it
+- **Durable terminals**: where tmux is installed, those shells outlive the daemon — the next daemon attaches to what the last one left, so a restart costs the connection and not the session. Where tmux is absent nothing changes, and the daemon asks again on each new terminal, because having installed it since is not a reason to restart. Re-attaching is strict: a session that ended between being listed and being attached to is reported, never silently replaced by a fresh shell
+- **Automatic compaction summaries**: flagged on the same path as manual ones
+- **Happy's own UI tools**: never put to the user as permission questions
+- **Durable terminals on Linux**: the tmux listing is no longer read through a control byte tmux rewrites, which had made the listing answer nothing on tmux 3.3-3.6 — a daemon restart dropped every terminal instead of taking the shells back
+- **Happy CLI v0.9.2 with Codex v0.155.1**: terminal shells start from better defaults and handle input more predictably
+- **Cold Codex download**: a first-run Codex download is no longer reported as a failed handshake
+- **Codex model lineup**: GPT-6-Astra gains its `ultra` effort, and the families OpenAI retired from Codex (GPT-5.4, GPT-5.4-Mini, GPT-5.2) are no longer offered; a session saved on one of them keeps the model and effort it was created with, resolved from a retired-mode table rather than passed through as a model name
+
+- **Happy CLI v0.10.0 with Codex v0.159.1**: follows the server's model catalog and drops the deprecated OpenClaw integration
+- **Codex v0.159.3 and archiving**: new Codex sessions start on Codex v0.159.3, and archiving a Codex session goes through the running app-server daemon
 
 ## Server
 
@@ -404,6 +436,20 @@ The CLI (`happy-next-cli`) received substantial upgrades.
 - **Image handling**: compression, MIME preservation, gallery viewer with zoom/gestures
 - **Status bar**: expanded model/permission display, auto-collapse timeout, mobile mic button
 
+- **Vendor mark**: a small logo derived from the session's flavor — the same source the model list uses — sits in front of the model's short label, so a session's vendor no longer needs the model list opened to be known
+- **SVG wordmark**: the desktop sidebar, the welcome screen and the settings logo view draw the brand wordmark from the outlined SVG exports instead of rasterised PNGs
+
+- **iOS 26 Liquid Glass**: floating buttons, the action menu, and bottom sheets use Liquid Glass
+- **Native iOS menus**: header, row, long-press, picker, filter, and attachment menus open as native iOS menus
+- **Soft header everywhere**: every screen sits under the soft scroll-edge header, with connection status in its subtitle
+- **Pressed-row highlight**: session rows, task cards, and GitHub rows highlight when pressed, like the other lists
+- **Terminal entry and preview titles**: terminals open from the Features group in Settings, and the HTML preview takes the page's own title
+- **Terminal quick action**: a terminal also opens from the quick actions in a session's details
+- **Terminals on the web**: terminals are drawn with xterm.js, keeping CJK text, spaces and styled runs on their cells; desktop browsers open them in a popup window, and recently shown terminals stay mounted while hidden
+- **Terminal input**: the cursor is drawn hollow while the input is unfocused, and a Command chord no longer types its letter
+- **Empty-session placeholder**: the placeholder shows on web and desktop and is localized in every language, including DooTask's empty chat
+- **Small layout fixes**: the iOS new session card spacing is even, and the DooTask error banner floats above the tab bar
+
 ## Bug Fixes & Stability
 
 Over 255 bug fixes landed. The following are grouped by area.
@@ -418,6 +464,7 @@ Over 255 bug fixes landed. The following are grouped by area.
 - Harden message send on flaky networks
 - Suppress draft restore while a send is in flight
 - Stop the sessions list cache from resurrecting drafts you've already sent
+- Name the real reason a message failed to send
 
 ### Unread Blue Dot Indicator
 - Fix blue dot not showing for offline sessions
@@ -450,6 +497,7 @@ Over 255 bug fixes landed. The following are grouped by area.
 - Fix Gemini MCP tool registration failure
 - Fix Codex icon invisible in dark mode
 - Fix sub-agent messages overwriting session model metadata
+- Remove stale archived session index entries
 
 ### Markdown Rendering
 - Fix table horizontal scroll and row height measurement
@@ -510,6 +558,7 @@ Over 255 bug fixes landed. The following are grouped by area.
 - Fix divider display in sharing dialogs
 - Remove backoff retry from sharing API, fix 403 log spam
 - Allow shared users to make RPC calls to session CLI
+- Allow shared-session recipients to upload chat images
 - Restrict session info actions by access level
 - Hide input and voice button for view-only shared users
 

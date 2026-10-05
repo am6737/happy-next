@@ -1,0 +1,30 @@
+Ported terminal renderer
+========================
+
+`sources/terminal/` contains code ported from Paseo
+(https://github.com/getpaseo/paseo), which is licensed under the Apache
+License, Version 2.0.
+
+Copyright (c) 2025-present Mohamed Boudra
+
+Files derived from Paseo, and what changed on the way in:
+
+  headlessTerminalState.ts    Scrollback extraction removed; the snapshot a
+                              client replays already carries the screen.
+  terminalRowModel.ts         Cell selection removed.
+  terminalColors.ts           Theme comes from terminalTheme.ts instead of the
+                              Paseo design system.
+  terminalCustomGlyph.ts      Unchanged.
+  terminalGridMetrics.ts      Unchanged.
+  terminalSizeMeasurement.ts  Unchanged.
+  terminalKeyEvents.ts        Unchanged.
+  terminalGridView.tsx        Selection removed; Paseo's Unistyles replaced
+                              with React Native's StyleSheet.
+  terminalInput.tsx           Paseo's EditingTextInput replaced with a plain
+                              TextInput; the Android remeasure machinery is
+                              unnecessary for a 1x1 hidden field.
+  terminalKeyInput.ts         Trimmed to soft/attached keyboard keys: no
+                              function keys, no Win32 or Kitty input modes.
+
+A copy of the Apache License, Version 2.0 is available at
+http://www.apache.org/licenses/LICENSE-2.0

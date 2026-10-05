@@ -448,4 +448,73 @@ describe('ApiSessionClient message receipt', () => {
             error: 'decrypt failed: invalid payload'
         });
     });
+    it('flags the post-compaction summary so the app can keep it off the minimap', () => {
+        const client = new ApiSessionClient('fake-token', mockSession) as any;
+        const titleSpy = vi.spyOn(client, 'maybeSetInitialTitleFromUserText');
+
+        const messageContent = client.buildMessageContent({
+            type: 'user',
+            uuid: 'user-compact-1',
+            isCompactSummary: true,
+            message: {
+                role: 'user',
+                content: 'This session is being continued from a previous conversation that ran out of context.',
+            },
+        });
+
+        expect(messageContent).toMatchObject({
+            role: 'user',
+            content: {
+                type: 'text',
+                text: 'This session is being continued from a previous conversation that ran out of context.',
+            },
+            meta: {
+                sentFrom: 'cli',
+                isCompactSummary: true,
+            },
+        });
+        // The summary is not user input, so it must not become the session title.
+        expect(titleSpy).not.toHaveBeenCalled();
+        titleSpy.mockRestore();
+    });
+
+    it('leaves ordinary user prompts unflagged', () => {
+        const client = new ApiSessionClient('fake-token', mockSession) as any;
+        const titleSpy = vi.spyOn(client, 'maybeSetInitialTitleFromUserText');
+
+        const messageContent = client.buildMessageContent({
+            type: 'user',
+            uuid: 'user-plain-1',
+            message: { role: 'user', content: 'hello there' },
+        });
+
+        expect(messageContent).toMatchObject({
+            role: 'user',
+            content: { type: 'text', text: 'hello there' },
+            meta: { sentFrom: 'cli' },
+        });
+        expect(messageContent.meta.isCompactSummary).toBeUndefined();
+        expect(titleSpy).toHaveBeenCalledWith('hello there');
+        titleSpy.mockRestore();
+    });
+
+    it('flags a compaction summary delivered as text blocks', () => {
+        const client = new ApiSessionClient('fake-token', mockSession) as any;
+
+        const messageContent = client.buildMessageContent({
+            type: 'user',
+            uuid: 'user-compact-2',
+            isCompactSummary: true,
+            message: {
+                role: 'user',
+                content: [{ type: 'text', text: 'continued from a previous conversation' }],
+            },
+        });
+
+        expect(messageContent).toMatchObject({
+            role: 'user',
+            content: { type: 'text', text: 'continued from a previous conversation' },
+            meta: { sentFrom: 'cli', isCompactSummary: true },
+        });
+    });
 });

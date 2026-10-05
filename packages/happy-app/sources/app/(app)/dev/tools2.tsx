@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
-import { Stack } from 'expo-router';
 import { ToolView } from '@/components/tools/ToolView';
 import { ItemGroup } from '@/components/ItemGroup';
 import { Item } from '@/components/Item';
@@ -377,13 +376,7 @@ export function formatTime(date: Date): string {
 
     return (
         <>
-            <Stack.Screen
-                options={{
-                    headerTitle: 'Tool Views Demo',
-                }}
-            />
-            
-            <ScrollView style={styles.container}>
+            <ScrollView style={styles.container} contentInsetAdjustmentBehavior="automatic">
                 <View style={styles.content}>
                     <Text style={styles.pageTitle}>Tool View Components</Text>
                     <Text style={styles.description}>

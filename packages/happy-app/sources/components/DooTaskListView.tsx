@@ -15,6 +15,7 @@ import { parseFlowItem, FLOW_STATUS_COLORS } from '@/sync/dootask/types';
 import type { DooTaskItem, DooTaskProject } from '@/sync/dootask/types';
 import { useShallow } from 'zustand/react/shallow';
 import { useMainTabBottomPadding } from '@/hooks/useMainTabBottomPadding';
+import { PressHighlight } from '@/components/PressHighlight';
 
 /**
  * Format end_at date as countdown or short date (matches DooTask dashboard logic).
@@ -442,6 +443,8 @@ const TaskCard = React.memo(({ item, projectName, columnName, userCache, flavors
 
     return (
         <Pressable style={[styles.card, { backgroundColor: theme.colors.surface }]} onPress={onPress}>
+            {({ pressed }) => (<>
+            {pressed && <PressHighlight style={styles.cardHighlight} />}
             <View style={styles.cardHeader}>
                 <View style={[styles.priorityBar, { backgroundColor: item.p_color || theme.colors.textSecondary }]} />
                 <Text style={[styles.cardTitle, { color: theme.colors.text }]} numberOfLines={2}>
@@ -503,6 +506,7 @@ const TaskCard = React.memo(({ item, projectName, columnName, userCache, flavors
                     {flavors && flavors.length > 0 ? <FlavorBadges flavors={flavors} /> : null}
                 </View>
             </View>
+            </>)}
         </Pressable>
     );
 });
@@ -511,7 +515,7 @@ const TaskCard = React.memo(({ item, projectName, columnName, userCache, flavors
 export const DooTaskListView = React.memo(() => {
     const router = useRouter();
     const { theme } = useUnistyles();
-    const { tasks, loading, error, pager } = useDootaskTasks();
+    const { tasks, loading, loadingMore, error, pager } = useDootaskTasks();
     const profile = useDootaskProfile();
     const userCache = useDootaskUserCache();
     const taskFlavorsMap = useTaskFlavorsMap(profile?.serverUrl);
@@ -547,6 +551,12 @@ export const DooTaskListView = React.memo(() => {
     const triggerRefreshWithFeedback = React.useCallback(() => {
         void handlePullRefresh();
     }, [handlePullRefresh]);
+
+    // Filter changes already show the new filter's cached page (or the empty
+    // state spinner), so they revalidate without pull-to-refresh feedback.
+    const refreshTasksSilently = React.useCallback(() => {
+        void storage.getState().fetchDootaskTasks({ refresh: true });
+    }, []);
 
     React.useEffect(() => {
         if (profile) {
@@ -617,12 +627,12 @@ export const DooTaskListView = React.memo(() => {
                         />
                     }
                     onEndReached={() => {
-                        if (pager.hasMore && !loading) {
+                        if (pager.hasMore && !loading && !loadingMore) {
                             storage.getState().fetchDootaskTasks({ loadMore: true });
                         }
                     }}
                     onEndReachedThreshold={0.5}
-                    ListHeaderComponent={<FilterBar onRefreshTasks={triggerRefreshWithFeedback} />}
+                    ListHeaderComponent={<FilterBar onRefreshTasks={refreshTasksSilently} />}
                     ListEmptyComponent={
                         loading && !isPullRefreshing ? (
                             <ActivityIndicator style={{ marginTop: 40 }} />
@@ -638,22 +648,28 @@ export const DooTaskListView = React.memo(() => {
                         )
                     }
                     ListFooterComponent={
-                        loading && !isPullRefreshing && tasks.length > 0 ? <ActivityIndicator style={{ padding: 16 }} /> : null
+                        loadingMore ? <ActivityIndicator style={{ padding: 16 }} /> : null
                     }
                     contentContainerStyle={[styles.list, { paddingBottom: tabBottomPadding }]}
                 />
                 {error && error !== 'token_expired' ? (
-                    <View style={[styles.errorBanner, { backgroundColor: theme.colors.deleteAction + '20' }]}>
-                        <Text style={[styles.errorText, { color: theme.colors.deleteAction }]}>{error}</Text>
-                        <Pressable onPress={triggerRefreshWithFeedback}>
-                            <Text style={styles.retryText}>{t('common.retry')}</Text>
-                        </Pressable>
+                    // Floats above the tab bar: the scene extends underneath it and the bottom safe area.
+                    <View style={[styles.errorBannerContainer, { bottom: tabBottomPadding - ERROR_BANNER_TAB_GAP, backgroundColor: theme.colors.surface }]}>
+                        <View style={[styles.errorBanner, { backgroundColor: theme.colors.deleteAction + '20' }]}>
+                            <Text style={[styles.errorText, { color: theme.colors.deleteAction }]} numberOfLines={2}>{error}</Text>
+                            <Pressable onPress={triggerRefreshWithFeedback} hitSlop={10}>
+                                <Text style={[styles.retryText, { color: theme.colors.text }]}>{t('common.retry')}</Text>
+                            </Pressable>
+                        </View>
                     </View>
                 ) : null}
             </View>
         </View>
     );
 });
+
+// useMainTabBottomPadding leaves 128pt of scroll room; the tab bar itself only covers ~56pt of it.
+const ERROR_BANNER_TAB_GAP = 64;
 
 const styles = StyleSheet.create((_theme) => ({
     filterBar: { paddingVertical: 8, gap: 12 },
@@ -686,6 +702,9 @@ const styles = StyleSheet.create((_theme) => ({
         borderRadius: 10,
         marginTop: 8,
     },
+    cardHighlight: {
+        borderRadius: 10,
+    },
     cardHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
     priorityBar: { width: 3, alignSelf: 'stretch' as const, borderRadius: 1.5 },
     cardTitle: { ...Typography.default('semiBold'), fontSize: 15, flex: 1 },
@@ -700,13 +719,21 @@ const styles = StyleSheet.create((_theme) => ({
     emptyText: { ...Typography.default(), fontSize: 14, textAlign: 'center', marginTop: 4 },
     retryButton: { marginTop: 16, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 },
     retryText: { ...Typography.default('semiBold'), fontSize: 14 },
+    errorBannerContainer: {
+        position: 'absolute',
+        left: 16,
+        right: 16,
+        borderRadius: 10,
+        overflow: 'hidden',
+    },
     errorBanner: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
         padding: 12,
+        gap: 12,
     },
-    errorText: { fontSize: 13, ...Typography.default() },
+    errorText: { fontSize: 13, flex: 1, ...Typography.default() },
     // --- Filter Panel ---
     filterSectionHeader: {
         paddingHorizontal: 20,

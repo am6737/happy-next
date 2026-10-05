@@ -40,7 +40,7 @@ export function ToolFullView({ tool, metadata, messages = [], sessionId }: ToolF
     const devModeEnabled = (useLocalSetting('devModeEnabled') || __DEV__);
     const selectable = useCopySelectable();
     return (
-        <ScrollView style={[styles.container, { paddingHorizontal: screenWidth > 700 ? 16 : 0 }]}>
+        <ScrollView contentInsetAdjustmentBehavior="automatic" style={[styles.container, { paddingHorizontal: screenWidth > 700 ? 16 : 0 }]}>
             <View style={styles.contentWrapper}>
                 {/* Tool-specific content or generic fallback */}
                 {SpecializedFullView && !unavailable ? (

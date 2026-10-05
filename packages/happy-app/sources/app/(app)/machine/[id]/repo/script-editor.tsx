@@ -13,6 +13,7 @@ import { t } from '@/text';
 import { CodeEditor, type CodeEditorHandle } from '@/components/CodeEditor';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSoftHeaderInset } from '@/components/navigation/softHeader';
 import { getTempData } from '@/utils/tempDataStore';
 import { storage } from '@/sync/storage';
 import { saveRegisteredRepos } from '@/sync/repoStore';
@@ -36,6 +37,8 @@ export default React.memo(function ScriptEditorScreen() {
     const navigation = useNavigation();
     const { theme } = useUnistyles();
     const insets = useSafeAreaInsets();
+    // The info bar is the editor's fixed top row; it clears the soft header itself.
+    const softHeaderInset = useSoftHeaderInset();
     const editorRef = React.useRef<CodeEditorHandle>(null);
     const { dataId } = useLocalSearchParams<{ dataId: string }>();
 
@@ -158,7 +161,7 @@ export default React.memo(function ScriptEditorScreen() {
     const infoBar = (
         <View style={{
             paddingHorizontal: 16,
-            paddingTop: 12,
+            paddingTop: 12 + softHeaderInset,
             paddingBottom: 8,
             borderBottomWidth: 1,
             borderBottomColor: theme.colors.divider,

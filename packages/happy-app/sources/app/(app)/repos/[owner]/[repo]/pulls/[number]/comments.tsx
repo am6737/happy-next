@@ -1,5 +1,6 @@
 import * as React from 'react';
-import { View, FlatList, Pressable, ActivityIndicator, Platform, useWindowDimensions } from 'react-native';
+import { View, Pressable, ActivityIndicator, Platform, useWindowDimensions, type ScrollViewProps } from 'react-native';
+import { LegendList, type LegendListRef } from '@legendapp/list/react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { Ionicons } from '@expo/vector-icons';
@@ -13,21 +14,40 @@ import { createGithubIssueComment, uploadGithubImage } from '@/sync/apiGithubDat
 import { useAuth } from '@/auth/AuthContext';
 import { useHappyAction } from '@/hooks/useHappyAction';
 import { Modal } from '@/modal';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChatHeaderTitle } from '@/components/ChatHeaderTitle';
 import { getNativeHeaderTitleWidth } from '@/utils/nativeHeaderTitleWidth';
-import { useKeyboardState } from 'react-native-keyboard-controller';
+import { KeyboardStickyView } from 'react-native-keyboard-controller';
+import Animated, { useSharedValue } from 'react-native-reanimated';
+import { AgentContentView } from '@/components/AgentContentView';
+import { ChatScrollView } from '@/components/ChatScrollView';
+import { ScrollToBottomButton } from '@/components/ScrollToBottomButton';
+import { distanceFromEnd } from '@/components/chatListRowModel';
+import { useChatOverlayStyle } from '@/hooks/useChatOverlayStyle';
+import { GlassSurface } from '@/components/GlassSurface';
+import { COMPOSER_MARGIN, floatingComposerAvailable, floatingComposerBottomInset, floatingComposerScreenOptions } from '@/components/floatingComposer';
 import { ActionMenuModal } from '@/components/ActionMenuModal';
 import type { ActionMenuItem } from '@/components/ActionMenu';
 import { t } from '@/text';
 import { getGithubCommentFallbackRoute } from '@/utils/githubCommentNavigation';
 import { CommentItem } from '@/components/repos/CommentItem';
+import { isRunningOnMac } from '@/utils/platform';
+import { softHeaderOptions, useSoftHeaderInset } from '@/components/navigation/softHeader';
+import { KeyboardCenteredEmpty } from '@/components/KeyboardCenteredEmpty';
+import { NativeMenu } from '@/components/NativeMenu';
+
+// How far above the end the reader has to be for the scroll-to-bottom button to show.
+const SCROLL_THRESHOLD = 100;
 
 export default React.memo(function PRCommentsPage() {
     const styles = stylesheet;
     const { theme } = useUnistyles();
     const router = useRouter();
     const insets = useSafeAreaInsets();
+    const softHeaderInset = useSoftHeaderInset();
+    // Written by AgentContentView as the floating composer lays out, read by the list on the UI thread.
+    const composerHeight = useSharedValue(0);
+    const composerInset = floatingComposerAvailable ? composerHeight : undefined;
     const { owner, repo, number: numberStr, issueTitle, issueAuthor } = useLocalSearchParams<{ owner: string; repo: string; number: string; issueTitle?: string; issueAuthor?: string }>();
     const prNumber = parseInt(numberStr, 10);
     const { credentials } = useAuth();
@@ -54,8 +74,6 @@ export default React.memo(function PRCommentsPage() {
 
     const [submitting, doSubmit] = useHappyAction(submit);
     const canSubmit = draft.trim().length > 0 && !submitting;
-    const keyboard = useKeyboardState();
-    const keyboardPadding = keyboard.isVisible ? keyboard.height - insets.bottom : 0;
 
     const [menuVisible, setMenuVisible] = React.useState(false);
     const [uploading, setUploading] = React.useState(false);
@@ -127,6 +145,7 @@ export default React.memo(function PRCommentsPage() {
     const headerTitle = React.useCallback(() => (
         <ChatHeaderTitle title={headerTitleText} subtitle={headerSubtitleText} width={headerTitleWidth} />
     ), [headerTitleText, headerSubtitleText, headerTitleWidth]);
+    const useNativeSoftHeader = Platform.OS === 'ios' && !isRunningOnMac();
 
     const listEmpty = React.useMemo(() => (
         <View style={styles.emptyContainer}>
@@ -138,87 +157,155 @@ export default React.memo(function PRCommentsPage() {
         </View>
     ), [loading, theme]);
 
-    return (
-        <View style={styles.container}>
-            <Stack.Screen options={{ headerTitle, headerLeft }} />
-            <FlatList
+    const listRef = React.useRef<LegendListRef>(null);
+
+    const renderScrollComponent = React.useCallback(
+        (props: ScrollViewProps) => (
+            <ChatScrollView
+                {...props}
+                bottomInset={composerInset ? floatingComposerBottomInset(insets.bottom) : insets.bottom}
+                topInset={softHeaderInset}
+                composerInset={composerInset}
+                listRef={listRef}
+            />
+        ),
+        [composerInset, insets.bottom, softHeaderInset, listRef],
+    );
+
+    const [showScrollButton, setShowScrollButton] = React.useState(false);
+    const handleScroll = React.useCallback((event: any) => {
+        setShowScrollButton(distanceFromEnd(event.nativeEvent) > SCROLL_THRESHOLD);
+    }, []);
+    const handleScrollToBottom = React.useCallback(() => {
+        void listRef.current?.scrollToEnd({ animated: false });
+    }, []);
+    // The list's frame does not shrink for the keyboard (or end at a floating composer), so the
+    // scroll-to-bottom button is moved above both.
+    const overlayStyle = useChatOverlayStyle(Platform.OS === 'ios', composerInset);
+
+    const list = (
+        <View style={styles.listWrapper}>
+            <LegendList
+                ref={listRef}
                 data={comments}
+                estimatedItemSize={120}
                 keyExtractor={(item) => String(item.id)}
-                renderItem={({ item }) => (
-                    <CommentItem comment={item} issueAuthor={issueAuthor} />
+                renderItem={({ item, index }) => (
+                    <CommentItem comment={item} issueAuthor={issueAuthor} isLast={index === comments.length - 1} />
                 )}
+                // A new comment takes the last-row styling off the one before it.
+                extraData={comments.length}
                 onEndReached={hasMore ? loadMore : undefined}
                 onEndReachedThreshold={0.5}
-                ListEmptyComponent={listEmpty}
+                maintainVisibleContentPosition
+                maintainScrollAtEnd={{ on: { dataChange: true } }}
+                initialScrollAtEnd
+                ListHeaderComponent={useNativeSoftHeader ? <View style={{ height: softHeaderInset + 12 }} /> : null}
+                estimatedHeaderSize={useNativeSoftHeader ? softHeaderInset + 12 : 0}
+                ListEmptyComponent={<KeyboardCenteredEmpty composerInset={composerInset}>{listEmpty}</KeyboardCenteredEmpty>}
                 ListFooterComponent={loadingMore ? (
                     <ActivityIndicator style={{ paddingVertical: 16 }} color={theme.colors.textSecondary} />
                 ) : null}
-                contentContainerStyle={[styles.list, { maxWidth: layout.maxWidth, alignSelf: 'center', width: '100%' }]}
+                renderScrollComponent={renderScrollComponent}
+                contentContainerStyle={[styles.list, comments.length === 0 && styles.listEmpty, { maxWidth: layout.maxWidth, alignSelf: 'center', width: '100%' }]}
                 style={{ flex: 1, backgroundColor: theme.colors.surface }}
                 keyboardShouldPersistTaps="handled"
+                // An empty thread only shows its centered placeholder; the composer's inset would
+                // otherwise leave it a little room to scroll. The keyboard still lifts it (scrollTo).
+                scrollEnabled={comments.length > 0}
+                onScroll={handleScroll}
+                scrollEventThrottle={16}
             />
-            <View style={[styles.composer, { paddingBottom: Math.max(insets.bottom + Math.max(0, keyboardPadding), 12) }]}>
-                <View style={styles.inputRow}>
-                        <Pressable
-                            onPress={() => setMenuVisible(true)}
-                            disabled={uploading}
-                            hitSlop={4}
-                            style={styles.addButton}
-                        >
-                            <View style={[styles.addCircle, { backgroundColor: theme.colors.surfaceHighest }]}>
-                                {uploading ? (
-                                    <ActivityIndicator size="small" color={theme.colors.textSecondary} />
-                                ) : (
-                                    <Ionicons name="add" size={24} color={theme.colors.textSecondary} />
-                                )}
-                            </View>
-                        </Pressable>
-                        <View style={[styles.inputGroup, { backgroundColor: theme.colors.surfaceHighest }]}>
-                            <MultiTextInput
-                                style={{ flex: 1, paddingVertical: 6 }}
-                                value={draft}
-                                onChangeText={setDraft}
-                                placeholder={uploading ? t('issueComments.uploadingImage') : t('issueComments.placeholder')}
-                                maxHeight={120}
-                                paddingTop={6}
-                                paddingBottom={6}
-                                lineHeight={20}
-                            />
-                            <Pressable
-                                onPress={doSubmit}
-                                disabled={!canSubmit}
-                                hitSlop={4}
-                                style={styles.sendButton}
-                            >
-                                {submitting ? (
-                                    <ActivityIndicator size="small" color={theme.colors.button.primary.tint} />
-                                ) : (
-                                    <View style={[
-                                        styles.sendCircle,
-                                        {
-                                            backgroundColor: canSubmit
-                                                ? theme.colors.button.primary.background
-                                                : theme.colors.button.primary.disabled,
-                                        },
-                                    ]}>
-                                        <Ionicons
-                                            name="arrow-up"
-                                            size={20}
-                                            color={theme.colors.button.primary.tint}
-                                        />
-                                    </View>
-                                )}
-                            </Pressable>
-                        </View>
+            <Animated.View pointerEvents="box-none" style={[StyleSheet.absoluteFill, overlayStyle]}>
+                {showScrollButton && (
+                    <View pointerEvents="box-none" style={styles.scrollButton}>
+                        <ScrollToBottomButton onPress={handleScrollToBottom} unreadCount={0} />
                     </View>
-                </View>
-                <ActionMenuModal
-                    visible={menuVisible}
+                )}
+            </Animated.View>
+        </View>
+    );
+
+    const composer = (
+        <View style={[styles.composer, floatingComposerAvailable && styles.composerFloating, { paddingBottom: Platform.OS === 'ios' ? 0 : Math.max(insets.bottom, 12) }]}>
+            <View style={styles.inputRow}>
+                <NativeMenu
                     items={menuItems}
-                    onClose={() => setMenuVisible(false)}
-                    deferItemPress
-                />
+                    disabled={uploading}
+                    style={styles.addButton}
+                    onFallbackOpen={() => setMenuVisible(true)}
+                >
+                    <GlassSurface glass={floatingComposerAvailable} color={theme.colors.surfaceHighest} style={styles.addCircle}>
+                        {uploading ? (
+                            <ActivityIndicator size="small" color={theme.colors.textSecondary} />
+                        ) : (
+                            <Ionicons name="add" size={24} color={theme.colors.textSecondary} />
+                        )}
+                    </GlassSurface>
+                </NativeMenu>
+                <GlassSurface glass={floatingComposerAvailable} color={theme.colors.surfaceHighest} style={styles.inputGroup}>
+                    <MultiTextInput
+                        style={{ flex: 1, paddingVertical: 6 }}
+                        value={draft}
+                        onChangeText={setDraft}
+                        placeholder={uploading ? t('issueComments.uploadingImage') : t('issueComments.placeholder')}
+                        maxHeight={120}
+                        paddingTop={6}
+                        paddingBottom={6}
+                        lineHeight={20}
+                    />
+                    <Pressable
+                        onPress={doSubmit}
+                        disabled={!canSubmit}
+                        hitSlop={4}
+                        style={styles.sendButton}
+                    >
+                        {submitting ? (
+                            <ActivityIndicator size="small" color={theme.colors.button.primary.tint} />
+                        ) : (
+                            <View style={[
+                                styles.sendCircle,
+                                {
+                                    backgroundColor: canSubmit
+                                        ? theme.colors.button.primary.background
+                                        : theme.colors.button.primary.disabled,
+                                },
+                            ]}>
+                                <Ionicons
+                                    name="arrow-up"
+                                    size={20}
+                                    color={theme.colors.button.primary.tint}
+                                />
+                            </View>
+                        )}
+                    </Pressable>
+                </GlassSurface>
             </View>
+        </View>
+    );
+
+    return (
+        <SafeAreaView edges={floatingComposerAvailable ? [] : ['bottom']} style={styles.container}>
+            <Stack.Screen options={{ ...softHeaderOptions, ...floatingComposerScreenOptions, headerTitle: useNativeSoftHeader ? headerTitleText : headerTitle, headerSubtitle: useNativeSoftHeader ? headerSubtitleText : undefined, headerSubtitleColor: useNativeSoftHeader ? theme.colors.textSecondary : undefined, headerLeft }} />
+            {floatingComposerAvailable ? (
+                <AgentContentView floatingInput composerHeight={composerHeight} content={list} input={composer} />
+            ) : (
+                <>
+                    {list}
+                    <KeyboardStickyView
+                        offset={{ opened: Platform.OS === 'ios' ? insets.bottom - COMPOSER_MARGIN : insets.bottom }}
+                    >
+                        {composer}
+                    </KeyboardStickyView>
+                </>
+            )}
+            <ActionMenuModal
+                visible={menuVisible}
+                items={menuItems}
+                onClose={() => setMenuVisible(false)}
+                deferItemPress
+            />
+        </SafeAreaView>
     );
 });
 
@@ -227,8 +314,23 @@ const stylesheet = StyleSheet.create((theme) => ({
         flex: 1,
         backgroundColor: theme.colors.surface,
     },
+    listWrapper: {
+        flex: 1,
+    },
+    scrollButton: {
+        position: 'absolute',
+        bottom: 16,
+        right: 16,
+    },
+    // Only an empty thread stretches to the viewport, for its centered placeholder: stretched, a
+    // short thread would outgrow the room left above the composer and scroll.
+    listEmpty: {
+        flexGrow: 1,
+    },
     list: {
-        padding: 16,
+        paddingTop: 16,
+        paddingHorizontal: 16,
+        paddingBottom: COMPOSER_MARGIN,
         gap: 0,
     },
     emptyContainer: {
@@ -245,6 +347,10 @@ const stylesheet = StyleSheet.create((theme) => ({
         paddingHorizontal: 10,
         paddingTop: theme.margins.xs,
         backgroundColor: theme.colors.header.background,
+    },
+    // Floating over the chat as glass pieces (see `floatingComposerAvailable`) rather than on a bar.
+    composerFloating: {
+        backgroundColor: 'transparent',
     },
     inputRow: {
         flexDirection: 'row',

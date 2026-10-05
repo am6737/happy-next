@@ -43,8 +43,22 @@ export function buildLayoutModel(args: {
     keys: string[];
     measuredHeightsByKey: Record<string, number>;
     estimateHeightPx: number;
+    /**
+     * Entries folded away: they take no height at all. Their measured height
+     * stays in `measuredHeightsByKey`, which is what makes the expand
+     * animation possible — its endpoint is known before the first frame — and
+     * what lets a fold be undone without re-measuring anything.
+     *
+     * (The reference reaches zero height by measuring zero, because its
+     * animated element really is zero tall, and it drops the gap in front of
+     * such an entry as well. Our list has no gaps, so a folded entry simply
+     * loses its height here.)
+     */
+    collapsedKeys?: ReadonlySet<string>;
+    /** Floor for a measured height, applied before a fold zeroes it. */
+    minHeightsByKey?: Record<string, number>;
 }): LayoutModel {
-    const { keys, measuredHeightsByKey, estimateHeightPx } = args;
+    const { keys, measuredHeightsByKey, estimateHeightPx, collapsedKeys, minHeightsByKey } = args;
     const count = keys.length;
     const heightsPx = new Array<number>(count);
     const topOffsetsPx = new Array<number>(count);
@@ -52,7 +66,9 @@ export function buildLayoutModel(args: {
     let total = 0;
     for (let i = 0; i < count; i++) {
         const key = keys[i];
-        const height = measuredHeightsByKey[key] ?? estimateHeightPx;
+        const height = collapsedKeys?.has(key)
+            ? 0
+            : Math.max(minHeightsByKey?.[key] ?? 0, measuredHeightsByKey[key] ?? estimateHeightPx);
         indexByKey.set(key, i);
         topOffsetsPx[i] = total;
         heightsPx[i] = height;
@@ -72,14 +88,26 @@ export function computeVisibleRange(args: {
     distanceFromBottomPx: number;
     viewportHeightPx: number;
     overscanCount: number;
+    /**
+     * When entries can be zero-height (folded away), reaching either end of the
+     * content drops the overscan on that side: at the very bottom the window
+     * must run to the newest entry, and at the very top to the oldest, or the
+     * end of the list would sit inside a gap of unmounted entries.
+     */
+    collapseEmptyRows?: boolean;
 }): RenderRange {
     const { layout, overscanCount } = args;
     const count = layout.keys.length;
     if (count === 0) return { startIndex: 0, endIndex: 0 };
+    const collapse = args.collapseEmptyRows === true;
     const bottomEdge = Math.min(Math.max(0, args.distanceFromBottomPx), layout.totalHeightPx);
     const topEdge = Math.min(bottomEdge + Math.max(0, args.viewportHeightPx), layout.totalHeightPx);
-    const first = firstIndexWithBottomBelow(layout.bottomOffsetsPx, topEdge);
-    const pastLast = firstIndexWithTopAtOrBelow(layout.bottomOffsetsPx, layout.heightsPx, bottomEdge);
+    const first = collapse && topEdge === layout.totalHeightPx
+        ? 0
+        : firstIndexWithBottomBelow(layout.bottomOffsetsPx, topEdge);
+    const pastLast = collapse && bottomEdge === 0
+        ? count
+        : firstIndexWithTopAtOrBelow(layout.bottomOffsetsPx, layout.heightsPx, bottomEdge);
     return {
         startIndex: Math.max(0, first - overscanCount),
         endIndex: Math.min(count, Math.max(pastLast, first + 1) + overscanCount),
@@ -139,39 +167,40 @@ export function entryTopFromBottom(layout: LayoutModel, key: string): number | n
     return (layout.bottomOffsetsPx[index] ?? 0) + (layout.heightsPx[index] ?? 0);
 }
 
-// The scroll distance that keeps the anchor entry's TOP edge at the same
-// viewport position across a layout change.
-export function compensatedDistanceFromBottom(args: {
-    anchorKey: string;
-    distanceFromBottomPx: number;
-    previousLayout: LayoutModel;
-    nextLayout: LayoutModel;
-}): number | null {
-    const prevTopFromBottom = entryTopFromBottom(args.previousLayout, args.anchorKey);
-    const nextTopFromBottom = entryTopFromBottom(args.nextLayout, args.anchorKey);
-    if (prevTopFromBottom == null || nextTopFromBottom == null) return null;
-    return Math.max(0, args.distanceFromBottomPx + nextTopFromBottom - prevTopFromBottom);
+// Distance from the content bottom to the entry's BOTTOM edge — the edge an entry has in common
+// with the one below it, and the one a change of its own height does not move.
+export function entryBottomFromBottom(layout: LayoutModel, key: string): number | null {
+    const index = layout.indexByKey.get(key);
+    if (index == null) return null;
+    return layout.bottomOffsetsPx[index] ?? 0;
 }
 
-// Extra empty canvas above the content top. It is the physical headroom that
-// lets the window absorb content growth (page prepends, measurement
-// corrections of rows entering from the top) WITHOUT resizing the canvas —
-// scrollHeight changes mid-gesture are what desktop engines answer with an
-// asynchronous scroll adjustment (the visible jump). When the whole history is
-// loaded and the viewport is reading near the content top, the slack would be
-// scrollable blank above the oldest message, so it collapses (with hysteresis
-// so renormalizations don't flap around the boundary).
-export function desiredTopSlackPx(args: {
-    hasMore: boolean;
-    totalHeightPx: number;
-    viewportTopModelPx: number;
-    currentSlackPx: number;
-    maxSlackPx: number;
+/**
+ * How far the distance from the bottom has to move for the reader's line to stay where it is.
+ *
+ * The line is the anchor's BOTTOM edge, and which edge that is is the whole of the rule:
+ *
+ *   - an entry's own height sits ABOVE its bottom edge, so an entry that changes its own height
+ *     changes nothing under it — and a reader parked on a row that gives up 33px because a page of
+ *     history arrived is reading the pixels BELOW that row, not the row's own box. Holding the top
+ *     edge instead makes that row's height a shift of the whole screen, which is a 33px jump of the
+ *     conversation under their eyes on every page;
+ *   - an entry's own height sits BELOW the bottom edge of every entry above it, so a fold under the
+ *     line pushes the line and comes back here as the line's movement. That is the fold's rule as
+ *     the measurement batch states it (`absorptionLinePx` is the same edge), so both paths agree on
+ *     which pixels stay: the line's, with everything under it sliding by what changed.
+ *
+ * Zero when either layout does not know the anchor, or when the line did not move.
+ */
+export function shiftForAnchorLine(args: {
+    previous: LayoutModel;
+    next: LayoutModel;
+    anchorKey: string;
 }): number {
-    if (args.hasMore) return args.maxSlackPx;
-    const collapseBandPx = args.currentSlackPx <= 0 ? 2400 : 1200;
-    if (args.viewportTopModelPx > args.totalHeightPx - collapseBandPx) return 0;
-    return args.maxSlackPx;
+    const before = entryBottomFromBottom(args.previous, args.anchorKey);
+    const after = entryBottomFromBottom(args.next, args.anchorKey);
+    if (before == null || after == null) return 0;
+    return after - before;
 }
 
 // The canvas sits between the list's header spacer and footer inside the
@@ -195,6 +224,10 @@ export function pickCompensationAnchor(args: {
     distanceFromBottomPx: number;
     viewportHeightPx: number;
     measuredHeightsByKey: Record<string, number>;
+    /** Entries that are pure spacing, never content: unusable as an anchor. */
+    gapKeys?: Set<string>;
+    /** With zero-height entries in play, one of them cannot anchor anything. */
+    collapseEmptyRows?: boolean;
 }): string | null {
     const range = computeVisibleRange({
         layout: args.previousLayout,
@@ -204,24 +237,14 @@ export function pickCompensationAnchor(args: {
     });
     for (let i = range.startIndex; i < range.endIndex; i++) {
         const key = args.previousLayout.keys[i];
-        if (key != null && args.measuredHeightsByKey[key] != null && args.nextLayout.indexByKey.has(key)) {
-            return key;
-        }
+        if (key == null) continue;
+        if (args.gapKeys?.has(key)) continue;
+        if (args.collapseEmptyRows === true && (args.previousLayout.heightsPx[i] ?? 0) <= 0) continue;
+        if (args.measuredHeightsByKey[key] == null) continue;
+        if (!args.nextLayout.indexByKey.has(key)) continue;
+        return key;
     }
     return null;
-}
-
-// Distance that places the entry's top edge `topInsetPx` below the viewport top.
-export function distanceToAlignEntryTop(args: {
-    layout: LayoutModel;
-    key: string;
-    viewportHeightPx: number;
-    topInsetPx: number;
-}): number | null {
-    const index = args.layout.indexByKey.get(args.key);
-    if (index == null) return null;
-    const topFromBottom = (args.layout.bottomOffsetsPx[index] ?? 0) + (args.layout.heightsPx[index] ?? 0);
-    return Math.max(0, topFromBottom - args.viewportHeightPx + args.topInsetPx);
 }
 
 // Distance that centers the entry in the viewport.

@@ -49,8 +49,7 @@
               {
                 "group": "Integrations",
                 "pages": [
-                  "integrations/dootask",
-                  "integrations/openclaw"
+                  "integrations/dootask"
                 ]
               },
               {
@@ -136,8 +135,7 @@
               {
                 "group": "集成",
                 "pages": [
-                  "zh/integrations/dootask",
-                  "zh/integrations/openclaw"
+                  "zh/integrations/dootask"
                 ]
               },
               {

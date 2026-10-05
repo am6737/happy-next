@@ -65,3 +65,49 @@ export function handleDesktopTitleBarMouseDown(
 
     startDesktopWindowDragging();
 }
+
+const TERMINAL_WINDOW_LABEL = 'terminal';
+
+/**
+ * Whether this window is the terminal window.
+ *
+ * The window is opened at the app's root document, because a link to a route
+ * would assume the export had produced a file for that path. Its identity lives
+ * in its label instead, which is the one thing a webview can read about itself
+ * before anything has loaded.
+ */
+export function isTerminalWindow(): boolean {
+    if (!isTauriDesktop()) {
+        return false;
+    }
+    return getCurrentWindow().label === TERMINAL_WINDOW_LABEL;
+}
+
+/** The tab a terminal window should open on, when something specific asked for it. */
+export interface TerminalFocus {
+    machineId: string;
+    terminalId: string;
+}
+
+/** Opens the terminal window, or raises it and switches it to `focus`. */
+export async function openDesktopTerminalWindow(focus?: TerminalFocus): Promise<void> {
+    if (!isTauriDesktop()) {
+        throw new Error('Terminal windows are only available in the Tauri app');
+    }
+    await invoke('open_desktop_terminal_window', { focus: focus ?? null });
+}
+
+/**
+ * Collects the tab a just-opened terminal window was asked to show.
+ *
+ * Someone has to hold the request between the window being asked for and the
+ * app inside it starting up, and the two are different processes as far as the
+ * webview is concerned — so the desktop shell holds it, and the window takes it
+ * once, on mount.
+ */
+export async function takeDesktopTerminalFocus(): Promise<TerminalFocus | null> {
+    if (!isTauriDesktop()) {
+        return null;
+    }
+    return await invoke<TerminalFocus | null>('take_terminal_focus');
+}

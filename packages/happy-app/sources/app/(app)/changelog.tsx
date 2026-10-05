@@ -105,6 +105,7 @@ export default function ChangelogScreen() {
         <View style={styles.container}>
             <ScrollView 
                 style={styles.container}
+                contentInsetAdjustmentBehavior="automatic"
                 contentContainerStyle={[
                     styles.content, 
                     { 

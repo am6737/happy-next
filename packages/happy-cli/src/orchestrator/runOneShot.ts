@@ -1,13 +1,13 @@
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { claudeCliPath } from '@/claude/claudeLocal';
-import { CODEX_PACKAGE } from '@/codex/package';
+import { codexPackage } from '@/codex/package';
+import { resolveCodexRuntime } from '@/codex/codexRuntime';
 import { logger } from '@/ui/logger';
 import { MODEL_MODE_DEFAULT, isModelModeForAgent, parseCodexModelMode, parseClaudeModelMode } from 'happy-wire';
 import {
   ORCHESTRATOR_ENV_KEYS,
   type OrchestratorProvider,
-  type OrchestratorPermissionMode,
   decodePromptFromBase64,
   isOrchestratorProvider,
 } from './common';
@@ -66,11 +66,6 @@ function readChildSessionIdFromEnv(): string | undefined {
   return value;
 }
 
-function readPermissionModeFromEnv(): OrchestratorPermissionMode | undefined {
-  const value = process.env[ORCHESTRATOR_ENV_KEYS.permissionMode];
-  return value === 'read_only' || value === 'approval' || value === 'guarded_auto' ? value : undefined;
-}
-
 export function buildSpawnPlan(
   provider: OrchestratorProvider,
   prompt: string,
@@ -78,7 +73,6 @@ export function buildSpawnPlan(
   modelMode?: string,
   executionType: 'initial' | 'resume' = 'initial',
   childSessionId?: string,
-  permissionMode?: OrchestratorPermissionMode,
 ): SpawnPlan {
   if (executionType === 'resume' && !childSessionId) {
     throw new Error('childSessionId is required for resume execution');
@@ -86,9 +80,7 @@ export function buildSpawnPlan(
   const normalizedModelMode = modelMode === MODEL_MODE_DEFAULT ? undefined : modelMode;
   switch (provider) {
     case 'claude': {
-      const baseArgs = [claudeCliPath];
-      if (!permissionMode) baseArgs.push('--dangerously-skip-permissions');
-      else baseArgs.push('--permission-mode', permissionMode === 'read_only' ? 'plan' : permissionMode === 'approval' ? 'default' : 'acceptEdits');
+      const baseArgs = [claudeCliPath, '--dangerously-skip-permissions'];
       if (executionType === 'resume') {
         baseArgs.push('--resume', childSessionId!, '-p', prompt);
       } else {
@@ -119,11 +111,7 @@ export function buildSpawnPlan(
       };
     }
     case 'codex': {
-      const codexArgs = ['-y', CODEX_PACKAGE];
-      if (!permissionMode) codexArgs.push('--dangerously-bypass-approvals-and-sandbox');
-      else codexArgs.push('--ask-for-approval', permissionMode === 'approval' ? 'on-request' : 'never');
-      codexArgs.push('exec');
-      if (permissionMode) codexArgs.push('--sandbox', permissionMode === 'read_only' ? 'read-only' : 'workspace-write');
+      const codexArgs = ['exec', '--dangerously-bypass-approvals-and-sandbox'];
       if (executionType === 'resume') {
         codexArgs.push('resume', childSessionId!, prompt);
       } else {
@@ -142,17 +130,16 @@ export function buildSpawnPlan(
           }
         }
       }
+      const runtime = resolveCodexRuntime(codexPackage(), codexArgs);
       return {
-        command: 'npx',
-        args: codexArgs,
+        command: runtime.command,
+        args: runtime.args,
         cwd: workingDirectory,
         env: { ...process.env },
       };
     }
     case 'gemini': {
-      const geminiArgs: string[] = [];
-      if (!permissionMode) geminiArgs.push('--yolo');
-      else geminiArgs.push('--approval-mode', permissionMode === 'read_only' ? 'plan' : permissionMode === 'approval' ? 'default' : 'auto_edit');
+      const geminiArgs = ['--yolo'];
       if (executionType === 'resume') {
         geminiArgs.push('--resume', childSessionId!, '-p', prompt);
       } else {
@@ -217,9 +204,8 @@ export async function runOrchestratorOneShot(args: string[]): Promise<number> {
   const modelMode = readModelModeFromEnv();
   const executionType = readExecutionTypeFromEnv();
   const childSessionId = readChildSessionIdFromEnv();
-  const permissionMode = readPermissionModeFromEnv();
   logger.debug(`[ORCHESTRATOR ONESHOT] Starting ${provider} one-shot`);
 
-  const plan = buildSpawnPlan(provider, prompt, workingDirectory, modelMode, executionType, childSessionId, permissionMode);
+  const plan = buildSpawnPlan(provider, prompt, workingDirectory, modelMode, executionType, childSessionId);
   return spawnAndWait(plan);
 }

@@ -16,6 +16,7 @@ import { t } from '@/text';
 import { CodeEditor, type CodeEditorHandle } from '@/components/CodeEditor';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSoftHeaderInset } from '@/components/navigation/softHeader';
 
 function getFileLanguage(path: string): string {
     const ext = path.split('.').pop()?.toLowerCase();
@@ -133,6 +134,8 @@ export default function EditScreen() {
     const navigation = useNavigation();
     const { theme } = useUnistyles();
     const insets = useSafeAreaInsets();
+    // The info bar is the editor's fixed top row; it clears the soft header itself.
+    const softHeaderInset = useSoftHeaderInset();
     const { id: sessionId } = useLocalSearchParams<{ id: string }>();
     const editorRef = React.useRef<CodeEditorHandle>(null);
     const searchParams = useLocalSearchParams();
@@ -349,7 +352,7 @@ export default function EditScreen() {
                 <KeyboardAvoidingView behavior="padding" keyboardVerticalOffset={0} style={{ flex: 1 }}>
                     <View style={{
                         paddingHorizontal: 16,
-                        paddingTop: 12,
+                        paddingTop: 12 + softHeaderInset,
                         paddingBottom: 8,
                         borderBottomWidth: 1,
                         borderBottomColor: theme.colors.divider,
@@ -377,7 +380,7 @@ export default function EditScreen() {
                 <RNKeyboardAvoidingView behavior="padding" keyboardVerticalOffset={0} style={{ flex: 1 }}>
                     <View style={{
                         paddingHorizontal: 16,
-                        paddingTop: 12,
+                        paddingTop: 12 + softHeaderInset,
                         paddingBottom: 8,
                         borderBottomWidth: 1,
                         borderBottomColor: theme.colors.divider,
@@ -405,7 +408,7 @@ export default function EditScreen() {
                 <>
                     <View style={{
                         paddingHorizontal: 16,
-                        paddingTop: 12,
+                        paddingTop: 12 + softHeaderInset,
                         paddingBottom: 8,
                         borderBottomWidth: 1,
                         borderBottomColor: theme.colors.divider,

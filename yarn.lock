@@ -2654,10 +2654,10 @@
     "@jridgewell/resolve-uri" "^3.1.0"
     "@jridgewell/sourcemap-codec" "^1.4.14"
 
-"@legendapp/list@3.3.3":
-  version "3.3.3"
-  resolved "https://registry.npmjs.org/@legendapp/list/-/list-3.3.3.tgz#219531d71d0020a8e521827f072002224df8cfaa"
-  integrity sha512-p3g4xG6f//s4XQKhuus2189GCQgOHEIbJXHePqeDxj+6UQQQyij4YBjyArNSCgqoP0c03sxDPSOuCFB128Ql6g==
+"@legendapp/list@3.6.0":
+  version "3.6.0"
+  resolved "https://registry.yarnpkg.com/@legendapp/list/-/list-3.6.0.tgz#4f4fe797b6d4e1ebd5813e8e0c95c508656d3741"
+  integrity sha512-ndGQjSYdA32LWErJYbXEm4+eta+4bo0NxQO7eA3Xcvh0rXSb1mTGPbUtUkpea5w4MYciLKaE+0hoPxlMcaMtrw==
   dependencies:
     use-sync-external-store "^1.5.0"
 
@@ -5153,6 +5153,21 @@
   resolved "https://registry.yarnpkg.com/@xmldom/xmldom/-/xmldom-0.8.11.tgz#b79de2d67389734c57c52595f7a7305e30c2d608"
   integrity sha512-cQzWCtO6C8TQiYl1ruKNn2U6Ao4o4WBBcbL61yJl84x+j5sOWWFU9X7DpND8XZG3daDppSsigMdfAIl2upQBRw==
 
+"@xterm/addon-fit@0.12.0-beta.213":
+  version "0.12.0-beta.213"
+  resolved "https://registry.yarnpkg.com/@xterm/addon-fit/-/addon-fit-0.12.0-beta.213.tgz#8350c3c714f9799929534fefe6f13ae325a0c1cc"
+  integrity sha512-hFupt6CX7MNO0XKjugPpm2T3/PUGT2Y7o92Y9UyQAH0a7Da/H5nzkDbJLH1LZHfyUFaJOOvkJOQl8oreWMr/SQ==
+
+"@xterm/headless@6.1.0-beta.213":
+  version "6.1.0-beta.213"
+  resolved "https://registry.yarnpkg.com/@xterm/headless/-/headless-6.1.0-beta.213.tgz#e3bfba53c94de927e7ca4522be8ab77fa58ccac4"
+  integrity sha512-D08E4Bl0HRhYZRL2o5PxD4FNQN9qXpI8QSw3CkKrsym5dtTRAqsynVYE8V8echQrxfb+EpR0CB5reM7tEGZ/fA==
+
+"@xterm/xterm@6.1.0-beta.213":
+  version "6.1.0-beta.213"
+  resolved "https://registry.yarnpkg.com/@xterm/xterm/-/xterm-6.1.0-beta.213.tgz#e8041733b6845fe7486e70ccdc5c3ab9d434e382"
+  integrity sha512-bq5nJkgoZDSg6Ma4zgiQ7jlooGNo7U+HDa6vnhx43yXsVEK2laIF7R08bMYAuU0B+C9xX0gwSrcsW18GxjUoJQ==
+
 "@yarnpkg/lockfile@^1.1.0":
   version "1.1.0"
   resolved "https://registry.yarnpkg.com/@yarnpkg/lockfile/-/lockfile-1.1.0.tgz#e77a97fbd345b76d83245edcd17d393b1b41fb31"
@@ -5967,9 +5982,9 @@ camelcase@^6.2.0:
   integrity sha512-Gmy6FhYlCY7uOElZUSbxo2UCDH8owEk996gkbrpsgGtrJLM3J7jGxl9Ic7Qwwj4ivOE5AWZWRMecDdF7hqGjFA==
 
 caniuse-lite@^1.0.30001759:
-  version "1.0.30001766"
-  resolved "https://registry.yarnpkg.com/caniuse-lite/-/caniuse-lite-1.0.30001766.tgz#b6f6b55cb25a2d888d9393104d14751c6a7d6f7a"
-  integrity sha512-4C0lfJ0/YPjJQHagaE9x2Elb69CIqEPZeG0anQt9SIvIoOH4a4uaRl73IavyO+0qZh6MDLH//DrXThEYKHkmYA==
+  version "1.0.30001812"
+  resolved "https://registry.npmjs.org/caniuse-lite/-/caniuse-lite-1.0.30001812.tgz"
+  integrity sha512-qN+QNNBr93TCmFrmte0bBCjSDMuRvt78VlHT99qIGPszm4QsqCX8lnyWUFkHi8B7ZBAPq8SH+UqyXNy/odMdng==
 
 canvaskit-wasm@0.40.0:
   version "0.40.0"
@@ -7199,7 +7214,7 @@ dompurify@^3.2.5:
   optionalDependencies:
     "@types/trusted-types" "^2.0.7"
 
-domutils@^3.0.1, domutils@^3.2.1:
+domutils@^3.0.1:
   version "3.2.2"
   resolved "https://registry.yarnpkg.com/domutils/-/domutils-3.2.2.tgz#edbfe2b668b0c1d97c24baf0f1062b132221bc78"
   integrity sha512-6kZKyUajlDuqlHKVX1w7gyslj9MPIXzIFiz/rGu35uC1wMi+kMhQwGhl4lt9unC9Vb9INnY9Z3/ZA3+FhASLaw==
@@ -7353,11 +7368,6 @@ entities@^4.2.0:
   version "4.5.0"
   resolved "https://registry.yarnpkg.com/entities/-/entities-4.5.0.tgz#5d268ea5e7113ec74c4d033b79ea5a35a488fb48"
   integrity sha512-V0hjH4dGPh9Ao5p0MoRY6BVqtwCjhz6vI5LT8AJ55H+4g9/4vbHx1I54fS0XuclLhDHArPQCiMjDxjaL8fPxhw==
-
-entities@^6.0.0:
-  version "6.0.1"
-  resolved "https://registry.yarnpkg.com/entities/-/entities-6.0.1.tgz#c28c34a43379ca7f61d074130b2f5f7020a30694"
-  integrity sha512-aN97NXWF6AWBTahfVOIrB/NShkzi5H7F9r1s9mD3cDj4Ko5f2qhhVoYMibXF7GlLveb/D2ioWay8lxI97Ven3g==
 
 env-editor@^0.4.1:
   version "0.4.2"
@@ -9091,16 +9101,6 @@ html2canvas@^1.4.1:
   dependencies:
     css-line-break "^2.1.0"
     text-segmentation "^1.0.3"
-
-htmlparser2@10.0.0:
-  version "10.0.0"
-  resolved "https://registry.yarnpkg.com/htmlparser2/-/htmlparser2-10.0.0.tgz#77ad249037b66bf8cc99c6e286ef73b83aeb621d"
-  integrity sha512-TwAZM+zE5Tq3lrEHvOlvwgj1XLWQCtaaibSN11Q+gGBAS7Y1uZSWwXXRe4iF6OXnaq1riyQAPFOBtYc77Mxq0g==
-  dependencies:
-    domelementtype "^2.3.0"
-    domhandler "^5.0.3"
-    domutils "^3.2.1"
-    entities "^6.0.0"
 
 http-cache-semantics@^4.0.0:
   version "4.2.0"
@@ -10947,6 +10947,11 @@ new-github-release-url@2.0.0:
   dependencies:
     type-fest "^2.5.1"
 
+node-addon-api@^7.1.0:
+  version "7.1.1"
+  resolved "https://registry.yarnpkg.com/node-addon-api/-/node-addon-api-7.1.1.tgz#1aba6693b0f255258a049d621329329322aad558"
+  integrity sha512-5m3bsyrjFWE1xf7nz7YXdN4udnVtXK6/Yfgn5qnahL6bCkf2yKt4k3nuTKAtT4r3IG8JNR2ncsIMdZuAzJjHQQ==
+
 node-fetch-native@^1.6.6:
   version "1.6.7"
   resolved "https://registry.yarnpkg.com/node-fetch-native/-/node-fetch-native-1.6.7.tgz#9d09ca63066cc48423211ed4caf5d70075d76a71"
@@ -10968,6 +10973,13 @@ node-int64@^0.4.0:
   version "0.4.0"
   resolved "https://registry.yarnpkg.com/node-int64/-/node-int64-0.4.0.tgz#87a9065cdb355d3182d8f94ce11188b825c68a3b"
   integrity sha512-O5lz91xSOeoXP6DulyHfllpq+Eg00MWitZIbtPfoSEvqIHdl5gfcY6hYzDWnj0qD5tz52PI08u9qUvSVeUBeHw==
+
+node-pty@1.2.0-beta.15:
+  version "1.2.0-beta.15"
+  resolved "https://registry.yarnpkg.com/node-pty/-/node-pty-1.2.0-beta.15.tgz#cd62e0e32b69ce226c650935a35613fa41bf77d4"
+  integrity sha512-vORSzHXi4Ofl7HemVWpuudLqCPdaQb4LfpRCUpE5HPxhp4JYscl8zZwxh11p26v2wvW24WMwnMfLjhRLixrfxA==
+  dependencies:
+    node-addon-api "^7.1.0"
 
 node-readable-to-web-readable-stream@^0.4.2:
   version "0.4.2"

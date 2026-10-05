@@ -22,12 +22,12 @@ import { userRoutes } from "./routes/userRoutes";
 import { feedRoutes } from "./routes/feedRoutes";
 import { kvRoutes } from "./routes/kvRoutes";
 import { chatRoutes } from "./routes/chatRoutes";
-import { openclawRoutes } from "./routes/openclawRoutes";
 import { v3SessionRoutes } from "./routes/v3SessionRoutes";
 import { shareRoutes } from "./routes/shareRoutes";
 import { publicShareRoutes } from "./routes/publicShareRoutes";
 import { orchestratorRoutes } from "./routes/orchestratorRoutes";
 import { appConfigRoutes } from "./routes/appConfigRoutes";
+import { modelCatalogRoutes } from "./routes/modelCatalogRoutes";
 import { githubRoutes } from "./routes/githubRoutes";
 import { aiTeamRoutes } from "./routes/aiTeamRoutes";
 
@@ -67,6 +67,7 @@ export async function startApi() {
 
     // Routes
     appConfigRoutes(typed);
+    modelCatalogRoutes(typed);
     authRoutes(typed);
     pushRoutes(typed);
     sessionRoutes(typed);
@@ -82,7 +83,6 @@ export async function startApi() {
     feedRoutes(typed);
     kvRoutes(typed);
     chatRoutes(typed);
-    openclawRoutes(typed);
     v3SessionRoutes(typed);
     shareRoutes(typed);
     publicShareRoutes(typed);

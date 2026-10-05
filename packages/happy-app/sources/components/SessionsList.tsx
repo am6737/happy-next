@@ -3,7 +3,8 @@ import { View, Pressable, FlatList, Platform, RefreshControl, ScrollView, Native
 import { Swipeable } from 'react-native-gesture-handler';
 import { Text } from '@/components/StyledText';
 import { usePathname } from 'expo-router';
-import { SessionListViewItem, useSetting, useOrchestratorRunningTaskCount, useSessionHasDraft } from '@/sync/storage';
+import { SessionListViewItem, useOrchestratorRunningTaskCount, useSessionHasDraft } from '@/sync/storage';
+import { useCompactSessionView } from '@/hooks/useCompactSessionView';
 import { Ionicons } from '@expo/vector-icons';
 import { getSessionName, useSessionStatus, getSessionSubtitle, getSessionAvatarId, hasUnreadCompletion } from '@/utils/sessionUtils';
 import { Avatar } from './Avatar';
@@ -31,7 +32,8 @@ import { HappyError } from '@/utils/errors';
 import { Modal } from '@/modal';
 import { sync } from '@/sync/sync';
 import { SessionContextMenu } from './SessionContextMenu';
-import { SessionColorMarkerForSession } from './SessionColorMarker';
+import { PressHighlight } from './PressHighlight';
+import { SessionMarkerBar } from './SessionColorMarker';
 import { getDesktopPlatform } from '@/desktop/desktopWindowUtils';
 
 const stylesheet = StyleSheet.create((theme) => ({
@@ -255,6 +257,9 @@ const stylesheet = StyleSheet.create((theme) => ({
         gap: 12,
         paddingHorizontal: 16,
         paddingTop: 16,
+        // The chips are the last thing in the header, so this is all that separates them from
+        // the first row of the list.
+        paddingBottom: 4,
     },
     filterChip: {
         paddingHorizontal: 12,
@@ -403,6 +408,11 @@ export function SessionsList() {
     const sharedByMeData = useSharedByMeSessionListViewData();
     const machineNames = useMachineNameMap();
     const isDesktopWindows = getDesktopPlatform() === 'windows';
+    // The desktop sidebar drops the list viewport 8px below the header, then pulls the
+    // content back up by the same 8 so the first row does not move. Only the top edge
+    // moves; side and bottom insets are untouched. The tablet main area keeps the list
+    // flush, so this is gated on actually running inside a desktop shell.
+    const isDesktopSidebarList = getDesktopPlatform() !== null;
     // Selected tab is persisted to disk so it survives app restarts.
     const [persistedTab, setPersistedTab] = useLocalSettingMutable('sessionListSelectedTab');
     // machineId -> name cache, so machine tabs keep their labels before machines sync.
@@ -469,7 +479,7 @@ export function SessionsList() {
     }, [selectedSessionId]);
     const isTablet = useIsTablet();
     const navigateToSession = useNavigateToSession();
-    const compactSessionView = useSetting('compactSessionView');
+    const compactSessionView = useCompactSessionView();
     const router = useRouter();
     const { theme } = useUnistyles();
     const [refreshing, setRefreshing] = React.useState(false);
@@ -787,7 +797,7 @@ export function SessionsList() {
     ), [theme]);
 
     return (
-        <View style={styles.container}>
+        <View style={[styles.container, isDesktopSidebarList && { paddingTop: 8 }]}>
             <View ref={listViewportRef} style={styles.contentContainer}>
                 <FlatList
                     ref={listRef}
@@ -795,7 +805,10 @@ export function SessionsList() {
                     data={dataWithSelected}
                     renderItem={renderItem}
                     keyExtractor={keyExtractor}
-                    contentContainerStyle={{ paddingBottom: safeArea.bottom + 128, maxWidth: layout.maxWidth }}
+                    contentContainerStyle={[
+                        { paddingBottom: safeArea.bottom + 128, maxWidth: layout.maxWidth },
+                        isDesktopSidebarList && { marginTop: -8 },
+                    ]}
                     ListHeaderComponent={HeaderComponent}
                     ListEmptyComponent={EmptyComponent}
                     removeClippedSubviews={true}
@@ -836,7 +849,7 @@ const SessionItem = React.memo(({ session, selected, isFirst, isLast, isSingle, 
     const hasDraft = useSessionHasDraft(session.id);
     const sessionName = getSessionName(session);
     const sessionSubtitle = getSessionSubtitle(session);
-    const compactSessionView = useSetting('compactSessionView');
+    const compactSessionView = useCompactSessionView();
     const runningTaskCount = useOrchestratorRunningTaskCount(session.id);
     const navigateToSession = useNavigateToSession();
     const swipeableRef = React.useRef<Swipeable | null>(null);
@@ -872,20 +885,29 @@ const SessionItem = React.memo(({ session, selected, isFirst, isLast, isSingle, 
         return getSessionAvatarId(session);
     }, [session]);
 
+    // The row's corners where it ends a group. The container that clips it rounds at the same
+    // radii, so the context-menu ring has to be rounded to match or it gets notched.
+    const rowShape = isSingle ? styles.sessionItemSingle :
+        isFirst ? styles.sessionItemFirst :
+            isLast ? styles.sessionItemLast : {};
+
     const itemContent = (
-        <SessionContextMenu session={session}>
+        <SessionContextMenu session={session} highlightShape={rowShape}>
             <Pressable
                 style={[
                 compactSessionView ? styles.sessionItemCompact : styles.sessionItem,
                 selected && styles.sessionItemSelected,
-                isSingle ? styles.sessionItemSingle :
-                    isFirst ? styles.sessionItemFirst :
-                        isLast ? styles.sessionItemLast : {}
+                rowShape
             ]}
             onPress={() => {
                 navigateToSession(session.id);
             }}
         >
+            {({ pressed }) => (<>
+            {pressed && <PressHighlight style={rowShape} />}
+            {/* The session's colour marker, down the leading edge — out of flow, so an
+                unmarked row costs nothing and nothing shifts. See SessionMarkerBar. */}
+            <SessionMarkerBar sessionId={session.id} />
             {!compactSessionView && (
                 <View style={styles.avatarContainer}>
                     <Avatar id={avatarId} size={48} monochrome={!sessionStatus.isConnected} flavor={session.metadata?.flavor} sessionIcon={session.metadata?.sessionIcon} />
@@ -916,7 +938,6 @@ const SessionItem = React.memo(({ session, selected, isFirst, isLast, isSingle, 
                     }}>
                         {sessionName}
                     </Text>
-                    <SessionColorMarkerForSession sessionId={session.id} />
                 </View>
 
                 {!compactSessionView && (
@@ -974,6 +995,7 @@ const SessionItem = React.memo(({ session, selected, isFirst, isLast, isSingle, 
                     </>
                 )}
             </View>
+            </>)}
             </Pressable>
         </SessionContextMenu>
     );

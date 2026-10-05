@@ -1,24 +1,27 @@
 import * as React from 'react';
-import { View, Text, Pressable } from 'react-native';
+import { View, Text, Pressable, Platform } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { t } from '@/text';
 import { Typography } from '@/constants/Typography';
 import { MultiTextInput } from '@/components/MultiTextInput';
 import { ActionMenuModal } from '@/components/ActionMenuModal';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { ActionMenuItem } from '@/components/ActionMenu';
 import type { DooTaskDialogMsg } from '@/sync/dootask/types';
+import { GlassSurface } from '@/components/GlassSurface';
+import { NativeMenu } from '@/components/NativeMenu';
 
 type ChatInputProps = {
     onSendText: (text: string) => void;
     onSendImage: (base64DataUri: string) => void;
-    showAttachments?: boolean;
     onSendFile?: (file: { uri: string; name: string; mimeType: string }) => void;
     replyTo?: { msg: DooTaskDialogMsg; senderName: string } | null;
     onCancelReply?: () => void;
+    /** Floating over the chat (see `floatingComposerAvailable`): no bar behind it, glass pieces instead. */
+    glass?: boolean;
 };
 
 function getPreviewText(msg: DooTaskDialogMsg): string {
@@ -29,7 +32,7 @@ function getPreviewText(msg: DooTaskDialogMsg): string {
     return '[Message]';
 }
 
-export const ChatInput = React.memo(({ onSendText, onSendImage, onSendFile, showAttachments = true, replyTo, onCancelReply }: ChatInputProps) => {
+export const ChatInput = React.memo(({ onSendText, onSendImage, onSendFile, replyTo, onCancelReply, glass = false }: ChatInputProps) => {
     const { theme } = useUnistyles();
     const insets = useSafeAreaInsets();
     const [text, setText] = React.useState('');
@@ -114,9 +117,9 @@ export const ChatInput = React.memo(({ onSendText, onSendImage, onSendFile, show
     ], [handlePickFromCamera, handlePickFromAlbum, handlePickFile]);
 
     return (
-        <View style={[styles.container, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+        <View style={[styles.container, glass && styles.containerFloating, { paddingBottom: Platform.OS === 'ios' ? 0 : Math.max(insets.bottom, 12) }]}>
             {replyTo && (
-                <View style={styles.replyBar}>
+                <GlassSurface glass={glass} color={theme.colors.surfaceHigh} style={styles.replyBar}>
                     <View style={styles.replyContent}>
                         <Text style={styles.replySender} numberOfLines={1}>
                             {replyTo.senderName}
@@ -132,21 +135,19 @@ export const ChatInput = React.memo(({ onSendText, onSendImage, onSendFile, show
                     >
                         <Ionicons name="close" size={18} color={theme.colors.textSecondary} />
                     </Pressable>
-                </View>
+                </GlassSurface>
             )}
             <View style={styles.inputRow}>
-                {showAttachments ? (
-                    <Pressable
-                        onPress={() => setMenuVisible(true)}
-                        hitSlop={4}
-                        style={styles.addButton}
-                    >
-                        <View style={[styles.addCircle, { backgroundColor: theme.colors.surfaceHighest }]}>
-                            <Ionicons name="add" size={24} color={theme.colors.textSecondary} />
-                        </View>
-                    </Pressable>
-                ) : null}
-                <View style={[styles.inputGroup, { backgroundColor: theme.colors.surfaceHighest }]}>
+                <NativeMenu
+                    items={menuItems}
+                    style={styles.addButton}
+                    onFallbackOpen={() => setMenuVisible(true)}
+                >
+                    <GlassSurface glass={glass} color={theme.colors.surfaceHighest} style={styles.addCircle}>
+                        <Ionicons name="add" size={24} color={theme.colors.textSecondary} />
+                    </GlassSurface>
+                </NativeMenu>
+                <GlassSurface glass={glass} color={theme.colors.surfaceHighest} style={styles.inputGroup}>
                     <MultiTextInput
                         style={{ flex: 1, paddingVertical: 6 }}
                         value={text}
@@ -170,16 +171,14 @@ export const ChatInput = React.memo(({ onSendText, onSendImage, onSendFile, show
                             <Ionicons name="arrow-up" size={20} color={theme.colors.button.primary.tint} />
                         </View>
                     </Pressable>
-                </View>
+                </GlassSurface>
             </View>
-            {showAttachments ? (
-                <ActionMenuModal
-                    visible={menuVisible}
-                    items={menuItems}
-                    onClose={() => setMenuVisible(false)}
-                    deferItemPress
-                />
-            ) : null}
+            <ActionMenuModal
+                visible={menuVisible}
+                items={menuItems}
+                onClose={() => setMenuVisible(false)}
+                deferItemPress
+            />
         </View>
     );
 });
@@ -190,12 +189,14 @@ const styles = StyleSheet.create((theme) => ({
         paddingHorizontal: 10,
         paddingTop: theme.margins.xs,
     },
+    containerFloating: {
+        backgroundColor: 'transparent',
+    },
     replyBar: {
         flexDirection: 'row',
         alignItems: 'center',
         paddingVertical: theme.margins.sm,
         paddingHorizontal: theme.margins.sm,
-        backgroundColor: theme.colors.surfaceHigh,
         borderLeftWidth: 3,
         borderLeftColor: theme.colors.textLink,
         borderRadius: theme.borderRadius.sm,

@@ -23,7 +23,9 @@ import { useSetting } from "@/sync/storage";
 import { showCopiedToast, showToast } from '@/components/Toast';
 import { formatMessageTime, formatFullMessageTime } from '@/utils/messageTime';
 import { hapticsLight } from './haptics';
+import { TurnHeader } from './TurnHeader';
 import { useMessageTts } from '@/hooks/useMessageTts';
+import { userTextPresentation, type CollapsedTextReason } from './messageCollapse';
 
 export const MessageView = (props: {
   message: Message;
@@ -39,25 +41,105 @@ export const MessageView = (props: {
   onFork?: () => void;
   showActionBar?: boolean;
   forkLoading?: boolean;
+  // The turn this row belongs to: `turnStartedAt` undefined = no timing known;
+  // `turnCompletedAt` null = still running. Flat scalars rather than one object
+  // so the list rows stay referentially stable.
+  turnStartedAt?: number | null;
+  turnCompletedAt?: number | null;
+  /** This row opens its turn, so the turn's header sits above it. */
+  isTurnStart?: boolean;
+  /**
+   * Whether this row's turn is showing one line instead of its process. Undefined when the turn has
+   * nothing worth folding, which is also when there is no fold to toggle. Only the row that opens a
+   * turn ever carries it: that is the row the folded line stands in for.
+   */
+  foldFolded?: boolean;
+  /**
+   * True on a row the fold leaves standing: a settled turn's answer, or a row the fold may never hide
+   * — a landmark, or a tool call still waiting on a permission. Either can be the row the line sits
+   * on, and that row keeps its content even though the line stands in for it. Only ever set alongside
+   * `foldFolded`.
+   */
+  foldKeepsRow?: boolean;
+  /**
+   * Whether the folded line closes its row off from what follows. False only on a folded turn with
+   * no answer of its own — the line is then the whole of what the turn shows, and a line there
+   * would be dividing the row from empty space.
+   */
+  foldDivides?: boolean;
+  /** Tool calls the folded line counts. */
+  foldSteps?: number;
+  /** What the folded rows are doing right now, for a turn that is still running. */
+  foldSnapshot?: string;
+  /** Flip the fold on the turn this row opens. Stable, so list rows keep their props. */
+  onToggleFold?: (headerId: string) => void;
+  /**
+   * The element a fold's height animation clips this row's content in (web only). A fold is a height
+   * change like any other, so the list animates it by writing heights onto one element — and that
+   * element has to hold the row's content and nothing else, or the folded line would slide with it
+   * (see `useFoldAnimation`). It is rendered for the whole life of a foldable line, so nothing inside
+   * the row is torn down and rebuilt when a fold opens or closes.
+   */
+  foldBodyRef?: (el: HTMLElement | null) => void;
 }) => {
+  const { message, foldFolded, foldSnapshot, onToggleFold } = props;
+  const foldSteps = props.foldSteps ?? 0;
+  // The folded line takes the place of the row it sits on — unless the fold kept this row: a settled
+  // turn's answer, or a landmark, either of which can be the row the line itself sits on.
+  const foldHidesRow = foldFolded === true && props.foldKeepsRow !== true;
+  const handleToggleFold = React.useCallback(() => {
+    onToggleFold?.(message.id);
+  }, [onToggleFold, message.id]);
+  // Memoized so the memoized TurnHeader keeps its props: the list re-renders on every scroll frame.
+  const fold = React.useMemo(
+    () => foldFolded === undefined
+      ? undefined
+      : { folded: foldFolded, steps: foldSteps, snapshot: foldSnapshot, onToggle: handleToggleFold },
+    [foldFolded, foldSteps, foldSnapshot, handleToggleFold],
+  );
+
+  // A folded turn is its header and nothing else: the folded line is the whole row, and the answer
+  // below it is a row of its own. Nothing here is dropped from the list — the process rows were
+  // filtered out upstream — so the row keeps its id and only its content changes.
+  const header = props.isTurnStart && props.turnStartedAt != null ? (
+    <View style={styles.turnHeaderRow}>
+      <TurnHeader
+        startedAt={props.turnStartedAt}
+        completedAt={props.turnCompletedAt ?? null}
+        fold={fold}
+        divide={props.foldDivides ?? true}
+      />
+    </View>
+  ) : null;
+
+  const body = foldHidesRow ? null : <RenderBlock
+    message={props.message}
+    metadata={props.metadata}
+    sessionId={props.sessionId}
+    getMessageById={props.getMessageById}
+    isNewestMessage={props.isNewestMessage}
+    onFillInput={props.onFillInput}
+    readOnly={props.readOnly}
+    isSharedSession={props.isSharedSession}
+    currentUserId={props.currentUserId}
+    showSenderName={props.showSenderName}
+    onFork={props.onFork}
+    showActionBar={props.showActionBar}
+    forkLoading={props.forkLoading}
+    isTurnStart={props.isTurnStart}
+  />;
+
   return (
     <View style={styles.messageContainer} renderToHardwareTextureAndroid={true}>
       <View style={styles.messageContent}>
-        <RenderBlock
-          message={props.message}
-          metadata={props.metadata}
-          sessionId={props.sessionId}
-          getMessageById={props.getMessageById}
-          isNewestMessage={props.isNewestMessage}
-          onFillInput={props.onFillInput}
-          readOnly={props.readOnly}
-          isSharedSession={props.isSharedSession}
-          currentUserId={props.currentUserId}
-          showSenderName={props.showSenderName}
-          onFork={props.onFork}
-          showActionBar={props.showActionBar}
-          forkLoading={props.forkLoading}
-        />
+        {header}
+        {/* Only on web, and only on a row that carries a fold: the wrapper keeps the flex column the
+            content used to sit in, so a row that folds lays out exactly as it did before. */}
+        {Platform.OS === 'web' && foldFolded !== undefined
+          // The declared ref type is the component instance, because that is what a ref is on
+          // native; on web it is the DOM element underneath, which is what the animation needs.
+          ? <View ref={props.foldBodyRef as unknown as React.Ref<View>} style={styles.foldBody}>{body}</View>
+          : body}
       </View>
     </View>
   );
@@ -66,6 +148,9 @@ export const MessageView = (props: {
 function MessageActionBar(props: {
   side: 'left' | 'right';
   hovered: boolean;
+  // The newest message keeps its bar on screen on web: it is the row the eye is
+  // already on, whether that is the reply landing or the prompt just sent.
+  isNewestMessage?: boolean;
   createdAt: number;
   onCopy?: () => void;
   onFork?: () => void;
@@ -75,12 +160,19 @@ function MessageActionBar(props: {
 }) {
   const { theme } = useUnistyles();
   const ttsState = props.ttsState ?? 'idle';
+  const label = formatMessageTime(props.createdAt);
+  const fullTime = formatFullMessageTime(props.createdAt);
+  const showFullTime = () => {
+    hapticsLight();
+    showToast(fullTime, { icon: null });
+  };
   // Web: visible only on hover (but the row always occupies layout space).
   // Native: always visible. While a fork is in progress, or TTS is
   // loading/playing/queued, force the bar visible on web so the spinner /
   // play state stays shown even if the cursor moved away.
   const ttsActive = ttsState !== 'idle';
-  const contentVisible = Platform.OS !== 'web' || props.hovered || !!props.forkLoading || ttsActive;
+  const contentVisible = Platform.OS !== 'web' || props.hovered || !!props.forkLoading || ttsActive
+    || !!props.isNewestMessage;
   return (
     <View
       style={[
@@ -140,21 +232,12 @@ function MessageActionBar(props: {
           )}
         </Pressable>
       ) : null}
-      {Platform.OS === 'web' ? (
-        // react-native-web doesn't forward the DOM `title` prop, so wrap the
-        // time in a native <span> to show the full timestamp on hover.
-        <span title={formatFullMessageTime(props.createdAt)} style={{ display: 'inline-flex' }}>
-          <Text style={styles.actionTime}>{formatMessageTime(props.createdAt)}</Text>
-        </span>
-      ) : (
-        // Native: tap the time to reveal the full timestamp in a toast.
-        <Pressable
-          onPress={() => { hapticsLight(); showToast(formatFullMessageTime(props.createdAt), { icon: null }); }}
-          hitSlop={6}
-        >
-          <Text style={styles.actionTime}>{formatMessageTime(props.createdAt)}</Text>
-        </Pressable>
-      )}
+      {/* The time states the time and nothing more: no hover tooltip on web, here
+          or on the turn header above a reply — pressing it gives the full
+          timestamp in a toast, on both platforms. */}
+      <Pressable onPress={showFullTime} hitSlop={6}>
+        <Text style={styles.actionTime}>{label}</Text>
+      </Pressable>
     </View>
   );
 }
@@ -211,6 +294,7 @@ function RenderBlock(props: {
   onFork?: () => void;
   showActionBar?: boolean;
   forkLoading?: boolean;
+  isTurnStart?: boolean;
 }): React.ReactElement {
   switch (props.message.kind) {
     case 'user-text':
@@ -266,11 +350,6 @@ function RenderBlock(props: {
       throw new Error(`Unknown message kind: ${_exhaustive}`);
   }
 }
-
-// Beyond this many characters, parseMarkdown + the resulting React tree freezes the UI on
-// mid-range devices. Such messages are almost always pasted dumps (skill bodies, logs, files),
-// so we collapse them to a single tap-to-view placeholder instead of rendering them inline.
-const LONG_USER_MESSAGE_THRESHOLD = 20000;
 
 function UserTextBlock(props: {
   message: UserTextMessage;
@@ -347,11 +426,12 @@ function UserTextBlock(props: {
   }, [messageText]);
 
   const renderedText = props.message.displayText || props.message.text;
-  const isTooLong = renderedText.length > LONG_USER_MESSAGE_THRESHOLD;
-  const handleOpenFullText = React.useCallback(() => {
+  const presentation = userTextPresentation(renderedText, props.message.meta);
+  // The reason travels as the entry point, so the screen it opens knows what to call itself.
+  const handleOpenFullText = React.useCallback((reason: CollapsedTextReason) => {
     try {
       const textId = storeTempText(renderedText);
-      router.push(`/text-selection?textId=${textId}`);
+      router.push(`/text-selection?textId=${textId}&from=${reason}`);
     } catch (error) {
       console.error('Error opening long message:', error);
     }
@@ -385,14 +465,16 @@ function UserTextBlock(props: {
             />
           </>
         )}
-        {isTooLong ? (
+        {presentation.kind === 'collapsed' ? (
           <Pressable
-            onPress={handleOpenFullText}
-            onLongPress={handleOpenFullText}
+            onPress={() => handleOpenFullText(presentation.reason)}
+            onLongPress={() => handleOpenFullText(presentation.reason)}
             style={styles.longMessagePlaceholder}
           >
             <Text style={styles.longMessagePlaceholderText}>
-              {t('message.tooLongPlaceholder', { chars: renderedText.length })}
+              {presentation.reason === 'compaction'
+                ? t('message.compactSummaryPlaceholder', { chars: presentation.chars })
+                : t('message.tooLongPlaceholder', { chars: presentation.chars })}
             </Text>
           </Pressable>
         ) : (
@@ -415,6 +497,7 @@ function UserTextBlock(props: {
         <MessageActionBar
           side="right"
           hovered={hovered}
+          isNewestMessage={props.isNewestMessage}
           createdAt={props.message.createdAt}
           onCopy={messageText ? handleCopy : undefined}
           onFork={props.onFork}
@@ -436,6 +519,7 @@ function AgentTextBlock(props: {
   onFork?: () => void;
   showActionBar?: boolean;
   forkLoading?: boolean;
+  isTurnStart?: boolean;
 }) {
   const showThinkingMessages = useSetting('showThinkingMessages');
   const [optionsLoadingState, setOptionsLoadingState] = React.useState<OptionsLoadingState>({ loadingIndex: null });
@@ -490,7 +574,14 @@ function AgentTextBlock(props: {
 
   return (
     <View
-      style={[styles.agentMessageContainer, props.message.isThinking && { opacity: 0.3 }, hasOptions && styles.agentMessageContainerStretch]}
+      style={[
+        styles.agentMessageContainer,
+        props.message.isThinking && { opacity: 0.3 },
+        // The turn header carries a rule under it, so the row that opens a turn
+        // has to fill the column — a short first line would otherwise leave the
+        // rule stopping in the middle of it.
+        (hasOptions || props.isTurnStart) && styles.agentMessageContainerStretch,
+      ]}
       {...hoverHandlers}
     >
       <MarkdownView
@@ -507,6 +598,7 @@ function AgentTextBlock(props: {
         <MessageActionBar
           side="left"
           hovered={hovered}
+          isNewestMessage={props.isNewestMessage}
           createdAt={props.message.createdAt}
           onCopy={messageText ? handleCopy : undefined}
           onFork={props.onFork}
@@ -611,7 +703,7 @@ const styles = StyleSheet.create((theme) => ({
     paddingHorizontal: 12,
     paddingVertical: 4,
     borderRadius: 12,
-    marginBottom: 0,
+    marginBlock: 4,
     maxWidth: '100%',
     position: 'relative',
   },
@@ -677,7 +769,7 @@ const styles = StyleSheet.create((theme) => ({
     alignSelf: 'stretch',
   },
   agentEventContainer: {
-    marginHorizontal: 8,
+    marginHorizontal: 16,
     alignItems: 'center',
     paddingVertical: 8,
   },
@@ -686,7 +778,20 @@ const styles = StyleSheet.create((theme) => ({
     fontSize: 14,
   },
   toolContainer: {
-    marginHorizontal: 8,
+    marginHorizontal: 16,
+  },
+  // The header stands where the block's own inset would have put it: the two
+  // blocks that used to render it are inset 16px (one by padding, one by
+  // margin), and it now sits outside both.
+  turnHeaderRow: {
+    paddingHorizontal: 16,
+  },
+  // The content of a row that carries a fold, on its own element so a fold can animate its height
+  // without touching the line above it. Nothing is set on it that a height could fight: the height
+  // and the clip are written by the animation, and cleared with it.
+  foldBody: {
+    flexDirection: 'column',
+    flexShrink: 0,
   },
   debugText: {
     color: theme.colors.agentEventText,

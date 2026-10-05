@@ -1,29 +1,15 @@
-import { ToolCall } from '@/sync/typesMessage';
+import { normalizePreviewHtmlToolName, PreviewHtmlCard, readPreviewHtmlCard, ToolCall, PREVIEW_HTML_TOOL } from '@/sync/typesMessage';
 
-export type PreviewHtmlInput = {
-    html: string;
-    title: string | null;
-};
-
-function normalizePreviewHtmlToolName(name: string): string {
-    return name
-        .replace(/__/g, ':')
-        .replace(/^mcp:/, '')
-        .replace(/^happy:/, '');
-}
+/** What the inline preview card renders — `title` is null when the call supplied none. */
+export type PreviewHtmlInput = PreviewHtmlCard;
 
 export function getPreviewHtmlInput(tool: ToolCall): PreviewHtmlInput | null {
     if (
-        normalizePreviewHtmlToolName(tool.name) !== 'preview_html'
+        normalizePreviewHtmlToolName(tool.name) !== PREVIEW_HTML_TOOL
         || tool.state !== 'completed'
-        || typeof tool.input?.html !== 'string'
-        || tool.input.html.length === 0
     ) {
         return null;
     }
 
-    return {
-        html: tool.input.html,
-        title: typeof tool.input?.title === 'string' ? tool.input.title : null,
-    };
+    return readPreviewHtmlCard(tool.input);
 }

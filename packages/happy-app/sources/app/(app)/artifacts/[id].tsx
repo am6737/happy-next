@@ -244,6 +244,7 @@ export default function ArtifactDetailScreen() {
             <View style={styles.container}>
                 <ScrollView 
                     style={styles.scrollView}
+                    contentInsetAdjustmentBehavior="automatic"
                     contentContainerStyle={[
                         styles.contentContainer,
                         { maxWidth: layout.maxWidth, alignSelf: 'center', width: '100%' }

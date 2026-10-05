@@ -12,6 +12,8 @@ import { layout } from '@/components/layout';
 import { useSettingMutable } from '@/sync/storage';
 import { DEFAULT_PROFILES } from '@/sync/profileUtils';
 import { randomUUID } from 'expo-crypto';
+import { isRunningOnMac } from '@/utils/platform';
+import { softHeaderOptions } from '@/components/navigation/softHeader';
 
 export default function SettingsProfileEditScreen() {
     const { theme } = useUnistyles();
@@ -19,6 +21,7 @@ export default function SettingsProfileEditScreen() {
     const params = useLocalSearchParams<{ profileData?: string }>();
     const screenWidth = useWindowDimensions().width;
     const headerHeight = useHeaderHeight();
+    const useNativeSoftHeader = Platform.OS === 'ios' && !isRunningOnMac();
     const [profiles, setProfiles] = useSettingMutable('profiles');
 
     // Deserialize profile from URL params
@@ -106,10 +109,12 @@ export default function SettingsProfileEditScreen() {
         <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             keyboardVerticalOffset={Platform.OS === 'ios' ? Constants.statusBarHeight + headerHeight : 0}
+            enabled={!useNativeSoftHeader}
             style={styles.container}
         >
             <Stack.Screen
                 options={{
+                    ...softHeaderOptions,
                     headerTitle: profile.name ? t('profiles.editProfile') : t('profiles.addProfile'),
                 }}
             />
@@ -124,6 +129,7 @@ export default function SettingsProfileEditScreen() {
                         machineId={null}
                         onSave={handleSave}
                         onCancel={handleCancel}
+                        nativeScrollInsets={useNativeSoftHeader}
                     />
                 </View>
             </View>

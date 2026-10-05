@@ -1,11 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
     buildLayoutModel,
-    compensatedDistanceFromBottom,
     computeVisibleRange,
-    desiredTopSlackPx,
-    distanceToAlignEntryTop,
     distanceToCenterEntry,
+    entryBottomFromBottom,
     entryTopFromBottom,
     minimumCanvasHeightPx,
     nextViewportState,
@@ -13,6 +11,7 @@ import {
     rangeAroundAnchor,
     rangeContains,
     sameKeys,
+    shiftForAnchorLine,
     type ViewportState,
 } from './chatListVirtualModel';
 
@@ -36,6 +35,34 @@ describe('buildLayoutModel', () => {
         expect(layout.totalHeightPx).toBe(550);
         expect(layout.heightsPx).toEqual([100, 100, 100, 150, 100]);
         expect(layout.bottomOffsetsPx).toEqual([450, 350, 250, 100, 0]);
+    });
+
+    it('gives a folded entry no height but keeps its measurement', () => {
+        const measured = { C: 240, D: 150 };
+        const layout = buildLayoutModel({
+            keys: KEYS,
+            measuredHeightsByKey: measured,
+            estimateHeightPx: 100,
+            collapsedKeys: new Set(['C']),
+        });
+        expect(layout.heightsPx).toEqual([100, 100, 0, 150, 100]);
+        expect(layout.totalHeightPx).toBe(450);
+        expect(layout.topOffsetsPx).toEqual([0, 100, 200, 200, 350]);
+        // The measurement survives: an expand animation needs its endpoint.
+        expect(measured.C).toBe(240);
+        // ...and so a layout rebuilt without the fold comes back unchanged.
+        expect(buildLayoutModel({ keys: KEYS, measuredHeightsByKey: measured, estimateHeightPx: 100 }).heightsPx)
+            .toEqual([100, 100, 240, 150, 100]);
+    });
+
+    it('applies a minimum height to a measured entry', () => {
+        const layout = buildLayoutModel({
+            keys: KEYS,
+            measuredHeightsByKey: { C: 12 },
+            estimateHeightPx: 100,
+            minHeightsByKey: { C: 64 },
+        });
+        expect(layout.heightsPx[2]).toBe(64);
     });
 
     it('handles an empty entry set', () => {
@@ -69,6 +96,45 @@ describe('computeVisibleRange', () => {
             .toEqual({ startIndex: 0, endIndex: 5 });
     });
 
+    it('keeps the newest entry in the window at the very bottom', () => {
+        // E is folded away, so it is zero-height and a binary search over
+        // offsets cannot see it: without the rule the newest entry is dropped.
+        const layout = buildLayoutModel({
+            keys: KEYS,
+            measuredHeightsByKey: { A: 100, B: 100, C: 100, D: 100, E: 100 },
+            estimateHeightPx: 100,
+            collapsedKeys: new Set(['E']),
+        });
+        expect(computeVisibleRange({ layout, distanceFromBottomPx: 0, viewportHeightPx: 100, overscanCount: 0 }))
+            .toEqual({ startIndex: 3, endIndex: 4 });
+        expect(computeVisibleRange({
+            layout,
+            distanceFromBottomPx: 0,
+            viewportHeightPx: 100,
+            overscanCount: 0,
+            collapseEmptyRows: true,
+        })).toEqual({ startIndex: 3, endIndex: 5 });
+    });
+
+    it('keeps the oldest entry in the window at the very top', () => {
+        const layout = buildLayoutModel({
+            keys: KEYS,
+            measuredHeightsByKey: { A: 100, B: 100, C: 100, D: 100, E: 100 },
+            estimateHeightPx: 100,
+            collapsedKeys: new Set(['A']),
+        });
+        const distanceFromBottomPx = layout.totalHeightPx;
+        expect(computeVisibleRange({ layout, distanceFromBottomPx, viewportHeightPx: 100, overscanCount: 0 }))
+            .toEqual({ startIndex: 1, endIndex: 2 });
+        expect(computeVisibleRange({
+            layout,
+            distanceFromBottomPx,
+            viewportHeightPx: 100,
+            overscanCount: 0,
+            collapseEmptyRows: true,
+        })).toEqual({ startIndex: 0, endIndex: 1 });
+    });
+
     it('clamps a distance beyond the content to the topmost entry', () => {
         const layout = uniformLayout();
         expect(computeVisibleRange({ layout, distanceFromBottomPx: 1000, viewportHeightPx: 150, overscanCount: 0 }))
@@ -96,71 +162,6 @@ describe('rangeAroundAnchor', () => {
     });
 });
 
-describe('compensatedDistanceFromBottom', () => {
-    it('keeps the anchor still when an entry below it grows', () => {
-        const previousLayout = uniformLayout({ C: 100, D: 100 });
-        const nextLayout = uniformLayout({ C: 100, D: 150 });
-        // D grew by 50 below the viewport; the distance must grow by 50 too.
-        expect(compensatedDistanceFromBottom({
-            anchorKey: 'C',
-            distanceFromBottomPx: 220,
-            previousLayout,
-            nextLayout,
-        })).toBe(270);
-    });
-
-    it('is a no-op when an entry above the anchor changes', () => {
-        const previousLayout = uniformLayout();
-        const nextLayout = uniformLayout({ A: 300 });
-        expect(compensatedDistanceFromBottom({
-            anchorKey: 'C',
-            distanceFromBottomPx: 220,
-            previousLayout,
-            nextLayout,
-        })).toBe(220);
-    });
-
-    it('compensates an append below the anchor (new entry at the bottom)', () => {
-        const previousLayout = uniformLayout();
-        const nextLayout = buildLayoutModel({
-            keys: [...KEYS, 'F'],
-            measuredHeightsByKey: {},
-            estimateHeightPx: 100,
-        });
-        expect(compensatedDistanceFromBottom({
-            anchorKey: 'C',
-            distanceFromBottomPx: 220,
-            previousLayout,
-            nextLayout,
-        })).toBe(320);
-    });
-
-    it('is a no-op for a prepend (older page) — bottom-anchored coordinates', () => {
-        const previousLayout = uniformLayout();
-        const nextLayout = buildLayoutModel({
-            keys: ['P1', 'P2', ...KEYS],
-            measuredHeightsByKey: {},
-            estimateHeightPx: 100,
-        });
-        expect(compensatedDistanceFromBottom({
-            anchorKey: 'C',
-            distanceFromBottomPx: 220,
-            previousLayout,
-            nextLayout,
-        })).toBe(220);
-    });
-
-    it('returns null when the anchor is missing from either layout', () => {
-        const layout = uniformLayout();
-        expect(compensatedDistanceFromBottom({
-            anchorKey: 'Z',
-            distanceFromBottomPx: 100,
-            previousLayout: layout,
-            nextLayout: layout,
-        })).toBeNull();
-    });
-});
-
 describe('pickCompensationAnchor', () => {
     it('picks the topmost MEASURED entry in the strict viewport', () => {
         const previousLayout = uniformLayout({ C: 100, D: 100 });
@@ -172,6 +173,41 @@ describe('pickCompensationAnchor', () => {
             distanceFromBottomPx: 175,
             viewportHeightPx: 150,
             measuredHeightsByKey: { C: 100, D: 100 },
+        })).toBe('C');
+    });
+
+    it('never anchors on a gap or on a folded (zero-height) entry', () => {
+        const previousLayout = buildLayoutModel({
+            keys: KEYS,
+            measuredHeightsByKey: { C: 100, D: 100, E: 100 },
+            estimateHeightPx: 100,
+            collapsedKeys: new Set(['C']),
+        });
+        // Viewport [150, 300]: C is measured but folded away, D is the anchor.
+        expect(pickCompensationAnchor({
+            previousLayout,
+            nextLayout: previousLayout,
+            distanceFromBottomPx: 150,
+            viewportHeightPx: 150,
+            measuredHeightsByKey: { C: 100, D: 100, E: 100 },
+            collapseEmptyRows: true,
+        })).toBe('D');
+        // Without the collapse flag the zero-height entry is fair game again.
+        expect(pickCompensationAnchor({
+            previousLayout,
+            nextLayout: previousLayout,
+            distanceFromBottomPx: 150,
+            viewportHeightPx: 150,
+            measuredHeightsByKey: { C: 100, D: 100, E: 100 },
+        })).toBe('C');
+        // And a spacing entry is never an anchor, whatever its height.
+        expect(pickCompensationAnchor({
+            previousLayout,
+            nextLayout: previousLayout,
+            distanceFromBottomPx: 150,
+            viewportHeightPx: 150,
+            measuredHeightsByKey: { C: 100, D: 100, E: 100 },
+            gapKeys: new Set(['D']),
         })).toBe('C');
     });
 
@@ -187,15 +223,7 @@ describe('pickCompensationAnchor', () => {
     });
 });
 
-describe('jump positioning', () => {
-    it('aligns an entry top at the requested inset', () => {
-        const layout = uniformLayout();
-        // A's top edge is 500 from the bottom; viewport 150 with 10px inset.
-        expect(distanceToAlignEntryTop({ layout, key: 'A', viewportHeightPx: 150, topInsetPx: 10 })).toBe(360);
-        // Near the bottom the distance clamps to 0.
-        expect(distanceToAlignEntryTop({ layout, key: 'E', viewportHeightPx: 150, topInsetPx: 10 })).toBe(0);
-    });
-
+describe('distanceToCenterEntry', () => {
     it('centers an entry in the viewport', () => {
         const layout = uniformLayout();
         // C spans 200–300 from the bottom; centered in a 150px viewport → [175, 325].
@@ -303,7 +331,7 @@ describe('entryTopFromBottom', () => {
         expect(entryTopFromBottom(uniformLayout(), 'nope')).toBeNull();
     });
 
-    it('is invariant under prepends and shifts by appends (the canvas-offset delta)', () => {
+    it('is invariant under a prepend and shifts by an append, which is what a compensation reads', () => {
         const before = uniformLayout();
         const prepended = buildLayoutModel({ keys: ['P', ...KEYS], measuredHeightsByKey: {}, estimateHeightPx: 100 });
         expect(entryTopFromBottom(prepended, 'C')).toBe(entryTopFromBottom(before, 'C'));
@@ -312,28 +340,71 @@ describe('entryTopFromBottom', () => {
     });
 });
 
-describe('desiredTopSlackPx', () => {
-    it('keeps full slack while more history can load', () => {
-        expect(desiredTopSlackPx({ hasMore: true, totalHeightPx: 10_000, viewportTopModelPx: 9_900, currentSlackPx: 0, maxSlackPx: 3000 }))
-            .toBe(3000);
+describe('entryBottomFromBottom', () => {
+    it('returns the distance from the content bottom to the entry bottom', () => {
+        const layout = uniformLayout({ D: 150 });
+        // E's bottom edge IS the content bottom; D's sits one E above it.
+        expect(entryBottomFromBottom(layout, 'E')).toBe(0);
+        expect(entryBottomFromBottom(layout, 'D')).toBe(100);
+        expect(entryBottomFromBottom(layout, 'C')).toBe(250);
+        expect(entryBottomFromBottom(layout, 'A')).toBe(450);
     });
 
-    it('collapses near a fully-loaded top and keeps slack mid-history', () => {
-        expect(desiredTopSlackPx({ hasMore: false, totalHeightPx: 10_000, viewportTopModelPx: 9_500, currentSlackPx: 3000, maxSlackPx: 3000 }))
-            .toBe(0);
-        expect(desiredTopSlackPx({ hasMore: false, totalHeightPx: 10_000, viewportTopModelPx: 5_000, currentSlackPx: 3000, maxSlackPx: 3000 }))
-            .toBe(3000);
+    it('returns null for unknown keys', () => {
+        expect(entryBottomFromBottom(uniformLayout(), 'nope')).toBeNull();
     });
 
-    it('collapses for short conversations and is hysteretic around the boundary', () => {
-        // Shorter than the viewport: viewport top is above the content top.
-        expect(desiredTopSlackPx({ hasMore: false, totalHeightPx: 600, viewportTopModelPx: 800, currentSlackPx: 0, maxSlackPx: 3000 }))
-            .toBe(0);
-        // Between the collapse band (1200px) and the re-expand band (2400px):
-        // the current state wins, in both directions.
-        const between = { hasMore: false, totalHeightPx: 10_000, viewportTopModelPx: 10_000 - 2000, maxSlackPx: 3000 };
-        expect(desiredTopSlackPx({ ...between, currentSlackPx: 3000 })).toBe(3000);
-        expect(desiredTopSlackPx({ ...between, currentSlackPx: 0 })).toBe(0);
+    it('is invariant under a prepend, which is why a page of history moves no box below it', () => {
+        const before = uniformLayout();
+        const prepended = buildLayoutModel({ keys: ['P', 'Q', ...KEYS], measuredHeightsByKey: {}, estimateHeightPx: 100 });
+        expect(entryBottomFromBottom(prepended, 'C')).toBe(entryBottomFromBottom(before, 'C'));
+    });
+});
+
+describe('shiftForAnchorLine', () => {
+    it('is zero when the anchor is the entry whose own height changed', () => {
+        // The paging case, at the size it happens: the row the reader's line rests on is a 33px fold
+        // line, and the page that arrives turns it into a folded body row of the now-complete turn.
+        // Its own box gave up 33px, but its box is ABOVE its bottom edge — nothing under the line
+        // moved — so nothing under the line may move on screen either. (Reading the TOP edge instead
+        // reports this as a 33px shift of every row below it: the shake.)
+        const before = uniformLayout({ A: 33 });
+        const after = buildLayoutModel({
+            keys: KEYS,
+            measuredHeightsByKey: { A: 33 },
+            estimateHeightPx: 100,
+            collapsedKeys: new Set(['A']),
+        });
+        expect(entryTopFromBottom(after, 'A')! - entryTopFromBottom(before, 'A')!).toBe(-33);
+        expect(shiftForAnchorLine({ previous: before, next: after, anchorKey: 'A' })).toBe(0);
+    });
+
+    it('is the change below the line when a fold happens under it', () => {
+        // Folding D away takes 100px out of the content between the line at C and the bottom, so the
+        // line drops by 100 in bottom-anchored coordinates: the distance gives up the same 100 and
+        // everything at or above C keeps its place while what is under it slides up by the fold.
+        const before = uniformLayout();
+        const after = buildLayoutModel({
+            keys: KEYS,
+            measuredHeightsByKey: {},
+            estimateHeightPx: 100,
+            collapsedKeys: new Set(['D']),
+        });
+        expect(shiftForAnchorLine({ previous: before, next: after, anchorKey: 'C' })).toBe(-100);
+    });
+
+    it('is the appended height when entries arrive below the line', () => {
+        const before = uniformLayout();
+        const after = buildLayoutModel({ keys: [...KEYS, 'Z'], measuredHeightsByKey: { Z: 40 }, estimateHeightPx: 100 });
+        expect(shiftForAnchorLine({ previous: before, next: after, anchorKey: 'C' })).toBe(40);
+        expect(shiftForAnchorLine({ previous: before, next: after, anchorKey: 'Z' })).toBe(0);
+    });
+
+    it('is zero when either layout does not know the anchor', () => {
+        const before = uniformLayout();
+        const after = buildLayoutModel({ keys: [...KEYS, 'Z'], measuredHeightsByKey: { Z: 40 }, estimateHeightPx: 100 });
+        expect(shiftForAnchorLine({ previous: before, next: after, anchorKey: 'nope' })).toBe(0);
+        expect(shiftForAnchorLine({ previous: after, next: before, anchorKey: 'Z' })).toBe(0);
     });
 });
 

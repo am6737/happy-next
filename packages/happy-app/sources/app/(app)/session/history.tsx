@@ -33,6 +33,8 @@ import { t } from '@/text';
 import { sync } from '@/sync/sync';
 import { formatPathRelativeToHome } from '@/utils/sessionUtils';
 import { MMKV } from 'react-native-mmkv';
+import { NativeMenu } from '@/components/NativeMenu';
+import type { ActionMenuItem } from '@/components/ActionMenu';
 
 const mmkv = new MMKV();
 const SELECTED_MACHINE_KEY = 'agent-history-selected-machine';
@@ -529,6 +531,18 @@ export default function AgentHistoryPage() {
         }
     }, [previewEntry, handleClosePreview, handleResume]);
 
+    const machineMenuItems = React.useMemo<ActionMenuItem[]>(() => machines.map((machine) => ({
+        label: machine.metadata?.displayName || machine.metadata?.host || 'Unknown',
+        selected: machine.id === selectedMachineId,
+        onPress: () => setSelectedMachineId(machine.id),
+    })), [machines, selectedMachineId]);
+
+    const agentMenuItems = React.useMemo<ActionMenuItem[]>(() => AGENT_TABS.map((tab) => ({
+        label: tab.label(),
+        selected: activeTab === tab.key,
+        onPress: () => { setActiveTab(tab.key); setSearchQuery(''); },
+    })), [activeTab]);
+
     return (
         <ItemList style={{ paddingTop: 0 }} onScroll={handleScroll} scrollEventThrottle={200}>
             <View style={{ maxWidth: layout.maxWidth, alignSelf: 'center', width: '100%' }}>
@@ -565,9 +579,10 @@ export default function AgentHistoryPage() {
 
                 {/* Device & Agent filter triggers */}
                 <View style={filterStyles.filterRow}>
-                    <Pressable
+                    <NativeMenu
+                        items={machineMenuItems}
                         style={filterStyles.filterTrigger}
-                        onPress={() => setMachineMenuVisible(true)}
+                        onFallbackOpen={() => setMachineMenuVisible(true)}
                     >
                         <Ionicons name="desktop-outline" size={16} color={theme.colors.textSecondary} style={{ marginRight: 6 }} />
                         <Text style={filterStyles.filterTriggerText} numberOfLines={1}>
@@ -576,11 +591,12 @@ export default function AgentHistoryPage() {
                                 : t('claudeHistory.noMachines')}
                         </Text>
                         <Ionicons name="chevron-down" size={14} color={theme.colors.textSecondary} />
-                    </Pressable>
+                    </NativeMenu>
 
-                    <Pressable
+                    <NativeMenu
+                        items={agentMenuItems}
                         style={filterStyles.filterTrigger}
-                        onPress={() => setAgentMenuVisible(true)}
+                        onFallbackOpen={() => setAgentMenuVisible(true)}
                     >
                         <Image
                             source={agentIcons[activeTab]}
@@ -592,7 +608,7 @@ export default function AgentHistoryPage() {
                             {AGENT_TABS.find(tab => tab.key === activeTab)?.label() || activeTab}
                         </Text>
                         <Ionicons name="chevron-down" size={14} color={theme.colors.textSecondary} />
-                    </Pressable>
+                    </NativeMenu>
                 </View>
 
                 {/* Loading / empty state */}
@@ -705,22 +721,14 @@ export default function AgentHistoryPage() {
             <ActionMenuModal
                 visible={machineMenuVisible}
                 title={t('settings.machines')}
-                items={machines.map((machine) => ({
-                    label: machine.metadata?.displayName || machine.metadata?.host || 'Unknown',
-                    selected: machine.id === selectedMachineId,
-                    onPress: () => setSelectedMachineId(machine.id),
-                }))}
+                items={machineMenuItems}
                 onClose={() => setMachineMenuVisible(false)}
             />
 
             <ActionMenuModal
                 visible={agentMenuVisible}
                 title={t('agentHistory.title')}
-                items={AGENT_TABS.map((tab) => ({
-                    label: tab.label(),
-                    selected: activeTab === tab.key,
-                    onPress: () => { setActiveTab(tab.key); setSearchQuery(''); },
-                }))}
+                items={agentMenuItems}
                 onClose={() => setAgentMenuVisible(false)}
             />
         </ItemList>

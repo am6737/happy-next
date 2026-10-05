@@ -19,6 +19,8 @@ interface MachineCacheEntry {
 class ActivityCache {
     private sessionCache = new Map<string, SessionCacheEntry>();
     private machineCache = new Map<string, MachineCacheEntry>();
+    // session-end time per session: heartbeats at or before it are stale and must not revive the session
+    private sessionEndedAt = new Map<string, number>();
     private batchTimer: NodeJS.Timeout | null = null;
     
     // Cache TTL (30 seconds)
@@ -29,6 +31,9 @@ class ActivityCache {
     
     // Batch update interval (5 seconds)
     private readonly BATCH_INTERVAL = 5 * 1000;
+
+    // Heartbeats older than this are rejected by the socket handler anyway
+    private readonly ENDED_TTL = 10 * 60 * 1000;
 
     constructor() {
         this.startBatchTimer();
@@ -140,6 +145,22 @@ class ActivityCache {
         return false; // No update needed
     }
 
+    markSessionEnded(sessionId: string, timestamp: number): void {
+        this.sessionEndedAt.set(sessionId, Math.max(timestamp, this.sessionEndedAt.get(sessionId) ?? 0));
+        const cached = this.sessionCache.get(sessionId);
+        if (cached) {
+            // Drop the queued heartbeat so the batch flush can't write active: true after session-end,
+            // and force the next genuine heartbeat (session resumed) to be flushed.
+            cached.pendingUpdate = null;
+            cached.lastUpdateSent = 0;
+        }
+    }
+
+    isHeartbeatAfterEnd(sessionId: string, timestamp: number): boolean {
+        const endedAt = this.sessionEndedAt.get(sessionId);
+        return endedAt === undefined || timestamp > endedAt;
+    }
+
     queueMachineUpdate(machineId: string, timestamp: number): boolean {
         const cached = this.machineCache.get(machineId);
         if (!cached) {
@@ -186,9 +207,11 @@ class ActivityCache {
         // Batch update sessions
         if (sessionUpdates.length > 0) {
             try {
+                // Conditional on lastActiveAt so a flush racing session-end (which writes a newer
+                // lastActiveAt with active: false) can't flip the session back to active.
                 await Promise.all(sessionUpdates.map(update =>
-                    db.session.update({
-                        where: { id: update.id },
+                    db.session.updateMany({
+                        where: { id: update.id, lastActiveAt: { lt: new Date(update.timestamp) } },
                         data: { lastActiveAt: new Date(update.timestamp), active: true }
                     })
                 ));
@@ -228,6 +251,12 @@ class ActivityCache {
         for (const [sessionId, entry] of this.sessionCache.entries()) {
             if (entry.validUntil < now) {
                 this.sessionCache.delete(sessionId);
+            }
+        }
+        
+        for (const [sessionId, endedAt] of this.sessionEndedAt.entries()) {
+            if (endedAt < now - this.ENDED_TTL) {
+                this.sessionEndedAt.delete(sessionId);
             }
         }
         

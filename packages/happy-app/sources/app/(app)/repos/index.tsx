@@ -15,12 +15,14 @@ import {
     RepoEmptyState,
     RepoSearchBar,
 } from '@/components/repos';
+import { useSoftHeaderInset } from '@/components/navigation/softHeader';
 
 export default function ReposListScreen() {
     const styles = stylesheet;
     const { theme } = useUnistyles();
     const router = useRouter();
     const navigation = useNavigation();
+    const softHeaderInset = useSoftHeaderInset();
     const [search, setSearch] = React.useState('');
     const [debouncedSearch, setDebouncedSearch] = React.useState('');
     const [searchVisible, setSearchVisible] = React.useState(false);
@@ -76,21 +78,24 @@ export default function ReposListScreen() {
     return (
         <View style={styles.container}>
             {searchVisible ? (
-                <RepoSearchBar
-                    value={search}
-                    onChange={setSearch}
-                    placeholder={t('lab.searchPlaceholder')}
-                    expanded
-                    onExpand={() => setSearchVisible(true)}
-                    onCollapse={() => {
-                        setSearchVisible(false);
-                        setSearch('');
-                    }}
-                    cancelLabel={t('common.cancel')}
-                />
+                <View style={{ paddingTop: softHeaderInset }}>
+                    <RepoSearchBar
+                        value={search}
+                        onChange={setSearch}
+                        placeholder={t('lab.searchPlaceholder')}
+                        expanded
+                        onExpand={() => setSearchVisible(true)}
+                        onCollapse={() => {
+                            setSearchVisible(false);
+                            setSearch('');
+                        }}
+                        cancelLabel={t('common.cancel')}
+                    />
+                </View>
             ) : null}
 
             <FlatList
+                contentInsetAdjustmentBehavior="automatic"
                 data={githubRepos}
                 keyExtractor={(item) => item.fullName}
                 renderItem={renderItem}

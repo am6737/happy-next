@@ -22,10 +22,12 @@ describe('GitHub global count wiring', () => {
         expect(source).toContain("activeItems.length === 0 && (activeTab === 'issues' ? issueResult.loading : pullResult.loading)");
     });
 
-    test('uses server totals and preserves existing counts while refreshing', () => {
+    test('uses server totals and shows a spinner only for explicit refreshes', () => {
         expect(source).toContain('workIssues.totalCount');
         expect(source).toContain('workPulls.totalCount');
-        expect(source).toContain("otherTabCountLoading && typeof otherTabCount !== 'number'");
+        expect(source).toContain("otherTabCountRefreshing || (otherTabCountLoading && typeof otherTabCount !== 'number')");
+        expect(source).toContain("activeTab === 'issues' ? workPulls.refreshing : workIssues.refreshing");
+        expect(source).toContain('reposRefreshing');
         expect(source).not.toContain('workIssues.error ? undefined : workIssues.totalCount');
         expect(source).not.toContain('workPulls.error ? undefined : workPulls.totalCount');
     });

@@ -90,7 +90,7 @@ describe('sessionModeConfig', () => {
                 agentType: 'codex',
                 includeLastUsed: true,
                 permissionMode: 'on-failure',
-                modelMode: 'gpt-5.4-high',
+                modelMode: 'gpt-5.6-sol-high',
                 updatedAt: 200,
             }),
         );
@@ -101,7 +101,7 @@ describe('sessionModeConfig', () => {
         });
         expect(getLastUsedForAgent(doc, 'codex')).toMatchObject({
             permissionMode: 'on-failure',
-            modelMode: 'gpt-5.4-high',
+            modelMode: 'gpt-5.6-sol-high',
         });
     });
 

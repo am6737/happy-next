@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { View, Pressable, FlatList, ActivityIndicator } from 'react-native';
+import { View, Pressable, FlatList, ActivityIndicator, Platform } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
@@ -19,6 +19,8 @@ import {
     RepoEmptyState,
 } from '@/components/repos';
 import { t } from '@/text';
+import { softHeaderOptions } from '@/components/navigation/softHeader';
+import { isRunningOnMac } from '@/utils/platform';
 
 export default function RepoPullsScreen() {
     const styles = stylesheet;
@@ -26,6 +28,7 @@ export default function RepoPullsScreen() {
     const router = useRouter();
     const navigation = useNavigation();
     const { owner, repo: repoName } = useLocalSearchParams<{ owner: string; repo: string }>();
+    const useNativeSoftHeader = Platform.OS === 'ios' && !isRunningOnMac();
 
     const { data: pulls, loading: pullsLoading, loadingMore, hasMore, loadMore, refresh: refreshPulls } = useGithubPulls(owner!, repoName!, 'all');
     const lastRefreshRef = React.useRef(0);
@@ -43,6 +46,7 @@ export default function RepoPullsScreen() {
 
     React.useEffect(() => {
         navigation.setOptions({
+            ...softHeaderOptions,
             headerTitle: searchVisible ? '' : t('repository.pulls'),
             headerRight: searchVisible ? undefined : () => (
                 <View style={styles.headerRight}>
@@ -89,10 +93,8 @@ export default function RepoPullsScreen() {
         />
     ), [router, owner, repoName, filteredPulls.length]);
 
-    return (
-        <View style={styles.container}>
-            <Stack.Screen options={{ headerBackTitle: t('common.back') }} />
-
+    const fixedControls = (
+        <>
             {searchVisible ? (
                 <RepoSearchBar
                     value={searchQuery}
@@ -104,31 +106,67 @@ export default function RepoPullsScreen() {
                     cancelLabel={t('common.cancel')}
                 />
             ) : null}
-
             <FilterChipRow filters={filtersWithCount} value={prFilter} onChange={setPrFilter} />
+        </>
+    );
 
-            {pullsLoading && pulls.length === 0 ? (
+    const list = (
+        <FlatList
+            // Opening search starts a fresh list at the top, where the search bar is on iOS.
+            key={useNativeSoftHeader && searchVisible ? 'search' : 'browse'}
+            contentInsetAdjustmentBehavior="automatic"
+            data={pullsLoading && pulls.length === 0 ? [] : filteredPulls}
+            keyExtractor={(item) => String(item.number)}
+            renderItem={useNativeSoftHeader ? (info) => (
+                // The controls scroll in the list's header here, so the list is no longer one card
+                // view: each row draws its slice of the card instead.
+                <View style={[
+                    styles.cardRow,
+                    info.index === 0 && styles.cardRowFirst,
+                    info.index === filteredPulls.length - 1 && styles.cardRowLast,
+                ]}>
+                    {renderPullItem(info)}
+                </View>
+            ) : renderPullItem}
+            // Under the see-through iOS header the controls scroll with the list: pinned, they would
+            // hide it behind an opaque band right under the header's soft edge.
+            ListHeaderComponent={useNativeSoftHeader ? <View style={styles.listHeader}>{fixedControls}</View> : undefined}
+            ListEmptyComponent={pullsLoading && pulls.length === 0 ? (
                 <IssueListSkeleton count={5} />
-            ) : filteredPulls.length === 0 ? (
+            ) : (
                 <RepoEmptyState
                     icon="git-pull-request-outline"
                     title={t('repository.emptyPullsTitle')}
                     subtitle={t('repository.emptyPullsSubtitle')}
                 />
-            ) : (
-                <View style={styles.listWrap}>
-                    <FlatList
-                        data={filteredPulls}
-                        keyExtractor={(item) => String(item.number)}
-                        renderItem={renderPullItem}
-                        contentContainerStyle={{ paddingBottom: 24 }}
-                        onEndReached={hasMore ? loadMore : undefined}
-                        onEndReachedThreshold={0.5}
-                        ListFooterComponent={loadingMore ? (
-                            <ActivityIndicator style={{ paddingVertical: 16 }} color={theme.colors.textSecondary} />
-                        ) : null}
-                    />
-                </View>
+            )}
+            contentContainerStyle={{ paddingBottom: 24 }}
+            onEndReached={hasMore ? loadMore : undefined}
+            onEndReachedThreshold={0.5}
+            ListFooterComponent={loadingMore ? (
+                <ActivityIndicator style={{ paddingVertical: 16 }} color={theme.colors.textSecondary} />
+            ) : null}
+        />
+    );
+
+    return (
+        <View style={styles.container}>
+            <Stack.Screen options={{ ...softHeaderOptions, headerBackTitle: t('common.back') }} />
+            {useNativeSoftHeader ? list : (
+                <>
+                    {fixedControls}
+                    {pullsLoading && pulls.length === 0 ? (
+                        <IssueListSkeleton count={5} />
+                    ) : filteredPulls.length === 0 ? (
+                        <RepoEmptyState
+                            icon="git-pull-request-outline"
+                            title={t('repository.emptyPullsTitle')}
+                            subtitle={t('repository.emptyPullsSubtitle')}
+                        />
+                    ) : (
+                        <View style={[styles.listWrap, { marginTop: 4 }]}>{list}</View>
+                    )}
+                </>
             )}
         </View>
     );
@@ -142,13 +180,33 @@ const stylesheet = StyleSheet.create((theme) => ({
     listWrap: {
         flex: 1,
         marginHorizontal: 16,
-        marginTop: 4,
         marginBottom: 16,
         borderRadius: 14,
         overflow: 'hidden',
         backgroundColor: theme.colors.surface,
         borderWidth: 1,
         borderColor: theme.colors.divider,
+    },
+    listHeader: {
+        marginBottom: 4,
+    },
+    cardRow: {
+        marginHorizontal: 16,
+        backgroundColor: theme.colors.surface,
+        borderLeftWidth: 1,
+        borderRightWidth: 1,
+        borderColor: theme.colors.divider,
+        overflow: 'hidden',
+    },
+    cardRowFirst: {
+        borderTopWidth: 1,
+        borderTopLeftRadius: 14,
+        borderTopRightRadius: 14,
+    },
+    cardRowLast: {
+        borderBottomWidth: 1,
+        borderBottomLeftRadius: 14,
+        borderBottomRightRadius: 14,
     },
     headerRight: {
         flexDirection: 'row',

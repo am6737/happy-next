@@ -37,7 +37,10 @@ import { useShallow } from 'zustand/react/shallow';
 import { FolderPickerSheet } from '@/components/FolderPickerSheet';
 import { BottomSheetModal } from '@gorhom/bottom-sheet';
 import { getNativeHeaderTitleWidth } from '@/utils/nativeHeaderTitleWidth';
+import { isRunningOnMac } from '@/utils/platform';
+import { softHeaderOptions } from '@/components/navigation/softHeader';
 import { MODEL_MODE_DEFAULT } from 'happy-wire';
+import { NativeMenu } from '@/components/NativeMenu';
 
 type AgentType = 'claude' | 'codex' | 'gemini';
 
@@ -120,6 +123,7 @@ export default function MachineDetailScreen() {
     const folderPickerRef = useRef<BottomSheetModal>(null);
     const folderSelectHandlerRef = useRef<(path: string) => void>(() => {});
     const { width: screenWidth } = useWindowDimensions();
+    const useNativeSoftHeader = Platform.OS === 'ios' && !isRunningOnMac();
     const registeredRepos = storage(useShallow((state) => state.registeredRepos[machineId!] || [])) as RegisteredRepo[];
     const cliAvailability = useCLIDetection(machineId ?? null);
     const [agentMenu, setAgentMenu] = useState<{ visible: boolean; items: ActionMenuItem[] }>({ visible: false, items: [] });
@@ -249,11 +253,11 @@ export default function MachineDetailScreen() {
         if (!machine || !machineId) return;
 
         const newDisplayName = await Modal.prompt(
-            t('openclaw.renameMachine'),
-            t('openclaw.renameMachineDescription'),
+            t('machine.renameMachine'),
+            t('machine.renameMachineDescription'),
             {
                 defaultValue: machine.metadata?.displayName || '',
-                placeholder: machine.metadata?.host || t('openclaw.machineNamePlaceholder'),
+                placeholder: machine.metadata?.host || t('machine.machineNamePlaceholder'),
                 cancelText: t('common.cancel'),
                 confirmText: t('common.rename')
             }
@@ -273,11 +277,11 @@ export default function MachineDetailScreen() {
                     machine.metadataVersion
                 );
                 
-                hapticsLight(); showToast(t('openclaw.machineRenamedSuccess'));
+                hapticsLight(); showToast(t('machine.machineRenamedSuccess'));
             } catch (error) {
                 Modal.alert(
                     t('common.error'),
-                    error instanceof Error ? error.message : t('openclaw.machineRenameFailed')
+                    error instanceof Error ? error.message : t('machine.machineRenameFailed')
                 );
                 // Refresh to get latest state
                 await sync.refreshMachines();
@@ -433,6 +437,14 @@ export default function MachineDetailScreen() {
             })),
         });
     }, [availableAgents, handleStartSession]);
+
+    const agentMenuItems = useMemo<ActionMenuItem[]>(() => availableAgents.map((agent) => ({
+        label: AGENT_LABELS[agent],
+        onPress: () => {
+            setAgentMenu({ visible: false, items: [] });
+            void handleStartSession(agent);
+        },
+    })), [availableAgents, handleStartSession]);
 
     const pastUsedRelativePath = useCallback((session: Session) => {
         if (!session.metadata) return 'unknown path';
@@ -614,13 +626,27 @@ export default function MachineDetailScreen() {
 
     const hasWorktreeRepos = sessionType === 'worktree' && selectedRepos.length > 0;
     const spawnButtonDisabled = (!hasWorktreeRepos && !customPath.trim()) || isSpawning || !isMachineOnline(machine!);
+    const startSessionIcon = isSpawning ? (
+        <ActivityIndicator
+            size="small"
+            color={theme.colors.textSecondary}
+        />
+    ) : (
+        <Ionicons
+            name="play"
+            size={16}
+            color={spawnButtonDisabled ? theme.colors.textSecondary : theme.colors.button.primary.tint}
+            style={{ marginLeft: 1 }}
+        />
+    );
 
     return (
         <>
             <Stack.Screen
                 options={{
                     headerShown: true,
-                    headerTitle: () => (
+                    ...softHeaderOptions,
+                    headerTitle: useNativeSoftHeader ? machineName : () => (
                         <View style={{ alignItems: 'center', justifyContent: 'center', maxWidth: headerTitleMaxWidth }}>
                             <View style={{ flexDirection: 'row', alignItems: 'center', maxWidth: '100%' }}>
                                 <Ionicons
@@ -654,6 +680,8 @@ export default function MachineDetailScreen() {
                             </View>
                         </View>
                     ),
+                    headerSubtitle: useNativeSoftHeader ? (isMachineOnline(machine) ? t('status.online') : t('status.offline')) : undefined,
+                    headerSubtitleColor: useNativeSoftHeader ? (isMachineOnline(machine) ? '#34C759' : '#999') : undefined,
                     headerRight: () => (
                         <Pressable
                             onPress={handleRenameMachine}
@@ -677,6 +705,7 @@ export default function MachineDetailScreen() {
                 }}
             />
             <ItemList
+                automaticallyAdjustKeyboardInsets={useNativeSoftHeader}
                 refreshControl={
                     <RefreshControl
                         refreshing={isRefreshing}
@@ -730,28 +759,31 @@ export default function MachineDetailScreen() {
                                             autoCorrect={false}
                                         />
                                     </View>
-                                    <Pressable
-                                        onPress={handleStartSessionPress}
-                                        disabled={spawnButtonDisabled}
-                                        style={[
-                                            styles.inlineSendButton,
-                                            spawnButtonDisabled ? styles.inlineSendInactive : styles.inlineSendActive
-                                        ]}
-                                    >
-                                        {isSpawning ? (
-                                            <ActivityIndicator
-                                                size="small"
-                                                color={theme.colors.textSecondary}
-                                            />
-                                        ) : (
-                                            <Ionicons
-                                                name="play"
-                                                size={16}
-                                                color={spawnButtonDisabled ? theme.colors.textSecondary : theme.colors.button.primary.tint}
-                                                style={{ marginLeft: 1 }}
-                                            />
-                                        )}
-                                    </Pressable>
+                                    {availableAgents.length > 1 ? (
+                                        // Several agents: the button opens the agent choice from itself.
+                                        <NativeMenu
+                                            items={agentMenuItems}
+                                            disabled={spawnButtonDisabled}
+                                            style={[
+                                                styles.inlineSendButton,
+                                                spawnButtonDisabled ? styles.inlineSendInactive : styles.inlineSendActive
+                                            ]}
+                                            onFallbackOpen={handleStartSessionPress}
+                                        >
+                                            {startSessionIcon}
+                                        </NativeMenu>
+                                    ) : (
+                                        <Pressable
+                                            onPress={handleStartSessionPress}
+                                            disabled={spawnButtonDisabled}
+                                            style={[
+                                                styles.inlineSendButton,
+                                                spawnButtonDisabled ? styles.inlineSendInactive : styles.inlineSendActive
+                                            ]}
+                                        >
+                                            {startSessionIcon}
+                                        </Pressable>
+                                    )}
                                 </View>
                             </View>
                             {!hasWorktreeRepos && pathsToShow.map((display, index) => {

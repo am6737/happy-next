@@ -4,6 +4,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { Typography } from '@/constants/Typography';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming } from 'react-native-reanimated';
+import { isRunningOnMac } from '@/utils/platform';
+
+// Under the see-through iOS header the bar sits on the page's grouped background (scrolling with the
+// list, or just below the header), so it draws no band of its own: only the field, a capsule like the
+// filter chips beside it.
+const onGroupedBackground = Platform.OS === 'ios' && !isRunningOnMac();
 
 interface RepoSearchBarProps {
     value: string;
@@ -43,8 +49,8 @@ export const RepoSearchBar = React.memo<RepoSearchBarProps>(({ value, onChange, 
     }
 
     return (
-        <Animated.View style={[styles.container, animatedStyle]}>
-            <View style={styles.inputWrap}>
+        <Animated.View style={[styles.container, onGroupedBackground && styles.containerGrouped, animatedStyle]}>
+            <View style={[styles.inputWrap, onGroupedBackground && styles.inputWrapGrouped]}>
                 <Ionicons name="search" size={15} color={theme.colors.textSecondary} />
                 <TextInput
                     ref={inputRef}
@@ -90,6 +96,12 @@ const stylesheet = StyleSheet.create((theme) => ({
         paddingVertical: 8,
         backgroundColor: theme.colors.header.background,
     },
+    containerGrouped: {
+        paddingHorizontal: 16,
+        paddingTop: 10,
+        paddingBottom: 0,
+        backgroundColor: 'transparent',
+    },
     inputWrap: {
         flex: 1,
         flexDirection: 'row',
@@ -99,6 +111,14 @@ const stylesheet = StyleSheet.create((theme) => ({
         paddingVertical: Platform.select({ ios: 7, default: 4 }),
         borderRadius: 10,
         backgroundColor: theme.colors.surfaceHighest,
+    },
+    inputWrapGrouped: {
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 999,
+        borderWidth: 1,
+        borderColor: theme.colors.divider,
+        backgroundColor: theme.colors.surface,
     },
     input: {
         flex: 1,

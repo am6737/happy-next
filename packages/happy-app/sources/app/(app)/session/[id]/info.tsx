@@ -2,7 +2,7 @@ import React, { useCallback } from 'react';
 import { View, Text, Animated, Pressable, Platform } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
-import { Ionicons, AntDesign, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons, AntDesign, MaterialCommunityIcons, FontAwesome6 } from '@expo/vector-icons';
 import { Typography } from '@/constants/Typography';
 import { Item } from '@/components/Item';
 import { ItemGroup } from '@/components/ItemGroup';
@@ -11,11 +11,12 @@ import { Avatar } from '@/components/Avatar';
 import { useSession, useIsDataReady, useMachine, useOrchestratorHasRuns, storage } from '@/sync/storage';
 import { generateCopyTitle, getSessionName, useSessionStatus, formatOSPlatform, formatPathRelativeToHome, getSessionAvatarId, copySessionMetadata, copySessionModeSettings } from '@/utils/sessionUtils';
 import { canArchiveSession } from '@/utils/sessionLifecycle';
+import { promptRenameSession } from '@/utils/sessionRename';
 import * as Clipboard from 'expo-clipboard';
 import { Modal } from '@/modal';
 import { hapticsLight } from '@/components/haptics';
 import { showCopiedToast } from '@/components/Toast';
-import { sessionArchive, sessionKill, sessionDelete, machineForkClaudeSession, machineForkGeminiSession, machineForkCodexSession, machineSpawnNewSession, sessionUpdateSummary, sessionUpdateMetadataFields } from '@/sync/ops';
+import { sessionArchive, sessionKill, sessionDelete, machineForkClaudeSession, machineForkGeminiSession, machineForkCodexSession, machineSpawnNewSession, sessionUpdateMetadataFields } from '@/sync/ops';
 import { leaveSharedSession } from '@/sync/apiSharing';
 import { pushWorktreeBranch, mergeWorktreeBranch, createWorktreePR, cleanupWorktree, cleanupWorkspace, getLocalBranches, getCurrentBranch } from '@/utils/worktreeOps';
 import { getWorkspaceRepos } from '@/utils/workspaceRepos';
@@ -24,6 +25,7 @@ import { ActionMenuModal } from '@/components/ActionMenuModal';
 import { ActionMenuItem } from '@/components/ActionMenu';
 import { buildReviewPrompt } from '@/utils/reviewPrompt';
 import { sync } from '@/sync/sync';
+import { openSessionTerminal } from '@/terminal/openSessionTerminal';
 import { useUnistyles } from 'react-native-unistyles';
 import { layout } from '@/components/layout';
 import { t } from '@/text';
@@ -33,6 +35,7 @@ import { Session } from '@/sync/storageTypes';
 import { useHappyAction } from '@/hooks/useHappyAction';
 import { HappyError } from '@/utils/errors';
 import { formatModelDisplay, resolveLocalModelDisplay, isModelFast, FAST_MODE_ICON_COLOR } from 'happy-wire';
+import { NativeMenu } from '@/components/NativeMenu';
 
 // Animated status dot component
 function StatusDot({ color, isPulsing, size = 8 }: { color: string; isPulsing?: boolean; size?: number }) {
@@ -132,6 +135,12 @@ function SessionInfoContent({ session }: { session: Session }) {
         if (path) params.set('path', path);
         const query = params.toString();
         router.push(query ? `/new?${query}` : '/new');
+    }, [router, session.metadata?.machineId, session.metadata?.path]);
+
+    const handleOpenTerminal = useCallback(() => {
+        const machineId = session.metadata?.machineId;
+        if (!machineId) return;
+        openSessionTerminal({ machineId, sessionPath: session.metadata?.path, push: router.push });
     }, [router, session.metadata?.machineId, session.metadata?.path]);
 
     const handleOpenOrchestratorRuns = useCallback(() => {
@@ -437,43 +446,7 @@ function SessionInfoContent({ session }: { session: Session }) {
         return new Date(timestamp).toLocaleString();
     }, []);
 
-    const handleRenameSession = useCallback(async () => {
-        if (!session.metadata) return;
-
-        const result = await Modal.promptWithCheckbox(
-            t('sessionInfo.renameSession'),
-            t('sessionInfo.renameSessionHint'),
-            {
-                defaultValue: session.metadata.summary?.text || '',
-                placeholder: getSessionName(session),
-                cancelText: t('common.cancel'),
-                confirmText: t('common.rename'),
-                checkbox: {
-                    label: t('sessionInfo.pinSessionTitle'),
-                    defaultValue: session.metadata.summaryPinned ?? false
-                }
-            }
-        );
-
-        if (result !== null) {
-            const trimmed = result.value.trim();
-            if (!trimmed) return;
-            try {
-                await sessionUpdateSummary(
-                    session.id,
-                    session.metadata,
-                    trimmed,
-                    session.metadataVersion,
-                    result.checked
-                );
-            } catch (error) {
-                Modal.alert(
-                    t('common.error'),
-                    error instanceof Error ? error.message : t('sessionInfo.failedToRenameSession')
-                );
-            }
-        }
-    }, [session]);
+    const handleRenameSession = useCallback(() => promptRenameSession(session), [session]);
 
     const handleCopyUpdateCommand = useCallback(() => {
         Modal.alert(
@@ -831,6 +804,21 @@ function SessionInfoContent({ session }: { session: Session }) {
         }
     }, [worktreeMachineId, worktreeBranch, worktreePath, worktreeBasePath, session, router, selectedRepo]);
 
+    const reviewMenuItems = React.useMemo<ActionMenuItem[]>(() => [
+            {
+                label: 'Claude',
+                onPress: () => { setReviewMenuVisible(false); doRequestReview('claude'); },
+            },
+            {
+                label: 'Codex',
+                onPress: () => { setReviewMenuVisible(false); doRequestReview('codex'); },
+            },
+            {
+                label: 'Gemini',
+                onPress: () => { setReviewMenuVisible(false); doRequestReview('gemini'); },
+            },
+    ], [doRequestReview]);
+
     const handleRequestReview = React.useCallback(() => {
         if (!selectedRepo?.prUrl) {
             Modal.alert(t('common.error'), t('sessionInfo.worktree.reviewNoPR'));
@@ -997,12 +985,22 @@ function SessionInfoContent({ session }: { session: Session }) {
                 )}
 
                 <ItemGroup title={t('sessionInfo.quickActions')}>
-                    <Item
-                        title={t('sessionInfo.newSession')}
-                        subtitle={t('sessionInfo.newSessionSubtitle')}
-                        icon={<Ionicons name="add-circle-outline" size={29} color="#007AFF" />}
-                        onPress={handleNewSession}
-                    />
+                    {isOwner && (
+                        <Item
+                            title={t('sessionInfo.newSession')}
+                            subtitle={t('sessionInfo.newSessionSubtitle')}
+                            icon={<Ionicons name="add-circle-outline" size={29} color="#007AFF" />}
+                            onPress={handleNewSession}
+                        />
+                    )}
+                    {isOwner && session.metadata?.machineId && (
+                        <Item
+                            title={t('sessionInfo.openTerminal')}
+                            subtitle={t('sessionInfo.openTerminalSubtitle')}
+                            icon={<FontAwesome6 name="terminal" size={23} color="#007AFF" />}
+                            onPress={handleOpenTerminal}
+                        />
+                    )}
                     {hasOrchestratorRuns && (
                         <Item
                             title={t('sessionInfo.delegationHistory')}
@@ -1124,14 +1122,21 @@ function SessionInfoContent({ session }: { session: Session }) {
                             disabled={creatingPR}
                         />
                         {selectedRepo?.prUrl && (
-                            <Item
-                                title={t('sessionInfo.worktree.requestReview')}
-                                subtitle={t('sessionInfo.worktree.requestReviewSubtitle')}
-                                icon={<Ionicons name="eye-outline" size={29} color="#5856D6" />}
-                                onPress={handleRequestReview}
-                                loading={requestingReview}
+                            // The agent choice opens from the row itself.
+                            <NativeMenu
+                                items={reviewMenuItems}
                                 disabled={requestingReview}
-                            />
+                                onFallbackOpen={handleRequestReview}
+                            >
+                                <Item
+                                    title={t('sessionInfo.worktree.requestReview')}
+                                    subtitle={t('sessionInfo.worktree.requestReviewSubtitle')}
+                                    icon={<Ionicons name="eye-outline" size={29} color="#5856D6" />}
+                                    onPress={handleRequestReview}
+                                    loading={requestingReview}
+                                    disabled={requestingReview}
+                                />
+                            </NativeMenu>
                         )}
                         <Item
                             title={t('sessionInfo.worktree.mergeBranch')}
@@ -1375,20 +1380,7 @@ function SessionInfoContent({ session }: { session: Session }) {
             <ActionMenuModal
                 visible={reviewMenuVisible}
                 title={t('sessionInfo.worktree.reviewSelectAgentMessage')}
-                items={[
-                    {
-                        label: 'Claude',
-                        onPress: () => { setReviewMenuVisible(false); doRequestReview('claude'); },
-                    },
-                    {
-                        label: 'Codex',
-                        onPress: () => { setReviewMenuVisible(false); doRequestReview('codex'); },
-                    },
-                    {
-                        label: 'Gemini',
-                        onPress: () => { setReviewMenuVisible(false); doRequestReview('gemini'); },
-                    },
-                ]}
+                items={reviewMenuItems}
                 onClose={() => setReviewMenuVisible(false)}
             />
         </>

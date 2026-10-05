@@ -22,6 +22,7 @@ import { tracking } from '@/track/tracking';
 import { sync, syncRestore } from '@/sync/sync';
 import { resetBadgeCount } from '@/sync/apiPush';
 import { resolveServerConfig } from '@/sync/serverConfig';
+import { startModelCatalogSync } from '@/sync/modelCatalogSync';
 import { useTrackScreens } from '@/track/useTrackScreens';
 import { RealtimeProvider } from '@/realtime/RealtimeProvider';
 import { FaviconPermissionIndicator } from '@/components/web/FaviconPermissionIndicator';
@@ -40,6 +41,7 @@ import { isTauriDesktop } from '@/utils/tauri';
 import { DesktopBridge } from '@/desktop/DesktopBridge';
 import { DesktopWindowFrame } from '@/desktop/DesktopWindowFrame';
 import { DesktopAuthWindowSync } from '@/desktop/DesktopAuthWindowSync';
+import { DesktopTerminalWindowRedirect } from '@/desktop/DesktopTerminalWindowRedirect';
 import { ThemePreferenceSync } from '@/components/ThemePreferenceSync';
 import { ActionMenuOverlayProvider } from '@/components/ActionMenuOverlayProvider';
 import { getNotificationSessionId } from '@/utils/notificationData';
@@ -282,6 +284,7 @@ export default function RootLayout() {
                 await loadFonts();
                 await sodium.ready;
                 await resolveServerConfig();
+                startModelCatalogSync();
                 const credentials = await TokenStorage.getCredentials();
                 console.log('credentials', credentials);
                 if (credentials) {
@@ -375,6 +378,7 @@ export default function RootLayout() {
         <>
             <FaviconPermissionIndicator />
             <DesktopBridge />
+            <DesktopTerminalWindowRedirect />
             {providers}
         </>
     );

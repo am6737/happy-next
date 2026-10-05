@@ -9,10 +9,12 @@ import * as Clipboard from 'expo-clipboard';
 import { Modal } from '@/modal';
 import { hapticsLight } from '@/components/haptics';
 import { showCopiedToast } from '@/components/Toast';
+import { useSoftHeaderInset } from '@/components/navigation/softHeader';
 
 export default function LogsScreen() {
     const [logs, setLogs] = React.useState<string[]>([]);
     const flatListRef = React.useRef<FlatList>(null);
+    const softHeaderInset = useSoftHeaderInset();
 
     // Subscribe to log changes
     React.useEffect(() => {
@@ -89,7 +91,7 @@ export default function LogsScreen() {
     );
 
     return (
-        <View style={{ flex: 1, backgroundColor: '#F5F5F5' }}>
+        <View style={{ flex: 1, backgroundColor: '#F5F5F5', paddingTop: softHeaderInset }}>
             {/* Header with actions */}
             <ItemList>
                 <ItemGroup title={`Logs (${logs.length})`}>

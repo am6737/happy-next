@@ -4,7 +4,7 @@ import { Image } from 'expo-image';
 import * as React from 'react';
 import { Text } from '@/components/StyledText';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, FontAwesome6 } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 import { useAuth } from '@/auth/AuthContext';
 import { isTauriDesktop } from '@/utils/tauri';
@@ -29,7 +29,7 @@ import { Avatar } from '@/components/Avatar';
 import { t } from '@/text';
 import { useMainTabBottomPadding } from '@/hooks/useMainTabBottomPadding';
 import { openExternalUrl } from '@/utils/tauri';
-import { getAiTeamCopy } from '@/features/aiTeams/copy';
+import { openTerminalPopup } from '@/terminal/terminalPopupWindow';
 
 export const SettingsView = React.memo(function SettingsView() {
     const { theme } = useUnistyles();
@@ -44,7 +44,6 @@ export const SettingsView = React.memo(function SettingsView() {
     const avatarUrl = getAvatarUrl(profile);
     const bio = getBio(profile);
     const tabBottomPadding = useMainTabBottomPadding();
-    const aiTeamCopy = getAiTeamCopy();
 
     const { launchScanner, connectWithUrl, isLoading } = useUnifiedScanner();
 
@@ -159,19 +158,29 @@ export const SettingsView = React.memo(function SettingsView() {
             t('dootask.disconnectConfirm'),
             { confirmText: t('modals.disconnect'), destructive: true }
         );
-        if (confirmed) {
-            if (dootaskProfile) {
-                // Complete both remote disconnects before clearing local state.
-                // This makes the account-scoped deletion visible to other
-                // devices as soon as they reconcile their profile.
-                const { dootaskLogout, deleteDootaskFromServer } = await import('@/sync/dootask/api');
-                await Promise.allSettled([
-                    dootaskLogout(dootaskProfile.serverUrl, dootaskProfile.token),
-                    deleteDootaskFromServer(),
-                ]);
-            }
-            storage.getState().clearDootaskData();
-        }
+        if (!confirmed) return;
+
+        const profile = dootaskProfile;
+
+        // Unbind locally and unconditionally, before touching the network. The
+        // DooTask server being unreachable is exactly when a user wants to
+        // disconnect, so nothing here may wait on reaching it — a pending
+        // request used to leave the account bound with no error shown.
+        storage.getState().clearDootaskData();
+
+        if (!profile) return;
+
+        // Best-effort remote cleanup, detached from the UI. A server that never
+        // answers may leave these pending, which is why the unbind above must
+        // not wait on them; a failure only means the next device to reconcile
+        // still sees the stale profile.
+        void (async () => {
+            const { dootaskLogout, deleteDootaskFromServer } = await import('@/sync/dootask/api');
+            await Promise.allSettled([
+                dootaskLogout(profile.serverUrl, profile.token),
+                deleteDootaskFromServer(),
+            ]);
+        })().catch(() => {});
     });
 
     return (
@@ -204,7 +213,7 @@ export const SettingsView = React.memo(function SettingsView() {
                         // Logo view: Original logo + version
                         <>
                             <Image
-                                source={theme.dark ? require('@/assets/images/logotype-light.png') : require('@/assets/images/logotype-dark.png')}
+                                source={theme.dark ? require('@/assets/images/logotype-light.svg') : require('@/assets/images/logotype-dark.svg')}
                                 contentFit="contain"
                                 style={{ width: 300, height: 90, marginBottom: 12 }}
                             />
@@ -333,21 +342,6 @@ export const SettingsView = React.memo(function SettingsView() {
             )}
 
             {/* History */}
-            <ItemGroup title={aiTeamCopy.workspace}>
-                <Item
-                    title={aiTeamCopy.agents}
-                    subtitle={aiTeamCopy.agentsSubtitle}
-                    icon={<Ionicons name="people-circle-outline" size={29} color="#5856D6" />}
-                    onPress={() => router.push('/settings/agents')}
-                />
-                <Item
-                    title={aiTeamCopy.teams}
-                    subtitle={aiTeamCopy.teamsSubtitle}
-                    icon={<Ionicons name="git-network-outline" size={29} color="#34C759" />}
-                    onPress={() => router.push('/settings/teams')}
-                />
-            </ItemGroup>
-
             <ItemGroup title={t('settings.history')}>
                 <Item
                     title={t('sessionHistory.title')}
@@ -434,17 +428,15 @@ export const SettingsView = React.memo(function SettingsView() {
                     />
                 )}
                 <Item
-                    title={t('tabs.openclaw')}
-                    subtitle={t('settings.openclawSubtitle')}
-                    icon={
-                        <Image
-                            source={require('@/assets/images/brutalist/Brutalism 117.png')}
-                            style={{ width: 36, height: 36 }}
-                            contentFit="contain"
-                            tintColor="#5AC8FA"
-                        />
-                    }
-                    onPress={() => router.push('/openclaw')}
+                    title={t('settings.terminal')}
+                    subtitle={t('settings.terminalSubtitle')}
+                    icon={<FontAwesome6 name="terminal" size={24} color="#5856D6" />}
+                    onPress={() => {
+                        // A popup where the browser offers one; opened here, in the click, or it is blocked.
+                        if (!openTerminalPopup()?.show()) {
+                            router.push('/terminals');
+                        }
+                    }}
                 />
             </ItemGroup>
 

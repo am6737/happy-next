@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { View, SectionList, ActivityIndicator, Pressable, RefreshControl } from 'react-native';
+import { View, SectionList, ActivityIndicator, Pressable, RefreshControl, Platform } from 'react-native';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,6 +20,8 @@ import {
 import { useMachineNameMap } from '@/hooks/useMachineNameMap';
 import { formatDate } from '@/utils/formatDate';
 import { t } from '@/text';
+
+import { softHeaderOptions } from '@/components/navigation/softHeader';
 
 const stylesheet = StyleSheet.create((theme) => ({
     container: {
@@ -211,7 +213,7 @@ export default function OrchestratorTaskDetailScreen() {
     if (loading && !task) {
         return (
             <View style={styles.center}>
-                <Stack.Screen options={{ headerTitle: t('settings.orchestratorTaskDetails') }} />
+                <Stack.Screen options={{ ...softHeaderOptions, headerTitle: t('settings.orchestratorTaskDetails') }} />
                 <ActivityIndicator size="large" />
                 <Text style={styles.hint}>{t('settings.orchestratorLoadingTask')}</Text>
             </View>
@@ -221,7 +223,7 @@ export default function OrchestratorTaskDetailScreen() {
     if (!task) {
         return (
             <View style={styles.center}>
-                <Stack.Screen options={{ headerTitle: t('settings.orchestratorTaskDetails') }} />
+                <Stack.Screen options={{ ...softHeaderOptions, headerTitle: t('settings.orchestratorTaskDetails') }} />
                 <Text style={styles.sectionTitle}>{t('settings.orchestratorTaskNotFound')}</Text>
                 {!!error && <Text style={styles.errorText}>{error}</Text>}
             </View>
@@ -255,11 +257,12 @@ export default function OrchestratorTaskDetailScreen() {
 
     return (
         <View style={styles.container}>
-            <Stack.Screen options={{ headerTitle: t('settings.orchestratorTaskSeq', { seq: task.seq }) }} />
+            <Stack.Screen options={{ ...softHeaderOptions, headerTitle: t('settings.orchestratorTaskSeq', { seq: task.seq }) }} />
             <SectionList
                 sections={executionSections}
+                contentInsetAdjustmentBehavior="automatic"
                 keyExtractor={(item) => item}
-                stickySectionHeadersEnabled
+                stickySectionHeadersEnabled={Platform.OS !== 'ios'}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => {
                     setRefreshing(true);
                     void loadTask({ silent: true });

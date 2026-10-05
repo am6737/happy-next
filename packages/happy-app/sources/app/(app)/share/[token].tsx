@@ -11,13 +11,14 @@ import { MessageView } from '@/components/MessageView';
 import { usePublicShareSession } from '@/hooks/usePublicShareSession';
 import { Message } from '@/sync/typesMessage';
 import { getShareUserDisplayName } from '@/sync/sharingTypes';
+import { useSoftHeaderInset } from '@/components/navigation/softHeader';
 
-function OwnerCard({ owner, floating }: { owner: { username: string | null; firstName: string | null; lastName: string | null }; floating?: boolean }) {
+function OwnerCard({ owner, floating, topInset = 0 }: { owner: { username: string | null; firstName: string | null; lastName: string | null }; floating?: boolean; topInset?: number }) {
     const { theme } = useUnistyles();
     const name = getShareUserDisplayName(owner) || 'Unknown';
 
     return (
-        <View style={[styles.ownerCard, floating && styles.ownerCardFloating, { backgroundColor: theme.colors.groupped.background }]}>
+        <View style={[styles.ownerCard, floating && styles.ownerCardFloating, { backgroundColor: theme.colors.groupped.background }, topInset > 0 && { paddingTop: 12 + topInset }]}>
             <Ionicons name="person-circle-outline" size={32} color={theme.colors.textSecondary} />
             <View style={styles.ownerInfo}>
                 <Text style={[styles.ownerLabel, { color: theme.colors.textSecondary }]}>
@@ -34,6 +35,7 @@ function OwnerCard({ owner, floating }: { owner: { username: string | null; firs
 export default memo(function PublicShareScreen() {
     const { token } = useLocalSearchParams<{ token: string }>();
     const { theme } = useUnistyles();
+    const softHeaderInset = useSoftHeaderInset();
     const { state, messages, metadata, owner, sessionId, hasMore, isLoadingMore, loadMore, giveConsent } = usePublicShareSession(token);
 
     const keyExtractor = useCallback((item: Message) => item.id, []);
@@ -124,8 +126,10 @@ export default memo(function PublicShareScreen() {
 
     // Loaded
     return (
-        <View style={[styles.container, { backgroundColor: theme.colors.surface }]}>
-            {owner && <OwnerCard owner={owner} />}
+        // The owner card is the list's fixed top row, so it (or, without one, the container)
+        // takes the soft header's height; the card's background runs up under the header.
+        <View style={[styles.container, { backgroundColor: theme.colors.surface }, !owner && { paddingTop: softHeaderInset }]}>
+            {owner && <OwnerCard owner={owner} topInset={softHeaderInset} />}
             {messages.length === 0 ? (
                 <View style={styles.center}>
                     <Ionicons name="chatbubble-outline" size={48} color={theme.colors.textSecondary} />

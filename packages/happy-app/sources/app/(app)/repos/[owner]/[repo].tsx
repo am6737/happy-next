@@ -64,7 +64,7 @@ export default function RepoDashboardScreen() {
         return (
             <View style={styles.container}>
                 <Stack.Screen options={{ headerTitle: repoName }} />
-                <ScrollView contentContainerStyle={{ paddingBottom: 32 }}>
+                <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ paddingBottom: 32 }}>
                     <RepoDetailSkeleton />
                 </ScrollView>
             </View>
@@ -91,7 +91,7 @@ export default function RepoDashboardScreen() {
         <View style={styles.container}>
             <Stack.Screen options={{ headerTitle: repoInfo.name }} />
 
-            <ScrollView contentContainerStyle={{ paddingBottom: 32 }}>
+            <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ paddingBottom: 32 }}>
                 {/* Hero */}
                 <View style={[styles.heroWrapper, { alignSelf: 'center', width: '100%', maxWidth: layout.maxWidth }]}>
                     <View style={styles.heroCard}>

@@ -2,7 +2,8 @@ import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { createRequire } from 'node:module';
 import {
-    buildStaticDocument,
+    buildHtmlDocument,
+    buildMarkdownDocument,
     buildSvgDocument,
 } from '../components/FilePreview/staticDocument';
 import { en } from '../text/_default';
@@ -49,19 +50,33 @@ const svg = Buffer.from(
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 260"><rect x="30" y="30" width="340" height="180" rx="8" fill="#139d78"/><circle cx="200" cy="110" r="45" fill="#ffffff"/><text x="200" y="242" text-anchor="middle" font-size="20">SVG preview</text><script>fetch("https://example.invalid/svg-script")</script><image href="https://example.invalid/svg-image" width="10" height="10"/></svg>'
 ).toString('base64');
 const pages = {
-    'html-dark': buildStaticDocument(
-        '<style>body{background:white;color:black}h1{color:#168467}</style><h1>HTML dark preview</h1><p style="background:white;color:black">Author colors are overridden for reading.</p><pre>const answer = 42;</pre><table><tr><th>Format</th><th>Status</th></tr><tr><td>HTML</td><td>Dark</td></tr></table>',
-        'html',
+    'html-dark': buildHtmlDocument(
+        '<style>body{background:white;color:black}h1{color:#168467}</style><h1>HTML dark preview</h1><p style="background:white;color:black">Author colors are overridden for reading.</p><pre>const answer = 42;</pre><table><tr><th>Format</th><th>Status</th></tr><tr><td>HTML</td><td>Dark</td></tr></table><script>document.querySelector("h1").textContent += " (script ran)"</script>',
         true
     ),
     svg: buildSvgDocument(svg, false, 1),
-    html: buildStaticDocument(
-        '<style>h1{color:#168467}.sample{border-left:4px solid #d04b64;padding:12px;background:#f2f3f4}body{background-image:url(https://example.invalid/css)}</style><h1>HTML preview</h1><p class="sample">Static styles and embedded content.</p><script>parent.hacked=true;fetch("https://example.invalid/script")</script><img src="https://example.invalid/image" alt="External image"><meta http-equiv="refresh" content="0;url=https://example.invalid/navigation">',
-        'html'
+    html: buildHtmlDocument(
+        `<style>h1{color:#168467}.sample{border-left:4px solid #d04b64;padding:12px;background:#f2f3f4}</style>
+<h1>HTML preview</h1>
+<p class="sample">Scripts, inline handlers, canvas and external resources run as authored.</p>
+<p id="script">Script did not run.</p>
+<p id="sandbox">Sandbox probe did not run.</p>
+<button id="counter" onclick="this.textContent='Clicked ' + (window.clicks = (window.clicks || 0) + 1) + ' times'">Clicked 0 times</button>
+<canvas id="canvas" width="120" height="60"></canvas>
+<script>
+document.getElementById('script').textContent = 'Script ran: 6 * 7 = ' + (6 * 7);
+try { parent.hacked = true; document.getElementById('sandbox').textContent = 'SANDBOX ESCAPED: parent reachable'; }
+catch (error) { document.getElementById('sandbox').textContent = 'Sandbox holds: ' + error.name; }
+var context = document.getElementById('canvas').getContext('2d');
+context.fillStyle = '#139d78';
+context.fillRect(8, 8, 104, 44);
+fetch('https://example.invalid/script').catch(function () {});
+</script>
+<img src="https://example.invalid/image" alt="External image (DNS for example.invalid always fails)">`
     ),
-    markdown: buildStaticDocument(
+    markdown: buildMarkdownDocument(
         '# Markdown preview\n\n**Bold** and *italic* text.\n\n- First item\n- Second item\n\n> A quotation\n\n| Format | Status |\n| --- | --- |\n| SVG | Preview |\n| MD | Preview |\n\n```ts\nconst answer = 42;\n```\n\n![External image](https://example.invalid/md-image)\n\n<script>parent.hacked=true</script>',
-        'markdown'
+        false
     ),
     pdf: readFileSync(
         new URL(
@@ -87,11 +102,13 @@ const pages = {
         })
     ),
 };
+/** Fixtures whose document executes scripts, mirroring SandboxDocument's `scripts` prop. */
+const scripted = new Set(['pdf', 'damaged', 'html', 'html-dark']);
 for (const [name, html] of Object.entries(pages)) {
     writeFileSync(resolve(output, `${name}.html`), html);
     writeFileSync(
         resolve(output, `${name}-sandbox.html`),
-        `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0;height:100%}iframe{border:0;width:100%;height:100%;display:block}</style></head><body><iframe title="${name}" sandbox="${name === 'pdf' || name === 'damaged' ? 'allow-scripts' : ''}" srcdoc="${html.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"></iframe></body></html>`
+        `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0;height:100%}iframe{border:0;width:100%;height:100%;display:block}</style></head><body><iframe title="${name}" sandbox="${scripted.has(name) ? 'allow-scripts' : ''}" srcdoc="${html.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"></iframe></body></html>`
     );
 }
 console.log(`Preview fixtures: ${output}`);

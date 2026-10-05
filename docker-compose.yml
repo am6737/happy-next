@@ -33,6 +33,8 @@ services:
       # Public service discovery (/v1/app-config)
       - PUBLIC_API_BASE_URL=${PUBLIC_API_BASE_URL}
       - PUBLIC_VOICE_BASE_URL=${PUBLIC_VOICE_BASE_URL}
+      # Model catalog source served at /v1/model-catalog (blank = GitHub main, `off` = bundled)
+      - MODEL_CATALOG_URL=${MODEL_CATALOG_URL}
       # Server-side DooPush notification relay.
       - DOOPUSH_APP_ID=${DOOPUSH_APP_ID}
       - DOOPUSH_APP_SECRET=${DOOPUSH_APP_SECRET}
@@ -113,7 +115,7 @@ services:
       - AGENT_WELCOME_MESSAGE=${AGENT_WELCOME_MESSAGE:-你好，需要我做点什么？}
 
   minio:
-    image: quay.io/minio/minio:latest
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
     command: server /data
     environment:
       - MINIO_ROOT_USER=${S3_ACCESS_KEY}
@@ -124,7 +126,7 @@ services:
       - minio_data:/data
 
   minio-init:
-    image: minio/mc
+    image: pgsty/mc:RELEASE.2026-09-16T00-00-00Z
     depends_on:
       - minio
     environment:

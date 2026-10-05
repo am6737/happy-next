@@ -41,3 +41,8 @@
 ::-webkit-scrollbar:vertical {
     width: 12px;
 }
+
+/* Remove the default focus ring for keyboard-visible focus */
+:focus-visible {
+    outline: none;
+}

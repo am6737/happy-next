@@ -18,8 +18,11 @@ import { useHappyAction } from '@/hooks/useHappyAction';
 import { getGitHubOAuthParams } from '@/sync/apiGithub';
 import { Image } from 'expo-image';
 import { useMainTabBottomPadding } from '@/hooks/useMainTabBottomPadding';
+import { useSoftHeaderInset } from '@/components/navigation/softHeader';
 import { FilterChipRow, IssueIcon, PullRequestIcon } from '@/components/repos';
 import type { GithubIssueScope, GithubPullScope } from '@/sync/apiGithubData';
+import { NativeMenu } from '@/components/NativeMenu';
+import type { ActionMenuItem } from '@/components/ActionMenu';
 
 const SheetTextInput = Platform.OS === 'web' ? TextInput : BottomSheetTextInput;
 
@@ -47,7 +50,7 @@ function getStateColor(state: string, theme: ReturnType<typeof useUnistyles>['th
 
 const IssueRow = React.memo(({ item, onPress, theme }: { item: RepoIssue; onPress: () => void; theme: any }) => (
     <View style={issueStyles.item}>
-        <Pressable style={issueStyles.row} onPress={onPress}>
+        <Pressable style={({ pressed }) => [issueStyles.row, pressed && { backgroundColor: theme.colors.surfaceRipple }]} onPress={onPress}>
             <View style={issueStyles.icon}>
                 <IssueIcon size={18} color={getStateColor(item.state, theme)} state={item.state} />
             </View>
@@ -80,7 +83,7 @@ const IssueRow = React.memo(({ item, onPress, theme }: { item: RepoIssue; onPres
 
 const PRRow = React.memo(({ item, onPress, theme }: { item: RepoPR; onPress: () => void; theme: any }) => (
     <View style={issueStyles.item}>
-        <Pressable style={issueStyles.row} onPress={onPress}>
+        <Pressable style={({ pressed }) => [issueStyles.row, pressed && { backgroundColor: theme.colors.surfaceRipple }]} onPress={onPress}>
             <View style={issueStyles.icon}>
                 <PullRequestIcon state={item.status} size={18} color={getStateColor(item.status, theme)} />
             </View>
@@ -115,7 +118,7 @@ const TokenExpiredCard = React.memo(({ onReconnect, loading }: { onReconnect: ()
                 disabled={loading}
             >
                 <Text style={[styles.reconnectButtonText, { color: theme.colors.button.primary.tint }]}>
-                    {loading ? t('openclaw.connecting') : t('github.reconnect')}
+                    {loading ? t('github.connecting') : t('github.reconnect')}
                 </Text>
             </Pressable>
         </View>
@@ -188,6 +191,7 @@ export const GitHubListView = React.memo(({ onRepoChange, repoPickerTriggerRef }
     const router = useRouter();
     const auth = useAuth();
     const tabBottomPadding = useMainTabBottomPadding();
+    const softHeaderInset = useSoftHeaderInset();
 
     const [repoSearch, setRepoSearch] = React.useState('');
     const [debouncedRepoSearch, setDebouncedRepoSearch] = React.useState('');
@@ -197,7 +201,7 @@ export const GitHubListView = React.memo(({ onRepoChange, repoPickerTriggerRef }
         return () => clearTimeout(timer);
     }, [repoSearch]);
 
-    const { data: repos, loading: reposLoading, loadingMore: reposLoadingMore, hasMore: reposHasMore, totalCount: reposTotalCount, loadMore: loadMoreRepos, refresh: refreshRepos, tokenExpired } = useGithubRepos({
+    const { data: repos, loading: reposLoading, refreshing: reposRefreshing, loadingMore: reposLoadingMore, hasMore: reposHasMore, totalCount: reposTotalCount, loadMore: loadMoreRepos, refresh: refreshRepos, tokenExpired } = useGithubRepos({
         search: debouncedRepoSearch || undefined,
     });
 
@@ -394,6 +398,11 @@ export const GitHubListView = React.memo(({ onRepoChange, repoPickerTriggerRef }
         closed: t('github.closed'),
         merged: t('github.merged'),
     };
+    const filterMenuItems: ActionMenuItem[] = filters.map((f) => ({
+        label: filterLabels[f.key],
+        selected: f.key === currentFilter,
+        onPress: () => setFilter(f.key),
+    }));
 
     const renderBackdrop = React.useCallback(
         (props: any) => <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} />,
@@ -454,6 +463,11 @@ export const GitHubListView = React.memo(({ onRepoChange, repoPickerTriggerRef }
     const otherTabCountLoading = isGlobal
         ? (activeTab === 'issues' ? workPulls.loading : workIssues.loading)
         : reposLoading;
+    // Explicit refreshes replace the stale count with a spinner; silent
+    // revalidation keeps showing the cached count.
+    const otherTabCountRefreshing = isGlobal
+        ? (activeTab === 'issues' ? workPulls.refreshing : workIssues.refreshing)
+        : reposRefreshing;
     const currentTabLabel = activeTab === 'issues' ? t('github.issues') : t('github.pullRequests');
     const currentCount = activeTab === 'issues' ? issuesCount : pullsCount;
 
@@ -485,7 +499,7 @@ export const GitHubListView = React.memo(({ onRepoChange, repoPickerTriggerRef }
                         {otherTabLabel}
                     </Text>
                     <View style={[styles.swapPillBadge, { backgroundColor: theme.colors.divider }]}>
-                        {otherTabCountLoading && typeof otherTabCount !== 'number' ? (
+                        {otherTabCountRefreshing || (otherTabCountLoading && typeof otherTabCount !== 'number') ? (
                             <ActivityIndicator
                                 size={Platform.OS === 'ios' ? 'small' : 12}
                                 color={theme.colors.textSecondary}
@@ -519,14 +533,15 @@ export const GitHubListView = React.memo(({ onRepoChange, repoPickerTriggerRef }
                             <Ionicons name="close-circle" size={16} color={theme.colors.textSecondary} />
                         </Pressable>
                     )}
-                    <Pressable
+                    <NativeMenu
+                        items={filterMenuItems}
                         style={[
                             styles.filterButton,
                             currentFilter === 'all'
                                 ? { backgroundColor: theme.colors.surfaceHigh }
                                 : { backgroundColor: theme.colors.text },
                         ]}
-                        onPress={() => setFilterPopoverVisible(true)}
+                        onFallbackOpen={() => setFilterPopoverVisible(true)}
                     >
                         <Ionicons
                             name="filter"
@@ -541,7 +556,7 @@ export const GitHubListView = React.memo(({ onRepoChange, repoPickerTriggerRef }
                         ]}>
                             {filterLabels[currentFilter]}
                         </Text>
-                    </Pressable>
+                    </NativeMenu>
                 </View>
             </View>
 
@@ -603,7 +618,8 @@ export const GitHubListView = React.memo(({ onRepoChange, repoPickerTriggerRef }
             </Modal>
 
             {(tokenExpired || activeResult.tokenExpired) && !isLoading ? (
-                <View style={styles.listContent}>
+                // Not a scroll view, so UIKit does not inset it below the soft header.
+                <View style={[styles.listContent, { paddingTop: softHeaderInset }]}>
                     {listHeader}
                     <TokenExpiredCard onReconnect={handleReconnect} loading={reconnecting} />
                 </View>

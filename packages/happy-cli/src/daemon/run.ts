@@ -3,6 +3,7 @@ import os from 'os';
 import * as tmp from 'tmp';
 
 import { ApiClient } from '@/api/api';
+import { startModelCatalogSync } from '@/api/modelCatalog';
 import { TrackedSession } from './types';
 import { MachineMetadata, DaemonState, Metadata } from '@/api/types';
 import { SpawnSessionOptions, SpawnSessionResult } from '@/modules/common/registerCommonHandlers';
@@ -1096,6 +1097,9 @@ export async function startDaemon(): Promise<void> {
 
     // Connect to server
     apiMachine.connect();
+
+    // Keep the model catalog (and its cache for spawned sessions) in sync with the server
+    startModelCatalogSync();
 
     // Update machine metadata on server (ensures version is current after daemon restart)
     // Merge with current metadata to preserve fields set by the app (e.g. displayName)

@@ -14,6 +14,7 @@ import {
     hasCustomWelcomeMessage,
 } from '@/sync/voiceConfig';
 import { StyleSheet } from 'react-native-unistyles';
+import { isRunningOnMac } from '@/utils/platform';
 
 const stylesheet = StyleSheet.create((theme) => ({
     keyboardAvoidingView: { flex: 1 },
@@ -61,6 +62,7 @@ const stylesheet = StyleSheet.create((theme) => ({
 export default function WelcomeMessageScreen() {
     const router = useRouter();
     const styles = stylesheet;
+    const useNativeKeyboardInsets = Platform.OS === 'ios' && !isRunningOnMac();
     const isCustom = hasCustomWelcomeMessage();
     const [input, setInput] = useState(isCustom ? (getWelcomeMessage() ?? '') : '');
 
@@ -76,10 +78,15 @@ export default function WelcomeMessageScreen() {
 
     return (
         <KeyboardAvoidingView
+            enabled={!useNativeKeyboardInsets}
             style={styles.keyboardAvoidingView}
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
-            <ItemList style={{ flex: 1 }}>
+            <ItemList
+                style={{ flex: 1 }}
+                keyboardShouldPersistTaps="handled"
+                automaticallyAdjustKeyboardInsets={useNativeKeyboardInsets}
+            >
                 <ItemGroup footer={t('settingsVoice.welcomeMessageDescription')}>
                     <View style={styles.contentContainer}>
                         <Text style={styles.labelText}>{t('settingsVoice.welcomeMessage')}</Text>

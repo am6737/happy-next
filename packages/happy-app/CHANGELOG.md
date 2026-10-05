@@ -1,5 +1,72 @@
 # Changelog
 
+## Version 28 - 2026-10-01
+
+Happy Next v2.13.1 brings the terminal to the web and the session details — drawn with xterm.js, openable in a popup window on desktop browsers and kept alive while hidden — and shows the empty-session placeholder everywhere. New Codex sessions start on Codex v0.159.3.
+
+- Terminal: open a terminal from the quick actions in a session's details
+- Terminal: draw the terminal with xterm.js on the web, keeping CJK text, spaces and styled runs on their cells
+- Terminal: open terminals in a popup window in desktop browsers, and keep recently shown terminals mounted while hidden
+- Terminal: draw the cursor hollow when the input is unfocused, and stop typing the letter when a Command chord is pressed
+- Sessions: show the empty-session placeholder on web and desktop, localized in every language, including DooTask's empty chat
+- Sessions: even out the spacing of the new session card on iOS
+- DooTask: float the error banner above the tab bar
+- CLI: archive Codex sessions through the running app-server daemon
+- Codex: new Codex sessions start on Codex v0.159.3
+
+## Version 27 - 2026-09-29
+
+Happy Next v2.13.0 gives iOS 26 its native look — Liquid Glass buttons, menus and sheets, a soft header across the app, and a floating composer docked to the keyboard — and moves the chat onto a faster native list. Models now arrive from the server without an app update, adding Claude Opus 5.5, Sonnet 5.5 and the GPT-6 family, and Happy CLI is updated to v0.10.0 with Codex v0.159.1.
+
+- iOS: float buttons, the action menu and bottom sheets as Liquid Glass on iOS 26
+- iOS: open header "more" menus, session row actions, long-press menus, pickers, filters and composer attachment menus as native iOS menus
+- iOS: put every screen under the soft scroll-edge header, with connection status in the header subtitle and forms following the keyboard natively
+- Composer: float a glass composer over every iOS chat screen, docked to the keyboard, so new messages, short chats and empty states stay in step as it opens and closes
+- Conversation: render the native message list with LegendList for smoother scrolling, follow new messages to the end even in bursts, and start short chats at the top
+- Models: pick up new models from the server without an app update, now including Claude Opus 5.5, Claude Sonnet 5.5, GPT-6.1-Sol, GPT-6-Sol and GPT-6-Luna
+- Sessions: an open session is no longer marked read while the window is unfocused or idle, and archived sessions stay offline
+- Lists: highlight pressed session rows, task cards and GitHub rows
+- GitHub: cache list totals with a spinner while refreshing, and add a scroll-to-bottom button to issue and pull request comments
+- DooTask: cache the task list per filter and refresh it in the background
+- Terminal: open terminals from the Features group in Settings, sized to the keyboard and clear of the home indicator
+- Preview: title the HTML preview with the page's own title
+- CLI: Happy CLI v0.10.0 bundles Codex v0.159.1, follows the server's model catalog, and drops the deprecated OpenClaw integration
+
+## Version 26 - 2026-09-23
+
+Happy Next v2.12.1 adds terminals that live on the machine — a shell owned by the daemon rather than by the window showing it, with its own desktop window and tabs — and folds a turn's working-out into one line you can open. Plan proposals now show folded at the shape of a proposal, the fold line holds where you tapped it, the minimap becomes a swipe-in landmark rail on touch, HTML previews render as authored, and Happy CLI is updated to v0.9.2 with Codex v0.155.1 and GPT-6-Astra's Ultra effort.
+
+- Terminals: run a shell on the machine, one worker per terminal, shown in its own desktop window with tabs
+- Terminals: keep running across a daemon restart by living under tmux, and come back attached to the same shell
+- Conversation: fold a turn's process into one line — how long it took and how many tool calls it hid — that opens on a tap and says what the agent is doing while the turn runs
+- Conversation: collapse a compacted conversation's summary to a single tap-to-view line
+- Minimap: summon the landmark rail with a swipe in from the right edge on touch, with a card previewing the mark under your finger
+- Files: render HTML as authored inside the sandbox, switch a file's views through one tab bar, and move the version notice into the header
+- Sessions: reveal a local session's folder in Finder or Explorer, and split the session menu into sections
+- Models: mark the session's vendor beside the model label
+- Composer: turn the voice button into a stop button while the agent works, and abort on a double press of Escape
+- Desktop: draw the brand wordmark from the SVG logos in the sidebar, welcome screen and settings
+- CLI: Happy CLI v0.9.1 bundles Codex v0.155.1, flags automatic compaction summaries too, and takes durable terminals back correctly on Linux
+- Plan proposals: show folded at the shape of a proposal, marked on the landmark rail and kept out of the turn's fold, and a proposal is sent as the request it is
+- Conversation: a step waiting on a permission stays out of the fold, so the question is never folded away, and the fold line holds the position it was tapped at instead of snapping when the page settles around it
+- CLI: Happy CLI v0.9.2 bundles Codex v0.155.1, terminal shells start with better defaults and handle input more predictably, and a cold Codex download no longer reads as a failed handshake
+- Models: GPT-6-Astra gains its Ultra effort, and the Codex models OpenAI retired (GPT-5.4, GPT-5.4-Mini, GPT-5.2) are no longer offered
+
+## Version 25 - 2026-09-18
+
+Happy Next v2.11.0 reworks the session list — rename, read/unread, and a scannable color bar — and times every assistant turn above its reply. Questions and HTML previews now appear on the conversation minimap, in-progress answers survive as drafts, and Happy CLI is updated to v0.9.0 with Codex v0.155.0.
+
+- Sessions: rename a session, or mark it read or unread, from its context menu
+- Sessions: draw the color marker as a bar down the row edge, give every session state a mark in the compact list, and remember the compact list per platform
+- Sessions: stop offering a new session from a session shared with you, let recipients of a shared session upload images, and name the real reason a message failed to send
+- Conversation: time each assistant turn above its reply, counting up while the turn runs
+- Minimap: mark AskUserQuestion calls and HTML previews, and keep compaction summaries off the rail
+- Drafts: keep in-progress AskUserQuestion answers so they survive scrolling away
+- Tools: preview images that file-reading tools open, and let HTML previews read a document from a file path
+- GitHub: use Octicons for lists and keep the repository list cached
+- Appearance: hide thinking and image placeholder rows, and default "show thinking messages" to off
+- CLI: Happy CLI v0.9.0 bundles Codex v0.155.0, and Claude fast-mode cost estimates are corrected
+
 ## Version 24 - 2026-09-12
 
 Happy Next v2.10.1 improves DooTask sign-in and cross-device connection sync, and adds a quick new-session action to desktop project headers. It also includes the GitHub workflows, safer file previews, and downloads introduced in v2.10.0.
@@ -159,9 +226,9 @@ The Happy CLI gains a built-in orchestrator that fans work out to parallel Claud
 
 ## Version 13 - 2026-06-18
 
-Session header is reworked with a left-aligned title, a new-session button, and OpenClaw session info sheets; the sessions list is reorganized into per-machine tabs; session loading gets a reliability sweep (longer fetch timeout, retry-loop refresh indicator, stuck-load recovery, base64 stack-overflow fix); long user messages collapse and select cleanly on web; the commits list tags the upstream tip; nginx adds a /healthz endpoint; unrecognized tool calls now render as a generic 'other' block and agent-event messages strip ANSI escape codes; Happy CLI updates to v0.5.5 with mid-turn permission-mode forwarding, graceful Stop/ESC interrupts that keep the Claude and Codex backends warm, and hot-swappable model / plan-mode switching on a warm subprocess; and Claude Fable 5 (with 1M-context variant) joins the Claude model catalog.
+Session header is reworked with a left-aligned title and a new-session button; the sessions list is reorganized into per-machine tabs; session loading gets a reliability sweep (longer fetch timeout, retry-loop refresh indicator, stuck-load recovery, base64 stack-overflow fix); long user messages collapse and select cleanly on web; the commits list tags the upstream tip; nginx adds a /healthz endpoint; unrecognized tool calls now render as a generic 'other' block and agent-event messages strip ANSI escape codes; Happy CLI updates to v0.5.5 with mid-turn permission-mode forwarding, graceful Stop/ESC interrupts that keep the Claude and Codex backends warm, and hot-swappable model / plan-mode switching on a warm subprocess; and Claude Fable 5 (with 1M-context variant) joins the Claude model catalog.
 
-- Session header: unified left-aligned title across iOS / Android / web — new-session button on the header right, header title in the session info screen, and a dedicated OpenClaw session info sheet
+- Session header: unified left-aligned title across iOS / Android / web — new-session button on the header right and a header title in the session info screen
 - Session header: left-align the title on narrow phones (was center-overflowing), and fix the invisible back icon in dark-theme landscape
 - Sessions: the active/inactive split is replaced by per-machine tabs — sessions are grouped by the machine they run on, so multi-machine setups are easier to navigate
 - Messages: long user messages (>20k chars) now collapse to a preview with a Show More toggle; web text selection inside messages is fixed
@@ -248,9 +315,8 @@ Native iOS/Android navigation overhaul, deeper DooTask inbox integration, direct
 
 ## Version 8 - 2026-05-07
 
-OpenClaw renders rich AI content blocks, Claude Opus 4.7 and GPT-5.5 support, image upload quality, session title polish, Claude 4.x compatibility fixes, web desktop polish, and mobile text-selection rebuild.
+Claude Opus 4.7 and GPT-5.5 support, image upload quality, session title polish, Claude 4.x compatibility fixes, web desktop polish, and mobile text-selection rebuild.
 
-- OpenClaw: full rendering of thinking, tool use, and image content blocks from external AI machines
 - Models: add Claude Opus 4.7 to available model list
 - Models: add GPT-5.5 to available Codex model list with low/medium/high/xhigh reasoning levels
 - Image uploads: raise max dimension to 1568px and skip redundant compression when originals are already within limits, preserving text sharpness in code and UI screenshots
@@ -263,7 +329,7 @@ OpenClaw renders rich AI content blocks, Claude Opus 4.7 and GPT-5.5 support, im
 - Mobile reliability: fix Android text-selection page crash caused by iOS-only WebView props under the new Fabric architecture
 - AskUserQuestion: fix empty/missing answers — frontend now keys answers by the full question text to match Claude Code CLI's internal lookup
 - iOS 26: align navigation header icons and pin App Store builds to Xcode 26.4.1 (required by Apple for App Store Connect uploads)
-- Header action menus: refine action menus on session edit/status/commits, script editor, and OpenClaw machine detail pages for cleaner interactions
+- Header action menus: refine action menus on session edit/status/commits and script editor pages for cleaner interactions
 - Dependencies: upgrade react-native-audio-api and react-native-keyboard-controller for improved iOS audio recording and keyboard handling
 
 ## Version 7 - 2026-03-18
@@ -290,7 +356,6 @@ The biggest Happy update ever — multi-agent, voice, workspaces, code browser, 
 - Built-in code browser with file navigation, Monaco editor, commit history, branch selector, and a full git changes page for staging, committing, and discarding changes.
 - Session sharing: share sessions with friends via direct invite (NaCl Box E2E encryption) or public links (token-derived keys), with real-time sync, access control, and a public share web viewer.
 - DooTask integration with task lists, detail pages, real-time WebSocket chat, emoji reactions, voice message playback, one-click AI session launch, and in-app task/project creation.
-- OpenClaw gateway for connecting to external AI machines with secure Ed25519 key exchange, real-time streaming chat, and relay or direct connection modes.
 - AI backend profiles with built-in presets for DeepSeek, Z.AI, OpenAI, Azure, and Google AI — switch LLM backends for Claude Code with custom environment variable mapping.
 - Self-hosting with a single `docker-compose` command: Web app, API server, Voice gateway, Postgres, Redis, and MinIO all configured out of the box.
 - Major sync reliability improvements: v3 messages API with seq-based sync, HTTP outbox for offline delivery, server-confirmed sends, and message loss prevention.

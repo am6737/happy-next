@@ -10,6 +10,7 @@
  */
 
 import { CodexJsonRpcPeer } from './CodexJsonRpcPeer';
+import { CODEX_INITIALIZE_TIMEOUT_MS } from '@/codex/codexRuntime';
 import { recordNativeThreadEmpty } from '@/daemon/sessionBinding';
 import {
   Methods,
@@ -69,7 +70,7 @@ export interface CodexAppServerBackendOptions {
   cwd: string;
   /** Executable command (e.g. 'npx') */
   command: string;
-  /** Arguments for the command (e.g. ['-y', '@openai/codex@0.153.4', 'app-server']) */
+  /** Arguments for the command (e.g. ['-y', '@openai/codex@<version>', 'app-server']) */
   args?: string[];
   /** Environment variables passed to the spawned process */
   env?: Record<string, string>;
@@ -235,7 +236,7 @@ export class CodexAppServerBackend implements AgentBackend {
         version: '0.14.0',
       },
       capabilities: { experimentalApi: true },
-    } satisfies InitializeParams);
+    } satisfies InitializeParams, CODEX_INITIALIZE_TIMEOUT_MS);
     this.structuredLegacyDenials = supportsStructuredLegacyDenials(initializeResult.userAgent ?? '');
 
     this.peer.notify(Methods.INITIALIZED);

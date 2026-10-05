@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
+import { codexPackage } from '@/codex/package';
+import { resolveCodexRuntime } from '@/codex/codexRuntime';
 
 vi.mock('@/claude/claudeLocal', () => ({
   claudeCliPath: '/mock/claude.js',
@@ -10,6 +12,9 @@ vi.mock('@/ui/logger', () => ({
 }));
 
 const { buildSpawnPlan } = await import('./runOneShot');
+
+/** Whatever this machine resolves for the pinned Codex: a matching local binary or npx. */
+const codexCommand = resolveCodexRuntime(codexPackage(), []).command;
 
 describe('runOneShot spawn plan', () => {
   it('passes claude model and initial session-id arguments', () => {
@@ -29,9 +34,7 @@ describe('runOneShot spawn plan', () => {
 
   it('decomposes codex model mode into --model and -c model_reasoning_effort', () => {
     const plan = buildSpawnPlan('codex', 'hello', '/tmp/workdir', 'gpt-5.5-high', 'initial');
-    expect(plan.command).toBe('npx');
-    expect(plan.args).toContain('-y');
-    expect(plan.args).toContain('@openai/codex@0.153.4');
+    expect(plan.command).toBe(codexCommand);
     expect(plan.args).toContain('--dangerously-bypass-approvals-and-sandbox');
     expect(plan.args).toContain('hello');
     expect(plan.args).toContain('--model');
@@ -42,7 +45,7 @@ describe('runOneShot spawn plan', () => {
 
   it('uses codex resume command for resume execution', () => {
     const plan = buildSpawnPlan('codex', 'continue', '/tmp/workdir', undefined, 'resume', 'session-uuid');
-    expect(plan.command).toBe('npx');
+    expect(plan.command).toBe(codexCommand);
     expect(plan.args).toContain('--dangerously-bypass-approvals-and-sandbox');
     expect(plan.args).toContain('resume');
     expect(plan.args).toContain('session-uuid');

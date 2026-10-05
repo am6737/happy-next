@@ -12,7 +12,7 @@ export default function MultiTextInputDemo() {
     const [lastKey, setLastKey] = React.useState<string>('');
 
     return (
-        <ScrollView style={{ flex: 1, backgroundColor: 'white' }}>
+        <ScrollView style={{ flex: 1, backgroundColor: 'white' }} contentInsetAdjustmentBehavior="automatic">
             <View style={{ padding: 16, gap: 24 }}>
                 <View>
                     <Text style={{ 

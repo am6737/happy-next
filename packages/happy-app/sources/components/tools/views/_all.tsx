@@ -27,6 +27,11 @@ export type ToolViewProps = {
     messages: Message[];
     sessionId?: string;
     /**
+     * The row this call is rendered in. A view that keeps something of its own between mounts —
+     * a plan proposal's expansion — keys it by this, the id the list gives the row.
+     */
+    messageId?: string;
+    /**
      * A full view that cannot show what it was chosen for hands the page back to its ordinary
      * body — a call the CLI never registered has no image to preview, which is an old call rather
      * than a failure. Supplied by ToolFullView.

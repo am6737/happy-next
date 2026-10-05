@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, ScrollView, ActivityIndicator, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/auth/AuthContext';
 import { RoundButton } from '@/components/RoundButton';
@@ -21,8 +21,9 @@ const stylesheet = StyleSheet.create((theme) => ({
     container: {
         flex: 1,
         alignItems: 'center',
-        justifyContent: 'center',
+        justifyContent: Platform.OS === 'web' ? 'center' : 'flex-start',
         paddingHorizontal: 24,
+        paddingTop: Platform.OS === 'web' ? 0 : 24,
     },
     contentWrapper: {
         width: '100%',
@@ -140,7 +141,7 @@ export default function Restore() {
     }, [keypair]);
 
     return (
-        <ScrollView style={styles.scrollView} contentContainerStyle={{ flexGrow: 1 }}>
+        <ScrollView style={styles.scrollView} contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ flexGrow: 1 }}>
             <View style={styles.container}>
 
                 <View style={styles.instructionsContainer}>

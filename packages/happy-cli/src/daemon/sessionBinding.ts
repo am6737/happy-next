@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { configuration } from '@/configuration';
 import type { Metadata } from '@/api/types';
 import { logger } from '@/ui/logger';
-import { CODEX_PACKAGE } from '@/codex/package';
+import { codexPackage } from '@/codex/package';
 
 const BindingSchema = z.object({
     sessionId: z.string(), provider: z.enum(['claude', 'codex', 'gemini']),
@@ -133,7 +133,7 @@ export function recordSessionBinding(sessionId: string, metadata: Metadata): voi
             nativeSessionIds: [...new Set([...(previous?.nativeSessionIds ?? []), ...(nativeId ? [nativeId] : [])])],
             emptyNativeSessionIds: previous?.emptyNativeSessionIds,
             processes: [...managedProcesses].map(([pid, identity]) => ({ pid, identity })),
-            codexPackage: CODEX_PACKAGE,
+            codexPackage: codexPackage(),
             codexHome: resolve(process.env.CODEX_HOME || join(homedir(), '.codex')),
         };
         if (JSON.stringify(binding) === JSON.stringify(previous)) return;
