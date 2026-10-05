@@ -414,6 +414,7 @@ const {
             }
             return { count: rows.length };
         }),
+        count: vi.fn(async (args: any) => state.runs.filter((item) => matchesRun(item, args?.where)).length),
     };
 
     const taskApi = {
@@ -1100,7 +1101,7 @@ describe('orchestrator integration paths', () => {
                 tasks: [
                     {
                         provider: 'claude',
-                        model: 'gpt-5.3-codex-high',
+                        model: 'gpt-5.5-high',
                         prompt: 'work',
                     },
                 ],
@@ -1109,6 +1110,64 @@ describe('orchestrator integration paths', () => {
 
         expect(submit.statusCode).toBe(400);
         expect(submit.json().error.code).toBe('INVALID_ARGUMENT');
+        await app.close();
+    });
+
+    it('rejects a codex task whose -fast model mode belongs to another provider', async () => {
+        const app = await createApp();
+        const submit = await app.inject({
+            method: 'POST',
+            url: '/v1/orchestrator/submit',
+            headers: { 'x-user-id': 'user-1' },
+            payload: {
+                title: 'invalid-fast-task-model',
+                tasks: [
+                    {
+                        provider: 'codex',
+                        model: 'claude-opus-5-max-fast',
+                        prompt: 'work',
+                    },
+                ],
+            },
+        });
+
+        expect(submit.statusCode).toBe(400);
+        expect(submit.json().error.code).toBe('INVALID_ARGUMENT');
+        await app.close();
+    });
+
+    it('accepts a codex -fast model mode and forwards it to the dispatch as-is', async () => {
+        const app = await createApp();
+        const submit = await app.inject({
+            method: 'POST',
+            url: '/v1/orchestrator/submit',
+            headers: { 'x-user-id': 'user-1' },
+            payload: {
+                title: 'codex-fast-task-model',
+                tasks: [
+                    {
+                        provider: 'codex',
+                        model: 'gpt-5.5-high-fast',
+                        prompt: 'work',
+                    },
+                ],
+            },
+        });
+
+        expect(submit.statusCode).toBe(200);
+        const runId = submit.json().data.runId as string;
+        expect(state.tasks.find((task) => task.runId === runId)?.model).toBe('gpt-5.5-high-fast');
+
+        await orchestratorSchedulerTick(new Date('2026-03-16T00:00:00.000Z'));
+        expect(invokeUserRpcMock).toHaveBeenCalledWith(
+            'user-1',
+            'machine-1:orchestrator-dispatch',
+            expect.objectContaining({
+                provider: 'codex',
+                model: 'gpt-5.5-high-fast',
+            }),
+            expect.any(Number),
+        );
         await app.close();
     });
 

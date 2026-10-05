@@ -16,7 +16,8 @@ import type { AgentBackend, McpServerConfig, AgentFactoryOptions } from '../core
 import { agentRegistry } from '../core';
 import { logger } from '@/ui/logger';
 import { codexPackage } from '@/codex/package';
-import { resolveCodexRuntime } from '@/codex/codexRuntime';
+import { codexFastModeArgs, resolveCodexRuntime } from '@/codex/codexRuntime';
+import { splitFastModeSuffix } from 'happy-wire';
 
 /**
  * Options for creating a Codex app-server backend
@@ -66,7 +67,8 @@ export function createCodexBackend(options: CodexBackendOptions): CodexBackendRe
   // Let Codex choose the default model based on auth method (API key vs ChatGPT)
   const model = options.model ?? process.env.CODEX_MODEL ?? null;
   const packageSpec = codexPackage();
-  const runtime = resolveCodexRuntime(packageSpec, ['app-server']);
+  const { fast } = splitFastModeSuffix(model ?? '');
+  const runtime = resolveCodexRuntime(packageSpec, ['app-server', ...codexFastModeArgs(fast)]);
 
   const backendOptions: CodexAppServerBackendOptions = {
     cwd: options.cwd,

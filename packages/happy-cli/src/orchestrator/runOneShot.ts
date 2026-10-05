@@ -2,9 +2,9 @@ import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { claudeCliPath } from '@/claude/claudeLocal';
 import { codexPackage } from '@/codex/package';
-import { resolveCodexRuntime } from '@/codex/codexRuntime';
+import { codexFastModeArgs, resolveCodexRuntime } from '@/codex/codexRuntime';
 import { logger } from '@/ui/logger';
-import { MODEL_MODE_DEFAULT, isModelModeForAgent, parseCodexModelMode, parseClaudeModelMode } from 'happy-wire';
+import { MODEL_MODE_DEFAULT, isModelModeForAgent, parseCodexModelMode, parseClaudeModelMode, splitFastModeSuffix } from 'happy-wire';
 import {
   ORCHESTRATOR_ENV_KEYS,
   type OrchestratorProvider,
@@ -111,14 +111,20 @@ export function buildSpawnPlan(
       };
     }
     case 'codex': {
-      const codexArgs = ['exec', '--dangerously-bypass-approvals-and-sandbox'];
+      // Fast mode is opt-in per task via a `-fast` model suffix. The model stays on the task, so a
+      // resumed or retried execution keeps the speed the task was submitted with.
+      const { mode: codexMode, fast } = splitFastModeSuffix(normalizedModelMode ?? '');
+      const codexArgs = ['exec', '--dangerously-bypass-approvals-and-sandbox', ...codexFastModeArgs(fast)];
+      if (fast) {
+        codexArgs.push('-c', 'service_tier="fast"');
+      }
       if (executionType === 'resume') {
         codexArgs.push('resume', childSessionId!, prompt);
       } else {
         codexArgs.push(prompt);
-        if (normalizedModelMode) {
-          if (isModelModeForAgent('codex', normalizedModelMode)) {
-            const parsed = parseCodexModelMode(normalizedModelMode);
+        if (codexMode && codexMode !== MODEL_MODE_DEFAULT) {
+          if (isModelModeForAgent('codex', codexMode)) {
+            const parsed = parseCodexModelMode(codexMode);
             if (parsed.family !== MODEL_MODE_DEFAULT) {
               codexArgs.push('--model', parsed.family);
               if (parsed.effort) {
@@ -126,7 +132,7 @@ export function buildSpawnPlan(
               }
             }
           } else {
-            codexArgs.push('--model', normalizedModelMode);
+            codexArgs.push('--model', codexMode);
           }
         }
       }

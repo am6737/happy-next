@@ -11,7 +11,7 @@ const orchestratorTaskSchema = z.object({
   provider: z.enum(['claude', 'codex', 'gemini'])
     .describe('AI agent provider to execute the task.'),
   model: z.string().min(1).max(128).optional()
-    .describe('Model mode for this provider; prefer orchestrator_get_context.data.modelModes[provider]. Use "default" for CLI default.'),
+    .describe('Model mode for this provider; prefer orchestrator_get_context.data.modelModes[provider]. Use "default" for CLI default. Codex only: append "-fast" (e.g. "gpt-5.5-high-fast") to run in fast mode, which uses more quota — off unless the user asks for it.'),
   prompt: z.string().min(1).max(65536),
   workingDirectory: z.string().max(512).optional()
     .describe('Absolute path for task execution. Defaults to the controller session working directory from get_context.'),

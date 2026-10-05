@@ -52,6 +52,46 @@ describe('runOneShot spawn plan', () => {
     expect(plan.args).toContain('continue');
   });
 
+  it('pins codex fast mode off by default so a service_tier in the user config cannot apply', () => {
+    const plan = buildSpawnPlan('codex', 'hello', '/tmp/workdir', 'gpt-5.5-high', 'initial');
+    const args = plan.args.join(' ');
+    expect(args).toContain('--disable fast_mode');
+    expect(args).not.toContain('--enable fast_mode');
+    expect(args).not.toContain('service_tier');
+
+    const noModel = buildSpawnPlan('codex', 'hello', '/tmp/workdir', undefined, 'initial');
+    expect(noModel.args.join(' ')).toContain('--disable fast_mode');
+  });
+
+  it('requests codex fast mode for a -fast model mode and keeps the model and effort', () => {
+    const plan = buildSpawnPlan('codex', 'hello', '/tmp/workdir', 'gpt-5.5-high-fast', 'initial');
+    const args = plan.args.join(' ');
+    expect(args).toContain('--enable fast_mode');
+    expect(args).not.toContain('--disable fast_mode');
+    expect(args).toContain('-c service_tier="fast"');
+    expect(args).toContain('--model gpt-5.5');
+    expect(args).toContain('-c model_reasoning_effort=high');
+    expect(plan.args).not.toContain('gpt-5.5-high-fast');
+  });
+
+  it('requests codex fast mode on the default model without passing --model', () => {
+    const plan = buildSpawnPlan('codex', 'hello', '/tmp/workdir', 'default-fast', 'initial');
+    expect(plan.args.join(' ')).toContain('-c service_tier="fast"');
+    expect(plan.args).not.toContain('--model');
+  });
+
+  it('keeps the codex speed of the task when resuming its session', () => {
+    const standard = buildSpawnPlan('codex', 'continue', '/tmp/workdir', 'gpt-5.5-high', 'resume', 'session-uuid');
+    expect(standard.args.join(' ')).toContain('--disable fast_mode');
+    expect(standard.args.indexOf('--disable')).toBeLessThan(standard.args.indexOf('resume'));
+
+    const fast = buildSpawnPlan('codex', 'continue', '/tmp/workdir', 'gpt-5.5-high-fast', 'resume', 'session-uuid');
+    expect(fast.args.join(' ')).toContain('--enable fast_mode');
+    expect(fast.args.join(' ')).toContain('-c service_tier="fast"');
+    expect(fast.args.indexOf('service_tier="fast"')).toBeLessThan(fast.args.indexOf('resume'));
+    expect(fast.args).not.toContain('--model');
+  });
+
   it('passes gemini model as --model argument and outputs json for initial session capture', () => {
     const plan = buildSpawnPlan('gemini', 'hello', '/tmp/workdir', 'gemini-2.5-pro', 'initial');
     expect(plan.command).toBe('gemini');

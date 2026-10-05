@@ -54,6 +54,7 @@ import type {
   StartSessionResult,
 } from '@/agent/core';
 import { logger } from '@/ui/logger';
+import { splitFastModeSuffix } from 'happy-wire';
 
 // ─── Options ────────────────────────────────────────────────────
 
@@ -99,11 +100,10 @@ export interface CodexAppServerBackendOptions {
 // ─── Model Resolution ──────────────────────────────────────────
 
 /** Strip `-fast` suffix from model name and extract service tier. */
-const FAST_SUFFIX = '-fast';
 export function resolveModel(model: string | null | undefined): { model: string | null; isFast: boolean } {
   if (!model) return { model: null, isFast: false };
-  if (model.endsWith(FAST_SUFFIX)) return { model: model.slice(0, -FAST_SUFFIX.length), isFast: true };
-  return { model, isFast: false };
+  const { mode, fast } = splitFastModeSuffix(model);
+  return { model: mode, isFast: fast };
 }
 
 // Event types that indicate real turn progress and should reset idle timeout.

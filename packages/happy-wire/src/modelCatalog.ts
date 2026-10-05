@@ -3,6 +3,16 @@ import { ModelCatalogSchema, type AgentFlavor, type ModelCatalog, type ModelCata
 
 export const MODEL_MODE_DEFAULT = 'default' as const;
 
+/** Trailing marker that asks for Codex fast mode, on a model id or a model mode (`gpt-5.5-high-fast`). */
+export const FAST_MODE_SUFFIX = '-fast' as const;
+
+/** Split the `-fast` marker off a model id or mode; `fast` says whether it was there. */
+export function splitFastModeSuffix(value: string): { mode: string; fast: boolean } {
+    return value.endsWith(FAST_MODE_SUFFIX)
+        ? { mode: value.slice(0, -FAST_MODE_SUFFIX.length), fast: true }
+        : { mode: value, fast: false };
+}
+
 export type CodexReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
 export type ClaudeReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 

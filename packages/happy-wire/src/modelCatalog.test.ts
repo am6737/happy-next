@@ -23,7 +23,21 @@ import {
     parseCodexModelMode,
     resolveLocalModelDisplay,
     resolveModelSelectionForFlavor,
+    splitFastModeSuffix,
 } from './modelCatalog';
+
+describe('splitFastModeSuffix', () => {
+    it('splits a trailing -fast off a model id or a composite mode', () => {
+        expect(splitFastModeSuffix('gpt-5.5-fast')).toEqual({ mode: 'gpt-5.5', fast: true });
+        expect(splitFastModeSuffix('gpt-5.5-high-fast')).toEqual({ mode: 'gpt-5.5-high', fast: true });
+        expect(splitFastModeSuffix('default-fast')).toEqual({ mode: 'default', fast: true });
+    });
+
+    it('leaves values without a trailing -fast unchanged', () => {
+        expect(splitFastModeSuffix('gpt-5.5-high')).toEqual({ mode: 'gpt-5.5-high', fast: false });
+        expect(splitFastModeSuffix('fast-model')).toEqual({ mode: 'fast-model', fast: false });
+    });
+});
 
 describe('modelCatalog', () => {
     it('validates model mode and flavor-specific mode', () => {

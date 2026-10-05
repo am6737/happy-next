@@ -76,6 +76,17 @@ export function resolveCodexRuntime(packageSpec: string, args: readonly string[]
   return runtime;
 }
 
+/**
+ * Pins the `fast_mode` feature on or off for one Codex process. Codex inherits a `service_tier`
+ * persisted in the user's config.toml (e.g. by `/fast`), so leaving the feature alone would run
+ * a session fast although fast mode was never asked for; disabling it overrides that tier.
+ * Asking for fast still needs the tier itself (`serviceTier` on thread start, `-c service_tier`
+ * for `codex exec`) — this only decides whether Codex may honour it.
+ */
+export function codexFastModeArgs(fast: boolean): string[] {
+  return fast ? ['--enable', 'fast_mode'] : ['--disable', 'fast_mode'];
+}
+
 /** Whether the pinned version is already on this machine, so starting it needs no download. */
 export function isCodexRuntimeWarm(packageSpec: string): boolean {
   const version = codexPackageVersion(packageSpec);

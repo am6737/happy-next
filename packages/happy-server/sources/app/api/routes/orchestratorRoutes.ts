@@ -19,6 +19,7 @@ import {
     getValidModelModesForAgent,
     isModelMode,
     isModelModeForAgent,
+    splitFastModeSuffix,
 } from "happy-wire";
 import {
     addTaskCount,
@@ -926,7 +927,9 @@ export function orchestratorRoutes(app: Fastify) {
                 normalizedTaskModels.push(undefined);
                 continue;
             }
-            if (isModelMode(model) && !isModelModeForAgent(task.provider, model)) {
+            // Codex tasks may carry a `-fast` marker on top of any valid mode; validate the mode itself.
+            const baseMode = task.provider === 'codex' ? splitFastModeSuffix(model).mode : model;
+            if (isModelMode(baseMode) && !isModelModeForAgent(task.provider, baseMode)) {
                 return sendError(reply, 400, 'INVALID_ARGUMENT', `Task seq ${index + 1} has invalid model "${model}" for provider "${task.provider}"`);
             }
             normalizedTaskModels.push(model);
