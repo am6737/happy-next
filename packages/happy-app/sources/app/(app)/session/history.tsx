@@ -72,11 +72,8 @@ const filterStyles = StyleSheet.create((theme) => ({
         alignItems: 'center',
         backgroundColor: theme.colors.surface,
         borderRadius: 10,
-        paddingHorizontal: 8,
+        paddingHorizontal: 10,
         height: 36,
-    },
-    searchIcon: {
-        marginRight: 6,
     },
     searchInput: {
         flex: 1,
@@ -549,7 +546,7 @@ export default function AgentHistoryPage() {
                 {/* Search box */}
                 <View style={filterStyles.searchContainer}>
                     <View style={filterStyles.searchInputWrapper}>
-                        <Ionicons name="search" size={16} color={theme.colors.textSecondary} style={filterStyles.searchIcon} />
+                        <Ionicons name="search" size={16} color={theme.colors.textSecondary} style={{ marginRight: 6 }} />
                         <TextInput
                             style={filterStyles.searchInput}
                             placeholder={t('agentHistory.searchPlaceholder')}

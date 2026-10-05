@@ -175,10 +175,7 @@ const styles = StyleSheet.create((theme) => ({
         alignItems: 'center',
         backgroundColor: theme.colors.surface,
         borderRadius: 10,
-        paddingHorizontal: 8,
-    },
-    searchIcon: {
-        marginRight: 6,
+        paddingHorizontal: 10,
     },
     searchInput: {
         flex: 1,
@@ -615,7 +612,7 @@ function SessionHistory() {
         <View>
             <View style={styles.searchContainer}>
                 <View style={styles.searchInputWrapper}>
-                    <Ionicons name="search" size={16} color={theme.colors.textSecondary} style={styles.searchIcon} />
+                    <Ionicons name="search" size={16} color={theme.colors.textSecondary} style={{ marginRight: 6 }} />
                     <TextInput
                         style={styles.searchInput}
                         placeholder={t('sessionHistory.searchPlaceholder')}
