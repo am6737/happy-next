@@ -10,6 +10,8 @@ import { CodeView } from '../CodeView';
 import { SmartDataView } from '../KeyValueView';
 import { OrchestratorStatusBadge } from '@/components/orchestrator/OrchestratorStatusBadge';
 import { sanitizeOrchestratorOutputSummary } from '@/components/orchestrator/display';
+import { OrchestratorContextCard } from './OrchestratorContextCard';
+import type { ParsedOrchestratorContext } from './orchestratorContextDisplay';
 import { formatToolOutputContent, isTrimmedToolOutput } from './toolOutputContent';
 import { createToolOutputLoadingCardStyles, formatToolOutputSummaryValue } from './toolOutputLoadingCard';
 import { parseMcpResult } from './parseMcpResult';
@@ -197,31 +199,6 @@ type ParsedOrchestratorRunFallback = {
     status?: string;
     summary?: ParsedOrchestratorSummary | null;
     tasks?: ParsedOrchestratorTask[];
-};
-
-type ParsedOrchestratorContext = {
-    controllerSessionId?: string;
-    machineId?: string;
-    workingDirectory?: string;
-    defaults?: {
-        mode?: string;
-        maxConcurrency?: number;
-        waitTimeoutMs?: number;
-        pollIntervalMs?: number;
-        retryMaxAttempts?: number;
-        retryBackoffMs?: number;
-    };
-    providers: string[];
-    modelModes: Record<string, string[]>;
-    machines: Array<{
-        machineId?: string;
-        name?: string;
-        providers?: string[];
-        active?: boolean;
-        online?: boolean;
-        dispatchReady?: boolean;
-        lastActiveAt?: string;
-    }>;
 };
 
 function renderOrchestratorStructuredOutput(tool: ToolCall, result: unknown, fallbackData: unknown): React.ReactElement | null {
@@ -440,51 +417,6 @@ function OrchestratorStructuredOutput({ context, runs: initialRuns }: { context:
                 })}
             </View>
         </LongPressCopy>
-    );
-}
-
-function OrchestratorContextCard({ context }: { context: ParsedOrchestratorContext }) {
-    const providers = context.providers.length > 0 ? context.providers.join(', ') : '-';
-    const defaultsLine = formatContextDefaults(context.defaults);
-
-    return (
-        <View style={styles.orchestratorRunCard}>
-            <Text style={styles.orchestratorTasksTitle}>orchestrator context</Text>
-            {context.controllerSessionId ? (
-                <Text style={styles.orchestratorTaskMeta}>controllerSessionId: {context.controllerSessionId}</Text>
-            ) : null}
-            {context.machineId ? (
-                <Text style={styles.orchestratorTaskMeta}>machineId: {context.machineId}</Text>
-            ) : null}
-            {context.workingDirectory ? (
-                <Text style={styles.orchestratorTaskMeta}>workingDirectory: {context.workingDirectory}</Text>
-            ) : null}
-            <Text style={styles.orchestratorTaskMeta}>providers: {providers}</Text>
-            {defaultsLine ? (
-                <Text style={styles.orchestratorTaskMeta}>defaults: {defaultsLine}</Text>
-            ) : null}
-            {Object.entries(context.modelModes).length > 0 ? (
-                <View style={styles.orchestratorContextSubsection}>
-                    <Text style={styles.orchestratorRunMetaLabel}>modelModes</Text>
-                    {Object.entries(context.modelModes).map(([provider, modes]) => (
-                        <Text key={provider} style={styles.orchestratorTaskMeta}>
-                            {provider}: {modes.join(', ')}
-                        </Text>
-                    ))}
-                </View>
-            ) : null}
-            {context.machines.length > 0 ? (
-                <View style={styles.orchestratorContextSubsection}>
-                    <Text style={styles.orchestratorRunMetaLabel}>machines</Text>
-                    {context.machines.map((machine, index) => (
-                        <Text key={machine.machineId ?? `machine-${index}`} style={styles.orchestratorTaskMeta}>
-                            {machine.name ? `${machine.name} (${machine.machineId ?? '-'})` : (machine.machineId ?? '-')} · providers:{machine.providers?.join(',') || '-'} · active:{formatBoolean(machine.active)} · online:{formatBoolean(machine.online)} · ready:{formatBoolean(machine.dispatchReady)}
-                            {machine.lastActiveAt ? ` · lastActiveAt:${machine.lastActiveAt}` : ''}
-                        </Text>
-                    ))}
-                </View>
-            ) : null}
-        </View>
     );
 }
 
@@ -793,27 +725,6 @@ function isPlainObject(value: unknown): value is Record<string, any> {
     return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 
-function formatBoolean(value: boolean | undefined): string {
-    if (value === undefined) {
-        return '-';
-    }
-    return value ? 'true' : 'false';
-}
-
-function formatContextDefaults(defaults: ParsedOrchestratorContext['defaults']): string | null {
-    if (!defaults) {
-        return null;
-    }
-    const parts: string[] = [];
-    if (defaults.mode) parts.push(`mode=${defaults.mode}`);
-    if (typeof defaults.maxConcurrency === 'number') parts.push(`maxConcurrency=${defaults.maxConcurrency}`);
-    if (typeof defaults.waitTimeoutMs === 'number') parts.push(`waitTimeoutMs=${defaults.waitTimeoutMs}`);
-    if (typeof defaults.pollIntervalMs === 'number') parts.push(`pollIntervalMs=${defaults.pollIntervalMs}`);
-    if (typeof defaults.retryMaxAttempts === 'number') parts.push(`retryMaxAttempts=${defaults.retryMaxAttempts}`);
-    if (typeof defaults.retryBackoffMs === 'number') parts.push(`retryBackoffMs=${defaults.retryBackoffMs}`);
-    return parts.length > 0 ? parts.join(', ') : null;
-}
-
 const styles = StyleSheet.create((theme) => ({
     ...createToolOutputLoadingCardStyles(theme),
     orchestratorContainer: {
@@ -886,9 +797,5 @@ const styles = StyleSheet.create((theme) => ({
     orchestratorTaskMeta: {
         fontSize: 12,
         color: theme.colors.textSecondary,
-    },
-    orchestratorContextSubsection: {
-        gap: 4,
-        marginTop: 2,
     },
 }));
