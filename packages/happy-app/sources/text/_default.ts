@@ -1948,6 +1948,8 @@ export const en = {
         processed: ({ duration }: { duration: string }) => `Processed ${duration}`,
         took: ({ duration }: { duration: string }) => `Took ${duration}`,
         foldedProcess: ({ duration, steps }: { duration: string; steps: number }) => `Took ${duration} · ${steps} steps`,
+        segmentSteps: ({ steps }: { steps: number }) => `Ran ${steps} ${steps === 1 ? 'step' : 'steps'}`,
+        segmentRunning: ({ steps }: { steps: number }) => `Running · ${steps} ${steps === 1 ? 'step' : 'steps'}`,
         foldProcess: 'Fold the steps',
         expandProcess: 'Show the steps',
         unknownTime: 'unknown time',

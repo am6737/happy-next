@@ -1933,6 +1933,8 @@ export const ru: TranslationStructure = {
         processed: ({ duration }: { duration: string }) => `Обработано ${duration}`,
         took: ({ duration }: { duration: string }) => `Заняло ${duration}`,
         foldedProcess: ({ duration, steps }: { duration: string; steps: number }) => `Заняло ${duration} · ${steps} шагов`,
+        segmentSteps: ({ steps }: { steps: number }) => `Выполнено шагов: ${steps}`,
+        segmentRunning: ({ steps }: { steps: number }) => `Выполняется · шагов: ${steps}`,
         foldProcess: 'Свернуть шаги',
         expandProcess: 'Показать шаги',
         unknownTime: 'неизвестное время',

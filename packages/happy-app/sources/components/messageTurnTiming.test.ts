@@ -204,8 +204,12 @@ describe('turns above the loaded window', () => {
 });
 
 describe('folded turns', () => {
+    // What the whole turn takes; the runs inside it have their own describe below.
     function fold(result: ReturnType<typeof analyzeTurns>, headerId: string) {
-        return result.foldById.get(headerId);
+        const process = result.foldById.get(headerId);
+        if (!process) return process;
+        const { segments: _segments, ...turn } = process;
+        return turn;
     }
 
     it('hides the process, keeping the row that opens it and the answer', () => {
@@ -493,6 +497,138 @@ describe('folded turns', () => {
         // The newer turn's own process is all it hides: its prompt is a boundary, not a row. That row
         // is the answer as well, so the line keeps its content and hides nothing at all.
         expect(fold(result, 'a2')).toEqual({ hiddenIds: [], steps: 0, snapshotId: null, answerId: 'a2' });
+    });
+});
+
+describe('runs of steps inside a folded turn', () => {
+    function segments(result: ReturnType<typeof analyzeTurns>, headerId: string) {
+        return result.foldById.get(headerId)?.segments;
+    }
+
+    function thinking(id: string, createdAt: number): Message {
+        return agent(id, createdAt, { isThinking: true });
+    }
+
+    it('splits a turn at the words the agent wrote between its steps', () => {
+        // Oldest first: three steps, a line of narration, two more steps, then the report.
+        const result = analyze([
+            agent('a1', 90),
+            tool('t6', 80),
+            tool('t5', 70),
+            agent('mid', 60),
+            tool('t3', 50),
+            tool('t2', 45),
+            tool('t1', 40),
+            user('u1', 10),
+        ]);
+        expect(segments(result, 't1')).toEqual([
+            { startId: 't1', hiddenIds: ['t2', 't3'], steps: 3, snapshotId: 't3', running: false },
+            { startId: 't5', hiddenIds: ['t6'], steps: 2, snapshotId: 't6', running: false },
+        ]);
+        // The turn's own line still takes all of it, the narration included.
+        expect(result.foldById.get('t1')).toMatchObject({
+            hiddenIds: ['t2', 't3', 'mid', 't5', 't6'],
+            steps: 5,
+            answerId: 'a1',
+        });
+    });
+
+    it('has no runs to split when the whole process is one', () => {
+        // The turn's line and the run's line would stand for the same rows.
+        const result = analyze([agent('a1', 50), tool('t3', 40), tool('t2', 35), tool('t1', 30), user('u1', 10)]);
+        expect(segments(result, 't1')).toEqual([]);
+    });
+
+    it('has no runs to split when the words are only the conclusion', () => {
+        const result = analyze([agent('a2', 60), agent('a1', 50), tool('t1', 30), user('u1', 10)]);
+        expect(segments(result, 't1')).toEqual([]);
+    });
+
+    it('counts the agent thinking as part of the run it happens in', () => {
+        const result = analyze([
+            agent('a1', 90),
+            tool('t3', 80),
+            thinking('th', 70),
+            tool('t2', 60),
+            agent('mid', 50),
+            tool('t1', 40),
+            user('u1', 10),
+        ]);
+        expect(segments(result, 't1')).toEqual([
+            { startId: 't1', hiddenIds: [], steps: 1, snapshotId: 't1', running: false },
+            { startId: 't2', hiddenIds: ['th', 't3'], steps: 2, snapshotId: 't3', running: false },
+        ]);
+    });
+
+    it('gives no line to a run where the agent only thought', () => {
+        const result = analyze([agent('a1', 90), tool('t1', 70), agent('mid', 60), thinking('th', 50), user('u1', 10)]);
+        expect(segments(result, 'th')).toEqual([
+            { startId: 't1', hiddenIds: [], steps: 1, snapshotId: 't1', running: false },
+        ]);
+    });
+
+    it('splits at a question the reader may have to answer', () => {
+        const result = analyze([agent('a1', 90), tool('t3', 80), question('q1', 70), tool('t1', 60), user('u1', 10)]);
+        expect(segments(result, 't1')).toEqual([
+            { startId: 't1', hiddenIds: [], steps: 1, snapshotId: 't1', running: false },
+            { startId: 't3', hiddenIds: [], steps: 1, snapshotId: 't3', running: false },
+        ]);
+    });
+
+    it('splits at a step waiting on a permission, and joins it once it is answered', () => {
+        const waiting = analyze([agent('a1', 90), tool('t3', 80), awaitingPermission('p1', 70), tool('t1', 60), user('u1', 10)]);
+        expect(segments(waiting, 't1')?.map((s) => s.startId)).toEqual(['t1', 't3']);
+
+        const answered = analyze([
+            agent('a1', 90),
+            tool('t3', 80),
+            awaitingPermission('p1', 70, 'approved'),
+            tool('t1', 60),
+            user('u1', 10),
+        ]);
+        // One run, so nothing to split.
+        expect(segments(answered, 't1')).toEqual([]);
+    });
+
+    it('splits at a notice the CLI wrote', () => {
+        const result = analyze([agent('a1', 90), tool('t3', 80), event('e1', 70), tool('t1', 60), user('u1', 10)]);
+        expect(segments(result, 't1')?.map((s) => s.startId)).toEqual(['t1', 't3']);
+    });
+
+    it('stops at the last step, leaving what follows it to the conclusion', () => {
+        const result = analyze([
+            agent('a1', 90),
+            thinking('th', 80),
+            tool('t2', 70),
+            agent('mid', 60),
+            tool('t1', 50),
+            user('u1', 10),
+        ]);
+        expect(segments(result, 't1')).toEqual([
+            { startId: 't1', hiddenIds: [], steps: 1, snapshotId: 't1', running: false },
+            { startId: 't2', hiddenIds: [], steps: 1, snapshotId: 't2', running: false },
+        ]);
+    });
+
+    it('marks the run a turn in flight has got to, and only that one', () => {
+        const rows = [tool('t2', 70), agent('mid', 60), tool('t1', 50), user('u1', 10)];
+        const running = analyze(rows, { inFlight: true });
+        expect(segments(running, 't1')?.map((s) => s.running)).toEqual([false, true]);
+        // Settled, the same runs are not in flight any more.
+        expect(segments(analyze(rows), 't1')?.map((s) => s.running)).toEqual([false, false]);
+    });
+
+    it('does not mark a run the agent has already written past', () => {
+        const result = analyze([agent('a2', 80), tool('t2', 70), agent('mid', 60), tool('t1', 50), user('u1', 10)], { inFlight: true });
+        expect(segments(result, 't1')?.map((s) => s.running)).toEqual([false, false]);
+    });
+
+    it('keeps its shape when the turn settles', () => {
+        // A turn that changed from one line to two as it finished would move the reader's page.
+        const rows = [agent('a1', 80), tool('t2', 70), agent('mid', 60), tool('t1', 50), user('u1', 10)];
+        const startIds = (inFlight: boolean) => segments(analyze(rows, { inFlight }), 't1')?.map((s) => s.startId);
+        expect(startIds(true)).toEqual(['t1', 't2']);
+        expect(startIds(false)).toEqual(['t1', 't2']);
     });
 });
 

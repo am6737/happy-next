@@ -1934,6 +1934,8 @@ export const ca: TranslationStructure = {
         processed: ({ duration }: { duration: string }) => `Processat ${duration}`,
         took: ({ duration }: { duration: string }) => `Ha trigat ${duration}`,
         foldedProcess: ({ duration, steps }: { duration: string; steps: number }) => `Ha trigat ${duration} · ${steps} passos`,
+        segmentSteps: ({ steps }: { steps: number }) => `Ha executat ${steps} passos`,
+        segmentRunning: ({ steps }: { steps: number }) => `Executant · ${steps} passos`,
         foldProcess: 'Replega els passos',
         expandProcess: 'Mostra els passos',
         unknownTime: 'temps desconegut',

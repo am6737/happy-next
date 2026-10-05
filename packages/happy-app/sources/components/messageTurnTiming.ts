@@ -59,6 +59,36 @@ export type TurnProcess = {
      * carries the line and its own content at once.
      */
     answerId: string | null;
+    /**
+     * The runs of steps inside the fold's reach, each with a line of its own, oldest first. Empty when
+     * the turn's whole process is one run — then the turn's line is the only line there is, and a
+     * second one standing for the same rows would just say it twice.
+     */
+    segments: TurnSegment[];
+};
+
+/**
+ * One run of steps between two rows that are not steps: the unit a turn folds in when the reader has
+ * the turn open and still wants the words the agent wrote between its steps.
+ *
+ * Words, a question card, a request waiting on the reader and a notice all end a run. They stay on
+ * screen whatever happens to the runs around them, so a turn reads as the agent wrote it — narration,
+ * a run of steps, narration — with each run one line instead of a column of tool rows.
+ *
+ * Like the turn's own fold, the line is drawn on the run's first row and takes that row's content:
+ * `hiddenIds` is the rest of the run, and the first row is never dropped from the list.
+ */
+export type TurnSegment = {
+    /** The run's first row: where its line is drawn. */
+    startId: string;
+    /** The rest of the run, oldest first. */
+    hiddenIds: string[];
+    /** Tool calls in the run, the first row included. */
+    steps: number;
+    /** The run's newest row, which is the one in flight while the run is still going. */
+    snapshotId: string;
+    /** The turn is still running and this run is where it has got to: nothing has followed it yet. */
+    running: boolean;
 };
 
 /** What the header above a turn's first row shows. */
@@ -176,8 +206,9 @@ function lastStepIndex(rows: Message[]): number {
  */
 function turnProcess(turn: Turn, settled: boolean): TurnProcess {
     const answerId = settled ? turn.lastTextId : null;
+    const lastStep = lastStepIndex(turn.rows);
     // A turn still working has no conclusion to spare: the line stands for the whole of it.
-    const reach = settled ? lastStepIndex(turn.rows) : turn.rows.length - 1;
+    const reach = settled ? lastStep : turn.rows.length - 1;
 
     const hiddenIds: string[] = [];
     let steps = 0;
@@ -196,7 +227,59 @@ function turnProcess(turn: Turn, settled: boolean): TurnProcess {
         // The row under the line is the one row of this set the list never drops: the line lives on it.
         if (row.id !== turn.headerId) hiddenIds.push(row.id);
     }
-    return { hiddenIds, steps, snapshotId, answerId };
+    return { hiddenIds, steps, snapshotId, answerId, segments: turnSegments(turn, lastStep, !settled) };
+}
+
+/** A row that belongs to a run of steps: a tool call the fold may take, or the agent thinking. */
+function isStepRow(row: Message): boolean {
+    if (foldMustKeepMessage(row)) return false;
+    return row.kind === 'tool-call' || (row.kind === 'agent-text' && row.isThinking === true);
+}
+
+/**
+ * The runs of steps in a turn, split wherever the agent said something or the reader has something to
+ * answer.
+ *
+ * Runs are cut at the last step, whether the turn is still running or not: what stands after it is
+ * the conclusion (or, for a turn still going, the words it has written since), and a run that
+ * stretched over it would swallow rows the reader is looking at. It also means a turn's shape does
+ * not change when it settles.
+ *
+ * A run with no tool call in it — the agent only thought — has no step to report and gets no line.
+ *
+ * A turn whose every foldable row is in one run has nothing to split, and answers with no segments:
+ * that run and the turn's own fold would be the same rows under two lines.
+ */
+function turnSegments(turn: Turn, lastStep: number, running: boolean): TurnSegment[] {
+    const segments: TurnSegment[] = [];
+    let run: Message[] = [];
+    let foldableRows = 0;
+    const closeRun = (endIndex: number) => {
+        const steps = run.filter((row) => row.kind === 'tool-call').length;
+        if (steps > 0) {
+            segments.push({
+                startId: run[0].id,
+                hiddenIds: run.slice(1).map((row) => row.id),
+                steps,
+                snapshotId: run[run.length - 1].id,
+                running: running && endIndex === turn.rows.length - 1,
+            });
+        }
+        run = [];
+    };
+    for (let index = 0; index <= lastStep; index++) {
+        const row = turn.rows[index];
+        if (!foldMustKeepMessage(row)) foldableRows++;
+        if (isStepRow(row)) {
+            run.push(row);
+        } else {
+            closeRun(index - 1);
+        }
+    }
+    closeRun(lastStep);
+
+    if (segments.length === 1 && 1 + segments[0].hiddenIds.length === foldableRows) return [];
+    return segments;
 }
 
 // The CLI stamps `taskCompleted` from its own clock; a stamp far ahead of ours

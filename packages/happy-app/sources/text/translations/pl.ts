@@ -1945,6 +1945,8 @@ export const pl: TranslationStructure = {
         processed: ({ duration }: { duration: string }) => `Przetworzono ${duration}`,
         took: ({ duration }: { duration: string }) => `Zajęło ${duration}`,
         foldedProcess: ({ duration, steps }: { duration: string; steps: number }) => `Zajęło ${duration} · ${steps} kroków`,
+        segmentSteps: ({ steps }: { steps: number }) => `Wykonano kroków: ${steps}`,
+        segmentRunning: ({ steps }: { steps: number }) => `W toku · kroków: ${steps}`,
         foldProcess: 'Zwiń kroki',
         expandProcess: 'Pokaż kroki',
         unknownTime: 'nieznany czas',

@@ -24,6 +24,7 @@ import { showCopiedToast, showToast } from '@/components/Toast';
 import { formatMessageTime, formatFullMessageTime } from '@/utils/messageTime';
 import { hapticsLight } from './haptics';
 import { TurnHeader } from './TurnHeader';
+import { SegmentFoldLine } from './SegmentFoldLine';
 import { useMessageTts } from '@/hooks/useMessageTts';
 import { userTextPresentation, type CollapsedTextReason } from './messageCollapse';
 
@@ -81,8 +82,30 @@ export const MessageView = (props: {
    * the row is torn down and rebuilt when a fold opens or closes.
    */
   foldBodyRef?: (el: HTMLElement | null) => void;
+  /**
+   * Whether the run of steps this row opens is showing one line instead of its rows. Undefined on a
+   * row that opens no run, or whose turn is folded as a whole — the turn's line stands for the run
+   * then. Unlike the turn's fold it is never kept back: a run's first row is a step, and the line
+   * takes its content.
+   */
+  segmentFolded?: boolean;
+  /**
+   * True while the run's line is closing: the row keeps its content until the animation has taken
+   * it away, the same way a turn's folded line keeps its row for the length of the slide.
+   */
+  segmentKeepsRow?: boolean;
+  /** Tool calls the run's line counts. */
+  segmentSteps?: number;
+  /** What the run is doing right now. Only a run the turn has got no further than has one. */
+  segmentSnapshot?: string;
+  /** The turn has got no further than this run. */
+  segmentRunning?: boolean;
+  /** Flip the fold on the run this row opens. Stable, so list rows keep their props. */
+  onToggleSegment?: (startId: string) => void;
+  /** The same as `foldBodyRef`, for a run's line: it clips the row's content under that line. */
+  segmentBodyRef?: (el: HTMLElement | null) => void;
 }) => {
-  const { message, foldFolded, foldSnapshot, onToggleFold } = props;
+  const { message, foldFolded, foldSnapshot, onToggleFold, segmentFolded, onToggleSegment } = props;
   const foldSteps = props.foldSteps ?? 0;
   // The folded line takes the place of the row it sits on — unless the fold kept this row: a settled
   // turn's answer, or a landmark, either of which can be the row the line itself sits on.
@@ -112,7 +135,13 @@ export const MessageView = (props: {
     </View>
   ) : null;
 
-  const body = foldHidesRow ? null : <RenderBlock
+  const handleToggleSegment = React.useCallback(() => {
+    onToggleSegment?.(message.id);
+  }, [onToggleSegment, message.id]);
+  // A run's line takes the place of the first row of the run, which is a step and never kept.
+  const segmentHidesRow = segmentFolded === true && props.segmentKeepsRow !== true;
+
+  const body = foldHidesRow || segmentHidesRow ? null : <RenderBlock
     message={props.message}
     metadata={props.metadata}
     sessionId={props.sessionId}
@@ -129,17 +158,38 @@ export const MessageView = (props: {
     isTurnStart={props.isTurnStart}
   />;
 
+  // The same wrapper for a run's line, around the content alone: the line is what the reader tapped
+  // and stays where it is while the content under it slides.
+  const runBody = Platform.OS === 'web' && segmentFolded !== undefined
+    ? <View ref={props.segmentBodyRef as unknown as React.Ref<View>} style={styles.foldBody}>{body}</View>
+    : body;
+  // In the same gutter as the turn's line, which is what lines the two up with the text between them.
+  const segmentLine = segmentFolded === undefined ? null : (
+    <View style={styles.turnHeaderRow}>
+      <SegmentFoldLine
+        folded={segmentFolded}
+        steps={props.segmentSteps ?? 0}
+        snapshot={props.segmentSnapshot}
+        running={props.segmentRunning === true}
+        onToggle={handleToggleSegment}
+      />
+    </View>
+  );
+  const content = segmentLine === null ? runBody : <>{segmentLine}{runBody}</>;
+
   return (
     <View style={styles.messageContainer} renderToHardwareTextureAndroid={true}>
       <View style={styles.messageContent}>
         {header}
         {/* Only on web, and only on a row that carries a fold: the wrapper keeps the flex column the
-            content used to sit in, so a row that folds lays out exactly as it did before. */}
+            content used to sit in, so a row that folds lays out exactly as it did before. It holds a
+            run's line too when the row carries both, so that the whole of what hangs under the turn's
+            line slides with it. */}
         {Platform.OS === 'web' && foldFolded !== undefined
           // The declared ref type is the component instance, because that is what a ref is on
           // native; on web it is the DOM element underneath, which is what the animation needs.
-          ? <View ref={props.foldBodyRef as unknown as React.Ref<View>} style={styles.foldBody}>{body}</View>
-          : body}
+          ? <View ref={props.foldBodyRef as unknown as React.Ref<View>} style={styles.foldBody}>{content}</View>
+          : content}
       </View>
     </View>
   );

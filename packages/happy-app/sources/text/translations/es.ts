@@ -1934,6 +1934,8 @@ export const es: TranslationStructure = {
         processed: ({ duration }: { duration: string }) => `Procesado ${duration}`,
         took: ({ duration }: { duration: string }) => `Tardó ${duration}`,
         foldedProcess: ({ duration, steps }: { duration: string; steps: number }) => `Tardó ${duration} · ${steps} pasos`,
+        segmentSteps: ({ steps }: { steps: number }) => `Ejecutó ${steps} pasos`,
+        segmentRunning: ({ steps }: { steps: number }) => `Ejecutando · ${steps} pasos`,
         foldProcess: 'Contraer los pasos',
         expandProcess: 'Mostrar los pasos',
         unknownTime: 'tiempo desconocido',

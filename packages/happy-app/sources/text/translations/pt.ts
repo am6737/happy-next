@@ -1934,6 +1934,8 @@ export const pt: TranslationStructure = {
         processed: ({ duration }: { duration: string }) => `Processado ${duration}`,
         took: ({ duration }: { duration: string }) => `Levou ${duration}`,
         foldedProcess: ({ duration, steps }: { duration: string; steps: number }) => `Levou ${duration} · ${steps} passos`,
+        segmentSteps: ({ steps }: { steps: number }) => `Executou ${steps} passos`,
+        segmentRunning: ({ steps }: { steps: number }) => `Executando · ${steps} passos`,
         foldProcess: 'Recolher os passos',
         expandProcess: 'Mostrar os passos',
         unknownTime: 'horário desconhecido',

@@ -414,6 +414,15 @@ const ChatRow = React.memo((props: {
     // The same, for the row that opens the fold: there the animated element is the row's content
     // inside `MessageView`, because the folded line above it must not move.
     foldBodyRef: ((el: HTMLElement | null) => void) | undefined,
+    // A run of steps' line, on the row that opens the run (see turnFold.ts). A row can carry this and
+    // the turn's own line both; `segmentBodyRef` is `foldBodyRef`'s counterpart for the run's.
+    segmentFolded: boolean | undefined,
+    segmentKeepsRow: boolean,
+    segmentSteps: number | undefined,
+    segmentSnapshot: string | undefined,
+    segmentRunning: boolean,
+    onToggleSegment: ((startId: string) => void) | undefined,
+    segmentBodyRef: ((el: HTMLElement | null) => void) | undefined,
     refCallback: (el: HTMLDivElement | null) => void,
 }) => {
     const { message, onForkMessage, forkTarget } = props;
@@ -454,6 +463,13 @@ const ChatRow = React.memo((props: {
                     foldSnapshot={props.foldSnapshot}
                     onToggleFold={props.onToggleFold}
                     foldBodyRef={props.foldBodyRef}
+                    segmentFolded={props.segmentFolded}
+                    segmentKeepsRow={props.segmentKeepsRow}
+                    segmentSteps={props.segmentSteps}
+                    segmentSnapshot={props.segmentSnapshot}
+                    segmentRunning={props.segmentRunning}
+                    onToggleSegment={props.onToggleSegment}
+                    segmentBodyRef={props.segmentBodyRef}
                 />
             </div>
         </div>
@@ -571,12 +587,19 @@ const ChatListInternal = React.memo((props: {
     // Read by the measurement pipeline, which runs from observer callbacks rather than a render.
     const hiddenIdsRef = useRef(folding.hiddenIds);
     hiddenIdsRef.current = folding.hiddenIds;
-    // What a tap on a fold line needs to know about that line, keyed by the row the line sits on:
-    // which rows the fold takes, and whether the line's own row is one of them. Filled by the rows
-    // loop below, so that `handleToggleFold` can stay stable for every row's memo.
-    const foldTapRef = useRef<Map<string, { hiddenIds: readonly string[]; keepsRow: boolean; folded: boolean }>>(
+    // What a tap on a turn's fold line needs to know about that line, keyed by the row the line sits
+    // on: whether the line's own row is one of the rows the fold takes, and which way the tap is going.
+    // Filled by the rows loop below, so that `handleToggleFold` can stay stable for every row's memo.
+    const foldTapRef = useRef<Map<string, { keepsRow: boolean; folded: boolean }>>(
         new Map(),
     );
+    // Whether a run's line is folded, by the row it is drawn on — what a tap on it needs to know to
+    // say which way the rows are about to go.
+    const segmentFoldedRef = useRef(folding.segmentControlByStartId);
+    segmentFoldedRef.current = folding.segmentControlByStartId;
+    // The row whose line the animation in flight belongs to, and which of the two lines it is. That row
+    // animates the content hanging under the line; every other row in the animation animates whole.
+    const foldLineRef = useRef<{ key: string; line: 'turn' | 'segment' } | null>(null);
     const listedMessagesRef = useRef(listedMessages);
     listedMessagesRef.current = listedMessages;
 
@@ -1662,12 +1685,14 @@ const ChatListInternal = React.memo((props: {
     // the line's own row animates the content hanging under it (see `useFoldAnimation`).
     const handleToggleFold = React.useCallback((headerId: string) => {
         const tap = foldTapRef.current.get(headerId);
+        // The rows the tap shows or hides, which are not always the rows the line stands for: a run
+        // inside the turn that stays folded stays hidden when the turn opens. Asked before the toggle.
+        const changed = folding.idsChangedBy({ turn: headerId });
         // The line's own row is one of the rows the fold takes — unless the fold leaves it standing,
         // in which case its content stays and only the process below it goes.
-        const keys = tap == null
-            ? [headerId]
-            : tap.keepsRow ? [...tap.hiddenIds] : [headerId, ...tap.hiddenIds];
+        const keys = tap?.keepsRow ? changed : [headerId, ...changed];
         if (tap) {
+            foldLineRef.current = { key: headerId, line: 'turn' };
             // The state the row is in *now* decides which way the bodies are about to go.
             foldAnim.start({ keys, direction: tap.folded ? 'expanding' : 'collapsing' });
         }
@@ -1677,7 +1702,20 @@ const ChatListInternal = React.memo((props: {
         folding.toggle(headerId);
         // `folding.toggle` and not `folding`: the object is rebuilt every render, so depending on it
         // would hand every mounted row a new callback prop on every commit and defeat their memo.
-    }, [folding.toggle, foldAnim.start]);
+    }, [folding.toggle, folding.idsChangedBy, foldAnim.start]);
+
+    // A tap on a run's line is the same thing one level down: the rest of the run takes no height, or
+    // takes it back, and the run's first row — which carries the line — animates the content under it.
+    const handleToggleSegment = React.useCallback((startId: string) => {
+        const folded = segmentFoldedRef.current.get(startId)?.folded;
+        const keys = [startId, ...folding.idsChangedBy({ segment: startId })];
+        if (folded !== undefined) {
+            foldLineRef.current = { key: startId, line: 'segment' };
+            foldAnim.start({ keys, direction: folded ? 'expanding' : 'collapsing' });
+        }
+        lastFoldTapRef.current = { at: performance.now(), keys: new Set(keys) };
+        folding.toggleSegment(startId);
+    }, [folding.toggleSegment, folding.idsChangedBy, foldAnim.start]);
 
     // The target of the in-flight jump. A second minimap click updates this so the running paging
     // loop retargets instead of the click being silently dropped.
@@ -2179,11 +2217,7 @@ const ChatListInternal = React.memo((props: {
             mustKeep: foldMustKeepMessage(item),
         });
         if (fold) {
-            foldTapRef.current.set(item.id, {
-                hiddenIds: process?.hiddenIds ?? [],
-                keepsRow: foldKeepsRow,
-                folded: fold.folded,
-            });
+            foldTapRef.current.set(item.id, { keepsRow: foldKeepsRow, folded: fold.folded });
         }
         // While the fold is closing, the row the line sits on keeps its content — clipped away by
         // the animation rather than taken away in a single frame. The fold is what the model already
@@ -2197,6 +2231,24 @@ const ChatListInternal = React.memo((props: {
             ? newestRowSnapshot({
                 hiddenIds: process?.hiddenIds ?? [],
                 lineRow: foldKeepsRow ? null : item,
+                messageById,
+                headlineOf: (tool) => toolTitle(tool, props.metadata),
+            })
+            : undefined;
+        // Present only on the row that opens a run of steps inside a turn the agent's words split. A
+        // turn folded as a whole draws no lines for its runs — its own line stands for all of them —
+        // except while it slides, when the runs are still on screen and must look as they did.
+        const segment = folding.segmentControlByStartId.get(item.id);
+        const segmentShown = segment !== undefined && (!segment.turnFolded || foldAnimating);
+        const foldLine = foldLineRef.current?.key === item.id ? foldLineRef.current.line : null;
+        // Like the turn's line, a run's closing keeps its first row's content until the slide has taken
+        // it away — but only when it is this run's own line that is closing; a run swept up in its
+        // turn's fold slides away as the line it was.
+        const segmentKeepsRow = foldAnimating && segment?.folded === true && foldLine === 'segment';
+        const segmentSnapshot = segmentShown && segment.folded && segment.running
+            ? newestRowSnapshot({
+                hiddenIds: segment.hiddenIds,
+                lineRow: item,
                 messageById,
                 headlineOf: (tool) => toolTitle(tool, props.metadata),
             })
@@ -2243,8 +2295,15 @@ const ChatListInternal = React.memo((props: {
                 // The row the line is drawn on animates the content inside it; every other row
                 // animates whole. Only a row the animation is actually playing on gets an element,
                 // so the ref map holds the rows in flight and nothing else.
-                outerRefCallback={foldAnimating && !fold ? foldAnimClipRef : undefined}
-                foldBodyRef={foldAnimating && fold ? foldAnimClipRef : undefined}
+                outerRefCallback={foldAnimating && foldLine === null ? foldAnimClipRef : undefined}
+                foldBodyRef={foldAnimating && foldLine === 'turn' ? foldAnimClipRef : undefined}
+                segmentFolded={segmentShown ? segment.folded : undefined}
+                segmentKeepsRow={segmentKeepsRow}
+                segmentSteps={segment?.steps}
+                segmentSnapshot={segmentSnapshot}
+                segmentRunning={segment?.running === true}
+                onToggleSegment={handleToggleSegment}
+                segmentBodyRef={foldAnimating && foldLine === 'segment' ? foldAnimClipRef : undefined}
                 refCallback={getRowRefCallback(item.id)}
             />
         );

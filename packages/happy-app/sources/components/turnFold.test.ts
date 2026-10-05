@@ -1,15 +1,27 @@
 import { describe, expect, it } from 'vitest';
-import { foldedLineKeepsRow, turnFoldControl } from './turnFold';
-import type { TurnProcess } from './messageTurnTiming';
+import { foldedLineKeepsRow, resolveTurnFolding, segmentFoldControl, turnFoldControl } from './turnFold';
+import type { TurnProcess, TurnSegment } from './messageTurnTiming';
 
 /** A process that hides `hidden` rows, `steps` of them tool calls. */
-function process(hidden: number, steps = hidden): TurnProcess {
+function process(hidden: number, steps = hidden, segments: TurnSegment[] = []): TurnProcess {
     const hiddenIds = Array.from({ length: hidden }, (_, i) => `row-${i}`);
     return {
         hiddenIds,
         steps,
         snapshotId: hiddenIds.length > 0 ? hiddenIds[hiddenIds.length - 1] : null,
         answerId: null,
+        segments,
+    };
+}
+
+/** A run of `hidden + 1` steps, drawn on `startId`. */
+function segment(startId: string, hidden: string[] = [], running = false): TurnSegment {
+    return {
+        startId,
+        hiddenIds: hidden,
+        steps: hidden.length + 1,
+        snapshotId: hidden.length > 0 ? hidden[hidden.length - 1] : startId,
+        running,
     };
 }
 
@@ -56,6 +68,92 @@ describe('turnFoldControl', () => {
         // A turn of prose and thinking with two tool calls in it: five rows go, two are steps.
         expect(turnFoldControl({ process: process(5, 2), enabled: true, override: undefined }))
             .toEqual({ folded: true, steps: 2 });
+    });
+});
+
+describe('a turn split into runs of steps', () => {
+    const split = process(4, 4, [segment('a', ['b']), segment('c', ['d'])]);
+
+    it('starts open however the setting reads, leaving the folding to its runs', () => {
+        expect(turnFoldControl({ process: split, enabled: true, override: undefined }))
+            .toEqual({ folded: false, steps: 4 });
+        expect(turnFoldControl({ process: split, enabled: false, override: undefined }))
+            .toEqual({ folded: false, steps: 4 });
+    });
+
+    it('still lets a tap fold the whole turn', () => {
+        expect(turnFoldControl({ process: split, enabled: true, override: true }))
+            .toEqual({ folded: true, steps: 4 });
+    });
+});
+
+describe('segmentFoldControl', () => {
+    const run = segment('a', ['b'], true);
+
+    it('starts as the setting says', () => {
+        expect(segmentFoldControl({ segment: run, enabled: true, override: undefined, turnFolded: false }))
+            .toEqual({ folded: true, steps: 2, running: true, hiddenIds: ['b'], turnFolded: false });
+        expect(segmentFoldControl({ segment: run, enabled: false, override: undefined, turnFolded: false }).folded)
+            .toBe(false);
+    });
+
+    it('lets a tap outrank the setting, both ways', () => {
+        expect(segmentFoldControl({ segment: run, enabled: true, override: false, turnFolded: false }).folded).toBe(false);
+        expect(segmentFoldControl({ segment: run, enabled: false, override: true, turnFolded: false }).folded).toBe(true);
+    });
+});
+
+describe('resolveTurnFolding', () => {
+    // One turn on `h`: a run on `h` itself and another on `c`, with words between them.
+    const turn = process(5, 4, [segment('h', ['b']), segment('c', ['d'])]);
+    const resolve = (
+        overrides: { turn?: [string, boolean][]; segment?: [string, boolean][]; enabled?: boolean } = {},
+    ) => resolveTurnFolding({
+        foldById: new Map([['h', turn]]),
+        enabled: overrides.enabled ?? true,
+        turnOverrides: new Map(overrides.turn ?? []),
+        segmentOverrides: new Map(overrides.segment ?? []),
+    });
+
+    it('hides what the folded runs hide, leaving the open turn and the words between them', () => {
+        const folding = resolve();
+        expect([...folding.hiddenIds].sort()).toEqual(['b', 'd']);
+        expect(folding.controlByHeaderId.get('h')).toEqual({ folded: false, steps: 4 });
+        expect([...folding.segmentControlByStartId.keys()]).toEqual(['h', 'c']);
+    });
+
+    it('hides the whole process once the turn is folded, whatever the runs say', () => {
+        const folding = resolve({ turn: [['h', true]], segment: [['h', false], ['c', false]] });
+        expect([...folding.hiddenIds].sort()).toEqual(turn.hiddenIds.slice().sort());
+    });
+
+    it('keeps a run open that the reader opened, and remembers it under a folded turn', () => {
+        const open = resolve({ segment: [['c', false]] });
+        expect([...open.hiddenIds]).toEqual(['b']);
+        const folded = resolve({ turn: [['h', true]], segment: [['c', false]] });
+        expect(folded.segmentControlByStartId.get('c')?.folded).toBe(false);
+    });
+
+    it('says on each run whether the turn above it is folded', () => {
+        expect(resolve().segmentControlByStartId.get('c')?.turnFolded).toBe(false);
+        expect(resolve({ turn: [['h', true]] }).segmentControlByStartId.get('c')?.turnFolded).toBe(true);
+    });
+
+    it('hides nothing of a run when the setting leaves runs open', () => {
+        expect(resolve({ enabled: false }).hiddenIds.size).toBe(0);
+    });
+
+    it('folds a turn that is one run by the setting, with no runs of its own', () => {
+        const single = process(2, 3);
+        const folding = resolveTurnFolding({
+            foldById: new Map([['h', single]]),
+            enabled: true,
+            turnOverrides: new Map(),
+            segmentOverrides: new Map(),
+        });
+        expect(folding.controlByHeaderId.get('h')?.folded).toBe(true);
+        expect(folding.segmentControlByStartId.size).toBe(0);
+        expect([...folding.hiddenIds]).toEqual(single.hiddenIds);
     });
 });
 
