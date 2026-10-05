@@ -117,3 +117,19 @@ export function formatCompactDuration(ms: number): string {
         .join(' ');
 }
 
+
+/**
+ * A running timer reading: `54.0s` under a minute, `02:03` under an hour, `01:02:03` from
+ * an hour on. Minutes and hours are zero-padded so the width only changes when a unit is added.
+ */
+export function formatElapsedClock(seconds: number): string {
+    const total = Math.max(0, seconds);
+    if (total < 60) {
+        return `${total.toFixed(1)}s`;
+    }
+    const whole = Math.floor(total);
+    const hours = Math.floor(whole / 3600);
+    const minutes = Math.floor((whole % 3600) / 60);
+    const mm = `${pad2(minutes)}:${pad2(whole % 60)}`;
+    return hours > 0 ? `${pad2(hours)}:${mm}` : mm;
+}

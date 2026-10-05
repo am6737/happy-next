@@ -14,7 +14,7 @@ vi.mock('@/text', () => ({
     },
 }));
 
-import { formatCompactDuration, formatDuration, formatMessageTime } from './messageTime';
+import { formatCompactDuration, formatDuration, formatElapsedClock, formatMessageTime } from './messageTime';
 
 // Fixed "now": Wednesday 2026-05-20 12:00 local time
 const NOW = new Date(2026, 4, 20, 12, 0, 0);
@@ -108,5 +108,25 @@ describe('formatCompactDuration', () => {
     it('floors to whole seconds and never goes negative', () => {
         expect(formatCompactDuration(1_999)).toBe('1s');
         expect(formatCompactDuration(-5_000)).toBe('0s');
+    });
+});
+
+describe('formatElapsedClock', () => {
+    it('shows seconds with one decimal under a minute', () => {
+        expect(formatElapsedClock(0)).toBe('0.0s');
+        expect(formatElapsedClock(54)).toBe('54.0s');
+        expect(formatElapsedClock(-3)).toBe('0.0s');
+    });
+
+    it('switches to mm:ss from a minute on', () => {
+        expect(formatElapsedClock(60)).toBe('01:00');
+        expect(formatElapsedClock(123)).toBe('02:03');
+        expect(formatElapsedClock(3599)).toBe('59:59');
+    });
+
+    it('switches to HH:mm:ss from an hour on', () => {
+        expect(formatElapsedClock(3600)).toBe('01:00:00');
+        expect(formatElapsedClock(3723)).toBe('01:02:03');
+        expect(formatElapsedClock(2993 + 100 * 3600)).toBe('100:49:53');
     });
 });
