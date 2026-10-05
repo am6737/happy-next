@@ -203,6 +203,7 @@ export const ru: TranslationStructure = {
         orchestratorLabelErrorMessage: 'Сообщение об ошибке',
         orchestratorLabelStarted: 'Начало',
         orchestratorLabelFinished: 'Окончание',
+        orchestratorLabelDuration: 'Длительность',
         orchestratorLabelExitCode: 'Код выхода',
         orchestratorLabelSignal: 'Сигнал',
         orchestratorLabelError: 'Ошибка',

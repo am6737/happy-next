@@ -9,10 +9,12 @@ import { layout } from '@/components/layout';
 import { useAuth } from '@/auth/AuthContext';
 import { getOrchestratorTask, type OrchestratorExecutionRecord, type OrchestratorTaskDetail, type OrchestratorTaskRecord } from '@/sync/apiOrchestrator';
 import { OrchestratorStatusBadge } from '@/components/orchestrator/OrchestratorStatusBadge';
+import { OrchestratorDuration } from '@/components/orchestrator/OrchestratorDuration';
 import {
     formatOrchestratorProviderLabel,
     resolveTaskMachineId,
     resolveMachineName,
+    resolveExecutionDurationMs,
     resolveOrchestratorExecutionPrompt,
     sanitizeOrchestratorOutputSummary,
     sortOrchestratorExecutionsByAttemptDesc,
@@ -114,6 +116,10 @@ const stylesheet = StyleSheet.create((theme) => ({
     },
     executionDetails: {
         paddingTop: 2,
+    },
+    executionDuration: {
+        fontSize: 12,
+        color: theme.colors.textSecondary,
     },
     detailLabel: {
         marginTop: 12,
@@ -376,6 +382,13 @@ export default function OrchestratorTaskDetailScreen() {
                                         {t('settings.orchestratorAttemptTitle', { attempt, machineId })}
                                     </Text>
                                     <View style={styles.executionHeaderStatus}>
+                                        {execution ? (
+                                            <OrchestratorDuration
+                                                style={styles.executionDuration}
+                                                live={execution.status === 'running'}
+                                                resolve={(now) => resolveExecutionDurationMs(execution, now)}
+                                            />
+                                        ) : null}
                                         <OrchestratorStatusBadge status={status} />
                                         <Ionicons
                                             name="chevron-down"
@@ -406,6 +419,12 @@ export default function OrchestratorTaskDetailScreen() {
                             <View style={styles.executionDetails}>
                                 <Text style={styles.row}>{t('settings.orchestratorLabelStarted')}: {formatDate(execution.startedAt)}</Text>
                                 <Text style={styles.row}>{t('settings.orchestratorLabelFinished')}: {formatDate(execution.finishedAt)}</Text>
+                                <OrchestratorDuration
+                                    style={styles.row}
+                                    label={t('settings.orchestratorLabelDuration')}
+                                    live={execution.status === 'running'}
+                                    resolve={(now) => resolveExecutionDurationMs(execution, now)}
+                                />
                                 <Text style={styles.row}>{t('settings.orchestratorLabelExitCode')}: {execution.exitCode ?? '-'}</Text>
                                 {!!execution.signal && <Text style={styles.row}>{t('settings.orchestratorLabelSignal')}: {execution.signal}</Text>}
 

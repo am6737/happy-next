@@ -242,6 +242,7 @@ export const ca: TranslationStructure = {
         orchestratorLabelErrorMessage: 'Missatge d\'error',
         orchestratorLabelStarted: 'Iniciat',
         orchestratorLabelFinished: 'Finalitzat',
+        orchestratorLabelDuration: 'Durada',
         orchestratorLabelExitCode: 'Codi de sortida',
         orchestratorLabelSignal: 'Senyal',
         orchestratorLabelError: 'Error',

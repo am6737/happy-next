@@ -243,6 +243,7 @@ export const zhHant: TranslationStructure = {
         orchestratorLabelErrorMessage: '錯誤訊息',
         orchestratorLabelStarted: '開始時間',
         orchestratorLabelFinished: '結束時間',
+        orchestratorLabelDuration: '耗時',
         orchestratorLabelExitCode: '退出代碼',
         orchestratorLabelSignal: '訊號',
         orchestratorLabelError: '錯誤',

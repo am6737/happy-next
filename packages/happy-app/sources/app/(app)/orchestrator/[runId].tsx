@@ -12,12 +12,15 @@ import type { ActionMenuItem } from '@/components/ActionMenu';
 import { cancelOrchestratorRun, getOrchestratorRun, pendOrchestratorRun, type OrchestratorRunDetail } from '@/sync/apiOrchestrator';
 import { OrchestratorStatusBadge } from '@/components/orchestrator/OrchestratorStatusBadge';
 import { OrchestratorProgressBar } from '@/components/orchestrator/OrchestratorProgressBar';
+import { OrchestratorDuration } from '@/components/orchestrator/OrchestratorDuration';
 import {
     formatOrchestratorProviderLabel,
     resolveTaskMachineId,
     resolveMachineName,
     resolveOrchestratorAttemptDisplay,
     resolveOrchestratorSummaryLineDataFromTasks,
+    resolveRunDurationMs,
+    resolveTaskDurationMs,
     sanitizeOrchestratorOutputSummary,
 } from '@/components/orchestrator/display';
 import { useMachineNameMap } from '@/hooks/useMachineNameMap';
@@ -341,6 +344,12 @@ export default function OrchestratorRunDetailScreen() {
                     <Text style={styles.summaryLine}>{t('settings.orchestratorLabelRunId')}: {run.runId}</Text>
                     <Text style={styles.summaryLine}>{t('settings.orchestratorLabelCreated')}: {formatDate(run.createdAt)}</Text>
                     <Text style={styles.summaryLine}>{t('settings.orchestratorLabelUpdated')}: {formatDate(run.updatedAt)}</Text>
+                    <OrchestratorDuration
+                        style={styles.summaryLine}
+                        label={t('settings.orchestratorLabelDuration')}
+                        live={isRunActive(run.status)}
+                        resolve={(now) => resolveRunDurationMs(run, now)}
+                    />
                     <View style={styles.progressBar}>
                         <OrchestratorProgressBar summary={run.summary} />
                     </View>
@@ -383,6 +392,12 @@ export default function OrchestratorRunDetailScreen() {
                                     </Text>
                                 ) : null;
                             })()}
+                            <OrchestratorDuration
+                                style={styles.taskMeta}
+                                label={t('settings.orchestratorLabelDuration')}
+                                live={task.status === 'running'}
+                                resolve={(now) => resolveTaskDurationMs(task, now)}
+                            />
                             {task.taskKey ? (
                                 <Text style={styles.taskMeta}>{t('settings.orchestratorLabelTaskKey')}: {task.taskKey}</Text>
                             ) : null}

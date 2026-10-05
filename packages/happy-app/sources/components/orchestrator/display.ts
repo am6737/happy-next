@@ -1,4 +1,4 @@
-import type { OrchestratorExecutionRecord, OrchestratorRunSummary, OrchestratorTaskRecord } from '@/sync/apiOrchestrator';
+import type { OrchestratorExecutionRecord, OrchestratorRunDetail, OrchestratorRunStatus, OrchestratorRunSummary, OrchestratorTaskRecord } from '@/sync/apiOrchestrator';
 import { MODEL_MODE_DEFAULT } from 'happy-wire';
 
 function isMarkdownFenceLine(value: string): boolean {
@@ -132,4 +132,47 @@ export function pickLatestAssistantMessage(messages: ReadonlyArray<{ role: strin
         }
     }
     return null;
+}
+
+// Lives here rather than in status.ts, which pulls in UI modules these pure helpers must not need
+export function isRunActive(status: OrchestratorRunStatus): boolean {
+    return status === 'queued' || status === 'running' || status === 'canceling';
+}
+
+function elapsedMs(startIso: string, endMs: number): number | null {
+    const start = Date.parse(startIso);
+    return Number.isNaN(start) || Number.isNaN(endMs) ? null : Math.max(0, endMs - start);
+}
+
+/**
+ * How long one execution has been running, or ran. Not started yet: null. A running one is
+ * measured up to `now`; a finished one up to the time the daemon reported (both come from the
+ * machine's clock), falling back to the last update when that is missing.
+ */
+export function resolveExecutionDurationMs(
+    execution: Pick<OrchestratorExecutionRecord, 'status' | 'startedAt' | 'finishedAt' | 'updatedAt'>,
+    now: number,
+): number | null {
+    if (!execution.startedAt) {
+        return null;
+    }
+    const end = execution.status === 'running' ? now : Date.parse(execution.finishedAt ?? execution.updatedAt);
+    return elapsedMs(execution.startedAt, end);
+}
+
+/** A task's time spent running: its attempts added up, so waiting between retries is not counted. */
+export function resolveTaskDurationMs(task: Pick<OrchestratorTaskRecord, 'executions'>, now: number): number | null {
+    const durations = (task.executions ?? [])
+        .map((execution) => resolveExecutionDurationMs(execution, now))
+        .filter((duration): duration is number => duration !== null);
+    return durations.length > 0 ? durations.reduce((sum, duration) => sum + duration, 0) : null;
+}
+
+/** A run's total time from creation, which includes queueing, up to now or to when it ended. */
+export function resolveRunDurationMs(
+    run: Pick<OrchestratorRunDetail, 'status' | 'createdAt' | 'updatedAt' | 'completedAt'>,
+    now: number,
+): number | null {
+    const end = isRunActive(run.status) ? now : Date.parse(run.completedAt ?? run.updatedAt);
+    return elapsedMs(run.createdAt, end);
 }

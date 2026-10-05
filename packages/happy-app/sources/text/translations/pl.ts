@@ -253,6 +253,7 @@ export const pl: TranslationStructure = {
         orchestratorLabelErrorMessage: 'Komunikat błędu',
         orchestratorLabelStarted: 'Rozpoczęto',
         orchestratorLabelFinished: 'Zakończono',
+        orchestratorLabelDuration: 'Czas trwania',
         orchestratorLabelExitCode: 'Kod wyjścia',
         orchestratorLabelSignal: 'Sygnał',
         orchestratorLabelError: 'Błąd',

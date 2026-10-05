@@ -244,6 +244,7 @@ export const zhHans: TranslationStructure = {
         orchestratorLabelErrorMessage: '错误信息',
         orchestratorLabelStarted: '开始时间',
         orchestratorLabelFinished: '结束时间',
+        orchestratorLabelDuration: '耗时',
         orchestratorLabelExitCode: '退出代码',
         orchestratorLabelSignal: '信号',
         orchestratorLabelError: '错误',

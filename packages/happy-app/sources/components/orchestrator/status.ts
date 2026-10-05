@@ -29,9 +29,7 @@ export function getStatusLabel(status: AnyStatus): string {
     }
 }
 
-export function isRunActive(status: OrchestratorRunStatus): boolean {
-    return status === 'queued' || status === 'running' || status === 'canceling';
-}
+export { isRunActive } from './display';
 
 export function getStatusColor(theme: UnistylesThemes['light'], status: AnyStatus): string {
     switch (status) {

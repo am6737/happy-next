@@ -3,10 +3,13 @@ import {
     formatOrchestratorProviderLabel,
     pickLatestAssistantMessage,
     resolveTaskMachineId,
+    resolveExecutionDurationMs,
     resolveMachineName,
     resolveOrchestratorAttemptDisplay,
     resolveOrchestratorExecutionPrompt,
     resolveOrchestratorSummaryLineData,
+    resolveRunDurationMs,
+    resolveTaskDurationMs,
     sanitizeOrchestratorOutputSummary,
     shortenMachineId,
     sortOrchestratorExecutionsByAttemptDesc,
@@ -126,5 +129,51 @@ describe('orchestrator display helpers', () => {
         ])).toBe('kept');
         expect(pickLatestAssistantMessage([{ role: 'user', content: 'only prompt' }])).toBeNull();
         expect(pickLatestAssistantMessage([])).toBeNull();
+    });
+
+    describe('durations', () => {
+        const at = (iso: string) => Date.parse(iso);
+        const execution = (overrides: Record<string, unknown>) => ({
+            status: 'completed',
+            startedAt: '2026-05-20T10:00:00.000Z',
+            finishedAt: '2026-05-20T10:03:12.000Z',
+            updatedAt: '2026-05-20T10:03:13.000Z',
+            ...overrides,
+        }) as any;
+
+        it('measures a finished execution from start to finish', () => {
+            expect(resolveExecutionDurationMs(execution({}), at('2026-05-20T12:00:00.000Z'))).toBe(192_000);
+        });
+
+        it('measures a running execution up to now', () => {
+            expect(resolveExecutionDurationMs(execution({ status: 'running', finishedAt: null }), at('2026-05-20T10:00:42.000Z'))).toBe(42_000);
+        });
+
+        it('falls back to the last update when a finished execution has no finish time', () => {
+            expect(resolveExecutionDurationMs(execution({ finishedAt: null }), at('2026-05-20T12:00:00.000Z'))).toBe(193_000);
+        });
+
+        it('has no duration before the execution started, and never goes negative', () => {
+            expect(resolveExecutionDurationMs(execution({ status: 'dispatching', startedAt: null, finishedAt: null }), Date.now())).toBeNull();
+            expect(resolveExecutionDurationMs(execution({ status: 'running', finishedAt: null }), at('2026-05-20T09:00:00.000Z'))).toBe(0);
+        });
+
+        it('adds up the attempts of a task and ignores those that never started', () => {
+            const now = at('2026-05-20T11:00:00.000Z');
+            expect(resolveTaskDurationMs({ executions: [
+                execution({}),
+                execution({ startedAt: '2026-05-20T10:10:00.000Z', finishedAt: '2026-05-20T10:10:30.000Z' }),
+                execution({ status: 'dispatching', startedAt: null, finishedAt: null }),
+            ] }, now)).toBe(222_000);
+            expect(resolveTaskDurationMs({ executions: [] }, now)).toBeNull();
+            expect(resolveTaskDurationMs({ executions: undefined }, now)).toBeNull();
+        });
+
+        it('measures a run from creation up to now while active and up to completion once ended', () => {
+            const run = { createdAt: '2026-05-20T10:00:00.000Z', updatedAt: '2026-05-20T10:09:00.000Z', completedAt: '2026-05-20T10:08:00.000Z' };
+            expect(resolveRunDurationMs({ ...run, status: 'running', completedAt: null }, at('2026-05-20T10:05:00.000Z'))).toBe(300_000);
+            expect(resolveRunDurationMs({ ...run, status: 'completed' }, at('2026-05-20T12:00:00.000Z'))).toBe(480_000);
+            expect(resolveRunDurationMs({ ...run, status: 'cancelled', completedAt: null }, at('2026-05-20T12:00:00.000Z'))).toBe(540_000);
+        });
     });
 });

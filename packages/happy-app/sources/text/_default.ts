@@ -249,6 +249,7 @@ export const en = {
         orchestratorLabelErrorMessage: 'Error Message',
         orchestratorLabelStarted: 'Started',
         orchestratorLabelFinished: 'Finished',
+        orchestratorLabelDuration: 'Duration',
         orchestratorLabelExitCode: 'Exit Code',
         orchestratorLabelSignal: 'Signal',
         orchestratorLabelError: 'Error',

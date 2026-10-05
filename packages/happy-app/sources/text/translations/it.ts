@@ -271,6 +271,7 @@ export const it: TranslationStructure = {
         orchestratorLabelErrorMessage: 'Messaggio di errore',
         orchestratorLabelStarted: 'Iniziato',
         orchestratorLabelFinished: 'Terminato',
+        orchestratorLabelDuration: 'Durata',
         orchestratorLabelExitCode: 'Codice di uscita',
         orchestratorLabelSignal: 'Segnale',
         orchestratorLabelError: 'Errore',

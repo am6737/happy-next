@@ -93,3 +93,27 @@ export function formatDuration(ms: number): string {
     if (seconds > 0 || parts.length === 0) parts.push(t('time.durationSeconds', { count: seconds }));
     return parts.join(' ');
 }
+
+/**
+ * A duration for tight spaces, at most two units: `42秒`, `3分钟 12秒`, `2小时 5分钟`
+ * (localized). It starts at the largest non-empty unit and adds only the next one down, so
+ * seconds disappear once an hour is reached. Hours do not roll over into days.
+ */
+export function formatCompactDuration(ms: number): string {
+    const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+    const units = [
+        { key: 'time.durationHours', count: Math.floor(totalSeconds / 3600) },
+        { key: 'time.durationMinutes', count: Math.floor((totalSeconds % 3600) / 60) },
+        { key: 'time.durationSeconds', count: totalSeconds % 60 },
+    ] as const;
+    const largest = units.findIndex((unit) => unit.count > 0);
+    if (largest === -1) {
+        return t('time.durationSeconds', { count: 0 });
+    }
+    return units
+        .slice(largest, largest + 2)
+        .filter((unit) => unit.count > 0)
+        .map((unit) => t(unit.key, { count: unit.count }))
+        .join(' ');
+}
+

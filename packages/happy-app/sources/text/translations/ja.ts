@@ -274,6 +274,7 @@ export const ja: TranslationStructure = {
         orchestratorLabelErrorMessage: 'エラーメッセージ',
         orchestratorLabelStarted: '開始',
         orchestratorLabelFinished: '終了',
+        orchestratorLabelDuration: '所要時間',
         orchestratorLabelExitCode: '終了コード',
         orchestratorLabelSignal: 'シグナル',
         orchestratorLabelError: 'エラー',

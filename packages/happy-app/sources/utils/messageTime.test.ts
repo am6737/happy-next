@@ -14,7 +14,7 @@ vi.mock('@/text', () => ({
     },
 }));
 
-import { formatDuration, formatMessageTime } from './messageTime';
+import { formatCompactDuration, formatDuration, formatMessageTime } from './messageTime';
 
 // Fixed "now": Wednesday 2026-05-20 12:00 local time
 const NOW = new Date(2026, 4, 20, 12, 0, 0);
@@ -80,5 +80,33 @@ describe('formatDuration', () => {
     it('floors to whole seconds and never goes negative', () => {
         expect(formatDuration(1_999)).toBe('1s');
         expect(formatDuration(-5_000)).toBe('0s');
+    });
+});
+
+describe('formatCompactDuration', () => {
+    it('shows only seconds below a minute', () => {
+        expect(formatCompactDuration(0)).toBe('0s');
+        expect(formatCompactDuration(42_000)).toBe('42s');
+    });
+
+    it('shows minutes and seconds from a minute up to an hour', () => {
+        expect(formatCompactDuration(60_000)).toBe('1m');
+        expect(formatCompactDuration(192_000)).toBe('3m 12s');
+        expect(formatCompactDuration(59 * 60_000 + 59_000)).toBe('59m 59s');
+    });
+
+    it('shows hours and minutes from an hour up, dropping the seconds', () => {
+        expect(formatCompactDuration(3_600_000)).toBe('1h');
+        expect(formatCompactDuration(3_600_000 + 42_000)).toBe('1h');
+        expect(formatCompactDuration(2 * 3_600_000 + 5 * 60_000 + 42_000)).toBe('2h 5m');
+    });
+
+    it('keeps counting hours instead of rolling over into days', () => {
+        expect(formatCompactDuration(30 * 3_600_000 + 5 * 60_000)).toBe('30h 5m');
+    });
+
+    it('floors to whole seconds and never goes negative', () => {
+        expect(formatCompactDuration(1_999)).toBe('1s');
+        expect(formatCompactDuration(-5_000)).toBe('0s');
     });
 });
