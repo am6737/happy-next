@@ -1148,6 +1148,23 @@ describe('orchestrator integration paths', () => {
         await app.close();
     });
 
+    it('rejects an obviously incompatible unknown provider model', async () => {
+        const app = await createApp();
+        const submit = await app.inject({
+            method: 'POST',
+            url: '/v1/orchestrator/submit',
+            headers: { 'x-user-id': 'user-1' },
+            payload: {
+                title: 'invalid-unknown-task-model',
+                tasks: [{ provider: 'gemini', model: 'claude-sonnet-9-20270101', prompt: 'work' }],
+            },
+        });
+
+        expect(submit.statusCode).toBe(400);
+        expect(submit.json().error.code).toBe('INVALID_ARGUMENT');
+        await app.close();
+    });
+
     it('normalizes default model and persists model in dispatch/execution/task responses', async () => {
         const app = await createApp();
         const submit = await app.inject({
