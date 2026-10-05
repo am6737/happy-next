@@ -11,7 +11,7 @@ import { Typography } from '@/constants/Typography';
 import { StatusDot } from './StatusDot';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { sessionArchive } from '@/sync/ops';
-import { storage, useSessionHasDraft } from '@/sync/storage';
+import { storage, useOrchestratorRunningTaskCount, useSessionHasDraft } from '@/sync/storage';
 import { Modal } from '@/modal';
 import { t } from '@/text';
 import { useNavigateToSession } from '@/hooks/useNavigateToSession';
@@ -213,6 +213,19 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
     // Gap between the title and the right-hand status mark.
     statusMark: {
         marginLeft: 8,
+    },
+    // Delegated tasks still running under this session. Sits beside the status mark rather than
+    // competing for its slot: it is a fact about the session, not one of its states.
+    taskMark: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginLeft: 8,
+    },
+    taskMarkText: {
+        fontSize: 11,
+        marginLeft: 2,
+        color: theme.colors.textSecondary,
+        ...Typography.default('semiBold'),
     },
 }));
 
@@ -418,6 +431,7 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder, isCardFir
     const sessionStatus = useSessionStatus(session);
     const { theme } = useUnistyles();
     const hasDraft = useSessionHasDraft(session.id);
+    const runningTaskCount = useOrchestratorRunningTaskCount(session.id);
     const sessionName = getSessionName(session);
     const navigateToSession = useNavigateToSession();
     const dismissToHome = useDismissToHome();
@@ -535,7 +549,16 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder, isCardFir
                     >
                         {sessionName}
                     </Text>
-                    {/* The only mark a compact row draws, at the far end so it can never move the
+                    {/* Delegated tasks running under this session, before the status mark. */}
+                    {runningTaskCount > 0 && (
+                        <View style={styles.taskMark}>
+                            <Ionicons name="layers-outline" size={12} color={theme.colors.textSecondary} />
+                            <Text style={styles.taskMarkText}>
+                                {runningTaskCount > 99 ? '99+' : runningTaskCount}
+                            </Text>
+                        </View>
+                    )}
+                    {/* The status mark a compact row draws, at the far end so it can never move the
                         title. Restricted to the things worth interrupting for — see below. */}
                     {(() => {
                         // Finished while you were away. The one signal here that is not a session
