@@ -5,6 +5,7 @@ import Animated, { useAnimatedStyle, type SharedValue } from 'react-native-reani
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardDock } from './KeyboardDock';
 import { COMPOSER_MARGIN, floatingComposerBottomInset } from './floatingComposer';
+import { ComposerKeyboardOffsetContext } from './composerKeyboardOffset';
 
 
 interface AgentContentViewProps {
@@ -42,6 +43,7 @@ export const AgentContentView: React.FC<AgentContentViewProps> = React.memo(({ i
             }
         };
         return (
+            <ComposerKeyboardOffsetContext.Provider value={KeyboardDock ? Math.max(0, bottomInset - COMPOSER_MARGIN) : bottomInset - COMPOSER_MARGIN}>
             <View style={styles.root}>
                 {content && (
                     <View style={StyleSheet.absoluteFillObject}>
@@ -77,11 +79,13 @@ export const AgentContentView: React.FC<AgentContentViewProps> = React.memo(({ i
                     </KeyboardStickyView>
                 )}
             </View>
+            </ComposerKeyboardOffsetContext.Provider>
         );
     }
 
     if (!safeAreaLayout) {
         return (
+            <ComposerKeyboardOffsetContext.Provider value={safeArea.bottom}>
             <View style={styles.legacyRoot}>
                 <View style={styles.legacyContent}>
                     {content && (
@@ -105,10 +109,12 @@ export const AgentContentView: React.FC<AgentContentViewProps> = React.memo(({ i
                     {input}
                 </KeyboardStickyView>
             </View>
+            </ComposerKeyboardOffsetContext.Provider>
         );
     }
 
     return (
+        <ComposerKeyboardOffsetContext.Provider value={safeArea.bottom - COMPOSER_MARGIN}>
         <SafeAreaView edges={['bottom']} style={styles.root}>
             <View style={styles.contentArea}>
                 {content}
@@ -128,6 +134,7 @@ export const AgentContentView: React.FC<AgentContentViewProps> = React.memo(({ i
                 {input}
             </KeyboardStickyView>
         </SafeAreaView>
+        </ComposerKeyboardOffsetContext.Provider>
     );
 });
 

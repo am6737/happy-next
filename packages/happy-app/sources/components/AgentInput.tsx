@@ -19,6 +19,8 @@ import { applySuggestion } from './autocomplete/applySuggestion';
 import { ABORT_ESCAPE_WINDOW_MS, resolveEscapeAbort, shouldSendOnEnter } from './agentInputKeyboard';
 import { GitStatusBadge, useHasLoadedGitStatus } from './GitStatusBadge';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
+import { KeyboardEvents, useKeyboardState } from 'react-native-keyboard-controller';
+import { ComposerKeyboardOffsetContext } from './composerKeyboardOffset';
 import { useSetting } from '@/sync/storage';
 import { Theme } from '@/theme';
 import { t } from '@/text';
@@ -647,6 +649,12 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
     const [isContextDetailsPinned, setIsContextDetailsPinned] = React.useState(false);
     const [contextDetailsAnchor, setContextDetailsAnchor] = React.useState<{ x: number; y: number; width: number; height: number } | null>(null);
     const contextDetailsAnchorRef = React.useRef<View>(null);
+    const composerKeyboardOffset = React.useContext(ComposerKeyboardOffsetContext);
+    const keyboardHeight = useKeyboardState((state) => state.height);
+    // measureInWindow reads layout, which the keyboard lift of the composer never touches — see
+    // ComposerKeyboardOffsetContext. Read at press time so the keyboard is already settled.
+    const composerKeyboardLiftRef = React.useRef(0);
+    composerKeyboardLiftRef.current = composerKeyboardOffset === null ? 0 : Math.max(0, keyboardHeight - composerKeyboardOffset);
     const contextDetailsHoverTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
     const isContextDetailsVisible = isContextDetailsHovered || isContextDetailsPinned;
     const isContextDetailsInlineVisible = isContextDetailsHovered || (Platform.OS === 'web' && isContextDetailsPinned);
@@ -667,6 +675,18 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
         }
     }, [contextWarning]);
 
+    // The popover is placed once, at press time, and the composer then moves with the keyboard:
+    // close it rather than leave it hanging where the composer used to be. The `Will` events fire as
+    // the keyboard starts to move; useKeyboardState only flips once the animation has finished.
+    React.useEffect(() => {
+        const close = () => setIsContextDetailsPinned(false);
+        const subscriptions = [
+            KeyboardEvents.addListener('keyboardWillHide', close),
+            KeyboardEvents.addListener('keyboardWillShow', close),
+        ];
+        return () => subscriptions.forEach((subscription) => subscription.remove());
+    }, []);
+
     const showContextDetailsFromPress = React.useCallback(() => {
         setIsContextDetailsHovered(false);
         if (isContextDetailsPinned) {
@@ -678,7 +698,7 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
             return;
         }
         contextDetailsAnchorRef.current?.measureInWindow((x, y, width, height) => {
-            setContextDetailsAnchor({ x, y, width, height });
+            setContextDetailsAnchor({ x, y: y - composerKeyboardLiftRef.current, width, height });
             setIsContextDetailsPinned(true);
         });
     }, [isContextDetailsPinned]);
