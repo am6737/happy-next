@@ -75,7 +75,7 @@ describe('listClaudeSessionsFromIndex', () => {
 
         expect(sessions).toHaveLength(1);
         expect(sessions[0].title).toBe('Session summary from file');
-        expect(sessions[0].messageCount).toBe(2);
+        expect(sessions[0].messageCount).toBe(3);
 
         const cachePath = join(happyHomeDir, 'claude-session-metadata-cache.json');
         expect(existsSync(cachePath)).toBe(true);
@@ -155,7 +155,7 @@ describe('listClaudeSessionsFromIndex', () => {
 
         expect(sessions).toHaveLength(1);
         expect(sessions[0].title).toBe('Need help optimizing list loading performance for session history');
-        expect(sessions[0].messageCount).toBe(3);
+        expect(sessions[0].messageCount).toBe(5);
 
         const cachePath = join(happyHomeDir, 'claude-session-metadata-cache.json');
         const cache = JSON.parse(readFileSync(cachePath, 'utf8'));

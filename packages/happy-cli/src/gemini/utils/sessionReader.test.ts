@@ -51,12 +51,12 @@ describe('listGeminiSessions', () => {
     expect(sessions[0].sessionId).toBe(sessionId);
     expect(sessions[0].originalPath).toBe('/workspace/happy');
     expect(sessions[0].title).toBe('Need help with timeout optimization');
-    expect(sessions[0].messageCount).toBe(1);
+    expect(sessions[0].messageCount).toBe(2);
 
     const cachePath = join(happyHomeDir, 'gemini-session-metadata-cache.json');
     expect(existsSync(cachePath)).toBe(true);
     let cache = JSON.parse(readFileSync(cachePath, 'utf8'));
-    expect(cache.entries[sessionId].messageCount).toBe(1);
+    expect(cache.entries[sessionId].messageCount).toBe(2);
     expect(cache.lastRun.filesProcessed).toBe(1);
     expect(cache.lastRun.filesReparsed).toBe(1);
     expect(cache.lastRun.resultCount).toBe(1);

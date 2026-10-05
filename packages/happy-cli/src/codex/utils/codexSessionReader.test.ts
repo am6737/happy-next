@@ -87,7 +87,8 @@ describe('listCodexSessions', () => {
     expect(sessions[0].sessionFile).toBe(filePath);
     expect(sessions[0].originalPath).toBe('/workspace/happy');
     expect(sessions[0].title).toBe('Please optimize Codex session listing speed');
-    expect(sessions[0].messageCount).toBe(1);
+    // user + assistant messages, matching what the preview shows
+    expect(sessions[0].messageCount).toBe(2);
     expect(sessions[0].gitBranch).toBe('main');
 
     const cachePath = join(happyHomeDir, 'codex-session-metadata-cache.json');

@@ -97,7 +97,7 @@ interface GeminiSessionMetadataCacheEntry {
   updatedAt?: number;
 }
 
-const GEMINI_SESSION_METADATA_CACHE_VERSION = 1;
+const GEMINI_SESSION_METADATA_CACHE_VERSION = 2;
 const GEMINI_SESSION_METADATA_CACHE_FILENAME = 'gemini-session-metadata-cache.json';
 
 export async function saveGeminiSessionCacheStats(sessionCache: SessionCacheRuntimeStats): Promise<void> {
@@ -133,8 +133,11 @@ async function parseGeminiSessionMetadata(filePath: string): Promise<Omit<Gemini
           originalPath = typeof parsed.value?.cwd === 'string' ? parsed.value.cwd : null;
         }
 
-        if (parsed.type === 'user') {
+        if (parsed.type === 'user' || parsed.type === 'assistant') {
           messageCount++;
+        }
+
+        if (parsed.type === 'user') {
           if (!title && typeof parsed.message === 'string' && parsed.message.trim()) {
             title = normalizeSessionTitle(parsed.message);
           }

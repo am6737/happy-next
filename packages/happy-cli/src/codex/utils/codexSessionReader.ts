@@ -248,6 +248,22 @@ export async function readAllCodexSessionUserMessages(
   return messages;
 }
 
+/**
+ * Extract assistant text (output_text blocks) from a Codex response_item payload.
+ */
+function extractAssistantText(payload: any): string | null {
+  const content = payload?.content;
+  if (!Array.isArray(content)) return null;
+
+  const texts: string[] = [];
+  for (const block of content) {
+    if (block?.type === 'output_text' && typeof block.text === 'string') {
+      texts.push(block.text);
+    }
+  }
+  return texts.join('\n') || null;
+}
+
 export interface CodexSessionIndexEntry {
   sessionId: string;
   sessionFile: string;
@@ -275,7 +291,7 @@ interface CodexSessionMetadataCacheEntry {
   gitBranch?: string | null;
 }
 
-const CODEX_SESSION_METADATA_CACHE_VERSION = 2;
+const CODEX_SESSION_METADATA_CACHE_VERSION = 3;
 const CODEX_SESSION_METADATA_CACHE_FILENAME = 'codex-session-metadata-cache.json';
 
 export async function saveCodexSessionCacheStats(sessionCache: SessionCacheRuntimeStats): Promise<void> {
@@ -336,6 +352,11 @@ async function parseCodexSessionMetadata(filePath: string): Promise<Omit<CodexSe
           }
         }
 
+        // Count assistant messages too so the total matches what the preview shows.
+        if (parsed.type === 'response_item' && parsed.payload?.role === 'assistant' && extractAssistantText(parsed.payload)) {
+          messageCount++;
+        }
+
         if (typeof parsed.timestamp === 'string') {
           const ts = Date.parse(parsed.timestamp);
           if (!Number.isNaN(ts)) updatedAt = ts;
@@ -353,9 +374,10 @@ async function parseCodexSessionMetadata(filePath: string): Promise<Omit<CodexSe
 
   const rawSessionId = fileSessionId || sessionId;
   if (hasInheritedHistory && rawSessionId) {
-    const messages = await readAllCodexSessionUserMessages(rawSessionId);
+    const messages = await getCodexSessionPreview(rawSessionId, Infinity);
+    const firstUserMessage = messages.find(message => message.role === 'user');
     messageCount = messages.length;
-    title = messages[0] ? normalizeSessionTitle(messages[0].content) : null;
+    title = firstUserMessage ? normalizeSessionTitle(firstUserMessage.content) : null;
   }
   const displaySessionId = rawSessionId ? extractDisplaySessionId(rawSessionId) : null;
   if (!displaySessionId || messageCount === 0) {
@@ -524,23 +546,13 @@ export async function getCodexSessionPreview(
           });
         }
       } else if (payload?.role === 'assistant') {
-        // Extract assistant text from content array
-        const content = payload?.content;
-        if (Array.isArray(content)) {
-          const texts: string[] = [];
-          for (const block of content) {
-            if (block?.type === 'output_text' && typeof block.text === 'string') {
-              texts.push(block.text);
-            }
-          }
-          const text = texts.join('\n');
-          if (text) {
-            messages.push({
-              role: 'assistant',
-              content: text,
-              timestamp: parsed.timestamp,
-            });
-          }
+        const text = extractAssistantText(payload);
+        if (text) {
+          messages.push({
+            role: 'assistant',
+            content: text,
+            timestamp: parsed.timestamp,
+          });
         }
       }
     } catch {

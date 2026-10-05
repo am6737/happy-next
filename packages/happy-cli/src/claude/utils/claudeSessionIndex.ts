@@ -61,7 +61,7 @@ interface ClaudeSessionMetadataCacheEntry {
     gitBranchExtracted: boolean;
 }
 
-const CLAUDE_SESSION_METADATA_CACHE_VERSION = 1;
+const CLAUDE_SESSION_METADATA_CACHE_VERSION = 2;
 const CLAUDE_SESSION_METADATA_CACHE_FILENAME = 'claude-session-metadata-cache.json';
 const CONTINUATION_PREFIX = 'This session is being continued';
 const IDE_MESSAGE_PREFIX = '<ide_';
@@ -348,7 +348,8 @@ async function parseClaudeSessionFileMetadata(jsonlPath: string): Promise<Claude
                 gitBranch = entry.gitBranch.trim();
             }
 
-            if (entry.type === 'user') {
+            // Count the same user + assistant text messages the preview shows (skips tool results).
+            if ((entry.type === 'user' || entry.type === 'assistant') && extractTextContent(entry.message)) {
                 messageCount++;
             }
 
