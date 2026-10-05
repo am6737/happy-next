@@ -292,6 +292,18 @@ export function formatLastSeen(activeAt: number, isActive: boolean = false): str
 }
 
 /**
+ * Clock time (HH:mm in the device locale) used by the agent history list and its preview sheet.
+ */
+export function formatSessionTime(ts?: number): string | null {
+    if (!ts) return null;
+    try {
+        return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch {
+        return null;
+    }
+}
+
+/**
  * Copy externalContext and sessionIcon from an original session to a newly forked/duplicated session.
  * Tries storage first (caller may have already refreshed), then retries with refreshSessions.
  */

@@ -31,7 +31,7 @@ import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { layout } from '@/components/layout';
 import { t } from '@/text';
 import { sync } from '@/sync/sync';
-import { formatPathRelativeToHome } from '@/utils/sessionUtils';
+import { formatPathRelativeToHome, formatSessionTime } from '@/utils/sessionUtils';
 import { MMKV } from 'react-native-mmkv';
 import { NativeMenu } from '@/components/NativeMenu';
 import type { ActionMenuItem } from '@/components/ActionMenu';
@@ -129,15 +129,6 @@ function formatDateHeader(date: Date): string {
         const diffTime = today.getTime() - sessionDate.getTime();
         const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
         return t('sessionHistory.daysAgo', { count: diffDays });
-    }
-}
-
-function formatTime(ts?: number): string | null {
-    if (!ts) return null;
-    try {
-        return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    } catch {
-        return null;
     }
 }
 
@@ -630,7 +621,7 @@ export default function AgentHistoryPage() {
                 {!loading && groupedSessions.map((group) => (
                     <ItemGroup key={`date-${group.key}`} title={group.label}>
                         {group.entries.map((entry, entryIndex) => {
-                            const time = formatTime(entry.updatedAt);
+                            const time = formatSessionTime(entry.updatedAt);
                             const displayPath = entry.originalPath
                                 ? formatPathRelativeToHome(entry.originalPath, selectedMachine?.metadata?.homeDir)
                                 : t('claudeHistory.pathUnavailable');

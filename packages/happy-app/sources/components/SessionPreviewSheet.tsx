@@ -6,7 +6,7 @@
  * Supports drag-to-resize functionality.
  */
 
-import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo } from 'react';
 import {
     View,
     Modal,
@@ -37,6 +37,8 @@ import { resolveCopyMenuPosition } from './copyMenuPosition';
 import { createSheetMessageInteractionManager } from './sheetMessageInteraction';
 import { isSessionPreviewMessageTruncated } from './sessionPreviewMenu';
 import { isWebTextTruncated } from './webTextTruncation';
+import { hasWebTextSelection } from './webTextSelection';
+import { formatMessageTime } from '@/utils/messageTime';
 import type { ClaudeSessionPreviewMessage, ClaudeSessionIndexEntry, AgentSessionIndexEntry } from '@/sync/ops';
 import { GlassSurface, liquidGlassAvailable } from './GlassSurface';
 import { GLASS_SHEET_FILL, GLASS_SHEET_RADIUS, glassSheetFramePadding, SHEET_BACKDROP_OPACITY, SHEET_SLIDE_SPRING } from './glassSheet';
@@ -62,6 +64,7 @@ const MIN_HEIGHT_RATIO = 0.3;
 const MAX_HEIGHT_RATIO = 0.9;
 const DEFAULT_HEIGHT_RATIO = 0.7;
 const PREVIEW_COLLAPSED_LINES = 6;
+const IS_WEB = Platform.OS === 'web';
 interface CopyMenuState {
     x: number;
     y: number;
@@ -90,6 +93,10 @@ export function SessionPreviewSheet({
     const [expandedMessageKeys, setExpandedMessageKeys] = useState<Set<string>>(new Set());
     const [truncatedMessageKeys, setTruncatedMessageKeys] = useState<Set<string>>(new Set());
     const webCollapsedTextRefs = useRef(new Map<string, HTMLElement>());
+    const listRef = useRef<FlatList<ClaudeSessionPreviewMessage>>(null);
+    // Web only: the upright list is hidden (loading shown on top) until it has been scrolled to the newest message.
+    const [webPositioned, setWebPositioned] = useState(false);
+    const webPositioningRef = useRef(false);
     const currentHeightRef = useRef(windowHeight * DEFAULT_HEIGHT_RATIO);
     const fadeAnim = useRef(new Animated.Value(0)).current;
     // 0 = off screen, 1 = in place: the glass card (iOS 26) slides by its own height, see `glassSheet`.
@@ -186,6 +193,14 @@ export function SessionPreviewSheet({
         setTruncatedMessageKeys(new Set());
         webCollapsedTextRefs.current.clear();
         setCopyMenu(null);
+    }, [entry?.sessionId, visible]);
+
+    // Only re-hide the list when opening or switching session; resetting on close would flash the
+    // loading overlay during the close animation.
+    useEffect(() => {
+        if (!visible) return;
+        webPositioningRef.current = false;
+        setWebPositioned(false);
     }, [entry?.sessionId, visible]);
 
     useEffect(() => {
@@ -301,7 +316,32 @@ export function SessionPreviewSheet({
         messageInteractionManager.cancel();
     }, [messageInteractionManager]);
 
-    const previewMessages = useMemo(() => messages ? [...messages].reverse() : [], [messages]);
+    const positionWebList = useCallback(() => {
+        if (!IS_WEB || webPositioned || webPositioningRef.current) return;
+        const node = listRef.current?.getScrollableNode();
+        if (!node) return;
+
+        // Scroll before paint, then once more next frame in case layout settled late (e.g. fonts).
+        node.scrollTop = node.scrollHeight;
+        webPositioningRef.current = true;
+        requestAnimationFrame(() => {
+            node.scrollTop = node.scrollHeight;
+            webPositioningRef.current = false;
+            setWebPositioned(true);
+        });
+    }, [webPositioned]);
+
+    useLayoutEffect(() => {
+        if (!loading) positionWebList();
+    }, [loading, messages, modalVisible, positionWebList]);
+
+    // Native uses an inverted list (newest first) to avoid a scroll flash. On web the list stays
+    // upright because react-native-web's inverted wheel handler treats a line-clamped message as
+    // scrollable and swallows the wheel delta, so scrolling gets stuck over long messages.
+    const previewMessages = useMemo(() => {
+        if (!messages) return [];
+        return IS_WEB ? messages : [...messages].reverse();
+    }, [messages]);
 
     if (!modalVisible) {
         return null;
@@ -317,6 +357,17 @@ export function SessionPreviewSheet({
     const hasOlderMessages = displayEntry?.messageCount && messages?.length
         ? displayEntry.messageCount > messages.length
         : false;
+    const renderLoading = (style: ViewStyle[]) => (
+        <View style={style}>
+            <ActivityIndicator size="small" color="#8E8E93" />
+            <Text style={styles.loadingText as TextStyle}>{t('common.loading')}</Text>
+        </View>
+    );
+    const olderMessagesHint = hasOlderMessages ? (
+        <Text style={styles.olderMessagesHint as TextStyle}>
+            {t('sessionPreview.olderMessagesHint')}
+        </Text>
+    ) : null;
     const copyMenuPosition = copyMenu
         ? resolveCopyMenuPosition({
             triggerX: copyMenu.x,
@@ -403,124 +454,148 @@ export function SessionPreviewSheet({
                             </Pressable>
                         </View>
 
-                        {/* Content - using inverted FlatList to avoid scroll flash */}
+                        {/* Content - native uses an inverted FlatList to avoid scroll flash; web stays hidden behind the loading state until scrolled to the end */}
                         {loading ? (
-                            <View style={[styles.content as ViewStyle, styles.loadingContainer as ViewStyle]}>
-                                <ActivityIndicator size="small" color="#8E8E93" />
-                                <Text style={styles.loadingText as TextStyle}>{t('common.loading')}</Text>
-                            </View>
+                            renderLoading([styles.content as ViewStyle, styles.loadingContainer as ViewStyle])
                         ) : (
-                            <FlatList
-                                data={previewMessages}
-                                inverted={true}
-                                style={styles.content as ViewStyle}
-                                contentContainerStyle={styles.contentContainer as ViewStyle}
-                                onScroll={handleMessageInteractionMove}
-                                scrollEventThrottle={16}
-                                onScrollBeginDrag={hideCopyMenu}
-                                showsVerticalScrollIndicator={false}
-                                keyExtractor={getPreviewMessageKey}
-                                renderItem={({ item: msg, index }: ListRenderItemInfo<ClaudeSessionPreviewMessage>) => {
-                                    const messageKey = getPreviewMessageKey(msg, index);
-                                    const isExpanded = expandedMessageKeys.has(messageKey);
-                                    const isLong = truncatedMessageKeys.has(messageKey);
-                                    const openCopyMenu = ({ pageX, pageY }: { pageX: number; pageY: number }) => {
-                                        showCopyMenu({ x: pageX, y: pageY, content: msg.content, messageKey });
-                                    };
-                                    const interactionCallbacks = {
-                                        onTap: () => {
-                                            if (copyMenuRef.current !== null) {
-                                                hideCopyMenu();
-                                                return;
+                            <View style={styles.content as ViewStyle}>
+                                <FlatList
+                                    ref={listRef}
+                                    data={previewMessages}
+                                    inverted={!IS_WEB}
+                                    initialNumToRender={IS_WEB ? previewMessages.length : undefined}
+                                    onContentSizeChange={IS_WEB ? positionWebList : undefined}
+                                    style={[styles.content as ViewStyle, IS_WEB && !webPositioned && styles.listHidden as ViewStyle]}
+                                    contentContainerStyle={styles.contentContainer as ViewStyle}
+                                    onScroll={handleMessageInteractionMove}
+                                    scrollEventThrottle={16}
+                                    onScrollBeginDrag={hideCopyMenu}
+                                    showsVerticalScrollIndicator={false}
+                                    keyExtractor={getPreviewMessageKey}
+                                    renderItem={({ item: msg, index }: ListRenderItemInfo<ClaudeSessionPreviewMessage>) => {
+                                        const messageKey = getPreviewMessageKey(msg, index);
+                                        const isExpanded = expandedMessageKeys.has(messageKey);
+                                        const isLong = truncatedMessageKeys.has(messageKey);
+                                        const messageTimestamp = msg.timestamp ? Date.parse(msg.timestamp) : NaN;
+                                        const messageTime = Number.isNaN(messageTimestamp) ? null : formatMessageTime(messageTimestamp);
+                                        const openCopyMenu = ({ pageX, pageY }: { pageX: number; pageY: number }) => {
+                                            showCopyMenu({ x: pageX, y: pageY, content: msg.content, messageKey });
+                                        };
+                                        const interactionCallbacks = {
+                                            onTap: () => {
+                                                if (copyMenuRef.current !== null) {
+                                                    hideCopyMenu();
+                                                    return;
+                                                }
+    
+                                                handleToggleMessageExpanded(messageKey);
+                                            },
+                                            onLongPress: ({ pageX, pageY }: { pageX: number; pageY: number }) => {
+                                                hapticsLight();
+                                                openCopyMenu({ pageX, pageY });
+                                            },
+                                        };
+                                        const webMouseHandlers = Platform.OS === 'web'
+                                            ? {
+                                                // Mouse users select text by dragging, so no press-and-hold menu here.
+                                                onMouseDown: (e: { nativeEvent: { pageX: number; pageY: number } }) => {
+                                                    messageInteractionManager.start(e, { ...interactionCallbacks, onLongPress: () => {} });
+                                                },
+                                                onMouseMove: handleMessageInteractionMove,
+                                                // A drag-select must not count as a tap (which would expand/collapse the message).
+                                                onMouseUp: (e: { nativeEvent: { pageX: number; pageY: number } }) => {
+                                                    if (hasWebTextSelection()) {
+                                                        messageInteractionManager.cancel();
+                                                        return;
+                                                    }
+                                                    messageInteractionManager.end(e);
+                                                },
+                                                onMouseLeave: handleMessageInteractionCancel,
+                                                onContextMenu: (e: { preventDefault: () => void; nativeEvent: { pageX: number; pageY: number } }) => {
+                                                    // Keep the browser's native menu when text is selected so "Copy" copies the selection.
+                                                    if (hasWebTextSelection()) return;
+                                                    handleCopyMenuContextMenu(e, openCopyMenu);
+                                                },
                                             }
-
-                                            handleToggleMessageExpanded(messageKey);
-                                        },
-                                        onLongPress: ({ pageX, pageY }: { pageX: number; pageY: number }) => {
-                                            hapticsLight();
-                                            openCopyMenu({ pageX, pageY });
-                                        },
-                                    };
-                                    const webMouseHandlers = Platform.OS === 'web'
-                                        ? {
-                                            onMouseDown: (e: { nativeEvent: { pageX: number; pageY: number } }) => {
-                                                messageInteractionManager.start(e, interactionCallbacks);
-                                            },
-                                            onMouseMove: handleMessageInteractionMove,
-                                            onMouseUp: messageInteractionManager.end,
-                                            onMouseLeave: handleMessageInteractionCancel,
-                                            onContextMenu: (e: { preventDefault: () => void; nativeEvent: { pageX: number; pageY: number } }) => {
-                                                handleCopyMenuContextMenu(e, openCopyMenu);
-                                            },
-                                        }
-                                        : {};
-
-                                    return (
-                                        <View
-                                            style={[
-                                                styles.message as ViewStyle,
-                                                msg.role === 'user' ? styles.userMessage as ViewStyle : styles.assistantMessage as ViewStyle,
-                                            ]}
-                                        >
+                                            : {};
+    
+                                        return (
                                             <View
                                                 style={[
-                                                    styles.messageBubble as ViewStyle,
-                                                    msg.role === 'user' ? styles.userBubble as ViewStyle : styles.assistantBubble as ViewStyle,
+                                                    styles.message as ViewStyle,
+                                                    msg.role === 'user' ? styles.userMessage as ViewStyle : styles.assistantMessage as ViewStyle,
                                                 ]}
-                                                onTouchStart={(e) => {
-                                                    messageInteractionManager.start(e, interactionCallbacks);
-                                                }}
-                                                onTouchMove={handleMessageInteractionMove}
-                                                onTouchEnd={messageInteractionManager.end}
-                                                onTouchCancel={handleMessageInteractionCancel}
-                                                {...webMouseHandlers}
                                             >
-                                                <Text
-                                                    ref={Platform.OS === 'web' && !isExpanded ? setWebCollapsedTextRef(messageKey) : undefined}
+                                                <View
                                                     style={[
-                                                        styles.messageText as TextStyle,
-                                                        msg.role === 'user' ? styles.userText as TextStyle : styles.assistantText as TextStyle,
+                                                        styles.messageBubble as ViewStyle,
+                                                        msg.role === 'user' ? styles.userBubble as ViewStyle : styles.assistantBubble as ViewStyle,
                                                     ]}
-                                                    numberOfLines={isExpanded ? undefined : PREVIEW_COLLAPSED_LINES}
-                                                    onLayout={Platform.OS === 'web' && !isExpanded ? () => measureWebMessageTruncation(messageKey) : undefined}
+                                                    onTouchStart={(e) => {
+                                                        messageInteractionManager.start(e, interactionCallbacks);
+                                                    }}
+                                                    onTouchMove={handleMessageInteractionMove}
+                                                    onTouchEnd={messageInteractionManager.end}
+                                                    onTouchCancel={handleMessageInteractionCancel}
+                                                    {...webMouseHandlers}
                                                 >
-                                                    {msg.content}
-                                                </Text>
-                                                {Platform.OS !== 'web' && !isExpanded && !isLong && (
                                                     <Text
+                                                        selectable={IS_WEB}
+                                                        ref={Platform.OS === 'web' && !isExpanded ? setWebCollapsedTextRef(messageKey) : undefined}
                                                         style={[
                                                             styles.messageText as TextStyle,
-                                                            styles.measureText as TextStyle,
                                                             msg.role === 'user' ? styles.userText as TextStyle : styles.assistantText as TextStyle,
                                                         ]}
-                                                        pointerEvents="none"
-                                                        onTextLayout={(e) => {
-                                                            if (isSessionPreviewMessageTruncated({
-                                                                lineCount: e.nativeEvent.lines.length,
-                                                                collapsedLineCount: PREVIEW_COLLAPSED_LINES,
-                                                            })) {
-                                                                setMessageTruncated(messageKey, true);
-                                                            }
-                                                        }}
+                                                        numberOfLines={isExpanded ? undefined : PREVIEW_COLLAPSED_LINES}
+                                                        onLayout={Platform.OS === 'web' && !isExpanded ? () => measureWebMessageTruncation(messageKey) : undefined}
                                                     >
                                                         {msg.content}
                                                     </Text>
-                                                )}
+                                                    {messageTime ? (
+                                                        <Text
+                                                            style={[
+                                                                styles.messageTime as TextStyle,
+                                                                msg.role === 'user' ? styles.userText as TextStyle : styles.assistantText as TextStyle,
+                                                                { textAlign: msg.role === 'user' ? 'right' : 'left' },
+                                                            ]}
+                                                        >
+                                                            {messageTime}
+                                                        </Text>
+                                                    ) : null}
+                                                    {Platform.OS !== 'web' && !isExpanded && !isLong && (
+                                                        <Text
+                                                            style={[
+                                                                styles.messageText as TextStyle,
+                                                                styles.measureText as TextStyle,
+                                                                msg.role === 'user' ? styles.userText as TextStyle : styles.assistantText as TextStyle,
+                                                            ]}
+                                                            pointerEvents="none"
+                                                            onTextLayout={(e) => {
+                                                                if (isSessionPreviewMessageTruncated({
+                                                                    lineCount: e.nativeEvent.lines.length,
+                                                                    collapsedLineCount: PREVIEW_COLLAPSED_LINES,
+                                                                })) {
+                                                                    setMessageTruncated(messageKey, true);
+                                                                }
+                                                            }}
+                                                        >
+                                                            {msg.content}
+                                                        </Text>
+                                                    )}
+                                                </View>
                                             </View>
+                                        );
+                                    }}
+                                    ListEmptyComponent={
+                                        <View style={styles.emptyContainer as ViewStyle}>
+                                            <Text style={styles.emptyText as TextStyle}>{t('sessionPreview.noMessages')}</Text>
                                         </View>
-                                    );
-                                }}
-                                ListEmptyComponent={
-                                    <View style={styles.emptyContainer as ViewStyle}>
-                                        <Text style={styles.emptyText as TextStyle}>{t('sessionPreview.noMessages')}</Text>
-                                    </View>
-                                }
-                                ListFooterComponent={hasOlderMessages ? (
-                                    <Text style={styles.olderMessagesHint as TextStyle}>
-                                        {t('sessionPreview.olderMessagesHint')}
-                                    </Text>
-                                ) : null}
-                            />
+                                    }
+                                    ListHeaderComponent={IS_WEB ? olderMessagesHint : undefined}
+                                    ListFooterComponent={IS_WEB ? undefined : olderMessagesHint}
+                                />
+                            {IS_WEB && !webPositioned && renderLoading([styles.loadingOverlay as ViewStyle, styles.loadingContainer as ViewStyle])}
+                            </View>
                         )}
 
                         {/* Footer */}
@@ -721,6 +796,16 @@ const styles = StyleSheet.create((theme) => ({
         paddingVertical: 40,
         gap: 12,
     },
+    loadingOverlay: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+    },
+    listHidden: {
+        opacity: 0,
+    },
     loadingText: {
         fontSize: 14,
         color: theme.colors.textSecondary,
@@ -766,6 +851,12 @@ const styles = StyleSheet.create((theme) => ({
     messageText: {
         fontSize: 15,
         lineHeight: 20,
+    },
+    messageTime: {
+        fontSize: 11,
+        lineHeight: 14,
+        marginTop: 4,
+        opacity: 0.6,
     },
     userText: {
         color: theme.colors.userMessageText,
