@@ -192,8 +192,6 @@ export const zhHans: TranslationStructure = {
         orchestratorLoading: '正在加载编排任务...',
         orchestratorFilterAll: '全部',
         orchestratorFilterActive: '进行中',
-        orchestratorFilterTerminal: '已结束',
-        orchestratorFilterRunning: '运行中',
         orchestratorFilterFailed: '失败',
         orchestratorFilterCompleted: '已完成',
         orchestratorFilterCancelled: '已取消',

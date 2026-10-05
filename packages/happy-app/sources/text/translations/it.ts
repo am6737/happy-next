@@ -219,8 +219,6 @@ export const it: TranslationStructure = {
         orchestratorLoading: 'Caricamento esecuzioni dell\'orchestratore...',
         orchestratorFilterAll: 'Tutte',
         orchestratorFilterActive: 'Attive',
-        orchestratorFilterTerminal: 'Terminate',
-        orchestratorFilterRunning: 'In esecuzione',
         orchestratorFilterFailed: 'Fallite',
         orchestratorFilterCompleted: 'Completate',
         orchestratorFilterCancelled: 'Annullate',

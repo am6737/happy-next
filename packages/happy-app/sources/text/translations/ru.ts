@@ -151,8 +151,6 @@ export const ru: TranslationStructure = {
         orchestratorLoading: 'Загрузка запусков оркестратора...',
         orchestratorFilterAll: 'Все',
         orchestratorFilterActive: 'Активные',
-        orchestratorFilterTerminal: 'Завершённые',
-        orchestratorFilterRunning: 'Выполняются',
         orchestratorFilterFailed: 'Неудачные',
         orchestratorFilterCompleted: 'Завершены',
         orchestratorFilterCancelled: 'Отменены',

@@ -18,15 +18,14 @@ import { isRunningOnMac } from '@/utils/platform';
 import { softHeaderOptions } from '@/components/navigation/softHeader';
 
 type RunListItem = Pick<OrchestratorRunDetail, 'runId' | 'title' | 'status' | 'createdAt' | 'updatedAt' | 'summary'> & { machines?: string[]; };
-type StatusFilter = 'all' | 'active' | 'terminal' | 'queued' | 'running' | 'canceling' | 'completed' | 'failed' | 'cancelled';
+// Each chip is a disjoint slice of the runs, so together they add up to "all"; `active` covers queued, running and canceling.
+type StatusFilter = 'all' | 'active' | 'completed' | 'failed' | 'cancelled';
 
 const FILTERS: Array<{ key: StatusFilter; label: string; }> = [
     { key: 'all', label: t('settings.orchestratorFilterAll') },
     { key: 'active', label: t('settings.orchestratorFilterActive') },
-    { key: 'terminal', label: t('settings.orchestratorFilterTerminal') },
-    { key: 'running', label: t('settings.orchestratorFilterRunning') },
-    { key: 'failed', label: t('settings.orchestratorFilterFailed') },
     { key: 'completed', label: t('settings.orchestratorFilterCompleted') },
+    { key: 'failed', label: t('settings.orchestratorFilterFailed') },
     { key: 'cancelled', label: t('settings.orchestratorFilterCancelled') },
 ];
 
@@ -146,9 +145,6 @@ function computeFilterCount(counts: OrchestratorRunCounts, filter: StatusFilter)
     }
     if (filter === 'active') {
         return (counts['queued'] ?? 0) + (counts['running'] ?? 0) + (counts['canceling'] ?? 0);
-    }
-    if (filter === 'terminal') {
-        return (counts['completed'] ?? 0) + (counts['failed'] ?? 0) + (counts['cancelled'] ?? 0);
     }
     return counts[filter] ?? 0;
 }

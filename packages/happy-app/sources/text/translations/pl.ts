@@ -201,8 +201,6 @@ export const pl: TranslationStructure = {
         orchestratorLoading: 'Ładowanie uruchomień orkiestratora...',
         orchestratorFilterAll: 'Wszystkie',
         orchestratorFilterActive: 'Aktywne',
-        orchestratorFilterTerminal: 'Zakończone',
-        orchestratorFilterRunning: 'W toku',
         orchestratorFilterFailed: 'Nieudane',
         orchestratorFilterCompleted: 'Ukończone',
         orchestratorFilterCancelled: 'Anulowane',

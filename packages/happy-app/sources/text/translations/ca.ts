@@ -190,8 +190,6 @@ export const ca: TranslationStructure = {
         orchestratorLoading: 'Carregant execucions de l\'orquestrador...',
         orchestratorFilterAll: 'Totes',
         orchestratorFilterActive: 'Actives',
-        orchestratorFilterTerminal: 'Acabades',
-        orchestratorFilterRunning: 'En execució',
         orchestratorFilterFailed: 'Fallides',
         orchestratorFilterCompleted: 'Completades',
         orchestratorFilterCancelled: 'Cancel·lades',

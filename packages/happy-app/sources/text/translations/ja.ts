@@ -222,8 +222,6 @@ export const ja: TranslationStructure = {
         orchestratorLoading: 'オーケストレーターの実行を読み込み中...',
         orchestratorFilterAll: 'すべて',
         orchestratorFilterActive: 'アクティブ',
-        orchestratorFilterTerminal: '終了済み',
-        orchestratorFilterRunning: '実行中',
         orchestratorFilterFailed: '失敗',
         orchestratorFilterCompleted: '完了',
         orchestratorFilterCancelled: 'キャンセル済み',
