@@ -1968,6 +1968,8 @@ export const ja: TranslationStructure = {
         foldedProcess: ({ duration, steps }: { duration: string; steps: number }) => `所要時間 ${duration} · ${steps} ステップ`,
         segmentSteps: ({ steps }: { steps: number }) => `${steps} ステップを実行`,
         segmentRunning: ({ steps }: { steps: number }) => `実行中 · ${steps} ステップ`,
+        delegatedMore: ({ title, count }: { title: string; count: number }) => `${title} ほか ${count - 1} 件`,
+        delegatedTask: '委任タスク',
         foldProcess: '手順を折りたたむ',
         expandProcess: '手順を表示',
         unknownTime: '不明な時間',

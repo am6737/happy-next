@@ -1950,6 +1950,8 @@ export const en = {
         foldedProcess: ({ duration, steps }: { duration: string; steps: number }) => `Took ${duration} · ${steps} steps`,
         segmentSteps: ({ steps }: { steps: number }) => `Ran ${steps} ${steps === 1 ? 'step' : 'steps'}`,
         segmentRunning: ({ steps }: { steps: number }) => `Running · ${steps} ${steps === 1 ? 'step' : 'steps'}`,
+        delegatedMore: ({ title, count }: { title: string; count: number }) => `${title} and ${count - 1} more`,
+        delegatedTask: 'Delegated task',
         foldProcess: 'Fold the steps',
         expandProcess: 'Show the steps',
         unknownTime: 'unknown time',

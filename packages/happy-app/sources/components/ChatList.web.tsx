@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { useSession, useSessionMessages, useProfile, useSetting, storage } from "@/sync/storage";
+import { useSession, useSessionMessages, useProfile, useSetting, storage, useOrchestratorActiveRunIds } from "@/sync/storage";
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { useCallback, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
@@ -16,6 +16,7 @@ import { currentLandmark, foldMustKeepMessage, railLandmarkRows, shouldHideMessa
 import { foldedLineKeepsRow } from './turnFold';
 import { turnHeaderProps, useTurnAnalysis } from './messageTurnTiming';
 import { newestRowSnapshot } from './rowSnapshot';
+import { foldHidesRunningDelegatedTask, delegatedLabel } from './foldDelegated';
 import { toolTitle } from './tools/toolTitle';
 import { useTurnFolding } from '@/hooks/useTurnFolding';
 import { useFoldAnimation } from '@/hooks/useFoldAnimation';
@@ -405,6 +406,7 @@ const ChatRow = React.memo((props: {
     foldDivides: boolean,
     foldSteps: number | undefined,
     foldSnapshot: string | undefined,
+    foldDelegated: string | null | undefined,
     onToggleFold: ((headerId: string) => void) | undefined,
     constrainedHeightPx: number | undefined,
     // Set only while this row's height belongs to a fold animation: the animation writes the height
@@ -420,6 +422,7 @@ const ChatRow = React.memo((props: {
     segmentKeepsRow: boolean,
     segmentSteps: number | undefined,
     segmentSnapshot: string | undefined,
+    segmentDelegated: string | null | undefined,
     segmentRunning: boolean,
     onToggleSegment: ((startId: string) => void) | undefined,
     segmentBodyRef: ((el: HTMLElement | null) => void) | undefined,
@@ -461,12 +464,14 @@ const ChatRow = React.memo((props: {
                     foldDivides={props.foldDivides}
                     foldSteps={props.foldSteps}
                     foldSnapshot={props.foldSnapshot}
+                    foldDelegated={props.foldDelegated}
                     onToggleFold={props.onToggleFold}
                     foldBodyRef={props.foldBodyRef}
                     segmentFolded={props.segmentFolded}
                     segmentKeepsRow={props.segmentKeepsRow}
                     segmentSteps={props.segmentSteps}
                     segmentSnapshot={props.segmentSnapshot}
+                    segmentDelegated={props.segmentDelegated}
                     segmentRunning={props.segmentRunning}
                     onToggleSegment={props.onToggleSegment}
                     segmentBodyRef={props.segmentBodyRef}
@@ -581,6 +586,9 @@ const ChatListInternal = React.memo((props: {
     // happened. A row that is still there at zero height keeps its measurement, and can grow back
     // from it — which is also what an expand animation needs to know its endpoint.
     const folding = useTurnFolding({ foldById: turns.foldById, enabled: foldTurnProcess });
+    // Runs of this session with a delegated task still going, for the folded lines that hide their submit.
+    const activeOrchestratorRunIds = useOrchestratorActiveRunIds(props.sessionId);
+    const delegatedMore = (title: string, count: number) => t('message.delegatedMore', { title, count });
     // The height animation a fold plays, and the rows it is playing on. Owns no layout of its own:
     // it writes heights onto the elements it is given and reads them back, nothing else.
     const foldAnim = useFoldAnimation();
@@ -2235,6 +2243,18 @@ const ChatListInternal = React.memo((props: {
                 headlineOf: (tool) => toolTitle(tool, props.metadata),
             })
             : undefined;
+        // A delegated task that outlives its turn is not something a snapshot can name, so when the
+        // folded line has no snapshot it says that one is still running. Only a folded line: an open
+        // one shows the rows, and each draws its own spinner. A turn the agent's words split shows it
+        // on its runs' lines while open (see `segmentDelegated`), never on its own.
+        const foldDelegated = fold?.folded === true && foldSnapshot === undefined
+            ? delegatedLabel(foldHidesRunningDelegatedTask({
+                hiddenIds: process?.hiddenIds ?? [],
+                lineRow: foldKeepsRow ? null : item,
+                messageById,
+                activeRunIds: activeOrchestratorRunIds,
+            }), delegatedMore)
+            : undefined;
         // Present only on the row that opens a run of steps inside a turn the agent's words split. A
         // turn folded as a whole draws no lines for its runs — its own line stands for all of them —
         // except while it slides, when the runs are still on screen and must look as they did.
@@ -2252,6 +2272,14 @@ const ChatListInternal = React.memo((props: {
                 messageById,
                 headlineOf: (tool) => toolTitle(tool, props.metadata),
             })
+            : undefined;
+        const segmentDelegated = segmentShown && segment.folded && segmentSnapshot === undefined
+            ? delegatedLabel(foldHidesRunningDelegatedTask({
+                hiddenIds: segment.hiddenIds,
+                lineRow: item,
+                messageById,
+                activeRunIds: activeOrchestratorRunIds,
+            }), delegatedMore)
             : undefined;
         // The line divides the turn from its answer, so a folded turn with no answer to show — one
         // still running, or one that ended without a word — has nothing under the line to divide.
@@ -2289,6 +2317,7 @@ const ChatListInternal = React.memo((props: {
                 foldDivides={foldDivides}
                 foldSteps={fold?.steps}
                 foldSnapshot={foldSnapshot}
+                foldDelegated={foldDelegated}
                 onToggleFold={handleToggleFold}
                 {...turnHeader}
                 constrainedHeightPx={constrainedHeightPx}
@@ -2301,6 +2330,7 @@ const ChatListInternal = React.memo((props: {
                 segmentKeepsRow={segmentKeepsRow}
                 segmentSteps={segment?.steps}
                 segmentSnapshot={segmentSnapshot}
+                segmentDelegated={segmentDelegated}
                 segmentRunning={segment?.running === true}
                 onToggleSegment={handleToggleSegment}
                 segmentBodyRef={foldAnimating && foldLine === 'segment' ? foldAnimClipRef : undefined}

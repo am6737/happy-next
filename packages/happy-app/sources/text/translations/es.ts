@@ -1936,6 +1936,8 @@ export const es: TranslationStructure = {
         foldedProcess: ({ duration, steps }: { duration: string; steps: number }) => `Tardó ${duration} · ${steps} pasos`,
         segmentSteps: ({ steps }: { steps: number }) => `Ejecutó ${steps} pasos`,
         segmentRunning: ({ steps }: { steps: number }) => `Ejecutando · ${steps} pasos`,
+        delegatedMore: ({ title, count }: { title: string; count: number }) => `${title} y ${count - 1} más`,
+        delegatedTask: 'Tarea delegada',
         foldProcess: 'Contraer los pasos',
         expandProcess: 'Mostrar los pasos',
         unknownTime: 'tiempo desconocido',

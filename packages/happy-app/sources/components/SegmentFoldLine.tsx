@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { t } from '@/text';
 import { TextShimmer } from './TextShimmer';
+import { FoldDelegatedMark } from './FoldDelegatedMark';
 
 /** How long the chevron takes to swing between open and folded. Matches the turn's own line. */
 const CHEVRON_TURN_MS = 180;
@@ -22,11 +23,16 @@ export const SegmentFoldLine = React.memo((props: {
     steps: number;
     /** What the run is doing right now. Only a run still going has one, and only while folded. */
     snapshot?: string;
+    /**
+     * A delegated task the folded run hides is still running: what it was asked to do, or null when
+     * there is nothing to say of it. Undefined when none is. Shown only when there is no snapshot.
+     */
+    delegated?: string | null;
     running: boolean;
     onToggle: () => void;
 }) => {
     const { theme } = useUnistyles();
-    const { folded, steps, snapshot, running, onToggle } = props;
+    const { folded, steps, snapshot, delegated, running, onToggle } = props;
 
     // One glyph that turns, rather than two icons swapped, and with the native driver for the same
     // reason the turn's line does it: see TurnHeader.
@@ -68,6 +74,8 @@ export const SegmentFoldLine = React.memo((props: {
                 ) : (
                     <Text style={styles.snapshot} numberOfLines={1}>{snapshot}</Text>
                 )
+            ) : delegated !== undefined ? (
+                <FoldDelegatedMark label={delegated} />
             ) : null}
         </Pressable>
     );

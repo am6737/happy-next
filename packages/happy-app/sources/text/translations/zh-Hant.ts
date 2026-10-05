@@ -1938,6 +1938,8 @@ export const zhHant: TranslationStructure = {
         foldedProcess: ({ duration, steps }: { duration: string; steps: number }) => `用時 ${duration} · ${steps} 步`,
         segmentSteps: ({ steps }: { steps: number }) => `執行了 ${steps} 步`,
         segmentRunning: ({ steps }: { steps: number }) => `執行中 · ${steps} 步`,
+        delegatedMore: ({ title, count }: { title: string; count: number }) => `${title} 等 ${count} 個`,
+        delegatedTask: '委派任務',
         foldProcess: '收起過程',
         expandProcess: '展開過程',
         unknownTime: '未知時間',

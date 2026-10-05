@@ -72,6 +72,8 @@ export const MessageView = (props: {
   foldSteps?: number;
   /** What the folded rows are doing right now, for a turn that is still running. */
   foldSnapshot?: string;
+  /** A delegated task the turn's folded line hides is still running: what it was asked to do, or null. */
+  foldDelegated?: string | null;
   /** Flip the fold on the turn this row opens. Stable, so list rows keep their props. */
   onToggleFold?: (headerId: string) => void;
   /**
@@ -98,6 +100,8 @@ export const MessageView = (props: {
   segmentSteps?: number;
   /** What the run is doing right now. Only a run the turn has got no further than has one. */
   segmentSnapshot?: string;
+  /** The same, for the run's folded line. */
+  segmentDelegated?: string | null;
   /** The turn has got no further than this run. */
   segmentRunning?: boolean;
   /** Flip the fold on the run this row opens. Stable, so list rows keep their props. */
@@ -105,7 +109,7 @@ export const MessageView = (props: {
   /** The same as `foldBodyRef`, for a run's line: it clips the row's content under that line. */
   segmentBodyRef?: (el: HTMLElement | null) => void;
 }) => {
-  const { message, foldFolded, foldSnapshot, onToggleFold, segmentFolded, onToggleSegment } = props;
+  const { message, foldFolded, foldSnapshot, foldDelegated, onToggleFold, segmentFolded, onToggleSegment } = props;
   const foldSteps = props.foldSteps ?? 0;
   // The folded line takes the place of the row it sits on — unless the fold kept this row: a settled
   // turn's answer, or a landmark, either of which can be the row the line itself sits on.
@@ -117,8 +121,8 @@ export const MessageView = (props: {
   const fold = React.useMemo(
     () => foldFolded === undefined
       ? undefined
-      : { folded: foldFolded, steps: foldSteps, snapshot: foldSnapshot, onToggle: handleToggleFold },
-    [foldFolded, foldSteps, foldSnapshot, handleToggleFold],
+      : { folded: foldFolded, steps: foldSteps, snapshot: foldSnapshot, delegated: foldDelegated, onToggle: handleToggleFold },
+    [foldFolded, foldSteps, foldSnapshot, foldDelegated, handleToggleFold],
   );
 
   // A folded turn is its header and nothing else: the folded line is the whole row, and the answer
@@ -170,6 +174,7 @@ export const MessageView = (props: {
         folded={segmentFolded}
         steps={props.segmentSteps ?? 0}
         snapshot={props.segmentSnapshot}
+        delegated={props.segmentDelegated}
         running={props.segmentRunning === true}
         onToggle={handleToggleSegment}
       />

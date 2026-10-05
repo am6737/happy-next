@@ -1935,6 +1935,8 @@ export const ru: TranslationStructure = {
         foldedProcess: ({ duration, steps }: { duration: string; steps: number }) => `Заняло ${duration} · ${steps} шагов`,
         segmentSteps: ({ steps }: { steps: number }) => `Выполнено шагов: ${steps}`,
         segmentRunning: ({ steps }: { steps: number }) => `Выполняется · шагов: ${steps}`,
+        delegatedMore: ({ title, count }: { title: string; count: number }) => `${title} и ещё ${count - 1}`,
+        delegatedTask: 'Делегированная задача',
         foldProcess: 'Свернуть шаги',
         expandProcess: 'Показать шаги',
         unknownTime: 'неизвестное время',

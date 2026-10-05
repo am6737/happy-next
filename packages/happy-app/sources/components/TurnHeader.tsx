@@ -7,6 +7,7 @@ import { formatDuration, formatFullMessageTime } from '@/utils/messageTime';
 import { showToast } from './Toast';
 import { hapticsLight } from './haptics';
 import { TextShimmer } from './TextShimmer';
+import { FoldDelegatedMark } from './FoldDelegatedMark';
 
 /** How long the chevron takes to swing between open and folded. */
 const CHEVRON_TURN_MS = 180;
@@ -22,6 +23,12 @@ export type TurnFoldProps = {
      * being just the cost of the process.
      */
     snapshot?: string;
+    /**
+     * A delegated task the folded line hides is still running: what it was asked to do, or null when
+     * there is nothing to say of it. Undefined when none is. Shown at the far end, but only when there
+     * is no snapshot: what the turn is doing right now outranks it.
+     */
+    delegated?: string | null;
     onToggle: () => void;
 };
 
@@ -143,6 +150,8 @@ export const TurnHeader = React.memo((props: {
                     // subject, and the snapshot is what the reader glances at.
                     <Text style={styles.snapshot} numberOfLines={1}>{fold.snapshot}</Text>
                 )
+            ) : foldable && fold.delegated !== undefined ? (
+                <FoldDelegatedMark label={fold.delegated} />
             ) : null}
         </Pressable>
     );

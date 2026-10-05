@@ -1938,6 +1938,8 @@ export const zhHans: TranslationStructure = {
         foldedProcess: ({ duration, steps }: { duration: string; steps: number }) => `用时 ${duration} · ${steps} 步`,
         segmentSteps: ({ steps }: { steps: number }) => `执行了 ${steps} 步`,
         segmentRunning: ({ steps }: { steps: number }) => `执行中 · ${steps} 步`,
+        delegatedMore: ({ title, count }: { title: string; count: number }) => `${title} 等 ${count} 个`,
+        delegatedTask: '委派任务',
         foldProcess: '收起过程',
         expandProcess: '展开过程',
         unknownTime: '未知时间',

@@ -78,3 +78,7 @@ export function extractOrchestratorSubmitRunId(tool: ToolCall): string | null {
     }
     return extractRunIdFromResult(tool.result);
 }
+
+export function extractOrchestratorSubmitTitle(tool: ToolCall): string | null {
+    return extractRunTitle(tool);
+}
