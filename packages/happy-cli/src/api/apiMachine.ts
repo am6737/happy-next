@@ -454,13 +454,18 @@ export class ApiMachineClient {
 
         // Get preview messages from a Claude session
         this.rpcHandlerManager.registerHandler('claude-session-preview', async (params: any) => {
-            const { projectId, sessionId, limit = 10 } = params || {};
+            const { projectId: requestedProjectId, sessionId, limit = 10 } = params || {};
 
-            if (!projectId || typeof projectId !== 'string') {
-                throw new Error('projectId is required');
-            }
             if (!sessionId || typeof sessionId !== 'string') {
                 throw new Error('sessionId is required');
+            }
+
+            // Callers that only know the session id (e.g. an orchestrator task) omit the project id
+            const projectId = typeof requestedProjectId === 'string' && requestedProjectId
+                ? requestedProjectId
+                : await findClaudeProjectId(sessionId);
+            if (!projectId) {
+                return { messages: [] };
             }
 
             const messageLimit = typeof limit === 'number' && limit > 0 ? Math.min(Math.floor(limit), 50) : 10;

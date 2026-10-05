@@ -127,6 +127,18 @@ function collectGeminiTextCandidates(value: unknown, out: string[]): void {
   }
 }
 
+/**
+ * Gemini's JSON output carries the answer under `response` next to metadata (stats, models, ...).
+ * When it is there only that is the result; other shapes fall back to collecting every text field.
+ */
+function collectGeminiResultCandidates(document: unknown, out: string[]): void {
+  if (document && typeof document === 'object' && !Array.isArray(document) && 'response' in document) {
+    collectGeminiTextCandidates((document as Record<string, unknown>).response, out);
+    return;
+  }
+  collectGeminiTextCandidates(document, out);
+}
+
 export function normalizeGeminiOutputText(stdout: string): string {
   const trimmed = stdout.trim();
   if (!trimmed) {
@@ -139,7 +151,7 @@ export function normalizeGeminiOutputText(stdout: string): string {
   try {
     const parsed = JSON.parse(trimmed);
     sawJson = true;
-    collectGeminiTextCandidates(parsed, candidates);
+    collectGeminiResultCandidates(parsed, candidates);
   } catch (_error) {
     // not a single JSON document, try line-based json output next
   }
@@ -151,7 +163,7 @@ export function normalizeGeminiOutputText(stdout: string): string {
       try {
         const parsed = JSON.parse(trimmedLine);
         sawJson = true;
-        collectGeminiTextCandidates(parsed, candidates);
+        collectGeminiResultCandidates(parsed, candidates);
       } catch (_error) {
         // ignore non-json line
       }

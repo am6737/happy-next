@@ -28,6 +28,7 @@ import { expandEnvironmentVariables } from '@/utils/expandEnvVars';
 import {
   appendOutputChunk,
   buildOrchestratorEnv,
+  buildExecutionOutputText,
   buildOutputSummary,
   mapFinishStatus,
   type OrchestratorCancelPayload,
@@ -262,7 +263,7 @@ export async function startDaemon(): Promise<void> {
         const normalizedStdout = execution.payload.provider === 'gemini'
           ? normalizeGeminiOutputText(execution.stdout)
           : execution.stdout.trim();
-        const outputText = [normalizedStdout, execution.stderr.trim()].filter(Boolean).join('\n');
+        const outputText = buildExecutionOutputText({ status: opts.status, stdout: normalizedStdout, stderr: execution.stderr });
         const outputSummary = buildOutputSummary(normalizedStdout, execution.stderr);
         const normalizedChildSessionId = execution.detectedChildSessionId?.trim();
 
@@ -327,6 +328,21 @@ export async function startDaemon(): Promise<void> {
       });
     };
 
+    // The provider session id is known long before the execution finishes (Codex prints it in its
+    // header). Report it right away so clients can read the live conversation of a running task.
+    const recordDetectedChildSessionId = (execution: ManagedOrchestratorExecution, childSessionId: string) => {
+      execution.detectedChildSessionId = childSessionId;
+      void execution.startReportPromise
+        .then(() => api.reportOrchestratorExecutionChildSession({
+          executionId: execution.payload.executionId,
+          dispatchToken: execution.payload.dispatchToken,
+          childSessionId,
+        }))
+        .catch((error) => {
+          logger.debug(`[ORCHESTRATOR] Failed to report child session for execution ${execution.payload.executionId}`, error);
+        });
+    };
+
     const handleOrchestratorDispatch = async (payload: OrchestratorDispatchPayload): Promise<{ accepted: boolean; duplicate?: boolean }> => {
       const existing = executionIdToManagedExecution.get(payload.executionId);
       if (existing) {
@@ -381,7 +397,7 @@ export async function startDaemon(): Promise<void> {
             const probe = `${execution.stdoutLineBuffer}${text}`;
             const parsed = extractCodexSessionId(probe);
             if (parsed) {
-              execution.detectedChildSessionId = parsed;
+              recordDetectedChildSessionId(execution, parsed);
             }
             execution.stdoutLineBuffer = probe.slice(-256);
           } else if (payload.provider === 'gemini' && payload.executionType === 'initial') {
@@ -391,7 +407,7 @@ export async function startDaemon(): Promise<void> {
             for (const line of lines) {
               const parsed = extractGeminiSessionIdFromJsonLine(line);
               if (parsed) {
-                execution.detectedChildSessionId = parsed;
+                recordDetectedChildSessionId(execution, parsed);
                 break;
               }
             }
@@ -405,7 +421,7 @@ export async function startDaemon(): Promise<void> {
           const probe = `${execution.stdoutLineBuffer}${text}`;
           const parsed = extractCodexSessionId(probe);
           if (parsed) {
-            execution.detectedChildSessionId = parsed;
+            recordDetectedChildSessionId(execution, parsed);
           }
           execution.stdoutLineBuffer = probe.slice(-256);
         }

@@ -251,6 +251,9 @@ const {
         if (where.childSessionId?.not === null && execution.childSessionId === null) {
             return false;
         }
+        if (where.childSessionId === null && execution.childSessionId !== null) {
+            return false;
+        }
         if (where.status && !matchesStatus(execution.status, where.status)) {
             return false;
         }
@@ -1334,6 +1337,44 @@ describe('orchestrator integration paths', () => {
             }),
             expect.any(Number),
         );
+        await app.close();
+    });
+
+    it('records childSessionId while the execution is running and keeps the first one', async () => {
+        const app = await createApp();
+        await app.inject({
+            method: 'POST',
+            url: '/v1/orchestrator/submit',
+            headers: { 'x-user-id': 'user-1' },
+            payload: {
+                title: 'early-child-session',
+                tasks: [{ provider: 'codex', prompt: 'initial prompt' }],
+            },
+        });
+        await orchestratorSchedulerTick(new Date('2026-03-16T00:00:00.000Z'));
+        const execution = state.executions[0];
+        expect(execution.childSessionId).toBeNull();
+
+        const report = (childSessionId: string, dispatchToken: string = execution.dispatchToken) => app.inject({
+            method: 'POST',
+            url: `/v1/orchestrator/executions/${execution.id}/child-session`,
+            headers: { 'x-user-id': 'user-1' },
+            payload: { dispatchToken, childSessionId },
+        });
+
+        const wrongToken = await report('11111111-2222-4333-8444-555555555555', 'wrong-token');
+        expect(wrongToken.statusCode).toBe(409);
+        expect(state.executions[0].childSessionId).toBeNull();
+
+        const first = await report('11111111-2222-4333-8444-555555555555');
+        expect(first.statusCode).toBe(200);
+        expect(first.json().data.recorded).toBe(true);
+        expect(state.executions[0].childSessionId).toBe('11111111-2222-4333-8444-555555555555');
+
+        const second = await report('99999999-2222-4333-8444-555555555555');
+        expect(second.statusCode).toBe(200);
+        expect(second.json().data.recorded).toBe(false);
+        expect(state.executions[0].childSessionId).toBe('11111111-2222-4333-8444-555555555555');
         await app.close();
     });
 

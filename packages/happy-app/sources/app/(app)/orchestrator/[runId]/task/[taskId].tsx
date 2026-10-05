@@ -18,6 +18,7 @@ import {
     sortOrchestratorExecutionsByAttemptDesc,
 } from '@/components/orchestrator/display';
 import { useMachineNameMap } from '@/hooks/useMachineNameMap';
+import { useOrchestratorLiveMessage } from '@/hooks/useOrchestratorLiveMessage';
 import { formatDate } from '@/utils/formatDate';
 import { t } from '@/text';
 
@@ -147,6 +148,40 @@ const stylesheet = StyleSheet.create((theme) => ({
 
 function buildTaskTitle(task: OrchestratorTaskRecord): string {
     return task.title || task.taskKey || t('settings.orchestratorProviderTask', { provider: task.provider });
+}
+
+/**
+ * The result of one execution. A finished one shows the output the daemon stored (the provider's
+ * final message). A running one is only mounted while its card is expanded, so following its
+ * conversation starts on expand and stops on collapse.
+ */
+function ExecutionResult({ execution }: { execution: OrchestratorExecutionRecord; }) {
+    const styles = stylesheet;
+    const isRunning = execution.status === 'running';
+    const liveMessage = useOrchestratorLiveMessage({
+        machineId: execution.machineId,
+        provider: execution.provider,
+        childSessionId: execution.childSessionId,
+        enabled: isRunning,
+    });
+
+    const title = isRunning
+        ? t('settings.orchestratorLatestMessageTitle')
+        : execution.status === 'completed'
+            ? t('settings.orchestratorLastMessageTitle')
+            : t('settings.orchestratorResultTitle');
+    const text = isRunning
+        ? liveMessage
+        : execution.outputText || sanitizeOrchestratorOutputSummary(execution.outputSummary);
+
+    return (
+        <>
+            <Text style={styles.detailLabel}>{title}</Text>
+            {!!execution.errorCode && <Text style={styles.row}>{t('settings.orchestratorLabelErrorCode')}: {execution.errorCode}</Text>}
+            {!!execution.errorMessage && <Text style={styles.row}>{t('settings.orchestratorLabelErrorMessage')}: {execution.errorMessage}</Text>}
+            <Text style={styles.monoText} selectable>{text || '-'}</Text>
+        </>
+    );
 }
 
 export default function OrchestratorTaskDetailScreen() {
@@ -365,7 +400,6 @@ export default function OrchestratorTaskDetailScreen() {
                         );
                     }
 
-                    const executionOutputSummary = sanitizeOrchestratorOutputSummary(execution.outputSummary);
                     const executionPrompt = resolveOrchestratorExecutionPrompt(task.prompt, execution);
                     return (
                         <View style={[styles.card, styles.executionDetailsCard]}>
@@ -378,10 +412,7 @@ export default function OrchestratorTaskDetailScreen() {
                                 <Text style={styles.detailLabel}>{t('settings.orchestratorLabelPrompt')}</Text>
                                 <Text style={styles.monoText} selectable>{executionPrompt || '-'}</Text>
 
-                                <Text style={styles.detailLabel}>{t('settings.orchestratorResultTitle')}</Text>
-                                {!!execution.errorCode && <Text style={styles.row}>{t('settings.orchestratorLabelErrorCode')}: {execution.errorCode}</Text>}
-                                {!!execution.errorMessage && <Text style={styles.row}>{t('settings.orchestratorLabelErrorMessage')}: {execution.errorMessage}</Text>}
-                                <Text style={styles.monoText} selectable>{execution.outputText || executionOutputSummary || '-'}</Text>
+                                <ExecutionResult execution={execution} />
                             </View>
                         </View>
                     );

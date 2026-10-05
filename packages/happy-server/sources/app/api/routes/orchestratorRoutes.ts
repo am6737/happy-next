@@ -1777,6 +1777,59 @@ export function orchestratorRoutes(app: Fastify) {
         });
     });
 
+    // The daemon learns the provider session id while the execution is still running (Codex prints
+    // it in its header). Recording it early lets clients read the live conversation of a task.
+    app.post('/v1/orchestrator/executions/:id/child-session', {
+        preHandler: app.authenticate,
+        schema: {
+            params: z.object({
+                id: z.string(),
+            }),
+            body: z.object({
+                dispatchToken: z.string().min(1),
+                childSessionId: z.string().min(1).max(256),
+            }),
+        },
+    }, async (request, reply) => {
+        const userId = request.userId;
+        const { id } = request.params;
+        const { dispatchToken, childSessionId } = request.body;
+
+        const execution = await db.orchestratorExecution.findFirst({
+            where: {
+                id,
+                run: {
+                    accountId: userId,
+                },
+            },
+            select: {
+                id: true,
+                dispatchToken: true,
+            },
+        });
+        if (!execution) {
+            return sendError(reply, 404, 'NOT_FOUND', 'Execution not found');
+        }
+        if (execution.dispatchToken !== dispatchToken) {
+            return sendError(reply, 409, 'CONFLICT', 'dispatchToken mismatch');
+        }
+
+        // Only a live execution without a session id yet: a finished one already got it from `finish`
+        const updated = await db.orchestratorExecution.updateMany({
+            where: {
+                id,
+                status: { in: ['dispatching', 'running'] },
+                childSessionId: null,
+            },
+            data: { childSessionId },
+        });
+
+        return reply.send({
+            ok: true,
+            data: { recorded: updated.count > 0 },
+        });
+    });
+
     app.post('/v1/orchestrator/executions/:id/finish', {
         preHandler: app.authenticate,
         schema: {

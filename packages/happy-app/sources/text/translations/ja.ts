@@ -253,6 +253,8 @@ export const ja: TranslationStructure = {
         orchestratorLoadingTask: 'タスク詳細を読み込み中...',
         orchestratorTaskNotFound: 'タスクが見つかりません',
         orchestratorResultTitle: '結果',
+        orchestratorLatestMessageTitle: '最新のメッセージ',
+        orchestratorLastMessageTitle: '最後のメッセージ',
         orchestratorExecutionHistoryTitle: 'リトライ / 実行履歴',
         orchestratorNoExecutions: '実行記録はまだありません。',
         orchestratorLabelRunId: '実行 ID',

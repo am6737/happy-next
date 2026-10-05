@@ -222,6 +222,8 @@ export const zhHant: TranslationStructure = {
         orchestratorLoadingTask: '正在載入任務詳情...',
         orchestratorTaskNotFound: '找不到任務',
         orchestratorResultTitle: '結果',
+        orchestratorLatestMessageTitle: '最新訊息',
+        orchestratorLastMessageTitle: '最後訊息',
         orchestratorExecutionHistoryTitle: '重試 / 執行記錄',
         orchestratorNoExecutions: '暫無執行記錄。',
         orchestratorLabelRunId: '執行 ID',

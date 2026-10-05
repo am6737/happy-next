@@ -17,6 +17,15 @@ describe('normalizeGeminiOutputText', () => {
     expect(normalizeGeminiOutputText(stdout)).toBe('这是纯文本回答');
   });
 
+  it('uses only the response field and ignores metadata strings next to it', () => {
+    const stdout = JSON.stringify({
+      session_id: '11111111-2222-4333-8444-555555555555',
+      response: '最终回答',
+      stats: { models: { 'gemini-2.5-pro': { api: { totalRequests: 1 } } }, note: 'telemetry note' },
+    });
+    expect(normalizeGeminiOutputText(stdout)).toBe('最终回答');
+  });
+
   it('extracts natural language text from line-delimited JSON output', () => {
     const stdout = [
       JSON.stringify({ session_id: '11111111-2222-4333-8444-555555555555' }),

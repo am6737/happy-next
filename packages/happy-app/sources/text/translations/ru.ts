@@ -182,6 +182,8 @@ export const ru: TranslationStructure = {
         orchestratorLoadingTask: 'Загрузка деталей задачи...',
         orchestratorTaskNotFound: 'Задача не найдена',
         orchestratorResultTitle: 'Результат',
+        orchestratorLatestMessageTitle: 'Текущее сообщение',
+        orchestratorLastMessageTitle: 'Последнее сообщение',
         orchestratorExecutionHistoryTitle: 'Повторы / История выполнений',
         orchestratorNoExecutions: 'Записей о выполнении пока нет.',
         orchestratorLabelRunId: 'ID запуска',

@@ -221,6 +221,8 @@ export const pt: TranslationStructure = {
         orchestratorLoadingTask: 'Carregando detalhes da tarefa...',
         orchestratorTaskNotFound: 'Tarefa não encontrada',
         orchestratorResultTitle: 'Resultado',
+        orchestratorLatestMessageTitle: 'Mensagem mais recente',
+        orchestratorLastMessageTitle: 'Última mensagem',
         orchestratorExecutionHistoryTitle: 'Tentativas / Histórico de execuções',
         orchestratorNoExecutions: 'Nenhum registro de execução ainda.',
         orchestratorLabelRunId: 'ID da execução',

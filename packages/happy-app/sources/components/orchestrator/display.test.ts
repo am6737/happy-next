@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
     formatOrchestratorProviderLabel,
+    pickLatestAssistantMessage,
     resolveTaskMachineId,
     resolveMachineName,
     resolveOrchestratorAttemptDisplay,
@@ -110,5 +111,20 @@ describe('orchestrator display helpers', () => {
         const nameMap = new Map([['id-aaa-bbb', 'My Mac']]);
         expect(resolveMachineName('id-aaa-bbb', nameMap)).toBe('My Mac (id-aaa-b)');
         expect(resolveMachineName('id-aaa-unknown', nameMap)).toBe('id-aaa-u');
+    });
+
+    it('picks the latest non-empty assistant message', () => {
+        expect(pickLatestAssistantMessage([
+            { role: 'user', content: 'do it' },
+            { role: 'assistant', content: 'first step' },
+            { role: 'assistant', content: '  second step \n' },
+            { role: 'user', content: 'ignored' },
+        ])).toBe('second step');
+        expect(pickLatestAssistantMessage([
+            { role: 'assistant', content: 'kept' },
+            { role: 'assistant', content: '   ' },
+        ])).toBe('kept');
+        expect(pickLatestAssistantMessage([{ role: 'user', content: 'only prompt' }])).toBeNull();
+        expect(pickLatestAssistantMessage([])).toBeNull();
     });
 });

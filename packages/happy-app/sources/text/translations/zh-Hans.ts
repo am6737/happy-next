@@ -223,6 +223,8 @@ export const zhHans: TranslationStructure = {
         orchestratorLoadingTask: '正在加载任务详情...',
         orchestratorTaskNotFound: '未找到任务',
         orchestratorResultTitle: '结果',
+        orchestratorLatestMessageTitle: '最新消息',
+        orchestratorLastMessageTitle: '最后消息',
         orchestratorExecutionHistoryTitle: '重试 / 执行记录',
         orchestratorNoExecutions: '暂无执行记录。',
         orchestratorLabelRunId: '运行 ID',

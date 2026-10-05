@@ -226,6 +226,8 @@ export const en = {
         orchestratorLoadingTask: 'Loading task details...',
         orchestratorTaskNotFound: 'Task not found',
         orchestratorResultTitle: 'Result',
+        orchestratorLatestMessageTitle: 'Latest message',
+        orchestratorLastMessageTitle: 'Last message',
         orchestratorExecutionHistoryTitle: 'Retry / Execution History',
         orchestratorNoExecutions: 'No execution records yet.',
 

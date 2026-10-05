@@ -221,6 +221,8 @@ export const ca: TranslationStructure = {
         orchestratorLoadingTask: 'Carregant detalls de la tasca...',
         orchestratorTaskNotFound: 'Tasca no trobada',
         orchestratorResultTitle: 'Resultat',
+        orchestratorLatestMessageTitle: 'Missatge més recent',
+        orchestratorLastMessageTitle: 'Últim missatge',
         orchestratorExecutionHistoryTitle: 'Reintents / Historial d\'execucions',
         orchestratorNoExecutions: 'Encara no hi ha registres d\'execució.',
         orchestratorLabelRunId: 'ID d\'execució',

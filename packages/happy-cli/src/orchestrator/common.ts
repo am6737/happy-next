@@ -128,20 +128,40 @@ export function appendOutputChunk(current: string, chunk: string, maxChars: numb
   return combined.slice(combined.length - maxChars);
 }
 
-export function buildOutputSummary(stdout: string, stderr: string, maxChars: number = 400): string | null {
-  const source = stdout.trim() ? stdout : stderr;
-  if (!source.trim()) {
+const ORCHESTRATOR_ERROR_LOG_TAIL_LINES = 40;
+const ORCHESTRATOR_ERROR_LOG_TAIL_CHARS = 4_000;
+
+/**
+ * Short preview of an execution's output. A successful run's stdout is its final message, so the
+ * summary is its beginning; without stdout the last stderr line is the most telling one.
+ */
+export function buildOutputSummary(stdout: string, stderr: string, maxChars: number = 200): string | null {
+  const head = stdout.trim();
+  const source = head || stderr.split(/\r?\n/).map((line) => line.trim()).filter((line) => line.length > 0).at(-1) || '';
+  if (!source) {
     return null;
   }
-
-  const lastLine = source
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0)
-    .at(-1) ?? source.trim();
-
-  if (lastLine.length <= maxChars) {
-    return lastLine;
+  if (source.length <= maxChars) {
+    return source;
   }
-  return `${lastLine.slice(0, maxChars - 3)}...`;
+  return `${source.slice(0, maxChars - 3)}...`;
+}
+
+/**
+ * The result text of an execution: the final message the provider printed on stdout. Provider
+ * progress logs go to stderr, so they are only attached (as a short tail) when the run did not
+ * complete or printed nothing, to explain what went wrong.
+ */
+export function buildExecutionOutputText(opts: { status: string; stdout: string; stderr: string }): string {
+  const stdout = opts.stdout.trim();
+  if (opts.status === 'completed' && stdout) {
+    return stdout;
+  }
+  const stderrTail = opts.stderr
+    .trim()
+    .split(/\r?\n/)
+    .slice(-ORCHESTRATOR_ERROR_LOG_TAIL_LINES)
+    .join('\n')
+    .slice(-ORCHESTRATOR_ERROR_LOG_TAIL_CHARS);
+  return [stdout, stderrTail].filter(Boolean).join('\n');
 }

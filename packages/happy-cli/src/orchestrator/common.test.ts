@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   applyDefaultWorkingDirectory,
   appendOutputChunk,
+  buildExecutionOutputText,
   buildOrchestratorEnv,
   buildOutputSummary,
   decodePromptFromBase64,
@@ -47,10 +48,25 @@ describe('orchestrator common helpers', () => {
     expect(second).toBe('bcdef');
   });
 
-  it('builds summary from last non-empty line', () => {
-    expect(buildOutputSummary('line1\nline2\n', '')).toBe('line2');
-    expect(buildOutputSummary('', ' err line \n')).toBe('err line');
+  it('builds summary from the beginning of stdout, falling back to the last stderr line', () => {
+    expect(buildOutputSummary('line1\nline2\n', 'noise')).toBe('line1\nline2');
+    expect(buildOutputSummary('x'.repeat(300), '')).toBe(`${'x'.repeat(197)}...`);
+    expect(buildOutputSummary('', 'first\n err line \n')).toBe('err line');
     expect(buildOutputSummary('   ', '   ')).toBeNull();
+  });
+
+  it('uses only stdout as the result of a completed execution', () => {
+    expect(buildExecutionOutputText({ status: 'completed', stdout: ' final answer \n', stderr: 'progress log\nmore log' })).toBe('final answer');
+  });
+
+  it('attaches the stderr tail when the execution did not complete or printed nothing', () => {
+    const stderr = Array.from({ length: 100 }, (_, index) => `log ${index}`).join('\n');
+    const failed = buildExecutionOutputText({ status: 'failed', stdout: 'partial', stderr });
+    expect(failed.startsWith('partial\nlog 60\n')).toBe(true);
+    expect(failed.endsWith('log 99')).toBe(true);
+    expect(failed).not.toContain('log 59\n');
+    expect(buildExecutionOutputText({ status: 'completed', stdout: '  ', stderr: 'boom' })).toBe('boom');
+    expect(buildExecutionOutputText({ status: 'timeout', stdout: '', stderr: '' })).toBe('');
   });
 
   it('applies default workingDirectory to tasks that do not provide one', () => {

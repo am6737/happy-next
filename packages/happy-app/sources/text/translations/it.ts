@@ -250,6 +250,8 @@ export const it: TranslationStructure = {
         orchestratorLoadingTask: 'Caricamento dettagli attività...',
         orchestratorTaskNotFound: 'Attività non trovata',
         orchestratorResultTitle: 'Risultato',
+        orchestratorLatestMessageTitle: 'Messaggio più recente',
+        orchestratorLastMessageTitle: 'Ultimo messaggio',
         orchestratorExecutionHistoryTitle: 'Tentativi / Cronologia esecuzioni',
         orchestratorNoExecutions: 'Nessun record di esecuzione.',
         orchestratorLabelRunId: 'ID esecuzione',

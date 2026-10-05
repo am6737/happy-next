@@ -344,14 +344,14 @@ export async function machineListClaudeSessions(
  */
 export async function machineGetClaudeSessionPreview(
     machineId: string,
-    projectId: string,
+    projectId: string | undefined, // omitted: the machine looks the project up by session id
     sessionId: string,
     options?: { limit?: number; timeoutMs?: number }
 ): Promise<{ messages: ClaudeSessionPreviewMessage[] }> {
     const timeoutMs = options?.timeoutMs ?? 10000;
     const limit = options?.limit ?? 10;
 
-    const rpcPromise = apiSocket.machineRPC<any, { projectId: string; sessionId: string; limit: number }>(
+    const rpcPromise = apiSocket.machineRPC<any, { projectId?: string; sessionId: string; limit: number }>(
         machineId,
         'claude-session-preview',
         { projectId, sessionId, limit }

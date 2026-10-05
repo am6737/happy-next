@@ -312,6 +312,31 @@ export class ApiClient {
   }
 
   /**
+   * Report the provider session id of a running orchestrator execution as soon as it is known
+   * (daemon -> server), so clients can follow the conversation before the execution finishes.
+   */
+  async reportOrchestratorExecutionChildSession(opts: {
+    executionId: string;
+    dispatchToken: string;
+    childSessionId: string;
+  }): Promise<void> {
+    await axios.post(
+      `${configuration.serverUrl}/v1/orchestrator/executions/${opts.executionId}/child-session`,
+      {
+        dispatchToken: opts.dispatchToken,
+        childSessionId: opts.childSessionId,
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${this.credential.token}`,
+          'Content-Type': 'application/json'
+        },
+        timeout: 30000,
+      }
+    );
+  }
+
+  /**
    * Report orchestrator execution finish (daemon -> server)
    */
   async reportOrchestratorExecutionFinish(opts: {
