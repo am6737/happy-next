@@ -2,6 +2,7 @@ import fastify from "fastify";
 import { serializerCompiler, validatorCompiler, ZodTypeProvider } from "fastify-type-provider-zod";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { __resetSessionTurnRuntimeForTests, markTurnStarted } from "@/app/presence/sessionTurnRuntime";
+import { dispatchNextPendingIfPossible } from "@/app/session/pendingMessageAutoDispatch";
 import { type Fastify } from "../types";
 
 type SessionRecord = {
@@ -40,6 +41,7 @@ type PendingMessageRecord = {
     trackCliDelivery: boolean;
     pinnedAt: Date | null;
     pausedAt: Date | null;
+    deliverAt: Date | null;
     createdAt: Date;
     updatedAt: Date;
 };
@@ -145,6 +147,7 @@ const {
         trackCliDelivery?: boolean;
         pinnedAt?: Date | null;
         pausedAt?: Date | null;
+        deliverAt?: Date | null;
         createdAt?: Date;
     }) => {
         const createdAt = input.createdAt ?? new Date(state.nowMs);
@@ -159,6 +162,7 @@ const {
             trackCliDelivery: input.trackCliDelivery ?? false,
             pinnedAt: input.pinnedAt ?? null,
             pausedAt: input.pausedAt ?? null,
+            deliverAt: input.deliverAt ?? null,
             createdAt,
             updatedAt: createdAt,
         };
@@ -334,6 +338,19 @@ const {
         if (args?.where?.pausedAt === null) {
             rows = rows.filter((message) => message.pausedAt === null);
         }
+        if (args?.where?.deliverAt?.lte instanceof Date) {
+            const limit = args.where.deliverAt.lte.getTime();
+            rows = rows.filter((message) => message.deliverAt !== null && message.deliverAt.getTime() <= limit);
+        }
+        if (Array.isArray(args?.where?.OR)) {
+            // Only the "unscheduled or already due" shape is used by the service.
+            const clauses = args.where.OR as Array<{ deliverAt: null | { lte: Date } }>;
+            rows = rows.filter((message) => clauses.some((clause) => (
+                clause.deliverAt === null
+                    ? message.deliverAt === null
+                    : message.deliverAt !== null && message.deliverAt.getTime() <= clause.deliverAt.lte.getTime()
+            )));
+        }
 
         const orderBy = args?.orderBy;
         if (Array.isArray(orderBy)) {
@@ -395,6 +412,7 @@ const {
             trackCliDelivery: args?.data?.trackCliDelivery ?? false,
             pinnedAt: args?.data?.pinnedAt ?? null,
             pausedAt: args?.data?.pausedAt ?? null,
+            deliverAt: args?.data?.deliverAt ?? null,
             createdAt,
             updatedAt: createdAt,
         };
@@ -413,6 +431,9 @@ const {
         }
         if (args?.data?.pausedAt !== undefined) {
             row.pausedAt = args.data.pausedAt;
+        }
+        if (args?.data?.deliverAt !== undefined) {
+            row.deliverAt = args.data.deliverAt;
         }
         row.updatedAt = new Date(state.nowMs);
         state.nowMs += 1;
@@ -1290,6 +1311,169 @@ describe("v3SessionRoutes", () => {
         } finally {
             vi.useRealTimers();
         }
+    });
+
+    describe("scheduled messages", () => {
+        const inject = (method: "POST" | "PATCH", url: string, payload?: unknown) => app.inject({
+            method,
+            url,
+            headers: { "x-user-id": "user-1" },
+            payload: payload as any,
+        });
+
+        it("queues a scheduled /send with its deliverAt even when the session is idle", async () => {
+            seedSession({ id: "session-1", accountId: "user-1", seq: 0 });
+            app = await createApp();
+            const deliverAt = Date.now() + 60 * 60_000;
+
+            const response = await inject("POST", "/v3/sessions/session-1/send", {
+                localId: "scheduled-a",
+                content: "enc-scheduled-a",
+                deliverAt,
+            });
+
+            expect(response.statusCode).toBe(200);
+            const body = response.json();
+            expect(body.mode).toBe("scheduled");
+            expect(body.pending.deliverAt).toBe(deliverAt);
+            expect(state.messages).toHaveLength(0);
+            expect(state.pendingMessages).toHaveLength(1);
+        });
+
+        it("rejects a deliverAt that is not in the future", async () => {
+            seedSession({ id: "session-1", accountId: "user-1", seq: 0 });
+            app = await createApp();
+
+            const response = await inject("POST", "/v3/sessions/session-1/send", {
+                localId: "scheduled-past",
+                content: "enc-scheduled-past",
+                deliverAt: Date.now() - 1000,
+            });
+
+            expect(response.statusCode).toBe(400);
+            expect(state.pendingMessages).toHaveLength(0);
+        });
+
+        it("does not force a normal /send into the queue because of a not-yet-due scheduled message", async () => {
+            seedSession({ id: "session-1", accountId: "user-1", seq: 0 });
+            seedPendingMessage({
+                sessionId: "session-1",
+                localId: "scheduled-later",
+                content: { t: "encrypted", c: "later" },
+                deliverAt: new Date(Date.now() + 60 * 60_000),
+            });
+            app = await createApp();
+
+            const response = await inject("POST", "/v3/sessions/session-1/send", {
+                localId: "direct-now",
+                content: "enc-direct-now",
+            });
+
+            expect(response.json().mode).toBe("sent");
+            expect(state.messages.map((m) => m.localId)).toEqual(["direct-now"]);
+            expect(state.pendingMessages).toHaveLength(1);
+        });
+
+        it("only dispatches a scheduled message once it is due", async () => {
+            vi.useFakeTimers({ toFake: ["setTimeout"] });
+            try {
+                seedSession({ id: "session-1", accountId: "user-1", seq: 0 });
+                const notDue = seedPendingMessage({
+                    sessionId: "session-1",
+                    localId: "not-due",
+                    content: { t: "encrypted", c: "not-due" },
+                    deliverAt: new Date(Date.now() + 60 * 60_000),
+                });
+                seedPendingMessage({
+                    sessionId: "session-1",
+                    localId: "due",
+                    content: { t: "encrypted", c: "due" },
+                    deliverAt: new Date(Date.now() - 1000),
+                });
+
+                const first = dispatchNextPendingIfPossible({ ownerId: "user-1", sessionId: "session-1" });
+                await vi.advanceTimersByTimeAsync(5000);
+                expect((await first).dispatched).toBe(true);
+                expect(state.messages.map((m) => m.localId)).toEqual(["due"]);
+
+                __resetSessionTurnRuntimeForTests();
+                const second = dispatchNextPendingIfPossible({ ownerId: "user-1", sessionId: "session-1" });
+                await vi.advanceTimersByTimeAsync(5000);
+                expect((await second).dispatched).toBe(false);
+                expect(state.pendingMessages.map((m) => m.id)).toEqual([notDue.id]);
+            } finally {
+                vi.useRealTimers();
+            }
+        });
+
+        it("reschedules via PATCH deliverAt without touching the content", async () => {
+            seedSession({ id: "session-1", accountId: "user-1", seq: 0 });
+            const pending = seedPendingMessage({
+                sessionId: "session-1",
+                localId: "scheduled-a",
+                content: { t: "encrypted", c: "keep-me" },
+                deliverAt: new Date(Date.now() + 60_000),
+            });
+            app = await createApp();
+            const next = Date.now() + 2 * 60 * 60_000;
+
+            const response = await inject("PATCH", `/v3/sessions/session-1/pending-messages/${pending.id}`, { deliverAt: next });
+
+            expect(response.statusCode).toBe(200);
+            expect(state.pendingMessages[0].deliverAt?.getTime()).toBe(next);
+            expect(state.pendingMessages[0].content).toEqual({ t: "encrypted", c: "keep-me" });
+
+            const past = await inject("PATCH", `/v3/sessions/session-1/pending-messages/${pending.id}`, { deliverAt: Date.now() - 1000 });
+            expect(past.statusCode).toBe(400);
+        });
+
+        it("send-now unschedules, resumes and dispatches the message, and is idempotent", async () => {
+            vi.useFakeTimers({ toFake: ["setTimeout"] });
+            try {
+                seedSession({ id: "session-1", accountId: "user-1", seq: 0 });
+                const pending = seedPendingMessage({
+                    sessionId: "session-1",
+                    localId: "scheduled-paused",
+                    content: { t: "encrypted", c: "go" },
+                    pausedAt: new Date(Date.now() - 1000),
+                    deliverAt: new Date(Date.now() + 60 * 60_000),
+                });
+                app = await createApp();
+
+                const request = inject("POST", `/v3/sessions/session-1/pending-messages/${pending.id}/send-now`);
+                await vi.advanceTimersByTimeAsync(5000);
+                const response = await request;
+
+                expect(response.statusCode).toBe(200);
+                expect(response.json().dispatched).toBe(true);
+                expect(state.pendingMessages).toHaveLength(0);
+                expect(state.messages.map((m) => m.localId)).toEqual(["scheduled-paused"]);
+
+                const again = await inject("POST", `/v3/sessions/session-1/pending-messages/${pending.id}/send-now`);
+                expect(again.statusCode).toBe(404);
+            } finally {
+                vi.useRealTimers();
+            }
+        });
+
+        it("send-now on a busy session keeps the message pinned at the head of the queue", async () => {
+            seedSession({ id: "session-1", accountId: "user-1", seq: 0 });
+            markTurnStarted("session-1");
+            const pending = seedPendingMessage({
+                sessionId: "session-1",
+                localId: "scheduled-busy",
+                content: { t: "encrypted", c: "wait" },
+                deliverAt: new Date(Date.now() + 60 * 60_000),
+            });
+            app = await createApp();
+
+            const response = await inject("POST", `/v3/sessions/session-1/pending-messages/${pending.id}/send-now`);
+
+            expect(response.json().dispatched).toBe(false);
+            expect(state.pendingMessages[0].deliverAt).toBeNull();
+            expect(state.pendingMessages[0].pinnedAt).not.toBeNull();
+            expect(state.messages).toHaveLength(0);
+        });
     });
 
     it("keeps a paused pending message queued and does not dispatch it", async () => {

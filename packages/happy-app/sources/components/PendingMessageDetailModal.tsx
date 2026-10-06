@@ -27,7 +27,7 @@ import { SelectableTextView } from '@/components/SelectableTextView';
 import { useSessionPendingMessages } from '@/sync/storage';
 import type { PendingMessage } from '@/sync/storageTypes';
 import { t } from '@/text';
-import { getPendingPreviewText } from './pendingQueuePanelUtils';
+import { getPendingPreviewText, getPendingScheduleInfo } from './pendingQueuePanelUtils';
 
 const HEADER_H = 44;
 const CANCEL_H = 57;
@@ -45,6 +45,7 @@ interface PendingMessageDetailModalProps {
     onDelete: (pendingId: string) => Promise<void> | void;
     onPause: (pendingId: string) => Promise<void> | void;
     onSaveEdit: (pendingId: string, newText: string) => Promise<void> | void;
+    onReschedule?: (pendingId: string) => void;
     onClose: () => void;
 }
 
@@ -57,6 +58,7 @@ export function PendingMessageDetailModal({
     onDelete,
     onPause,
     onSaveEdit,
+    onReschedule,
     onClose,
 }: PendingMessageDetailModalProps) {
     const { theme } = useUnistyles();
@@ -72,6 +74,7 @@ export function PendingMessageDetailModal({
     const live = useSessionPendingMessages(sessionId).find((m) => m.id === message.id) ?? null;
     const m = live ?? message;
     const isPaused = m.pausedAt !== null;
+    const schedule = getPendingScheduleInfo(m.deliverAt);
 
     const [editing, setEditing] = React.useState(false);
     const [draft, setDraft] = React.useState(m.previewText);
@@ -185,6 +188,9 @@ export function PendingMessageDetailModal({
                 <View style={styles.header}>
                     <Text style={styles.title}>{t('pendingQueue.detailTitle')}</Text>
                     <View style={styles.headerBadges}>
+                        {schedule && (
+                            <Text style={styles.scheduledTime}>{schedule.due ? t('pendingQueue.scheduledDue') : schedule.time}</Text>
+                        )}
                         {isPaused && (
                             <Ionicons name="pause" size={15} color={theme.colors.textSecondary} />
                         )}
@@ -216,6 +222,13 @@ export function PendingMessageDetailModal({
                     {canManage && (
                         <>
                             <Action icon="pencil" label={t('pendingQueue.edit')} onPress={() => void startEdit()} />
+                            {m.deliverAt !== null && onReschedule && (
+                                <Action
+                                    icon="calendar"
+                                    label={t('pendingQueue.reschedule')}
+                                    onPress={() => { onReschedule(m.id); onClose(); }}
+                                />
+                            )}
                             {isPaused ? (
                                 <Action ion="play" label={t('pendingQueue.resume')} onPress={() => void onPause(m.id)} />
                             ) : (
@@ -313,6 +326,11 @@ const styles = StyleSheet.create((theme) => ({
     },
     imageBadgeCount: {
         color: theme.colors.textSecondary,
+        fontSize: 11,
+        fontWeight: '600',
+    },
+    scheduledTime: {
+        color: theme.colors.textLink,
         fontSize: 11,
         fontWeight: '600',
     },

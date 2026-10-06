@@ -9,9 +9,12 @@ import {
     deletePendingMessage,
     enqueuePendingMessage,
     listPendingMessages,
+    hasDispatchablePendingMessage,
     pausePendingMessage,
     pinPendingMessage,
+    releasePendingMessageForSendNow,
     updatePendingMessageContent,
+    updatePendingMessageDeliverAt,
     type PendingMessageRecord,
 } from "@/app/session/pendingMessageService";
 import { dispatchNextPendingIfPossible } from "@/app/session/pendingMessageAutoDispatch";
@@ -40,6 +43,7 @@ const sendMessageBodySchema = z.object({
     content: z.string(),
     localId: z.string().min(1),
     trackCliDelivery: z.boolean().optional().default(false),
+    deliverAt: z.number().int().positive().optional(),
 });
 
 const pendingMessageParamsSchema = z.object({
@@ -115,6 +119,7 @@ function toPendingResponseMessage(message: PendingMessageRecord) {
         trackCliDelivery: message.trackCliDelivery,
         pinnedAt: message.pinnedAt ? message.pinnedAt.getTime() : null,
         pausedAt: message.pausedAt ? message.pausedAt.getTime() : null,
+        deliverAt: message.deliverAt ? message.deliverAt.getTime() : null,
         createdAt: message.createdAt.getTime(),
         updatedAt: message.updatedAt.getTime(),
     };
@@ -417,7 +422,7 @@ export function v3SessionRoutes(app: Fastify) {
     }, async (request, reply) => {
         const userId = request.userId;
         const { sessionId } = request.params;
-        const { localId, content, trackCliDelivery } = request.body;
+        const { localId, content, trackCliDelivery, deliverAt } = request.body;
 
         if (!await canSendMessages(userId, sessionId)) {
             return reply.code(404).send({ error: "Session not found" });
@@ -438,18 +443,39 @@ export function v3SessionRoutes(app: Fastify) {
 
         const sentByName = await getSenderName(userId);
 
-        // Only *active* (non-paused) pending messages gate new sends. Paused
-        // drafts are invisible to the queue decision: a lone draft must not
-        // force every new message into the queue while the session is idle.
-        const hasPending = !!await db.sessionPendingMessage.findFirst({
-            where: {
+        // A scheduled send always goes to the durable pending queue, even when the
+        // session is idle: the scheduled-message worker (or a turn end) dispatches
+        // it once its time arrives.
+        if (deliverAt !== undefined) {
+            if (deliverAt <= Date.now()) {
+                return reply.code(400).send({ error: "deliverAt must be in the future" });
+            }
+
+            const { message: scheduledMessage, created } = await enqueuePendingMessage({
                 sessionId,
-                pausedAt: null,
-            },
-            select: {
-                id: true,
-            },
-        });
+                localId,
+                content,
+                sentBy: userId,
+                sentByName,
+                trackCliDelivery,
+                deliverAt: new Date(deliverAt),
+            });
+
+            if (created) {
+                await emitPendingUpsert(ownerId, sessionId, scheduledMessage);
+            }
+
+            return reply.send({
+                mode: "scheduled",
+                pending: toPendingResponseMessage(scheduledMessage),
+            });
+        }
+
+        // Only messages that are ready to go out gate new sends. Paused drafts and
+        // not-yet-due scheduled messages are invisible to the queue decision: a
+        // lone draft must not force every new message into the queue while the
+        // session is idle.
+        const hasPending = await hasDispatchablePendingMessage(sessionId);
 
         const mode = resolveSendMode({
             hasPending,
@@ -608,14 +634,20 @@ export function v3SessionRoutes(app: Fastify) {
         preHandler: app.authenticate,
         schema: {
             params: pendingMessageParamsSchema,
-            body: z.object({
-                content: z.string(),
-            }),
+            // Either replace the content or reschedule, never both in one call.
+            body: z.union([
+                z.object({ content: z.string() }),
+                z.object({ deliverAt: z.number().int().positive().nullable() }),
+            ]),
         },
     }, async (request, reply) => {
         const userId = request.userId;
         const { sessionId, pendingId } = request.params;
-        const { content } = request.body;
+        const body = request.body;
+
+        if ("deliverAt" in body && body.deliverAt !== null && body.deliverAt <= Date.now()) {
+            return reply.code(400).send({ error: "deliverAt must be in the future" });
+        }
 
         if (!await canSendMessages(userId, sessionId)) {
             return reply.code(404).send({ error: "Session not found" });
@@ -626,7 +658,9 @@ export function v3SessionRoutes(app: Fastify) {
             return reply.code(404).send({ error: "Session not found" });
         }
 
-        const pending = await updatePendingMessageContent(sessionId, pendingId, content);
+        const pending = "content" in body
+            ? await updatePendingMessageContent(sessionId, pendingId, body.content)
+            : await updatePendingMessageDeliverAt(sessionId, pendingId, body.deliverAt === null ? null : new Date(body.deliverAt));
         if (!pending) {
             return reply.code(404).send({ error: "Pending message not found" });
         }
@@ -635,6 +669,42 @@ export function v3SessionRoutes(app: Fastify) {
 
         return reply.send({
             message: toPendingResponseMessage(pending),
+        });
+    });
+
+    // Make a pending message the next one out (resume + unschedule + pin) and try
+    // to dispatch it right away. If the session is busy it stays pinned at the
+    // head of the queue and the caller may abort the running turn.
+    app.post("/v3/sessions/:sessionId/pending-messages/:pendingId/send-now", {
+        preHandler: app.authenticate,
+        schema: {
+            params: pendingMessageParamsSchema,
+        },
+    }, async (request, reply) => {
+        const userId = request.userId;
+        const { sessionId, pendingId } = request.params;
+
+        if (!await canSendMessages(userId, sessionId)) {
+            return reply.code(404).send({ error: "Session not found" });
+        }
+
+        const ownerId = await getSessionOwnerId(sessionId);
+        if (!ownerId) {
+            return reply.code(404).send({ error: "Session not found" });
+        }
+
+        const pending = await releasePendingMessageForSendNow(sessionId, pendingId);
+        if (!pending) {
+            return reply.code(404).send({ error: "Pending message not found" });
+        }
+
+        await emitPendingUpsert(ownerId, sessionId, pending);
+
+        const result = await dispatchNextPendingIfPossible({ ownerId, sessionId });
+
+        return reply.send({
+            dispatched: result.pendingId === pending.id,
+            pending: toPendingResponseMessage(pending),
         });
     });
 

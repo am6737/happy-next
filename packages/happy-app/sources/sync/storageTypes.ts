@@ -258,6 +258,7 @@ export interface PendingMessage {
     trackCliDelivery: boolean;
     pinnedAt: number | null;
     pausedAt: number | null;
+    deliverAt: number | null;
     createdAt: number;
     updatedAt: number;
 }

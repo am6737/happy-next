@@ -145,6 +145,7 @@ type SendMessageResult = {
 type SendOrQueueResult = (
     { success: true; mode: 'sent'; localId: string; }
     | { success: true; mode: 'queued'; localId: string; pendingId: string; }
+    | { success: true; mode: 'scheduled'; localId: string; pendingId: string; deliverAt: number; }
     | { success: false; localId: string; error?: string; reason: SendFailureReason; }
 );
 
@@ -972,6 +973,7 @@ class Sync {
             trackCliDelivery: pending.trackCliDelivery,
             pinnedAt: pending.pinnedAt,
             pausedAt: pending.pausedAt,
+            deliverAt: pending.deliverAt,
             createdAt: pending.createdAt,
             updatedAt: pending.updatedAt,
         };
@@ -1145,6 +1147,96 @@ class Sync {
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({ content: encryptedRawRecord })
+                }
+            );
+
+            if (!response.ok) {
+                if (response.status === 404) {
+                    storage.getState().removePendingMessage(sessionId, pendingId);
+                }
+                return false;
+            }
+
+            const body = await response.json();
+            const pending = ApiPendingMessageSchema.safeParse(body?.message);
+            if (!pending.success) {
+                return false;
+            }
+
+            const decrypted = await this.decryptPendingMessage(sessionId, pending.data);
+            if (decrypted) {
+                storage.getState().upsertPendingMessage(sessionId, decrypted);
+            }
+            return true;
+        } catch (error) {
+            return false;
+        }
+    }
+
+    // Resume + unschedule + pin the message server-side and dispatch it if the
+    // session is idle. `dispatched: false` means the session is busy and the
+    // message now sits at the head of the queue.
+    async sendPendingMessageNow(sessionId: string, pendingId: string): Promise<{ success: boolean; dispatched: boolean }> {
+        if (!this.credentials) {
+            return { success: false, dispatched: false };
+        }
+
+        try {
+            const API_ENDPOINT = getServerUrl();
+            const response = await fetch(
+                `${API_ENDPOINT}/v3/sessions/${sessionId}/pending-messages/${pendingId}/send-now`,
+                {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${this.credentials.token}`,
+                        'Content-Type': 'application/json'
+                    }
+                }
+            );
+
+            if (!response.ok) {
+                if (response.status === 404) {
+                    storage.getState().removePendingMessage(sessionId, pendingId);
+                }
+                return { success: false, dispatched: false };
+            }
+
+            const body = await response.json();
+            if (body?.dispatched === true) {
+                storage.getState().removePendingMessage(sessionId, pendingId);
+                return { success: true, dispatched: true };
+            }
+
+            const pending = ApiPendingMessageSchema.safeParse(body?.pending);
+            if (pending.success) {
+                const decrypted = await this.decryptPendingMessage(sessionId, pending.data);
+                if (decrypted) {
+                    storage.getState().upsertPendingMessage(sessionId, decrypted);
+                }
+            }
+            return { success: true, dispatched: false };
+        } catch (error) {
+            return { success: false, dispatched: false };
+        }
+    }
+
+    // Change when a scheduled pending message goes out; `null` unschedules it.
+    async updatePendingMessageDeliverAt(sessionId: string, pendingId: string, deliverAt: number | null): Promise<boolean> {
+        if (!this.credentials) {
+            return false;
+        }
+
+        try {
+            const API_ENDPOINT = getServerUrl();
+            const response = await fetch(
+                `${API_ENDPOINT}/v3/sessions/${sessionId}/pending-messages/${pendingId}`,
+                {
+                    method: 'PATCH',
+                    headers: {
+                        'Authorization': `Bearer ${this.credentials.token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ deliverAt })
                 }
             );
 
@@ -1459,7 +1551,8 @@ class Sync {
         displayText?: string,
         images?: LocalImage[],
         existingLocalId?: string,
-        onBeforeApply?: () => void
+        onBeforeApply?: () => void,
+        deliverAt?: number
     ): Promise<SendOrQueueResult> {
         const prepared = await this.prepareOutgoingMessage(sessionId, text, displayText, images, existingLocalId);
         if ('error' in prepared) {
@@ -1489,7 +1582,8 @@ class Sync {
                         body: JSON.stringify({
                             content: encryptedRawRecord,
                             localId,
-                            trackCliDelivery: true
+                            trackCliDelivery: true,
+                            ...(deliverAt !== undefined ? { deliverAt } : {})
                         })
                     }
                 );
@@ -1522,7 +1616,7 @@ class Sync {
             }
 
             const responseData = parsed.data;
-            if (responseData.mode === 'queued') {
+            if (responseData.mode === 'queued' || responseData.mode === 'scheduled') {
                 const pending = this.pendingSendCallbacks.get(localId);
                 if (pending) {
                     this.pendingSendCallbacks.delete(localId);
@@ -1532,6 +1626,15 @@ class Sync {
                 const decryptedPending = await this.decryptPendingMessage(sessionId, responseData.pending);
                 if (decryptedPending) {
                     storage.getState().upsertPendingMessage(sessionId, decryptedPending);
+                }
+                if (responseData.mode === 'scheduled') {
+                    return {
+                        success: true,
+                        mode: 'scheduled',
+                        localId,
+                        pendingId: responseData.pending.id,
+                        deliverAt: responseData.pending.deliverAt ?? deliverAt!,
+                    };
                 }
                 return { success: true, mode: 'queued', localId, pendingId: responseData.pending.id };
             }

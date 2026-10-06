@@ -15,6 +15,7 @@ import { ActionMenuModal } from '@/components/ActionMenuModal';
 import type { ActionMenuItem } from '@/components/ActionMenu';
 import { EmptyMessages } from '@/components/EmptyMessages';
 import { PendingQueuePanel } from '@/components/PendingQueuePanel';
+import { ScheduleMessageSheet } from '@/components/ScheduleMessageSheet';
 import { VoiceAssistantStatusBar } from '@/components/VoiceAssistantStatusBar';
 import { useDraft } from '@/hooks/useDraft';
 import { useImagePicker } from '@/hooks/useImagePicker';
@@ -543,8 +544,16 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
     // Ref for hidden file input (web only)
     const fileInputRef = React.useRef<HTMLInputElement>(null);
 
-    // Image picker sheet state
+    // Add (+) menu sheet state
     const [imagePickerSheetVisible, setImagePickerSheetVisible] = React.useState(false);
+    // Schedule sheet: `limitEndsAt` is captured when it opens (epoch seconds, or null).
+    const [scheduleSheet, setScheduleSheet] = React.useState<{ visible: boolean; limitEndsAt: number | null; autoFocus: boolean }>({ visible: false, limitEndsAt: null, autoFocus: false });
+    // Whether the composer had the cursor when the add (+) sheet was opened. The sheet's own
+    // presentation can take focus from it, so it is read on the press, before the sheet opens.
+    const composerFocusedOnAddRef = React.useRef(false);
+    const [reschedulePendingId, setReschedulePendingId] = React.useState<string | null>(null);
+    const messagesRef = React.useRef(messages);
+    messagesRef.current = messages;
 
     // Check if the current session flavor supports images
     const supportsImages = React.useMemo(() => {
@@ -937,22 +946,43 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
         isMicActive: realtimeStatus === 'connected' || realtimeStatus === 'connecting'
     }), [handleMicrophonePress, realtimeStatus]);
 
-    // Handle image button press - platform-specific behavior
+    // Add (+) button: opens the sheet (also the fallback where the native menu isn't available)
     const handleImageButtonPress = React.useCallback(() => {
-        if (Platform.OS === 'web') {
-            // Web: directly open file picker
-            fileInputRef.current?.click();
-        } else {
-            // Native: show action sheet with camera and gallery options
-            setImagePickerSheetVisible(true);
-        }
+        composerFocusedOnAddRef.current = inputRef.current?.isFocused() ?? false;
+        setImagePickerSheetVisible(true);
     }, []);
 
-    // Image picker sheet menu items
+    // Open the schedule sheet, offering "when the limit resets" if the newest
+    // usage-limit notice in the chat is still in the future.
+    const handleOpenScheduleSheet = React.useCallback(() => {
+        const nowSeconds = Math.floor(Date.now() / 1000);
+        let limitEndsAt: number | null = null;
+        for (const item of messagesRef.current) {
+            if (item.kind === 'agent-event' && item.event.type === 'limit-reached' && item.event.endsAt > nowSeconds) {
+                limitEndsAt = Math.max(limitEndsAt ?? 0, item.event.endsAt);
+            }
+        }
+        // On native the schedule editor only takes the cursor if the composer had it: the native
+        // iOS menu leaves the composer as it was, so it is read now; the add sheet recorded it on
+        // the press. On web it always does.
+        const autoFocus = Platform.OS === 'web'
+            || composerFocusedOnAddRef.current
+            || (inputRef.current?.isFocused() ?? false);
+        composerFocusedOnAddRef.current = false;
+        setScheduleSheet({ visible: true, limitEndsAt, autoFocus });
+    }, []);
+
+    // Add (+) menu items. Image rows are disabled (not hidden) when the AI has no image support, so
+    // scheduling stays reachable. Web has no camera and opens the file picker for the library.
     const imagePickerMenuItems: ActionMenuItem[] = React.useMemo(() => [
-        { label: t('session.takePhoto'), onPress: pickFromCamera },
-        { label: t('session.chooseFromLibrary'), onPress: pickFromGallery },
-    ], [pickFromCamera, pickFromGallery]);
+        {
+            label: t('session.chooseFromLibrary'),
+            onPress: Platform.OS === 'web' ? () => fileInputRef.current?.click() : pickFromGallery,
+            disabled: !supportsImages,
+        },
+        ...(Platform.OS === 'web' ? [] : [{ label: t('session.takePhoto'), onPress: pickFromCamera, disabled: !supportsImages }]),
+        { label: t('session.scheduleMessage'), onPress: handleOpenScheduleSheet },
+    ], [pickFromCamera, pickFromGallery, supportsImages, handleOpenScheduleSheet]);
 
     // Handle file input change (web only)
     const handleFileInputChange = React.useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
@@ -1114,22 +1144,69 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
 
     const canEdit = canEditSession(session);
 
+    // Schedule what the user typed (plus any attached images) for later. The sheet's text is
+    // authoritative: it was prefilled from the input and may have been edited there.
+    const handleScheduleSubmit = React.useCallback(async (scheduledText: string, deliverAt: number) => {
+        if (session.upgrading) {
+            Modal.alert(t('sessionInfo.cliUpgradeAvailable'), t('sessionInfo.cliUpgradeSendBlocked'));
+            return;
+        }
+
+        const imagesToSend = images.length > 0 ? [...images] : undefined;
+        if (imagesToSend) {
+            setIsUploadingImages(true);
+        }
+        try {
+            const result = await sync.sendOrQueueMessage(
+                sessionId, scheduledText, undefined, imagesToSend, undefined,
+                () => {
+                    setMessage('');
+                    clearDraft();
+                    clearImages();
+                },
+                deliverAt,
+            );
+            if (!result.success) {
+                Modal.alert(t('common.error'), t(sendFailureKey(result.reason)));
+                return;
+            }
+            setScheduleSheet((current) => ({ ...current, visible: false }));
+            trackMessageSent();
+        } finally {
+            setIsUploadingImages(false);
+        }
+    }, [clearDraft, clearImages, images, session.upgrading, sessionId]);
+
+    const rescheduleTarget = reschedulePendingId
+        ? pendingMessages.find((pending) => pending.id === reschedulePendingId) ?? null
+        : null;
+    const handleRescheduleSubmit = React.useCallback(async (_text: string, deliverAt: number) => {
+        if (!reschedulePendingId) return;
+        const success = await sync.updatePendingMessageDeliverAt(sessionId, reschedulePendingId, deliverAt);
+        if (!success) {
+            Modal.alert(t('common.error'), t('status.operationFailed'));
+            return;
+        }
+        setReschedulePendingId(null);
+    }, [reschedulePendingId, sessionId]);
+
     const handleSendNowPending = React.useCallback(async (pendingId: string) => {
         try {
-            // A paused (draft) message is excluded from dispatch, so resume it first —
-            // otherwise pin+abort would skip it and it could never be sent.
-            const target = pendingMessages.find((m) => m.id === pendingId);
-            if (target?.pausedAt != null) {
-                await sync.pausePendingMessage(sessionId, pendingId);
+            // The server resumes, unschedules and pins the message, then dispatches it
+            // right away if the session is idle.
+            const sentNow = await sync.sendPendingMessageNow(sessionId, pendingId);
+            if (!sentNow.success) {
+                throw new Error('send-now failed');
             }
-            // Pin the message so it becomes the next to dispatch (pinnedAt desc ordering),
-            // then abort the current turn — the server auto-dispatches the first pending message.
-            await sync.pinPendingMessage(sessionId, pendingId);
-            await sessionAbort(sessionId);
+            // Session is busy: the message now heads the queue, so abort the running turn
+            // and the server dispatches it when the turn ends.
+            if (!sentNow.dispatched) {
+                await sessionAbort(sessionId);
+            }
         } catch {
             Modal.alert(t('common.error'), t('status.operationFailed'));
         }
-    }, [sessionId, pendingMessages]);
+    }, [sessionId]);
 
     const handlePinPending = React.useCallback(async (pendingId: string) => {
         const success = await sync.pinPendingMessage(sessionId, pendingId);
@@ -1169,6 +1246,7 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
             onDelete={handleDeletePending}
             onPause={handlePausePending}
             onSaveEdit={handleSaveEditPending}
+            onReschedule={setReschedulePendingId}
         />
     ) : null;
 
@@ -1448,12 +1526,31 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
                 onLoadMore={handleLoadMoreDuplicateMessages}
             />
 
-            {/* Image Picker Sheet */}
+            {/* Add (+) menu sheet */}
             <ActionMenuModal
                 visible={imagePickerSheetVisible}
                 items={imagePickerMenuItems}
+                title={t('session.addMenuTitle')}
                 onClose={() => setImagePickerSheetVisible(false)}
                 deferItemPress
+            />
+
+            <ScheduleMessageSheet
+                visible={scheduleSheet.visible}
+                mode="create"
+                initialText={message}
+                imageCount={images.length}
+                limitEndsAt={scheduleSheet.limitEndsAt}
+                autoFocus={scheduleSheet.autoFocus}
+                onClose={() => setScheduleSheet((current) => ({ ...current, visible: false }))}
+                onSubmit={handleScheduleSubmit}
+            />
+            <ScheduleMessageSheet
+                visible={rescheduleTarget !== null}
+                mode="reschedule"
+                initialDeliverAt={rescheduleTarget?.deliverAt}
+                onClose={() => setReschedulePendingId(null)}
+                onSubmit={handleRescheduleSubmit}
             />
 
         </>

@@ -281,12 +281,15 @@ model SessionPendingMessage {
   trackCliDelivery Boolean   @default(false)
   pinnedAt         DateTime?
   pausedAt         DateTime?
+  /// Scheduled delivery time; null means deliver as soon as the queue allows.
+  deliverAt        DateTime?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
   @@unique([sessionId, localId])
   @@index([sessionId, pinnedAt, createdAt])
   @@index([sessionId, pausedAt, pinnedAt, createdAt])
+  @@index([deliverAt, pausedAt])
 }
 
 model SessionMessageDeliveryIssue {

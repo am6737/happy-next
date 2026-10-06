@@ -129,8 +129,9 @@ interface AgentInputProps {
     images?: LocalImage[];
     onImagesChange?: (images: LocalImage[]) => void;
     onImageButtonPress?: () => void;
-    // Where the image button offers a choice (camera or library): opened natively from the button
-    // on iOS, while `onImageButtonPress` still opens the page's own sheet elsewhere.
+    // The add (+) button's menu (images, scheduling, ...): opened natively from the button on iOS,
+    // while `onImageButtonPress` opens the page's own sheet elsewhere. Items that don't apply
+    // (e.g. images on an AI without image support) are passed as `disabled` rather than hidden.
     imageMenuItems?: ActionMenuItem[];
     supportsImages?: boolean;
     isUploadingImages?: boolean;
@@ -1928,15 +1929,15 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                 <GitStatusButton sessionId={props.sessionId} onPress={props.onFileViewerPress} onBlank={() => inputRef.current?.focus()} />
                                 </View>
 
-                                {/* Image button */}
-                                {props.onImageButtonPress && (props.imageMenuItems && props.supportsImages !== false ? (
+                                {/* Add (+) button */}
+                                {props.onImageButtonPress && (props.imageMenuItems ? (
                                     <NativeMenu
                                         items={props.imageMenuItems}
                                         disabled={props.isUploadingImages}
                                         style={styles.iconButton}
                                         onFallbackOpen={props.onImageButtonPress}
                                     >
-                                        <Ionicons name="image-outline" size={24} color={theme.colors.text} />
+                                        <Ionicons name="add" size={25} color={theme.colors.text} />
                                     </NativeMenu>
                                 ) : (
                                     <Pressable
@@ -1950,8 +1951,8 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                         disabled={props.isUploadingImages}
                                     >
                                         <Ionicons
-                                            name="image-outline"
-                                            size={24}
+                                            name="add"
+                                            size={25}
                                             color={props.supportsImages !== false ? theme.colors.text : theme.colors.textSecondary}
                                         />
                                     </Pressable>

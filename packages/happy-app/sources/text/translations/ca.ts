@@ -776,6 +776,8 @@ export const ca: TranslationStructure = {
         minimapNavigator: 'Navegador de missatges',
         takePhoto: 'Fes una foto',
         chooseFromLibrary: 'Tria de la galeria',
+        addMenuTitle: 'Afegeix',
+        scheduleMessage: 'Programa un missatge',
         pasteFromClipboard: 'Enganxa des del porta-retalls',
         sharing: {
             title: 'Compartició',
@@ -832,6 +834,20 @@ export const ca: TranslationStructure = {
         },
     },
 
+    scheduleMessage: {
+        title: 'Programa un missatge',
+        rescheduleTitle: 'Canvia l\'hora d\'enviament',
+        placeholder: 'Missatge per enviar més tard',
+        sendTime: 'Hora d\'enviament',
+        afterLimitReset: 'Quan es restableixi el límit',
+        in30Minutes: 'D\'aquí a 30 minuts',
+        in1Hour: 'D\'aquí a 1 hora',
+        custom: 'Personalitzat',
+        confirm: 'Programa',
+        save: 'Desa',
+        imagesAttached: ({ count }: { count: number }) => count === 1 ? `${count} imatge adjunta` : `${count} imatges adjuntes`,
+    },
+
     pendingQueue: {
         title: 'Cua pendent',
         empty: 'Sense contingut de text',
@@ -847,6 +863,9 @@ export const ca: TranslationStructure = {
         save: 'Desa',
         editingPausedNotice: 'En pausa durant l\'edició: no s\'enviarà',
         saved: 'Desat',
+        scheduledAt: ({ time }: { time: string }) => `Programat · ${time}`,
+        scheduledDue: 'Hora complerta · esperant l\'enviament',
+        reschedule: 'Canvia l\'hora d\'enviament',
     },
 
     commandPalette: {

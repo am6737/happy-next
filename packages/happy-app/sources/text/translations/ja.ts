@@ -808,6 +808,8 @@ export const ja: TranslationStructure = {
         minimapNavigator: 'メッセージナビゲーター',
         takePhoto: '写真を撮る',
         chooseFromLibrary: 'ライブラリから選択',
+        addMenuTitle: '追加',
+        scheduleMessage: 'メッセージの送信を予約',
         pasteFromClipboard: 'クリップボードから貼り付け',
         sharing: {
             title: '共有',
@@ -864,6 +866,20 @@ export const ja: TranslationStructure = {
         },
     },
 
+    scheduleMessage: {
+        title: 'メッセージの送信を予約',
+        rescheduleTitle: '送信時刻を変更',
+        placeholder: '後で送信するメッセージ',
+        sendTime: '送信時刻',
+        afterLimitReset: '利用上限のリセット後',
+        in30Minutes: '30分後',
+        in1Hour: '1時間後',
+        custom: 'カスタム',
+        confirm: '予約する',
+        save: '保存',
+        imagesAttached: ({ count }: { count: number }) => `画像 ${count} 枚を添付`,
+    },
+
     pendingQueue: {
         title: '送信待ちキュー',
         empty: 'テキスト内容はありません',
@@ -879,6 +895,9 @@ export const ja: TranslationStructure = {
         save: '保存',
         editingPausedNotice: '編集中は一時停止中 — 送信されません',
         saved: '保存しました',
+        scheduledAt: ({ time }: { time: string }) => `予約 · ${time}`,
+        scheduledDue: '予約時刻を過ぎました · 送信待ち',
+        reschedule: '送信時刻を変更',
     },
 
     commandPalette: {

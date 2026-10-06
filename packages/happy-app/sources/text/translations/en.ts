@@ -792,6 +792,8 @@ export const en: TranslationStructure = {
         minimapNavigator: 'Message navigator',
         takePhoto: 'Take Photo',
         chooseFromLibrary: 'Choose from Library',
+        addMenuTitle: 'Add',
+        scheduleMessage: 'Schedule Message',
         pasteFromClipboard: 'Paste from Clipboard',
         sharing: {
             title: 'Sharing',
@@ -848,6 +850,20 @@ export const en: TranslationStructure = {
         },
     },
 
+    scheduleMessage: {
+        title: 'Schedule message',
+        rescheduleTitle: 'Change send time',
+        placeholder: 'Message to send later',
+        sendTime: 'Send time',
+        afterLimitReset: 'When limit resets',
+        in30Minutes: 'In 30 minutes',
+        in1Hour: 'In 1 hour',
+        custom: 'Custom',
+        confirm: 'Schedule',
+        save: 'Save',
+        imagesAttached: ({ count }: { count: number }) => count === 1 ? `${count} image attached` : `${count} images attached`,
+    },
+
     pendingQueue: {
         title: 'Pending queue',
         empty: 'No text content',
@@ -863,6 +879,9 @@ export const en: TranslationStructure = {
         save: 'Save',
         editingPausedNotice: 'Paused while editing — won\'t be sent',
         saved: 'Saved',
+        scheduledAt: ({ time }: { time: string }) => `Scheduled · ${time}`,
+        scheduledDue: 'Due · waiting to send',
+        reschedule: 'Change send time',
     },
 
     commandPalette: {

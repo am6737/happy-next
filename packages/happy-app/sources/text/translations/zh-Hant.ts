@@ -778,6 +778,8 @@ export const zhHant: TranslationStructure = {
         minimapNavigator: '訊息導覽列',
         takePhoto: '拍照',
         chooseFromLibrary: '從圖庫選擇',
+        addMenuTitle: '新增',
+        scheduleMessage: '定時傳送訊息',
         pasteFromClipboard: '從剪貼簿貼上',
         sharing: {
             title: '共享',
@@ -834,6 +836,20 @@ export const zhHant: TranslationStructure = {
         },
     },
 
+    scheduleMessage: {
+        title: '定時傳送訊息',
+        rescheduleTitle: '修改傳送時間',
+        placeholder: '輸入要定時傳送的訊息',
+        sendTime: '傳送時間',
+        afterLimitReset: '額度恢復後',
+        in30Minutes: '30 分鐘後',
+        in1Hour: '1 小時後',
+        custom: '自訂',
+        confirm: '安排傳送',
+        save: '儲存',
+        imagesAttached: ({ count }: { count: number }) => `已附 ${count} 張圖片`,
+    },
+
     pendingQueue: {
         title: '待發佇列',
         empty: '無文字內容',
@@ -849,6 +865,9 @@ export const zhHant: TranslationStructure = {
         save: '儲存',
         editingPausedNotice: '編輯期間已暫停，不會被發送',
         saved: '已儲存',
+        scheduledAt: ({ time }: { time: string }) => `定時 · ${time}`,
+        scheduledDue: '已到時間 · 等待傳送',
+        reschedule: '修改傳送時間',
     },
 
     commandPalette: {

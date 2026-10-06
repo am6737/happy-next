@@ -15,6 +15,7 @@ import { startMessageDeliveryTimeoutWorker } from "./app/messageDelivery/timeout
 import { startOrchestratorScheduler } from "./app/orchestrator/scheduler";
 import { startModelCatalogRefresh } from "./app/modelCatalog/modelCatalogRefresh";
 import { backfillGitHubDisplayNames } from "./app/github/backfillGitHubDisplayNames";
+import { startScheduledMessageWorker } from "./app/session/scheduledMessageWorker";
 
 async function main() {
 
@@ -44,6 +45,7 @@ async function main() {
     startDatabaseMetricsUpdater();
     startTimeout();
     startMessageDeliveryTimeoutWorker();
+    startScheduledMessageWorker();
     startOrchestratorScheduler();
     startModelCatalogRefresh();
 

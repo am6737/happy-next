@@ -7,7 +7,7 @@ import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-nati
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { layout } from './layout';
 import { PendingMessageDetailModal } from './PendingMessageDetailModal';
-import { getPendingPreviewText, truncatePendingPreview } from './pendingQueuePanelUtils';
+import { getPendingPreviewText, getPendingScheduleInfo, truncatePendingPreview } from './pendingQueuePanelUtils';
 
 type PendingActionType = 'send-now' | 'pin' | 'delete' | 'resume';
 
@@ -20,9 +20,10 @@ type PendingQueuePanelProps = {
     onDelete: (pendingId: string) => Promise<void> | void;
     onPause: (pendingId: string) => Promise<void> | void;
     onSaveEdit: (pendingId: string, newText: string) => Promise<void> | void;
+    onReschedule?: (pendingId: string) => void;
 };
 
-export const PendingQueuePanel: React.FC<PendingQueuePanelProps> = React.memo(({ sessionId, messages, canManage, onSendNow, onPin, onDelete, onPause, onSaveEdit }) => {
+export const PendingQueuePanel: React.FC<PendingQueuePanelProps> = React.memo(({ sessionId, messages, canManage, onSendNow, onPin, onDelete, onPause, onSaveEdit, onReschedule }) => {
     const { theme } = useUnistyles();
     const [pendingAction, setPendingAction] = React.useState<{ pendingId: string; action: PendingActionType } | null>(null);
     const scrollRef = React.useRef<ScrollView>(null);
@@ -67,9 +68,10 @@ export const PendingQueuePanel: React.FC<PendingQueuePanelProps> = React.memo(({
                 onDelete,
                 onPause,
                 onSaveEdit,
+                onReschedule,
             },
         });
-    }, [sessionId, canManage, onSendNow, onPin, onDelete, onPause, onSaveEdit]);
+    }, [sessionId, canManage, onSendNow, onPin, onDelete, onPause, onSaveEdit, onReschedule]);
 
     if (messages.length === 0) {
         return null;
@@ -94,6 +96,7 @@ export const PendingQueuePanel: React.FC<PendingQueuePanelProps> = React.memo(({
                         const loadingAction = pendingAction?.pendingId === message.id ? pendingAction.action : null;
                         const isDisabled = pendingAction !== null;
                         const isPaused = message.pausedAt !== null;
+                        const schedule = getPendingScheduleInfo(message.deliverAt);
 
                         return (
                             <View key={message.id} style={styles.itemRow}>
@@ -126,6 +129,11 @@ export const PendingQueuePanel: React.FC<PendingQueuePanelProps> = React.memo(({
                                             {truncatePendingPreview(getPendingPreviewText(message.previewText, t('pendingQueue.empty')))}
                                         </Text>
                                     </View>
+                                    {schedule && (
+                                        <Text style={[styles.scheduleLabel, schedule.due && styles.scheduleLabelDue]} numberOfLines={1}>
+                                            {schedule.due ? t('pendingQueue.scheduledDue') : t('pendingQueue.scheduledAt', { time: schedule.time })}
+                                        </Text>
+                                    )}
                                 </Pressable>
 
                                 {canManage && (
@@ -271,6 +279,15 @@ const styles = StyleSheet.create((theme) => ({
         fontWeight: '700',
     },
     previewPaused: {
+        color: theme.colors.textSecondary,
+    },
+    scheduleLabel: {
+        color: theme.colors.textLink,
+        fontSize: 11,
+        fontWeight: '600',
+        marginTop: 2,
+    },
+    scheduleLabelDue: {
         color: theme.colors.textSecondary,
     },
     actions: {

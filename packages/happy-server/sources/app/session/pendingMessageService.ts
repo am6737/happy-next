@@ -16,6 +16,7 @@ export type PendingMessageRecord = {
     trackCliDelivery: boolean;
     pinnedAt: Date | null;
     pausedAt: Date | null;
+    deliverAt: Date | null;
     createdAt: Date;
     updatedAt: Date;
 };
@@ -30,6 +31,7 @@ const pendingMessageSelect = {
     trackCliDelivery: true,
     pinnedAt: true,
     pausedAt: true,
+    deliverAt: true,
     createdAt: true,
     updatedAt: true,
 } as const;
@@ -98,6 +100,7 @@ export async function enqueuePendingMessage(params: {
     sentBy: string | null;
     sentByName: string | null;
     trackCliDelivery: boolean;
+    deliverAt?: Date | null;
 }): Promise<{ message: PendingMessageRecord; created: boolean }> {
     const existing = await findPendingMessageBySessionLocalId(params.sessionId, params.localId);
     if (existing) {
@@ -116,6 +119,7 @@ export async function enqueuePendingMessage(params: {
                 sentBy: params.sentBy,
                 sentByName: params.sentByName,
                 trackCliDelivery: params.trackCliDelivery,
+                deliverAt: params.deliverAt ?? null,
             },
             select: pendingMessageSelect,
         });
@@ -205,6 +209,98 @@ export async function updatePendingMessageContent(sessionId: string, pendingId: 
     return updated as PendingMessageRecord;
 }
 
+// Set or clear the scheduled delivery time. Independent of content updates so a
+// reschedule never touches the ciphertext.
+export async function updatePendingMessageDeliverAt(sessionId: string, pendingId: string, deliverAt: Date | null): Promise<PendingMessageRecord | null> {
+    const message = await findPendingMessageById(sessionId, pendingId);
+    if (!message) {
+        return null;
+    }
+
+    const updated = await db.sessionPendingMessage.update({
+        where: {
+            id: pendingId,
+        },
+        data: {
+            deliverAt,
+        },
+        select: pendingMessageSelect,
+    });
+
+    return updated as PendingMessageRecord;
+}
+
+// Make a pending message the next one to dispatch: resume it, drop any schedule
+// and pin it. Sets state instead of toggling, so retries are idempotent.
+export async function releasePendingMessageForSendNow(sessionId: string, pendingId: string): Promise<PendingMessageRecord | null> {
+    const message = await findPendingMessageById(sessionId, pendingId);
+    if (!message) {
+        return null;
+    }
+
+    const updated = await db.sessionPendingMessage.update({
+        where: {
+            id: pendingId,
+        },
+        data: {
+            pausedAt: null,
+            deliverAt: null,
+            pinnedAt: message.pinnedAt ?? new Date(),
+        },
+        select: pendingMessageSelect,
+    });
+
+    return updated as PendingMessageRecord;
+}
+
+// A pending message is dispatchable when it is not a paused draft and its
+// scheduled time (if any) has arrived.
+function dispatchableWhere(now: Date) {
+    return {
+        pausedAt: null,
+        OR: [
+            { deliverAt: null },
+            { deliverAt: { lte: now } },
+        ],
+    };
+}
+
+// Whether the session has a message that is ready to go out. Paused drafts and
+// not-yet-due scheduled messages must not gate new sends into the queue.
+export async function hasDispatchablePendingMessage(sessionId: string): Promise<boolean> {
+    const found = await db.sessionPendingMessage.findFirst({
+        where: {
+            sessionId,
+            ...dispatchableWhere(new Date()),
+        },
+        select: {
+            id: true,
+        },
+    });
+
+    return !!found;
+}
+
+// Sessions that have at least one scheduled message whose time has arrived.
+export async function listSessionIdsWithDueScheduledMessages(limit = 100): Promise<string[]> {
+    const rows = await db.sessionPendingMessage.findMany({
+        where: {
+            pausedAt: null,
+            deliverAt: { lte: new Date() },
+        },
+        orderBy: {
+            deliverAt: "asc",
+        },
+        distinct: ["sessionId"],
+        take: limit,
+        select: {
+            sessionId: true,
+        },
+    });
+
+    return rows.map((row) => row.sessionId);
+}
+
 export async function deletePendingMessage(sessionId: string, pendingId: string): Promise<PendingMessageRecord | null> {
     return db.$transaction(async (tx) => {
         const message = await tx.sessionPendingMessage.findUnique({
@@ -239,8 +335,9 @@ export async function takeNextPendingMessageForDispatch(sessionId: string): Prom
             where: {
                 sessionId,
                 // Paused messages are drafts: never auto-dispatched, never block
-                // the queue. Dispatch always picks the next non-paused message.
-                pausedAt: null,
+                // the queue. Scheduled messages wait for their time. Dispatch
+                // always picks the next non-paused, due message.
+                ...dispatchableWhere(new Date()),
             },
             orderBy: [
                 { pinnedAt: { sort: "desc", nulls: "last" } },

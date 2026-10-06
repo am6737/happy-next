@@ -806,6 +806,8 @@ export const it: TranslationStructure = {
         minimapNavigator: 'Navigatore messaggi',
         takePhoto: 'Scatta foto',
         chooseFromLibrary: 'Scegli dalla galleria',
+        addMenuTitle: 'Aggiungi',
+        scheduleMessage: 'Pianifica messaggio',
         pasteFromClipboard: 'Incolla dagli appunti',
         sharing: {
             title: 'Condivisione',
@@ -862,6 +864,20 @@ export const it: TranslationStructure = {
         },
     },
 
+    scheduleMessage: {
+        title: 'Pianifica messaggio',
+        rescheduleTitle: 'Cambia ora di invio',
+        placeholder: 'Messaggio da inviare più tardi',
+        sendTime: 'Ora di invio',
+        afterLimitReset: 'Al ripristino del limite',
+        in30Minutes: 'Tra 30 minuti',
+        in1Hour: 'Tra 1 ora',
+        custom: 'Personalizzato',
+        confirm: 'Pianifica',
+        save: 'Salva',
+        imagesAttached: ({ count }: { count: number }) => count === 1 ? `${count} immagine allegata` : `${count} immagini allegate`,
+    },
+
     pendingQueue: {
         title: 'Coda in attesa',
         empty: 'Nessun contenuto testuale',
@@ -877,6 +893,9 @@ export const it: TranslationStructure = {
         save: 'Salva',
         editingPausedNotice: 'In pausa durante la modifica — non verrà inviato',
         saved: 'Salvato',
+        scheduledAt: ({ time }: { time: string }) => `Pianificato · ${time}`,
+        scheduledDue: 'Ora raggiunta · in attesa di invio',
+        reschedule: 'Cambia ora di invio',
     },
 
     commandPalette: {

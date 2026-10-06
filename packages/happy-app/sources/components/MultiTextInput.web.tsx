@@ -25,6 +25,7 @@ export interface MultiTextInputHandle {
     setTextAndSelection: (text: string, selection: { start: number; end: number }) => void;
     focus: () => void;
     blur: () => void;
+    isFocused: () => boolean;
 }
 
 interface MultiTextInputProps {
@@ -181,7 +182,8 @@ export const MultiTextInput = React.forwardRef<MultiTextInputHandle, MultiTextIn
         },
         blur: () => {
             textareaRef.current?.blur();
-        }
+        },
+        isFocused: () => !!textareaRef.current && document.activeElement === textareaRef.current,
     }), [onChangeText, onStateChange, onSelectionChange]);
 
     return (

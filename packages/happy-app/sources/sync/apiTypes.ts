@@ -51,6 +51,7 @@ export const ApiPendingMessageSchema = z.object({
     trackCliDelivery: z.boolean(),
     pinnedAt: z.number().nullable(),
     pausedAt: z.number().nullable().default(null),
+    deliverAt: z.number().nullable().default(null),
     createdAt: z.number(),
     updatedAt: z.number(),
 });
@@ -68,6 +69,10 @@ export const ApiSendOrQueueResponseSchema = z.discriminatedUnion('mode', [
     }),
     z.object({
         mode: z.literal('queued'),
+        pending: ApiPendingMessageSchema,
+    }),
+    z.object({
+        mode: z.literal('scheduled'),
         pending: ApiPendingMessageSchema,
     }),
 ]);

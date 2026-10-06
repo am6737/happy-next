@@ -778,6 +778,8 @@ export const zhHans: TranslationStructure = {
         minimapNavigator: '消息导航条',
         takePhoto: '拍照',
         chooseFromLibrary: '从相册选择',
+        addMenuTitle: '添加',
+        scheduleMessage: '定时发送消息',
         pasteFromClipboard: '从剪贴板粘贴',
         sharing: {
             title: '共享',
@@ -834,6 +836,20 @@ export const zhHans: TranslationStructure = {
         },
     },
 
+    scheduleMessage: {
+        title: '定时发送消息',
+        rescheduleTitle: '修改发送时间',
+        placeholder: '输入要定时发送的消息',
+        sendTime: '发送时间',
+        afterLimitReset: '额度恢复后',
+        in30Minutes: '30 分钟后',
+        in1Hour: '1 小时后',
+        custom: '自定义',
+        confirm: '安排发送',
+        save: '保存',
+        imagesAttached: ({ count }: { count: number }) => `已附 ${count} 张图片`,
+    },
+
     pendingQueue: {
         title: '待发队列',
         empty: '无文本内容',
@@ -849,6 +865,9 @@ export const zhHans: TranslationStructure = {
         save: '保存',
         editingPausedNotice: '编辑期间已暂停，不会被发送',
         saved: '已保存',
+        scheduledAt: ({ time }: { time: string }) => `定时 · ${time}`,
+        scheduledDue: '已到时间 · 等待发送',
+        reschedule: '修改发送时间',
     },
 
     commandPalette: {

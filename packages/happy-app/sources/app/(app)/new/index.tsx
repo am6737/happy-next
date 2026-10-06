@@ -598,9 +598,9 @@ function NewSessionWizard() {
     }, []);
 
     const imagePickerMenuItems: ActionMenuItem[] = React.useMemo(() => [
-        { label: t('session.takePhoto'), onPress: pickFromCamera },
-        { label: t('session.chooseFromLibrary'), onPress: pickFromGallery },
-    ], [pickFromCamera, pickFromGallery]);
+        { label: t('session.takePhoto'), onPress: pickFromCamera, disabled: !supportsImages },
+        { label: t('session.chooseFromLibrary'), onPress: pickFromGallery, disabled: !supportsImages },
+    ], [pickFromCamera, pickFromGallery, supportsImages]);
 
     const handleFileInputChange = React.useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
         const files = event.target.files;

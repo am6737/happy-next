@@ -18,6 +18,7 @@ function pending(input: Partial<PendingMessage> & Pick<PendingMessage, 'id' | 'l
     trackCliDelivery: input.trackCliDelivery ?? false,
     pinnedAt: input.pinnedAt ?? null,
     pausedAt: input.pausedAt ?? null,
+    deliverAt: input.deliverAt ?? null,
     createdAt: input.createdAt ?? 0,
     updatedAt: input.updatedAt ?? input.createdAt ?? 0,
   };
@@ -74,5 +75,17 @@ describe('pendingQueue', () => {
 
     const updated = removePendingMessageFromQueue(queue, 'n1');
     expect(updated.map((item) => item.id)).toEqual(['p1', 'n2']);
+  });
+
+  it('sortPendingQueue puts scheduled messages (earliest first) after ready ones and before paused drafts', () => {
+    const queue = sortPendingQueue([
+      pending({ id: 'draft', localId: 'draft', pausedAt: 5, createdAt: 1 }),
+      pending({ id: 'later', localId: 'later', deliverAt: 900, createdAt: 2 }),
+      pending({ id: 'ready', localId: 'ready', createdAt: 30 }),
+      pending({ id: 'soon', localId: 'soon', deliverAt: 500, createdAt: 40 }),
+      pending({ id: 'pausedScheduled', localId: 'pausedScheduled', deliverAt: 100, pausedAt: 6, createdAt: 3 }),
+    ]);
+
+    expect(queue.map((item) => item.id)).toEqual(['ready', 'soon', 'later', 'draft', 'pausedScheduled']);
   });
 });

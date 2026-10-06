@@ -966,6 +966,8 @@ export const ru: TranslationStructure = {
         minimapNavigator: 'Навигатор по сообщениям',
         takePhoto: 'Сделать фото',
         chooseFromLibrary: 'Выбрать из галереи',
+        addMenuTitle: 'Добавить',
+        scheduleMessage: 'Отложенное сообщение',
         pasteFromClipboard: 'Вставить из буфера обмена',
         sharing: {
             title: 'Общий доступ',
@@ -1022,6 +1024,20 @@ export const ru: TranslationStructure = {
         },
     },
 
+    scheduleMessage: {
+        title: 'Отложенное сообщение',
+        rescheduleTitle: 'Изменить время отправки',
+        placeholder: 'Сообщение для отправки позже',
+        sendTime: 'Время отправки',
+        afterLimitReset: 'После сброса лимита',
+        in30Minutes: 'Через 30 минут',
+        in1Hour: 'Через 1 час',
+        custom: 'Своё время',
+        confirm: 'Запланировать',
+        save: 'Сохранить',
+        imagesAttached: ({ count }: { count: number }) => `Прикреплено изображений: ${count}`,
+    },
+
     pendingQueue: {
         title: 'Очередь ожидания',
         empty: 'Нет текста',
@@ -1037,6 +1053,9 @@ export const ru: TranslationStructure = {
         save: 'Сохранить',
         editingPausedNotice: 'На паузе во время редактирования — не будет отправлено',
         saved: 'Сохранено',
+        scheduledAt: ({ time }: { time: string }) => `Запланировано · ${time}`,
+        scheduledDue: 'Время пришло · ожидает отправки',
+        reschedule: 'Изменить время отправки',
     },
 
     commandPalette: {
