@@ -622,6 +622,7 @@ export function v3SessionRoutes(app: Fastify) {
             await dispatchNextPendingIfPossible({
                 ownerId,
                 sessionId,
+                delayMs: 0,
             });
         }
 
@@ -700,7 +701,7 @@ export function v3SessionRoutes(app: Fastify) {
 
         await emitPendingUpsert(ownerId, sessionId, pending);
 
-        const result = await dispatchNextPendingIfPossible({ ownerId, sessionId });
+        const result = await dispatchNextPendingIfPossible({ ownerId, sessionId, delayMs: 0 });
 
         return reply.send({
             dispatched: result.pendingId === pending.id,

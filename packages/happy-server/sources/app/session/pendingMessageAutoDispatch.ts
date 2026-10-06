@@ -27,6 +27,9 @@ function extractEncryptedText(content: unknown): string {
 export async function dispatchNextPendingIfPossible(params: {
     ownerId: string;
     sessionId: string;
+    // Settle time before dispatch. Turn-end dispatch keeps the default; user
+    // actions (resume, send now) pass 0 since no reply is in flight then.
+    delayMs?: number;
 }): Promise<{ dispatched: boolean; pendingId?: string; messageId?: string }> {
     if (!canDispatch(params.sessionId)) {
         return { dispatched: false };
@@ -39,7 +42,10 @@ export async function dispatchNextPendingIfPossible(params: {
     try {
         // Wait briefly so the AI's final response (which may still be in-flight)
         // arrives at the app before the next pending message is dispatched.
-        await new Promise(r => setTimeout(r, 3000));
+        const delayMs = params.delayMs ?? 3000;
+        if (delayMs > 0) {
+            await new Promise(r => setTimeout(r, delayMs));
+        }
 
         const pending = await takeNextPendingMessageForDispatch(params.sessionId);
         if (!pending) {
