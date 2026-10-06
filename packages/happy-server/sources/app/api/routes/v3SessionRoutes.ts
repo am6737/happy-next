@@ -589,6 +589,16 @@ export function v3SessionRoutes(app: Fastify) {
 
         await emitPendingUpsert(ownerId, sessionId, pending);
 
+        // Dispatch is otherwise only triggered by turn end or a new send. If the
+        // session is already idle when a message is resumed, nothing would ever
+        // pick it up, so kick the dispatcher here (no-op while the session is busy).
+        if (!pending.pausedAt) {
+            await dispatchNextPendingIfPossible({
+                ownerId,
+                sessionId,
+            });
+        }
+
         return reply.send({
             message: toPendingResponseMessage(pending),
         });

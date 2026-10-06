@@ -39,6 +39,7 @@ type PendingMessageRecord = {
     sentByName: string | null;
     trackCliDelivery: boolean;
     pinnedAt: Date | null;
+    pausedAt: Date | null;
     createdAt: Date;
     updatedAt: Date;
 };
@@ -143,6 +144,7 @@ const {
         sentByName?: string | null;
         trackCliDelivery?: boolean;
         pinnedAt?: Date | null;
+        pausedAt?: Date | null;
         createdAt?: Date;
     }) => {
         const createdAt = input.createdAt ?? new Date(state.nowMs);
@@ -156,6 +158,7 @@ const {
             sentByName: input.sentByName ?? null,
             trackCliDelivery: input.trackCliDelivery ?? false,
             pinnedAt: input.pinnedAt ?? null,
+            pausedAt: input.pausedAt ?? null,
             createdAt,
             updatedAt: createdAt,
         };
@@ -328,6 +331,9 @@ const {
         if (args?.where?.pinnedAt === null) {
             rows = rows.filter((message) => message.pinnedAt === null);
         }
+        if (args?.where?.pausedAt === null) {
+            rows = rows.filter((message) => message.pausedAt === null);
+        }
 
         const orderBy = args?.orderBy;
         if (Array.isArray(orderBy)) {
@@ -388,6 +394,7 @@ const {
             sentByName: args?.data?.sentByName ?? null,
             trackCliDelivery: args?.data?.trackCliDelivery ?? false,
             pinnedAt: args?.data?.pinnedAt ?? null,
+            pausedAt: args?.data?.pausedAt ?? null,
             createdAt,
             updatedAt: createdAt,
         };
@@ -403,6 +410,9 @@ const {
         }
         if (args?.data?.pinnedAt !== undefined) {
             row.pinnedAt = args.data.pinnedAt;
+        }
+        if (args?.data?.pausedAt !== undefined) {
+            row.pausedAt = args.data.pausedAt;
         }
         row.updatedAt = new Date(state.nowMs);
         state.nowMs += 1;
@@ -1251,5 +1261,55 @@ describe("v3SessionRoutes", () => {
         });
         expect(deleteResponse.statusCode).toBe(200);
         expect(state.pendingMessages).toHaveLength(0);
+    });
+
+    it("dispatches a resumed pending message right away when the session is idle", async () => {
+        vi.useFakeTimers({ toFake: ["setTimeout"] });
+        try {
+            seedSession({ id: "session-1", accountId: "user-1", seq: 0 });
+            const pending = seedPendingMessage({
+                sessionId: "session-1",
+                localId: "paused-a",
+                content: { t: "encrypted", c: "paused-content-a" },
+                pausedAt: new Date("2026-03-12T10:00:00.000Z"),
+            });
+            app = await createApp();
+
+            const resumeRequest = app.inject({
+                method: "POST",
+                url: `/v3/sessions/session-1/pending-messages/${pending.id}/pause`,
+                headers: { "x-user-id": "user-1" },
+            });
+            await vi.advanceTimersByTimeAsync(5000);
+            const resumeResponse = await resumeRequest;
+
+            expect(resumeResponse.statusCode).toBe(200);
+            expect(state.pendingMessages).toHaveLength(0);
+            expect(state.messages).toHaveLength(1);
+            expect(state.messages[0].localId).toBe("paused-a");
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it("keeps a paused pending message queued and does not dispatch it", async () => {
+        seedSession({ id: "session-1", accountId: "user-1", seq: 0 });
+        const pending = seedPendingMessage({
+            sessionId: "session-1",
+            localId: "pending-a",
+            content: { t: "encrypted", c: "pending-content-a" },
+        });
+        app = await createApp();
+
+        const pauseResponse = await app.inject({
+            method: "POST",
+            url: `/v3/sessions/session-1/pending-messages/${pending.id}/pause`,
+            headers: { "x-user-id": "user-1" },
+        });
+
+        expect(pauseResponse.statusCode).toBe(200);
+        expect(state.pendingMessages).toHaveLength(1);
+        expect(state.pendingMessages[0].pausedAt).not.toBeNull();
+        expect(state.messages).toHaveLength(0);
     });
 });
