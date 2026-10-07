@@ -17,6 +17,7 @@ import {
 
 interface KeyValueViewProps {
     data: Record<string, unknown>;
+    plain?: boolean;
 }
 
 function formatValue(value: unknown): string {
@@ -35,19 +36,21 @@ function isSimpleValue(value: unknown): boolean {
     return value === null || value === undefined || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean';
 }
 
-export const KeyValueView = React.memo<KeyValueViewProps>(({ data }) => {
+export const KeyValueView = React.memo<KeyValueViewProps>(({ data, plain = false }) => {
     const entries = Object.entries(data);
     const selectable = useCopySelectable();
     const allText = entries.map(([key, value]) => `${key}: ${formatValue(value)}`).join('\n');
 
     return (
         <LongPressCopy text={allText}>
-            <View style={styles.container}>
+            <View style={plain ? undefined : styles.container}>
                 {entries.map(([key, value], index) => (
                     <View key={key} style={[styles.row, index < entries.length - 1 && styles.rowBorder]}>
                         <Text style={styles.key} numberOfLines={1}>{key}</Text>
                         {isSimpleValue(value) ? (
                             <Text style={styles.value} selectable={selectable}>{formatValue(value)}</Text>
+                        ) : plain ? (
+                            <Text style={styles.structuredValue} selectable={selectable}>{formatValue(value)}</Text>
                         ) : (
                             <View style={styles.complexValue}>
                                 <CodeView code={formatValue(value)} />
@@ -60,125 +63,146 @@ export const KeyValueView = React.memo<KeyValueViewProps>(({ data }) => {
     );
 });
 
-function PreviewHtmlInputView({ input }: { input: Record<string, unknown> & { html: string } }) {
-    const { html, ...parameters } = input;
+function InputCopyButton({ text, label }: { text: string; label: string }) {
     const { theme } = useUnistyles();
-    const [expanded, setExpanded] = React.useState(false);
-    const sourceStats = React.useMemo(() => ({
-        characters: html.length,
-        lines: html.length === 0 ? 0 : html.split(/\r\n|\r|\n/).length,
-    }), [html]);
-
-    React.useEffect(() => setExpanded(false), [html]);
-
-    const copySource = React.useCallback(async () => {
+    const copyText = React.useCallback(async () => {
         try {
-            await Clipboard.setStringAsync(html);
+            await Clipboard.setStringAsync(text);
             showCopiedToast();
         } catch {
             showToast(t('textSelection.failedToCopy'), { icon: 'alert-circle-outline' });
         }
-    }, [html]);
-
-    const toggleLabel = expanded ? t('tools.previewHtml.collapseSource') : t('tools.previewHtml.expandSource');
+    }, [text]);
 
     return (
-        <View style={styles.previewHtmlInput}>
-            {Object.keys(parameters).length > 0 && <KeyValueView data={parameters} />}
-            <View style={styles.container}>
-                <View style={styles.htmlHeader}>
-                    <Pressable
-                        style={styles.htmlToggle}
-                        onPress={() => setExpanded((value) => !value)}
-                        accessibilityRole="button"
-                        accessibilityLabel={toggleLabel}
-                        accessibilityState={{ expanded }}
-                    >
-                        <Ionicons name={expanded ? 'chevron-down' : 'chevron-forward'} size={16} color={theme.colors.textSecondary} />
-                        <View style={styles.htmlSummary}>
-                            <Text style={styles.key}>html</Text>
-                            <Text style={styles.htmlStats}>{t('tools.previewHtml.sourceStats', sourceStats)}</Text>
-                        </View>
-                        <Text style={styles.htmlAction}>{toggleLabel}</Text>
-                    </Pressable>
-                    <Pressable
-                        style={styles.htmlCopyButton}
-                        onPress={copySource}
-                        accessibilityRole="button"
-                        accessibilityLabel={`${t('common.copy')} HTML`}
-                    >
-                        <Ionicons name="copy-outline" size={18} color={theme.colors.textSecondary} />
-                    </Pressable>
-                </View>
-                {expanded && <CodeView code={html} language="html" />}
+        <Pressable
+            style={styles.inputCopyButton}
+            onPress={copyText}
+            accessibilityRole="button"
+            accessibilityLabel={`${t('common.copy')} ${label}`}
+        >
+            <Ionicons name="copy-outline" size={18} color={theme.colors.textSecondary} />
+        </Pressable>
+    );
+}
+
+function ExpandableInputText({ label, text, preview, language, expandLabel, collapseLabel, plain = false }: {
+    label: string;
+    text: string;
+    preview?: string;
+    language?: string;
+    expandLabel: string;
+    collapseLabel: string;
+    plain?: boolean;
+}) {
+    const { theme } = useUnistyles();
+    const selectable = useCopySelectable();
+    const [expanded, setExpanded] = React.useState(false);
+    const canExpand = preview === undefined || preview !== text;
+    const stats = React.useMemo(() => ({
+        characters: text.length,
+        lines: text.length === 0 ? 0 : text.split(/\r\n|\r|\n/).length,
+    }), [text]);
+
+    React.useEffect(() => setExpanded(false), [text]);
+    const toggleLabel = expanded ? collapseLabel : expandLabel;
+    const showFullText = expanded || !canExpand;
+
+    return (
+        <View style={plain ? styles.plainInputText : styles.container}>
+            <View style={styles.inputTextHeader}>
+                <Pressable
+                    style={styles.inputTextToggle}
+                    disabled={!canExpand}
+                    onPress={() => setExpanded((value) => !value)}
+                    accessibilityRole={canExpand ? 'button' : undefined}
+                    accessibilityLabel={canExpand ? toggleLabel : label}
+                    accessibilityState={canExpand ? { expanded } : undefined}
+                >
+                    {canExpand && <Ionicons name={expanded ? 'chevron-down' : 'chevron-forward'} size={16} color={theme.colors.textSecondary} />}
+                    <View style={styles.inputTextSummary}>
+                        <Text style={styles.key}>{label}</Text>
+                        <Text style={styles.inputTextStats}>{t('tools.inputText.stats', stats)}</Text>
+                    </View>
+                    {canExpand && <Text style={styles.inputTextAction}>{toggleLabel}</Text>}
+                </Pressable>
+                <InputCopyButton text={text} label={label} />
             </View>
+            {showFullText && !plain ? <CodeView code={text} language={language} /> : (showFullText || preview !== undefined) && (
+                <LongPressCopy text={text}>
+                    <View style={styles.inputTextPreview}>
+                        <Text style={showFullText ? styles.structuredValue : styles.taskPromptText} selectable={selectable}>{showFullText ? text : preview}</Text>
+                    </View>
+                </LongPressCopy>
+            )}
+        </View>
+    );
+}
+
+function PreviewHtmlInputView({ input }: { input: Record<string, unknown> & { html: string } }) {
+    const { html, ...parameters } = input;
+    return (
+        <View style={styles.inputSections}>
+            {Object.keys(parameters).length > 0 && <KeyValueView data={parameters} />}
+            <ExpandableInputText
+                label="html"
+                text={html}
+                language="html"
+                expandLabel={t('tools.previewHtml.expandSource')}
+                collapseLabel={t('tools.previewHtml.collapseSource')}
+            />
+        </View>
+    );
+}
+
+function OrchestratorSubmitTaskView({ task, index }: { task: OrchestratorSubmitTaskInput; index: number }) {
+    const taskTitle = task.title || task.taskKey || `${t('tools.names.task')} ${index + 1}`;
+    const parameters = Object.fromEntries(Object.entries(task.input).filter(([key]) => key !== 'prompt' || task.prompt === undefined));
+
+    return (
+        <View style={styles.container}>
+            <View style={[styles.taskHeader, styles.taskCardHeader]}>
+                <Text style={styles.taskTitle} numberOfLines={1}>#{index + 1} {taskTitle}</Text>
+                <InputCopyButton text={formatValue(task.input)} label={taskTitle} />
+            </View>
+            {Object.keys(parameters).length > 0 && <KeyValueView data={parameters} plain />}
+            {task.prompt !== undefined && (
+                <ExpandableInputText
+                    plain
+                    label="prompt"
+                    text={task.prompt}
+                    preview={formatPromptPreview(task.prompt)}
+                    expandLabel={t('tools.orchestratorSubmit.expandPrompt')}
+                    collapseLabel={t('tools.orchestratorSubmit.collapsePrompt')}
+                />
+            )}
         </View>
     );
 }
 
 function OrchestratorSubmitInputView({ input }: { input: Record<string, unknown> }) {
-    const topLevelEntries = Object.entries(input).filter(([key]) => key !== 'tasks');
-    const tasksRaw = input.tasks;
+    const { tasks: tasksRaw, ...parameters } = input;
     const tasks = parseOrchestratorSubmitTasks(tasksRaw);
-    const selectable = useCopySelectable();
 
     return (
-        <LongPressCopy text={JSON.stringify(input, null, 2)}>
-            <View style={styles.container}>
-                {topLevelEntries.map(([key, value], index) => (
-                    <View key={key} style={[styles.row, index < topLevelEntries.length - 1 && styles.rowBorder]}>
-                        <Text style={styles.key} numberOfLines={1}>{key}</Text>
-                        {isSimpleValue(value) ? (
-                            <Text style={styles.value} selectable={selectable}>{formatValue(value)}</Text>
-                        ) : (
-                            <View style={styles.complexValue}>
-                                <CodeView code={formatValue(value)} />
-                            </View>
-                        )}
-                    </View>
-                ))}
-
-                <View style={[styles.row, topLevelEntries.length > 0 && styles.rowTopBorder]}>
+        <View style={styles.inputSections}>
+            {Object.keys(parameters).length > 0 && <KeyValueView data={parameters} />}
+            <View>
+                <View style={styles.taskHeader}>
                     <Text style={styles.key} numberOfLines={1}>tasks</Text>
-                    {tasks.length > 0 ? (
-                        <View style={styles.tasksList}>
-                            {tasks.map((task, index) => {
-                                const taskTitle = task.title || task.taskKey || `Task ${index + 1}`;
-                                const promptPreview = task.prompt ? formatPromptPreview(task.prompt) : null;
-                                return (
-                                    <View key={`${task.taskKey ?? task.title ?? 'task'}-${index}`} style={styles.taskCard}>
-                                        <Text style={styles.taskTitle} numberOfLines={1}>
-                                            #{index + 1} {taskTitle}
-                                        </Text>
-                                        {(task.provider || task.model) ? (
-                                            <Text style={styles.taskMeta}>
-                                                {[task.provider, task.model].filter(Boolean).join(' · ')}
-                                            </Text>
-                                        ) : null}
-                                        {task.dependsOn && task.dependsOn.length > 0 ? (
-                                            <Text style={styles.taskMeta}>dependsOn: {task.dependsOn.join(', ')}</Text>
-                                        ) : null}
-                                        {typeof task.timeoutMs === 'number' ? (
-                                            <Text style={styles.taskMeta}>timeoutMs: {task.timeoutMs}</Text>
-                                        ) : null}
-                                        {promptPreview ? (
-                                            <View style={styles.taskPromptWrap}>
-                                                <Text style={styles.taskMetaLabel}>prompt</Text>
-                                                <Text style={styles.taskPromptText} selectable={selectable}>{promptPreview}</Text>
-                                            </View>
-                                        ) : null}
-                                    </View>
-                                );
-                            })}
-                        </View>
-                    ) : (
-                        <View style={styles.complexValue}>
-                            <CodeView code={formatValue(tasksRaw)} />
-                        </View>
-                    )}
+                    <InputCopyButton text={formatValue(input)} label={t('tools.fullView.inputParams')} />
                 </View>
+                {tasks.length > 0 && Array.isArray(tasksRaw) && tasks.length === tasksRaw.length ? (
+                    <View style={styles.tasksList}>
+                        {tasks.map((task, index) => <OrchestratorSubmitTaskView key={index} task={task} index={index} />)}
+                    </View>
+                ) : (
+                    <View style={styles.complexValue}>
+                        <CodeView code={formatValue(tasksRaw)} />
+                    </View>
+                )}
             </View>
-        </LongPressCopy>
+        </View>
     );
 }
 
@@ -278,14 +302,25 @@ const styles = StyleSheet.create((theme) => ({
     complexValue: {
         marginTop: 2,
     },
-    previewHtmlInput: {
+    structuredValue: {
+        fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
+        fontSize: 12,
+        color: theme.colors.text,
+        lineHeight: 18,
+    },
+    inputSections: {
         gap: 12,
     },
-    htmlHeader: {
+    plainInputText: {
+        borderTopWidth: StyleSheet.hairlineWidth,
+        borderColor: theme.colors.modal.border,
+        paddingTop: 4,
+    },
+    inputTextHeader: {
         flexDirection: 'row',
         alignItems: 'center',
     },
-    htmlToggle: {
+    inputTextToggle: {
         flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
@@ -293,55 +328,42 @@ const styles = StyleSheet.create((theme) => ({
         paddingVertical: 12,
         gap: 8,
     },
-    htmlSummary: {
+    inputTextSummary: {
         flex: 1,
     },
-    htmlStats: {
+    inputTextStats: {
         fontSize: 12,
         color: theme.colors.textSecondary,
     },
-    htmlAction: {
+    inputTextAction: {
         fontSize: 12,
         color: theme.colors.textSecondary,
     },
-    htmlCopyButton: {
+    inputCopyButton: {
         padding: 14,
     },
-    rowTopBorder: {
-        borderTopWidth: StyleSheet.hairlineWidth,
-        borderTopColor: theme.colors.modal.border,
+    inputTextPreview: {
+        paddingHorizontal: 12,
+        paddingBottom: 12,
     },
     tasksList: {
-        gap: 8,
-        marginTop: 2,
+        gap: 12,
     },
-    taskCard: {
-        borderWidth: StyleSheet.hairlineWidth,
+    taskCardHeader: {
+        paddingLeft: 12,
+        borderBottomWidth: StyleSheet.hairlineWidth,
         borderColor: theme.colors.modal.border,
-        borderRadius: 6,
-        paddingHorizontal: 10,
-        paddingVertical: 8,
-        backgroundColor: theme.colors.surfaceHighest,
-        gap: 4,
+    },
+    taskHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
     },
     taskTitle: {
+        flex: 1,
         fontSize: 13,
         fontWeight: '600',
         color: theme.colors.text,
-    },
-    taskMeta: {
-        fontSize: 12,
-        color: theme.colors.textSecondary,
-        lineHeight: 17,
-    },
-    taskMetaLabel: {
-        fontSize: 12,
-        color: theme.colors.textSecondary,
-        fontWeight: '600',
-        marginBottom: 2,
-    },
-    taskPromptWrap: {
-        marginTop: 2,
     },
     taskPromptText: {
         fontSize: 12,

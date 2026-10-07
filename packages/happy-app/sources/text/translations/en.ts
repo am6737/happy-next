@@ -1213,10 +1213,16 @@ export const en: TranslationStructure = {
             editNumber: ({ index, total }: { index: number; total: number }) => `Edit ${index} of ${total}`,
             replaceAll: 'Replace All',
         },
+        inputText: {
+            stats: ({ characters, lines }: { characters: number; lines: number }) => `${characters} ${plural({ count: characters, singular: 'character', plural: 'characters' })} · ${lines} ${plural({ count: lines, singular: 'line', plural: 'lines' })}`,
+        },
+        orchestratorSubmit: {
+            expandPrompt: 'Show full prompt',
+            collapsePrompt: 'Show less',
+        },
         previewHtml: {
             expandSource: 'Show source',
             collapseSource: 'Hide source',
-            sourceStats: ({ characters, lines }: { characters: number; lines: number }) => `${characters} ${plural({ count: characters, singular: 'character', plural: 'characters' })} · ${lines} ${plural({ count: lines, singular: 'line', plural: 'lines' })}`,
         },
         names: {
             viewImage: "View Image",

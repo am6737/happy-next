@@ -1241,10 +1241,16 @@ export const it: TranslationStructure = {
             editNumber: ({ index, total }: { index: number; total: number }) => `Modifica ${index} di ${total}`,
             replaceAll: 'Sostituisci tutto',
         },
+        inputText: {
+            stats: ({ characters, lines }: { characters: number; lines: number }) => `${characters} ${plural({ count: characters, singular: 'carattere', plural: 'caratteri' })} · ${lines} ${plural({ count: lines, singular: 'riga', plural: 'righe' })}`,
+        },
+        orchestratorSubmit: {
+            expandPrompt: 'Mostra prompt completo',
+            collapsePrompt: 'Mostra meno',
+        },
         previewHtml: {
             expandSource: 'Mostra codice',
             collapseSource: 'Nascondi codice',
-            sourceStats: ({ characters, lines }: { characters: number; lines: number }) => `${characters} ${plural({ count: characters, singular: 'carattere', plural: 'caratteri' })} · ${lines} ${plural({ count: lines, singular: 'riga', plural: 'righe' })}`,
         },
         names: {
             viewImage: "Visualizza immagine",

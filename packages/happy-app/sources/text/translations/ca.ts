@@ -1197,10 +1197,16 @@ export const ca: TranslationStructure = {
             editNumber: ({ index, total }: { index: number; total: number }) => `Edició ${index} de ${total}`,
             replaceAll: 'Reemplaça tot',
         },
+        inputText: {
+            stats: ({ characters, lines }: { characters: number; lines: number }) => `${characters} ${plural({ count: characters, singular: 'caràcter', plural: 'caràcters' })} · ${lines} ${plural({ count: lines, singular: 'línia', plural: 'línies' })}`,
+        },
+        orchestratorSubmit: {
+            expandPrompt: 'Mostra el prompt complet',
+            collapsePrompt: 'Mostra menys',
+        },
         previewHtml: {
             expandSource: 'Mostra el codi',
             collapseSource: 'Amaga el codi',
-            sourceStats: ({ characters, lines }: { characters: number; lines: number }) => `${characters} ${plural({ count: characters, singular: 'caràcter', plural: 'caràcters' })} · ${lines} ${plural({ count: lines, singular: 'línia', plural: 'línies' })}`,
         },
         names: {
             viewImage: "Mostra la imatge",

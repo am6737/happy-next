@@ -1,4 +1,6 @@
 export type OrchestratorSubmitTaskInput = {
+    /** Original parameters, including fields this client does not yet recognize. */
+    input: Record<string, unknown>;
     taskKey?: string;
     title?: string;
     provider?: string;
@@ -43,6 +45,7 @@ export function parseOrchestratorSubmitTasks(value: unknown): OrchestratorSubmit
             : undefined;
 
         return [{
+            input: task,
             taskKey: asString(task.taskKey),
             title: asString(task.title),
             provider: asString(task.provider),
@@ -61,4 +64,3 @@ export function formatPromptPreview(prompt: string, maxLength = 220): string {
     }
     return `${trimmed.slice(0, maxLength)}…`;
 }
-

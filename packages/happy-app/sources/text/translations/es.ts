@@ -1197,10 +1197,16 @@ export const es: TranslationStructure = {
             editNumber: ({ index, total }: { index: number; total: number }) => `Edición ${index} de ${total}`,
             replaceAll: 'Reemplazar todo',
         },
+        inputText: {
+            stats: ({ characters, lines }: { characters: number; lines: number }) => `${characters} ${plural({ count: characters, singular: 'carácter', plural: 'caracteres' })} · ${lines} ${plural({ count: lines, singular: 'línea', plural: 'líneas' })}`,
+        },
+        orchestratorSubmit: {
+            expandPrompt: 'Mostrar prompt completo',
+            collapsePrompt: 'Mostrar menos',
+        },
         previewHtml: {
             expandSource: 'Mostrar código',
             collapseSource: 'Ocultar código',
-            sourceStats: ({ characters, lines }: { characters: number; lines: number }) => `${characters} ${plural({ count: characters, singular: 'carácter', plural: 'caracteres' })} · ${lines} ${plural({ count: lines, singular: 'línea', plural: 'líneas' })}`,
         },
         names: {
             viewImage: "Ver imagen",

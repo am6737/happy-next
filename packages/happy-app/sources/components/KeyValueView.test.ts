@@ -21,7 +21,7 @@ describe('KeyValueView orchestrator submit helpers', () => {
         expect(parseOrchestratorSubmitTasks({})).toEqual([]);
         expect(parseOrchestratorSubmitTasks([])).toEqual([]);
 
-        const parsed = parseOrchestratorSubmitTasks([
+        const inputs = [
             'bad',
             {
                 taskKey: 'security',
@@ -31,15 +31,22 @@ describe('KeyValueView orchestrator submit helpers', () => {
                 prompt: '审查 orchestratorRoutes.ts',
                 dependsOn: ['setup', 7, null],
                 timeoutMs: 120000,
+                workingDirectory: '/workspace/review',
+                retry: { maxAttempts: 3, backoffMs: 1000 },
+                target: { type: 'machine_id', machineId: 'machine-1' },
+                metadata: { owner: 'review' },
+                futureOption: { enabled: true },
             },
             {
                 dependsOn: [123],
                 timeoutMs: Number.NaN,
             },
-        ]);
+        ];
+        const parsed = parseOrchestratorSubmitTasks(inputs);
 
         expect(parsed).toEqual([
             {
+                input: inputs[1],
                 taskKey: 'security',
                 title: '安全审查',
                 provider: 'claude',
@@ -49,6 +56,7 @@ describe('KeyValueView orchestrator submit helpers', () => {
                 timeoutMs: 120000,
             },
             {
+                input: inputs[2],
                 taskKey: undefined,
                 title: undefined,
                 provider: undefined,

@@ -1208,10 +1208,16 @@ export const ru: TranslationStructure = {
             editNumber: ({ index, total }: { index: number; total: number }) => `Правка ${index} из ${total}`,
             replaceAll: 'Заменить все',
         },
+        inputText: {
+            stats: ({ characters, lines }: { characters: number; lines: number }) => `${characters} ${plural({ count: characters, one: 'символ', few: 'символа', many: 'символов' })} · ${lines} ${plural({ count: lines, one: 'строка', few: 'строки', many: 'строк' })}`,
+        },
+        orchestratorSubmit: {
+            expandPrompt: 'Показать весь запрос',
+            collapsePrompt: 'Свернуть запрос',
+        },
         previewHtml: {
             expandSource: 'Показать код',
             collapseSource: 'Скрыть код',
-            sourceStats: ({ characters, lines }: { characters: number; lines: number }) => `${characters} ${plural({ count: characters, one: 'символ', few: 'символа', many: 'символов' })} · ${lines} ${plural({ count: lines, one: 'строка', few: 'строки', many: 'строк' })}`,
         },
         names: {
             viewImage: "Просмотр изображения",

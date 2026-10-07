@@ -1208,10 +1208,16 @@ export const pl: TranslationStructure = {
             editNumber: ({ index, total }: { index: number; total: number }) => `Edycja ${index} z ${total}`,
             replaceAll: 'Zamień wszystkie',
         },
+        inputText: {
+            stats: ({ characters, lines }: { characters: number; lines: number }) => `${characters} ${plural({ count: characters, one: 'znak', few: 'znaki', many: 'znaków' })} · ${lines} ${plural({ count: lines, one: 'wiersz', few: 'wiersze', many: 'wierszy' })}`,
+        },
+        orchestratorSubmit: {
+            expandPrompt: 'Pokaż cały prompt',
+            collapsePrompt: 'Pokaż mniej',
+        },
         previewHtml: {
             expandSource: 'Pokaż kod',
             collapseSource: 'Ukryj kod',
-            sourceStats: ({ characters, lines }: { characters: number; lines: number }) => `${characters} ${plural({ count: characters, one: 'znak', few: 'znaki', many: 'znaków' })} · ${lines} ${plural({ count: lines, one: 'wiersz', few: 'wiersze', many: 'wierszy' })}`,
         },
         names: {
             viewImage: "Wyświetl obraz",
