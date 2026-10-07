@@ -110,7 +110,6 @@ const styles = StyleSheet.create((theme) => ({
     // The icon leans left a little: at this size a bare glyph floats in from the margin, and the
     // label is what the line is for.
     icon: {
-        marginLeft: -2,
         width: 12,
         alignItems: 'center',
         justifyContent: 'center',
