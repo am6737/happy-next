@@ -105,12 +105,14 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - MCP tool integration with auto-filled working directory
 - Happy CLI auto-installs the orchestrator skill and `/orchestrator` slash commands on startup — fan a task out to parallel or dependency-ordered Claude / Codex / Gemini agents straight from the CLI
 - Built-in `/preview-html` slash command — generate a self-contained HTML document from the CLI and preview it directly in the app
+- Runs and tasks show how long they take, run filters are simplified to All, Active, Completed, Failed and Cancelled, and a task's result is just the agent's final message, followed live while it runs
 
 ### Pending Message Queue
 - Messages sent while the CLI is busy are queued server-side and auto-dispatched
 - Queue panel UI with image count badges and send-now option
 - Edit a queued message before it sends, or pause it / save it as a draft instead of dispatching
 - Reconnect sync and concurrent dispatch safety, with dispatch timing tuned to avoid dropping a queued message on a busy CLI
+- Schedule a message to send later from the composer's add menu — in 30 minutes, in an hour, after the usage limit resets, or at a time you pick
 
 ### Multi-Agent (Claude Code + Codex + Gemini)
 - All three agents are first-class citizens with session resume, duplicate/fork, and history
@@ -276,6 +278,13 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - The native message list runs on LegendList for smoother scrolling, follows new messages to the end even in bursts, and starts short chats at the top
 - An open session is no longer marked read while the window is unfocused or idle, and archived sessions stay offline
 
+- The session list is scoped by machine — a machine rail beside the list on tablets and desktop, a machine switcher sheet on phones — with shared sessions folded into their own sections and machines reorderable by dragging in Settings
+- Projects are named by their directory, with the machine or parent directory added only where two projects would read the same, and a setting brings back full paths
+- A turn's steps fold in runs between the agent's words, so narration, questions and permissions stay on screen, and folded lines show running delegated tasks
+- Long-running tool times read as mm:ss and HH:mm:ss, the web minimap sits at the right edge, and the web chat list no longer jumps while scrolling
+- Text selection previews open as code, JSON or markdown to match the source, and the web session history preview supports text selection, smooth scrolling and timestamps
+- Claude's built-in slash commands show their descriptions, and the header's connection status keeps its color on Android and the web
+
 ### CLI
 - `happy update` self-upgrade, `happy --version` with all agent versions
 - Daemon auto-start on boot (`happy daemon enable/disable`), restart command
@@ -301,6 +310,8 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 
 - Happy CLI v0.10.0 bundles Codex v0.159.1, follows the server's model catalog, and drops the deprecated OpenClaw integration
 - New Codex sessions start on Codex v0.159.3, and archiving a Codex session goes through the running app-server daemon
+
+- Happy CLI v0.11.0 keeps Codex fast mode off unless a delegated task asks for it, and counts messages correctly in Claude, Codex and Gemini history lists; new Codex sessions start on Codex v0.160.1
 
 ### Bug Fixes & Stability
 - 255+ bug fixes: message sending reliability, session lifecycle, Markdown rendering, navigation, voice, DooTask, sharing

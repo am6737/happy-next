@@ -1,5 +1,27 @@
 # Changelog
 
+## Version 29 - 2026-10-07
+
+Happy Next v2.14.0 scopes the session list by machine — a machine rail on tablets and desktop, a machine switcher on phones, and machines you can reorder — and lets you schedule a message to send later. A turn's steps now fold in runs between the agent's words, orchestrator runs show how long they take, and Happy CLI is updated to v0.11.0 with Codex v0.160.1.
+
+- Sessions: scope the session list by machine, with a machine rail beside the list on tablets and desktop and a machine switcher sheet on phones
+- Sessions: fold shared sessions into their own sections in the all machines view, and keep settings at the foot of the machine rail
+- Sessions: name projects by their directory, adding the machine or parent directory only where two projects would read the same, with a setting to bring back full paths
+- Settings: reorder machines by dragging, synced across devices
+- Composer: schedule a message to send later — in 30 minutes, in an hour, after the usage limit resets, or at a time you pick
+- Conversation: fold a turn's steps in runs between the agent's words, so narration, questions and permissions stay on screen
+- Conversation: show running delegated tasks on folded turn and run lines, and show long tool times as mm:ss and HH:mm:ss
+- Conversation: move the web minimap to the right edge, and stop the web chat list from jumping while scrolling
+- Orchestrator: show how long runs and tasks take, simplify the run filters to All, Active, Completed, Failed and Cancelled, and make task parameters and context easier to read
+- Orchestrator: use only the agent's final message as a task's result, and follow running tasks live
+- Text selection: open the preview as code, JSON or markdown to match the source, with a switch to plain text
+- History: select text, scroll smoothly and see timestamps in the session history preview on web
+- Commands: show descriptions for Claude's built-in slash commands
+- Header: keep the connection status color under the title on Android and the web
+- Desktop: use a full-width title bar over a rounded content panel
+- CLI: Happy CLI v0.11.0 keeps Codex fast mode off unless a delegated task asks for it, and counts messages correctly in Claude, Codex and Gemini history lists
+- Codex: new Codex sessions start on Codex v0.160.1
+
 ## Version 28 - 2026-10-01
 
 Happy Next v2.13.1 brings the terminal to the web and the session details — drawn with xterm.js, openable in a popup window on desktop browsers and kept alive while hidden — and shows the empty-session placeholder everywhere. New Codex sessions start on Codex v0.159.3.

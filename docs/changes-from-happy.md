@@ -67,6 +67,9 @@ A multi-agent orchestration system that lets you define task dependency graphs a
 - **Complete i18n**: all orchestrator UI fully internationalized
 - **CLI auto-install**: the Happy CLI installs the orchestrator skill and `/orchestrator` slash commands on startup, so you can fan a task out to parallel or dependency-ordered Claude / Codex / Gemini agents straight from the CLI
 - **`/preview-html` built-in command**: a built-in CLI slash command that generates a self-contained HTML document and previews it directly in the app
+- **Run and task durations**: runs and tasks show how long they take, counting up while running
+- **Simplified run filters**: All, Active, Completed, Failed and Cancelled, which add up to All
+- **Final-message results**: a task's result is just the agent's final message, and running tasks can be followed live
 
 ## Pending Message Queue
 
@@ -80,6 +83,7 @@ Messages sent while the CLI is busy are now queued and delivered automatically.
 - **Edit & pause/draft**: edit a queued message before it sends, or pause it / save it as a draft instead of dispatching
 - **Reconnect sync**: queue state syncs on WebSocket reconnection
 - **Concurrent safety**: hardened dispatch concurrency and cleanup semantics, with dispatch timing tuned (3s) to avoid dropping a queued message on a busy CLI
+- **Scheduled messages**: schedule a message to send later from the composer's add menu — in 30 minutes, in an hour, after the usage limit resets, or at a time you pick
 - **Persistent message cache**: session messages are stored locally so reopening a conversation can show existing history faster
 
 ## Multi-Agent Support
@@ -358,6 +362,15 @@ Extensive improvements to the chat and session management experience.
 - **LegendList message list**: the native message list scrolls more smoothly, follows new messages to the end even in bursts, and starts short chats at the top
 - **Read state and presence**: an open session is no longer marked read while the window is unfocused or idle, and archived sessions stay offline
 
+- **Machine-scoped session list**: a machine rail beside the list on tablets and desktop and a machine switcher sheet on phones; shared sessions fold into their own sections, and machines can be reordered by dragging in Settings
+- **Project naming**: projects are named by their directory, with the machine or parent directory added only where two projects would read the same; a setting brings back full paths
+- **Folding in runs**: a turn's steps fold in runs between the agent's words, so narration, questions and permissions stay on screen, and folded lines show running delegated tasks
+- **Scrolling and timing**: long-running tool times read as mm:ss and HH:mm:ss, the web minimap sits at the right edge, and the web chat list no longer jumps while scrolling
+- **Text selection format**: the selection preview opens as code, JSON or markdown to match the source, with a switch to plain text
+- **Web history preview**: select text, scroll smoothly and see timestamps in the session history preview
+- **Built-in command descriptions**: Claude's built-in slash commands show their descriptions
+- **Header status color**: the connection status under the header title keeps its color on Android and the web
+
 ## CLI Improvements
 
 The CLI (`happy-next-cli`) received substantial upgrades.
@@ -408,6 +421,8 @@ The CLI (`happy-next-cli`) received substantial upgrades.
 
 - **Happy CLI v0.10.0 with Codex v0.159.1**: follows the server's model catalog and drops the deprecated OpenClaw integration
 - **Codex v0.159.3 and archiving**: new Codex sessions start on Codex v0.159.3, and archiving a Codex session goes through the running app-server daemon
+
+- **Happy CLI v0.11.0 with Codex v0.160.1**: Codex fast mode stays off unless a delegated task asks for it, and Claude, Codex and Gemini history lists count messages correctly
 
 ## Server
 
