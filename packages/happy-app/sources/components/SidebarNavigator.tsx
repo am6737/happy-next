@@ -122,7 +122,8 @@ export const SidebarNavigator = React.memo(() => {
             headerShown: false,
             drawerType: 'permanent' as const,
             drawerStyle: {
-                backgroundColor: 'white',
+                // Transparent so the desktop's rounded panel clips its own background, not a white edge.
+                backgroundColor: 'transparent',
                 borderRightWidth: 0,
                 width: drawerWidth,
             },
