@@ -6,6 +6,8 @@ import { useAllSessions, useAllMachines, storage } from '@/sync/storage';
 import { Session } from '@/sync/storageTypes';
 import { Avatar } from '@/components/Avatar';
 import { generateCopyTitle, getSessionName, getSessionSubtitle, getSessionAvatarId, useSessionStatus, copySessionMetadata, copySessionModeSettings } from '@/utils/sessionUtils';
+import { SessionProjectLabelsContext, useSessionProjectLabel, useSessionProjectLabels } from '@/hooks/useSessionProjectLabel';
+import { ProjectLabelText } from '@/components/ProjectLabelText';
 import { StatusDot } from '@/components/StatusDot';
 import { ActionMenuModal } from '@/components/ActionMenuModal';
 import type { ActionMenuItem } from '@/components/ActionMenu';
@@ -385,6 +387,7 @@ function SessionHistory() {
     const groupedItems = React.useMemo(() => {
         return groupSessionsByDate(filteredSessions);
     }, [filteredSessions]);
+    const projectLabel = useSessionProjectLabels(filteredSessions);
     
     const handleLoadMore = React.useCallback(async () => {
         if (!effectivePaginationCursor || loadingMore || !hasMoreOlderSessions || loadMoreInFlightRef.current) return;
@@ -731,7 +734,9 @@ function SessionHistory() {
     return (
         <View style={styles.container}>
             <View style={styles.contentContainer}>
-                {listContent}
+                <SessionProjectLabelsContext.Provider value={projectLabel}>
+                    {listContent}
+                </SessionProjectLabelsContext.Provider>
             </View>
             <ActionMenuModal
                 visible={machineMenuVisible}
@@ -763,7 +768,7 @@ const SessionHistoryItemCard = React.memo(({ session, isFirst, isLast, isSingle,
     const { theme } = useUnistyles();
     const sessionStatus = useSessionStatus(session);
     const sessionName = getSessionName(session);
-    const sessionSubtitle = getSessionSubtitle(session);
+    const sessionSubtitle = useSessionProjectLabel(session);
     const avatarId = getSessionAvatarId(session);
     const canFork = Boolean(session.metadata?.claudeSessionId || session.metadata?.flavor === 'gemini' || session.metadata?.codexSessionId);
     const isOnline = session.active;
@@ -788,9 +793,7 @@ const SessionHistoryItemCard = React.memo(({ session, isFirst, isLast, isSingle,
                         {sessionName}
                     </Text>
                 </View>
-                <Text style={styles.sessionSubtitle} numberOfLines={1}>
-                    {sessionSubtitle}
-                </Text>
+                <ProjectLabelText label={sessionSubtitle} style={styles.sessionSubtitle} />
                 <View style={styles.statusRow}>
                     <View style={styles.statusDotContainer}>
                         <StatusDot color={sessionStatus.statusDotColor} isPulsing={sessionStatus.isPulsing} />

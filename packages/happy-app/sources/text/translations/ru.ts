@@ -498,6 +498,8 @@ export const ru: TranslationStructure = {
         showFlavorIconsDescription: 'Отображать иконки провайдеров ИИ на аватарах сессий',
         compactSessionView: 'Компактный вид сессий',
         compactSessionViewDescription: 'Отображать активные сессии в более компактном виде',
+        showFullProjectPath: 'Полные пути проектов',
+        showFullProjectPathDescription: 'Показывать в списках сессий полный путь проекта, а не только имя папки',
     },
 
     settingsFeatures: {

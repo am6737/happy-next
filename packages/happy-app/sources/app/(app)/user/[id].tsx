@@ -20,7 +20,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSharedSessions, storage } from '@/sync/storage';
 import { sync } from '@/sync/sync';
 import { fetchSessionsSharedByMe, SharedByMeSession } from '@/sync/apiSharing';
-import { getSessionName, useSessionStatus, getSessionSubtitle, getSessionAvatarId } from '@/utils/sessionUtils';
+import { getSessionName, useSessionStatus, getSessionAvatarId } from '@/utils/sessionUtils';
+import { SessionProjectLabelsContext, useSessionProjectLabel, useSessionProjectLabels } from '@/hooks/useSessionProjectLabel';
+import { ProjectLabelText } from '@/components/ProjectLabelText';
 import { StatusDot } from '@/components/StatusDot';
 import { Typography } from '@/constants/Typography';
 import { Session } from '@/sync/storageTypes';
@@ -68,6 +70,11 @@ export default function UserProfileScreen() {
         }
         return result;
     }, [sharedByMeData]);
+    const listedSessions = useMemo(
+        () => [...filteredSharedSessions, ...sharedByMeSessions.map(({ session }) => session)],
+        [filteredSharedSessions, sharedByMeSessions],
+    );
+    const projectLabel = useSessionProjectLabels(listedSessions);
 
     // Load cached "shared by me" data immediately, then refresh from API
     useEffect(() => {
@@ -360,6 +367,7 @@ export default function UserProfileScreen() {
                 </ItemGroup>
             )}
 
+            <SessionProjectLabelsContext.Provider value={projectLabel}>
             {/* Sessions shared with me by this user */}
             {filteredSharedSessions.length > 0 && (
                 <ItemGroup title={t('session.sharing.sharedWithMeSessions')}>
@@ -383,6 +391,7 @@ export default function UserProfileScreen() {
                     ))}
                 </ItemGroup>
             )}
+            </SessionProjectLabelsContext.Provider>
 
             {/* Profile Details */}
             {/* <ItemGroup>
@@ -425,7 +434,7 @@ function SharedSessionItem({ session, showDivider }: {
     const { theme } = useUnistyles();
     const sessionStatus = useSessionStatus(session);
     const sessionName = getSessionName(session);
-    const sessionSubtitle = getSessionSubtitle(session);
+    const sessionSubtitle = useSessionProjectLabel(session);
     const avatarId = getSessionAvatarId(session);
     const router = useRouter();
     const isIOS = Platform.OS === 'ios';
@@ -465,9 +474,7 @@ function SharedSessionItem({ session, showDivider }: {
                             {getAccessLevelLabel(session.accessLevel)}
                         </Text>
                     </View>
-                    <Text style={styles.sharedSessionSubtitle} numberOfLines={1}>
-                        {sessionSubtitle}
-                    </Text>
+                    <ProjectLabelText label={sessionSubtitle} style={styles.sharedSessionSubtitle} />
                     <View style={styles.sharedSessionStatusRow}>
                         <View style={styles.sharedSessionStatusDot}>
                             <StatusDot color={sessionStatus.statusDotColor} isPulsing={sessionStatus.isPulsing} />

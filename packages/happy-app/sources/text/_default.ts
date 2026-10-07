@@ -545,6 +545,8 @@ export const en = {
         showFlavorIconsDescription: 'Display AI provider icons on session avatars',
         compactSessionView: 'Compact Session View',
         compactSessionViewDescription: 'Show active sessions in a more compact layout',
+        showFullProjectPath: 'Full Project Paths',
+        showFullProjectPathDescription: 'Show each project\'s full path in session lists instead of just its directory name',
     },
 
     settingsFeatures: {

@@ -1,8 +1,9 @@
 import * as React from 'react';
 import { useAllMachines, useLocalSettingMutable } from '@/sync/storage';
 import { Machine, Session } from '@/sync/storageTypes';
-import { formatPathRelativeToHome } from '@/utils/sessionUtils';
 import { t } from '@/text';
+import { projectLabels } from '@/utils/projectLabels';
+import { SessionProjectLabel, useSessionProjectLabels } from './useSessionProjectLabel';
 
 export type SessionProjectMachineGroup = {
     machine: Machine | null;
@@ -13,7 +14,7 @@ export type SessionProjectMachineGroup = {
 export type SessionProjectGroup = {
     path: string;
     collapseKey: string;
-    displayPath: string;
+    label: SessionProjectLabel;
     machines: Map<string, SessionProjectMachineGroup>;
     sessions: Session[];
 };
@@ -29,6 +30,7 @@ export function useSessionProjectGroups(sessions: Session[]): SessionProjectGrou
         for (const machine of machines) map[machine.id] = machine;
         return map;
     }, [machines]);
+    const projectLabel = useSessionProjectLabels(sessions);
 
     return React.useMemo(() => {
         const groups = new Map<string, SessionProjectGroup>();
@@ -47,7 +49,7 @@ export function useSessionProjectGroups(sessions: Session[]): SessionProjectGrou
                 projectGroup = {
                     path: projectPath,
                     collapseKey: getSessionProjectCollapseKey(projectPath),
-                    displayPath: formatPathRelativeToHome(projectPath, session.metadata?.homeDir),
+                    label: projectLabel(session),
                     machines: new Map(),
                     sessions: [],
                 };
@@ -71,8 +73,11 @@ export function useSessionProjectGroups(sessions: Session[]): SessionProjectGrou
             projectGroup.sessions.sort((a, b) => b.createdAt - a.createdAt);
         }
 
-        return Array.from(groups.values()).sort((a, b) => a.displayPath.localeCompare(b.displayPath));
-    }, [sessions, machinesMap]);
+        // By name, whether full paths are shown or not, so switching between them leaves the order be.
+        const names = projectLabels(Array.from(groups.keys()));
+        return Array.from(groups.values()).sort((a, b) => names.get(a.path)!.name
+            .localeCompare(names.get(b.path)!.name, undefined, { sensitivity: 'base' }) || a.path.localeCompare(b.path));
+    }, [sessions, machinesMap, projectLabel]);
 }
 
 export function useCollapsedSessionProjectGroups(

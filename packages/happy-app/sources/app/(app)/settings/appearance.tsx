@@ -29,6 +29,7 @@ export default function AppearanceSettingsScreen() {
     const [alwaysShowContextSize, setAlwaysShowContextSize] = useSettingMutable('alwaysShowContextSize');
     const [avatarStyle, setAvatarStyle] = useSettingMutable('avatarStyle');
     const [showFlavorIcons, setShowFlavorIcons] = useSettingMutable('showFlavorIcons');
+    const [showFullProjectPath, setShowFullProjectPath] = useSettingMutable('showFullProjectPath');
     const [showThinkingMessages, setShowThinkingMessages] = useSettingMutable('showThinkingMessages');
     const [foldTurnProcess, setFoldTurnProcess] = useSettingMutable('foldTurnProcess');
     const [compactSessionView, setCompactSessionView] = useCompactSessionViewMutable();
@@ -113,6 +114,17 @@ export default function AppearanceSettingsScreen() {
                         <Switch
                             value={compactSessionView}
                             onValueChange={setCompactSessionView}
+                        />
+                    }
+                />
+                <Item
+                    title={t('settingsAppearance.showFullProjectPath')}
+                    subtitle={t('settingsAppearance.showFullProjectPathDescription')}
+                    icon={<Ionicons name="folder-outline" size={29} color="#5856D6" />}
+                    rightElement={
+                        <Switch
+                            value={showFullProjectPath}
+                            onValueChange={setShowFullProjectPath}
                         />
                     }
                 />

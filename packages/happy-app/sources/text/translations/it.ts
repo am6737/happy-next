@@ -566,6 +566,8 @@ export const it: TranslationStructure = {
         showFlavorIconsDescription: 'Mostra le icone del provider IA sugli avatar di sessione',
         compactSessionView: 'Vista sessioni compatta',
         compactSessionViewDescription: 'Mostra le sessioni attive in un layout più compatto',
+        showFullProjectPath: 'Percorsi completi dei progetti',
+        showFullProjectPathDescription: 'Mostra il percorso completo di ogni progetto negli elenchi delle sessioni invece del solo nome della cartella',
     },
 
     settingsFeatures: {

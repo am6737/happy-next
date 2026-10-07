@@ -569,6 +569,8 @@ export const ja: TranslationStructure = {
         showFlavorIconsDescription: 'セッションアバターにAIプロバイダーアイコンを表示',
         compactSessionView: 'コンパクトセッション表示',
         compactSessionViewDescription: 'アクティブなセッションをコンパクトなレイアウトで表示',
+        showFullProjectPath: 'フルパスを表示',
+        showFullProjectPathDescription: 'セッション一覧でプロジェクトのディレクトリ名だけでなくフルパスを表示',
     },
 
     settingsFeatures: {

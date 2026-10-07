@@ -162,6 +162,7 @@ describe('settings', () => {
                 favoriteDirectories: [],
                 favoriteMachines: [],
                 machineOrder: [],
+                showFullProjectPath: false,
                 dismissedCLIWarnings: { perMachine: {}, global: {} },
             };
             const delta: Partial<Settings> = {
@@ -204,6 +205,7 @@ describe('settings', () => {
                 favoriteDirectories: [],
                 favoriteMachines: [],
                 machineOrder: [],
+                showFullProjectPath: false,
                 dismissedCLIWarnings: { perMachine: {}, global: {} },
             });
         });
@@ -246,6 +248,7 @@ describe('settings', () => {
                 favoriteDirectories: [],
                 favoriteMachines: [],
                 machineOrder: [],
+                showFullProjectPath: false,
                 dismissedCLIWarnings: { perMachine: {}, global: {} },
             };
             const delta: Partial<Settings> = {};
@@ -290,6 +293,7 @@ describe('settings', () => {
                 favoriteDirectories: [],
                 favoriteMachines: [],
                 machineOrder: [],
+                showFullProjectPath: false,
                 dismissedCLIWarnings: { perMachine: {}, global: {} },
             };
             const delta: Partial<Settings> = {
@@ -339,6 +343,7 @@ describe('settings', () => {
                 favoriteDirectories: [],
                 favoriteMachines: [],
                 machineOrder: [],
+                showFullProjectPath: false,
                 dismissedCLIWarnings: { perMachine: {}, global: {} },
             };
             expect(applySettings(currentSettings, {})).toEqual(currentSettings);
@@ -397,6 +402,7 @@ describe('settings', () => {
                 favoriteDirectories: [],
                 favoriteMachines: [],
                 machineOrder: [],
+                showFullProjectPath: false,
                 dismissedCLIWarnings: { perMachine: {}, global: {} },
             };
             const delta: any = {
@@ -464,6 +470,7 @@ describe('settings', () => {
                 favoriteDirectories: ['~/src', '~/Desktop', '~/Documents'],
                 favoriteMachines: [],
                 machineOrder: [],
+                showFullProjectPath: false,
                 dismissedCLIWarnings: { perMachine: {}, global: {} },
                 useEnhancedSessionWizard: false,
                 showThinkingMessages: false,

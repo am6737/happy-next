@@ -6,7 +6,9 @@ import { usePathname } from 'expo-router';
 import { SessionListViewItem, useOrchestratorRunningTaskCount, useSessionHasDraft, useSocketStatus } from '@/sync/storage';
 import { useCompactSessionView } from '@/hooks/useCompactSessionView';
 import { Ionicons } from '@expo/vector-icons';
-import { getSessionName, useSessionStatus, getSessionSubtitle, getSessionAvatarId } from '@/utils/sessionUtils';
+import { getSessionName, useSessionStatus, getSessionAvatarId } from '@/utils/sessionUtils';
+import { SessionProjectLabelsContext, useSessionProjectLabel, useSessionProjectLabels } from '@/hooks/useSessionProjectLabel';
+import { ProjectLabelText } from './ProjectLabelText';
 import { Avatar } from './Avatar';
 import { ActiveSessionsGroup } from './ActiveSessionsGroup';
 import { ActiveSessionsGroupCompact } from './ActiveSessionsGroupCompact';
@@ -364,6 +366,7 @@ type ListItem = (
     | { type: 'machine-header'; section: SessionSection; collapsed: boolean }
     | { type: 'machine-sessions'; section: SessionSection }
     | { type: 'machine-empty'; section: SessionSection }
+    | { type: 'shared-sessions'; sessions: Session[] }
 ) & { selected?: boolean };
 
 function getSessionIdFromPathname(pathname: string): string | null {
@@ -527,20 +530,25 @@ export function SessionsList() {
         }
     }, []);
 
+    // The active sessions shared with me, a section of the "All machines" view.
+    const sharedSection = React.useMemo<SessionSection | null>(() => {
+        const sharedActive = sharedSessions.filter(session => session.active);
+        return sharedActive.length > 0
+            ? { id: SHARED_SECTION_ID, name: t('session.sharing.sharedWithMeSessions'), icon: 'people-outline', sessions: sharedActive, dot: sharedDot }
+            : null;
+    }, [sharedSessions, sharedDot]);
+
     // The "All machines" view's sections: each machine, then the active sessions shared with me and by me.
     const sections = React.useMemo<SessionSection[]>(() => {
         if (!groupByMachine) return [];
         const result = groups.map(machineSection);
-        const sharedActive = sharedSessions.filter(session => session.active);
-        if (sharedActive.length > 0) {
-            result.push({ id: SHARED_SECTION_ID, name: t('session.sharing.sharedWithMeSessions'), icon: 'people-outline', sessions: sharedActive, dot: sharedDot });
-        }
+        if (sharedSection) result.push(sharedSection);
         const sharedByMeActive = sharedByMeSessions.filter(session => session.active);
         if (sharedByMeActive.length > 0) {
             result.push({ id: SHARED_BY_ME_SECTION_ID, name: t('session.sharing.sharedByMeSessions'), icon: 'share-outline', sessions: sharedByMeActive, dot: sharedByMeDot });
         }
         return result;
-    }, [groupByMachine, groups, sharedSessions, sharedByMeSessions, sharedDot, sharedByMeDot]);
+    }, [groupByMachine, groups, sharedSection, sharedByMeSessions, sharedByMeDot]);
 
     const toggleSection = React.useCallback((sectionId: string) => {
         const next = { ...collapsedMachines };
@@ -574,7 +582,14 @@ export function SessionsList() {
             if (!selectedGroup) return data;
             return selectedGroup.sessions.length > 0 ? [{ type: 'active-sessions', sessions: selectedGroup.sessions }] : [];
         }
-        if (!groupByMachine || !data) return data;
+        if (!data) return data;
+        if (!groupByMachine) {
+            // Without the sidebar there are no machine sections, only sessions by project: the ones
+            // shared with me are grouped the same way, after my own projects, in place of their list.
+            const sharedAt = data.findIndex(item => item.type === 'header' && item.title === 'Shared with me');
+            if (sharedAt < 0 || !sharedSection) return data;
+            return [...data.slice(0, sharedAt), { type: 'shared-sessions', sessions: sharedSection.sessions }];
+        }
         const items: ListItem[] = [];
         for (const section of sections) {
             const collapsed = !!collapsedMachines[section.id];
@@ -583,7 +598,13 @@ export function SessionsList() {
             items.push(section.sessions.length > 0 ? { type: 'machine-sessions', section } : { type: 'machine-empty', section });
         }
         return items;
-    }, [activeTab, sharedData, sharedByMeData, data, selectedGroup, groupByMachine, sections, collapsedMachines]);
+    }, [activeTab, sharedData, sharedByMeData, data, selectedGroup, groupByMachine, sections, sharedSection, collapsedMachines]);
+    const tabSessions = React.useMemo(() => (tabData ?? []).flatMap(item =>
+        item.type === 'session' ? [item.session]
+            : item.type === 'active-sessions' || item.type === 'shared-sessions' ? item.sessions
+                : item.type === 'machine-sessions' ? item.section.sessions
+                    : []), [tabData]);
+    const projectLabel = useSessionProjectLabels(tabSessions);
 
     const pendingActiveSession = React.useMemo(
         () => pendingSessionNavigationId ? allActiveSessions.find(session => session.id === pendingSessionNavigationId) : undefined,
@@ -668,7 +689,7 @@ export function SessionsList() {
             const topLevelIndex = dataWithSelected?.findIndex(item =>
                 item.type === 'session'
                     ? item.session.id === sessionId
-                    : item.type === 'active-sessions'
+                    : item.type === 'active-sessions' || item.type === 'shared-sessions'
                         ? item.sessions.some(session => session.id === sessionId)
                         : item.type === 'machine-sessions' && item.section.sessions.some(session => session.id === sessionId)
             ) ?? -1;
@@ -718,6 +739,7 @@ export function SessionsList() {
         switch (item.type) {
             case 'header': return `header-${item.title}-${index}`;
             case 'active-sessions': return 'active-sessions';
+            case 'shared-sessions': return 'shared-sessions';
             case 'project-group': return `project-group-${item.machine.id}-${item.displayPath}-${index}`;
             case 'session': return `session-${item.session.id}`;
             case 'machine-header': return `machine-header-${item.section.id}`;
@@ -745,6 +767,16 @@ export function SessionsList() {
                         sessions={item.sessions}
                         selectedSessionId={selectedId}
                         registerSessionRowRef={registerSessionRowRef}
+                    />
+                );
+
+            case 'shared-sessions':
+                return (
+                    <ActiveComponent
+                        sessions={item.sessions}
+                        selectedSessionId={selectedId}
+                        registerSessionRowRef={registerSessionRowRef}
+                        shared
                     />
                 );
 
@@ -844,40 +876,42 @@ export function SessionsList() {
         <View style={styles.container}>
             <View ref={listViewportRef} style={styles.contentContainer}>
                 {Platform.OS === 'ios' && isEmpty && <ViewportInsetsProbe onChange={setViewportInsets} />}
-                <FlatList
-                    // A different machine or sharing view starts from its top. Remounting rather than
-                    // scrolling to offset 0: on iOS the top of the list sits at minus the header inset
-                    // the system adds, so offset 0 would leave it scrolled under the header.
-                    key={activeTab}
-                    ref={listRef}
-                    contentInsetAdjustmentBehavior={Platform.OS === 'ios' ? 'automatic' : undefined}
-                    data={dataWithSelected}
-                    renderItem={renderItem}
-                    keyExtractor={keyExtractor}
-                    contentContainerStyle={[
-                        { paddingBottom: safeArea.bottom + 128, maxWidth: layout.maxWidth },
-                        isEmpty && emptyContentStyle,
-                    ]}
-                    ListEmptyComponent={EmptyComponent}
-                    removeClippedSubviews={true}
-                    onScroll={(event: NativeSyntheticEvent<NativeScrollEvent>) => {
-                        scrollOffsetRef.current = event.nativeEvent.contentOffset.y;
-                    }}
-                    scrollEventThrottle={16}
-                    onScrollToIndexFailed={({ index, averageItemLength }) => {
-                        listRef.current?.scrollToOffset({
-                            offset: Math.max(0, index * averageItemLength),
-                            animated: false,
-                        });
-                    }}
-                    refreshControl={
-                        <RefreshControl
-                            refreshing={refreshing}
-                            onRefresh={handleRefresh}
-                            tintColor={theme.colors.textSecondary}
-                        />
-                    }
-                />
+                <SessionProjectLabelsContext.Provider value={projectLabel}>
+                    <FlatList
+                        // A different machine or sharing view starts from its top. Remounting rather than
+                        // scrolling to offset 0: on iOS the top of the list sits at minus the header inset
+                        // the system adds, so offset 0 would leave it scrolled under the header.
+                        key={activeTab}
+                        ref={listRef}
+                        contentInsetAdjustmentBehavior={Platform.OS === 'ios' ? 'automatic' : undefined}
+                        data={dataWithSelected}
+                        renderItem={renderItem}
+                        keyExtractor={keyExtractor}
+                        contentContainerStyle={[
+                            { paddingBottom: safeArea.bottom + 128, maxWidth: layout.maxWidth },
+                            isEmpty && emptyContentStyle,
+                        ]}
+                        ListEmptyComponent={EmptyComponent}
+                        removeClippedSubviews={true}
+                        onScroll={(event: NativeSyntheticEvent<NativeScrollEvent>) => {
+                            scrollOffsetRef.current = event.nativeEvent.contentOffset.y;
+                        }}
+                        scrollEventThrottle={16}
+                        onScrollToIndexFailed={({ index, averageItemLength }) => {
+                            listRef.current?.scrollToOffset({
+                                offset: Math.max(0, index * averageItemLength),
+                                animated: false,
+                            });
+                        }}
+                        refreshControl={
+                            <RefreshControl
+                                refreshing={refreshing}
+                                onRefresh={handleRefresh}
+                                tintColor={theme.colors.textSecondary}
+                            />
+                        }
+                    />
+                </SessionProjectLabelsContext.Provider>
             </View>
         </View>
     );
@@ -896,7 +930,7 @@ const SessionItem = React.memo(({ session, selected, isFirst, isLast, isSingle, 
     const sessionStatus = useSessionStatus(session);
     const hasDraft = useSessionHasDraft(session.id);
     const sessionName = getSessionName(session);
-    const sessionSubtitle = getSessionSubtitle(session);
+    const sessionSubtitle = useSessionProjectLabel(session);
     const compactSessionView = useCompactSessionView();
     const runningTaskCount = useOrchestratorRunningTaskCount(session.id);
     const navigateToSession = useNavigateToSession();
@@ -991,9 +1025,7 @@ const SessionItem = React.memo(({ session, selected, isFirst, isLast, isSingle, 
                 {!compactSessionView && (
                     <>
                         {/* Subtitle line */}
-                        <Text style={styles.sessionSubtitle} numberOfLines={1}>
-                            {sessionSubtitle}
-                        </Text>
+                        <ProjectLabelText label={sessionSubtitle} style={styles.sessionSubtitle} />
 
                         {/* Status line with dot */}
                         <View style={styles.statusRow}>

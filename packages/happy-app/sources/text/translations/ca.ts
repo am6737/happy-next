@@ -537,6 +537,8 @@ export const ca: TranslationStructure = {
         showFlavorIconsDescription: "Mostrar icones del proveïdor d'IA als avatars de sessió",
         compactSessionView: 'Vista compacta de sessions',
         compactSessionViewDescription: 'Mostra les sessions actives en un disseny més compacte',
+        showFullProjectPath: 'Camins complets dels projectes',
+        showFullProjectPathDescription: 'Mostra el camí complet de cada projecte a les llistes de sessions en lloc de només el nom del directori',
     },
 
     settingsFeatures: {

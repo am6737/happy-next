@@ -539,6 +539,8 @@ export const zhHans: TranslationStructure = {
         showFlavorIconsDescription: '在会话头像上显示 AI 提供商图标',
         compactSessionView: '紧凑会话视图',
         compactSessionViewDescription: '以更紧凑的布局显示活跃会话',
+        showFullProjectPath: '显示完整目录',
+        showFullProjectPathDescription: '会话列表中显示项目的完整路径，而不只是目录名',
     },
 
     settingsFeatures: {

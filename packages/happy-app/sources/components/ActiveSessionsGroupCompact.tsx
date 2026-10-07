@@ -25,6 +25,7 @@ import { ActionMenuItem } from '@/components/ActionMenu';
 import { sync } from '@/sync/sync';
 import { SessionContextMenu } from './SessionContextMenu';
 import { PressHighlight } from './PressHighlight';
+import { ProjectLabelText } from './ProjectLabelText';
 import { SessionMarkerBar } from './SessionColorMarker';
 import { SessionProjectGroup, useCollapsedSessionProjectGroups, useSessionProjectGroups } from '@/hooks/useSessionProjectGroups';
 
@@ -93,6 +94,13 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
     sectionHeaderAvatar: {
         marginRight: 8,
     },
+    // As wide as the avatar it stands in for.
+    sectionHeaderSharedIcon: {
+        width: 24,
+        height: 24,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
     sectionHeaderPath: {
         ...Typography.default('regular'),
         color: theme.colors.groupped.sectionTitle,
@@ -100,7 +108,7 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
         lineHeight: Platform.select({ ios: 18, default: 20 }),
         letterSpacing: Platform.select({ ios: -0.08, default: 0.1 }),
         fontWeight: Platform.select({ ios: 'normal', default: '500' }),
-        flex: 1,
+        flexShrink: 1,
     },
     sectionHeaderMachine: {
         ...Typography.default('regular'),
@@ -233,6 +241,8 @@ interface ActiveSessionsGroupProps {
     sessions: Session[];
     selectedSessionId?: string;
     registerSessionRowRef?: (sessionId: string, ref: View | null) => void;
+    // Sessions shared with me: their projects are marked as such rather than by a session's avatar.
+    shared?: boolean;
 }
 
 function ProjectSectionHeader({
@@ -272,7 +282,7 @@ function ProjectSectionHeader({
                 onPress={onToggle}
                 accessibilityRole="button"
                 accessibilityState={{ expanded: !collapsed }}
-                accessibilityLabel={`${collapsed ? t('duplicate.expandText') : t('duplicate.collapseText')} ${projectGroup.displayPath}`}
+                accessibilityLabel={`${collapsed ? t('duplicate.expandText') : t('duplicate.collapseText')} ${[projectGroup.label.name, projectGroup.label.detail].filter(Boolean).join(', ')}`}
             >
             <View style={styles.sectionHeaderLeft}>
                 <Animated.View
@@ -288,13 +298,11 @@ function ProjectSectionHeader({
                     <Ionicons name="chevron-forward" size={14} color={styles.sectionHeaderPath.color} />
                 </Animated.View>
                 {avatar && <View style={styles.sectionHeaderAvatar}>{avatar}</View>}
-                <Text
+                <ProjectLabelText
+                    label={projectGroup.label}
+                    fullPath={projectGroup.path}
                     style={styles.sectionHeaderPath}
-                    numberOfLines={1}
-                    ref={(el: any) => { if (el) el.title = projectGroup.displayPath; }}
-                >
-                    {projectGroup.displayPath}
-                </Text>
+                />
             </View>
                 <View style={styles.sectionHeaderRight}>
                     <View style={styles.sectionHeaderActionSlot}>
@@ -326,7 +334,7 @@ function ProjectSectionHeader({
 }
 
 
-export function ActiveSessionsGroupCompact({ sessions, selectedSessionId, registerSessionRowRef }: ActiveSessionsGroupProps) {
+export function ActiveSessionsGroupCompact({ sessions, selectedSessionId, registerSessionRowRef, shared }: ActiveSessionsGroupProps) {
     const styles = stylesheet;
     const router = useRouter();
     const projectGroups = useSessionProjectGroups(sessions);
@@ -368,7 +376,11 @@ export function ActiveSessionsGroupCompact({ sessions, selectedSessionId, regist
                             collapsed={!!collapsedGroups[collapseKey]}
                             onToggle={() => toggleGroup(collapseKey)}
                             onNewSession={handleNewSession}
-                            avatar={avatarId && firstSession ? (
+                            avatar={shared ? (
+                                <View style={styles.sectionHeaderSharedIcon}>
+                                    <Ionicons name="people-outline" size={18} color={styles.sectionHeaderPath.color} />
+                                </View>
+                            ) : avatarId && firstSession ? (
                                 // No flavor badge here: the header marks a directory, and the vendor of
                                 // whichever session happens to sort first is not the directory's identity.
                                 <Avatar id={avatarId} size={24} hideFlavorBadge sessionIcon={firstSession.metadata?.sessionIcon} />

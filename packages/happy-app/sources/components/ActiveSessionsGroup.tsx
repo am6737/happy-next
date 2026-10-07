@@ -27,6 +27,7 @@ import { ActionMenuItem } from '@/components/ActionMenu';
 import { sync } from '@/sync/sync';
 import { SessionContextMenu } from './SessionContextMenu';
 import { PressHighlight } from './PressHighlight';
+import { ProjectLabelText } from './ProjectLabelText';
 import { SessionMarkerBar } from './SessionColorMarker';
 import { SessionProjectGroup, useCollapsedSessionProjectGroups, useSessionProjectGroups } from '@/hooks/useSessionProjectGroups';
 
@@ -91,6 +92,9 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
         alignItems: 'center',
         flex: 1,
         marginRight: 8,
+    },
+    sectionHeaderSharedIcon: {
+        marginRight: 6,
     },
     sectionHeaderPath: {
         ...Typography.default('regular'),
@@ -265,6 +269,8 @@ interface ActiveSessionsGroupProps {
     sessions: Session[];
     selectedSessionId?: string;
     registerSessionRowRef?: (sessionId: string, ref: View | null) => void;
+    // Sessions shared with me: their projects are marked as such rather than by a session's avatar.
+    shared?: boolean;
 }
 
 function ProjectSectionHeader({
@@ -272,12 +278,14 @@ function ProjectSectionHeader({
     collapsed,
     onToggle,
     onNewSession,
+    shared,
     rightContent,
 }: {
     projectGroup: SessionProjectGroup;
     collapsed: boolean;
     onToggle: () => void;
     onNewSession?: () => void;
+    shared?: boolean;
     rightContent: React.ReactNode;
 }) {
     const styles = stylesheet;
@@ -302,7 +310,7 @@ function ProjectSectionHeader({
                 onPress={onToggle}
                 accessibilityRole="button"
                 accessibilityState={{ expanded: !collapsed }}
-                accessibilityLabel={`${collapsed ? t('duplicate.expandText') : t('duplicate.collapseText')} ${projectGroup.displayPath}`}
+                accessibilityLabel={`${collapsed ? t('duplicate.expandText') : t('duplicate.collapseText')} ${[projectGroup.label.name, projectGroup.label.detail].filter(Boolean).join(', ')}`}
             >
             <View style={styles.sectionHeaderLeft}>
                 <Animated.View
@@ -317,13 +325,16 @@ function ProjectSectionHeader({
                 >
                     <Ionicons name="chevron-forward" size={14} color={styles.sectionHeaderPath.color} />
                 </Animated.View>
-                <Text
+                {shared && (
+                    <View style={styles.sectionHeaderSharedIcon}>
+                        <Ionicons name="people-outline" size={16} color={styles.sectionHeaderPath.color} />
+                    </View>
+                )}
+                <ProjectLabelText
+                    label={projectGroup.label}
+                    fullPath={projectGroup.path}
                     style={styles.sectionHeaderPath}
-                    numberOfLines={1}
-                    ref={(el: any) => { if (el) el.title = projectGroup.displayPath; }}
-                >
-                    {projectGroup.displayPath}
-                </Text>
+                />
             </View>
                 <View style={styles.sectionHeaderRight}>
                     <View style={styles.sectionHeaderActionSlot}>
@@ -355,7 +366,7 @@ function ProjectSectionHeader({
 }
 
 
-export function ActiveSessionsGroup({ sessions, selectedSessionId, registerSessionRowRef }: ActiveSessionsGroupProps) {
+export function ActiveSessionsGroup({ sessions, selectedSessionId, registerSessionRowRef, shared }: ActiveSessionsGroupProps) {
     const styles = stylesheet;
     const router = useRouter();
     const projectGroups = useSessionProjectGroups(sessions);
@@ -401,6 +412,7 @@ export function ActiveSessionsGroup({ sessions, selectedSessionId, registerSessi
                             collapsed={!!collapsedGroups[collapseKey]}
                             onToggle={() => toggleGroup(collapseKey)}
                             onNewSession={handleNewSession}
+                            shared={shared}
                             rightContent={singleMachineId && singleMachineSession?.metadata?.path ? (
                                 <ProjectGitStatus
                                     machineId={singleMachineId}

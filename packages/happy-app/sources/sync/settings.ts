@@ -298,6 +298,7 @@ export const SettingsSchema = z.object({
     favoriteMachines: z.array(z.string()).describe('User-defined favorite machines (machine IDs) for quick access in machine selection'),
     // Machine order across the app's machine lists
     machineOrder: z.array(z.string()).describe('User-defined machine order (machine IDs); machines not listed follow in their default order'),
+    showFullProjectPath: z.boolean().describe('Show project paths in session lists in full instead of by directory name'),
     // Dismissed CLI warning banners (supports both per-machine and global dismissal)
     dismissedCLIWarnings: z.object({
         perMachine: z.record(z.string(), z.object({
@@ -372,6 +373,7 @@ export const settingsDefaults: Settings = {
     favoriteMachines: [],
     // Machine order (default order until the user reorders)
     machineOrder: [],
+    showFullProjectPath: false,
     // Dismissed CLI warnings (empty by default)
     dismissedCLIWarnings: { perMachine: {}, global: {} },
 };

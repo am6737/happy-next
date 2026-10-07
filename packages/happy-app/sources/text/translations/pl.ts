@@ -548,6 +548,8 @@ export const pl: TranslationStructure = {
         showFlavorIconsDescription: 'Wyświetlaj ikony dostawcy AI na awatarach sesji',
         compactSessionView: 'Kompaktowy widok sesji',
         compactSessionViewDescription: 'Pokazuj aktywne sesje w bardziej zwartym układzie',
+        showFullProjectPath: 'Pełne ścieżki projektów',
+        showFullProjectPathDescription: 'Pokazuj na listach sesji pełną ścieżkę projektu zamiast samej nazwy katalogu',
     },
 
     settingsFeatures: {
