@@ -1,8 +1,13 @@
 import * as React from 'react';
-import { Text, View, Platform } from 'react-native';
-import { StyleSheet } from 'react-native-unistyles';
+import { Text, View, Platform, Pressable } from 'react-native';
+import { StyleSheet, useUnistyles } from 'react-native-unistyles';
+import { Ionicons } from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
 import { CodeView } from './CodeView';
 import { LongPressCopy, useCopySelectable } from './LongPressCopy';
+import { showCopiedToast, showToast } from './Toast';
+import { normalizePreviewHtmlToolName, PREVIEW_HTML_TOOL } from '@/sync/typesMessage';
+import { t } from '@/text';
 import {
     type OrchestratorSubmitTaskInput,
     formatPromptPreview,
@@ -54,6 +59,62 @@ export const KeyValueView = React.memo<KeyValueViewProps>(({ data }) => {
         </LongPressCopy>
     );
 });
+
+function PreviewHtmlInputView({ input }: { input: Record<string, unknown> & { html: string } }) {
+    const { html, ...parameters } = input;
+    const { theme } = useUnistyles();
+    const [expanded, setExpanded] = React.useState(false);
+    const sourceStats = React.useMemo(() => ({
+        characters: html.length,
+        lines: html.length === 0 ? 0 : html.split(/\r\n|\r|\n/).length,
+    }), [html]);
+
+    React.useEffect(() => setExpanded(false), [html]);
+
+    const copySource = React.useCallback(async () => {
+        try {
+            await Clipboard.setStringAsync(html);
+            showCopiedToast();
+        } catch {
+            showToast(t('textSelection.failedToCopy'), { icon: 'alert-circle-outline' });
+        }
+    }, [html]);
+
+    const toggleLabel = expanded ? t('tools.previewHtml.collapseSource') : t('tools.previewHtml.expandSource');
+
+    return (
+        <View style={styles.previewHtmlInput}>
+            {Object.keys(parameters).length > 0 && <KeyValueView data={parameters} />}
+            <View style={styles.container}>
+                <View style={styles.htmlHeader}>
+                    <Pressable
+                        style={styles.htmlToggle}
+                        onPress={() => setExpanded((value) => !value)}
+                        accessibilityRole="button"
+                        accessibilityLabel={toggleLabel}
+                        accessibilityState={{ expanded }}
+                    >
+                        <Ionicons name={expanded ? 'chevron-down' : 'chevron-forward'} size={16} color={theme.colors.textSecondary} />
+                        <View style={styles.htmlSummary}>
+                            <Text style={styles.key}>html</Text>
+                            <Text style={styles.htmlStats}>{t('tools.previewHtml.sourceStats', sourceStats)}</Text>
+                        </View>
+                        <Text style={styles.htmlAction}>{toggleLabel}</Text>
+                    </Pressable>
+                    <Pressable
+                        style={styles.htmlCopyButton}
+                        onPress={copySource}
+                        accessibilityRole="button"
+                        accessibilityLabel={`${t('common.copy')} HTML`}
+                    >
+                        <Ionicons name="copy-outline" size={18} color={theme.colors.textSecondary} />
+                    </Pressable>
+                </View>
+                {expanded && <CodeView code={html} language="html" />}
+            </View>
+        </View>
+    );
+}
 
 function OrchestratorSubmitInputView({ input }: { input: Record<string, unknown> }) {
     const topLevelEntries = Object.entries(input).filter(([key]) => key !== 'tasks');
@@ -138,6 +199,9 @@ export function ToolInputView({ input, toolName }: { input: unknown; toolName?: 
         if (isOrchestratorSubmitToolName(toolName)) {
             return <OrchestratorSubmitInputView input={objectInput} />;
         }
+        if (toolName && normalizePreviewHtmlToolName(toolName) === PREVIEW_HTML_TOOL && typeof objectInput.html === 'string') {
+            return <PreviewHtmlInputView input={objectInput as Record<string, unknown> & { html: string }} />;
+        }
         return <KeyValueView data={objectInput} />;
     }
 
@@ -213,6 +277,35 @@ const styles = StyleSheet.create((theme) => ({
     },
     complexValue: {
         marginTop: 2,
+    },
+    previewHtmlInput: {
+        gap: 12,
+    },
+    htmlHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    htmlToggle: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 12,
+        paddingVertical: 12,
+        gap: 8,
+    },
+    htmlSummary: {
+        flex: 1,
+    },
+    htmlStats: {
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+    },
+    htmlAction: {
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+    },
+    htmlCopyButton: {
+        padding: 14,
     },
     rowTopBorder: {
         borderTopWidth: StyleSheet.hairlineWidth,

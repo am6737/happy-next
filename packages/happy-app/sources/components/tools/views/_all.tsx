@@ -17,7 +17,6 @@ import { CodexDiffView } from './CodexDiffView';
 import { AskUserQuestionView } from './AskUserQuestionView';
 import { GeminiEditView } from './GeminiEditView';
 import { GeminiExecuteView } from './GeminiExecuteView';
-import { PreviewHtmlViewFull } from './PreviewHtmlViewFull';
 import { ViewImageViewFull } from './ViewImageViewFull';
 import { getToolImagePath } from '@/utils/toolImagePath';
 
@@ -67,8 +66,6 @@ export const toolFullViewRegistry: Record<string, ToolViewComponent> = {
     Bash: BashViewFull,
     Edit: EditViewFull,
     MultiEdit: MultiEditViewFull,
-    'mcp__happy__preview_html': PreviewHtmlViewFull,
-    'mcp:happy:preview_html': PreviewHtmlViewFull,
 };
 
 // Helper function to get the appropriate view component for a tool
@@ -98,4 +95,3 @@ export { TaskView } from './TaskView';
 export { AskUserQuestionView } from './AskUserQuestionView';
 export { GeminiEditView } from './GeminiEditView';
 export { GeminiExecuteView } from './GeminiExecuteView';
-export { PreviewHtmlViewFull } from './PreviewHtmlViewFull';

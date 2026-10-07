@@ -1199,6 +1199,11 @@ export const zhHans: TranslationStructure = {
             editNumber: ({ index, total }: { index: number; total: number }) => `编辑 ${index}/${total}`,
             replaceAll: '全部替换',
         },
+        previewHtml: {
+            expandSource: '展开源码',
+            collapseSource: '收起源码',
+            sourceStats: ({ characters, lines }: { characters: number; lines: number }) => `${characters} 个字符 · ${lines} 行`,
+        },
         names: {
             viewImage: "查看图片",
             task: '任务',

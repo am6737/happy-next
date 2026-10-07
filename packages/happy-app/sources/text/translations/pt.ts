@@ -1197,6 +1197,11 @@ export const pt: TranslationStructure = {
             editNumber: ({ index, total }: { index: number; total: number }) => `Edição ${index} de ${total}`,
             replaceAll: 'Substituir tudo',
         },
+        previewHtml: {
+            expandSource: 'Mostrar código',
+            collapseSource: 'Ocultar código',
+            sourceStats: ({ characters, lines }: { characters: number; lines: number }) => `${characters} ${plural({ count: characters, singular: 'caractere', plural: 'caracteres' })} · ${lines} ${plural({ count: lines, singular: 'linha', plural: 'linhas' })}`,
+        },
         names: {
             viewImage: "Ver imagem",
             task: 'Tarefa',

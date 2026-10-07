@@ -1243,6 +1243,11 @@ export const ja: TranslationStructure = {
             editNumber: ({ index, total }: { index: number; total: number }) => `編集 ${index}/${total}`,
             replaceAll: 'すべて置換',
         },
+        previewHtml: {
+            expandSource: 'ソースを表示',
+            collapseSource: 'ソースを隠す',
+            sourceStats: ({ characters, lines }: { characters: number; lines: number }) => `${characters} 文字 · ${lines} 行`,
+        },
         names: {
             viewImage: "画像を表示",
             task: 'タスク',

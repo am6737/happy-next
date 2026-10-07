@@ -11,6 +11,7 @@ import { useLocalSetting } from '@/sync/storage';
 import { StyleSheet } from 'react-native-unistyles';
 import { t } from '@/text';
 import { ToolOutputDetail } from './ToolOutputDetail';
+import { formatToolOutputContent } from './toolOutputContent';
 import { CopyableText, LongPressCopy, useCopySelectable } from '../LongPressCopy';
 
 function hasResultContent(result: unknown): boolean {
@@ -39,6 +40,16 @@ export function ToolFullView({ tool, metadata, messages = [], sessionId }: ToolF
     const screenWidth = useWindowDimensions().width;
     const devModeEnabled = (useLocalSetting('devModeEnabled') || __DEV__);
     const selectable = useCopySelectable();
+    const errorText = React.useMemo(() => {
+        if (tool.state !== 'error') return '';
+        const content = formatToolOutputContent({
+            toolName: tool.name,
+            toolInput: tool.input,
+            result: tool.result,
+            kind: 'text',
+        });
+        return content.kind === 'text' ? content.text : String(tool.result);
+    }, [tool.state, tool.name, tool.input, tool.result]);
     return (
         <ScrollView contentInsetAdjustmentBehavior="automatic" style={[styles.container, { paddingHorizontal: screenWidth > 700 ? 16 : 0 }]}>
             <View style={styles.contentWrapper}>
@@ -87,9 +98,9 @@ export function ToolFullView({ tool, metadata, messages = [], sessionId }: ToolF
                                 <Ionicons name="close-circle" size={20} color="#FF3B30" />
                                 <Text style={styles.sectionTitle}>{t('tools.fullView.error')}</Text>
                             </View>
-                            <LongPressCopy text={String(tool.result)}>
+                            <LongPressCopy text={errorText}>
                                 <View style={styles.errorContainer}>
-                                    <Text selectable={selectable} style={styles.errorText}>{String(tool.result)}</Text>
+                                    <Text selectable={selectable} style={styles.errorText}>{errorText}</Text>
                                 </View>
                             </LongPressCopy>
                         </View>
