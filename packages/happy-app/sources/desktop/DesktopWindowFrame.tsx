@@ -12,13 +12,17 @@ import { useDootaskProfile, useFriendRequests, useProfile, useSocketStatus } fro
 import { getServerInfo } from '@/sync/serverConfig';
 import { t } from '@/text';
 import { StatusDot } from '@/components/StatusDot';
-import { requestCommandPalette } from '@/components/CommandPalette/events';
 import { DesktopUpdateButton } from './DesktopUpdateButton';
 import { DesktopWindowControls, WINDOWS_TITLE_BAR_HEIGHT } from './DesktopWindowControls';
 import { getDesktopPlatform, handleDesktopTitleBarMouseDown, isTerminalWindow } from './desktopWindowUtils';
 import { useDesktopWindowFullscreen } from './useDesktopWindowFullscreen';
 
 const MACOS_RIGHT_DRAG_STRIP_LEFT = 360;
+// Kept in step with AUTHENTICATED_TRAFFIC_LIGHT_X/Y in src-tauri/src/lib.rs.
+const MACOS_TITLE_BAR_HEIGHT = 48;
+const MACOS_TRAFFIC_LIGHT_GUTTER = 88;
+const PANEL_INSET = 5;
+const PANEL_RADIUS = 10;
 const WINDOWS_NAVIGATION_BUTTON_SIZE = 30;
 
 type WindowsUnauthenticatedRoute = 'welcome' | 'restore' | 'restoreManual' | 'server';
@@ -76,14 +80,10 @@ function WindowsNavigationButton({ accessibilityLabel, children, onPress }: Wind
     );
 }
 
-function WindowsTitleBarNavigation() {
+// The connection status beside the app title in the signed-in title bar.
+function TitleBarConnectionStatus() {
     const { theme } = useUnistyles();
-    const router = useRouter();
     const socketStatus = useSocketStatus();
-    const friendRequests = useFriendRequests();
-    const inboxHasContent = useInboxHasContent();
-    const dootaskProfile = useDootaskProfile();
-    const profile = useProfile();
     const { width: windowWidth } = useWindowDimensions();
     const showConnectionText = windowWidth >= 720;
 
@@ -102,25 +102,38 @@ function WindowsTitleBarNavigation() {
         }
     })();
 
+    if (!connectionStatus.text) return null;
+    return (
+        <View style={{ alignItems: 'center', flexDirection: 'row', gap: 5, paddingLeft: 4 }}>
+            <StatusDot
+                color={connectionStatus.color}
+                isPulsing={connectionStatus.isPulsing}
+                size={6}
+            />
+            {showConnectionText && (
+                <Text selectable={false} style={{ color: connectionStatus.color, fontSize: 11, fontWeight: '500' }}>
+                    {connectionStatus.text}
+                </Text>
+            )}
+        </View>
+    );
+}
+
+// Navigation on the right of the signed-in title bar, on macOS and Windows alike. Search lives in
+// the sidebar's search field instead.
+function TitleBarNavigation() {
+    const { theme } = useUnistyles();
+    const router = useRouter();
+    const friendRequests = useFriendRequests();
+    const inboxHasContent = useInboxHasContent();
+    const dootaskProfile = useDootaskProfile();
+    const profile = useProfile();
+
     return (
         <View
             {...({ 'data-desktop-no-drag': true } as any)}
-            style={{ alignItems: 'center', flexDirection: 'row', gap: 6, height: WINDOWS_TITLE_BAR_HEIGHT }}
+            style={{ alignItems: 'center', flexDirection: 'row', gap: 6 }}
         >
-            {!!connectionStatus.text && (
-                <View style={{ alignItems: 'center', flexDirection: 'row', gap: 5, paddingHorizontal: 8 }}>
-                    <StatusDot
-                        color={connectionStatus.color}
-                        isPulsing={connectionStatus.isPulsing}
-                        size={6}
-                    />
-                    {showConnectionText && (
-                        <Text style={{ color: connectionStatus.color, fontSize: 11, fontWeight: '500' }}>
-                            {connectionStatus.text}
-                        </Text>
-                    )}
-                </View>
-            )}
             <WindowsNavigationButton
                 accessibilityLabel={t('tabs.inbox')}
                 onPress={() => router.navigate('/(app)/inbox')}
@@ -197,12 +210,6 @@ function WindowsTitleBarNavigation() {
                     tintColor={theme.colors.header.tint}
                 />
             </WindowsNavigationButton>
-            <WindowsNavigationButton
-                accessibilityLabel={t('commandPalette.placeholder')}
-                onPress={requestCommandPalette}
-            >
-                <Ionicons name="search-outline" size={18} color={theme.colors.header.tint} />
-            </WindowsNavigationButton>
             <DesktopUpdateButton placement="titleBar" />
         </View>
     );
@@ -270,7 +277,8 @@ export function DesktopWindowFrame({ children }: { children: React.ReactNode }) 
     const { isAuthenticated } = useAuth();
     const pathname = usePathname();
     const router = useRouter();
-    const isWindowsFullscreen = useDesktopWindowFullscreen(desktopPlatform === 'windows');
+    const isFullscreen = useDesktopWindowFullscreen(desktopPlatform !== null);
+    const isWindowsFullscreen = desktopPlatform === 'windows' && isFullscreen;
     const { width: windowWidth } = useWindowDimensions();
     const handleGoHome = React.useCallback(() => {
         try {
@@ -292,6 +300,98 @@ export function DesktopWindowFrame({ children }: { children: React.ReactNode }) 
     const handleTitleBarMouseDown = (event: any) => {
         handleDesktopTitleBarMouseDown(event, { allowMaximize: isAuthenticated });
     };
+
+    // Signed in, the window is a QQ-style frame: one title bar across the whole window with the app
+    // title, connection status and navigation, and the app below it in a rounded panel that stands
+    // apart from the chrome by a shade of background only.
+    const appTitle = (
+        <View
+            {...({ 'data-desktop-no-drag': true } as any)}
+            style={{ alignItems: 'center', flexDirection: 'row', gap: 8 }}
+        >
+            <Pressable
+                accessibilityLabel={t('tabs.sessions')}
+                accessibilityRole="button"
+                hitSlop={6}
+                onPress={handleGoHome}
+                ref={(element: any) => {
+                    if (element && typeof element === 'object') {
+                        element.title = t('tabs.sessions');
+                    }
+                }}
+                style={({ hovered, pressed }: any) => ({
+                    alignItems: 'center',
+                    cursor: 'pointer',
+                    flexDirection: 'row',
+                    gap: 8,
+                    opacity: hovered || pressed ? 0.7 : 1,
+                })}
+            >
+                <Image
+                    source={theme.dark
+                        ? require('@/assets/images/logo-white.svg')
+                        : require('@/assets/images/logo-black.svg')}
+                    contentFit="contain"
+                    style={{ height: 20, width: 20 }}
+                />
+                {windowWidth >= 600 && (
+                    <Text
+                        selectable={false}
+                        style={{ color: theme.colors.header.tint, fontSize: 13, fontWeight: '600' }}
+                    >
+                        Happy Next
+                    </Text>
+                )}
+            </Pressable>
+            <TitleBarConnectionStatus />
+        </View>
+    );
+    const panel = (
+        <View
+            style={{
+                backgroundColor: theme.colors.groupped.background,
+                borderRadius: PANEL_RADIUS,
+                flex: 1,
+                marginBottom: PANEL_INSET,
+                marginHorizontal: PANEL_INSET,
+                overflow: 'hidden',
+            }}
+        >
+            {children}
+        </View>
+    );
+
+    if (isMacOS && isAuthenticated) {
+        return (
+            <View style={{ flex: 1, backgroundColor: theme.colors.windowChrome }}>
+                <View
+                    {...({
+                        'data-tauri-drag-region': true,
+                        onMouseDown: handleTitleBarMouseDown,
+                    } as any)}
+                    style={{
+                        alignItems: 'center',
+                        flexDirection: 'row',
+                        height: MACOS_TITLE_BAR_HEIGHT,
+                        paddingLeft: isFullscreen ? 12 : MACOS_TRAFFIC_LIGHT_GUTTER,
+                        paddingRight: 12,
+                        userSelect: 'none',
+                    } as any}
+                >
+                    {/* Level with the traffic lights, which sit a little above the bar's middle. */}
+                    <View style={{ transform: [{ translateY: -2 }] }}>{appTitle}</View>
+                    <View
+                        {...({ 'data-tauri-drag-region': true } as any)}
+                        style={{ flex: 1, height: MACOS_TITLE_BAR_HEIGHT }}
+                    />
+                    <View style={{ transform: [{ translateY: -2 }] }}>
+                        <TitleBarNavigation />
+                    </View>
+                </View>
+                {panel}
+            </View>
+        );
+    }
 
     if (isMacOS) {
         return (
@@ -345,7 +445,7 @@ export function DesktopWindowFrame({ children }: { children: React.ReactNode }) 
     };
 
     return (
-        <View style={{ flex: 1, backgroundColor: theme.colors.groupped.background }}>
+        <View style={{ flex: 1, backgroundColor: isAuthenticated ? theme.colors.windowChrome : theme.colors.groupped.background }}>
             <View
                 {...({
                     'data-tauri-drag-region': true,
@@ -353,9 +453,9 @@ export function DesktopWindowFrame({ children }: { children: React.ReactNode }) 
                 } as any)}
                 style={{
                     alignItems: 'center',
-                    backgroundColor: theme.colors.header.background,
+                    backgroundColor: isAuthenticated ? theme.colors.windowChrome : theme.colors.header.background,
                     borderBottomColor: theme.colors.divider,
-                    borderBottomWidth: 1,
+                    borderBottomWidth: isAuthenticated ? 0 : 1,
                     flexDirection: 'row',
                     height: titleBarHeight,
                     userSelect: 'none',
@@ -382,48 +482,13 @@ export function DesktopWindowFrame({ children }: { children: React.ReactNode }) 
                                 {unauthenticatedTitle}
                             </Text>
                         </>
-                    ) : (
-                        <>
-                            <Pressable
-                                {...({ 'data-desktop-no-drag': true } as any)}
-                                accessibilityLabel={t('tabs.sessions')}
-                                accessibilityRole="button"
-                                hitSlop={6}
-                                onPress={handleGoHome}
-                                ref={(element: any) => {
-                                    if (element && typeof element === 'object') {
-                                        element.title = t('tabs.sessions');
-                                    }
-                                }}
-                                style={({ hovered, pressed }: any) => ({
-                                    cursor: 'pointer',
-                                    opacity: hovered || pressed ? 0.7 : 1,
-                                })}
-                            >
-                                <Image
-                                    source={theme.dark
-                                        ? require('@/assets/images/logo-white.png')
-                                        : require('@/assets/images/logo-black.png')}
-                                    contentFit="contain"
-                                    style={{ height: 20, width: 20 }}
-                                />
-                            </Pressable>
-                            {windowWidth >= 600 && (
-                                <Text
-                                    selectable={false}
-                                    style={{ color: theme.colors.header.tint, fontSize: 13, fontWeight: '600' }}
-                                >
-                                    Happy Next
-                                </Text>
-                            )}
-                        </>
-                    )}
+                    ) : appTitle}
                 </View>
                 <View
                     {...({ 'data-tauri-drag-region': true } as any)}
                     style={{ flex: 1, height: titleBarHeight }}
                 />
-                {isAuthenticated && <WindowsTitleBarNavigation />}
+                {isAuthenticated && <TitleBarNavigation />}
                 {!isAuthenticated && unauthenticatedRoute === 'welcome' && <WindowsUnauthenticatedNavigation />}
                 {isAuthenticated && (
                     <View style={{ backgroundColor: theme.colors.divider, height: 20, marginHorizontal: 10, width: 1 }} />
@@ -432,17 +497,17 @@ export function DesktopWindowFrame({ children }: { children: React.ReactNode }) 
                     <DesktopWindowControls />
                 </View>
             </View>
-            <View style={{ flex: 1 }}>
-                {children}
-                {!isAuthenticated && (
+            {isAuthenticated ? panel : (
+                <View style={{ flex: 1 }}>
+                    {children}
                     <View
                         pointerEvents="box-none"
                         style={{ bottom: 16, position: 'absolute', right: 16, zIndex: 1100 }}
                     >
                         <DesktopUpdateButton placement="floating" />
                     </View>
-                )}
-            </View>
+                </View>
+            )}
         </View>
     );
 }

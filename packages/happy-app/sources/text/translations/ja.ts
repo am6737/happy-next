@@ -18,6 +18,34 @@ function plural({ count, singular, plural }: { count: number; singular: string; 
 }
 
 export const ja: TranslationStructure = {
+    sessionScope: {
+        // Machine scope of the session list: sidebar machine rail and phone machine switcher
+        allMachines: 'すべてのマシン',
+        allMachinesHint: 'すべてのマシンのセッションを表示',
+        sessionCount: ({ count }: { count: number }) => `${count} 件のセッション`,
+        addMachine: 'マシンを追加',
+        addMachineWebHint: '新しいマシンで `npm i -g happy-next-cli` を実行し、続けて `happy` を実行して、表示された接続リンクをここに貼り付けてください。',
+        switchMachine: 'マシンを切り替え',
+        close: '閉じる',
+        searchMachines: 'マシンを検索…',
+        machineSummary: ({ total, online }: { total: number, online: number }) => `${total} 台のマシン · ${online} 台オンライン`,
+        searchSummary: ({ count, total }: { count: number, total: number }) => `${total} 台中 ${count} 台`,
+        machinesSection: 'マシン',
+        sharingSection: '共有',
+        unknownMachine: '不明なマシン',
+        noMatchingMachines: '一致するマシンがありません',
+        clearSearch: '検索をクリア',
+        noMachinesYet: 'マシンがまだありません',
+        noMachinesHint: 'コンピューターで happy を実行して、このアカウントに接続してください。',
+        noSessionsYet: 'セッションはまだありません',
+        newSession: '新しいセッション',
+        machineNoSessions: 'このマシンにはセッションがありません',
+        machineNoSessionsHint: ({ name }: { name: string }) => `${name} で新しいセッションを開始します。`,
+        offlineText: '既存のセッションは保持されます。マシンがオンラインに戻ると新しいセッションを作成できます。',
+        addMenu: '追加',
+        search: '検索',
+    },
+
     tabs: {
         // Tab navigation labels
         inbox: '受信トレイ',
@@ -2058,6 +2086,8 @@ export const ja: TranslationStructure = {
     },
 
     textSelection: {
+        formatTitle: 'プレビュー形式',
+        formatPlainText: 'プレーンテキスト',
         // Text selection screen
         selectText: 'テキスト範囲を選択',
         titleFullText: '全文を表示',
@@ -2086,8 +2116,6 @@ export const ja: TranslationStructure = {
         emptyDescription: '最初のアーティファクトを作成して始めましょう',
         new: '新規アーティファクト',
         edit: 'アーティファクトを編集',
-        formatTitle: 'プレビュー形式',
-        formatPlainText: 'プレーンテキスト',
         delete: '削除',
         updateError: 'アーティファクトの更新に失敗しました。再試行してください。',
         notFound: 'アーティファクトが見つかりません',

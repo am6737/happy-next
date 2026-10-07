@@ -349,8 +349,11 @@ export function ActiveSessionsGroupCompact({ sessions, selectedSessionId, regist
                 const newSessionSource = projectGroup.sessions[0];
                 const newSessionMetadata = newSessionSource?.metadata;
                 // The + opens /new pre-filled with this directory, which only works on a machine of
-                // my own — a session shared with me points at the owner's machine and directory.
-                const handleNewSession = newSessionMetadata?.path && newSessionSource && !newSessionSource.accessLevel ? () => {
+                // my own — a session shared with me points at the owner's machine and directory —
+                // and only while that machine is online to start it.
+                const newSessionMachineOnline = !!newSessionMetadata?.machineId
+                    && !!projectGroup.machines.get(newSessionMetadata.machineId)?.machine;
+                const handleNewSession = newSessionMetadata?.path && newSessionSource && !newSessionSource.accessLevel && newSessionMachineOnline ? () => {
                     const params = new URLSearchParams();
                     if (newSessionMetadata.machineId) params.set('machineId', newSessionMetadata.machineId);
                     params.set('path', newSessionMetadata.path);

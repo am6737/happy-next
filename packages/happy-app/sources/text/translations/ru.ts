@@ -26,6 +26,34 @@ function plural({ count, one, few, many }: { count: number; one: string; few: st
  * Must match the exact structure of the English translations
  */
 export const ru: TranslationStructure = {
+    sessionScope: {
+        // Machine scope of the session list: sidebar machine rail and phone machine switcher
+        allMachines: 'Все машины',
+        allMachinesHint: 'Сессии на всех машинах',
+        sessionCount: ({ count }: { count: number }) => `Сессий: ${count}`,
+        addMachine: 'Добавить машину',
+        addMachineWebHint: 'На новой машине выполните `npm i -g happy-next-cli`, затем `happy`, и вставьте сюда ссылку подключения.',
+        switchMachine: 'Сменить машину',
+        close: 'Закрыть',
+        searchMachines: 'Поиск машин…',
+        machineSummary: ({ total, online }: { total: number, online: number }) => `Машин: ${total} · в сети: ${online}`,
+        searchSummary: ({ count, total }: { count: number, total: number }) => `${count} из ${total} машин`,
+        machinesSection: 'Машины',
+        sharingSection: 'Общий доступ',
+        unknownMachine: 'Неизвестная машина',
+        noMatchingMachines: 'Машины не найдены',
+        clearSearch: 'Очистить поиск',
+        noMachinesYet: 'Машин пока нет',
+        noMachinesHint: 'Запустите happy на компьютере, чтобы подключить его к аккаунту.',
+        noSessionsYet: 'Сессий пока нет',
+        newSession: 'Новая сессия',
+        machineNoSessions: 'На этой машине нет сессий',
+        machineNoSessionsHint: ({ name }: { name: string }) => `Начните новую сессию на ${name}.`,
+        offlineText: 'Существующие сессии сохранены. Новые сессии станут доступны, когда машина снова будет в сети.',
+        addMenu: 'Добавить',
+        search: 'Поиск',
+    },
+
     tabs: {
         // Tab navigation labels
         inbox: 'Входящие',
@@ -2037,6 +2065,8 @@ export const ru: TranslationStructure = {
     },
 
     textSelection: {
+        formatTitle: 'Формат предпросмотра',
+        formatPlainText: 'Обычный текст',
         // Text selection screen
         selectText: 'Выделить диапазон текста',
         titleFullText: 'Показать весь текст',
@@ -2065,8 +2095,6 @@ export const ru: TranslationStructure = {
             const n10 = n % 10;
             const n100 = n % 100;
             
-        formatTitle: 'Формат предпросмотра',
-        formatPlainText: 'Обычный текст',
             if (n10 === 1 && n100 !== 11) {
                 return `${count} артефакт`;
             }

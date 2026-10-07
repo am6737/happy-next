@@ -3,12 +3,11 @@ import { View, ActivityIndicator, Text, Pressable, Platform, Image } from 'react
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import TabView from './NativeBottomTabs';
 import { useFriendRequests, useSocketStatus, useRealtimeStatus, useDootaskProfile, useProfile } from '@/sync/storage';
-import { useVisibleSessionListViewData } from '@/hooks/useVisibleSessionListViewData';
 import { useInboxHasContent } from '@/hooks/useInboxHasContent';
 import { useIsTablet } from '@/utils/responsive';
 import { useRouter, Stack } from 'expo-router';
 import { EmptySessionsTablet } from './EmptySessionsTablet';
-import { SessionsList, SessionsSidebarTitle } from './SessionsList';
+import { SessionsList } from './SessionsList';
 import { FABWide } from './FABWide';
 import { TabBar, TabType } from './TabBar';
 import { InboxView } from './InboxView';
@@ -25,11 +24,16 @@ import { t } from '@/text';
 import { isUsingCustomServer } from '@/sync/serverConfig';
 import { trackFriendsSearch } from '@/track';
 import { DooTaskCreateSheet, useDooTaskCreateItems } from './dootask/DooTaskCreateSheet';
-import { getDesktopPlatform, handleDesktopTitleBarMouseDown } from '@/desktop/desktopWindowUtils';
 import { useAuth } from '@/auth/AuthContext';
 import { prefetchGithubData } from '@/hooks/useGithubData';
 import { shouldProvideMainHeaderRight } from './mainHeaderOptions';
 import { headerMenuOptions } from './navigation/headerMenu';
+import type { BottomSheetModal } from '@gorhom/bottom-sheet';
+import { ActionMenuModal } from './ActionMenuModal';
+import { MachineSwitcherSheet } from './MachineSwitcherSheet';
+import { useSessionListScope, type SessionListScope } from '@/hooks/useSessionListScope';
+import { useAddMachine } from '@/hooks/useAddMachine';
+import { useSessionsCreateItems } from '@/hooks/useSessionsCreateItems';
 
 interface MainViewProps {
     variant: 'phone' | 'sidebar';
@@ -96,14 +100,6 @@ const styles = StyleSheet.create((theme) => ({
         height: 92,
         opacity: 0.11,
     },
-    emptyDetailDragRegion: {
-        height: 48,
-        left: 0,
-        position: 'absolute',
-        right: 0,
-        top: 0,
-        zIndex: 1,
-    },
     titleContainer: {
         alignItems: 'center',
         justifyContent: 'center',
@@ -111,6 +107,11 @@ const styles = StyleSheet.create((theme) => ({
     repoTitleRow: {
         flexDirection: 'row',
         alignItems: 'center',
+    },
+    titleSubtitle: {
+        fontSize: 12,
+        lineHeight: 16,
+        ...Typography.default(),
     },
     titleText: {
         fontSize: 17,
@@ -185,28 +186,66 @@ const useConnectionStatusSubtitle = () => {
     }, [socketStatus, theme]);
 };
 
-// Header title of the github tab — the repository picker. This one has to stay a custom title view
-// (it is a pressable with a chevron), and UIKit ignores the native `headerSubtitle` while a custom
-// title view is set, so this tab shows no connection status.
-const GitHubHeaderTitle = React.memo(({ githubRepo, onGithubRepoPress }: { githubRepo?: string | null; onGithubRepoPress?: () => void }) => {
+// Header title that opens a picker: the title with a chevron, and optionally a subtitle under it.
+// It has to be a custom title view (a pressable with a chevron), and UIKit ignores the native
+// `headerSubtitle` while a custom title view is set, so a subtitle has to be drawn here.
+const HeaderPickerTitle = React.memo(({ title, subtitle, subtitleColor, onPress }: {
+    title: string;
+    subtitle?: string;
+    subtitleColor?: string;
+    onPress?: () => void;
+}) => {
     const { theme } = useUnistyles();
-    const repoName = githubRepo ? githubRepo.split('/').pop() || githubRepo : '';
-    const title = repoName || t('github.allRepos');
 
     return (
-        <Pressable style={styles.titleContainer} onPress={onGithubRepoPress}>
+        <Pressable style={styles.titleContainer} onPress={onPress}>
             <View style={styles.repoTitleRow}>
                 <Text style={[styles.titleText, { maxWidth: 200 }]} numberOfLines={1} ellipsizeMode="tail">
                     {title}
                 </Text>
                 <Ionicons name="chevron-down" size={13} color={theme.colors.textSecondary} style={{ marginLeft: 4 }} />
             </View>
+            {!!subtitle && (
+                <Text style={[styles.titleSubtitle, { color: subtitleColor }]} numberOfLines={1}>
+                    {subtitle}
+                </Text>
+            )}
         </Pressable>
     );
 });
 
+// Header title of the github tab — the repository picker. It shows no connection status.
+const GitHubHeaderTitle = React.memo(({ githubRepo, onGithubRepoPress }: { githubRepo?: string | null; onGithubRepoPress?: () => void }) => {
+    const repoName = githubRepo ? githubRepo.split('/').pop() || githubRepo : '';
+    return <HeaderPickerTitle title={repoName || t('github.allRepos')} onPress={onGithubRepoPress} />;
+});
+
+// Header title of the sessions tab — the machine switcher, with the connection status underneath.
+// With one machine or none it reads "Sessions" but still opens the switcher, which is also where
+// machines get added.
+const SessionsHeaderTitle = React.memo(({ scope, onPress }: { scope: SessionListScope; onPress: () => void }) => {
+    const connectionStatus = useConnectionStatusSubtitle();
+    const { selection, switchable } = scope;
+    let title = t('tabs.sessions');
+    if (switchable) {
+        if (selection === 'all') title = t('sessionScope.allMachines');
+        else if (selection === 'shared') title = t('session.sharing.sharedWithMeSessions');
+        else if (selection === 'sharedByMe') title = t('session.sharing.sharedByMeSessions');
+        else title = scope.groups.find(group => group.id === selection)?.name ?? t('sessionScope.allMachines');
+    }
+
+    return (
+        <HeaderPickerTitle
+            title={title}
+            subtitle={connectionStatus.text}
+            subtitleColor={connectionStatus.color}
+            onPress={onPress}
+        />
+    );
+});
+
 // Header right button - varies by tab
-const HeaderRight = React.memo(({ activeTab, onDootaskCreate }: { activeTab: ActiveTabType; onDootaskCreate?: () => void }) => {
+const HeaderRight = React.memo(({ activeTab, onDootaskCreate, onSessionsCreate }: { activeTab: ActiveTabType; onDootaskCreate?: () => void; onSessionsCreate?: () => void }) => {
     const router = useRouter();
     const { theme } = useUnistyles();
     const isCustomServer = isUsingCustomServer();
@@ -214,9 +253,10 @@ const HeaderRight = React.memo(({ activeTab, onDootaskCreate }: { activeTab: Act
     if (activeTab === 'sessions') {
         return (
             <Pressable
-                onPress={() => router.push('/new')}
+                onPress={onSessionsCreate}
                 hitSlop={15}
                 style={styles.headerButton}
+                accessibilityLabel={t('sessionScope.addMenu')}
             >
                 <Ionicons name="add-outline" size={28} color={theme.colors.header.tint} />
             </Pressable>
@@ -270,7 +310,8 @@ const HeaderRight = React.memo(({ activeTab, onDootaskCreate }: { activeTab: Act
 
 export const MainView = React.memo(({ variant }: MainViewProps) => {
     const { theme } = useUnistyles();
-    const sessionListViewData = useVisibleSessionListViewData();
+    const sessionScope = useSessionListScope();
+    const sessionListViewData = sessionScope.data;
     const isTablet = useIsTablet();
     const router = useRouter();
     const friendRequests = useFriendRequests();
@@ -280,9 +321,6 @@ export const MainView = React.memo(({ variant }: MainViewProps) => {
     const inboxHasContent = useInboxHasContent();
     const showDootaskTab = !!dootaskProfile;
     const isCustomServer = isUsingCustomServer();
-    const desktopPlatform = getDesktopPlatform();
-    const isDesktopMacOS = desktopPlatform === 'macos';
-    const isDesktopWindows = desktopPlatform === 'windows';
     const profile = useProfile();
     const showGithubTab = !!profile?.github;
     const { credentials } = useAuth();
@@ -337,6 +375,16 @@ export const MainView = React.memo(({ variant }: MainViewProps) => {
     }, [router]);
 
     const dootaskCreateItems = useDooTaskCreateItems(handleSelectTask, handleSelectProject);
+
+    const machineSwitcherRef = React.useRef<BottomSheetModal>(null);
+    const handleOpenMachineSwitcher = React.useCallback(() => {
+        machineSwitcherRef.current?.present();
+    }, []);
+    const addMachine = useAddMachine();
+    const [sessionsMenuVisible, setSessionsMenuVisible] = React.useState(false);
+    const handleSessionsCreatePress = React.useCallback(() => setSessionsMenuVisible(true), []);
+    const handleSessionsMenuClose = React.useCallback(() => setSessionsMenuVisible(false), []);
+    const sessionsCreateItems = useSessionsCreateItems(sessionScope, addMachine);
 
     // Web fallback content swap
     const renderTabContent = React.useCallback(() => {
@@ -416,7 +464,6 @@ export const MainView = React.memo(({ variant }: MainViewProps) => {
         if (sessionListViewData === null) {
             return (
                 <View style={styles.sidebarContentContainer}>
-                    {isDesktopWindows && <SessionsSidebarTitle />}
                     <View style={styles.tabletLoadingContainer}>
                         <ActivityIndicator size="small" color={theme.colors.textSecondary} />
                     </View>
@@ -424,11 +471,10 @@ export const MainView = React.memo(({ variant }: MainViewProps) => {
             );
         }
 
-        // Empty state
-        if (sessionListViewData.length === 0) {
+        // Empty state — unless there are machines to switch between, which the list's rail shows
+        if (sessionListViewData.length === 0 && !sessionScope.switchable) {
             return (
                 <View style={styles.sidebarContentContainer}>
-                    {isDesktopWindows && <SessionsSidebarTitle />}
                     <View style={styles.emptyStateContainer}>
                         <EmptySessionsTablet />
                     </View>
@@ -462,15 +508,6 @@ export const MainView = React.memo(({ variant }: MainViewProps) => {
                         resizeMode="contain"
                         style={styles.emptyDetailLogo}
                     />
-                    {isDesktopMacOS && (
-                        <View
-                            {...({
-                                'data-tauri-drag-region': true,
-                                onMouseDown: handleDesktopTitleBarMouseDown,
-                            } as any)}
-                            style={styles.emptyDetailDragRegion}
-                        />
-                    )}
                 </View>
             </>
         );
@@ -484,14 +521,19 @@ export const MainView = React.memo(({ variant }: MainViewProps) => {
                 ...softHeaderOptions,
                 headerTitle: activeTab === 'github'
                     ? () => <GitHubHeaderTitle githubRepo={githubRepo} onGithubRepoPress={handleOpenRepoPicker} />
-                    : t(TAB_TITLES[activeTab as ActiveTabType]),
-                headerSubtitle: connectionStatus.text || undefined,
+                    : activeTab === 'sessions'
+                        ? () => <SessionsHeaderTitle scope={sessionScope} onPress={handleOpenMachineSwitcher} />
+                        : t(TAB_TITLES[activeTab as ActiveTabType]),
+                headerSubtitle: activeTab === 'sessions' ? undefined : connectionStatus.text || undefined,
                 headerSubtitleColor: connectionStatus.color,
                 headerLeft: () => <HeaderLogo />,
                 headerRight: shouldProvideMainHeaderRight(activeTab) && !(activeTab === 'settings' && !isCustomServer)
-                    ? () => <HeaderRight activeTab={activeTab as ActiveTabType} onDootaskCreate={handleCreatePress} />
+                    ? () => <HeaderRight activeTab={activeTab as ActiveTabType} onDootaskCreate={handleCreatePress} onSessionsCreate={handleSessionsCreatePress} />
                     : undefined,
-                ...headerMenuOptions(activeTab === 'dootask' ? dootaskCreateItems : null, { icon: 'plus', label: t('common.create') }),
+                ...headerMenuOptions(
+                    activeTab === 'dootask' ? dootaskCreateItems : activeTab === 'sessions' ? sessionsCreateItems : null,
+                    { icon: 'plus', label: activeTab === 'sessions' ? t('sessionScope.addMenu') : t('common.create') },
+                ),
             }}
         />
     );
@@ -503,6 +545,18 @@ export const MainView = React.memo(({ variant }: MainViewProps) => {
             onSelectTask={handleSelectTask}
             onSelectProject={handleSelectProject}
         />
+    );
+
+    const sessionsSheets = (
+        <>
+            <MachineSwitcherSheet ref={machineSwitcherRef} onAddMachine={addMachine} />
+            <ActionMenuModal
+                visible={sessionsMenuVisible}
+                items={sessionsCreateItems}
+                onClose={handleSessionsMenuClose}
+                deferItemPress
+            />
+        </>
     );
 
     // Web: keep state-based content swap + custom TabBar (no native tab bar primitives on web)
@@ -524,6 +578,7 @@ export const MainView = React.memo(({ variant }: MainViewProps) => {
                     showGithubTab={showGithubTab}
                 />
                 {dootaskSheet}
+                {sessionsSheets}
             </>
         );
     }
@@ -554,6 +609,7 @@ export const MainView = React.memo(({ variant }: MainViewProps) => {
                 />
             </View>
             {dootaskSheet}
+            {sessionsSheets}
         </>
     );
 });

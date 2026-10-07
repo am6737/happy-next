@@ -26,6 +26,34 @@ function plural({ count, one, few, many }: { count: number; one: string; few: st
  * Must match the exact structure of the English translations
  */
 export const pl: TranslationStructure = {
+    sessionScope: {
+        // Machine scope of the session list: sidebar machine rail and phone machine switcher
+        allMachines: 'Wszystkie maszyny',
+        allMachinesHint: 'Sesje ze wszystkich maszyn',
+        sessionCount: ({ count }: { count: number }) => `Sesje: ${count}`,
+        addMachine: 'Dodaj maszynę',
+        addMachineWebHint: 'Na nowej maszynie uruchom `npm i -g happy-next-cli`, potem `happy`, i wklej tutaj wyświetlony link połączenia.',
+        switchMachine: 'Zmień maszynę',
+        close: 'Zamknij',
+        searchMachines: 'Szukaj maszyn…',
+        machineSummary: ({ total, online }: { total: number, online: number }) => `Maszyny: ${total} · online: ${online}`,
+        searchSummary: ({ count, total }: { count: number, total: number }) => `${count} z ${total} maszyn`,
+        machinesSection: 'Maszyny',
+        sharingSection: 'Udostępnianie',
+        unknownMachine: 'Nieznana maszyna',
+        noMatchingMachines: 'Brak pasujących maszyn',
+        clearSearch: 'Wyczyść wyszukiwanie',
+        noMachinesYet: 'Brak maszyn',
+        noMachinesHint: 'Uruchom happy na komputerze, aby połączyć go z tym kontem.',
+        noSessionsYet: 'Brak sesji',
+        newSession: 'Nowa sesja',
+        machineNoSessions: 'Brak sesji na tej maszynie',
+        machineNoSessionsHint: ({ name }: { name: string }) => `Rozpocznij nową sesję na ${name}.`,
+        offlineText: 'Istniejące sesje zostają zachowane. Nowe sesje będą dostępne, gdy maszyna wróci online.',
+        addMenu: 'Dodaj',
+        search: 'Szukaj',
+    },
+
     tabs: {
         // Tab navigation labels
         inbox: 'Skrzynka',
@@ -2037,6 +2065,8 @@ export const pl: TranslationStructure = {
     },
 
     textSelection: {
+        formatTitle: 'Format podglądu',
+        formatPlainText: 'Zwykły tekst',
         // Text selection screen
         selectText: 'Wybierz zakres tekstu',
         titleFullText: 'Pokaż cały tekst',
@@ -2065,8 +2095,6 @@ export const pl: TranslationStructure = {
             const n10 = n % 10;
             const n100 = n % 100;
             
-        formatTitle: 'Format podglądu',
-        formatPlainText: 'Zwykły tekst',
             // Polish plural rules: 1 (singular), 2-4 (few), 5+ (many)
             if (n === 1) {
                 return `${count} artefakt`;

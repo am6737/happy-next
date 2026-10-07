@@ -15,6 +15,34 @@ function plural({ count, singular, plural }: { count: number; singular: string; 
  * Must match the exact structure of the English translations
  */
 export const ca: TranslationStructure = {
+    sessionScope: {
+        // Machine scope of the session list: sidebar machine rail and phone machine switcher
+        allMachines: 'Totes les màquines',
+        allMachinesHint: 'Veure sessions de totes les màquines',
+        sessionCount: ({ count }: { count: number }) => `${count} ${count === 1 ? 'sessió' : 'sessions'}`,
+        addMachine: 'Afegeix una màquina',
+        addMachineWebHint: 'A la màquina nova, executa `npm i -g happy-next-cli` i després `happy`, i enganxa aquí l\'enllaç de connexió que mostra.',
+        switchMachine: 'Canvia de màquina',
+        close: 'Tanca',
+        searchMachines: 'Cerca màquines…',
+        machineSummary: ({ total, online }: { total: number, online: number }) => `${total} ${total === 1 ? 'màquina' : 'màquines'} · ${online} en línia`,
+        searchSummary: ({ count, total }: { count: number, total: number }) => `${count} de ${total} màquines`,
+        machinesSection: 'Màquines',
+        sharingSection: 'Compartit',
+        unknownMachine: 'Màquina desconeguda',
+        noMatchingMachines: 'Cap màquina coincideix',
+        clearSearch: 'Esborra la cerca',
+        noMachinesYet: 'Encara no hi ha màquines',
+        noMachinesHint: 'Executa happy en un ordinador per connectar-lo a aquest compte.',
+        noSessionsYet: 'Encara no hi ha sessions',
+        newSession: 'Nova sessió',
+        machineNoSessions: 'No hi ha sessions en aquesta màquina',
+        machineNoSessionsHint: ({ name }: { name: string }) => `Inicia una nova sessió a ${name}.`,
+        offlineText: 'Les sessions existents es conserven. Podràs crear-ne de noves quan la màquina torni a estar en línia.',
+        addMenu: 'Afegeix',
+        search: 'Cerca',
+    },
+
     tabs: {
         // Tab navigation labels
         inbox: 'Safata',
@@ -2026,6 +2054,8 @@ export const ca: TranslationStructure = {
     },
 
     textSelection: {
+        formatTitle: 'Format de previsualització',
+        formatPlainText: 'Text pla',
         // Text selection screen
         selectText: 'Seleccionar rang de text',
         titleFullText: 'Veure text complet',
@@ -2054,8 +2084,6 @@ export const ca: TranslationStructure = {
         new: 'Nou artefacte',
         edit: 'Edita artefacte',
         delete: 'Elimina',
-        formatTitle: 'Format de previsualització',
-        formatPlainText: 'Text pla',
         updateError: 'No s\'ha pogut actualitzar l\'artefacte. Si us plau, torna-ho a provar.',
         notFound: 'Artefacte no trobat',
         discardChanges: 'Descartar els canvis?',

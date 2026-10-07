@@ -1,17 +1,19 @@
 import React from 'react';
-import { View, Pressable, FlatList, Platform, RefreshControl, ScrollView, NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
+import { View, Pressable, FlatList, Platform, RefreshControl, NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { Text } from '@/components/StyledText';
 import { usePathname } from 'expo-router';
-import { SessionListViewItem, useOrchestratorRunningTaskCount, useSessionHasDraft } from '@/sync/storage';
+import { SessionListViewItem, useOrchestratorRunningTaskCount, useSessionHasDraft, useSocketStatus } from '@/sync/storage';
 import { useCompactSessionView } from '@/hooks/useCompactSessionView';
 import { Ionicons } from '@expo/vector-icons';
-import { getSessionName, useSessionStatus, getSessionSubtitle, getSessionAvatarId, hasUnreadCompletion } from '@/utils/sessionUtils';
+import { getSessionName, useSessionStatus, getSessionSubtitle, getSessionAvatarId } from '@/utils/sessionUtils';
 import { Avatar } from './Avatar';
 import { ActiveSessionsGroup } from './ActiveSessionsGroup';
 import { ActiveSessionsGroupCompact } from './ActiveSessionsGroupCompact';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useVisibleSessionListViewData, useSharedSessionListViewData, useSharedByMeSessionListViewData } from '@/hooks/useVisibleSessionListViewData';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSessionListScope, collectListSessions } from '@/hooks/useSessionListScope';
+import { SessionScopeDot } from './SessionScopeDot';
+import { isSharingSelection, type SessionListSelection, type SessionMachineGroup } from './sessionListScope';
 import { useLocalSettingMutable } from '@/sync/storage';
 import { useMachineNameMap } from '@/hooks/useMachineNameMap';
 import { Typography } from '@/constants/Typography';
@@ -34,7 +36,6 @@ import { sync } from '@/sync/sync';
 import { SessionContextMenu } from './SessionContextMenu';
 import { PressHighlight } from './PressHighlight';
 import { SessionMarkerBar } from './SessionColorMarker';
-import { getDesktopPlatform } from '@/desktop/desktopWindowUtils';
 
 const stylesheet = StyleSheet.create((theme) => ({
     container: {
@@ -242,64 +243,10 @@ const stylesheet = StyleSheet.create((theme) => ({
         backgroundColor: theme.colors.divider,
         marginLeft: 80, // 16px paddingHorizontal + 48px avatar + 16px gap
     },
-    filterRow: {
-        paddingTop: 16,
-        paddingBottom: 0,
-    },
-    filterRowContent: {
-        flexDirection: 'row',
-        gap: 12,
-        paddingHorizontal: 16,
-    },
-    filterRowWrap: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        gap: 12,
-        paddingHorizontal: 16,
-        paddingTop: 16,
-        // The chips are the last thing in the header, so this is all that separates them from
-        // the first row of the list.
-        paddingBottom: 4,
-    },
-    filterChip: {
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 16,
-    },
-    filterChipInner: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    filterChipText: {
-        fontSize: 13,
-        maxWidth: 160,
-        ...Typography.default(),
-    },
-    filterChipCornerBadge: {
-        position: 'absolute',
-        top: -2,
-        right: -2,
-        width: 12,
-        height: 12,
-        borderRadius: 6,
+    emptyContainer: {
+        flex: 1,
         alignItems: 'center',
         justifyContent: 'center',
-    },
-    sidebarTitleContainer: {
-        height: 44,
-        justifyContent: 'flex-end',
-        paddingBottom: 7,
-        paddingHorizontal: 16,
-    },
-    sidebarTitle: {
-        fontSize: 15,
-        fontWeight: '600',
-        color: theme.colors.header.tint,
-        ...Typography.default('semiBold'),
-    },
-    emptyContainer: {
-        alignItems: 'center',
-        paddingTop: 80,
         paddingHorizontal: 48,
     },
     emptyText: {
@@ -308,94 +255,179 @@ const stylesheet = StyleSheet.create((theme) => ({
         textAlign: 'center',
         ...Typography.default(),
     },
+    emptyDescription: {
+        marginTop: 8,
+        fontSize: 13,
+        lineHeight: 20,
+        color: theme.colors.textSecondary,
+        textAlign: 'center',
+        ...Typography.default(),
+    },
+    emptyAction: {
+        marginTop: 20,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        paddingHorizontal: 18,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: theme.colors.button.primary.background,
+    },
+    emptyActionText: {
+        fontSize: 14,
+        color: theme.colors.button.primary.tint,
+        ...Typography.default('semiBold'),
+    },
+    machineHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 7,
+        paddingTop: 16,
+        paddingBottom: 4,
+        paddingHorizontal: Platform.select({ ios: 20, default: 16 }),
+    },
+    machineHeaderName: {
+        flexShrink: 1,
+        fontSize: 15,
+        color: theme.colors.text,
+        ...Typography.default('semiBold'),
+    },
+    machineOnlineDot: {
+        width: 6,
+        height: 6,
+        borderRadius: 3,
+    },
+    machineHeaderMeta: {
+        marginLeft: 'auto',
+        paddingLeft: 8,
+        flexShrink: 0,
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+        ...Typography.default(),
+    },
+    machineEmpty: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        paddingTop: 10,
+        paddingBottom: 14,
+        paddingHorizontal: Platform.select({ ios: 44, default: 40 }),
+    },
+    machineEmptyText: {
+        fontSize: 13,
+        color: theme.colors.textSecondary,
+        ...Typography.default(),
+    },
+    machineEmptyAction: {
+        fontSize: 13,
+        color: theme.colors.textLink,
+        ...Typography.default(),
+    },
 }));
 
-// 'all' = all active sessions (across every machine, including unknown-machine ones).
-// 'shared' / 'sharedByMe' = sharing tabs. Any other value is a machineId tab.
-type SessionTab = 'all' | 'shared' | 'sharedByMe' | (string & {});
-
-type TabDot = 'none' | 'attention' | 'thinking' | 'completed';
-type TabItem = { key: string; label: string; dot: TabDot; active: boolean };
+type SessionTab = SessionListSelection;
 type SessionRowRef = View | null;
 type RegisterSessionRowRef = (sessionId: string, ref: SessionRowRef) => void;
 
-function collectSessions(items: SessionListViewItem[] | null): Session[] {
-    const sessions: Session[] = [];
-    if (!items) return sessions;
-    for (const item of items) {
-        if (item.type === 'active-sessions') sessions.push(...item.sessions);
-        else if (item.type === 'session') sessions.push(item.session);
-    }
-    return sessions;
-}
+// The list's rows: the synced list items, plus the machine sections of the sidebar's "All machines" view.
+type ListItem = (
+    | SessionListViewItem
+    | { type: 'machine-header'; group: SessionMachineGroup; collapsed: boolean }
+    | { type: 'machine-sessions'; group: SessionMachineGroup }
+    | { type: 'machine-empty'; group: SessionMachineGroup }
+) & { selected?: boolean };
 
 function getSessionIdFromPathname(pathname: string): string | null {
     if (!pathname.startsWith('/session/')) return null;
     return pathname.split('/')[2] || null;
 }
 
-// Memoized so the tab bar is insulated from the session list's frequent re-renders.
-// `tabs` keeps a stable reference until its content changes (see tabItems below), so the
-// default shallow compare bails out on session churn. Theme changes still re-render here
-// because the useUnistyles subscription fires regardless of the props memo.
-const SessionTabBar = React.memo(function SessionTabBar({ tabs, onSelect }: { tabs: TabItem[]; onSelect: (key: SessionTab) => void }) {
-    const styles = stylesheet;
-    const { theme } = useUnistyles();
-    const chips = tabs.map((tab) => {
-        const backgroundColor = tab.active
-            ? theme.colors.button.primary.background
-            : (Platform.OS == 'web' ? (theme.dark ? '#2f2f2f' : '#e8e8e8'): theme.colors.surface);
-        return (
-            <Pressable
-                key={tab.key}
-                style={[styles.filterChip, { backgroundColor }]}
-                onPress={() => onSelect(tab.key)}
-            >
-                <View style={styles.filterChipInner}>
-                    <Text
-                        numberOfLines={1}
-                        style={[
-                            styles.filterChipText,
-                            { color: tab.active ? theme.colors.button.primary.tint : theme.colors.text },
-                        ]}
-                    >
-                        {tab.label}
-                    </Text>
-                </View>
-                {tab.dot !== 'none' && (
-                    <View style={[styles.filterChipCornerBadge, { backgroundColor: theme.colors.groupped.background }]}>
-                        <StatusDot
-                            color={tab.dot === 'attention' ? '#FF9500' : '#007AFF'}
-                            isPulsing={tab.dot === 'attention' || tab.dot === 'thinking'}
-                            size={8}
-                        />
-                    </View>
-                )}
-            </Pressable>
-        );
-    });
-    // Web/desktop: wrap onto multiple lines (no touch gestures to scroll).
-    // Mobile: horizontal scroll, swipeable by touch.
-    return Platform.OS === 'web' ? (
-        <View style={styles.filterRowWrap}>{chips}</View>
-    ) : (
-        <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.filterRow}
-            contentContainerStyle={styles.filterRowContent}
+function newSessionPath(machineId?: string): '/new' | `/new?${string}` {
+    return machineId ? `/new?${new URLSearchParams({ machineId }).toString()}` : '/new';
+}
+
+type ViewportInsets = { top: number; bottom: number; height: number };
+
+// Reports the iOS safe area of the list's viewport — the header and tab bar that the list's automatic
+// content inset adjustment insets it by. A nested provider measures the safe area of its own native
+// view, which fills the viewport, rather than the screen's.
+const ViewportInsetsProbe = React.memo(({ onChange }: { onChange: (insets: ViewportInsets) => void }) => {
+    const [height, setHeight] = React.useState(0);
+    return (
+        <View
+            pointerEvents="none"
+            style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+            onLayout={event => setHeight(event.nativeEvent.layout.height)}
         >
-            {chips}
-        </ScrollView>
+            <SafeAreaProvider style={{ flex: 1 }}>
+                <ViewportInsetsReporter height={height} onChange={onChange} />
+            </SafeAreaProvider>
+        </View>
     );
 });
 
-export const SessionsSidebarTitle = React.memo(function SessionsSidebarTitle() {
+function ViewportInsetsReporter({ height, onChange }: { height: number; onChange: (insets: ViewportInsets) => void }) {
+    const { top, bottom } = useSafeAreaInsets();
+    React.useEffect(() => onChange({ top, bottom, height }), [top, bottom, height, onChange]);
+    return null;
+}
+
+// Header of one machine's section in the sidebar's "All machines" view; folds the machine's projects.
+const MachineGroupHeader = React.memo(({ group, collapsed, onToggle }: {
+    group: SessionMachineGroup;
+    collapsed: boolean;
+    onToggle: (machineId: string) => void;
+}) => {
     const styles = stylesheet;
+    const { theme } = useUnistyles();
+    const name = group.unknown ? t('sessionScope.unknownMachine') : group.name;
+    const meta = [
+        !group.unknown && !group.online ? t('status.offline') : null,
+        t('sessionScope.sessionCount', { count: group.sessions.length }),
+    ].filter(Boolean).join(' · ');
 
     return (
-        <View style={styles.sidebarTitleContainer}>
-            <Text style={styles.sidebarTitle}>{t('tabs.sessions')}</Text>
+        <Pressable
+            onPress={() => onToggle(group.id)}
+            style={styles.machineHeader}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: !collapsed }}
+            accessibilityLabel={`${collapsed ? t('duplicate.expandText') : t('duplicate.collapseText')} ${name}`}
+        >
+            <Ionicons
+                name="chevron-forward"
+                size={14}
+                color={theme.colors.textSecondary}
+                style={{ transform: [{ rotate: collapsed ? '0deg' : '90deg' }] }}
+            />
+            <Ionicons name={group.unknown ? 'help-circle-outline' : 'desktop-outline'} size={16} color={theme.colors.textSecondary} />
+            <Text
+                style={styles.machineHeaderName}
+                numberOfLines={1}
+                ref={(el: any) => { if (Platform.OS === 'web' && el) el.title = name; }}
+            >
+                {name}
+            </Text>
+            {!group.unknown && (
+                <View style={[styles.machineOnlineDot, { backgroundColor: group.online ? theme.colors.status.connected : theme.colors.textSecondary }]} />
+            )}
+            {collapsed && <SessionScopeDot dot={group.dot} size={7} />}
+            <Text style={styles.machineHeaderMeta} numberOfLines={1}>{meta}</Text>
+        </Pressable>
+    );
+});
+
+const MachineEmptyRow = React.memo(({ group }: { group: SessionMachineGroup }) => {
+    const styles = stylesheet;
+    const router = useRouter();
+    return (
+        <View style={styles.machineEmpty}>
+            <Text style={styles.machineEmptyText}>{t('sessionScope.noSessionsYet')}</Text>
+            {group.online && !group.unknown && (
+                <Pressable onPress={() => router.push(newSessionPath(group.id))} hitSlop={8} accessibilityRole="button">
+                    <Text style={styles.machineEmptyAction}>{t('sessionScope.newSession')}</Text>
+                </Pressable>
+            )}
         </View>
     );
 });
@@ -403,59 +435,28 @@ export const SessionsSidebarTitle = React.memo(function SessionsSidebarTitle() {
 export function SessionsList() {
     const styles = stylesheet;
     const safeArea = useSafeAreaInsets();
-    const data = useVisibleSessionListViewData();
-    const sharedData = useSharedSessionListViewData();
-    const sharedByMeData = useSharedByMeSessionListViewData();
+    const scope = useSessionListScope();
+    const {
+        data,
+        sharedData,
+        sharedByMeData,
+        groups,
+        switchable,
+        selection: activeTab,
+        setSelection: setActiveTab,
+        activeSessions: allActiveSessions,
+        sharedSessions,
+        sharedByMeSessions,
+    } = scope;
     const machineNames = useMachineNameMap();
-    const isDesktopWindows = getDesktopPlatform() === 'windows';
-    // The desktop sidebar drops the list viewport 8px below the header, then pulls the
-    // content back up by the same 8 so the first row does not move. Only the top edge
-    // moves; side and bottom insets are untouched. The tablet main area keeps the list
-    // flush, so this is gated on actually running inside a desktop shell.
-    const isDesktopSidebarList = getDesktopPlatform() !== null;
-    // Selected tab is persisted to disk so it survives app restarts.
-    const [persistedTab, setPersistedTab] = useLocalSettingMutable('sessionListSelectedTab');
-    // machineId -> name cache, so machine tabs keep their labels before machines sync.
+    const socketStatus = useSocketStatus();
+    // machineId -> name cache, so machine labels survive a restart before machines sync.
     const [machineNameCache, setMachineNameCache] = useLocalSettingMutable('machineNameCache');
-    const [activeTab, _setActiveTab] = React.useState<SessionTab>(persistedTab ?? 'all');
+    const [collapsedMachines, setCollapsedMachines] = useLocalSettingMutable('collapsedSessionMachineGroups');
     const [pendingSessionNavigationId, setPendingSessionNavigationId] = React.useState<string | null>(null);
-    const setActiveTab = React.useCallback((tab: SessionTab) => {
-        setPersistedTab(tab);
-        _setActiveTab(tab);
-    }, [setPersistedTab]);
-    const handleSessionTabSelect = React.useCallback((tab: SessionTab) => {
-        // A manual tab selection takes precedence over any pending automatic reveal.
-        setPendingSessionNavigationId(null);
-        setActiveTab(tab);
-    }, [setActiveTab]);
 
-    // All active sessions live inside the single 'active-sessions' item produced by buildSessionListViewData.
-    const allActiveSessions = React.useMemo(() => {
-        const item = data?.find(i => i.type === 'active-sessions');
-        return item && item.type === 'active-sessions' ? item.sessions : [];
-    }, [data]);
-
-    // Group active sessions by machine. Sessions without a machineId are intentionally
-    // excluded here — they only appear in the 'all' tab.
-    const machineGroups = React.useMemo(() => {
-        const groups = new Map<string, { id: string; name: string; sessions: Session[] }>();
-        for (const session of allActiveSessions) {
-            const machineId = session.metadata?.machineId;
-            if (!machineId) continue;
-            let group = groups.get(machineId);
-            if (!group) {
-                // Prefer the live name, fall back to the persisted cache (so labels show
-                // correctly right after a restart, before machines have synced), then UUID.
-                const name = machineNames.get(machineId) || machineNameCache[machineId] || machineId;
-                group = { id: machineId, name, sessions: [] };
-                groups.set(machineId, group);
-            }
-            group.sessions.push(session);
-        }
-        return Array.from(groups.values()).sort((a, b) => a.name.localeCompare(b.name));
-    }, [allActiveSessions, machineNames, machineNameCache]);
-    const hasSharedSessions = (sharedData?.length ?? 0) > 0;
-    const showMachineTabs = machineGroups.length >= 2 || hasSharedSessions;
+    // Machines that can be picked on their own; the unknown-machine group only shows under "All".
+    const machineGroups = React.useMemo(() => groups.filter(group => !group.unknown), [groups]);
 
     // Persist live machine names so they survive app restarts (machines sync lazily).
     React.useEffect(() => {
@@ -478,11 +479,14 @@ export function SessionsList() {
         setPendingSessionNavigationId(selectedSessionId);
     }, [selectedSessionId]);
     const isTablet = useIsTablet();
-    const navigateToSession = useNavigateToSession();
+    // The sidebar (tablet / desktop / wide web) switches machines from the rail at its left edge
+    // (see SidebarView); there "All machines" lists every machine as its own foldable section.
+    const groupByMachine = isTablet && switchable && activeTab === 'all';
     const compactSessionView = useCompactSessionView();
     const router = useRouter();
     const { theme } = useUnistyles();
     const [refreshing, setRefreshing] = React.useState(false);
+    const [viewportInsets, setViewportInsets] = React.useState<ViewportInsets | null>(null);
     const handleRefresh = React.useCallback(async () => {
         setRefreshing(true);
         try {
@@ -491,35 +495,52 @@ export function SessionsList() {
             setRefreshing(false);
         }
     }, []);
-    // Fall back to 'all' if the current tab is no longer available (e.g. a machine
-    // went away, or a sharing tab became empty).
-    React.useEffect(() => {
-        if (activeTab === 'shared' && sharedData && sharedData.length === 0) {
-            setActiveTab('all');
-        }
-        if (activeTab === 'sharedByMe' && sharedByMeData && sharedByMeData.length === 0) {
-            setActiveTab('all');
-        }
-        // Only fall back once data has loaded — on a fresh restart machineGroups is
-        // briefly empty, and we must not discard the persisted machine tab before
-        // sessions arrive. Once loaded, drop to 'all' if that machine tab is gone
-        // (machine has no active sessions, or there's no longer a machine split).
-        const isMachineTab = activeTab !== 'all' && activeTab !== 'shared' && activeTab !== 'sharedByMe';
-        if (data !== null && isMachineTab && (!showMachineTabs || !machineGroups.some(g => g.id === activeTab))) {
-            setActiveTab('all');
-        }
-    }, [activeTab, data, sharedData, sharedByMeData, machineGroups, showMachineTabs, setActiveTab]);
 
-    const tabData = React.useMemo(() => {
+    const toggleMachine = React.useCallback((machineId: string) => {
+        const next = { ...collapsedMachines };
+        if (next[machineId]) delete next[machineId];
+        else next[machineId] = true;
+        setCollapsedMachines(next);
+    }, [collapsedMachines, setCollapsedMachines]);
+
+    // Opening a session unfolds its machine once, as the project groups do for their sessions.
+    const lastUnfoldedForSessionRef = React.useRef<string | null>(null);
+    React.useEffect(() => {
+        if (!groupByMachine || !selectedSessionId || lastUnfoldedForSessionRef.current === selectedSessionId) return;
+        const group = groups.find(g => g.sessions.some(session => session.id === selectedSessionId));
+        if (!group) return;
+        lastUnfoldedForSessionRef.current = selectedSessionId;
+        if (!collapsedMachines[group.id]) return;
+        const next = { ...collapsedMachines };
+        delete next[group.id];
+        setCollapsedMachines(next);
+    }, [groupByMachine, selectedSessionId, groups, collapsedMachines, setCollapsedMachines]);
+
+    const selectedGroup = React.useMemo(
+        () => machineGroups.find(group => group.id === activeTab),
+        [machineGroups, activeTab],
+    );
+
+    const tabData = React.useMemo<ListItem[] | null>(() => {
         if (activeTab === 'shared') return sharedData;
         if (activeTab === 'sharedByMe') return sharedByMeData;
-        if (activeTab === 'all') return data;
-        const group = machineGroups.find(g => g.id === activeTab);
-        return group ? [{ type: 'active-sessions' as const, sessions: group.sessions }] : data;
-    }, [activeTab, sharedData, sharedByMeData, data, machineGroups]);
+        if (activeTab !== 'all') {
+            if (!selectedGroup) return data;
+            return selectedGroup.sessions.length > 0 ? [{ type: 'active-sessions', sessions: selectedGroup.sessions }] : [];
+        }
+        if (!groupByMachine || !data) return data;
+        const items: ListItem[] = [];
+        for (const group of groups) {
+            const collapsed = !!collapsedMachines[group.id];
+            items.push({ type: 'machine-header', group, collapsed });
+            if (collapsed) continue;
+            items.push(group.sessions.length > 0 ? { type: 'machine-sessions', group } : { type: 'machine-empty', group });
+        }
+        // Active sessions shared with me trail "All", as they always have.
+        items.push(...data.filter(item => item.type !== 'active-sessions'));
+        return items;
+    }, [activeTab, sharedData, sharedByMeData, data, selectedGroup, groupByMachine, groups, collapsedMachines]);
 
-    const sharedSessions = React.useMemo(() => collectSessions(sharedData), [sharedData]);
-    const sharedByMeSessions = React.useMemo(() => collectSessions(sharedByMeData), [sharedByMeData]);
     const pendingActiveSession = React.useMemo(
         () => pendingSessionNavigationId ? allActiveSessions.find(session => session.id === pendingSessionNavigationId) : undefined,
         [allActiveSessions, pendingSessionNavigationId],
@@ -528,58 +549,34 @@ export function SessionsList() {
         if (!pendingSessionNavigationId) return null;
         if (pendingActiveSession) {
             const machineId = pendingActiveSession.metadata?.machineId;
-            if (showMachineTabs && machineId && machineGroups.some(group => group.id === machineId)) {
+            if (switchable && machineId && machineGroups.some(group => group.id === machineId)) {
                 return machineId;
             }
             return 'all';
         }
         if (sharedSessions.some(session => session.id === pendingSessionNavigationId)) return 'shared';
         if (sharedByMeSessions.some(session => session.id === pendingSessionNavigationId)) return 'sharedByMe';
-        if (collectSessions(data).some(session => session.id === pendingSessionNavigationId)) return 'all';
+        if (collectListSessions(data).some(session => session.id === pendingSessionNavigationId)) return 'all';
         return null;
-    }, [pendingSessionNavigationId, pendingActiveSession, showMachineTabs, machineGroups, sharedSessions, sharedByMeSessions, data]);
+    }, [pendingSessionNavigationId, pendingActiveSession, switchable, machineGroups, sharedSessions, sharedByMeSessions, data]);
     const activeTabContainsPendingSession = React.useMemo(() => {
         if (!pendingSessionNavigationId) return false;
-        if (activeTab === 'all') return collectSessions(data).some(session => session.id === pendingSessionNavigationId);
+        if (activeTab === 'all') return collectListSessions(data).some(session => session.id === pendingSessionNavigationId);
         if (activeTab === 'shared') return sharedSessions.some(session => session.id === pendingSessionNavigationId);
         if (activeTab === 'sharedByMe') return sharedByMeSessions.some(session => session.id === pendingSessionNavigationId);
-        return machineGroups.find(group => group.id === activeTab)?.sessions.some(session => session.id === pendingSessionNavigationId) ?? false;
-    }, [pendingSessionNavigationId, activeTab, data, sharedSessions, sharedByMeSessions, machineGroups]);
-
-    // Per-tab dot indicator, mirroring useSessionStatus precedence:
-    // 'attention' (needs permission, orange pulse) > 'thinking' (blue pulse) >
-    // 'completed' (unread completion, static blue). All are online-only signals.
-    // The 'all' tab is an aggregate and intentionally shows no dot.
-    const tabDot = React.useMemo(() => {
-        const needsAttention = (s: Session) => s.presence === 'online'
-            && !!s.agentState?.requests && Object.keys(s.agentState.requests).length > 0;
-        const isThinking = (s: Session) => s.presence === 'online' && s.thinking === true;
-        const dotFor = (sessions: Session[]): TabDot => {
-            if (sessions.some(needsAttention)) return 'attention';
-            if (sessions.some(isThinking)) return 'thinking';
-            if (sessions.some(hasUnreadCompletion)) return 'completed';
-            return 'none';
-        };
-        const map: Record<string, TabDot> = {
-            all: 'none',
-            shared: dotFor(collectSessions(sharedData)),
-            sharedByMe: dotFor(collectSessions(sharedByMeData)),
-        };
-        for (const group of machineGroups) {
-            map[group.id] = dotFor(group.sessions);
-        }
-        return map;
-    }, [machineGroups, sharedData, sharedByMeData]);
+        return selectedGroup?.sessions.some(session => session.id === pendingSessionNavigationId) ?? false;
+    }, [pendingSessionNavigationId, activeTab, data, sharedSessions, sharedByMeSessions, selectedGroup]);
 
     const selectable = isTablet;
-    const dataWithSelected = selectable ? React.useMemo(() => {
+    const dataWithSelected = React.useMemo(() => {
+        if (!selectable) return tabData;
         return tabData?.map(item => ({
             ...item,
             selected: selectedSessionId === (item.type === 'session' ? item.session.id : null)
         }));
-    }, [tabData, selectedSessionId]) : tabData;
+    }, [selectable, tabData, selectedSessionId]);
 
-    const listRef = React.useRef<FlatList<SessionListViewItem & { selected?: boolean }> | null>(null);
+    const listRef = React.useRef<FlatList<ListItem> | null>(null);
     const listViewportRef = React.useRef<View | null>(null);
     const sessionRowRefs = React.useRef(new Map<string, View>());
     const scrollOffsetRef = React.useRef(0);
@@ -627,7 +624,9 @@ export function SessionsList() {
             const topLevelIndex = dataWithSelected?.findIndex(item =>
                 item.type === 'session'
                     ? item.session.id === sessionId
-                    : item.type === 'active-sessions' && item.sessions.some(session => session.id === sessionId)
+                    : item.type === 'active-sessions'
+                        ? item.sessions.some(session => session.id === sessionId)
+                        : item.type === 'machine-sessions' && item.group.sessions.some(session => session.id === sessionId)
             ) ?? -1;
             if (topLevelIndex < 0) return;
 
@@ -638,6 +637,15 @@ export function SessionsList() {
             });
         });
     }, [dataWithSelected, revealSessionRow]);
+
+    // A manual switch on the rail or the phone switcher, to anywhere but where the pending session
+    // lives, takes precedence over revealing it.
+    const previousActiveTabRef = React.useRef(activeTab);
+    React.useEffect(() => {
+        if (previousActiveTabRef.current === activeTab) return;
+        previousActiveTabRef.current = activeTab;
+        if (pendingSessionNavigationId && activeTab !== pendingSessionTargetTab) setPendingSessionNavigationId(null);
+    }, [activeTab, pendingSessionNavigationId, pendingSessionTargetTab]);
 
     // Process each route-driven session change once. Realtime list updates must not
     // repeatedly reveal the same session after the user has manually scrolled away.
@@ -662,23 +670,21 @@ export function SessionsList() {
         }
     }, [data && data.length > 0]);
 
-    // Early return if no data yet
-    if (!data) {
-        return (
-            <View style={styles.container} />
-        );
-    }
-
-    const keyExtractor = React.useCallback((item: SessionListViewItem & { selected?: boolean }, index: number) => {
+    const keyExtractor = React.useCallback((item: ListItem, index: number) => {
         switch (item.type) {
             case 'header': return `header-${item.title}-${index}`;
             case 'active-sessions': return 'active-sessions';
             case 'project-group': return `project-group-${item.machine.id}-${item.displayPath}-${index}`;
             case 'session': return `session-${item.session.id}`;
+            case 'machine-header': return `machine-header-${item.group.id}`;
+            case 'machine-sessions': return `machine-sessions-${item.group.id}`;
+            case 'machine-empty': return `machine-empty-${item.group.id}`;
         }
     }, []);
 
-    const renderItem = React.useCallback(({ item, index }: { item: SessionListViewItem & { selected?: boolean }, index: number }) => {
+    const renderItem = React.useCallback(({ item, index }: { item: ListItem, index: number }) => {
+        const ActiveComponent = compactSessionView ? ActiveSessionsGroupCompact : ActiveSessionsGroup;
+        const selectedId = isTablet && selectedSessionId ? selectedSessionId : undefined;
         switch (item.type) {
             case 'header':
                 return (
@@ -690,11 +696,6 @@ export function SessionsList() {
                 );
 
             case 'active-sessions':
-                // Extract just the session ID from pathname (e.g., /session/abc123/file -> abc123)
-                let selectedId: string | undefined;
-                if (isTablet && selectedSessionId) selectedId = selectedSessionId;
-
-                const ActiveComponent = compactSessionView ? ActiveSessionsGroupCompact : ActiveSessionsGroup;
                 return (
                     <ActiveComponent
                         sessions={item.sessions}
@@ -702,6 +703,21 @@ export function SessionsList() {
                         registerSessionRowRef={registerSessionRowRef}
                     />
                 );
+
+            case 'machine-header':
+                return <MachineGroupHeader group={item.group} collapsed={item.collapsed} onToggle={toggleMachine} />;
+
+            case 'machine-sessions':
+                return (
+                    <ActiveComponent
+                        sessions={item.group.sessions}
+                        selectedSessionId={selectedId}
+                        registerSessionRowRef={registerSessionRowRef}
+                    />
+                );
+
+            case 'machine-empty':
+                return <MachineEmptyRow group={item.group} />;
 
             case 'project-group':
                 return (
@@ -735,71 +751,60 @@ export function SessionsList() {
                     />
                 );
         }
-    }, [isTablet, selectedSessionId, dataWithSelected, compactSessionView, registerSessionRowRef]);
+    }, [isTablet, selectedSessionId, dataWithSelected, compactSessionView, registerSessionRowRef, toggleMachine]);
 
+    const isDisconnected = socketStatus.status === 'disconnected' || socketStatus.status === 'error';
+    const canStartAnywhere = !isDisconnected && machineGroups.some(group => group.online);
+    const EmptyComponent = React.useCallback(() => {
+        const machine = selectedGroup;
+        const canStart = !isDisconnected && (machine ? machine.online : canStartAnywhere);
+        const title = machine ? t('sessionScope.machineNoSessions') : t('components.emptySessions.noActiveSessions');
+        const description = machine
+            ? (machine.online ? t('sessionScope.machineNoSessionsHint', { name: machine.name }) : t('sessionScope.offlineText'))
+            : canStart ? t('components.emptySessions.startOnConnectedMachines') : null;
+        return (
+            <View style={styles.emptyContainer}>
+                <Ionicons name="chatbubbles-outline" size={48} color={theme.colors.textSecondary} style={{ marginBottom: 12, opacity: 0.5 }} />
+                <Text style={styles.emptyText}>{title}</Text>
+                {description && <Text style={styles.emptyDescription}>{description}</Text>}
+                {canStart && !isSharingSelection(activeTab) && (
+                    <Pressable
+                        onPress={() => router.push(newSessionPath(machine?.id))}
+                        style={({ pressed }) => [styles.emptyAction, pressed && { opacity: 0.85 }]}
+                        accessibilityRole="button"
+                    >
+                        <Ionicons name="add" size={16} color={theme.colors.button.primary.tint} />
+                        <Text style={styles.emptyActionText}>{t('sessionScope.newSession')}</Text>
+                    </Pressable>
+                )}
+            </View>
+        );
+    }, [theme, selectedGroup, isDisconnected, canStartAnywhere, activeTab, router]);
 
-    // Remove this section as we'll use FlatList for all items now
+    const isEmpty = dataWithSelected?.length === 0;
+    // The empty state fills exactly the visible part of the viewport, so it centers itself and the
+    // list cannot scroll, yet still bounces for pull-to-refresh. On iOS the visible part excludes the
+    // header and tab bar insets the system adds around the content; elsewhere there are none.
+    const emptyContentStyle = Platform.OS === 'ios' && viewportInsets && viewportInsets.height > 0
+        ? { height: viewportInsets.height - viewportInsets.top - viewportInsets.bottom, paddingBottom: 0 }
+        : { flexGrow: 1, paddingBottom: safeArea.bottom };
 
-
-    const hasSharedByMeSessions = sharedByMeData && sharedByMeData.length > 0;
-
-    // Tab bar: one tab per machine when there are 2+ machines, or when shared-with-me
-    // sessions are present so users can distinguish their own machine from shared sources.
-    // The tabs are preceded by an
-    // "All" tab, then the sharing tabs. The "All" tab is also added when only sharing
-    // tabs exist, so the user can always get back to the main active list.
-    const visibleTabs = React.useMemo(() => {
-        const result: { key: SessionTab; label: string }[] = [];
-        if (showMachineTabs) {
-            result.push({ key: 'all', label: t('session.tabs.all') });
-            for (const group of machineGroups) {
-                result.push({ key: group.id, label: group.name });
-            }
-        }
-        if (hasSharedSessions) result.push({ key: 'shared', label: t('session.sharing.sharedWithMeSessions') });
-        if (hasSharedByMeSessions) result.push({ key: 'sharedByMe', label: t('session.sharing.sharedByMeSessions') });
-        if (!showMachineTabs && result.length > 0) {
-            result.unshift({ key: 'all', label: t('session.tabs.all') });
-        }
-        return result;
-    }, [showMachineTabs, machineGroups, hasSharedSessions, hasSharedByMeSessions]);
-
-    // Flattened, primitive-only tab descriptors. The upstream list churns its identity on
-    // every session realtime update, so we key the memo off a content signature: tabItems
-    // keeps a stable reference until the actual tab content changes. That in turn keeps
-    // HeaderComponent stable, so FlatList doesn't remount (and thus re-render) the tab bar.
-    const tabsSignature = visibleTabs.map((tab) => `${tab.key}|${tab.label}|${tabDot[tab.key] ?? 'none'}|${activeTab === tab.key ? 1 : 0}`).join(',');
-    const tabItems = React.useMemo<TabItem[]>(() => visibleTabs.map((tab) => ({
-        key: tab.key,
-        label: tab.label,
-        dot: tabDot[tab.key] ?? 'none',
-        active: activeTab === tab.key,
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    })), [tabsSignature]);
-
-    const HeaderComponent = React.useCallback(() => (
-        <>
-            {tabItems.length > 1 ? (
-                <SessionTabBar tabs={tabItems} onSelect={handleSessionTabSelect} />
-            ) : isDesktopWindows ? (
-                <SessionsSidebarTitle />
-            ) : null}
-        </>
-    ), [tabItems, handleSessionTabSelect, isDesktopWindows]);
-
-    const EmptyComponent = React.useCallback(() => (
-        <View style={styles.emptyContainer}>
-            <Ionicons name="chatbubbles-outline" size={48} color={theme.colors.textSecondary} style={{ marginBottom: 12, opacity: 0.5 }} />
-            <Text style={styles.emptyText}>
-                {t('components.emptySessions.noActiveSessions')}
-            </Text>
-        </View>
-    ), [theme]);
+    // Early return if no data yet
+    if (!data) {
+        return (
+            <View style={styles.container} />
+        );
+    }
 
     return (
-        <View style={[styles.container, isDesktopSidebarList && { paddingTop: 8 }]}>
+        <View style={styles.container}>
             <View ref={listViewportRef} style={styles.contentContainer}>
+                {Platform.OS === 'ios' && isEmpty && <ViewportInsetsProbe onChange={setViewportInsets} />}
                 <FlatList
+                    // A different machine or sharing view starts from its top. Remounting rather than
+                    // scrolling to offset 0: on iOS the top of the list sits at minus the header inset
+                    // the system adds, so offset 0 would leave it scrolled under the header.
+                    key={activeTab}
                     ref={listRef}
                     contentInsetAdjustmentBehavior={Platform.OS === 'ios' ? 'automatic' : undefined}
                     data={dataWithSelected}
@@ -807,9 +812,8 @@ export function SessionsList() {
                     keyExtractor={keyExtractor}
                     contentContainerStyle={[
                         { paddingBottom: safeArea.bottom + 128, maxWidth: layout.maxWidth },
-                        isDesktopSidebarList && { marginTop: -8 },
+                        isEmpty && emptyContentStyle,
                     ]}
-                    ListHeaderComponent={HeaderComponent}
                     ListEmptyComponent={EmptyComponent}
                     removeClippedSubviews={true}
                     onScroll={(event: NativeSyntheticEvent<NativeScrollEvent>) => {

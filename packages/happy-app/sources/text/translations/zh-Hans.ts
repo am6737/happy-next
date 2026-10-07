@@ -17,6 +17,34 @@ function plural({ count, singular, plural }: { count: number; singular: string; 
 }
 
 export const zhHans: TranslationStructure = {
+    sessionScope: {
+        // Machine scope of the session list: sidebar machine rail and phone machine switcher
+        allMachines: '全部机器',
+        allMachinesHint: '跨机器查看所有会话',
+        sessionCount: ({ count }: { count: number }) => `${count} 个会话`,
+        addMachine: '添加机器',
+        addMachineWebHint: '在新机器上运行 `npm i -g happy-next-cli`，然后运行 `happy`，把终端输出的连接链接粘贴到这里。',
+        switchMachine: '切换机器',
+        close: '关闭',
+        searchMachines: '搜索机器…',
+        machineSummary: ({ total, online }: { total: number, online: number }) => `${total} 台机器 · ${online} 在线`,
+        searchSummary: ({ count, total }: { count: number, total: number }) => `${count} / ${total} 台机器`,
+        machinesSection: '机器',
+        sharingSection: '分享',
+        unknownMachine: '未知机器',
+        noMatchingMachines: '没有匹配的机器',
+        clearSearch: '清除搜索',
+        noMachinesYet: '还没有机器',
+        noMachinesHint: '在电脑上运行 happy，把它连接到这个账号。',
+        noSessionsYet: '还没有会话',
+        newSession: '新建会话',
+        machineNoSessions: '这台机器还没有会话',
+        machineNoSessionsHint: ({ name }: { name: string }) => `在 ${name} 上开始一个新会话。`,
+        offlineText: '已有会话会保留，机器重新上线后才能新建会话。',
+        addMenu: '添加',
+        search: '搜索',
+    },
+
     tabs: {
         // Tab navigation labels
         inbox: '收件箱',
@@ -2028,6 +2056,8 @@ export const zhHans: TranslationStructure = {
     },
 
     textSelection: {
+        formatTitle: '预览格式',
+        formatPlainText: '纯文本',
         // Text selection screen
         selectText: '选择文本范围',
         titleFullText: '查看全文',
@@ -2056,8 +2086,6 @@ export const zhHans: TranslationStructure = {
         new: '新建工件',
         edit: '编辑工件',
         delete: '删除',
-        formatTitle: '预览格式',
-        formatPlainText: '纯文本',
         updateError: '更新工件失败。请重试。',
         notFound: '未找到工件',
         discardChanges: '放弃更改？',

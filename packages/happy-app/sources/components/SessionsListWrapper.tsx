@@ -3,7 +3,7 @@ import { View, ActivityIndicator } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { SessionsList } from './SessionsList';
 import { EmptyMainScreen } from './EmptyMainScreen';
-import { useVisibleSessionListViewData } from '@/hooks/useVisibleSessionListViewData';
+import { useSessionListScope } from '@/hooks/useSessionListScope';
 
 const stylesheet = StyleSheet.create((theme) => ({
     container: {
@@ -37,7 +37,7 @@ const stylesheet = StyleSheet.create((theme) => ({
 
 export const SessionsListWrapper = React.memo(() => {
     const { theme } = useUnistyles();
-    const sessionListViewData = useVisibleSessionListViewData();
+    const { data: sessionListViewData, switchable } = useSessionListScope();
     const styles = stylesheet;
 
     if (sessionListViewData === null) {
@@ -52,7 +52,8 @@ export const SessionsListWrapper = React.memo(() => {
         );
     }
 
-    if (sessionListViewData.length === 0) {
+    // With machines to switch between the list stays, so the machine switcher's views remain reachable.
+    if (sessionListViewData.length === 0 && !switchable) {
         return (
             <View style={styles.container}>
                 <View style={styles.emptyStateContainer}>

@@ -17,6 +17,34 @@ function plural({ count, singular, plural }: { count: number; singular: string; 
 }
 
 export const zhHant: TranslationStructure = {
+    sessionScope: {
+        // Machine scope of the session list: sidebar machine rail and phone machine switcher
+        allMachines: '全部機器',
+        allMachinesHint: '跨機器查看所有工作階段',
+        sessionCount: ({ count }: { count: number }) => `${count} 個工作階段`,
+        addMachine: '新增機器',
+        addMachineWebHint: '在新機器上執行 `npm i -g happy-next-cli`，然後執行 `happy`，把終端輸出的連線連結貼到這裡。',
+        switchMachine: '切換機器',
+        close: '關閉',
+        searchMachines: '搜尋機器…',
+        machineSummary: ({ total, online }: { total: number, online: number }) => `${total} 台機器 · ${online} 在線`,
+        searchSummary: ({ count, total }: { count: number, total: number }) => `${count} / ${total} 台機器`,
+        machinesSection: '機器',
+        sharingSection: '分享',
+        unknownMachine: '未知機器',
+        noMatchingMachines: '沒有符合的機器',
+        clearSearch: '清除搜尋',
+        noMachinesYet: '還沒有機器',
+        noMachinesHint: '在電腦上執行 happy，把它連線到這個帳號。',
+        noSessionsYet: '還沒有工作階段',
+        newSession: '新增工作階段',
+        machineNoSessions: '這台機器還沒有工作階段',
+        machineNoSessionsHint: ({ name }: { name: string }) => `在 ${name} 上開始新的工作階段。`,
+        offlineText: '現有工作階段會保留，機器重新上線後才能新增工作階段。',
+        addMenu: '新增',
+        search: '搜尋',
+    },
+
     tabs: {
         // Tab navigation labels
         inbox: '收件匣',
@@ -2028,6 +2056,8 @@ export const zhHant: TranslationStructure = {
     },
 
     textSelection: {
+        formatTitle: '預覽格式',
+        formatPlainText: '純文字',
         // Text selection screen
         selectText: '選擇文字範圍',
         titleFullText: '檢視全文',
@@ -2056,8 +2086,6 @@ export const zhHant: TranslationStructure = {
         new: '新建工件',
         edit: '編輯工件',
         delete: '刪除',
-        formatTitle: '預覽格式',
-        formatPlainText: '純文字',
         updateError: '更新工件失敗。請重試。',
         notFound: '未找到工件',
         discardChanges: '放棄更改？',

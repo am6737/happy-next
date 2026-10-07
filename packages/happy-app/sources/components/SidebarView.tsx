@@ -7,7 +7,8 @@ import { useHeaderHeight } from '@/utils/responsive';
 import { isRunningOnMac } from '@/utils/platform';
 import { Typography } from '@/constants/Typography';
 import { StatusDot } from './StatusDot';
-import { FABWide } from './FABWide';
+import { MachineRail, MACHINE_RAIL_WIDTH } from './MachineRail';
+import { SidebarSearchRow } from './SidebarSearchRow';
 import { VoiceAssistantStatusBar } from './VoiceAssistantStatusBar';
 import { useRealtimeStatus } from '@/sync/storage';
 import { MainView } from './MainView';
@@ -16,19 +17,31 @@ import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { t } from '@/text';
 import { useInboxHasContent } from '@/hooks/useInboxHasContent';
 import { useDootaskProfile, useProfile } from '@/sync/storage';
-import { Ionicons } from '@expo/vector-icons';
-import { requestCommandPalette } from './CommandPalette/events';
-import { getDesktopPlatform, handleDesktopTitleBarMouseDown } from '@/desktop/desktopWindowUtils';
-import { DesktopUpdateButton } from '@/desktop/DesktopUpdateButton';
-import { useDesktopWindowFullscreen } from '@/desktop/useDesktopWindowFullscreen';
+import { getDesktopPlatform } from '@/desktop/desktopWindowUtils';
+import { useSessionListScope } from '@/hooks/useSessionListScope';
 
 const stylesheet = StyleSheet.create((theme, runtime) => ({
     container: {
         flex: 1,
+        flexDirection: 'row',
         borderStyle: 'solid',
         backgroundColor: theme.colors.groupped.background,
         borderWidth: StyleSheet.hairlineWidth,
         borderColor: theme.colors.divider,
+    },
+    // Inside the desktop's rounded panel only the edge toward the content stays.
+    containerDesktop: {
+        borderWidth: 0,
+        borderRightWidth: StyleSheet.hairlineWidth,
+    },
+    listColumn: {
+        flex: 1,
+        minWidth: 0,
+    },
+    railLogoCell: {
+        width: MACHINE_RAIL_WIDTH,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     header: {
         flexDirection: 'row',
@@ -37,56 +50,12 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
         backgroundColor: theme.colors.groupped.background,
         position: 'relative',
     },
-    desktopTitleBar: {
-        alignItems: 'center',
-        backgroundColor: theme.colors.groupped.background,
-        flexDirection: 'row',
-        height: 48,
-        paddingRight: 12,
-    },
-    desktopTrafficLightSpacer: {
-        height: 48,
-        width: 88,
-    },
-    desktopTitleBarControls: {
-        alignItems: 'center',
-        flexDirection: 'row',
-        gap: 5,
-        transform: [{ translateY: -2 }],
-    },
-    desktopTitleBarSpacer: {
-        flex: 1,
-        height: 48,
-    },
-    desktopNavigationButton: {
-        alignItems: 'center',
-        borderRadius: 6,
-        height: 28,
-        justifyContent: 'center',
-        width: 28,
-    },
-    logoContainer: {
-        width: 32,
-    },
-    logo: {
-        height: 24,
-        width: 24,
-    },
     titleContainerLeft: {
         flex: 1,
         minWidth: 0,
         flexDirection: 'column',
         alignItems: 'flex-start',
-        marginLeft: 4,
         justifyContent: 'center',
-    },
-    desktopMacTitleContainerLeft: {
-        marginLeft: 0,
-    },
-    desktopMacTitleContent: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
     },
     titleText: {
         maxWidth: '100%',
@@ -116,9 +85,6 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
         alignItems: 'flex-end',
         flexDirection: 'row',
         gap: 8,
-    },
-    settingsButton: {
-        color: theme.colors.header.tint,
     },
     notificationButton: {
         position: 'relative',
@@ -171,6 +137,24 @@ type SidebarViewProps = {
     sidebarWidth?: number;
 };
 
+// The machine rail down the sidebar's left edge, always shown in the sidebar layout.
+const SidebarMachineRail = React.memo(({ header }: { header?: React.ReactNode }) => {
+    const scope = useSessionListScope();
+    return (
+        <MachineRail
+            groups={scope.groups}
+            selection={scope.selection}
+            onSelect={scope.setSelection}
+            hasShared={scope.hasShared}
+            hasSharedByMe={scope.hasSharedByMe}
+            sharedDot={scope.sharedDot}
+            sharedByMeDot={scope.sharedByMeDot}
+            sessionCount={scope.activeSessions.length}
+            header={header}
+        />
+    );
+});
+
 export const SidebarView = React.memo((props: SidebarViewProps) => {
     const styles = stylesheet;
     const { theme } = useUnistyles();
@@ -183,15 +167,9 @@ export const SidebarView = React.memo((props: SidebarViewProps) => {
     const inboxHasContent = useInboxHasContent();
     const dootaskProfile = useDootaskProfile();
     const profile = useProfile();
-    const [isSearchHovered, setIsSearchHovered] = React.useState(false);
-    const desktopPlatform = getDesktopPlatform();
-    const isDesktopMacOS = desktopPlatform === 'macos';
-    const isDesktopWindows = desktopPlatform === 'windows';
-    const isDesktopFullscreen = useDesktopWindowFullscreen(isDesktopMacOS);
-    const desktopDragProps = isDesktopMacOS ? {
-        'data-tauri-drag-region': true,
-        onMouseDown: handleDesktopTitleBarMouseDown,
-    } as any : {};
+    // The desktop shells draw the app title, status and navigation in their own title bar
+    // (see DesktopWindowFrame), and frame the sidebar in a rounded panel below it.
+    const isDesktop = getDesktopPlatform() !== null;
     // Compute connection status once per render (theme-reactive, no stale memoization)
     const connectionStatus = (() => {
         const { status } = socketStatus;
@@ -245,11 +223,6 @@ export const SidebarView = React.memo((props: SidebarViewProps) => {
     const screenHeight = Dimensions.get('screen').height;
     const isWindowedIos = Platform.OS === 'ios' && (windowWidth < screenWidth - 1 || windowHeight < screenHeight - 1);
     const hasWindowControls = isWindowedIos || isRunningOnMac();
-    const windowControlsInset = hasWindowControls ? 60 : 0;
-
-    const handleNewSession = React.useCallback(() => {
-        router.push('/new');
-    }, [router]);
 
     const handleGoHome = React.useCallback(() => {
         try {
@@ -259,89 +232,18 @@ export const SidebarView = React.memo((props: SidebarViewProps) => {
         }
     }, [router]);
 
-    const titleText = (
-        <Text
-            style={styles.titleText}
-            numberOfLines={1}
-            ref={(el: any) => {
-                if (Platform.OS === 'web' && el) {
-                    el.title = t('sidebar.sessionsTitle');
-                }
-            }}
-        >
-            {t('sidebar.sessionsTitle')}
-        </Text>
-    );
-
-    const titleContent = isDesktopMacOS ? (
-        <Pressable
-            {...({ 'data-desktop-no-drag': true } as any)}
-            accessibilityLabel={t('tabs.sessions')}
-            accessibilityRole="button"
-            hitSlop={6}
-            onPress={handleGoHome}
-            ref={(element: any) => {
-                if (element && typeof element === 'object') {
-                    element.title = t('tabs.sessions');
-                }
-            }}
-            style={({ hovered, pressed }: any) => [
-                styles.desktopMacTitleContent,
-                {
-                    cursor: 'pointer',
-                    opacity: hovered || pressed ? 0.9 : 1,
-                },
-            ]}
-        >
-            <Image
-                source={theme.dark
-                    ? require('@/assets/images/logotype-light.svg')
-                    : require('@/assets/images/logotype-dark.svg')}
-                contentFit="contain"
-                style={{ height: 20, width: 75 }}
-            />
-            {socketStatus.status === 'disconnected' && (
-                <StatusDot
-                    color={styles.statusDisconnected.color}
-                    isPulsing={false}
-                    size={6}
-                />
-            )}
-        </Pressable>
-    ) : (
-        <>
-            {titleText}
-            {connectionStatus.text && (
-                <View style={styles.statusContainer}>
-                    <StatusDot
-                        color={connectionStatus.color}
-                        isPulsing={connectionStatus.isPulsing}
-                        size={6}
-                        style={styles.statusDot}
-                    />
-                    <Text numberOfLines={1} style={[styles.statusText, { color: connectionStatus.textColor }]}>
-                        {connectionStatus.text}
-                    </Text>
-                </View>
-            )}
-        </>
-    );
-
     const navigationButtons = (
         <>
             <Pressable
                 accessibilityLabel={t('tabs.inbox')}
                 onPress={() => router.navigate('/(app)/inbox')}
                 hitSlop={10}
-                style={[
-                    styles.notificationButton,
-                    isDesktopMacOS && styles.desktopNavigationButton,
-                ]}
+                style={styles.notificationButton}
             >
                 <Image
                     source={require('@/assets/images/navigation/inbox.png')}
                     contentFit="contain"
-                    style={{ width: 20, height: 20, margin: 4, opacity: isDesktopMacOS ? 0.62 : 1 }}
+                    style={{ width: 20, height: 20, margin: 4 }}
                     tintColor={theme.colors.header.tint}
                 />
                 {friendRequests.length > 0 && (
@@ -360,12 +262,11 @@ export const SidebarView = React.memo((props: SidebarViewProps) => {
                     accessibilityLabel={t('tabs.dootask')}
                     onPress={() => router.navigate('/(app)/dootask')}
                     hitSlop={10}
-                    style={isDesktopMacOS ? styles.desktopNavigationButton : undefined}
                 >
                     <Image
                         source={require('@/assets/images/navigation/todo.png')}
                         contentFit="contain"
-                        style={{ width: 20, height: 20, margin: 4, opacity: isDesktopMacOS ? 0.62 : 1 }}
+                        style={{ width: 20, height: 20, margin: 4 }}
                         tintColor={theme.colors.header.tint}
                     />
                 </Pressable>
@@ -381,12 +282,11 @@ export const SidebarView = React.memo((props: SidebarViewProps) => {
                             element.title = t('tabs.github');
                         }
                     }}
-                    style={isDesktopMacOS ? styles.desktopNavigationButton : undefined}
                 >
                     <Image
                         source={require('@/assets/images/navigation/github.png')}
                         contentFit="contain"
-                        style={{ width: 20, height: 20, margin: 4, opacity: isDesktopMacOS ? 0.62 : 1 }}
+                        style={{ width: 20, height: 20, margin: 4 }}
                         tintColor={theme.colors.header.tint}
                     />
                 </Pressable>
@@ -395,97 +295,76 @@ export const SidebarView = React.memo((props: SidebarViewProps) => {
                 accessibilityLabel={t('tabs.settings')}
                 onPress={() => router.navigate('/settings')}
                 hitSlop={10}
-                style={isDesktopMacOS ? styles.desktopNavigationButton : undefined}
             >
                 <Image
                     source={require('@/assets/images/navigation/setting.png')}
                     contentFit="contain"
-                    style={{ width: 20, height: 20, margin: 4, opacity: isDesktopMacOS ? 0.62 : 1 }}
+                    style={{ width: 20, height: 20, margin: 4 }}
                     tintColor={theme.colors.header.tint}
                 />
             </Pressable>
-            <DesktopUpdateButton placement="titleBar" />
         </>
     );
 
+    // The app logo heads the rail, level with the list column's title. Where the system draws window
+    // controls over the top-left corner, the cell stays empty so the controls cover nothing.
+    const railHeader = isDesktop ? undefined : (
+        <View style={[styles.railLogoCell, { height: headerHeight }]}>
+            {!hasWindowControls && (
+                <Pressable accessibilityLabel={t('tabs.sessions')} onPress={handleGoHome} hitSlop={6}>
+                    <Image
+                        source={theme.dark ? require('@/assets/images/logo-white.svg') : require('@/assets/images/logo-black.svg')}
+                        contentFit="contain"
+                        style={{ width: 26, height: 26 }}
+                    />
+                </Pressable>
+            )}
+        </View>
+    );
+
     return (
-        <>
-            <View style={[styles.container, { paddingTop: safeArea.top }]}>
-                {isDesktopMacOS && (
-                    <View style={styles.desktopTitleBar}>
-                        <View
-                            {...desktopDragProps}
-                            style={[
-                                styles.desktopTrafficLightSpacer,
-                                isDesktopFullscreen && { width: 12 },
-                            ]}
-                        />
-                        <View style={styles.desktopTitleBarControls}>
+        <View style={[styles.container, isDesktop && styles.containerDesktop, { paddingTop: safeArea.top }]}>
+            <SidebarMachineRail header={railHeader} />
+            <View style={styles.listColumn}>
+                {!isDesktop && (
+                    <View style={[styles.header, { height: headerHeight }]}>
+                        <View style={styles.titleContainerLeft}>
+                            <Text
+                                style={styles.titleText}
+                                numberOfLines={1}
+                                ref={(el: any) => {
+                                    if (Platform.OS === 'web' && el) {
+                                        el.title = t('sidebar.sessionsTitle');
+                                    }
+                                }}
+                            >
+                                {t('sidebar.sessionsTitle')}
+                            </Text>
+                            {connectionStatus.text && (
+                                <View style={styles.statusContainer}>
+                                    <StatusDot
+                                        color={connectionStatus.color}
+                                        isPulsing={connectionStatus.isPulsing}
+                                        size={6}
+                                        style={styles.statusDot}
+                                    />
+                                    <Text numberOfLines={1} style={[styles.statusText, { color: connectionStatus.textColor }]}>
+                                        {connectionStatus.text}
+                                    </Text>
+                                </View>
+                            )}
+                        </View>
+                        <View style={styles.rightContainer}>
                             {navigationButtons}
                         </View>
-                        <View
-                            {...desktopDragProps}
-                            style={styles.desktopTitleBarSpacer}
-                        />
                     </View>
                 )}
-                {!isDesktopWindows && (
-                    <View
-                        {...desktopDragProps}
-                        style={[
-                            styles.header,
-                            {
-                                height: isDesktopMacOS ? 36 : headerHeight,
-                                paddingLeft: isDesktopMacOS
-                                    ? Math.max(safeArea.left, 0) + 16
-                                    : Math.max(safeArea.left, windowControlsInset) + 16,
-                            },
-                        ]}
-                    >
-                        {!isDesktopMacOS && (
-                            <Pressable style={styles.logoContainer} onPress={handleGoHome}>
-                                <Image
-                                    source={theme.dark ? require('@/assets/images/logo-white.png') : require('@/assets/images/logo-black.png')}
-                                    contentFit="contain"
-                                    style={[styles.logo, { height: 24, width: 24 }]}
-                                />
-                            </Pressable>
-                        )}
-
-                        <View style={[
-                            styles.titleContainerLeft,
-                            isDesktopMacOS && styles.desktopMacTitleContainerLeft,
-                        ]}>
-                            {titleContent}
-                        </View>
-
-                        <View style={styles.rightContainer}>
-                            {isDesktopMacOS ? (
-                                <Pressable
-                                    accessibilityLabel={t('commandPalette.placeholder')}
-                                    onPress={requestCommandPalette}
-                                    onHoverIn={() => setIsSearchHovered(true)}
-                                    onHoverOut={() => setIsSearchHovered(false)}
-                                    hitSlop={10}
-                                    style={styles.desktopNavigationButton}
-                                >
-                                    <Ionicons
-                                        name="search-outline"
-                                        size={18}
-                                        color={theme.colors.header.tint}
-                                        style={{ opacity: isSearchHovered ? 1 : 0.6 }}
-                                    />
-                                </Pressable>
-                            ) : navigationButtons}
-                        </View>
-                    </View>
-                )}
+                <SidebarSearchRow />
                 {realtimeStatus !== 'disconnected' && (
                     <VoiceAssistantStatusBar variant="sidebar" />
                 )}
                 <MainView variant="sidebar" />
             </View>
-            <FABWide onPress={handleNewSession} />
-        </>
-    )
+        </View>
+    );
 });

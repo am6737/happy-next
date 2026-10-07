@@ -15,6 +15,34 @@ function plural({ count, singular, plural }: { count: number; singular: string; 
  * Must match the exact structure of the English translations
  */
 export const es: TranslationStructure = {
+    sessionScope: {
+        // Machine scope of the session list: sidebar machine rail and phone machine switcher
+        allMachines: 'Todas las máquinas',
+        allMachinesHint: 'Ver sesiones de todas las máquinas',
+        sessionCount: ({ count }: { count: number }) => `${count} ${count === 1 ? 'sesión' : 'sesiones'}`,
+        addMachine: 'Añadir máquina',
+        addMachineWebHint: 'En la nueva máquina, ejecuta `npm i -g happy-next-cli` y luego `happy`, y pega aquí el enlace de conexión que muestra.',
+        switchMachine: 'Cambiar máquina',
+        close: 'Cerrar',
+        searchMachines: 'Buscar máquinas…',
+        machineSummary: ({ total, online }: { total: number, online: number }) => `${total} ${total === 1 ? 'máquina' : 'máquinas'} · ${online} en línea`,
+        searchSummary: ({ count, total }: { count: number, total: number }) => `${count} de ${total} máquinas`,
+        machinesSection: 'Máquinas',
+        sharingSection: 'Compartido',
+        unknownMachine: 'Máquina desconocida',
+        noMatchingMachines: 'Ninguna máquina coincide',
+        clearSearch: 'Borrar búsqueda',
+        noMachinesYet: 'Aún no hay máquinas',
+        noMachinesHint: 'Ejecuta happy en un ordenador para conectarlo a esta cuenta.',
+        noSessionsYet: 'Aún no hay sesiones',
+        newSession: 'Nueva sesión',
+        machineNoSessions: 'No hay sesiones en esta máquina',
+        machineNoSessionsHint: ({ name }: { name: string }) => `Inicia una nueva sesión en ${name}.`,
+        offlineText: 'Las sesiones existentes se conservan. Podrás crear nuevas cuando la máquina vuelva a estar en línea.',
+        addMenu: 'Añadir',
+        search: 'Buscar',
+    },
+
     tabs: {
         // Tab navigation labels
         inbox: 'Bandeja',
@@ -2026,6 +2054,8 @@ export const es: TranslationStructure = {
     },
 
     textSelection: {
+        formatTitle: 'Formato de vista previa',
+        formatPlainText: 'Texto sin formato',
         // Text selection screen
         selectText: 'Seleccionar rango de texto',
         titleFullText: 'Ver texto completo',
@@ -2054,8 +2084,6 @@ export const es: TranslationStructure = {
         emptyDescription: 'Crea tu primer artefacto para comenzar',
         new: 'Nuevo artefacto',
         edit: 'Editar artefacto',
-        formatTitle: 'Formato de vista previa',
-        formatPlainText: 'Texto sin formato',
         delete: 'Eliminar',
         updateError: 'No se pudo actualizar el artefacto. Por favor, intenta de nuevo.',
         notFound: 'Artefacto no encontrado',

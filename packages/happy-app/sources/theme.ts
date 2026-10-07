@@ -53,6 +53,8 @@ export const lightTheme = {
         surfacePressedOverlay: Platform.select({ ios: 'rgba(0, 0, 0, 0.08)', default: 'transparent' }),
         surfaceHigh: '#F8F8F8',
         surfaceHighest: '#f0f0f0',
+        // Desktop window chrome around the rounded content panel — a shade off the panel, not a border.
+        windowChrome: '#EBEBEB',
         divider: Platform.select({ ios: '#eaeaea', default: '#eaeaea' }),
         shadow: {
             color: Platform.select({ default: '#000000', web: 'rgba(0, 0, 0, 0.1)' }),
@@ -325,6 +327,7 @@ export const darkTheme = {
         // iOS dark theme is #1c1c1e for items, and #000 for the background
         surfaceHigh: Platform.select({ ios: '#2C2C2E', default: '#171717' }),
         surfaceHighest: Platform.select({ ios: '#38383A', default: '#292929' }),
+        windowChrome: '#161616',
         divider: Platform.select({ ios: '#38383A', default: '#292929' }),
         shadow: {
             color: Platform.select({ default: '#000000', web: 'rgba(0, 0, 0, 0.1)' }),

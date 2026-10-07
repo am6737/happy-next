@@ -30,6 +30,34 @@ function plural({ count, singular, plural }: { count: number; singular: string; 
  * - New translation keys must be added to ALL language files
  */
 export const en: TranslationStructure = {
+    sessionScope: {
+        // Machine scope of the session list: sidebar machine rail and phone machine switcher
+        allMachines: 'All machines',
+        allMachinesHint: 'View sessions across every machine',
+        sessionCount: ({ count }: { count: number }) => `${count} ${count === 1 ? 'session' : 'sessions'}`,
+        addMachine: 'Add machine',
+        addMachineWebHint: 'On the new machine, run `npm i -g happy-next-cli`, then `happy`, and paste the connection link it prints here.',
+        switchMachine: 'Switch machine',
+        close: 'Close',
+        searchMachines: 'Search machines…',
+        machineSummary: ({ total, online }: { total: number, online: number }) => `${total} ${total === 1 ? 'machine' : 'machines'} · ${online} online`,
+        searchSummary: ({ count, total }: { count: number, total: number }) => `${count} of ${total} machines`,
+        machinesSection: 'Machines',
+        sharingSection: 'Sharing',
+        unknownMachine: 'Unknown machine',
+        noMatchingMachines: 'No matching machines',
+        clearSearch: 'Clear search',
+        noMachinesYet: 'No machines yet',
+        noMachinesHint: 'Run happy on a computer to connect it to this account.',
+        noSessionsYet: 'No sessions yet',
+        newSession: 'New session',
+        machineNoSessions: 'No sessions on this machine',
+        machineNoSessionsHint: ({ name }: { name: string }) => `Start a new session on ${name}.`,
+        offlineText: 'Existing sessions are kept. New sessions are available once the machine is back online.',
+        addMenu: 'Add',
+        search: 'Search',
+    },
+
     tabs: {
         // Tab navigation labels
         inbox: 'Inbox',
@@ -2043,6 +2071,8 @@ export const en: TranslationStructure = {
     },
 
     textSelection: {
+        formatTitle: 'Preview format',
+        formatPlainText: 'Plain text',
         // Text selection screen
         selectText: 'Select text range',
         titleFullText: 'View full text',
@@ -2071,8 +2101,6 @@ export const en: TranslationStructure = {
         emptyDescription: 'Create your first artifact to get started',
         new: 'New Artifact',
         edit: 'Edit Artifact',
-        formatTitle: 'Preview format',
-        formatPlainText: 'Plain text',
         delete: 'Delete',
         updateError: 'Failed to update artifact. Please try again.',
         notFound: 'Artifact not found',
