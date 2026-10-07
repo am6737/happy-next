@@ -19,8 +19,8 @@ export const HeaderLogo = React.memo(() => {
         }}>
             <Image
                 source={theme.dark
-                    ? require('@/assets/images/logo-white.png')
-                    : require('@/assets/images/logo-black.png')}
+                    ? require('@/assets/images/logo-white.svg')
+                    : require('@/assets/images/logo-black.svg')}
                 contentFit="contain"
                 style={{ width: 24, height: 24 }}
             />

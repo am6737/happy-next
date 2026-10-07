@@ -503,8 +503,8 @@ export const MainView = React.memo(({ variant }: MainViewProps) => {
                 <View style={styles.emptyStateContentContainer}>
                     <Image
                         source={theme.dark
-                            ? require('@/assets/images/logo-white.png')
-                            : require('@/assets/images/logo-black.png')}
+                            ? require('@/assets/images/logo-white.svg')
+                            : require('@/assets/images/logo-black.svg')}
                         resizeMode="contain"
                         style={styles.emptyDetailLogo}
                     />
