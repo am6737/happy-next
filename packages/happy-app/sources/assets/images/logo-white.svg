@@ -1,14 +1,5 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<svg width="1024px" height="1024px" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
-    <title>画板</title>
-    <g id="画板" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
-        <g id="logotype-light" transform="translate(149, 75)" fill-rule="nonzero">
-            <polygon id="路径" fill="#FFFFFF" points="217.091851 0 217.091851 326.916997 219.194168 328.98259 506.805832 328.98259 508.908149 326.916997 508.908149 0 726 0 726 438.864767 535.168665 617.907428 535.168665 583.345629 508.908149 606.84175 508.908149 547.382177 217.091851 547.382177 217.091851 875 0 875 0 0"></polygon>
-            <polygon id="路径" fill="#FFFFFF" points="726 583 726 875 509 875 509 789.951815"></polygon>
-            <g id="编组" transform="translate(446, 254)">
-                <polygon id="路径" fill="#32D74B" points="280 146.549827 0 412.065368 0 598 280 332.48446"></polygon>
-                <polygon id="路径" fill="#248A3D" points="280 5.68434189e-14 88.5608856 184.385792 88.5608856 370.357301 280 185.97151"></polygon>
-            </g>
-        </g>
-    </g>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <path id="letter-h" fill="#ffffff" d="M183 77.929 H370.031 V418.506 H660.969 V77.929 H848 V953.706 H660.969 V613.125 H370.031 V953.706 H183 Z"/>
+  <path id="bright-green" fill="#32d74b" d="M590.314 744.502 L848.000 481.774 L848.000 666.659 L590.314 929.390 Z"/>
+  <path id="dark-green" fill="#248a3d" d="M673.438 510.961 L848.000 330.944 L848.000 515.833 L673.438 695.850 Z"/>
 </svg>
