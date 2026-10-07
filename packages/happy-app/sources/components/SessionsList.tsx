@@ -329,12 +329,41 @@ type SessionTab = SessionListSelection;
 type SessionRowRef = View | null;
 type RegisterSessionRowRef = (sessionId: string, ref: SessionRowRef) => void;
 
-// The list's rows: the synced list items, plus the machine sections of the sidebar's "All machines" view.
+// A foldable section of the sidebar's "All machines" view: one per machine, then the shared sessions.
+type SessionSection = {
+    id: string;
+    name: string;
+    icon: React.ComponentProps<typeof Ionicons>['name'];
+    // Machines only; the shared sections have no online state.
+    online?: boolean;
+    // The machine a new session starts on from the empty row, when it can start one.
+    newSessionMachineId?: string;
+    sessions: Session[];
+    dot: SessionMachineGroup['dot'];
+};
+
+// Fold keys of the shared sections, alongside the machineIds in collapsedSessionMachineGroups.
+const SHARED_SECTION_ID = 'shared';
+const SHARED_BY_ME_SECTION_ID = 'sharedByMe';
+
+function machineSection(group: SessionMachineGroup): SessionSection {
+    return {
+        id: group.id,
+        name: group.unknown ? t('sessionScope.unknownMachine') : group.name,
+        icon: group.unknown ? 'help-circle-outline' : 'desktop-outline',
+        online: group.unknown ? undefined : group.online,
+        newSessionMachineId: group.online && !group.unknown ? group.id : undefined,
+        sessions: group.sessions,
+        dot: group.dot,
+    };
+}
+
+// The list's rows: the synced list items, plus the foldable sections of the sidebar's "All machines" view.
 type ListItem = (
     | SessionListViewItem
-    | { type: 'machine-header'; group: SessionMachineGroup; collapsed: boolean }
-    | { type: 'machine-sessions'; group: SessionMachineGroup }
-    | { type: 'machine-empty'; group: SessionMachineGroup }
+    | { type: 'machine-header'; section: SessionSection; collapsed: boolean }
+    | { type: 'machine-sessions'; section: SessionSection }
+    | { type: 'machine-empty'; section: SessionSection }
 ) & { selected?: boolean };
 
 function getSessionIdFromPathname(pathname: string): string | null {
@@ -372,23 +401,23 @@ function ViewportInsetsReporter({ height, onChange }: { height: number; onChange
     return null;
 }
 
-// Header of one machine's section in the sidebar's "All machines" view; folds the machine's projects.
-const MachineGroupHeader = React.memo(({ group, collapsed, onToggle }: {
-    group: SessionMachineGroup;
+// Header of one section in the sidebar's "All machines" view; folds the section's sessions.
+const SessionSectionHeader = React.memo(({ section, collapsed, onToggle }: {
+    section: SessionSection;
     collapsed: boolean;
-    onToggle: (machineId: string) => void;
+    onToggle: (sectionId: string) => void;
 }) => {
     const styles = stylesheet;
     const { theme } = useUnistyles();
-    const name = group.unknown ? t('sessionScope.unknownMachine') : group.name;
+    const name = section.name;
     const meta = [
-        !group.unknown && !group.online ? t('status.offline') : null,
-        t('sessionScope.sessionCount', { count: group.sessions.length }),
+        section.online === false ? t('status.offline') : null,
+        t('sessionScope.sessionCount', { count: section.sessions.length }),
     ].filter(Boolean).join(' · ');
 
     return (
         <Pressable
-            onPress={() => onToggle(group.id)}
+            onPress={() => onToggle(section.id)}
             style={styles.machineHeader}
             accessibilityRole="button"
             accessibilityState={{ expanded: !collapsed }}
@@ -400,7 +429,7 @@ const MachineGroupHeader = React.memo(({ group, collapsed, onToggle }: {
                 color={theme.colors.textSecondary}
                 style={{ transform: [{ rotate: collapsed ? '0deg' : '90deg' }] }}
             />
-            <Ionicons name={group.unknown ? 'help-circle-outline' : 'desktop-outline'} size={16} color={theme.colors.textSecondary} />
+            <Ionicons name={section.icon} size={16} color={theme.colors.textSecondary} />
             <Text
                 style={styles.machineHeaderName}
                 numberOfLines={1}
@@ -408,23 +437,23 @@ const MachineGroupHeader = React.memo(({ group, collapsed, onToggle }: {
             >
                 {name}
             </Text>
-            {!group.unknown && (
-                <View style={[styles.machineOnlineDot, { backgroundColor: group.online ? theme.colors.status.connected : theme.colors.textSecondary }]} />
+            {section.online !== undefined && (
+                <View style={[styles.machineOnlineDot, { backgroundColor: section.online ? theme.colors.status.connected : theme.colors.textSecondary }]} />
             )}
-            {collapsed && <SessionScopeDot dot={group.dot} size={7} />}
+            {collapsed && <SessionScopeDot dot={section.dot} size={7} />}
             <Text style={styles.machineHeaderMeta} numberOfLines={1}>{meta}</Text>
         </Pressable>
     );
 });
 
-const MachineEmptyRow = React.memo(({ group }: { group: SessionMachineGroup }) => {
+const MachineEmptyRow = React.memo(({ section }: { section: SessionSection }) => {
     const styles = stylesheet;
     const router = useRouter();
     return (
         <View style={styles.machineEmpty}>
             <Text style={styles.machineEmptyText}>{t('sessionScope.noSessionsYet')}</Text>
-            {group.online && !group.unknown && (
-                <Pressable onPress={() => router.push(newSessionPath(group.id))} hitSlop={8} accessibilityRole="button">
+            {section.newSessionMachineId && (
+                <Pressable onPress={() => router.push(newSessionPath(section.newSessionMachineId))} hitSlop={8} accessibilityRole="button">
                     <Text style={styles.machineEmptyAction}>{t('sessionScope.newSession')}</Text>
                 </Pressable>
             )}
@@ -447,6 +476,8 @@ export function SessionsList() {
         activeSessions: allActiveSessions,
         sharedSessions,
         sharedByMeSessions,
+        sharedDot,
+        sharedByMeDot,
     } = scope;
     const machineNames = useMachineNameMap();
     const socketStatus = useSocketStatus();
@@ -496,25 +527,40 @@ export function SessionsList() {
         }
     }, []);
 
-    const toggleMachine = React.useCallback((machineId: string) => {
+    // The "All machines" view's sections: each machine, then the active sessions shared with me and by me.
+    const sections = React.useMemo<SessionSection[]>(() => {
+        if (!groupByMachine) return [];
+        const result = groups.map(machineSection);
+        const sharedActive = sharedSessions.filter(session => session.active);
+        if (sharedActive.length > 0) {
+            result.push({ id: SHARED_SECTION_ID, name: t('session.sharing.sharedWithMeSessions'), icon: 'people-outline', sessions: sharedActive, dot: sharedDot });
+        }
+        const sharedByMeActive = sharedByMeSessions.filter(session => session.active);
+        if (sharedByMeActive.length > 0) {
+            result.push({ id: SHARED_BY_ME_SECTION_ID, name: t('session.sharing.sharedByMeSessions'), icon: 'share-outline', sessions: sharedByMeActive, dot: sharedByMeDot });
+        }
+        return result;
+    }, [groupByMachine, groups, sharedSessions, sharedByMeSessions, sharedDot, sharedByMeDot]);
+
+    const toggleSection = React.useCallback((sectionId: string) => {
         const next = { ...collapsedMachines };
-        if (next[machineId]) delete next[machineId];
-        else next[machineId] = true;
+        if (next[sectionId]) delete next[sectionId];
+        else next[sectionId] = true;
         setCollapsedMachines(next);
     }, [collapsedMachines, setCollapsedMachines]);
 
-    // Opening a session unfolds its machine once, as the project groups do for their sessions.
+    // Opening a session unfolds its section once, as the project groups do for their sessions.
     const lastUnfoldedForSessionRef = React.useRef<string | null>(null);
     React.useEffect(() => {
         if (!groupByMachine || !selectedSessionId || lastUnfoldedForSessionRef.current === selectedSessionId) return;
-        const group = groups.find(g => g.sessions.some(session => session.id === selectedSessionId));
-        if (!group) return;
+        const section = sections.find(s => s.sessions.some(session => session.id === selectedSessionId));
+        if (!section) return;
         lastUnfoldedForSessionRef.current = selectedSessionId;
-        if (!collapsedMachines[group.id]) return;
+        if (!collapsedMachines[section.id]) return;
         const next = { ...collapsedMachines };
-        delete next[group.id];
+        delete next[section.id];
         setCollapsedMachines(next);
-    }, [groupByMachine, selectedSessionId, groups, collapsedMachines, setCollapsedMachines]);
+    }, [groupByMachine, selectedSessionId, sections, collapsedMachines, setCollapsedMachines]);
 
     const selectedGroup = React.useMemo(
         () => machineGroups.find(group => group.id === activeTab),
@@ -530,16 +576,14 @@ export function SessionsList() {
         }
         if (!groupByMachine || !data) return data;
         const items: ListItem[] = [];
-        for (const group of groups) {
-            const collapsed = !!collapsedMachines[group.id];
-            items.push({ type: 'machine-header', group, collapsed });
+        for (const section of sections) {
+            const collapsed = !!collapsedMachines[section.id];
+            items.push({ type: 'machine-header', section, collapsed });
             if (collapsed) continue;
-            items.push(group.sessions.length > 0 ? { type: 'machine-sessions', group } : { type: 'machine-empty', group });
+            items.push(section.sessions.length > 0 ? { type: 'machine-sessions', section } : { type: 'machine-empty', section });
         }
-        // Active sessions shared with me trail "All", as they always have.
-        items.push(...data.filter(item => item.type !== 'active-sessions'));
         return items;
-    }, [activeTab, sharedData, sharedByMeData, data, selectedGroup, groupByMachine, groups, collapsedMachines]);
+    }, [activeTab, sharedData, sharedByMeData, data, selectedGroup, groupByMachine, sections, collapsedMachines]);
 
     const pendingActiveSession = React.useMemo(
         () => pendingSessionNavigationId ? allActiveSessions.find(session => session.id === pendingSessionNavigationId) : undefined,
@@ -626,7 +670,7 @@ export function SessionsList() {
                     ? item.session.id === sessionId
                     : item.type === 'active-sessions'
                         ? item.sessions.some(session => session.id === sessionId)
-                        : item.type === 'machine-sessions' && item.group.sessions.some(session => session.id === sessionId)
+                        : item.type === 'machine-sessions' && item.section.sessions.some(session => session.id === sessionId)
             ) ?? -1;
             if (topLevelIndex < 0) return;
 
@@ -676,9 +720,9 @@ export function SessionsList() {
             case 'active-sessions': return 'active-sessions';
             case 'project-group': return `project-group-${item.machine.id}-${item.displayPath}-${index}`;
             case 'session': return `session-${item.session.id}`;
-            case 'machine-header': return `machine-header-${item.group.id}`;
-            case 'machine-sessions': return `machine-sessions-${item.group.id}`;
-            case 'machine-empty': return `machine-empty-${item.group.id}`;
+            case 'machine-header': return `machine-header-${item.section.id}`;
+            case 'machine-sessions': return `machine-sessions-${item.section.id}`;
+            case 'machine-empty': return `machine-empty-${item.section.id}`;
         }
     }, []);
 
@@ -705,19 +749,19 @@ export function SessionsList() {
                 );
 
             case 'machine-header':
-                return <MachineGroupHeader group={item.group} collapsed={item.collapsed} onToggle={toggleMachine} />;
+                return <SessionSectionHeader section={item.section} collapsed={item.collapsed} onToggle={toggleSection} />;
 
             case 'machine-sessions':
                 return (
                     <ActiveComponent
-                        sessions={item.group.sessions}
+                        sessions={item.section.sessions}
                         selectedSessionId={selectedId}
                         registerSessionRowRef={registerSessionRowRef}
                     />
                 );
 
             case 'machine-empty':
-                return <MachineEmptyRow group={item.group} />;
+                return <MachineEmptyRow section={item.section} />;
 
             case 'project-group':
                 return (
@@ -751,7 +795,7 @@ export function SessionsList() {
                     />
                 );
         }
-    }, [isTablet, selectedSessionId, dataWithSelected, compactSessionView, registerSessionRowRef, toggleMachine]);
+    }, [isTablet, selectedSessionId, dataWithSelected, compactSessionView, registerSessionRowRef, toggleSection]);
 
     const isDisconnected = socketStatus.status === 'disconnected' || socketStatus.status === 'error';
     const canStartAnywhere = !isDisconnected && machineGroups.some(group => group.online);
