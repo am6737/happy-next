@@ -2065,6 +2065,8 @@ export const pl: TranslationStructure = {
             const n10 = n % 10;
             const n100 = n % 100;
             
+        formatTitle: 'Format podglądu',
+        formatPlainText: 'Zwykły tekst',
             // Polish plural rules: 1 (singular), 2-4 (few), 5+ (many)
             if (n === 1) {
                 return `${count} artefakt`;

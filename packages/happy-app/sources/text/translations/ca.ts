@@ -2054,6 +2054,8 @@ export const ca: TranslationStructure = {
         new: 'Nou artefacte',
         edit: 'Edita artefacte',
         delete: 'Elimina',
+        formatTitle: 'Format de previsualització',
+        formatPlainText: 'Text pla',
         updateError: 'No s\'ha pogut actualitzar l\'artefacte. Si us plau, torna-ho a provar.',
         notFound: 'Artefacte no trobat',
         discardChanges: 'Descartar els canvis?',

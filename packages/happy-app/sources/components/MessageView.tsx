@@ -489,7 +489,7 @@ function UserTextBlock(props: {
   const handleOpenFullText = React.useCallback((reason: CollapsedTextReason) => {
     try {
       const textId = storeTempText(renderedText);
-      router.push(`/text-selection?textId=${textId}&from=${reason}`);
+      router.push({ pathname: '/text-selection', params: { textId, from: reason, format: 'markdown' } });
     } catch (error) {
       console.error('Error opening long message:', error);
     }

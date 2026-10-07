@@ -21,6 +21,7 @@ import { showCopiedToast } from '@/components/Toast';
 import { MermaidRenderer } from './MermaidRenderer';
 import { ImageViewer } from '@/components/ImageViewer';
 import { t } from '@/text';
+import { LongPressCopy } from '@/components/LongPressCopy';
 
 // Option type for callback
 export type Option = {
@@ -81,7 +82,7 @@ export const MarkdownView = React.memo((props: {
     const handleLongPress = React.useCallback(() => {
         try {
             const textId = storeTempText(props.markdown);
-            router.push(`/text-selection?textId=${textId}`);
+            router.push({ pathname: '/text-selection', params: { textId, format: 'markdown' } });
         } catch (error) {
             console.error('Error storing text for selection:', error);
             Modal.alert('Error', 'Failed to open text selection. Please try again.');
@@ -169,11 +170,12 @@ export const MarkdownView = React.memo((props: {
     };
 
     blocks.forEach((block, index) => {
-        if (block.type === 'options') {
-            if (props.hideOptions) return;
-            // Flush any accumulated non-options blocks first
+        if (block.type === 'options' || block.type === 'code-block') {
+            if (block.type === 'options' && props.hideOptions) return;
+            // Code blocks select their own source and carry their language, rather than
+            // opening the full Markdown message through the parent long-press gesture.
             flushNonOptionsGroup();
-            // Render options block directly without parent GestureDetector
+            // Render the block outside the parent GestureDetector
             elements.push(renderBlockContent(block, index));
         } else {
             // Accumulate non-options blocks
@@ -396,43 +398,45 @@ function RenderCodeBlock(props: { content: string, language: string | null, firs
     }, [props.content]);
 
     return (
-        <View
-            style={[style.codeBlock, props.first && style.first, props.last && style.last]}
-            // @ts-ignore - Web only events
-            onMouseEnter={() => setIsHovered(true)}
-            // @ts-ignore - Web only events
-            onMouseLeave={() => setIsHovered(false)}
-            {...wheelProps}
-        >
-            <View style={style.codeBlockHeader}>
-                <Text selectable={props.selectable} style={style.codeLanguage}>{displayLanguage}</Text>
-                <Pressable
-                    style={[style.copyButton, copyStateStyle]}
-                    onPress={copyCode}
-                    hitSlop={8}
-                    accessibilityLabel={t('common.copy')}
-                    // @ts-ignore - Web only events
-                    onMouseEnter={() => setIsCopyHovered(true)}
-                    // @ts-ignore - Web only events
-                    onMouseLeave={() => setIsCopyHovered(false)}
-                >
-                    <Ionicons name="copy-outline" size={16} color={theme.colors.textSecondary} />
-                </Pressable>
-            </View>
-            <ScrollView
-                {...scrollViewProps}
-                style={{ flexGrow: 0, flexShrink: 0 }}
-                horizontal={true}
-                contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 16 }}
-                showsHorizontalScrollIndicator={false}
+        <LongPressCopy text={props.content} language={props.language ?? 'plaintext'}>
+            <View
+                style={[style.codeBlock, props.first && style.first, props.last && style.last]}
+                // @ts-ignore - Web only events
+                onMouseEnter={() => setIsHovered(true)}
+                // @ts-ignore - Web only events
+                onMouseLeave={() => setIsHovered(false)}
+                {...wheelProps}
             >
-                <SimpleSyntaxHighlighter
-                    code={props.content}
-                    language={props.language}
-                    selectable={props.selectable}
-                />
-            </ScrollView>
-        </View>
+                <View style={style.codeBlockHeader}>
+                    <Text selectable={props.selectable} style={style.codeLanguage}>{displayLanguage}</Text>
+                    <Pressable
+                        style={[style.copyButton, copyStateStyle]}
+                        onPress={copyCode}
+                        hitSlop={8}
+                        accessibilityLabel={t('common.copy')}
+                        // @ts-ignore - Web only events
+                        onMouseEnter={() => setIsCopyHovered(true)}
+                        // @ts-ignore - Web only events
+                        onMouseLeave={() => setIsCopyHovered(false)}
+                    >
+                        <Ionicons name="copy-outline" size={16} color={theme.colors.textSecondary} />
+                    </Pressable>
+                </View>
+                <ScrollView
+                    {...scrollViewProps}
+                    style={{ flexGrow: 0, flexShrink: 0 }}
+                    horizontal={true}
+                    contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 16 }}
+                    showsHorizontalScrollIndicator={false}
+                >
+                    <SimpleSyntaxHighlighter
+                        code={props.content}
+                        language={props.language}
+                        selectable={props.selectable}
+                    />
+                </ScrollView>
+            </View>
+        </LongPressCopy>
     );
 }
 

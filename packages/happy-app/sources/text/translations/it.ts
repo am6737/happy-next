@@ -2084,6 +2084,8 @@ export const it: TranslationStructure = {
         emptyDescription: 'Crea il tuo primo artefatto per iniziare',
         new: 'Nuovo artefatto',
         edit: 'Modifica artefatto',
+        formatTitle: 'Formato di anteprima',
+        formatPlainText: 'Testo semplice',
         delete: 'Elimina',
         updateError: 'Impossibile aggiornare l\'artefatto. Riprova.',
         notFound: 'Artefatto non trovato',

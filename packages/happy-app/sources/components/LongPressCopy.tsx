@@ -3,6 +3,7 @@ import { Platform, Text, TextProps, View, ViewStyle } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useRouter } from 'expo-router';
 import { storeTempText } from '@/sync/persistence';
+import type { TextDocumentFormat } from '@/utils/textDocument';
 
 /**
  * Returns whether Text elements should use native `selectable` prop.
@@ -16,18 +17,24 @@ export function useCopySelectable(): boolean {
  * Wrapper that adds long-press → text-selection page navigation on mobile.
  * On web, renders children as-is (relying on native selectable text).
  */
-export function LongPressCopy({ text, children, style }: { text: string; children: React.ReactNode; style?: ViewStyle }) {
+export function LongPressCopy({ text, format, language, children, style }: {
+    text: string;
+    format?: TextDocumentFormat;
+    language?: string;
+    children: React.ReactNode;
+    style?: ViewStyle;
+}) {
     const selectable = useCopySelectable();
     const router = useRouter();
 
     const handleLongPress = React.useCallback(() => {
         try {
             const textId = storeTempText(text);
-            router.push(`/text-selection?textId=${textId}`);
+            router.push({ pathname: '/text-selection', params: { textId, format, language } });
         } catch (error) {
             console.error('Error storing text for selection:', error);
         }
-    }, [text, router]);
+    }, [text, format, language, router]);
 
     if (selectable) {
         return <>{children}</>;

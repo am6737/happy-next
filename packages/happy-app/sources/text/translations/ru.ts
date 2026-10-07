@@ -2065,6 +2065,8 @@ export const ru: TranslationStructure = {
             const n10 = n % 10;
             const n100 = n % 100;
             
+        formatTitle: 'Формат предпросмотра',
+        formatPlainText: 'Обычный текст',
             if (n10 === 1 && n100 !== 11) {
                 return `${count} артефакт`;
             }

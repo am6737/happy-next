@@ -2086,6 +2086,8 @@ export const ja: TranslationStructure = {
         emptyDescription: '最初のアーティファクトを作成して始めましょう',
         new: '新規アーティファクト',
         edit: 'アーティファクトを編集',
+        formatTitle: 'プレビュー形式',
+        formatPlainText: 'プレーンテキスト',
         delete: '削除',
         updateError: 'アーティファクトの更新に失敗しました。再試行してください。',
         notFound: 'アーティファクトが見つかりません',

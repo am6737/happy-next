@@ -42,7 +42,7 @@ export const KeyValueView = React.memo<KeyValueViewProps>(({ data, plain = false
     const allText = entries.map(([key, value]) => `${key}: ${formatValue(value)}`).join('\n');
 
     return (
-        <LongPressCopy text={allText}>
+        <LongPressCopy text={allText} format="plain">
             <View style={plain ? undefined : styles.container}>
                 {entries.map(([key, value], index) => (
                     <View key={key} style={[styles.row, index < entries.length - 1 && styles.rowBorder]}>
@@ -53,7 +53,7 @@ export const KeyValueView = React.memo<KeyValueViewProps>(({ data, plain = false
                             <Text style={styles.structuredValue} selectable={selectable}>{formatValue(value)}</Text>
                         ) : (
                             <View style={styles.complexValue}>
-                                <CodeView code={formatValue(value)} />
+                                <CodeView code={formatValue(value)} language="json" />
                             </View>
                         )}
                     </View>
@@ -129,7 +129,7 @@ function ExpandableInputText({ label, text, preview, language, expandLabel, coll
                 <InputCopyButton text={text} label={label} />
             </View>
             {showFullText && !plain ? <CodeView code={text} language={language} /> : (showFullText || preview !== undefined) && (
-                <LongPressCopy text={text}>
+                <LongPressCopy text={text} language={language ?? 'plaintext'}>
                     <View style={styles.inputTextPreview}>
                         <Text style={showFullText ? styles.structuredValue : styles.taskPromptText} selectable={selectable}>{showFullText ? text : preview}</Text>
                     </View>
@@ -198,7 +198,7 @@ function OrchestratorSubmitInputView({ input }: { input: Record<string, unknown>
                     </View>
                 ) : (
                     <View style={styles.complexValue}>
-                        <CodeView code={formatValue(tasksRaw)} />
+                        <CodeView code={formatValue(tasksRaw)} language="json" />
                     </View>
                 )}
             </View>
@@ -212,13 +212,13 @@ function OrchestratorSubmitInputView({ input }: { input: Record<string, unknown>
  */
 export function ToolInputView({ input, toolName }: { input: unknown; toolName?: string }) {
     if (input == null) {
-        return <CodeView code="null" />;
+        return <CodeView code="null" language="json" />;
     }
 
     if (input && typeof input === 'object' && !Array.isArray(input)) {
         const objectInput = input as Record<string, unknown>;
         if (Object.keys(objectInput).length === 0) {
-            return <CodeView code="{}" />;
+            return <CodeView code="{}" language="json" />;
         }
         if (isOrchestratorSubmitToolName(toolName)) {
             return <OrchestratorSubmitInputView input={objectInput} />;
@@ -232,7 +232,7 @@ export function ToolInputView({ input, toolName }: { input: unknown; toolName?: 
     // Fallback: raw JSON
     try {
         const serialized = JSON.stringify(input, null, 2);
-        return <CodeView code={serialized ?? String(input)} />;
+        return <CodeView code={serialized ?? String(input)} language="json" />;
     } catch {
         return <CodeView code={String(input)} />;
     }
@@ -267,7 +267,7 @@ export function SmartDataView({ data }: { data: unknown }) {
 
     // Fallback
     try {
-        return <CodeView code={JSON.stringify(data, null, 2)} />;
+        return <CodeView code={JSON.stringify(data, null, 2)} language="json" />;
     } catch {
         return <CodeView code={String(data)} />;
     }

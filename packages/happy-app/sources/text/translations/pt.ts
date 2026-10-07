@@ -2054,6 +2054,8 @@ export const pt: TranslationStructure = {
         new: 'Novo artefato',
         edit: 'Editar artefato',
         delete: 'Excluir',
+        formatTitle: 'Formato de pré-visualização',
+        formatPlainText: 'Texto simples',
         updateError: 'Falha ao atualizar artefato. Por favor, tente novamente.',
         notFound: 'Artefato não encontrado',
         discardChanges: 'Descartar alterações?',

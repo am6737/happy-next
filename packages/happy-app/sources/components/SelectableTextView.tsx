@@ -2,14 +2,14 @@ import * as React from 'react';
 import { Platform } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { useUnistyles } from 'react-native-unistyles';
-import { highlightMarkdownToHtml } from '@/utils/highlightMarkdownToHtml';
+import { highlightTextToHtml } from '@/utils/highlightTextToHtml';
 import { MONO_FONT_STACK } from '@/components/codeEditorConstants';
 
 /**
  * Selectable, syntax-highlighted text rendering shared by the text-selection
  * screen and inline surfaces (e.g. the pending-message detail modal).
  *
- * Renders markdown-highlighted content inside a WebView (native) / iframe (web)
+ * Renders content highlighted for its language inside a WebView (native) / iframe (web)
  * so the text is natively selectable and scrolls internally. The host controls
  * the size — give this a bounded-height container; it fills it.
  */
@@ -112,12 +112,12 @@ const MEASURE_SCRIPT = `(function(){
   if (window.ResizeObserver) { try { new ResizeObserver(report).observe(document.body); } catch (e) {} }
 })(); true;`;
 
-export function SelectableTextView({ text, bottomPadding = 16, onMeasure }: { text: string; bottomPadding?: number; onMeasure?: (height: number) => void }) {
+export function SelectableTextView({ text, language = 'markdown', bottomPadding = 16, onMeasure }: { text: string; language?: string; bottomPadding?: number; onMeasure?: (height: number) => void }) {
     const { theme, rt } = useUnistyles();
     const isDark = rt.themeName === 'dark';
 
     const html = React.useMemo(() => {
-        const highlighted = text ? highlightMarkdownToHtml(text) : '';
+        const highlighted = text ? highlightTextToHtml(text, language) : '';
         return buildSelectionHtml({
             highlightedHtml: highlighted,
             isDark,
@@ -125,7 +125,7 @@ export function SelectableTextView({ text, bottomPadding = 16, onMeasure }: { te
             textColor: theme.colors.text,
             bottomPadding,
         });
-    }, [text, isDark, theme.colors.surface, theme.colors.text, bottomPadding]);
+    }, [text, language, isDark, theme.colors.surface, theme.colors.text, bottomPadding]);
 
     if (Platform.OS === 'web') {
         // react-native-webview is unsupported on web. Use a plain iframe with the same

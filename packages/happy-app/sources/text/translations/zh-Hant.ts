@@ -2056,6 +2056,8 @@ export const zhHant: TranslationStructure = {
         new: '新建工件',
         edit: '編輯工件',
         delete: '刪除',
+        formatTitle: '預覽格式',
+        formatPlainText: '純文字',
         updateError: '更新工件失敗。請重試。',
         notFound: '未找到工件',
         discardChanges: '放棄更改？',

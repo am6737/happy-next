@@ -2071,6 +2071,8 @@ export const en: TranslationStructure = {
         emptyDescription: 'Create your first artifact to get started',
         new: 'New Artifact',
         edit: 'Edit Artifact',
+        formatTitle: 'Preview format',
+        formatPlainText: 'Plain text',
         delete: 'Delete',
         updateError: 'Failed to update artifact. Please try again.',
         notFound: 'Artifact not found',

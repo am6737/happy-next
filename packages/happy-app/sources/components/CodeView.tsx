@@ -15,7 +15,7 @@ export const CodeView = React.memo<CodeViewProps>(({
     const selectable = useCopySelectable();
 
     return (
-        <LongPressCopy text={code}>
+        <LongPressCopy text={code} language={language ?? 'plaintext'}>
             <View style={styles.codeBlock}>
                 <Text selectable={selectable} style={styles.codeText}>{code}</Text>
             </View>

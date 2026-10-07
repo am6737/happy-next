@@ -614,12 +614,15 @@ function LegacyFileScreen() {
         if (Platform.OS === 'web') return;
         try {
             const textId = storeTempText(content);
-            router.push(`/text-selection?textId=${textId}`);
+            router.push({
+                pathname: '/text-selection',
+                params: { textId, language: displayMode === 'diff' ? 'plaintext' : editorLanguage },
+            });
         } catch (error) {
             console.error('Error storing text for selection:', error);
             Modal.alert(t('common.error'), 'Failed to open text selection');
         }
-    }, [router]);
+    }, [router, displayMode, editorLanguage]);
 
     // Get current display content for long press
     const currentContent = React.useMemo(() => {

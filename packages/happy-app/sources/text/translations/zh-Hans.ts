@@ -2056,6 +2056,8 @@ export const zhHans: TranslationStructure = {
         new: '新建工件',
         edit: '编辑工件',
         delete: '删除',
+        formatTitle: '预览格式',
+        formatPlainText: '纯文本',
         updateError: '更新工件失败。请重试。',
         notFound: '未找到工件',
         discardChanges: '放弃更改？',
