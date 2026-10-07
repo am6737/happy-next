@@ -3,6 +3,7 @@ import { existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
 import os from 'node:os';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { parseMarkdownFrontmatter, readYamlString } from '@/utils/yaml';
+import type { SDKCommandInfo } from '@/claude/sdk/types';
 
 export type ClaudeSlashCommandKind = 'command' | 'skill';
 export type ClaudeSlashCommandScope = 'REPO' | 'USER' | 'PLUGIN' | 'SYSTEM';
@@ -24,6 +25,8 @@ export interface ClaudeInitCapabilities {
     slashCommands?: string[];
     skills?: string[];
     plugins?: ClaudePluginMetadata[];
+    /** Commands from Claude's `initialize` control response; used for descriptions not found on disk. */
+    sdkCommands?: SDKCommandInfo[];
     cwd?: string;
 }
 
@@ -208,16 +211,27 @@ export function buildClaudeSlashCommandMetadata(
     const homeDir = opts.homeDir || os.homedir();
     const knownMetadata = buildKnownCommandMetadata(capabilities, cwd, homeDir);
     const skillCommands = new Set((capabilities.skills ?? []).map(normalizeCommandName));
+    const sdkDescriptions = new Map<string, string>();
+    for (const command of capabilities.sdkCommands ?? []) {
+        const description = readYamlString(command.description, true);
+        if (!description) continue;
+        for (const alias of [command.name, ...(command.aliases ?? [])]) {
+            sdkDescriptions.set(normalizeCommandName(alias), description);
+        }
+    }
 
     return capabilities.slashCommands.map((rawName) => {
         const name = normalizeCommandName(rawName);
+        const sdkDescription = sdkDescriptions.get(name);
         const known = knownMetadata.get(name);
         if (known) {
-            return { ...known, name };
+            return { ...known, name, ...(!known.description && sdkDescription ? { description: sdkDescription } : {}) };
         }
-        if (skillCommands.has(name)) {
-            return { name, kind: 'skill', scope: 'SYSTEM' };
-        }
-        return { name, kind: 'command', scope: 'SYSTEM' };
+        return {
+            name,
+            kind: skillCommands.has(name) ? 'skill' : 'command',
+            scope: 'SYSTEM',
+            ...(sdkDescription ? { description: sdkDescription } : {}),
+        };
     });
 }

@@ -24,15 +24,24 @@ export async function extractSDKMetadata(): Promise<SDKMetadata> {
     try {
         logger.debug('[metadataExtractor] Starting SDK metadata extraction')
         
+        // Stream-json input (rather than a plain prompt string) so we can also send control requests.
+        async function* prompt() {
+            yield { type: 'user' as const, message: { role: 'user' as const, content: 'hello' } }
+        }
+
         // Run SDK with minimal tools allowed
         const sdkQuery = query({
-            prompt: 'hello',
+            prompt: prompt(),
             options: {
                 allowedTools: ['Bash(echo)'],
                 maxTurns: 1,
                 abort: abortController.signal
             }
         })
+
+        // The init message only has command names; the `initialize` response also has descriptions
+        // (including for built-in skills that have no file on disk).
+        const sdkCommands = sdkQuery.supportedCommands()
 
         // Wait for the first system message which contains tools and slash commands
         for await (const message of sdkQuery) {
@@ -46,6 +55,7 @@ export async function extractSDKMetadata(): Promise<SDKMetadata> {
                         slashCommands: systemMessage.slash_commands,
                         skills: systemMessage.skills,
                         plugins: systemMessage.plugins,
+                        sdkCommands: await sdkCommands,
                         cwd: systemMessage.cwd,
                     })
                 }

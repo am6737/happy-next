@@ -94,26 +94,6 @@ const FORKABLE_COMMANDS: CommandItem[] = [
     { command: 'duplicate', description: 'Duplicate conversation from a specific point', scope: 'SYSTEM', kind: 'command' },
 ];
 
-// Command descriptions for known tools/commands
-const COMMAND_DESCRIPTIONS: Record<string, string> = {
-    // Default commands
-    compact: 'Compact the conversation history',
-    duplicate: 'Duplicate conversation from a specific point',
-
-    // Common tool commands
-    help: 'Show available commands',
-    clear: 'Clear the conversation',
-    reset: 'Reset the session',
-    export: 'Export conversation',
-    debug: 'Show debug information',
-    status: 'Show connection status',
-    stop: 'Stop current operation',
-    abort: 'Abort current operation',
-    cancel: 'Cancel current operation',
-    
-    // Add more descriptions as needed
-};
-
 function shouldIgnoreCommand(item: CommandItem): boolean {
     return IGNORED_COMMANDS.includes(item.command) && (!item.scope || item.scope === 'SYSTEM');
 }
@@ -165,7 +145,7 @@ function getCommandsFromSession(sessionId: string): CommandItem[] {
         for (const cmd of slashCommandMetadata) {
             mergeCommand(commands, {
                 command: cmd.name,
-                description: cmd.description || COMMAND_DESCRIPTIONS[cmd.name],
+                description: cmd.description,
                 scope: cmd.scope,
                 kind: cmd.kind,
             });
@@ -179,7 +159,6 @@ function getCommandsFromSession(sessionId: string): CommandItem[] {
         for (const cmd of slashCommands) {
             mergeCommand(commands, {
                 command: cmd,
-                description: COMMAND_DESCRIPTIONS[cmd],
                 scope: session.metadata.claudeSessionId ? 'SYSTEM' : undefined,
                 kind: session.metadata.claudeSessionId ? 'command' : undefined,
             });

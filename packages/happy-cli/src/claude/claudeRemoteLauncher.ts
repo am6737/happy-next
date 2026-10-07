@@ -8,6 +8,7 @@ import { PermissionHandler } from "./utils/permissionHandler";
 import { Future } from "@/utils/future";
 import { cleanupStdinAfterInk } from "@/utils/terminalStdinCleanup";
 import { Query, SDKAssistantMessage, SDKMessage, SDKResultMessage, SDKSystemMessage, SDKUserMessage } from "./sdk";
+import type { SDKCommandInfo } from "./sdk/types";
 import { formatClaudeMessageForInk } from "@/ui/messageFormatterInk";
 import { isDebug } from "@/utils/env";
 import { logger } from "@/ui/logger";
@@ -206,6 +207,43 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
     // (e.g. unknown slash command like `/foo` → result.result = "Unknown command: /foo").
     let hadAssistantMessage = false;
 
+    function syncInitCapabilities(init: SDKSystemMessage, sdkCommands: SDKCommandInfo[]) {
+        const nextModel = init.model && init.model !== currentSyncedModel ? init.model : undefined;
+        const toolsSig = init.tools ? JSON.stringify(init.tools) : undefined;
+        const slashCommandsSig = init.slash_commands ? JSON.stringify(init.slash_commands) : undefined;
+        const slashCommandMetadata = buildClaudeSlashCommandMetadata({
+            slashCommands: init.slash_commands,
+            skills: init.skills,
+            plugins: init.plugins,
+            sdkCommands,
+            cwd: init.cwd,
+        });
+        const slashCommandMetadataSig = slashCommandMetadata ? JSON.stringify(slashCommandMetadata) : undefined;
+        const toolsChanged = toolsSig !== undefined && toolsSig !== currentSyncedToolsSig;
+        const slashCommandsChanged = slashCommandsSig !== undefined && slashCommandsSig !== currentSyncedSlashCommandsSig;
+        const slashCommandMetadataChanged = slashCommandMetadataSig !== undefined && slashCommandMetadataSig !== currentSyncedSlashCommandMetadataSig;
+        if (nextModel || toolsChanged || slashCommandsChanged || slashCommandMetadataChanged) {
+            if (nextModel) currentSyncedModel = nextModel;
+            if (toolsChanged) currentSyncedToolsSig = toolsSig;
+            if (slashCommandsChanged) currentSyncedSlashCommandsSig = slashCommandsSig;
+            if (slashCommandMetadataChanged) currentSyncedSlashCommandMetadataSig = slashCommandMetadataSig;
+            if (nextModel) {
+                session.client.updateMetadata((m) => ({
+                    ...m,
+                    model: nextModel,
+                }));
+            }
+            if (toolsChanged || slashCommandsChanged || slashCommandMetadataChanged) {
+                session.client.updateCapabilities((currentCapabilities) => ({
+                    ...currentCapabilities,
+                    ...(toolsChanged ? { tools: init.tools } : {}),
+                    ...(slashCommandsChanged ? { slashCommands: init.slash_commands } : {}),
+                    ...(slashCommandMetadataChanged ? { slashCommandMetadata } : {}),
+                }));
+            }
+        }
+    }
+
     function onMessage(message: SDKMessage) {
 
         // Write to message log
@@ -217,39 +255,12 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
         // this keeps them correct/refreshed from the real session (and covers cases the probe misses).
         if (message.type === 'system' && (message as SDKSystemMessage).subtype === 'init') {
             const init = message as SDKSystemMessage;
-            const nextModel = init.model && init.model !== currentSyncedModel ? init.model : undefined;
-            const toolsSig = init.tools ? JSON.stringify(init.tools) : undefined;
-            const slashCommandsSig = init.slash_commands ? JSON.stringify(init.slash_commands) : undefined;
-            const slashCommandMetadata = buildClaudeSlashCommandMetadata({
-                slashCommands: init.slash_commands,
-                skills: init.skills,
-                plugins: init.plugins,
-                cwd: init.cwd,
-            });
-            const slashCommandMetadataSig = slashCommandMetadata ? JSON.stringify(slashCommandMetadata) : undefined;
-            const toolsChanged = toolsSig !== undefined && toolsSig !== currentSyncedToolsSig;
-            const slashCommandsChanged = slashCommandsSig !== undefined && slashCommandsSig !== currentSyncedSlashCommandsSig;
-            const slashCommandMetadataChanged = slashCommandMetadataSig !== undefined && slashCommandMetadataSig !== currentSyncedSlashCommandMetadataSig;
-            if (nextModel || toolsChanged || slashCommandsChanged || slashCommandMetadataChanged) {
-                if (nextModel) currentSyncedModel = nextModel;
-                if (toolsChanged) currentSyncedToolsSig = toolsSig;
-                if (slashCommandsChanged) currentSyncedSlashCommandsSig = slashCommandsSig;
-                if (slashCommandMetadataChanged) currentSyncedSlashCommandMetadataSig = slashCommandMetadataSig;
-                if (nextModel) {
-                    session.client.updateMetadata((m) => ({
-                        ...m,
-                        model: nextModel,
-                    }));
-                }
-                if (toolsChanged || slashCommandsChanged || slashCommandMetadataChanged) {
-                    session.client.updateCapabilities((currentCapabilities) => ({
-                        ...currentCapabilities,
-                        ...(toolsChanged ? { tools: init.tools } : {}),
-                        ...(slashCommandsChanged ? { slashCommands: init.slash_commands } : {}),
-                        ...(slashCommandMetadataChanged ? { slashCommandMetadata } : {}),
-                    }));
-                }
-            }
+            // system/init only carries command names. Ask Claude for descriptions too (built-in skills
+            // have no file on disk to scan) before syncing; falls back to [] on error/timeout.
+            const sdkCommands = currentQuery?.supportedCommands() ?? Promise.resolve([]);
+            sdkCommands
+                .then((commands) => syncInitCapabilities(init, commands))
+                .catch((error) => logger.debug('[remote]: failed to sync init capabilities', error));
         }
 
         // Handle result messages with errors - send as session event

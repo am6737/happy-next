@@ -70,4 +70,49 @@ describe('buildClaudeSlashCommandMetadata', () => {
             },
         ]);
     });
+
+    it('fills in descriptions for built-in commands from the SDK initialize response', () => {
+        const cwd = createTempDir();
+        const homeDir = createTempDir();
+
+        const metadata = buildClaudeSlashCommandMetadata(
+            {
+                slashCommands: ['verify', 'review', 'unknown'],
+                skills: ['verify'],
+                sdkCommands: [
+                    { name: 'verify', description: 'Verify a change\n end-to-end', builtin: true },
+                    { name: 'code-review', description: 'Review the diff', aliases: ['review'], builtin: true },
+                ],
+                cwd,
+            },
+            { cwd, homeDir },
+        );
+
+        expect(metadata).toEqual([
+            { name: 'verify', description: 'Verify a change end-to-end', kind: 'skill', scope: 'SYSTEM' },
+            { name: 'review', description: 'Review the diff', kind: 'command', scope: 'SYSTEM' },
+            { name: 'unknown', kind: 'command', scope: 'SYSTEM' },
+        ]);
+    });
+
+    it('prefers the on-disk description over the SDK one', () => {
+        const cwd = createTempDir();
+        const homeDir = createTempDir();
+        const commandsDir = join(homeDir, '.claude', 'commands');
+        mkdirSync(commandsDir, { recursive: true });
+        writeFileSync(join(commandsDir, 'ship.md'), '---\ndescription: From disk\n---\n', 'utf8');
+
+        const metadata = buildClaudeSlashCommandMetadata(
+            {
+                slashCommands: ['ship'],
+                sdkCommands: [{ name: 'ship', description: 'From SDK (user)' }],
+                cwd,
+            },
+            { cwd, homeDir },
+        );
+
+        expect(metadata).toEqual([
+            { name: 'ship', description: 'From disk', kind: 'command', scope: 'USER' },
+        ]);
+    });
 });

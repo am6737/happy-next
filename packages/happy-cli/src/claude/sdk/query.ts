@@ -22,6 +22,8 @@ import {
     type PermissionResult,
     type SetPermissionModeRequest,
     type SetModelRequest,
+    type InitializeRequest,
+    type SDKCommandInfo,
     AbortError
 } from './types'
 import { getDefaultClaudeCodePath, getCleanEnv, logDebug, streamToStdin } from './utils'
@@ -162,6 +164,32 @@ export class Query implements AsyncIterableIterator<SDKMessage> {
         }
         const req: SetModelRequest = { subtype: 'set_model', model }
         await this.request(req, this.childStdin)
+    }
+
+    /**
+     * Ask Claude Code for the commands/skills it knows about. Unlike the `system/init` message
+     * (names only) this includes descriptions, including for built-in skills that have no file on disk.
+     * Best effort: resolves to [] on error or timeout (e.g. a Claude Code build without `initialize`).
+     */
+    async supportedCommands(timeoutMs = 3000): Promise<SDKCommandInfo[]> {
+        if (!this.childStdin) {
+            throw new Error('supportedCommands requires --input-format stream-json')
+        }
+        const req: InitializeRequest = { subtype: 'initialize' }
+        let timer: NodeJS.Timeout | undefined
+        try {
+            const response = await Promise.race([
+                this.request(req, this.childStdin),
+                new Promise<undefined>((resolve) => { timer = setTimeout(() => resolve(undefined), timeoutMs) }),
+            ])
+            const commands = (response?.response as { commands?: SDKCommandInfo[] } | undefined)?.commands
+            return Array.isArray(commands) ? commands : []
+        } catch (error) {
+            logger.debug('[Claude SDK] supportedCommands failed:', error)
+            return []
+        } finally {
+            clearTimeout(timer)
+        }
     }
 
     /**

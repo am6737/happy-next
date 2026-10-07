@@ -96,6 +96,7 @@ export interface SDKControlResponse extends SDKMessage {
         request_id: string
         subtype: 'success' | 'error'
         error?: string
+        response?: unknown
     }
 }
 
@@ -121,6 +122,19 @@ export interface InterruptRequest extends ControlRequest {
 export interface SetPermissionModeRequest extends ControlRequest {
     subtype: 'set_permission_mode'
     mode: 'default' | 'acceptEdits' | 'auto' | 'bypassPermissions' | 'plan'
+}
+
+export interface InitializeRequest extends ControlRequest {
+    subtype: 'initialize'
+}
+
+/** A slash command / skill as reported by Claude Code's `initialize` control response. */
+export interface SDKCommandInfo {
+    name: string
+    description?: string
+    argumentHint?: string
+    aliases?: string[]
+    builtin?: boolean
 }
 
 export interface SetModelRequest extends ControlRequest {
