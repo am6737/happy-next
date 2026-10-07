@@ -18,7 +18,8 @@ type RailButtonProps = {
     onPress: () => void;
     online?: boolean;
     dot?: Dot;
-    // An action rather than a scope: no tile behind it until hovered or shown.
+    // An action rather than a scope: no tile behind it until hovered or shown, and only the plain tile
+    // when shown, so it never reads as a second scope picked beside the machine.
     plain?: boolean;
     children: React.ReactNode;
 };
@@ -34,7 +35,7 @@ const RailButton = React.memo(({ label, active, onPress, online, dot = 'none', p
     const styles = stylesheet;
     return (
         <View style={styles.buttonSlot}>
-            {active && <View style={styles.activeIndicator} />}
+            {active && !plain && <View style={styles.activeIndicator} />}
             <Pressable
                 ref={setTooltip(label)}
                 accessibilityRole="button"
@@ -44,7 +45,7 @@ const RailButton = React.memo(({ label, active, onPress, online, dot = 'none', p
                 style={({ hovered, pressed }: any) => [
                     styles.button,
                     plain && !active && !hovered && !pressed && styles.buttonPlain,
-                    active && styles.buttonActive,
+                    active && !plain && styles.buttonActive,
                     // An offline machine steps back so the online ones stand out, unless it is the one shown.
                     online === false && !active && !hovered && styles.buttonOffline,
                 ]}
@@ -162,7 +163,7 @@ export const MachineRail = React.memo(({
                         source={require('@/assets/images/navigation/setting.png')}
                         contentFit="contain"
                         style={{ width: 20, height: 20 }}
-                        tintColor={iconColor(settingsActive)}
+                        tintColor={theme.colors.text}
                     />
                 </RailButton>
             </View>
