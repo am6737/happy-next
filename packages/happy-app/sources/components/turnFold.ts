@@ -12,6 +12,8 @@ export type SegmentFoldControl = {
     folded: boolean;
     /** Tool calls the line counts. */
     steps: number;
+    /** The oldest of them, whose icon the line wears. */
+    firstStepId: string;
     /** The turn has got no further than this run, so the line says what it is doing. */
     running: boolean;
     /** The rest of the run, which is what the line hides while it is folded. */
@@ -37,25 +39,32 @@ export type TurnFoldSetting = boolean;
  * Nothing else folds. Words are the reply itself rather than the way to it, so a turn that has only
  * written is left as it was written, however much of it there is.
  *
- * Which of the two the setting decides depends on the turn's shape. A turn that is one run of steps
- * has one line, and the setting decides whether it starts folded. A turn the agent's words split into
- * several runs has a line for each run — those start as the setting says — and the turn's own line
- * above them is the whole turn at once, which starts open: the runs are what the setting folds, and
- * the line above them is for the reader who wants the lot gone. Either way a tap decides this line:
- * an explicit toggle outranks the default, so one the reader opened stays open.
+ * Only the conversation's newest turn lays its process out in runs. A turn that is one run of steps
+ * has one line, and the setting decides whether it starts folded. A newest turn the agent's words
+ * split into several runs has a line for each run — those start as the setting says — and the turn's
+ * own line above them is the whole turn at once, which starts open: the runs are what the setting
+ * folds, and the line above them is for the reader who wants the lot gone.
+ *
+ * Every older turn is history and starts as its one line, split or not, as the setting says. That
+ * shape depends on nothing but which turn is newest — not on how much history is loaded, nor on
+ * whether the turn has settled — so a turn never changes shape under the reader except when a new
+ * turn begins below it. Either way a tap decides this line: an explicit toggle outranks the default,
+ * so one the reader opened stays open.
  */
 export function turnFoldControl(params: {
     process: TurnProcess;
     enabled: TurnFoldSetting;
     /** What the reader last chose for this turn, if they have touched it. */
     override: boolean | undefined;
+    /** Whether this is the conversation's newest turn. Defaults to true. */
+    newest?: boolean;
 }): TurnFoldControl | null {
-    const { process, enabled, override } = params;
+    const { process, enabled, override, newest = true } = params;
     // `steps` counts the tool calls whose row the line takes, the row it is drawn on included: a turn
     // that opens with a tool call gets its line from that first step, and one that has only written so
     // far has no step to fold.
     if (process.steps === 0) return null;
-    const split = process.segments.length > 0;
+    const split = newest && process.segments.length > 0;
     return { folded: override ?? (split ? false : enabled), steps: process.steps };
 }
 
@@ -71,6 +80,7 @@ export function segmentFoldControl(params: {
     return {
         folded: override ?? enabled,
         steps: segment.steps,
+        firstStepId: segment.firstStepId,
         running: segment.running,
         hiddenIds: segment.hiddenIds,
         turnFolded,
@@ -99,13 +109,24 @@ export function resolveTurnFolding(params: {
     turnOverrides: ReadonlyMap<string, boolean>;
     /** Taps on a run's line, keyed by the run's first row. */
     segmentOverrides: ReadonlyMap<string, boolean>;
+    /**
+     * `TurnAnalysis.newestHeaderId`: the one turn that lays its process out in runs. Null when the
+     * newest turn has no line of its own, so every turn here is history; left out, every turn is
+     * treated as the newest.
+     */
+    newestHeaderId?: string | null;
 }): TurnFoldResolution {
-    const { foldById, enabled, turnOverrides, segmentOverrides } = params;
+    const { foldById, enabled, turnOverrides, segmentOverrides, newestHeaderId } = params;
     const controlByHeaderId = new Map<string, TurnFoldControl>();
     const segmentControlByStartId = new Map<string, SegmentFoldControl>();
     const hiddenIds = new Set<string>();
     for (const [headerId, process] of foldById) {
-        const control = turnFoldControl({ process, enabled, override: turnOverrides.get(headerId) });
+        const control = turnFoldControl({
+            process,
+            enabled,
+            override: turnOverrides.get(headerId),
+            newest: newestHeaderId === undefined || newestHeaderId === headerId,
+        });
         if (control === null) continue;
         controlByHeaderId.set(headerId, control);
         for (const segment of process.segments) {

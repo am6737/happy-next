@@ -502,12 +502,28 @@ describe('folded turns', () => {
 
 describe('runs of steps inside a folded turn', () => {
     function segments(result: ReturnType<typeof analyzeTurns>, headerId: string) {
-        return result.foldById.get(headerId)?.segments;
+        return result.foldById.get(headerId)?.segments.map(({ firstStepId: _firstStepId, ...run }) => run);
     }
 
     function thinking(id: string, createdAt: number): Message {
         return agent(id, createdAt, { isThinking: true });
     }
+
+    it('names each run by its oldest tool call, past any thinking it opens with', () => {
+        const result = analyze([
+            agent('a1', 90),
+            tool('t5', 70),
+            thinking('k2', 65),
+            agent('mid', 60),
+            tool('t2', 45),
+            thinking('k1', 40),
+            user('u1', 10),
+        ]);
+        expect(result.foldById.get('k1')?.segments.map((run) => [run.startId, run.firstStepId])).toEqual([
+            ['k1', 't2'],
+            ['k2', 't5'],
+        ]);
+    });
 
     it('splits a turn at the words the agent wrote between its steps', () => {
         // Oldest first: three steps, a line of narration, two more steps, then the report.

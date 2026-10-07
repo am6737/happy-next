@@ -20,6 +20,7 @@ function segment(startId: string, hidden: string[] = [], running = false): TurnS
         startId,
         hiddenIds: hidden,
         steps: hidden.length + 1,
+        firstStepId: startId,
         snapshotId: hidden.length > 0 ? hidden[hidden.length - 1] : startId,
         running,
     };
@@ -92,7 +93,7 @@ describe('segmentFoldControl', () => {
 
     it('starts as the setting says', () => {
         expect(segmentFoldControl({ segment: run, enabled: true, override: undefined, turnFolded: false }))
-            .toEqual({ folded: true, steps: 2, running: true, hiddenIds: ['b'], turnFolded: false });
+            .toEqual({ folded: true, steps: 2, firstStepId: 'a', running: true, hiddenIds: ['b'], turnFolded: false });
         expect(segmentFoldControl({ segment: run, enabled: false, override: undefined, turnFolded: false }).folded)
             .toBe(false);
     });
@@ -154,6 +155,44 @@ describe('resolveTurnFolding', () => {
         expect(folding.controlByHeaderId.get('h')?.folded).toBe(true);
         expect(folding.segmentControlByStartId.size).toBe(0);
         expect([...folding.hiddenIds]).toEqual(single.hiddenIds);
+    });
+});
+
+describe('resolveTurnFolding by the newest turn', () => {
+    const split = () => process(5, 4, [segment('a', ['a1']), segment('a2', ['a3'])]);
+    const resolve = (newestHeaderId: string | null) => resolveTurnFolding({
+        foldById: new Map([['old', process(5, 4, [segment('old', ['o1']), segment('o2', ['o3'])])], ['a', split()]]),
+        newestHeaderId,
+        enabled: true,
+        turnOverrides: new Map(),
+        segmentOverrides: new Map(),
+    });
+
+    it('opens only the newest turn in runs and folds every older one to its line', () => {
+        const folding = resolve('a');
+        expect(folding.controlByHeaderId.get('a')?.folded).toBe(false);
+        expect(folding.controlByHeaderId.get('old')?.folded).toBe(true);
+        // The older turn hides its whole process; the newest hides only what its folded runs hide.
+        expect(folding.hiddenIds.has('row-0')).toBe(true);
+        expect(folding.hiddenIds.has('a1')).toBe(true);
+        expect(folding.hiddenIds.has('a2')).toBe(false);
+    });
+
+    it('folds every turn to its line when the newest turn has no line of its own', () => {
+        const folding = resolve(null);
+        expect(folding.controlByHeaderId.get('a')?.folded).toBe(true);
+        expect(folding.controlByHeaderId.get('old')?.folded).toBe(true);
+    });
+
+    it('still lets a tap open an older turn', () => {
+        const folding = resolveTurnFolding({
+            foldById: new Map([['old', split()], ['a', split()]]),
+            newestHeaderId: 'a',
+            enabled: true,
+            turnOverrides: new Map([['old', false]]),
+            segmentOverrides: new Map(),
+        });
+        expect(folding.controlByHeaderId.get('old')?.folded).toBe(false);
     });
 });
 

@@ -64,6 +64,9 @@ export const TurnHeader = React.memo((props: {
     const divide = props.divide ?? true;
     const folded = fold?.folded ?? false;
     const running = completedAt === null;
+    // A fold line under the pointer lights up its label and chevron: text over textSecondary is the
+    // stronger of the two in either theme (darker on light, lighter on dark).
+    const [hovered, setHovered] = React.useState(false);
 
     // One glyph that turns, rather than two icons swapped: this row is the thing the reader just
     // tapped, and a swap reads as a jump. `Animated` with the native driver, not Reanimated — see
@@ -114,12 +117,15 @@ export const TurnHeader = React.memo((props: {
     // Inert means there is nothing here to do, not that the turn is busy: react-native-web answers a
     // disabled Pressable with `pointer-events: none`, so a running turn's fold would be untappable.
     const inert = onPress === undefined;
+    const lit = foldable && hovered;
 
     return (
         <Pressable
             style={[styles.row, !divide && styles.rowUndivided]}
             onPress={onPress}
             onLongPress={onLongPress}
+            onHoverIn={fold !== undefined ? () => setHovered(true) : undefined}
+            onHoverOut={fold !== undefined ? () => setHovered(false) : undefined}
             disabled={inert}
             accessibilityRole={foldable ? 'button' : undefined}
             accessibilityState={foldable ? { expanded: !folded } : undefined}
@@ -129,10 +135,10 @@ export const TurnHeader = React.memo((props: {
         >
             {foldable && (
                 <Animated.View style={[styles.chevron, { transform: [{ rotate: rotation }] }]}>
-                    <Ionicons name="chevron-down" size={12} color={theme.colors.textSecondary} />
+                    <Ionicons name="chevron-down" size={12} color={lit ? theme.colors.text : theme.colors.textSecondary} />
                 </Animated.View>
             )}
-            <Text style={styles.text} numberOfLines={1}>{label}</Text>
+            <Text style={[styles.text, lit && styles.textLit]} numberOfLines={1}>{label}</Text>
             {foldable && fold.snapshot ? (
                 running ? (
                     // What the turn is doing right now is the long part of the line, and it is the
@@ -199,6 +205,9 @@ const styles = StyleSheet.create((theme) => ({
         color: theme.colors.textSecondary,
         // The cost of the process is short and is the line's own subject, so it never gives way.
         flexShrink: 0,
+    },
+    textLit: {
+        color: theme.colors.text,
     },
     // Everything the line has left goes to the snapshot, which is the part long enough to need
     // cutting. minWidth keeps it from refusing to shrink below its content on web.

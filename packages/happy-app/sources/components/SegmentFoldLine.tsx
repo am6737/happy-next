@@ -1,16 +1,20 @@
 import * as React from 'react';
-import { Animated, Easing, Pressable, Text } from 'react-native';
+import { Animated, Easing, Pressable, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { t } from '@/text';
 import { TextShimmer } from './TextShimmer';
 import { FoldDelegatedMark } from './FoldDelegatedMark';
+import { ToolCall } from '@/sync/typesMessage';
+import { toolIcon } from './tools/toolIcon';
 
 /** How long the chevron takes to swing between open and folded. Matches the turn's own line. */
 const CHEVRON_TURN_MS = 180;
 
 /**
- * The line a run of steps folds to: a chevron and how many steps it ran, tap to open or close.
+ * The line a run of steps folds to: the icon of its first step and how many steps it ran, tap to open
+ * or close. The chevron after the label says so while the pointer is on the line, and stays while the
+ * run is open, as the way back.
  *
  * It is the turn line's smaller sibling and looks like it, minus the clock and the hairline — the
  * turn's line is what the turn cost and what divides it from the answer, while this one sits between
@@ -21,6 +25,8 @@ export const SegmentFoldLine = React.memo((props: {
     folded: boolean;
     /** Tool calls the run holds. */
     steps: number;
+    /** The oldest of them, whose icon the line opens with. */
+    tool?: ToolCall;
     /** What the run is doing right now. Only a run still going has one, and only while folded. */
     snapshot?: string;
     /**
@@ -32,7 +38,9 @@ export const SegmentFoldLine = React.memo((props: {
     onToggle: () => void;
 }) => {
     const { theme } = useUnistyles();
-    const { folded, steps, snapshot, delegated, running, onToggle } = props;
+    const { folded, steps, tool, snapshot, delegated, running, onToggle } = props;
+
+    const [hovered, setHovered] = React.useState(false);
 
     // One glyph that turns, rather than two icons swapped, and with the native driver for the same
     // reason the turn's line does it: see TurnHeader.
@@ -46,6 +54,10 @@ export const SegmentFoldLine = React.memo((props: {
         }).start();
     }, [folded, turn]);
     const rotation = turn.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '-90deg'] });
+    // Hidden by opacity, not taken out: the chevron keeps its room, so showing it moves nothing.
+    const chevronShown = hovered || !folded;
+    // Under the pointer the label and both glyphs light up, as the turn's line does.
+    const glyphColor = hovered ? theme.colors.text : theme.colors.textSecondary;
 
     // Said the same folded or open: what the line reports is the run, not the state of the line.
     const label = running ? t('message.segmentRunning', { steps }) : t('message.segmentSteps', { steps });
@@ -54,14 +66,21 @@ export const SegmentFoldLine = React.memo((props: {
         <Pressable
             style={styles.row}
             onPress={onToggle}
+            onHoverIn={() => setHovered(true)}
+            onHoverOut={() => setHovered(false)}
             accessibilityRole="button"
             accessibilityState={{ expanded: !folded }}
             accessibilityLabel={`${label}. ${folded ? t('message.expandProcess') : t('message.foldProcess')}`}
         >
-            <Animated.View style={[styles.chevron, { transform: [{ rotate: rotation }] }]}>
-                <Ionicons name="chevron-down" size={12} color={theme.colors.textSecondary} />
+            <View style={styles.icon}>
+                {tool
+                    ? toolIcon(tool, 12, glyphColor)
+                    : <Ionicons name="construct-outline" size={12} color={glyphColor} />}
+            </View>
+            <Text style={[styles.text, hovered && styles.textLit]} numberOfLines={1}>{label}</Text>
+            <Animated.View style={[styles.chevron, { opacity: chevronShown ? 1 : 0, transform: [{ rotate: rotation }] }]}>
+                <Ionicons name="chevron-down" size={12} color={glyphColor} />
             </Animated.View>
-            <Text style={styles.text} numberOfLines={1}>{label}</Text>
             {snapshot ? (
                 running ? (
                     <TextShimmer
@@ -88,8 +107,15 @@ const styles = StyleSheet.create((theme) => ({
         gap: 5,
         paddingVertical: 4,
     },
-    chevron: {
+    // The icon leans left a little: at this size a bare glyph floats in from the margin, and the
+    // label is what the line is for.
+    icon: {
         marginLeft: -2,
+        width: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    chevron: {
         width: 12,
         alignItems: 'center',
         justifyContent: 'center',
@@ -98,6 +124,9 @@ const styles = StyleSheet.create((theme) => ({
         fontSize: 13,
         color: theme.colors.textSecondary,
         flexShrink: 0,
+    },
+    textLit: {
+        color: theme.colors.text,
     },
     snapshot: {
         flexShrink: 1,

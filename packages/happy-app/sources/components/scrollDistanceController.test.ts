@@ -206,4 +206,34 @@ describe('scroll distance controller', () => {
         harness.controller.setDistancePx(5200);
         expect(harness.controller.getRequestedDistancePx()).toBeCloseTo(5200, 6);
     });
+
+    it('follows a scroll nobody announced, so the next correction starts where the reader is', () => {
+        // A script's smooth scroll, or the engine still animating a wheel after its last event: no
+        // input reaches the list, only scroll events. The intent from an earlier write must not
+        // survive them, or the next measurement writes the reader back to where they started.
+        const harness = createHarness({ contentHeightPx: 9000, gridPx: 1 / 1.25, startDistancePx: 1234.6 });
+        expect(harness.controller.getRequestedDistancePx()).toBeCloseTo(1234.6, 6);
+        harness.scroller.el.scrollTop = -4000;
+        expect(harness.controller.noteScrollEvent().moved).toBe(true);
+        expect(harness.controller.getRequestedDistancePx()).toBeCloseTo(4000, 6);
+        harness.controller.setDistancePx(harness.controller.getRequestedDistancePx() + 120);
+        expect(harness.controller.readDistancePx()).toBeCloseTo(4120, 6);
+    });
+
+    it('keeps the intent through the scroll event that echoes our own write', () => {
+        const harness = createHarness({ contentHeightPx: 9000, gridPx: 1 / 1.25, startDistancePx: 0 });
+        harness.controller.setDistancePx(1234.6);
+        expect(harness.controller.noteScrollEvent().moved).toBe(false);
+        expect(harness.controller.getRequestedDistancePx()).toBeCloseTo(1234.6, 6);
+    });
+
+    it('starts a same-commit correction from the distance before the clamp, not a fresh read', () => {
+        // A fold shrinks the range inside the commit; the engine clamps before any scroll event.
+        const harness = createHarness({ contentHeightPx: 19741, startDistancePx: 0 });
+        harness.scroller.el.scrollTop = -18743;
+        harness.controller.noteScrollEvent();
+        harness.scroller.setContentHeightPx(2088);
+        harness.scroller.el.scrollTop = -18743;
+        expect(harness.controller.getRequestedDistancePx()).toBeCloseTo(18743, 6);
+    });
 });

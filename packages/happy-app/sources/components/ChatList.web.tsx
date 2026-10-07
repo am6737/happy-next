@@ -11,7 +11,7 @@ import { MessageView } from './MessageView';
 import { ConversationMinimapItem } from './ConversationMinimap';
 import { Metadata, Session } from '@/sync/storageTypes';
 import { ChatFooter } from './ChatFooter';
-import { AskUserQuestionMessage, isAskUserQuestionToolCall, isPreviewHtmlToolCall, Message, MinimapMessage, PreviewHtmlMessage, toAskUserQuestionMessage, toPreviewHtmlMessage, UserTextMessage } from '@/sync/typesMessage';
+import { AskUserQuestionMessage, isAskUserQuestionToolCall, isPreviewHtmlToolCall, Message, MinimapMessage, PreviewHtmlMessage, toAskUserQuestionMessage, toPreviewHtmlMessage, ToolCall, UserTextMessage } from '@/sync/typesMessage';
 import { currentLandmark, foldMustKeepMessage, railLandmarkRows, shouldHideMessageInChatList, shouldHideMessageInMinimap, type LandmarkRow } from './chatListVisibility';
 import { foldedLineKeepsRow } from './turnFold';
 import { turnHeaderProps, useTurnAnalysis } from './messageTurnTiming';
@@ -106,6 +106,13 @@ import {
 // The virtualizer model uses chronological (oldest-first) keys, mapped by
 // index arithmetic at the render boundary.
 
+/** The call a run's first step made, for the run's line to wear its icon. */
+function toolOfRow(id: string | null | undefined, messageById: ReadonlyMap<string, Message>): ToolCall | undefined {
+    if (id == null) return undefined;
+    const row = messageById.get(id);
+    return row?.kind === 'tool-call' ? row.tool : undefined;
+}
+
 // --- Keep in sync with ChatList.tsx (duplicated to avoid a self-resolving
 // platform import: './ChatList' resolves back to this file on web) ---
 
@@ -175,6 +182,8 @@ const ListFooter = React.memo((props: { sessionId: string }) => {
 // Distance from the bottom (px) within which the list counts as "at bottom":
 // hides the scroll button and keeps the viewport glued to streaming output.
 const SCROLL_THRESHOLD = 100;
+/** Quiet time after the last scroll event that counts as rest where `scrollend` does not arrive. */
+const CANVAS_HOLD_IDLE_MS = 200;
 const SHOW_SCROLL_BUTTON_DELAY_MS = 300;
 // Inside the glue band but not exactly at 0, an upward touchpad gesture moves
 // only a few px per frame; snapping back to the bottom mid-gesture would trap
@@ -227,6 +236,20 @@ const MAX_JUMP_ATTEMPTS = 12;
 const WRITE_VERIFY_TOLERANCE_PX = 1;
 /** Frames a refused write waits for the box to catch up before taking the end of the range. */
 const WRITE_VERIFY_MAX_CHECKS = 6;
+// A row's height as the model stores it: the border box, snapped to the device pixel grid the
+// engine lays boxes out on. Every path that measures a row goes through here — the observer, the
+// pre-paint pass, a jump, a fold settling — so a row that remounts measures to exactly the number
+// the model already holds and nothing moves. Two readings of one row that differ by a rounding
+// (an integer `offsetHeight` against a fractional observer box) are each a correction, and on a
+// row entering the window mid-scroll each correction is a scroll write that interrupts the scroll.
+function snapToDevicePixels(px: number): number {
+    const scale = typeof window !== 'undefined' && window.devicePixelRatio > 0 ? window.devicePixelRatio : 1;
+    return Math.round(px * scale) / scale;
+}
+function measureRowHeightPx(el: HTMLElement): number {
+    return snapToDevicePixels(el.getBoundingClientRect().height);
+}
+
 // Keys the browser turns into native scrolling of the hovered/focused scroller.
 const SCROLL_KEYS = new Set(['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' ']);
 // Post-jump feedback: horizontal shake on the target row.
@@ -421,6 +444,7 @@ const ChatRow = React.memo((props: {
     segmentFolded: boolean | undefined,
     segmentKeepsRow: boolean,
     segmentSteps: number | undefined,
+    segmentTool: ToolCall | undefined,
     segmentSnapshot: string | undefined,
     segmentDelegated: string | null | undefined,
     segmentRunning: boolean,
@@ -470,6 +494,7 @@ const ChatRow = React.memo((props: {
                     segmentFolded={props.segmentFolded}
                     segmentKeepsRow={props.segmentKeepsRow}
                     segmentSteps={props.segmentSteps}
+                    segmentTool={props.segmentTool}
                     segmentSnapshot={props.segmentSnapshot}
                     segmentDelegated={props.segmentDelegated}
                     segmentRunning={props.segmentRunning}
@@ -585,7 +610,11 @@ const ChatListInternal = React.memo((props: {
     // would have to be measured again on its way back and everything below it would move while it
     // happened. A row that is still there at zero height keeps its measurement, and can grow back
     // from it — which is also what an expand animation needs to know its endpoint.
-    const folding = useTurnFolding({ foldById: turns.foldById, enabled: foldTurnProcess });
+    const folding = useTurnFolding({
+        foldById: turns.foldById,
+        newestHeaderId: turns.newestHeaderId,
+        enabled: foldTurnProcess,
+    });
     // Runs of this session with a delegated task still going, for the folded lines that hide their submit.
     const activeOrchestratorRunIds = useOrchestratorActiveRunIds(props.sessionId);
     const delegatedMore = (title: string, count: number) => t('message.delegatedMore', { title, count });
@@ -776,11 +805,10 @@ const ChatListInternal = React.memo((props: {
     viewportRef.current = viewport;
 
     // ---- Canvas geometry (architecture note 3) ----
-    // Derived, never stored: the canvas is the model plus the fill a short conversation needs to sit
-    // at the bottom of the viewport. With no frozen state there is nothing to re-sync, and the
-    // scroll range always covers the content — a range change can never strand the viewport outside
-    // it. Both inputs are state, so this re-derives in the same commit that resized either.
-    const canvasHeightPx = Math.max(
+    // Derived: the canvas is the model plus the fill a short conversation needs to sit at the bottom
+    // of the viewport. Both inputs are state, so this re-derives in the same commit that resized
+    // either.
+    const naturalCanvasHeightPx = Math.max(
         layout.totalHeightPx,
         minimumCanvasHeightPx({
             viewportHeightPx: viewport.viewportHeightPx,
@@ -788,6 +816,33 @@ const ChatListInternal = React.memo((props: {
             footerHeightPx,
         }),
     );
+    // ...except while the scroller is moving on its own (a wheel's animation, a script's smooth
+    // scroll, a drag). Chrome keeps a column-reverse smooth scroll's target in top-based
+    // coordinates, so content growing above the viewport mid-animation (a page loading) moves the
+    // landing by exactly that growth. Holding the canvas height until the scroller comes to rest
+    // keeps scrollHeight still; the rows stay placed by their distance from the bottom, the top of
+    // the content is clipped meanwhile, and the release grows the canvas at the top, which
+    // column-reverse never shows as movement.
+    const [, setCanvasHoldReleases] = useState(0);
+    const canvasHoldPxRef = useRef<number | null>(null);
+    const canvasHoldTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const canvasHeightPx = canvasHoldPxRef.current ?? naturalCanvasHeightPx;
+    const renderedCanvasHeightPxRef = useRef(canvasHeightPx);
+    renderedCanvasHeightPxRef.current = canvasHeightPx;
+    const releaseCanvasHold = useCallback(() => {
+        if (canvasHoldTimerRef.current != null) clearTimeout(canvasHoldTimerRef.current);
+        canvasHoldTimerRef.current = null;
+        if (canvasHoldPxRef.current == null) return;
+        canvasHoldPxRef.current = null;
+        setCanvasHoldReleases((n) => n + 1);
+    }, []);
+    const holdCanvasWhileMoving = useCallback(() => {
+        canvasHoldPxRef.current ??= renderedCanvasHeightPxRef.current;
+        // scrollend ends the hold; the timer covers engines without it and motion that never ends
+        // in one (a write of ours cutting an animation short).
+        if (canvasHoldTimerRef.current != null) clearTimeout(canvasHoldTimerRef.current);
+        canvasHoldTimerRef.current = setTimeout(releaseCanvasHold, CANVAS_HOLD_IDLE_MS);
+    }, [releaseCanvasHold]);
 
     const [pendingJump, setPendingJump] = useState<PendingJump | null>(null);
     const pendingJumpRef = useRef<PendingJump | null>(null);
@@ -797,14 +852,6 @@ const ChatListInternal = React.memo((props: {
     // Far in the past — `performance.now()` starts near 0, so initializing to 0
     // would count the first 400ms of page life as "user is scrolling".
     const lastUserInputAtRef = useRef(-1e9);
-    // The same, for their SCROLLING input only — a wheel, a drag, a scroll key — and not the tap
-    // that opens a fold. Together with `lastDistanceWriteAtRef` it decides whether an offset the
-    // scroller reports is where the reader is, or one the engine clamped on its own: see
-    // `handleScroll` and the layout effect that absorbs a fold.
-    const lastScrollInputAtRef = useRef(-1e9);
-    // When we last wrote the distance ourselves. A write the reader's input predates is ours to
-    // answer for — they have not moved since we placed them.
-    const lastDistanceWriteAtRef = useRef(-1e9);
     // A write the engine refused, waiting for the box to catch up (see `verifyPendingWrite`).
     const pendingWriteVerifyRef = useRef<PendingWriteVerify | null>(null);
     // Raw |scrollTop| target of a pending session restore; re-asserted after
@@ -879,7 +926,6 @@ const ChatListInternal = React.memo((props: {
         // remembered rather than lost (see scrollDistanceRef above).
         const actual = scrollDistance.setDistancePx(raw);
         const atMs = performance.now();
-        lastDistanceWriteAtRef.current = atMs;
         atBottomRef.current = actual <= SCROLL_THRESHOLD;
         lastVisibleRawRef.current = actual;
         // A refusal is not an answer (see `settleRefusedWrite`): hold the request until the box has
@@ -907,9 +953,9 @@ const ChatListInternal = React.memo((props: {
             pendingWriteVerifyRef.current = null;
             return true;
         }
-        // The reader scrolled by hand after the write: their position is the truth (the scroll
-        // handler adopted it), not a request we are still waiting on.
-        if (lastScrollInputAtRef.current > armed.atMs) {
+        // The scroller moved since the write — the reader, or a script — so the scroll handler has
+        // taken where it is as the distance, and the request is no longer anyone's.
+        if (Math.abs(getRequestedRawDistance() - armed.askedRawPx) > WRITE_VERIFY_TOLERANCE_PX) {
             pendingWriteVerifyRef.current = null;
             return true;
         }
@@ -1067,8 +1113,6 @@ const ChatListInternal = React.memo((props: {
         const onWheel = () => {
             proxyScrollIntentRef.current.input(performance.now());
             proxySelfWriteRef.current = null;
-            // A wheel here is the reader scrolling the list, whoever ends up moving the offset.
-            lastScrollInputAtRef.current = performance.now();
         };
         const onKeyDown = (event: KeyboardEvent) => {
             if (SCROLL_KEYS.has(event.key)) onWheel();
@@ -1350,7 +1394,8 @@ const ChatListInternal = React.memo((props: {
                 const key = keyByElementRef.current.get(entry.target);
                 if (key == null) continue;
                 const el = entry.target as HTMLElement;
-                const heightPx = entry.borderBoxSize?.[0]?.blockSize ?? el.offsetHeight;
+                const boxPx = entry.borderBoxSize?.[0]?.blockSize;
+                const heightPx = boxPx != null ? snapToDevicePixels(boxPx) : measureRowHeightPx(el);
                 if (heightPx > 0) batch.set(key, { element: el as HTMLDivElement, heightPx });
             }
             // ResizeObserver callbacks run before paint; flushSync commits the
@@ -1471,19 +1516,13 @@ const ChatListInternal = React.memo((props: {
         }
         // First visible event after a covered period: restore, don't record.
         if (maybeHandleReshowRef.current()) return;
-        // The reader's own scroll, and the only thing that moves the distance we own. Two conditions,
-        // because a scroll event is not evidence of a reader: the engine clamps the offset when a
-        // layout shrinks under the viewport — a fold takes thousands of pixels off the canvas in one
-        // commit — and accepting that clamp as their position is what used to throw the viewport to
-        // the bottom of the conversation with the line they tapped gone off the screen. So the input
-        // has to be theirs (a wheel, a drag, a scroll key: never the tap that opens a fold, which is
-        // a `pointerdown` and nothing more) and newer than our last write, which is the one that
-        // would have moved the offset since.
-        if (lastScrollInputAtRef.current > lastDistanceWriteAtRef.current
-            && performance.now() - lastScrollInputAtRef.current < USER_SCROLL_GRACE_MS) {
-            scrollDistance.adoptReportedDistancePx();
-        }
-        const raw = Math.abs(scroller.scrollTop);
+        // Whatever moved the scroller — a wheel, the engine animating that wheel's gesture, a script's
+        // smooth scroll, a drag — where it now is is where the reader is, and the next correction
+        // starts from there. Only the echo of our own write keeps the distance we asked for (see
+        // scrollDistanceController.ts). A clamp inside a commit never gets this far: the correction
+        // that commit makes runs before the event, from the distance the reader was at.
+        const { distancePx: raw, moved } = scrollDistance.noteScrollEvent();
+        if (moved) holdCanvasWhileMoving();
         lastVisibleRawRef.current = raw;
         const atBottom = raw <= SCROLL_THRESHOLD;
         atBottomRef.current = atBottom;
@@ -1522,26 +1561,21 @@ const ChatListInternal = React.memo((props: {
             // top of the scroll range (where scroll events go silent) — it must
             // still be able to keep paging.
             const onWheel = () => {
-                lastScrollInputAtRef.current = performance.now();
                 maybeHandleReshowRef.current();
                 onUserInput();
                 maybeLoadMoreRef.current();
             };
-            // A drag scrolls the list exactly as a wheel does, and only its moves say so: the
-            // pointer/touch START is also what a tap on a row is, and a tap moves nobody.
-            const onTouchMove = () => {
-                lastScrollInputAtRef.current = performance.now();
-            };
             el.addEventListener('scroll', onScroll, { passive: true });
+            el.addEventListener('scrollend', releaseCanvasHold, { passive: true });
             el.addEventListener('wheel', onWheel, { passive: true });
             el.addEventListener('touchstart', onUserInput, { passive: true });
-            el.addEventListener('touchmove', onTouchMove, { passive: true });
             el.addEventListener('pointerdown', onUserInput, { passive: true });
             detachScrollerListenersRef.current = () => {
                 el.removeEventListener('scroll', onScroll);
+                el.removeEventListener('scrollend', releaseCanvasHold);
                 el.removeEventListener('wheel', onWheel);
+                releaseCanvasHold();
                 el.removeEventListener('touchstart', onUserInput);
-                el.removeEventListener('touchmove', onTouchMove);
                 el.removeEventListener('pointerdown', onUserInput);
             };
             if (typeof ResizeObserver !== 'undefined') {
@@ -1567,7 +1601,7 @@ const ChatListInternal = React.memo((props: {
             visibleIdsRef.current.clear();
         }
         ensureIntersectionObserver();
-    }, [ensureIntersectionObserver]);
+    }, [ensureIntersectionObserver, releaseCanvasHold]);
 
     // Footer block at the content bottom: its height is the raw↔model offset, and its growth below
     // a scrolled-up viewport must be compensated (at the bottom, scrollTop 0 tracks it
@@ -1577,7 +1611,7 @@ const ChatListInternal = React.memo((props: {
         footerResizeObserverRef.current?.disconnect();
         footerResizeObserverRef.current = null;
         if (!el) return;
-        const measured = el.offsetHeight;
+        const measured = measureRowHeightPx(el);
         if (measured > 0 && measured !== footerHeightRef.current) {
             footerHeightRef.current = measured;
             setFooterHeightPx(measured);
@@ -1591,7 +1625,8 @@ const ChatListInternal = React.memo((props: {
             // re-display resize computes its delta against it (usually 0).
             const scrollerNow = scrollerElRef.current;
             if (!scrollerNow || scrollerNow.clientHeight === 0) return;
-            const height = entry.borderBoxSize?.[0]?.blockSize ?? el.offsetHeight;
+            const boxPx = entry.borderBoxSize?.[0]?.blockSize;
+            const height = boxPx != null ? snapToDevicePixels(boxPx) : measureRowHeightPx(el);
             const prev = footerHeightRef.current;
             footerHeightRef.current = height;
             setFooterHeightPx(height);
@@ -1876,8 +1911,8 @@ const ChatListInternal = React.memo((props: {
         updateViewportRef.current(shiftedRawPx, scroller.clientHeight);
     }, [layout]);
 
-    // 2. Synchronous first measurement of rows mounted this commit. Reading
-    // offsetHeight here (pre-paint) feeds real sizes into the model before the
+    // 2. Synchronous first measurement of rows mounted this commit. Measuring
+    // here (pre-paint) feeds real sizes into the model before the
     // user can ever see the constrained placeholder.
     React.useLayoutEffect(() => {
         const pending = pendingFirstMeasureRef.current;
@@ -1886,7 +1921,7 @@ const ChatListInternal = React.memo((props: {
         const batch = new Map<string, { element: HTMLElement; heightPx: number }>();
         for (const [key, el] of pending) {
             if (rowElsByKeyRef.current.get(key) !== el) continue;
-            const height = el.offsetHeight;
+            const height = measureRowHeightPx(el);
             if (height > 0) batch.set(key, { element: el, heightPx: height });
         }
         if (batch.size > 0 && applyMeasuredHeightsRef.current(batch, false)) {
@@ -1919,10 +1954,10 @@ const ChatListInternal = React.memo((props: {
         for (const row of settledRows) {
             const el = rowElsByKeyRef.current.get(row.key);
             if (!el) continue;
-            // The border box the observer would have reported, unrounded: the row's own box — the
-            // element the observer watches, which the clip never reached — never the number the
-            // animation was writing, which was never a measurement of anything.
-            const heightPx = el.getBoundingClientRect().height;
+            // The border box the observer would have reported: the row's own box — the element the
+            // observer watches, which the clip never reached — never the number the animation was
+            // writing, which was never a measurement of anything.
+            const heightPx = measureRowHeightPx(el);
             if (heightPx > 0) batch.set(row.key, { element: el, heightPx });
         }
         if (batch.size > 0) applyMeasuredHeightsRef.current(batch, false);
@@ -1980,7 +2015,7 @@ const ChatListInternal = React.memo((props: {
         if (!scroller) return;
         const batch = new Map<string, { element: HTMLElement; heightPx: number }>();
         for (const [key, el] of rowElsByKeyRef.current) {
-            const height = el.offsetHeight;
+            const height = measureRowHeightPx(el);
             if (height > 0) batch.set(key, { element: el, heightPx: height });
         }
         // If measuring staged a commit, wait for it — this effect re-runs with
@@ -2038,7 +2073,6 @@ const ChatListInternal = React.memo((props: {
             const target = event.target as HTMLElement | null;
             if (target && (target.isContentEditable || target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
             lastUserInputAtRef.current = performance.now();
-            lastScrollInputAtRef.current = performance.now();
             pendingRestoreRef.current = null;
             cancelScrollAnimation();
             // Same duty as the wheel listener: at the top of the scroll range
@@ -2329,6 +2363,7 @@ const ChatListInternal = React.memo((props: {
                 segmentFolded={segmentShown ? segment.folded : undefined}
                 segmentKeepsRow={segmentKeepsRow}
                 segmentSteps={segment?.steps}
+                segmentTool={toolOfRow(segment?.firstStepId, messageById)}
                 segmentSnapshot={segmentSnapshot}
                 segmentDelegated={segmentDelegated}
                 segmentRunning={segment?.running === true}
@@ -2339,9 +2374,10 @@ const ChatListInternal = React.memo((props: {
         );
     }
 
-    // Window position inside the canvas: the model's own top offset. The canvas is the model (or the
-    // viewport fill a short conversation needs), so there is no slack left to shift it by.
-    const windowMarginTopPx = layout.topOffsetsPx[renderedRange.startIndex] ?? layout.totalHeightPx;
+    // Window position inside the canvas: the model's own top offset, shifted by whatever a held canvas
+    // differs from the natural one, so every row keeps its distance from the bottom.
+    const windowMarginTopPx = (canvasHeightPx - naturalCanvasHeightPx)
+        + (layout.topOffsetsPx[renderedRange.startIndex] ?? layout.totalHeightPx);
 
     return (
         <View style={{ flex: 1 }}>

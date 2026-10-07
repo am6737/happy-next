@@ -11,11 +11,19 @@
 //     did with it: a fractional `scrollTop`, a range it has not laid out yet, a
 //     clamp at either end. Reads answer with the request, so the rounding the
 //     engine hands back is a value we carry rather than a value we accumulate.
-//   - Only the reader moves that number: `adoptReportedDistancePx` is called
-//     when they scrolled by hand. A scroller that moved with nobody asking did
-//     not move the reader — a layout that shrank under the viewport clamps the
-//     offset itself, and reading that clamp back as where they are is what
-//     turned a fold into a jump to the bottom of the conversation.
+//   - The record lives exactly as long as the scroller still holds what the
+//     engine made of that write. The moment a scroll event reports anything
+//     else, somebody moved it — the reader's wheel, the engine animating their
+//     gesture, a script's smooth scroll, a scrollbar drag — and the reported
+//     offset is where the reader now is. No guessing at who moved it: an input
+//     timestamp cannot see a script or a smooth scroll still running after its
+//     last wheel event, and an intent that outlives those is a correction aimed
+//     at a place the reader has already left, i.e. the list yanking back.
+//   - Between scroll events, the arithmetic starts from the last distance a
+//     scroll event or a write produced, never from a fresh read. A layout that
+//     shrinks under the viewport clamps the offset inside the commit, before the
+//     scroll event that reports it; the correction runs in that same commit and
+//     must start from where the reader was, not from the clamp.
 //   - A refusal is not an answer, but it is not nothing either: the range can
 //     be short of the request for exactly one commit (the row a fold opens
 //     arrives a frame after the arithmetic that accounted for it), and there
@@ -37,9 +45,13 @@ export interface ScrollElementLike {
 export function createScrollDistanceController(params: { getElement: () => ScrollElementLike | null }) {
     const { getElement } = params;
 
-    // The distance we own. Null until the first write: before that there is
-    // nothing of ours to answer with, and the scroller's own number is the truth.
-    let intentPx: number | null = null;
+    // The last distance a scroll event reported or a write produced. Null until
+    // either happens: before that the scroller's own number is the truth.
+    let lastDistancePx: number | null = null;
+    // A write the engine did not store as asked: what we asked, and what it
+    // stored instead. Answers for the stored number for as long as the
+    // scroller still holds it.
+    let pendingIntent: { requestedPx: number; storedPx: number } | null = null;
 
     /** What the scroller currently reports, in its own quantized numbers. */
     function readDistancePx(): number {
@@ -53,7 +65,9 @@ export function createScrollDistanceController(params: { getElement: () => Scrol
      * the engine dropped outright is visible there and nowhere else.
      */
     function getRequestedDistancePx(): number {
-        return intentPx ?? readDistancePx();
+        const basePx = lastDistancePx ?? readDistancePx();
+        if (pendingIntent != null && pendingIntent.storedPx === basePx) return pendingIntent.requestedPx;
+        return basePx;
     }
 
     /**
@@ -65,20 +79,33 @@ export function createScrollDistanceController(params: { getElement: () => Scrol
         const el = getElement();
         if (!el) return 0;
         const target = Math.max(0, distancePx);
-        intentPx = target;
         // column-reverse: 0 is the content bottom, everything above is negative.
         el.scrollTop = target === 0 ? 0 : -target;
-        return Math.max(0, Math.abs(el.scrollTop));
+        const storedPx = readDistancePx();
+        lastDistancePx = storedPx;
+        pendingIntent = storedPx === target ? null : { requestedPx: target, storedPx };
+        return storedPx;
     }
 
     /**
-     * The reader moved the scroller themselves: whatever it reports is where they
-     * are, and the arithmetic starts from there. Nothing else may call this — a
-     * clamp is not a scroll.
+     * A scroll event: the scroller reports where it is now. If that is still what
+     * our last write left there, the event is the echo of that write and the
+     * intent stands; anything else means it moved, and the reported offset is the
+     * reader's position from here on. `moved` is false only for that echo.
      */
+    function noteScrollEvent(): { distancePx: number; moved: boolean } {
+        const reportedPx = readDistancePx();
+        const moved = reportedPx !== lastDistancePx;
+        if (pendingIntent != null && pendingIntent.storedPx !== reportedPx) pendingIntent = null;
+        lastDistancePx = reportedPx;
+        return { distancePx: reportedPx, moved };
+    }
+
+    /** Take whatever the scroller reports as the reader's position, dropping any intent. */
     function adoptReportedDistancePx(): number {
-        intentPx = readDistancePx();
-        return intentPx;
+        pendingIntent = null;
+        lastDistancePx = readDistancePx();
+        return lastDistancePx;
     }
 
     /**
@@ -97,7 +124,7 @@ export function createScrollDistanceController(params: { getElement: () => Scrol
         });
     }
 
-    return { readDistancePx, getRequestedDistancePx, setDistancePx, adoptReportedDistancePx, settleRefusedWrite };
+    return { readDistancePx, getRequestedDistancePx, setDistancePx, noteScrollEvent, adoptReportedDistancePx, settleRefusedWrite };
 }
 
 /**

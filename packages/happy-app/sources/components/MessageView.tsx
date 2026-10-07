@@ -9,7 +9,7 @@ import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { MarkdownView, OptionsLoadingState } from "./markdown/MarkdownView";
 import { t } from '@/text';
 import { storeTempText } from '@/sync/persistence';
-import { Message, UserTextMessage, AgentTextMessage, ToolCallMessage } from "@/sync/typesMessage";
+import { Message, UserTextMessage, AgentTextMessage, ToolCallMessage, ToolCall } from "@/sync/typesMessage";
 import { Metadata } from "@/sync/storageTypes";
 import { layout } from "./layout";
 import { ToolView } from "./tools/ToolView";
@@ -98,6 +98,8 @@ export const MessageView = (props: {
   segmentKeepsRow?: boolean;
   /** Tool calls the run's line counts. */
   segmentSteps?: number;
+  /** The run's first tool call, whose icon its line opens with. */
+  segmentTool?: ToolCall;
   /** What the run is doing right now. Only a run the turn has got no further than has one. */
   segmentSnapshot?: string;
   /** The same, for the run's folded line. */
@@ -173,6 +175,7 @@ export const MessageView = (props: {
       <SegmentFoldLine
         folded={segmentFolded}
         steps={props.segmentSteps ?? 0}
+        tool={props.segmentTool}
         snapshot={props.segmentSnapshot}
         delegated={props.segmentDelegated}
         running={props.segmentRunning === true}

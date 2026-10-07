@@ -37,21 +37,23 @@ export type TurnFolding = TurnFoldResolution & {
 export function useTurnFolding(params: {
     /** `TurnAnalysis.foldById` — every turn worth folding, running ones included. */
     foldById: ReadonlyMap<string, TurnProcess>;
+    /** `TurnAnalysis.newestHeaderId` — the only turn whose process opens in runs. */
+    newestHeaderId: string | null;
     /** Whether a run of steps starts folded. */
     enabled: boolean;
 }): TurnFolding {
-    const { foldById, enabled } = params;
+    const { foldById, newestHeaderId, enabled } = params;
     const [turnOverrides, setTurnOverrides] = React.useState<ReadonlyMap<string, boolean>>(NO_OVERRIDES);
     const [segmentOverrides, setSegmentOverrides] = React.useState<ReadonlyMap<string, boolean>>(NO_OVERRIDES);
 
     const resolution = React.useMemo(
-        () => resolveTurnFolding({ foldById, enabled, turnOverrides, segmentOverrides }),
-        [foldById, enabled, turnOverrides, segmentOverrides],
+        () => resolveTurnFolding({ foldById, newestHeaderId, enabled, turnOverrides, segmentOverrides }),
+        [foldById, newestHeaderId, enabled, turnOverrides, segmentOverrides],
     );
 
     // Read through a ref so the callbacks never change identity: they are handed to every list row.
-    const latestRef = React.useRef({ foldById, enabled, turnOverrides, segmentOverrides, resolution });
-    latestRef.current = { foldById, enabled, turnOverrides, segmentOverrides, resolution };
+    const latestRef = React.useRef({ foldById, newestHeaderId, enabled, turnOverrides, segmentOverrides, resolution });
+    latestRef.current = { foldById, newestHeaderId, enabled, turnOverrides, segmentOverrides, resolution };
 
     const toggle = React.useCallback((headerId: string) => {
         const folded = latestRef.current.resolution.controlByHeaderId.get(headerId)?.folded;
@@ -66,13 +68,14 @@ export function useTurnFolding(params: {
     }, []);
 
     const idsChangedBy = React.useCallback((tap: { turn: string } | { segment: string }): string[] => {
-        const { foldById, enabled, turnOverrides, segmentOverrides, resolution } = latestRef.current;
+        const { foldById, newestHeaderId, enabled, turnOverrides, segmentOverrides, resolution } = latestRef.current;
         let next: TurnFoldResolution;
         if ('turn' in tap) {
             const folded = resolution.controlByHeaderId.get(tap.turn)?.folded;
             if (folded === undefined) return [];
             next = resolveTurnFolding({
                 foldById,
+                newestHeaderId,
                 enabled,
                 turnOverrides: new Map(turnOverrides).set(tap.turn, !folded),
                 segmentOverrides,
@@ -82,6 +85,7 @@ export function useTurnFolding(params: {
             if (folded === undefined) return [];
             next = resolveTurnFolding({
                 foldById,
+                newestHeaderId,
                 enabled,
                 turnOverrides,
                 segmentOverrides: new Map(segmentOverrides).set(tap.segment, !folded),

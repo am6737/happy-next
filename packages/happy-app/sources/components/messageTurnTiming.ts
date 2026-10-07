@@ -85,6 +85,8 @@ export type TurnSegment = {
     hiddenIds: string[];
     /** Tool calls in the run, the first row included. */
     steps: number;
+    /** The run's oldest tool call, whose icon the run's line wears. */
+    firstStepId: string;
     /** The run's newest row, which is the one in flight while the run is still going. */
     snapshotId: string;
     /** The turn is still running and this run is where it has got to: nothing has followed it yet. */
@@ -110,6 +112,13 @@ export type TurnAnalysis = {
      * turn folds like any other — to its line alone, with the newest row's snapshot on it.
      */
     foldById: Map<string, TurnProcess>;
+    /**
+     * The row that opens the conversation's newest turn, or null when that turn opens on no row (or
+     * there is no turn). The newest turn is the only one that lays its process out in runs; every
+     * older one folds to its line — see `resolveTurnFolding`. Paging only ever adds older turns, and
+     * a turn keeps its header row when it settles, so this moves only when a new turn begins.
+     */
+    newestHeaderId: string | null;
 };
 
 /**
@@ -255,12 +264,14 @@ function turnSegments(turn: Turn, lastStep: number, running: boolean): TurnSegme
     let run: Message[] = [];
     let foldableRows = 0;
     const closeRun = (endIndex: number) => {
-        const steps = run.filter((row) => row.kind === 'tool-call').length;
+        const toolCalls = run.filter((row) => row.kind === 'tool-call');
+        const steps = toolCalls.length;
         if (steps > 0) {
             segments.push({
                 startId: run[0].id,
                 hiddenIds: run.slice(1).map((row) => row.id),
                 steps,
+                firstStepId: toolCalls[0].id,
                 snapshotId: run[run.length - 1].id,
                 running: running && endIndex === turn.rows.length - 1,
             });
@@ -373,7 +384,8 @@ export function analyzeTurns(params: {
         }
     }
 
-    return { completedIds, stillCompleted, running, headerById, foldById };
+    const newestHeaderId = turns.length > 0 ? turns[turns.length - 1].headerId : null;
+    return { completedIds, stillCompleted, running, headerById, foldById, newestHeaderId };
 }
 
 /**
@@ -396,7 +408,7 @@ export function useTurnAnalysis(params: {
     taskCompletedAt?: number | null;
     /** Defaults to true for the web list, which renders process folds. */
     includeFold?: boolean;
-}): Pick<TurnAnalysis, 'completedIds' | 'headerById' | 'foldById'> {
+}): Pick<TurnAnalysis, 'completedIds' | 'headerById' | 'foldById' | 'newestHeaderId'> {
     const { visibleMessages, turnInFlight, taskCompletedAt, includeFold = true } = params;
     const completedTurnsRef = React.useRef<Set<string>>(new Set());
     const turnEndsRef = React.useRef<Map<string, number>>(new Map());
@@ -430,5 +442,6 @@ export function useTurnAnalysis(params: {
         completedIds: analysis.completedIds,
         headerById: analysis.headerById,
         foldById: analysis.foldById,
+        newestHeaderId: analysis.newestHeaderId,
     }), [analysis]);
 }
