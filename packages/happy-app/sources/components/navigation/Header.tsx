@@ -116,6 +116,7 @@ export const Header = React.memo((props: HeaderProps) => {
 // Extended navigation options to support subtitle
 interface ExtendedNavigationOptions extends Partial<NativeStackHeaderProps['options']> {
     headerSubtitle?: string;
+    headerSubtitleColor?: string;
     headerSubtitleStyle?: any;
 }
 
@@ -222,7 +223,10 @@ const NavigationHeaderComponent: React.FC<NativeStackHeaderProps> = React.memo((
             }
             headerStyle={options.headerStyle}
             headerTitleStyle={options.headerTitleStyle}
-            headerSubtitleStyle={extendedOptions.headerSubtitleStyle}
+            headerSubtitleStyle={[
+                extendedOptions.headerSubtitleColor && { color: extendedOptions.headerSubtitleColor },
+                extendedOptions.headerSubtitleStyle,
+            ]}
             headerShadowVisible={options.headerShadowVisible}
             headerTransparent={options.headerTransparent}
             headerTitleAlign={options.headerTitleAlign}
