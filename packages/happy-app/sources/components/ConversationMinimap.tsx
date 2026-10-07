@@ -13,6 +13,7 @@ import {
 } from './minimapScrubber';
 import { MinimapPreviewCard, PREVIEW_WIDTH } from './minimapPreview';
 import { ConversationMinimapTouch } from './ConversationMinimapTouch';
+import { proxyStripWidthPx } from './proxyScrollbarWidth';
 
 export type ConversationMinimapItem = {
     message: MinimapMessage;
@@ -66,7 +67,10 @@ export function ConversationMinimap(props: ConversationMinimapProps) {
     return <WebMinimap {...props} />;
 }
 
-/** Left-edge rail: the pointer is the scrubber, the preview follows the hovered mark. */
+/**
+ * Right-edge rail: the pointer is the scrubber, the preview follows the hovered mark. It sits just
+ * inside the chat list's scrollbar strip, which it would otherwise cover and take the drags of.
+ */
 function WebMinimap(props: ConversationMinimapProps) {
     const { theme } = useUnistyles();
     const [hoveredIndex, setHoveredIndex] = React.useState<number | null>(null);
@@ -113,8 +117,9 @@ function WebMinimap(props: ConversationMinimapProps) {
                 position: 'absolute',
                 top: '15%',
                 bottom: '15%',
-                left: 8,
+                right: proxyStripWidthPx() + 8,
                 width: HIT_WIDTH + PREVIEW_WIDTH + 16,
+                alignItems: 'flex-end',
                 marginTop: -56, // offset for the top bar
                 justifyContent: 'center',
                 zIndex: 1001,
@@ -124,7 +129,7 @@ function WebMinimap(props: ConversationMinimapProps) {
                 {...webHoverHandlers}
                 style={{
                     width: HIT_WIDTH,
-                    alignItems: 'flex-start',
+                    alignItems: 'flex-end',
                     justifyContent: 'center',
                 }}
             >
@@ -134,7 +139,7 @@ function WebMinimap(props: ConversationMinimapProps) {
                         position: 'absolute',
                         top: 0,
                         bottom: 0,
-                        left: 0,
+                        right: 0,
                         width: 1,
                         borderRadius: 1,
                         backgroundColor: theme.colors.transparent,
@@ -157,7 +162,7 @@ function WebMinimap(props: ConversationMinimapProps) {
                             ? 'Jump to preview'
                             : 'Jump to user message';
                     return (
-                        <View key={item.message.id} style={{ position: 'relative', width: HIT_WIDTH, height: MARKER_SLOT_HEIGHT, alignItems: 'flex-start', justifyContent: 'center' }}>
+                        <View key={item.message.id} style={{ position: 'relative', width: HIT_WIDTH, height: MARKER_SLOT_HEIGHT, alignItems: 'flex-end', justifyContent: 'center' }}>
                             <Pressable
                                 onPress={() => props.onJumpToMessage(item.message)}
                                 onHoverIn={() => setHoveredIndex(itemIndex)}
@@ -166,7 +171,7 @@ function WebMinimap(props: ConversationMinimapProps) {
                                 style={{
                                     width: HIT_WIDTH,
                                     height: MARKER_SLOT_HEIGHT,
-                                    alignItems: 'flex-start',
+                                    alignItems: 'flex-end',
                                     justifyContent: 'center',
                                     cursor: 'pointer' as any,
                                 }}
@@ -187,7 +192,7 @@ function WebMinimap(props: ConversationMinimapProps) {
                             {isHovered && (
                                 <MinimapPreviewCard
                                     message={item.message}
-                                    style={{ position: 'absolute', top: -44, left: HIT_WIDTH + 8 }}
+                                    style={{ position: 'absolute', top: -44, right: HIT_WIDTH + 8 }}
                                 />
                             )}
                         </View>
