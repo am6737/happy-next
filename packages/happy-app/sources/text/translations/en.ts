@@ -183,6 +183,8 @@ export const en: TranslationStructure = {
         connectAccount: 'Connect account',
         github: 'GitHub',
         machines: 'Machines',
+        reorderMachines: 'Reorder',
+        reorderMachinesDone: 'Done',
         features: 'Features',
         social: 'Social',
         account: 'Account',

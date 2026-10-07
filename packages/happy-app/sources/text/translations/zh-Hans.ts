@@ -170,6 +170,8 @@ export const zhHans: TranslationStructure = {
         connectAccount: '连接账户',
         github: 'GitHub',
         machines: '设备',
+        reorderMachines: '排序',
+        reorderMachinesDone: '完成',
         features: '功能',
         social: '社交',
         account: '账户',

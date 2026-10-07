@@ -1,4 +1,5 @@
 import type { Machine, Session } from '@/sync/storageTypes';
+import { applyMachineOrder } from '@/utils/machineOrder';
 import { hasUnreadCompletion } from '@/utils/sessionUtils';
 
 // What the session list is showing: every machine, one machine (its id), or a sharing view.
@@ -44,6 +45,7 @@ export function buildSessionMachineGroups(
     activeSessions: Session[],
     machines: Record<string, Machine>,
     nameCache: Record<string, string>,
+    machineOrder: readonly string[] = [],
 ): SessionMachineGroup[] {
     const groups = new Map<string, SessionMachineGroup>();
     const ensure = (machineId: string) => {
@@ -74,7 +76,12 @@ export function buildSessionMachineGroups(
         else unknownSessions.push(session);
     }
 
-    const result = Array.from(groups.values()).sort((a, b) => a.name.localeCompare(b.name));
+    // By name, unless the user put the machines in an order of their own (settings > machines).
+    const result = applyMachineOrder(
+        Array.from(groups.values()).sort((a, b) => a.name.localeCompare(b.name)),
+        group => group.id,
+        machineOrder,
+    );
     if (unknownSessions.length > 0) {
         result.push({ id: UNKNOWN_MACHINE_GROUP_ID, name: '', online: false, unknown: true, sessions: unknownSessions, dot: 'none' });
     }

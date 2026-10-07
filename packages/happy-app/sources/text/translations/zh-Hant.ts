@@ -169,6 +169,8 @@ export const zhHant: TranslationStructure = {
         connectAccount: '連結帳戶',
         github: 'GitHub',
         machines: '裝置',
+        reorderMachines: '排序',
+        reorderMachinesDone: '完成',
         features: '功能',
         social: '社交',
         account: '帳戶',

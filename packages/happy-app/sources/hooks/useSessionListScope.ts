@@ -3,7 +3,7 @@
 // consumer reads and writes the same value and stays in step without prop drilling.
 import * as React from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import { storage, useLocalSettingMutable, type SessionListViewItem } from '@/sync/storage';
+import { storage, useLocalSettingMutable, useSetting, type SessionListViewItem } from '@/sync/storage';
 import type { Session } from '@/sync/storageTypes';
 import { useIsTablet } from '@/utils/responsive';
 import { useVisibleSessionListViewData, useSharedSessionListViewData, useSharedByMeSessionListViewData } from '@/hooks/useVisibleSessionListViewData';
@@ -52,6 +52,7 @@ export function useSessionListScope(): SessionListScope {
     // Every synced machine, offline ones included — useAllMachines() only returns the online ones.
     const machines = storage(useShallow((state) => state.machines));
     const [nameCache] = useLocalSettingMutable('machineNameCache');
+    const machineOrder = useSetting('machineOrder');
     const [persisted, setPersisted] = useLocalSettingMutable('sessionListSelectedTab');
 
     const activeSessions = React.useMemo(() => {
@@ -59,8 +60,8 @@ export function useSessionListScope(): SessionListScope {
         return item && item.type === 'active-sessions' ? item.sessions : [];
     }, [data]);
     const groups = React.useMemo(
-        () => buildSessionMachineGroups(activeSessions, machines, nameCache),
-        [activeSessions, machines, nameCache],
+        () => buildSessionMachineGroups(activeSessions, machines, nameCache, machineOrder),
+        [activeSessions, machines, nameCache, machineOrder],
     );
     const sharedSessions = React.useMemo(() => collectListSessions(sharedData), [sharedData]);
     const sharedByMeSessions = React.useMemo(() => collectListSessions(sharedByMeData), [sharedByMeData]);

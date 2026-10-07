@@ -1,6 +1,7 @@
 import * as React from 'react';
 import {
     View,
+    Pressable,
     Text,
     StyleProp,
     ViewStyle,
@@ -18,6 +19,8 @@ interface ItemChildProps {
 
 export interface ItemGroupProps {
     title?: string | React.ReactNode;
+    // A text action at the right end of the title row, set like the title; highlighted while it is on.
+    headerAction?: { label: string; onPress: () => void; highlighted?: boolean };
     footer?: string;
     children: React.ReactNode;
     style?: StyleProp<ViewStyle>;
@@ -41,6 +44,17 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
         paddingTop: Platform.select({ ios: 35, default: 16 }),
         paddingBottom: Platform.select({ ios: 6, default: 8 }),
         paddingHorizontal: Platform.select({ ios: 32, default: 24 }),
+    },
+    headerWithAction: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+    },
+    headerActionPressed: {
+        opacity: 0.6,
+    },
+    headerActionHighlighted: {
+        color: theme.colors.textLink,
     },
     headerNoTitle: {
         paddingTop: Platform.select({ ios: 20, default: 16 }),
@@ -85,6 +99,7 @@ export const ItemGroup = React.memo<ItemGroupProps>((props) => {
 
     const {
         title,
+        headerAction,
         footer,
         children,
         style,
@@ -100,13 +115,25 @@ export const ItemGroup = React.memo<ItemGroupProps>((props) => {
             <View style={styles.container}>
                 {/* Header */}
                 {title ? (
-                    <View style={[styles.header, headerStyle]}>
+                    <View style={[styles.header, headerAction && styles.headerWithAction, headerStyle]}>
                         {typeof title === 'string' ? (
                             <Text style={[styles.headerText, titleStyle]}>
                                 {title}
                             </Text>
                         ) : (
                             title
+                        )}
+                        {headerAction && (
+                            <Pressable
+                                onPress={headerAction.onPress}
+                                hitSlop={10}
+                                accessibilityRole="button"
+                                style={({ hovered, pressed }: any) => (hovered || pressed) && styles.headerActionPressed}
+                            >
+                                <Text style={[styles.headerText, headerAction.highlighted && styles.headerActionHighlighted]}>
+                                    {headerAction.label}
+                                </Text>
+                            </Pressable>
                         )}
                     </View>
                 ) : (

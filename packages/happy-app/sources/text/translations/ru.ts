@@ -129,6 +129,8 @@ export const ru: TranslationStructure = {
         connectAccount: 'Подключить аккаунт',
         github: 'GitHub',
         machines: 'Машины',
+        reorderMachines: 'Изменить порядок',
+        reorderMachinesDone: 'Готово',
         features: 'Функции',
         social: 'Социальное',
         account: 'Аккаунт',

@@ -179,6 +179,8 @@ export const pl: TranslationStructure = {
         connectAccount: 'Połącz konto',
         github: 'GitHub',
         machines: 'Maszyny',
+        reorderMachines: 'Zmień kolejność',
+        reorderMachinesDone: 'Gotowe',
         features: 'Funkcje',
         social: 'Społeczność',
         account: 'Konto',

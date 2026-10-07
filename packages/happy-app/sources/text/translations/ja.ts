@@ -200,6 +200,8 @@ export const ja: TranslationStructure = {
         connectAccount: 'アカウントを接続',
         github: 'GitHub',
         machines: 'マシン',
+        reorderMachines: '並べ替え',
+        reorderMachinesDone: '完了',
         features: '機能',
         social: 'ソーシャル',
         account: 'アカウント',

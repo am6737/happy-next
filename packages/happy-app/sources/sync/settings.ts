@@ -296,6 +296,8 @@ export const SettingsSchema = z.object({
     favoriteDirectories: z.array(z.string()).describe('User-defined favorite directories for quick access in path selection'),
     // Favorite machines for quick machine selection
     favoriteMachines: z.array(z.string()).describe('User-defined favorite machines (machine IDs) for quick access in machine selection'),
+    // Machine order across the app's machine lists
+    machineOrder: z.array(z.string()).describe('User-defined machine order (machine IDs); machines not listed follow in their default order'),
     // Dismissed CLI warning banners (supports both per-machine and global dismissal)
     dismissedCLIWarnings: z.object({
         perMachine: z.record(z.string(), z.object({
@@ -368,6 +370,8 @@ export const settingsDefaults: Settings = {
     favoriteDirectories: ['~/src', '~/Desktop', '~/Documents'],
     // Favorite machines (empty by default)
     favoriteMachines: [],
+    // Machine order (default order until the user reorders)
+    machineOrder: [],
     // Dismissed CLI warnings (empty by default)
     dismissedCLIWarnings: { perMachine: {}, global: {} },
 };

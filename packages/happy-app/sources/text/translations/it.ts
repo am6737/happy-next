@@ -197,6 +197,8 @@ export const it: TranslationStructure = {
         connectAccount: 'Collega account',
         github: 'GitHub',
         machines: 'Macchine',
+        reorderMachines: 'Riordina',
+        reorderMachinesDone: 'Fine',
         features: 'Funzionalità',
         social: 'Social',
         account: 'Account',

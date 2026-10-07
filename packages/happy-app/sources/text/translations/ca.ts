@@ -168,6 +168,8 @@ export const ca: TranslationStructure = {
         connectAccount: 'Connectar compte',
         github: 'GitHub',
         machines: 'Màquines',
+        reorderMachines: 'Reordena',
+        reorderMachinesDone: 'Fet',
         features: 'Funcions',
         social: 'Social',
         account: 'Compte',

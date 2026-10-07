@@ -12,13 +12,17 @@ import { Item } from '@/components/Item';
 import { ItemGroup } from '@/components/ItemGroup';
 import { ItemList } from '@/components/ItemList';
 import { useUnifiedScanner } from '@/hooks/useUnifiedScanner';
-import { useLocalSettingMutable, useSetting, useDootaskProfile } from '@/sync/storage';
+import { useLocalSettingMutable, useSetting, useSettingMutable, useDootaskProfile } from '@/sync/storage';
 import { storage } from '@/sync/storage';
 import { trackWhatsNewClicked } from '@/track';
 import { Modal } from '@/modal';
 import { useMultiClick } from '@/hooks/useMultiClick';
 import { useAllMachines } from '@/sync/storage';
 import { isMachineOnline } from '@/utils/machineUtils';
+import type { Machine } from '@/sync/storageTypes';
+import { applyMachineOrder, mergeMachineOrder } from '@/utils/machineOrder';
+import { getMachineDisplayName } from '@/components/sessionListScope';
+import { SortableList } from '@/components/SortableList';
 import { useUnistyles } from 'react-native-unistyles';
 import { layout } from '@/components/layout';
 import { useHappyAction } from '@/hooks/useHappyAction';
@@ -31,6 +35,8 @@ import { useMainTabBottomPadding } from '@/hooks/useMainTabBottomPadding';
 import { openExternalUrl } from '@/utils/tauri';
 import { openTerminalPopup } from '@/terminal/terminalPopupWindow';
 
+const machineKey = (machine: Machine) => machine.id;
+
 export const SettingsView = React.memo(function SettingsView() {
     const { theme } = useUnistyles();
     const router = useRouter();
@@ -39,6 +45,63 @@ export const SettingsView = React.memo(function SettingsView() {
     const [devModeEnabled, setDevModeEnabled] = useLocalSettingMutable('devModeEnabled');
     const experiments = useSetting('experiments');
     const allMachines = useAllMachines();
+    const [machineOrder, setMachineOrder] = useSettingMutable('machineOrder');
+    // By name, as the sidebar's machine rail, unless reordered (the action beside the title).
+    const machines = React.useMemo(() => applyMachineOrder(
+        [...allMachines].sort((a, b) => getMachineDisplayName(a, a.id, {}).localeCompare(getMachineDisplayName(b, b.id, {}))),
+        machine => machine.id,
+        machineOrder,
+    ), [allMachines, machineOrder]);
+    const saveMachineOrder = React.useCallback(
+        (ids: string[]) => setMachineOrder(mergeMachineOrder(machineOrder, ids)),
+        [machineOrder, setMachineOrder],
+    );
+    // One machine row; while reordering it carries the drag handle instead of opening the machine.
+    const renderMachineItem = (machine: (typeof machines)[number], reorderHandle?: React.ReactNode, isLast?: boolean) => {
+        const isOnline = isMachineOnline(machine);
+        const host = machine.metadata?.host || 'Unknown';
+        const displayName = machine.metadata?.displayName;
+        const platform = machine.metadata?.platform || '';
+
+        // Use displayName if available, otherwise use host
+        const title = displayName || host;
+
+        // Build subtitle: show hostname if different from title, plus platform and status
+        let subtitle = '';
+        if (displayName && displayName !== host) {
+            subtitle = host;
+        }
+        if (platform) {
+            subtitle = subtitle ? `${subtitle} • ${platform}` : platform;
+        }
+        subtitle = subtitle ? `${subtitle} • ${isOnline ? t('status.online') : t('status.offline')}` : (isOnline ? t('status.online') : t('status.offline'));
+
+        return (
+            <Item
+                key={machine.id}
+                title={title}
+                subtitle={subtitle}
+                icon={
+                    <Ionicons
+                        name="desktop-outline"
+                        size={29}
+                        color={isOnline ? theme.colors.status.connected : theme.colors.status.disconnected}
+                    />
+                }
+                onPress={reorderHandle ? undefined : () => router.push(`/machine/${machine.id}`)}
+                showChevron={!reorderHandle}
+                // Reordering rows sit in a list of their own, outside ItemGroup's dividers.
+                showDivider={reorderHandle ? !isLast : undefined}
+                rightElement={reorderHandle}
+            />
+        );
+    };
+
+    const [reorderingMachines, setReorderingMachines] = React.useState(false);
+    const canReorderMachines = machines.length >= 2;
+    React.useEffect(() => {
+        if (!canReorderMachines) setReorderingMachines(false);
+    }, [canReorderMachines]);
     const profile = useProfile();
     const displayName = getDisplayName(profile);
     const avatarUrl = getAvatarUrl(profile);
@@ -300,44 +363,33 @@ export const SettingsView = React.memo(function SettingsView() {
                 />
             </ItemGroup> */}
 
-            {/* Machines (sorted: online first, then last seen desc) */}
-            {allMachines.length > 0 && (
-                <ItemGroup title={t('settings.machines')}>
-                    {[...allMachines].map((machine) => {
-                        const isOnline = isMachineOnline(machine);
-                        const host = machine.metadata?.host || 'Unknown';
-                        const displayName = machine.metadata?.displayName;
-                        const platform = machine.metadata?.platform || '';
-
-                        // Use displayName if available, otherwise use host
-                        const title = displayName || host;
-
-                        // Build subtitle: show hostname if different from title, plus platform and status
-                        let subtitle = '';
-                        if (displayName && displayName !== host) {
-                            subtitle = host;
-                        }
-                        if (platform) {
-                            subtitle = subtitle ? `${subtitle} • ${platform}` : platform;
-                        }
-                        subtitle = subtitle ? `${subtitle} • ${isOnline ? t('status.online') : t('status.offline')}` : (isOnline ? t('status.online') : t('status.offline'));
-
-                        return (
-                            <Item
-                                key={machine.id}
-                                title={title}
-                                subtitle={subtitle}
-                                icon={
+            {/* Machines, in the user's order (the action beside the title reorders them) */}
+            {machines.length > 0 && (
+                <ItemGroup
+                    title={t('settings.machines')}
+                    headerAction={canReorderMachines ? {
+                        label: reorderingMachines ? t('settings.reorderMachinesDone') : t('settings.reorderMachines'),
+                        highlighted: reorderingMachines,
+                        onPress: () => setReorderingMachines(value => !value),
+                    } : undefined}
+                >
+                    {reorderingMachines ? (
+                        <SortableList
+                            items={machines}
+                            keyOf={machineKey}
+                            onReorder={saveMachineOrder}
+                            renderHandle={(dragging) => (
+                                <View style={{ padding: 6 }}>
                                     <Ionicons
-                                        name="desktop-outline"
-                                        size={29}
-                                        color={isOnline ? theme.colors.status.connected : theme.colors.status.disconnected}
+                                        name="reorder-three-outline"
+                                        size={24}
+                                        color={dragging ? theme.colors.textLink : theme.colors.textSecondary}
                                     />
-                                }
-                                onPress={() => router.push(`/machine/${machine.id}`)}
-                            />
-                        );
-                    })}
+                                </View>
+                            )}
+                            renderItem={(machine, handle, _dragging, isLast) => renderMachineItem(machine, handle, isLast)}
+                        />
+                    ) : machines.map(machine => renderMachineItem(machine))}
                 </ItemGroup>
             )}
 
