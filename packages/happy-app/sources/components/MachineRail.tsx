@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { View, Pressable, ScrollView, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { Text } from '@/components/StyledText';
 import { Typography } from '@/constants/Typography';
@@ -8,7 +9,7 @@ import { t } from '@/text';
 import { SessionScopeDot } from './SessionScopeDot';
 import { getMachineInitials, type SessionListSelection, type SessionMachineGroup, type SessionScopeDot as Dot } from './sessionListScope';
 
-const BUTTON_SIZE = 34;
+const BUTTON_SIZE = 32;
 export const MACHINE_RAIL_WIDTH = 56;
 
 type RailButtonProps = {
@@ -17,6 +18,8 @@ type RailButtonProps = {
     onPress: () => void;
     online?: boolean;
     dot?: Dot;
+    // An action rather than a scope: no tile behind it until hovered or shown.
+    plain?: boolean;
     children: React.ReactNode;
 };
 
@@ -27,7 +30,7 @@ function setTooltip(label: string) {
     };
 }
 
-const RailButton = React.memo(({ label, active, onPress, online, dot = 'none', children }: RailButtonProps) => {
+const RailButton = React.memo(({ label, active, onPress, online, dot = 'none', plain, children }: RailButtonProps) => {
     const styles = stylesheet;
     return (
         <View style={styles.buttonSlot}>
@@ -40,15 +43,13 @@ const RailButton = React.memo(({ label, active, onPress, online, dot = 'none', c
                 onPress={onPress}
                 style={({ hovered, pressed }: any) => [
                     styles.button,
+                    plain && !active && !hovered && !pressed && styles.buttonPlain,
                     active && styles.buttonActive,
                     // An offline machine steps back so the online ones stand out, unless it is the one shown.
                     online === false && !active && !hovered && styles.buttonOffline,
                 ]}
             >
                 {children}
-                {online !== undefined && (
-                    <View style={[styles.onlineDot, online ? styles.onlineDotOn : styles.onlineDotOff]} />
-                )}
                 {dot !== 'none' && (
                     <View style={styles.statusDotSlot}>
                         <SessionScopeDot dot={dot} size={8} />
@@ -68,6 +69,8 @@ export const MachineRail = React.memo(({
     sharedDot,
     sharedByMeDot,
     sessionCount,
+    settingsActive,
+    onSettings,
     header,
 }: {
     groups: SessionMachineGroup[];
@@ -78,6 +81,8 @@ export const MachineRail = React.memo(({
     sharedDot: Dot;
     sharedByMeDot: Dot;
     sessionCount: number;
+    settingsActive: boolean;
+    onSettings: () => void;
     // Sits above the rail's buttons, where the web sidebar keeps the app logo.
     header?: React.ReactNode;
 }) => {
@@ -123,8 +128,6 @@ export const MachineRail = React.memo(({
                         </RailButton>
                     );
                 })}
-            </ScrollView>
-            <View style={styles.footer}>
                 {(hasShared || hasSharedByMe) && <View style={styles.separator} />}
                 {hasShared && (
                     <RailButton
@@ -146,6 +149,22 @@ export const MachineRail = React.memo(({
                         <Ionicons name="share-outline" size={16} color={iconColor(selection === 'sharedByMe')} />
                     </RailButton>
                 )}
+            </ScrollView>
+            <View style={styles.footer}>
+                <View style={styles.separator} />
+                <RailButton
+                    label={t('tabs.settings')}
+                    active={settingsActive}
+                    plain
+                    onPress={onSettings}
+                >
+                    <Image
+                        source={require('@/assets/images/navigation/setting.png')}
+                        contentFit="contain"
+                        style={{ width: 20, height: 20 }}
+                        tintColor={iconColor(settingsActive)}
+                    />
+                </RailButton>
             </View>
         </View>
     );
@@ -205,6 +224,9 @@ const stylesheet = StyleSheet.create((theme) => ({
         // The dark surface is the sidebar's own color, so the buttons take the next step up there.
         backgroundColor: theme.dark ? theme.colors.surfaceHighest : theme.colors.surface,
     },
+    buttonPlain: {
+        backgroundColor: 'transparent',
+    },
     buttonActive: {
         backgroundColor: theme.colors.button.primary.background,
     },
@@ -214,22 +236,6 @@ const stylesheet = StyleSheet.create((theme) => ({
     initials: {
         fontSize: 11,
         ...Typography.default('semiBold'),
-    },
-    onlineDot: {
-        position: 'absolute',
-        right: -2,
-        bottom: -2,
-        width: 10,
-        height: 10,
-        borderRadius: 5,
-        borderWidth: 2,
-        borderColor: theme.colors.groupped.background,
-    },
-    onlineDotOn: {
-        backgroundColor: theme.colors.status.connected,
-    },
-    onlineDotOff: {
-        backgroundColor: theme.colors.textSecondary,
     },
     statusDotSlot: {
         position: 'absolute',

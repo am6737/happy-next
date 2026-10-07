@@ -199,17 +199,6 @@ function TitleBarNavigation() {
                     />
                 </WindowsNavigationButton>
             )}
-            <WindowsNavigationButton
-                accessibilityLabel={t('tabs.settings')}
-                onPress={() => router.navigate('/settings')}
-            >
-                <Image
-                    source={require('@/assets/images/navigation/setting.png')}
-                    contentFit="contain"
-                    style={{ height: 18, width: 18 }}
-                    tintColor={theme.colors.header.tint}
-                />
-            </WindowsNavigationButton>
             <DesktopUpdateButton placement="titleBar" />
         </View>
     );

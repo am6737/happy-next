@@ -2,7 +2,7 @@ import { useSocketStatus, useFriendRequests } from '@/sync/storage';
 import * as React from 'react';
 import { Text, View, Pressable, useWindowDimensions, Dimensions, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { usePathname, useRouter } from 'expo-router';
 import { useHeaderHeight } from '@/utils/responsive';
 import { isRunningOnMac } from '@/utils/platform';
 import { Typography } from '@/constants/Typography';
@@ -140,6 +140,8 @@ type SidebarViewProps = {
 // The machine rail down the sidebar's left edge, always shown in the sidebar layout.
 const SidebarMachineRail = React.memo(({ header }: { header?: React.ReactNode }) => {
     const scope = useSessionListScope();
+    const router = useRouter();
+    const pathname = usePathname();
     return (
         <MachineRail
             groups={scope.groups}
@@ -150,6 +152,8 @@ const SidebarMachineRail = React.memo(({ header }: { header?: React.ReactNode })
             sharedDot={scope.sharedDot}
             sharedByMeDot={scope.sharedByMeDot}
             sessionCount={scope.activeSessions.length}
+            settingsActive={pathname.startsWith('/settings')}
+            onSettings={() => router.navigate('/settings')}
             header={header}
         />
     );
@@ -291,18 +295,6 @@ export const SidebarView = React.memo((props: SidebarViewProps) => {
                     />
                 </Pressable>
             )}
-            <Pressable
-                accessibilityLabel={t('tabs.settings')}
-                onPress={() => router.navigate('/settings')}
-                hitSlop={10}
-            >
-                <Image
-                    source={require('@/assets/images/navigation/setting.png')}
-                    contentFit="contain"
-                    style={{ width: 20, height: 20, margin: 4 }}
-                    tintColor={theme.colors.header.tint}
-                />
-            </Pressable>
         </>
     );
 
