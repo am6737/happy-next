@@ -108,11 +108,6 @@ const styles = StyleSheet.create((theme) => ({
         flexDirection: 'row',
         alignItems: 'center',
     },
-    titleSubtitle: {
-        fontSize: 12,
-        lineHeight: 16,
-        ...Typography.default(),
-    },
     titleText: {
         fontSize: 17,
         lineHeight: 24,
@@ -186,13 +181,11 @@ const useConnectionStatusSubtitle = () => {
     }, [socketStatus, theme]);
 };
 
-// Header title that opens a picker: the title with a chevron, and optionally a subtitle under it.
-// It has to be a custom title view (a pressable with a chevron), and UIKit ignores the native
-// `headerSubtitle` while a custom title view is set, so a subtitle has to be drawn here.
-const HeaderPickerTitle = React.memo(({ title, subtitle, subtitleColor, onPress }: {
+// Header title that opens a picker: the title with a chevron. It has to be a custom title view (a
+// pressable with a chevron); the connection status under it stays the native `headerSubtitle`, as
+// with a subtitle drawn in the title view the scroll edge effect under the header comes out thinner.
+const HeaderPickerTitle = React.memo(({ title, onPress }: {
     title: string;
-    subtitle?: string;
-    subtitleColor?: string;
     onPress?: () => void;
 }) => {
     const { theme } = useUnistyles();
@@ -205,26 +198,20 @@ const HeaderPickerTitle = React.memo(({ title, subtitle, subtitleColor, onPress 
                 </Text>
                 <Ionicons name="chevron-down" size={13} color={theme.colors.textSecondary} style={{ marginLeft: 4 }} />
             </View>
-            {!!subtitle && (
-                <Text style={[styles.titleSubtitle, { color: subtitleColor }]} numberOfLines={1}>
-                    {subtitle}
-                </Text>
-            )}
         </Pressable>
     );
 });
 
-// Header title of the github tab — the repository picker. It shows no connection status.
+// Header title of the github tab — the repository picker.
 const GitHubHeaderTitle = React.memo(({ githubRepo, onGithubRepoPress }: { githubRepo?: string | null; onGithubRepoPress?: () => void }) => {
     const repoName = githubRepo ? githubRepo.split('/').pop() || githubRepo : '';
     return <HeaderPickerTitle title={repoName || t('github.allRepos')} onPress={onGithubRepoPress} />;
 });
 
-// Header title of the sessions tab — the machine switcher, with the connection status underneath.
+// Header title of the sessions tab — the machine switcher.
 // With one machine or none it reads "Sessions" but still opens the switcher, which is also where
 // machines get added.
 const SessionsHeaderTitle = React.memo(({ scope, onPress }: { scope: SessionListScope; onPress: () => void }) => {
-    const connectionStatus = useConnectionStatusSubtitle();
     const { selection, switchable } = scope;
     let title = t('tabs.sessions');
     if (switchable) {
@@ -237,8 +224,6 @@ const SessionsHeaderTitle = React.memo(({ scope, onPress }: { scope: SessionList
     return (
         <HeaderPickerTitle
             title={title}
-            subtitle={connectionStatus.text}
-            subtitleColor={connectionStatus.color}
             onPress={onPress}
         />
     );
@@ -524,7 +509,7 @@ export const MainView = React.memo(({ variant }: MainViewProps) => {
                     : activeTab === 'sessions'
                         ? () => <SessionsHeaderTitle scope={sessionScope} onPress={handleOpenMachineSwitcher} />
                         : t(TAB_TITLES[activeTab as ActiveTabType]),
-                headerSubtitle: activeTab === 'sessions' ? undefined : connectionStatus.text || undefined,
+                headerSubtitle: connectionStatus.text || undefined,
                 headerSubtitleColor: connectionStatus.color,
                 headerLeft: () => <HeaderLogo />,
                 headerRight: shouldProvideMainHeaderRight(activeTab) && !(activeTab === 'settings' && !isCustomServer)
