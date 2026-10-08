@@ -1,5 +1,19 @@
 # AI Agent 生产化：新会话入口与当前交接
 
+## 代码已提交并推送，供另一台机器本地构建（2026-10-08）
+
+用户明确授权提交以便拉取构建后，root已提交源码 `577d47ee65e4af71b5c348a959405a69e06fe0a7` 并推送到 `am6737/happy-next` 的 `feat/ai-team-real-implementation`；GitHub ref API已独立核远端SHA一致。该提交382文件，含本次完整源码/共享wire/38新增迁移/锁/patches/测试和文档。根/Server env、运营私钥、依赖备份及.qoder本机配置未提交。root提交前独立扫描内容及已配置secret值（无命中）、核staged清单/diff；wire build+typecheck、App/CLI typecheck与Server build均实际exit0，独立CLI审查无确定阻断。下方10:48“主会话未提交/推送”仅此前状态，本节替代它。
+
+构建步骤见 `docs/ai-team-native-build.zh-CN.md`：同分支/提交、Yarn1.22.22 frozen安装、happy-wire build，再在Mac设置公开Server地址后运行ios:dev --device。手机实体复验与完整当前源码生产资格仍待，productionReady=false；本次未合并或上线。源码提交后补充本节交接记录，不重复旧矩阵。
+
+## 2026-10-08 10:48 CLI回调：提交前只读审查完成，未暂存或提交
+
+CLI10:48:54 completed，Server仍08:34历史审计。报告 `/tmp/ai-team-precommit-review-20261008/report.md`/JSON：检查时78 tracked修改+304未跟踪，明确排除.qoder/settings.local.json后计划381文件，未发现确定提交阻断；私钥/常见凭据格式、体积/mode扫描无命中，非所有秘密格式不存在的证明。未改index/refs/source，未重复typecheck/native或整轮业务。
+
+App Unistyles精确manifest/lock3.0.22、Metro/native配置、patch、新路由/API、Wire导出/Server模块与38迁移文件已核清单；四个docs/ai-team-local-acceptance.*.json是验收证据而非Mac必需构建输入，暂存须明确范围并检查staged清单，不全量纳入本机配置。另一台Mac同提交Yarn1.22.22 frozen安装、happy-wire build、本机Xcode/签名配置后ios:dev --device；配置/认证/签名材料留本机，不提交。
+
+主会话本次已读审查，未独立重扫381文件或执行git add/commit/push。下节主验收已记录9091温和重启、新Metro/web200及多路由Babel/单例解析验证，旧“Metro未重启”快照不再当前；手机内版本/原生实体运行仍需实际验证。提交或远端本地构建不等于生产放行，源码变化后旧p2verified资格仅历史，**productionReady=false**。
+
 ## 原生开发包启动故障：源码修复与主会话独立验证完成（2026-10-08）
 
 用户报告多路由Unistyles missing Babel plugin及Fusebox不可重定义/ReactFabric错误，确认使用另一台机器构建的已安装iOS开发包。Babel插件原已存在；根因证据为App安装3.5.1而锁3.0.22：3.5.1插件生成一个create参数，3.0.22 C++在count==1时正好抛该错误。root独立发布包哈希/代码和新旧插件对照确认，不把报错误判为插件未添加；手机内确切版本仍未读取。

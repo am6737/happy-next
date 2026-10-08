@@ -4,7 +4,7 @@
   "contextSha256": "d1350df4c5d01e4a0e40b190bc0c3dc534b665c9bef0188d0de1fd2b1dba4019",
   "scope": "historical p2verified local checks retained; current source changed for native startup fix and needs full qualification",
   "phase": "app_startup_source_fixed_waiting_physical_device_retest",
-  "updatedAt": "2026-10-08T10:52:01.427791+00:00",
+  "updatedAt": "2026-10-08T10:54:46.705972+00:00",
   "sourceSnapshot": "/tmp/ai-team-source-snapshot-rootp2verified-20261008.json",
   "runtimeRoot": "/tmp/ai-team-frozen-deps-rootp2verified7469ab",
   "historicalLatest": "docs/ai-team-local-acceptance.identitygate-progress-20261008.json",
@@ -783,6 +783,8 @@
     "nativeBuildGuide": "docs/ai-team-native-build.zh-CN.md",
     "privateAndLocalFilesExcluded": true,
     "physicalDeviceRetestPassed": false,
-    "productionReady": false
+    "productionReady": false,
+    "sourceCommit": "577d47ee65e4af71b5c348a959405a69e06fe0a7",
+    "sourceCommitPushedAndRemoteVerified": true
   }
 }
