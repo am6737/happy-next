@@ -10,6 +10,7 @@ export type OrchestratorDispatchPayload = {
   runId: string;
   taskId: string;
   dispatchToken: string;
+  executionCapability?: import('./executionCapability').ExecutionCapability;
   provider: OrchestratorProvider;
   executionType: 'initial' | 'resume';
   childSessionId?: string;
@@ -18,7 +19,26 @@ export type OrchestratorDispatchPayload = {
   timeoutMs: number;
   workingDirectory?: string;
   permissionMode?: OrchestratorPermissionMode;
+  assignedAgentId?: string;
+  parentTaskId?: string;
+  teamId?: string;
+  delegationDepth?: number;
+  integrationPolicy?: 'review_and_cherry_pick';
+  projectId?: string;
+  projectSnapshot?: import('./projectSnapshot').ProjectSnapshot;
+  templateProposalScope?: { templateId: string; templateVersionId: string;
+    expectedCurrentVersion: number };
+  aiRuntimeContract?: import('happy-wire').AiRuntimeContract;
+  aiRuntimeContractInvalid?: boolean;
+  internalAi?: boolean;
 };
+
+export function requiresTaskSkillDownload(payload: OrchestratorDispatchPayload): boolean {
+  return !!(payload.executionCapability || payload.assignedAgentId || payload.teamId
+    || payload.parentTaskId || payload.projectId || payload.projectSnapshot
+    || payload.integrationPolicy || payload.internalAi || payload.aiRuntimeContract
+    || payload.aiRuntimeContractInvalid);
+}
 
 export type OrchestratorCancelPayload = {
   executionId: string;

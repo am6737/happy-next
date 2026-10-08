@@ -26,10 +26,11 @@ import { getGitHubOAuthParams, disconnectGitHub } from '@/sync/apiGithub';
 import { useProfile } from '@/sync/storage';
 import { getDisplayName, getAvatarUrl, getBio } from '@/sync/profile';
 import { Avatar } from '@/components/Avatar';
-import { t } from '@/text';
+import { getCurrentLanguage, t } from '@/text';
 import { useMainTabBottomPadding } from '@/hooks/useMainTabBottomPadding';
 import { openExternalUrl } from '@/utils/tauri';
 import { openTerminalPopup } from '@/terminal/terminalPopupWindow';
+import { getAiTeamCopy } from '@/features/aiTeams/copy';
 
 export const SettingsView = React.memo(function SettingsView() {
     const { theme } = useUnistyles();
@@ -44,6 +45,7 @@ export const SettingsView = React.memo(function SettingsView() {
     const avatarUrl = getAvatarUrl(profile);
     const bio = getBio(profile);
     const tabBottomPadding = useMainTabBottomPadding();
+    const aiTeamCopy = getAiTeamCopy();
 
     const { launchScanner, connectWithUrl, isLoading } = useUnifiedScanner();
 
@@ -342,6 +344,62 @@ export const SettingsView = React.memo(function SettingsView() {
             )}
 
             {/* History */}
+            <ItemGroup title={aiTeamCopy.workspace}>
+                <Item
+                    title={aiTeamCopy.agents}
+                    subtitle={aiTeamCopy.agentsSubtitle}
+                    icon={<Ionicons name="people-circle-outline" size={29} color="#5856D6" />}
+                    onPress={() => router.push('/settings/agents' as never)}
+                />
+                <Item
+                    title={aiTeamCopy.teams}
+                    subtitle={aiTeamCopy.teamsSubtitle}
+                    icon={<Ionicons name="git-network-outline" size={29} color="#34C759" />}
+                    onPress={() => router.push('/settings/teams' as never)}
+                />
+                <Item
+                    title="Skills"
+                    subtitle={getCurrentLanguage().startsWith('zh') ? '版本、发布与 Agent 绑定' : 'Versions, publishing and agent bindings'}
+                    icon={<Ionicons name="document-text-outline" size={29} color="#D18B32" />}
+                    onPress={() => router.push('/settings/skills' as never)}
+                />
+                <Item
+                    title={getCurrentLanguage().startsWith('zh') ? '项目' : 'Projects'}
+                    subtitle={getCurrentLanguage().startsWith('zh') ? '仓库与机器版本' : 'Repository and machine versions'}
+                    icon={<Ionicons name="folder-open-outline" size={29} color="#3E8B83" />}
+                    onPress={() => router.push('/settings/projects' as never)}
+                />
+                <Item
+                    title={getCurrentLanguage().startsWith('zh') ? '自动任务' : 'Autopilot'}
+                    subtitle={getCurrentLanguage().startsWith('zh') ? '计划、运行与历史' : 'Schedules, runs and history'}
+                    icon={<Ionicons name="timer-outline" size={29} color="#B36846" />}
+                    onPress={() => router.push('/settings/autopilots' as never)}
+                />
+                <Item
+                    title={getCurrentLanguage().startsWith('zh') ? '工作空间权限' : 'Workspace access'}
+                    subtitle={getCurrentLanguage().startsWith('zh') ? '成员与资源授权' : 'Members and resource access'}
+                    icon={<Ionicons name="shield-checkmark-outline" size={29} color="#587A56" />}
+                    onPress={() => router.push('/settings/workspaces' as never)}
+                />
+                <Item
+                    title={getCurrentLanguage().startsWith('zh') ? '执行恢复确认' : 'Execution recovery'}
+                    subtitle={getCurrentLanguage().startsWith('zh') ? '审查过期能力的失败回报申请' : 'Review failed execution drain requests'}
+                    icon={<Ionicons name="shield-outline" size={29} color="#7A6B52" />}
+                    onPress={() => router.push('/settings/capability-recoveries' as never)}
+                />
+                <Item
+                    title={getCurrentLanguage().startsWith('zh') ? '身份核验设备' : 'Identity verification devices'}
+                    subtitle={getCurrentLanguage().startsWith('zh') ? '设备状态与撤销' : 'Device status and revocation'}
+                    icon={<Ionicons name="key-outline" size={29} color="#478877" />}
+                    onPress={() => router.push('/settings/human-credentials' as never)}
+                />
+                <Item
+                    title={getCurrentLanguage().startsWith('zh') ? '任务通知' : 'Work notifications'}
+                    subtitle={getCurrentLanguage().startsWith('zh') ? '订阅任务的站内更新' : 'Updates from subscribed work items'}
+                    icon={<Ionicons name="notifications-outline" size={29} color="#4E8A78" />}
+                    onPress={() => router.push('/settings/ai-notifications' as never)}
+                />
+            </ItemGroup>
             <ItemGroup title={t('settings.history')}>
                 <Item
                     title={t('sessionHistory.title')}

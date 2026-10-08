@@ -26,6 +26,7 @@ import { backoff } from '@/utils/time';
 import { RpcHandlerManager } from './rpc/RpcHandlerManager';
 import { execSync, execFileSync } from 'node:child_process';
 import { readdirSync, rmdirSync } from 'node:fs';
+import { verifyRegisteredRepo } from '@/orchestrator/registeredRepo';
 import { paginateSessionUserMessages, resolveSessionUserMessage, type SessionUserMessage } from '@/utils/sessionUserMessages';
 
 function createSessionCacheStatsReporter(
@@ -131,6 +132,9 @@ interface DaemonToServerEvents {
 }
 
 type MachineRpcHandlers = {
+    orchestratorFeatures: (params: { nonce: string; protocolVersion: 1 }) =>
+        Promise<import('happy-wire').AiRuntimeFeatures>;
+    structuredModel: (params: { prompt: string; timeoutMs: number; maxResponseBytes: number }) => Promise<{ success: true; text: string } | { success: false; error: string }>;
     spawnSession: (options: SpawnSessionOptions) => Promise<SpawnSessionResult>;
     stopSession: (sessionId: string) => boolean;
     requestShutdown: () => void;
@@ -147,6 +151,16 @@ type MachineRpcHandlers = {
         timeoutMs: number;
         workingDirectory?: string;
         permissionMode?: 'read_only' | 'approval' | 'guarded_auto';
+        assignedAgentId?: string;
+        parentTaskId?: string;
+        teamId?: string;
+        delegationDepth?: number;
+        integrationPolicy?: 'review_and_cherry_pick';
+        projectId?: string;
+        projectSnapshot?: import('@/orchestrator/projectSnapshot').ProjectSnapshot;
+        executionCapability?: import('@/orchestrator/executionCapability').ExecutionCapability;
+        templateProposalScope?: { templateId: string; templateVersionId: string;
+            expectedCurrentVersion: number };
     }) => Promise<{
         accepted: boolean;
         duplicate?: boolean;
@@ -160,6 +174,13 @@ type MachineRpcHandlers = {
         accepted: boolean;
         notFound?: boolean;
     }>;
+    orchestratorSteer: (params: { steeringId: string; executionId: string; dispatchToken: string; message: string }) => Promise<{ accepted: boolean }>;
+    orchestratorDecision: (params: { decisionId: string; executionId: string; dispatchToken: string;
+        version: number; decision: 'approved' | 'rejected'; operationId: string;
+        actionType: string; actionHash: string; childSessionId: string;
+        worktreePathHash: string; branchName: string; expiresAt: string }) => Promise<{ accepted: boolean }>;
+    orchestratorVerifyIntegration: (params: { executionId: string; dispatchToken: string; expectedHash: string; expected: unknown; proof: unknown }) =>
+        { verified: true; expectedHash: string } | { verified: false; errorCode: string };
 }
 
 export class ApiMachineClient {
@@ -229,6 +250,8 @@ export class ApiMachineClient {
             const trimmed = displayName?.trim();
             return { name: trimmed || host || undefined };
         });
+        this.rpcHandlerManager.registerHandler('orchestrator-verify-registered-repo', async (params: any) =>
+            verifyRegisteredRepo(this.token, this.machine.id, params));
     }
 
     setRPCHandlers({
@@ -236,8 +259,20 @@ export class ApiMachineClient {
         stopSession,
         requestShutdown,
         orchestratorDispatch,
-        orchestratorCancel
+        orchestratorFeatures,
+        orchestratorCancel,
+        orchestratorSteer,
+        orchestratorDecision,
+        orchestratorVerifyIntegration,
+        structuredModel,
     }: MachineRpcHandlers) {
+        this.rpcHandlerManager.registerHandler('orchestrator-features', async (params: any) => {
+            if (typeof params?.nonce !== 'string' || !/^[A-Za-z0-9-]{8,128}$/.test(params.nonce)
+                || params.protocolVersion !== 1) throw new Error('Invalid feature probe');
+            return orchestratorFeatures({ nonce: params.nonce, protocolVersion: 1 });
+        });
+        this.rpcHandlerManager.registerHandler('ai-structured-model', structuredModel);
+        this.rpcHandlerManager.registerHandler('orchestrator-verify-integration', orchestratorVerifyIntegration);
         // Register spawn session handler
         this.rpcHandlerManager.registerHandler('spawn-happy-session', async (params: any) => {
             const { directory, sessionId, resumeSessionId, sessionTitle, skipForkSession, machineId, approvedNewDirectoryCreation, agent, token, environmentVariables, worktreeBasePath, worktreeBranchName, workspaceRepos, workspacePath, repoScripts, mcpServers } = params || {};
@@ -362,7 +397,9 @@ export class ApiMachineClient {
 
         // Register orchestrator dispatch handler
         this.rpcHandlerManager.registerHandler('orchestrator-dispatch', async (params: any) => {
-            const { executionId, runId, taskId, dispatchToken, provider, executionType, childSessionId, model, prompt, timeoutMs, workingDirectory, permissionMode } = params || {};
+            const { executionId, runId, taskId, dispatchToken, provider, executionType, childSessionId, model, prompt, timeoutMs, workingDirectory, permissionMode,
+                assignedAgentId, parentTaskId, teamId, delegationDepth, integrationPolicy, projectId, projectSnapshot,
+                executionCapability, templateProposalScope } = params || {};
 
             if (!executionId || typeof executionId !== 'string') {
                 throw new Error('executionId is required');
@@ -406,6 +443,33 @@ export class ApiMachineClient {
             if (permissionMode !== undefined && !['read_only', 'approval', 'guarded_auto'].includes(permissionMode)) {
                 throw new Error('permissionMode is invalid');
             }
+            for (const value of [assignedAgentId, parentTaskId, teamId]) {
+                if (value !== undefined && (typeof value !== 'string' || !value || value.length > 256)) throw new Error('Invalid collaboration identity');
+            }
+            if (delegationDepth !== undefined && (!Number.isInteger(delegationDepth) || delegationDepth < 0 || delegationDepth > 8)) throw new Error('Invalid delegation depth');
+            if (integrationPolicy !== undefined && integrationPolicy !== 'review_and_cherry_pick') throw new Error('Invalid integration policy');
+            if (projectSnapshot !== undefined && (typeof projectSnapshot !== 'object' || projectSnapshot === null
+                || Array.isArray(projectSnapshot))) throw new Error('Invalid project snapshot');
+            if (projectId !== undefined && (typeof projectId !== 'string' || !projectId || projectId.length > 200))
+                throw new Error('Invalid project identity');
+            if (projectId && (!projectSnapshot || projectSnapshot.projectId !== projectId))
+                throw new Error('Project task requires its persisted snapshot');
+            if (executionCapability !== undefined && (executionCapability?.protocolVersion !== 1
+                || !/^[0-9a-f]{64}$/.test(executionCapability.token)
+                || !Array.isArray(executionCapability.allowedOps)
+                || !executionCapability.allowedOps.includes('finish')
+                || !executionCapability.allowedOps.includes('identity')
+                || !Number.isFinite(Date.parse(executionCapability.expiresAt))))
+                throw new Error('Execution capability is invalid');
+            if (templateProposalScope !== undefined && (typeof templateProposalScope !== 'object'
+                || templateProposalScope === null || Array.isArray(templateProposalScope)
+                || typeof templateProposalScope.templateId !== 'string'
+                || !templateProposalScope.templateId || templateProposalScope.templateId.length > 200
+                || typeof templateProposalScope.templateVersionId !== 'string'
+                || !templateProposalScope.templateVersionId || templateProposalScope.templateVersionId.length > 200
+                || !Number.isSafeInteger(templateProposalScope.expectedCurrentVersion)
+                || templateProposalScope.expectedCurrentVersion < 0))
+                throw new Error('Invalid frozen template proposal scope');
 
             return orchestratorDispatch({
                 executionId,
@@ -420,6 +484,8 @@ export class ApiMachineClient {
                 timeoutMs: Math.floor(timeoutMs),
                 workingDirectory,
                 permissionMode,
+                assignedAgentId, parentTaskId, teamId, delegationDepth, integrationPolicy, projectId, projectSnapshot,
+                executionCapability, templateProposalScope,
             });
         });
 
@@ -446,6 +512,26 @@ export class ApiMachineClient {
                 taskId,
                 dispatchToken,
             });
+        });
+        this.rpcHandlerManager.registerHandler('orchestrator-steer', async (params: any) => {
+            const { steeringId, executionId, dispatchToken, message } = params || {};
+            if ([steeringId, executionId, dispatchToken, message].some((value) => typeof value !== 'string' || !value))
+                throw new Error('Invalid steering identity or message');
+            if (message.length > 65_536) throw new Error('Steering message is too large');
+            return orchestratorSteer({ steeringId, executionId, dispatchToken, message });
+        });
+        this.rpcHandlerManager.registerHandler('orchestrator-decision', async (params: any) => {
+            const { decisionId, executionId, dispatchToken, version, decision, operationId,
+                actionType, actionHash, childSessionId, worktreePathHash, branchName, expiresAt } = params || {};
+            if ([decisionId, executionId, dispatchToken, operationId, actionType,
+                actionHash, childSessionId, worktreePathHash, branchName, expiresAt].some((value) => typeof value !== 'string' || !value)
+                || !Number.isSafeInteger(version) || version < 1
+                || !['approved', 'rejected'].includes(decision)
+                || !/^[0-9a-f]{64}$/.test(actionHash) || !/^[0-9a-f]{64}$/.test(worktreePathHash)
+                || !Number.isFinite(Date.parse(expiresAt)))
+                return { accepted: false };
+            return orchestratorDecision({ decisionId, executionId, dispatchToken, version, decision,
+                operationId, actionType, actionHash, childSessionId, worktreePathHash, branchName, expiresAt });
         });
 
         // List Claude sessions from local index

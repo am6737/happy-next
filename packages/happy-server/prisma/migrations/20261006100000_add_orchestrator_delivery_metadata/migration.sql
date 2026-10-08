@@ -1,0 +1,12 @@
+ALTER TABLE "OrchestratorTask" ADD COLUMN "worktreePath" TEXT;
+ALTER TABLE "OrchestratorTask" ADD COLUMN "branchName" TEXT;
+ALTER TABLE "OrchestratorTask" ADD COLUMN "baseCommit" TEXT;
+ALTER TABLE "OrchestratorTask" ADD COLUMN "commitSha" TEXT;
+ALTER TABLE "OrchestratorTask" ADD COLUMN "pullRequestUrl" TEXT;
+ALTER TABLE "OrchestratorTask" ADD COLUMN "pullRequestNumber" INTEGER;
+ALTER TABLE "OrchestratorExecution" ADD COLUMN "worktreePath" TEXT;
+ALTER TABLE "OrchestratorExecution" ADD COLUMN "branchName" TEXT;
+ALTER TABLE "OrchestratorExecution" ADD COLUMN "baseCommit" TEXT;
+ALTER TABLE "OrchestratorExecution" ADD COLUMN "commitSha" TEXT;
+ALTER TABLE "OrchestratorExecution" ADD COLUMN "pullRequestUrl" TEXT;
+ALTER TABLE "OrchestratorExecution" ADD COLUMN "pullRequestNumber" INTEGER;

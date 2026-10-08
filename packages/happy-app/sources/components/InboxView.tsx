@@ -22,6 +22,7 @@ import { showToast } from './Toast';
 import { useMainTabBottomPadding } from '@/hooks/useMainTabBottomPadding';
 import { loadDooTaskInboxUsersCache, saveDooTaskInboxUsersCache } from '@/sync/persistence';
 import { AiGroupAvatar, AiIdentityAvatar } from '@/features/aiTeams/components';
+import { Ionicons } from '@expo/vector-icons';
 import { getAiTeamCopy } from '@/features/aiTeams/copy';
 import { useManagedAiTeamData } from '@/features/aiTeams/agentStore';
 import type { AiAgent, AiChatMessage, AiConversation } from '@/features/aiTeams/types';
@@ -429,6 +430,11 @@ export const InboxView = React.memo(({}: InboxViewProps) => {
                     refreshControl={refreshControl}
                 >
                     <UpdateBanner />
+                    <ItemGroup title={aiTeamCopy.inboxTitle}>
+                        <Item title={getCurrentLanguage().startsWith('zh') ? '待决策' : 'Decisions'}
+                            icon={<Ionicons name="checkmark-done-outline" size={25} color={theme.colors.text} />}
+                            onPress={() => router.push('/inbox/ai/decisions' as never)} />
+                    </ItemGroup>
                     <View style={styles.emptyContainer}>
                         <Image
                             source={require('@/assets/images/brutalist/Brutalism 10.png')}
@@ -461,6 +467,9 @@ export const InboxView = React.memo(({}: InboxViewProps) => {
                 <UpdateBanner />
 
                 <ItemGroup title={aiTeamCopy.inboxTitle}>
+                    <Item title={getCurrentLanguage().startsWith('zh') ? '待决策' : 'Decisions'}
+                        icon={<Ionicons name="checkmark-done-outline" size={25} color={theme.colors.text} />}
+                        onPress={() => router.push('/inbox/ai/decisions' as never)} />
                     {aiTeamData.conversations.map((conversation) => (
                         <AiConversationListItem
                             key={conversation.id}

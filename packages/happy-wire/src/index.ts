@@ -8,3 +8,8 @@ export * from './filePreview';
 export * from './fileDownload';
 export * from './toolImagePreview';
 export * from './terminal';
+export * from './aiTeams';
+export * from './aiCoordinator';
+export * from './aiTeamOperations';
+export * from './aiTeamProduction';
+export * from './aiRuntime';

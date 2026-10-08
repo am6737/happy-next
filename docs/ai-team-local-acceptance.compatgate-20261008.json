@@ -1,0 +1,151 @@
+{
+  "format": "happy-ai-team-independent-candidate-acceptance-v2",
+  "sourceSha256": "4785f1823263c5a5ede2ff1ead2592efeb4d99beacc139370fad4c9fb13a1281",
+  "artifactContextSha256": "126e37df8ab655d295f9c1d66629e3d2cd17149bad1dfa4d283a725a9ab8beba",
+  "runtimeRoot": "/tmp/ai-team-frozen-deps-rootcompatgate8de72f",
+  "scope": "new compatgate candidate partial matrix; not complete production acceptance",
+  "results": [
+    {
+      "name": "compat-old-upgrade",
+      "exitCode": 0,
+      "signal": null,
+      "report": "/tmp/ai-team-compatgate-compat-old-upgrade-root-20261008.json",
+      "reportSha256": "279f5b4041d48bd6d92540708aa64c1638f37f1c268de018c723371e73e18c87",
+      "result": "PASS"
+    },
+    {
+      "name": "compat-finish",
+      "exitCode": 0,
+      "signal": null,
+      "report": "/tmp/ai-team-compatgate-compat-finish-root-20261008.json",
+      "reportSha256": "07ae906174cd944a3c18a87d450ac97fb6879405660b1a3e2716b6b142f0f0db",
+      "result": "PASS"
+    },
+    {
+      "name": "compat-old-generic",
+      "exitCode": 0,
+      "signal": null,
+      "report": "/tmp/ai-team-compatgate-compat-old-generic-root-20261008.json",
+      "reportSha256": "6e67bf9eefbb4a254eccd22c3b9582e27182e96a1032b9ad85875f3b940d3891",
+      "result": "PASS"
+    },
+    {
+      "name": "compat-owner-cancel",
+      "exitCode": 0,
+      "signal": null,
+      "report": "/tmp/ai-team-compatgate-compat-owner-cancel-root-20261008.json",
+      "reportSha256": "674dbde4d97cc22cb8cfc4f8def95f465212bb51e145ae9fdac78928489ed97a",
+      "result": "PASS"
+    },
+    {
+      "name": "compat-owner-inflight",
+      "exitCode": 0,
+      "signal": null,
+      "report": "/tmp/ai-team-compatgate-compat-owner-inflight-root-20261008.json",
+      "reportSha256": "a9bac0439e6bf27b6a50f2d75f23de340a5e37c575478defdcc755d2a8ff2d5d",
+      "result": "PASS"
+    },
+    {
+      "name": "restore",
+      "exitCode": 0,
+      "signal": null,
+      "report": "/tmp/ai-team-compatgate-restore-root-20261008.json",
+      "reportSha256": "6b74923da69ff02d6f68391cad9693dc9e51babe72e90e9dc3200c39d8333eaf",
+      "result": "PASS"
+    },
+    {
+      "name": "compat-owner",
+      "exitCode": 0,
+      "signal": null,
+      "report": "/tmp/ai-team-compatgate-compat-owner-root-20261008.json",
+      "reportSha256": "7c3d458b50f90665d2aa425a30cf6e35fc5a726f08eb05a44969c238cc933434",
+      "result": "PASS"
+    },
+    {
+      "name": "compat-redis",
+      "exitCode": 0,
+      "signal": null,
+      "report": "/tmp/ai-team-compatgate-compat-redis-root-20261008.json",
+      "reportSha256": "21adb43ea781f9abb770ab5f3996cb0b96111781deb182b0056673b7046615bd",
+      "result": "PASS"
+    },
+    {
+      "name": "old-agent-safe",
+      "exitCode": 0,
+      "signal": null,
+      "report": "/tmp/ai-team-compatgate-old-agent-safe-root-20261008.json",
+      "reportSha256": "476a4250543f60d0180c9f7a3d77649a45aea99eeec6fe8dc3d774532a507ed6",
+      "result": "PASS"
+    },
+    {
+      "name": "old-agent-generic",
+      "exitCode": 0,
+      "signal": null,
+      "report": "/tmp/ai-team-compatgate-old-agent-generic-root-20261008.json",
+      "reportSha256": "a26304db858f9e7fbda06e30e7875cc431d7437d740b1548861a149bf0f5b908",
+      "result": "PASS"
+    },
+    {
+      "name": "app-five",
+      "exitCode": 1,
+      "signal": null,
+      "report": "/tmp/ai-team-compatgate-app-five-root-20261008.json",
+      "reportSha256": "402f181b01efb7e79ff61572c8565d0a63dcec8c52db13a31dc1d5a9f25836a4",
+      "result": "FAIL"
+    },
+    {
+      "name": "app-diagnostic",
+      "exitCode": 1,
+      "signal": null,
+      "report": "/tmp/ai-team-compatgate-app-diagnostic-root-20261008.json",
+      "reportSha256": "7172d2b4c951479f69998dd36e3629e014fffd2ba81274b7763f820e8aeb84e4",
+      "result": "FAIL"
+    }
+  ],
+  "counts": {
+    "rootPass": 10,
+    "rootFail": 2,
+    "serverPass": 18
+  },
+  "server": {
+    "path": "/tmp/ai-server-compatgate-33bcb08f93ab/report.json",
+    "sha256": "653aae9137b0f8c9777b8db8d8b4050c27d6688f2533014ff02ff96a89a55c26"
+  },
+  "serverBoundary": {
+    "beforeBinding": true,
+    "afterBinding": true,
+    "preDestroyNonzeroCounts": {
+      "AiDecisionRequest": 1,
+      "AiInboundRequest": 8
+    },
+    "postgresRemoved": true,
+    "redisRemoved": true,
+    "realProvider": false
+  },
+  "image": {
+    "path": "/tmp/ai-image-root-1e00870e8d-report.json",
+    "sha256": "6cf9036c451f0d6fddd296a46dd0d39f7ac1dabf0bbe3ca68640d7b7c9eaf04c"
+  },
+  "oldComponentsIndependentCheck": {
+    "path": "/tmp/ai-team-compatgate-old-components-independent-root-20261008.json",
+    "sha256": "cfd0b085ee220f1c19f243eaa45682105c2a49b72bf6feca9944a2450cfd94d7"
+  },
+  "strictPreflight": {
+    "path": "/tmp/ai-team-compatgate-release-preflight-root-20261008.json",
+    "sha256": "83bf40808f0ec44a08fb88eab2480300d7508e0ccfbfd9d317220debeb033236"
+  },
+  "repositoryAccess": {
+    "path": "/tmp/ai-team-compatgate-github-access-root-20261008.json",
+    "sha256": "88155ce38defd267adcee6e495aaa12b55b5eac605e922f3976c6c13cf2eac39"
+  },
+  "sourceProofEnforcementMissing": [
+    "old npm complete extracted runtime tree identity",
+    "old Server prepared tracked source identity"
+  ],
+  "activeWork": [
+    "App original task infrastructure diagnosis/fix",
+    "review original task staged old component identity implementation"
+  ],
+  "historicalDeadlineAcceptance": "docs/ai-team-local-acceptance.deadline-20261008.json",
+  "productionReady": false
+}

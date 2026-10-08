@@ -33,6 +33,16 @@ export function createEmptyAiAgentDraft(): AiAgentDraft {
     };
 }
 
+/** Model suggestions describe an agent; runtime, model, path and permissions
+ * remain the user's explicit selections, including edits made while waiting. */
+export function applyGeneratedAiAgentDraft(current: AiAgentDraft, generated: AiAgentDraft): AiAgentDraft {
+    return {
+        ...generated,
+        enabled: current.enabled,
+        settings: { ...current.settings, instructions: generated.settings.instructions },
+    };
+}
+
 export function cloneAiAgentDraft(agent: AiAgent): AiAgentDraft {
     return {
         name: agent.name,

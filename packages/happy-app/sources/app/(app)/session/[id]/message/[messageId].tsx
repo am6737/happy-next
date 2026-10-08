@@ -1,5 +1,6 @@
 import * as React from 'react';
-import { useLocalSearchParams, Stack, useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { Stack } from '@/components/navigation/AppStack';
 import { Text, View, ActivityIndicator, Pressable, useWindowDimensions, Platform } from "react-native";
 import { useMessage, useSession, useSessionMessages } from "@/sync/storage";
 import { sync } from '@/sync/sync';

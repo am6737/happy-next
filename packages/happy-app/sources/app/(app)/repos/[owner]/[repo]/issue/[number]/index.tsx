@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { View, ScrollView, Pressable, Platform } from 'react-native';
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Stack } from '@/components/navigation/AppStack';
 import { Text } from '@/components/StyledText';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { Ionicons } from '@expo/vector-icons';
@@ -111,6 +112,11 @@ function IssueDetailScreen() {
         } satisfies NewSessionData);
         router.push(`/new?dataId=${dataId}`);
     }, [originalIssue, credentials, owner, repo, issueNumber, router]);
+
+    const handleAssignToAiTeam = React.useCallback(() => {
+        if (!originalIssue) return;
+        router.push(`/inbox/ai/assign?owner=${encodeURIComponent(owner!)}&repo=${encodeURIComponent(repo!)}&number=${issueNumber}&title=${encodeURIComponent(originalIssue.title)}&body=${encodeURIComponent(originalIssue.body ?? '')}` as never);
+    }, [originalIssue, owner, repo, issueNumber, router]);
 
     const insets = useSafeAreaInsets();
     const [menuVisible, setMenuVisible] = React.useState(false);
@@ -404,6 +410,17 @@ function IssueDetailScreen() {
                         <Ionicons name="sparkles" size={17} color={theme.colors.button.primary.tint} />
                         <Text style={[styles.bottomButtonText, { color: theme.colors.button.primary.tint }]} numberOfLines={1}>
                             {t('issueDetail.aiSession')}
+                        </Text>
+                    </View>
+                </Pressable>
+                <Pressable
+                    style={[styles.btnPilot, { backgroundColor: theme.colors.surfaceHigh }]}
+                    onPress={handleAssignToAiTeam}
+                >
+                    <View style={styles.bottomButtonInner}>
+                        <Ionicons name="people-outline" size={17} color={theme.colors.text} />
+                        <Text style={[styles.bottomButtonText, { color: theme.colors.text }]} numberOfLines={1}>
+                            AI Team
                         </Text>
                     </View>
                 </Pressable>

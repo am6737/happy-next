@@ -1,8 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { applyAiAgentDraft, cloneAiAgentDraft, createEmptyAiAgentDraft } from './agentDefinition';
+import { applyAiAgentDraft, applyGeneratedAiAgentDraft, cloneAiAgentDraft, createEmptyAiAgentDraft } from './agentDefinition';
 import type { AiAgent } from './types';
 
 describe('AI agent definitions', () => {
+    it('does not grant model-suggested runtime access or overwrite current permission choices', () => {
+        const current = createEmptyAiAgentDraft();
+        current.enabled = false;
+        current.settings = { ...current.settings, engine: 'codex', model: 'chosen-model', workingDirectory: '/chosen/repo', permissionMode: 'read_only', allowDelegation: false };
+        const generated = createEmptyAiAgentDraft();
+        generated.name = 'Reviewer';
+        generated.settings = { ...generated.settings, workingDirectory: '/private/repo', permissionMode: 'guarded_auto', allowDelegation: true, instructions: 'Review changes' };
+        const result = applyGeneratedAiAgentDraft(current, generated);
+        expect(result.name).toBe('Reviewer');
+        expect(result.enabled).toBe(false);
+        expect(result.settings).toEqual({ ...current.settings, instructions: 'Review changes' });
+        expect(current.settings.instructions).toBe('');
+    });
     it('creates a safe default draft', () => {
         const draft = createEmptyAiAgentDraft();
         expect(draft.enabled).toBe(true);

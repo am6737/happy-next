@@ -68,6 +68,26 @@ export const databaseRecordCountGauge = new Gauge({
     registers: [register]
 });
 
+export const aiWorkflowQueueGauge = new Gauge({
+    name: 'ai_workflow_queue_items',
+    help: 'AI workflow items by fixed queue and status',
+    labelNames: ['queue', 'status'] as const,
+    registers: [register]
+});
+
+export const aiBudgetMaxUtilizationGauge = new Gauge({
+    name: 'ai_budget_max_utilization_ratio',
+    help: 'Highest used plus reserved ratio among active AI budget policies',
+    registers: [register]
+});
+
+export const aiBudgetPoliciesHighWaterGauge = new Gauge({
+    name: 'ai_budget_policies_high_water',
+    help: 'Number of active AI budget policies above the fixed utilization threshold',
+    labelNames: ['threshold'] as const,
+    registers: [register]
+});
+
 // WebSocket connection tracking
 const connectionCounts = {
     'user-scoped': 0,
@@ -88,18 +108,42 @@ export function decrementWebSocketConnection(type: 'user-scoped' | 'session-scop
 // Database metrics updater
 export async function updateDatabaseMetrics(): Promise<void> {
     // Query counts for each table
-    const [accountCount, sessionCount, messageCount, machineCount] = await Promise.all([
+    const [accountCount, sessionCount, messageCount, machineCount,
+        pendingDecisions, pendingDelivery, blockedDelivery, reservedBudget,
+        unknownBudget] = await Promise.all([
         db.account.count(),
         db.session.count(),
         db.sessionMessage.count(),
-        db.machine.count()
+        db.machine.count(),
+        db.aiDecisionRequest.count({ where: { status: 'pending' } }),
+        db.aiDecisionRequest.count({ where: { deliveryStatus: 'pending' } }),
+        db.aiDecisionRequest.count({ where: { deliveryStatus: 'blocked' } }),
+        db.aiBudgetReservation.count({ where: { status: 'reserved' } }),
+        db.aiBudgetReservation.count({ where: { status: 'unknown' } })
     ]);
+    const [{ maxRatio, highWater }] = await db.$queryRaw<Array<{
+        maxRatio: number; highWater: bigint,
+    }>>`
+        SELECT COALESCE(MAX(("usedMicros" + "reservedMicros")::numeric
+                / "limitMicros"::numeric), 0)::double precision AS "maxRatio",
+               COUNT(*) FILTER (WHERE ("usedMicros" + "reservedMicros")::numeric
+                   / "limitMicros"::numeric >= 0.9) AS "highWater"
+        FROM "AiBudgetPolicy"
+        WHERE active = TRUE AND "periodStart" <= clock_timestamp()
+          AND "periodEnd" > clock_timestamp() AND "limitMicros" > 0`;
 
     // Update metrics
     databaseRecordCountGauge.set({ table: 'accounts' }, accountCount);
     databaseRecordCountGauge.set({ table: 'sessions' }, sessionCount);
     databaseRecordCountGauge.set({ table: 'messages' }, messageCount);
     databaseRecordCountGauge.set({ table: 'machines' }, machineCount);
+    aiWorkflowQueueGauge.set({ queue: 'decision', status: 'pending' }, pendingDecisions);
+    aiWorkflowQueueGauge.set({ queue: 'decision_delivery', status: 'pending' }, pendingDelivery);
+    aiWorkflowQueueGauge.set({ queue: 'decision_delivery', status: 'blocked' }, blockedDelivery);
+    aiWorkflowQueueGauge.set({ queue: 'budget', status: 'reserved' }, reservedBudget);
+    aiWorkflowQueueGauge.set({ queue: 'budget', status: 'unknown' }, unknownBudget);
+    aiBudgetMaxUtilizationGauge.set(maxRatio);
+    aiBudgetPoliciesHighWaterGauge.set({ threshold: '0.9' }, Number(highWater));
 }
 
 export function startDatabaseMetricsUpdater(): void {

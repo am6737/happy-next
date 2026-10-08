@@ -7,6 +7,7 @@ import {
     resolveOrchestratorExecutionPrompt,
     resolveOrchestratorSummaryLineData,
     sanitizeOrchestratorOutputSummary,
+    verifiedOrchestratorAnswer,
     shortenMachineId,
     sortOrchestratorExecutionsByAttemptDesc,
 } from './display';
@@ -41,6 +42,21 @@ describe('orchestrator display helpers', () => {
         expect(sanitizeOrchestratorOutputSummary('```')).toBeNull();
         expect(sanitizeOrchestratorOutputSummary('```json\nhello\n```')).toBe('hello');
         expect(sanitizeOrchestratorOutputSummary('done')).toBe('done');
+    });
+
+    it('shows only a completed, explicitly verified, nonempty final answer', () => {
+        const answer = { status: 'completed', answerVerified: true, finalResponse: '  Safe answer  ',
+            deliveryVerified: false };
+        expect(verifiedOrchestratorAnswer(answer)).toBe('Safe answer');
+        for (const state of [
+            { ...answer, status: 'running' },
+            { ...answer, answerVerified: false },
+            { ...answer, answerVerified: null },
+            { ...answer, answerVerified: undefined },
+            { ...answer, finalResponse: '  ' },
+            { ...answer, finalResponse: null },
+            { ...answer, deliveryVerified: undefined },
+        ]) expect(verifiedOrchestratorAnswer(state)).toBeNull();
     });
 
     it('sorts execution records by attempt desc', () => {

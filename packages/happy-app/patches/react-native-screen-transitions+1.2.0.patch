@@ -1,0 +1,11 @@
+diff --git a/node_modules/react-native-screen-transitions/package.json b/node_modules/react-native-screen-transitions/package.json
+--- a/node_modules/react-native-screen-transitions/package.json
++++ b/node_modules/react-native-screen-transitions/package.json
+@@ -38,7 +38,6 @@
+   },
+   "peerDependencies": {
+     "@types/react": "*",
+-    "@types/react-native": "*",
+     "react": "*",
+     "react-native": "*",
+     "react-native-safe-area-context": "*",

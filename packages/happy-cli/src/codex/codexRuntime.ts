@@ -72,7 +72,8 @@ export function pickCodexRuntime(packageSpec: string, args: readonly string[], l
 
 export function resolveCodexRuntime(packageSpec: string, args: readonly string[]): CodexRuntime {
   const runtime = pickCodexRuntime(packageSpec, args, localCodexVersion());
-  logger.debug(`[Codex] Runtime for ${packageSpec}: ${runtime.command} ${runtime.args.join(' ')}`);
+  logger.debug(`[Codex] Runtime for ${packageSpec}: ${runtime.command} ${runtime.args.map((arg) =>
+    arg.includes('HAPPY_ORCH_LEADER_CAPABILITY') ? '[execution MCP configuration redacted]' : arg).join(' ')}`);
   return runtime;
 }
 

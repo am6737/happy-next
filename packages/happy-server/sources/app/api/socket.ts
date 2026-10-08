@@ -13,9 +13,15 @@ import { machineUpdateHandler } from "./socket/machineUpdateHandler";
 import { artifactUpdateHandler } from "./socket/artifactUpdateHandler";
 import { accessKeyHandler } from "./socket/accessKeyHandler";
 import { terminalStreamHandler } from "./socket/terminalStreamHandler";
-import { cleanupUserRpcSocket, getOrCreateUserRpcListeners } from "./socket/rpcRegistry";
+import { cleanupUserRpcSocket, enableDistributedRpc, getOrCreateUserRpcListeners,
+    stopDistributedRpc } from "./socket/rpcRegistry";
+import { db } from "@/storage/db";
+import { registerSessionPresence, unregisterSessionPresence } from "@/app/events/eventBridge";
 
 export function startSocket(app: Fastify) {
+    enableDistributedRpc();
+    void eventRouter.startDistributed().catch(error =>
+        log({ module: 'event-bridge', level: 'error' }, String(error)));
     const io = new Server(app.server, {
         cors: {
             origin: "*",
@@ -34,46 +40,49 @@ export function startSocket(app: Fastify) {
         serveClient: false // Don't serve the client files
     });
 
-    io.on("connection", async (socket) => {
-        log({ module: 'websocket' }, `New connection attempt from socket: ${socket.id}`);
+    io.use(async (socket, next) => {
         const token = socket.handshake.auth.token as string;
         const clientType = socket.handshake.auth.clientType as 'session-scoped' | 'user-scoped' | 'machine-scoped' | undefined;
         const sessionId = socket.handshake.auth.sessionId as string | undefined;
         const machineId = socket.handshake.auth.machineId as string | undefined;
-        const supportsMessageReceipt = socket.handshake.auth.supportsMessageReceipt === true;
-
         if (!token) {
-            log({ module: 'websocket' }, `No token provided`);
-            socket.emit('error', { message: 'Missing authentication token' });
-            socket.disconnect();
-            return;
+            return next(new Error('Missing authentication token'));
         }
-
-        // Validate session-scoped clients have sessionId
         if (clientType === 'session-scoped' && !sessionId) {
-            log({ module: 'websocket' }, `Session-scoped client missing sessionId`);
-            socket.emit('error', { message: 'Session ID required for session-scoped clients' });
-            socket.disconnect();
-            return;
+            return next(new Error('Session ID required'));
         }
-
-        // Validate machine-scoped clients have machineId
         if (clientType === 'machine-scoped' && !machineId) {
-            log({ module: 'websocket' }, `Machine-scoped client missing machineId`);
-            socket.emit('error', { message: 'Machine ID required for machine-scoped clients' });
-            socket.disconnect();
-            return;
+            return next(new Error('Machine ID required'));
         }
-
-        const verified = await auth.verifyToken(token);
-        if (!verified) {
-            log({ module: 'websocket' }, `Invalid token provided`);
-            socket.emit('error', { message: 'Invalid authentication token' });
-            socket.disconnect();
-            return;
-        }
-
+        let verified: Awaited<ReturnType<typeof auth.verifyToken>>;
+        try { verified = await auth.verifyToken(token); }
+        catch { return next(new Error('Invalid authentication token')); }
+        if (!verified) return next(new Error('Invalid authentication token'));
         const userId = verified.userId;
+        try {
+        if (clientType === 'session-scoped') {
+            const session = await db.session.findFirst({ where: { id: sessionId,
+                accountId: userId }, select: { id: true } });
+            if (!session) return next(new Error('Session is unavailable'));
+        }
+        if (clientType === 'machine-scoped') {
+            const machine = await db.machine.findFirst({ where: { id: machineId, accountId: userId },
+                select: { id: true } });
+            if (!machine) return next(new Error('Machine is unavailable'));
+        }
+        } catch {
+            return next(new Error('Connection authorization unavailable'));
+        }
+        socket.data.authenticatedUserId = userId;
+        next();
+    });
+
+    io.on("connection", (socket) => {
+        const clientType = socket.handshake.auth.clientType as 'session-scoped' | 'user-scoped' | 'machine-scoped' | undefined;
+        const sessionId = socket.handshake.auth.sessionId as string | undefined;
+        const machineId = socket.handshake.auth.machineId as string | undefined;
+        const supportsMessageReceipt = socket.handshake.auth.supportsMessageReceipt === true;
+        const userId = socket.data.authenticatedUserId as string;
         log({ module: 'websocket' }, `Token verified: ${userId}, clientType: ${clientType || 'user-scoped'}, sessionId: ${sessionId || 'none'}, machineId: ${machineId || 'none'}, socketId: ${socket.id}`);
 
         // Store connection based on type
@@ -102,6 +111,11 @@ export function startSocket(app: Fastify) {
             };
         }
         eventRouter.addConnection(userId, connection);
+        if (connection.connectionType === 'session-scoped') {
+            void registerSessionPresence(userId, connection.sessionId, socket.id,
+                connection.supportsMessageReceipt).catch(error =>
+                log({ module: 'event-bridge', level: 'error' }, String(error)));
+        }
         incrementWebSocketConnection(connection.connectionType);
 
         // Broadcast daemon online status
@@ -120,6 +134,10 @@ export function startSocket(app: Fastify) {
 
             // Cleanup connections
             eventRouter.removeConnection(userId, connection);
+            if (connection.connectionType === 'session-scoped') {
+                void unregisterSessionPresence(socket.id).catch(error =>
+                    log({ module: 'event-bridge', level: 'error' }, String(error)));
+            }
             decrementWebSocketConnection(connection.connectionType);
 
             log({ module: 'websocket' }, `User disconnected: ${userId}`);
@@ -134,12 +152,13 @@ export function startSocket(app: Fastify) {
                 });
             }
 
-            cleanupUserRpcSocket(userId, socket);
+            void cleanupUserRpcSocket(userId, socket).catch(error =>
+                log({ module: 'websocket-rpc', level: 'error' }, String(error)));
         });
 
         // Handlers
         const userRpcListeners = getOrCreateUserRpcListeners(userId);
-        rpcHandler(userId, socket, userRpcListeners);
+        rpcHandler(userId, socket, userRpcListeners, connection);
         usageHandler(userId, socket);
         sessionUpdateHandler(userId, socket, connection);
         pingHandler(socket);
@@ -154,5 +173,7 @@ export function startSocket(app: Fastify) {
 
     onShutdown('api', async () => {
         await io.close();
+        await stopDistributedRpc();
+        eventRouter.stopDistributed();
     });
 }

@@ -1,0 +1,788 @@
+{
+  "format": "happy-ai-team-independent-candidate-acceptance-v3",
+  "sourceSha256": "3bf522a4d7e8f7b9d15153e3b5d8d6612a3de6f9066e5b0ed0bd5aa7d0ea66c1",
+  "contextSha256": "d1350df4c5d01e4a0e40b190bc0c3dc534b665c9bef0188d0de1fd2b1dba4019",
+  "scope": "historical p2verified local checks retained; current source changed for native startup fix and needs full qualification",
+  "phase": "app_startup_source_fixed_waiting_physical_device_retest",
+  "updatedAt": "2026-10-08T10:52:01.427791+00:00",
+  "sourceSnapshot": "/tmp/ai-team-source-snapshot-rootp2verified-20261008.json",
+  "runtimeRoot": "/tmp/ai-team-frozen-deps-rootp2verified7469ab",
+  "historicalLatest": "docs/ai-team-local-acceptance.identitygate-progress-20261008.json",
+  "historicalLatestSha256": "287520c9210aa700f5cd06bbb8989adb54abb44975a6371789aead1fe7b73bfd",
+  "cases": [
+    {
+      "name": "alerts",
+      "selected": {
+        "path": "/tmp/ai-team-p2verified-alerts-root-20261008.json",
+        "sha256": "bdea06415533503faab85a5f233430d03662bc00c83a600c8d7e4621bef6b976",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-p2verified-alerts-root-20261008.json",
+          "sha256": "bdea06415533503faab85a5f233430d03662bc00c83a600c8d7e4621bef6b976",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    },
+    {
+      "name": "app-diagnostic",
+      "selected": {
+        "path": "/tmp/ai-team-p2verified-app-diagnostic-root-20261008.json",
+        "sha256": "2199daaba2e53a061d6beb3501f8bc516a8a990d9921971d35aef9191ecc26d3",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-p2verified-app-diagnostic-root-20261008.json",
+          "sha256": "2199daaba2e53a061d6beb3501f8bc516a8a990d9921971d35aef9191ecc26d3",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    },
+    {
+      "name": "app-five",
+      "selected": {
+        "path": "/tmp/ai-team-p2verified-app-five-root-20261008.json",
+        "sha256": "d7b8a09515b755a50e7dd82fbe32f953cecee8c9f9e2ead299b6508b841cdc45",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-p2verified-app-five-root-20261008.json",
+          "sha256": "d7b8a09515b755a50e7dd82fbe32f953cecee8c9f9e2ead299b6508b841cdc45",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    },
+    {
+      "name": "app-p2-skills",
+      "selected": {
+        "path": "/tmp/ai-team-p2verified-app-p2-skills-root-20261008.json",
+        "sha256": "0559b2d13537322981f04e38b732ef857f1dba1fd0e3c7733f903a7d4291a65a",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-p2verified-app-p2-skills-root-20261008.json",
+          "sha256": "0559b2d13537322981f04e38b732ef857f1dba1fd0e3c7733f903a7d4291a65a",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    },
+    {
+      "name": "app-p2-workspace",
+      "selected": {
+        "path": "/tmp/ai-team-p2verified-app-p2-workspace-root-20261008.json",
+        "sha256": "9495545b3a45d8ceaa0abead146e1eef37ce7e578294959b51cd9ecef5eba5ad",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-p2verified-app-p2-workspace-root-20261008.json",
+          "sha256": "9495545b3a45d8ceaa0abead146e1eef37ce7e578294959b51cd9ecef5eba5ad",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    },
+    {
+      "name": "capacity",
+      "selected": {
+        "path": "/tmp/ai-team-p2verified-capacity-root-20261008.json",
+        "sha256": "0cf7d248f42692157e88e8accb9b70236847a48b0c70acb1a7bf4727146ca802",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-p2verified-capacity-root-20261008.json",
+          "sha256": "0cf7d248f42692157e88e8accb9b70236847a48b0c70acb1a7bf4727146ca802",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    },
+    {
+      "name": "compat-finish",
+      "selected": {
+        "path": "/tmp/ai-team-p2verified-compat-finish-root-20261008.json",
+        "sha256": "5fa584d6818ab981686ffb887ac57cfe88ffca7727db9d6502fff8ddb002b8f6",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-p2verified-compat-finish-root-20261008.json",
+          "sha256": "5fa584d6818ab981686ffb887ac57cfe88ffca7727db9d6502fff8ddb002b8f6",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    },
+    {
+      "name": "compat-old-generic",
+      "selected": {
+        "path": "/tmp/ai-team-p2verified-compat-old-generic-root-20261008.json",
+        "sha256": "b8414c99dc1768c8511be7847b4bea88ef3a7ca6c16fee552bc1f2efa24b9953",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-p2verified-compat-old-generic-root-20261008.json",
+          "sha256": "b8414c99dc1768c8511be7847b4bea88ef3a7ca6c16fee552bc1f2efa24b9953",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    },
+    {
+      "name": "compat-old-upgrade",
+      "selected": {
+        "path": "/tmp/ai-team-p2verified-compat-old-upgrade-root-20261008.json",
+        "sha256": "295d461f67d2730864f9891b0fd4374670bab014f42491867e19283993ac4620",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-p2verified-compat-old-upgrade-root-20261008.json",
+          "sha256": "295d461f67d2730864f9891b0fd4374670bab014f42491867e19283993ac4620",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    },
+    {
+      "name": "compat-owner",
+      "selected": {
+        "path": "/tmp/ai-team-p2verified-compat-owner-root-20261008.json",
+        "sha256": "92d5033434a084d595f6ee5002b235be0831a0a0144796f98efa58b2b9e3a028",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-p2verified-compat-owner-root-20261008.json",
+          "sha256": "92d5033434a084d595f6ee5002b235be0831a0a0144796f98efa58b2b9e3a028",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    },
+    {
+      "name": "compat-owner-cancel",
+      "selected": {
+        "path": "/tmp/ai-team-p2verified-compat-owner-cancel-root-20261008.json",
+        "sha256": "52ce17b1a6e1c53379d5a7bdd5cdd2e9259b910f586310b535489aebe3998fa6",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-p2verified-compat-owner-cancel-root-20261008.json",
+          "sha256": "52ce17b1a6e1c53379d5a7bdd5cdd2e9259b910f586310b535489aebe3998fa6",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    },
+    {
+      "name": "compat-owner-inflight",
+      "selected": {
+        "path": "/tmp/ai-team-p2verified-compat-owner-inflight-root-20261008.json",
+        "sha256": "32900e575caeb67942d183af5afadf7c534bae64f7fe8a632e7fbecd535d0ddd",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-p2verified-compat-owner-inflight-root-20261008.json",
+          "sha256": "32900e575caeb67942d183af5afadf7c534bae64f7fe8a632e7fbecd535d0ddd",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    },
+    {
+      "name": "compat-redis",
+      "selected": {
+        "path": "/tmp/ai-team-p2verified-compat-redis-root-20261008.json",
+        "sha256": "bcf561e200bf681ca339cefecf34b87dc50532ffdeffeb2b5d8f12934d2fb00c",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-p2verified-compat-redis-root-20261008.json",
+          "sha256": "bcf561e200bf681ca339cefecf34b87dc50532ffdeffeb2b5d8f12934d2fb00c",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    },
+    {
+      "name": "coordinator",
+      "selected": {
+        "path": "/tmp/ai-team-p2verified-coordinator-root-20261008.json",
+        "sha256": "49f42677502d5a661d1ec651e5b32ea19344c73a70268d41ae4cb0a34afd92a3",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-p2verified-coordinator-root-20261008.json",
+          "sha256": "49f42677502d5a661d1ec651e5b32ea19344c73a70268d41ae4cb0a34afd92a3",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    },
+    {
+      "name": "cross-cwd",
+      "selected": {
+        "path": "/tmp/ai-team-p2verified-cross-cwd-root-20261008.json",
+        "sha256": "dea8a2452a87a93e941727d19c97a11524c32404694397d4ef0d9627b8396c4f",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-p2verified-cross-cwd-root-20261008.json",
+          "sha256": "dea8a2452a87a93e941727d19c97a11524c32404694397d4ef0d9627b8396c4f",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    },
+    {
+      "name": "git",
+      "selected": {
+        "path": "/tmp/ai-team-p2verified-git-root-20261008.json",
+        "sha256": "a79f50848940d0f67fffc2e904967a4eab923a9cada8415f10805972802f7f18",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-p2verified-git-root-20261008.json",
+          "sha256": "a79f50848940d0f67fffc2e904967a4eab923a9cada8415f10805972802f7f18",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    },
+    {
+      "name": "lifecycle-approval-cancel",
+      "selected": {
+        "path": "/tmp/ai-team-p2verified-lifecycle-approval-cancel-root-20261008.json",
+        "sha256": "d669d7a262e31dc37520b69c530bcc72c6d96f8240a181101bdfd03eabd9b1d4",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-p2verified-lifecycle-approval-cancel-root-20261008.json",
+          "sha256": "d669d7a262e31dc37520b69c530bcc72c6d96f8240a181101bdfd03eabd9b1d4",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    },
+    {
+      "name": "lifecycle-approval-timeout",
+      "selected": {
+        "path": "/tmp/ai-team-p2verified-lifecycle-approval-timeout-root-20261008.json",
+        "sha256": "7d7560d47d8d8abb4888e349fd255f40057a7e6af9091de8e6c0e117fa746036",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-p2verified-lifecycle-approval-timeout-root-20261008.json",
+          "sha256": "7d7560d47d8d8abb4888e349fd255f40057a7e6af9091de8e6c0e117fa746036",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    },
+    {
+      "name": "lifecycle-cancel",
+      "selected": {
+        "path": "/tmp/ai-team-p2verified-lifecycle-cancel-root-20261008.json",
+        "sha256": "2224ce69ca8afbd8f4550450fd9b5b506c01d13ad6605f529416fe97682cff02",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-p2verified-lifecycle-cancel-root-20261008.json",
+          "sha256": "2224ce69ca8afbd8f4550450fd9b5b506c01d13ad6605f529416fe97682cff02",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    },
+    {
+      "name": "lifecycle-claude-cancel-env",
+      "selected": {
+        "path": "/tmp/ai-team-p2verified-lifecycle-claude-cancel-env-root-20261008.json",
+        "sha256": "5f979cda544ef4cf303a90ccc65f6a8b2115aeaac0f09732146751374f93f037",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-p2verified-lifecycle-claude-cancel-env-root-20261008.json",
+          "sha256": "5f979cda544ef4cf303a90ccc65f6a8b2115aeaac0f09732146751374f93f037",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    },
+    {
+      "name": "lifecycle-claude-normal-env",
+      "selected": {
+        "path": "/tmp/ai-team-p2verified-lifecycle-claude-normal-env-root-20261008.json",
+        "sha256": "450dc93c7e78cd3c18e887fff94df9c3ffa66f4f8431b94c12aa765ab24fa2a8",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-p2verified-lifecycle-claude-normal-env-root-20261008.json",
+          "sha256": "450dc93c7e78cd3c18e887fff94df9c3ffa66f4f8431b94c12aa765ab24fa2a8",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    },
+    {
+      "name": "lifecycle-claude-timeout-env",
+      "selected": {
+        "path": "/tmp/ai-team-p2verified-lifecycle-claude-timeout-env-root-20261008.json",
+        "sha256": "15d9b3c183ee5c41a74031e46fe777d6b6028e4aa8848655ada1018b2a85a2cb",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-p2verified-lifecycle-claude-timeout-env-root-20261008.json",
+          "sha256": "15d9b3c183ee5c41a74031e46fe777d6b6028e4aa8848655ada1018b2a85a2cb",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    },
+    {
+      "name": "lifecycle-normal",
+      "selected": {
+        "path": "/tmp/ai-team-p2verified-lifecycle-normal-root-20261008.json",
+        "sha256": "1a0a5b940076391e86102f2d3e0979f60178a3e65d2190f18c4623399012308c",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-p2verified-lifecycle-normal-root-20261008.json",
+          "sha256": "1a0a5b940076391e86102f2d3e0979f60178a3e65d2190f18c4623399012308c",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    },
+    {
+      "name": "lifecycle-recovery",
+      "selected": {
+        "path": "/tmp/ai-team-p2verified-lifecycle-recovery-root-20261008.json",
+        "sha256": "ba56be15ff54a58c320f877a5e18b1cb5e6a33ede40397a03b3a9a387508d6ae",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-p2verified-lifecycle-recovery-root-20261008.json",
+          "sha256": "ba56be15ff54a58c320f877a5e18b1cb5e6a33ede40397a03b3a9a387508d6ae",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    },
+    {
+      "name": "lifecycle-steer",
+      "selected": {
+        "path": "/tmp/ai-team-p2verified-lifecycle-steer-root-20261008.json",
+        "sha256": "d6d1beba30dcd66c2f04664fc718588ad289c74e0193e7a56545ea393793323e",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-p2verified-lifecycle-steer-root-20261008.json",
+          "sha256": "d6d1beba30dcd66c2f04664fc718588ad289c74e0193e7a56545ea393793323e",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    },
+    {
+      "name": "lifecycle-timeout",
+      "selected": {
+        "path": "/tmp/ai-team-p2verified-lifecycle-timeout-root-20261008.json",
+        "sha256": "ff046e79f5c0e69475e2d98363822ffdff6ff415f245d1a808e542eb2adf66fa",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-p2verified-lifecycle-timeout-root-20261008.json",
+          "sha256": "ff046e79f5c0e69475e2d98363822ffdff6ff415f245d1a808e542eb2adf66fa",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    },
+    {
+      "name": "old-agent-generic",
+      "selected": {
+        "path": "/tmp/ai-team-p2verified-old-agent-generic-root-20261008.json",
+        "sha256": "2aff8911908d4f8362f5967b813b14d5f72288fcfbb277efd209644ee0c61df2",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-p2verified-old-agent-generic-root-20261008.json",
+          "sha256": "2aff8911908d4f8362f5967b813b14d5f72288fcfbb277efd209644ee0c61df2",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    },
+    {
+      "name": "old-agent-safe",
+      "selected": {
+        "path": "/tmp/ai-team-p2verified-old-agent-safe-root-20261008.json",
+        "sha256": "b26e4ee4b7b4afc74e5de3b35487de5bacc14231d8e858d5cd01578cff344023",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-p2verified-old-agent-safe-root-20261008.json",
+          "sha256": "b26e4ee4b7b4afc74e5de3b35487de5bacc14231d8e858d5cd01578cff344023",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    },
+    {
+      "name": "restore",
+      "selected": {
+        "path": "/tmp/ai-team-p2verified-restore-root-20261008.json",
+        "sha256": "eb222d0d66ad3bade33c67e82b738bf03876b46a681eb29013c010cf329963ee",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-p2verified-restore-root-20261008.json",
+          "sha256": "eb222d0d66ad3bade33c67e82b738bf03876b46a681eb29013c010cf329963ee",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    },
+    {
+      "name": "target-outage",
+      "selected": {
+        "path": "/tmp/ai-team-p2verified-target-outage-root-20261008.json",
+        "sha256": "13ad60c834463c603582dfd13e251b6adef5f4c07232344745a042227cb05d38",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-p2verified-target-outage-root-20261008.json",
+          "sha256": "13ad60c834463c603582dfd13e251b6adef5f4c07232344745a042227cb05d38",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    },
+    {
+      "name": "watchdog",
+      "selected": {
+        "path": "/tmp/ai-team-p2verified-watchdog-root-20261008.json",
+        "sha256": "7026053dcb7d32734c8294c6306cd555c3e5c01a5bce97b7054871fce1985f2b",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-p2verified-watchdog-root-20261008.json",
+          "sha256": "7026053dcb7d32734c8294c6306cd555c3e5c01a5bce97b7054871fce1985f2b",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    }
+  ],
+  "formalPassed": 31,
+  "formalRequired": 31,
+  "serverPassed": 18,
+  "serverRequired": 18,
+  "unboundDiagnostics": [
+    {
+      "mode": "skills",
+      "path": "/tmp/ai-team-p2-skills-unbound-diagnostic6-root-20261008.json",
+      "sha256": "c3991ab53aaff665c398d3eb90901ab5dd0c8a5a5092ae38e8c03f2b92ddf6d5",
+      "result": "PASS",
+      "formalQualification": false,
+      "artifactStable": true
+    },
+    {
+      "mode": "workspace",
+      "path": "/tmp/ai-team-p2-workspace-unbound-diagnostic5-root-20261008.json",
+      "sha256": "dc31da439b991ac613febe754082a055c8e16375c2ffcbaa77e669a3f05b6d76",
+      "result": "PASS",
+      "formalQualification": false,
+      "artifactStable": true
+    }
+  ],
+  "productionReady": false,
+  "localRequiredCasesPassed": true,
+  "fullProductionChecklistPassed": false,
+  "remaining": [
+    "dirty worktree retained; strict release gate remains closed",
+    "am6737/happy-next accessible; independent Happy GitHub connection and Issue/Project/WorkItem/provider/PR/CI/webhook chain still unverified",
+    "Gemini latest CLI0.63.0 also returns IneligibleTierError; provider/account eligibility and scoped write qualification unresolved",
+    "human physical authenticator and actual human alert delivery",
+    "cross-platform long-duration qualification",
+    "signed release and actual deployment/upgrade/rollback; merge/deploy not authorized"
+  ],
+  "artifactContext": "/tmp/ai-team-artifact-context-ai-team-frozen-deps-rootp2verified7469ab.json",
+  "freshBuildVerified": true,
+  "serverTaskId": "cmuxqs6na4dm9qq149fvegmyk",
+  "serverExecutionId": "cmuz4qlhj0kf8nn1405zcznw8",
+  "serverReport": "/tmp/ai-server-p2verified-20261008/report.json",
+  "passed": 31,
+  "formalFinished": 31,
+  "imageReport": "/tmp/ai-image-root-75d6b933bf-report.json",
+  "imageReportSha256": "d59c97736a72f2426cb983659803d1f26c1966a1d2441cc692a603b032fbd9e5",
+  "serverReportSha256": "4bb51b508b6030059f4287e81adb788921e2daa625d0e4d78b9bb4408ee83b36",
+  "strictV1Negative": "/tmp/ai-team-p2verified-v1-admission-negative-root-20261008.json",
+  "strictV1NegativeSha256": "8e8d44cd1593dde91cc640ac7340bfbd82e36917b772ea3abbd8cc47ad986e8c",
+  "strictLegacyV1Rejected": true,
+  "serverLogHashesIndependentlyVerified": true,
+  "serverExactNamesAndArgsVerified": true,
+  "serverOwnedCleanupVerified": true,
+  "imageMigrationLogHashIndependentlyVerified": true,
+  "compatibilityEvidenceReady": true,
+  "compatibilityEvidence": "/tmp/ai-team-p2verified-compatibility-evidence-root-20261008.json",
+  "compatibilityEvidenceSha256": "8f75ced6f2fab7492fa6252195fd81b23ba76f245f432f079fdbe520da0cfdad",
+  "nodeSuite": "/tmp/ai-team-p2verified-node-suite-root-20261008.json",
+  "nodeSuiteSha256": "2130414160a558c318fcbca2eeb86d30b8235baff0f75689684c10f01ca5c872",
+  "nodeTestsPassed": 9,
+  "nodeTestsSkipped": 0,
+  "independentNegativeReport": "/tmp/ai-team-p2verified-independent-negative-root-20261008.json",
+  "independentNegativeReportSha256": "0f964a30bae69c1afb5cb0e64f2ef42e07826dd754fee2c09ffc5297e1e4ccc2",
+  "independentNegativesRejected": 13,
+  "strictPreflight": "/tmp/ai-team-p2verified-strict-preflight-root-20261008.json",
+  "strictPreflightSha256": "9079f7db771b4fbbe9dac9da2853673136d0cdae3df0e1f2cf8afb8b5de5ea72",
+  "strictReasons": [
+    "dirty_worktree"
+  ],
+  "githubAccessReport": "/tmp/ai-team-happy-next-corrected-access-root-20261008.json",
+  "geminiCurrentProbeLog": "/tmp/ai-team-p2verified-gemini-provider-probe-root-20261008.log",
+  "geminiRuntimeTaskId": "cmuxqs6na4dmaqq145s8e0mee",
+  "geminiRuntimeExecutionId": "cmuz5icd50m42nn14c99ffsxx",
+  "sourceStableAtFinalCheck": true,
+  "orchestratorActiveTasks": 0,
+  "geminiRuntimeDiagnosis": {
+    "installedVersion": "0.42.0",
+    "isolatedLatestVersion": "0.63.0",
+    "latestProbeSucceeded": false,
+    "errorClass": "IneligibleTierError",
+    "privateAuthRemoved": true,
+    "globalBundleUnchanged": true,
+    "report": "/tmp/ai-cli-gemini-current-diagnostic-20261008/report.md",
+    "reportSha256": "059a5fd82c6da31d52cf95ec81c88a5b71c965559c6e80147f7890342d0fa5cf",
+    "probeLog": "/tmp/ai-cli-gemini-current-diagnostic-20261008/latest-probe.log",
+    "probeLogSha256": "5b1b92e4ea4904d220a4624ca8e0807cbdb31fe072fd562ddec377d42b9c8971",
+    "scope": "latest runtime diagnosis only; not scoped write or release dependency qualification"
+  },
+  "historicalGithubAccessReport": "/tmp/ai-team-p2verified-github-access-root-20261008.json",
+  "githubAccessReportSha256": "7eb176cc99f7e05a17f8ce85331ac783d4e94496f5d73338a957fff42fcc2c0c",
+  "githubRepository": "am6737/happy-next",
+  "githubRepositoryAccessVerified": true,
+  "githubExternalChainVerified": false,
+  "githubTaskId": "cmuxqs6na4dmaqq145s8e0mee",
+  "githubExecutionId": "cmuz9vtvc0rmvnn1432adx0oa",
+  "githubConnectionAuditTaskId": "cmuxqs6na4dm9qq149fvegmyk",
+  "githubConnectionAuditExecutionId": "cmuz9xuaz0rqbnn14ado411qi",
+  "userRealTestGuide": "docs/ai-team-user-real-test.zh-CN.md",
+  "githubRealChainDiagnostic": {
+    "report": "/tmp/ai-team-happy-next-github-real-20261008/report.json",
+    "reportSha256": "6fbe95bfff198812b37b4766829381066be437098f9bc2beda5ceacf1f400a03",
+    "result": "BLOCKED_BEFORE_EXTERNAL_WRITE",
+    "evidenceLogSha256": "f3b71d233c172b7fd71b2022fb9d3b990263f34defe69f867252174b8656ae2d",
+    "externalResourcesCreated": 0,
+    "happyGithubOAuthConnected": false,
+    "githubAppInstallationVerified": false,
+    "scope": "read-only contracts/access; no Happy-bound external chain verified"
+  },
+  "githubConnectionAudit": {
+    "report": "/tmp/ai-server-github-connection-audit-20261008/report.json",
+    "reportSha256": "46e0ad7d208bda05f01fcaf4a6e6ccf27735846b4704971874a1d3eec3eb4d35",
+    "rootConfigPresenceIndependentlyChecked": true,
+    "oauthAndWebhookConfiguredInInspectedEnvDev": false,
+    "scope": "source/config presence audit; no external chain qualification",
+    "correction": {
+      "checkedAt": "2026-10-08T09:48:14.891922+00:00",
+      "oauthConfiguredInBaseEnv": true,
+      "baseFiles": [
+        ".env",
+        "packages/happy-server/.env"
+      ],
+      "standardDevLoadsBaseAndDevEnv": true,
+      "webhookSecretConfigured": false,
+      "physicalWebauthnConfigured": false,
+      "scope": "configuration presence only; no OAuth or external delivery execution"
+    }
+  },
+  "githubDiagnosticTasksCompleted": true,
+  "runtimeConfigurationUpdate": {
+    "checkedAt": "2026-10-08T09:53:21.941378+00:00",
+    "serverPublicUrl": "https://3031--main--am--am6737.coder.dootask.com",
+    "appPublicUrl": "https://9091--main--am--am6737.coder.dootask.com",
+    "webhookSecretConfigured": true,
+    "webauthnRpAndOriginConfigured": true,
+    "operatorTrustPublicKeyConfigured": true,
+    "serverExternalHealthStatus": 200,
+    "appExternalStatus": 200,
+    "externalWebhookRegistered": true,
+    "scope": "local configuration and unauthenticated external probes; no service start/deploy or external hook registration",
+    "operatorKeyScope": "local test operator, not independent production custody",
+    "webhookHookId": 694068590,
+    "signedPingDelivered200": true,
+    "currentServerRestartNeededForNewPublicKey": true,
+    "webhookReport": "/tmp/ai-team-user-address-webhook-config-root-20261008.json",
+    "webhookReportSha256": "ba0fcc3a34d257989e745849f68380337f4aa189bb571f3537205f10730083d8"
+  },
+  "startupRegression": {
+    "reportedAt": "2026-10-08T10:20:12.126074+00:00",
+    "client": "installed Android/iOS development build",
+    "taskId": "cmuxringz4ea7qq148syzq8kc",
+    "executionId": "cmuzdweux0vyqnn14nzdfv747",
+    "phase": "source_fixed_root_independent_checks_passed_device_retest_pending",
+    "lockedUnistylesVersion": "3.0.22",
+    "observedInstalledUnistylesVersion": "3.5.1",
+    "rootIndependentPluginProtocolMismatchVerified": true,
+    "legacyNativeMissingPluginErrorCondition": "StyleSheet.create argument count equals 1",
+    "rootLockSelectorPinned": true,
+    "currentSourceChangedSinceFrozenCandidate": true,
+    "deviceRetestPassed": false,
+    "currentInstalledUnistylesVersion": "3.0.22",
+    "rootIndependentAcceptanceReport": "/tmp/ai-app-unistyles-root-independent-acceptance-20261008.json",
+    "rootIndependentAcceptanceReportSha256": "d505e7cc8dcb803f29f914f6b4bcc0aca8ea536dd8f5cfd5d1cd5cea5812d9d0",
+    "rootBabelRoutesPassed": 10,
+    "rootMetroResolverCasesPassed": 16,
+    "metroRestartedWithClear": true,
+    "liveWebRenderedNoErrors": true,
+    "nativePackageBuiltOnOtherMachine": true,
+    "currentSourceCandidateQualificationPassed": false
+  },
+  "codeHandoff": {
+    "preparedAt": "2026-10-08T10:52:01.427667+00:00",
+    "branch": "feat/ai-team-real-implementation",
+    "repository": "am6737/happy-next",
+    "purpose": "user requested Git commit/push for local native build on another machine",
+    "checks": {
+      "wireBuild": 0,
+      "wireTypecheck": 0,
+      "appTypecheck": 0,
+      "cliTypecheck": 0,
+      "serverBuild": 0,
+      "stagedDiffCheck": 0
+    },
+    "review": "/tmp/ai-team-precommit-review-20261008/report.json",
+    "reviewSha256": "2dbbe8aecbd388bc73def1646ac5f82350edcc8010b8ca87a1b2fd3e03a566aa",
+    "nativeBuildGuide": "docs/ai-team-native-build.zh-CN.md",
+    "privateAndLocalFilesExcluded": true,
+    "physicalDeviceRetestPassed": false,
+    "productionReady": false
+  }
+}

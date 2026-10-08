@@ -1,0 +1,60 @@
+groups:
+  - name: happy-ai-team
+    interval: 1m
+    rules:
+      - alert: AiServerMetricsUnavailable
+        expr: up{job="happy-server"} == 0 or absent(up{job="happy-server"})
+        for: 5m
+        labels:
+          severity: critical
+          component: ai_team
+        annotations:
+          summary: AI server metrics target is unavailable
+      - alert: AiWorkflowMetricsMissing
+        expr: up{job="happy-server"} == 1 unless on(job, instance) ai_workflow_queue_items{queue="decision",status="pending"}
+        for: 5m
+        labels:
+          severity: critical
+          component: ai_team
+        annotations:
+          summary: AI workflow queue metrics are missing
+      - alert: AiBudgetWatermarkMetricsMissing
+        expr: up{job="happy-server"} == 1 unless on(job, instance) ai_budget_max_utilization_ratio
+        for: 5m
+        labels:
+          severity: warning
+          component: ai_team
+        annotations:
+          summary: AI budget utilization metrics are missing
+      - alert: AiBudgetHighWater
+        expr: ai_budget_max_utilization_ratio > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          component: ai_team
+        annotations:
+          summary: AI budget utilization is above 90 percent
+      - alert: AiDecisionDeliveryBlocked
+        expr: sum by(job, instance) (ai_workflow_queue_items{queue="decision_delivery",status="blocked"}) > 0
+        for: 5m
+        labels:
+          severity: warning
+          component: ai_team
+        annotations:
+          summary: AI decision deliveries require intervention
+      - alert: AiDecisionDeliveryBacklog
+        expr: sum by(job, instance) (ai_workflow_queue_items{queue="decision_delivery",status="pending"}) > 10
+        for: 10m
+        labels:
+          severity: warning
+          component: ai_team
+        annotations:
+          summary: AI decision delivery backlog is above 10 items
+      - alert: AiBudgetUnknownCost
+        expr: sum by(job, instance) (ai_workflow_queue_items{queue="budget",status="unknown"}) > 0
+        for: 30m
+        labels:
+          severity: warning
+          component: ai_team
+        annotations:
+          summary: AI budget reservations have unresolved cost

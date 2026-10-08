@@ -15,6 +15,15 @@ import { startMessageDeliveryTimeoutWorker } from "./app/messageDelivery/timeout
 import { startOrchestratorScheduler } from "./app/orchestrator/scheduler";
 import { startModelCatalogRefresh } from "./app/modelCatalog/modelCatalogRefresh";
 import { backfillGitHubDisplayNames } from "./app/github/backfillGitHubDisplayNames";
+import { startGithubIssueIntentReconciler } from './app/ai/githubIssueIntent';
+import { startGithubDeliveryVerifier } from './app/ai/githubDeliveryVerifier';
+import { startSteeringOutbox } from './app/ai/steeringOutbox';
+import { startIntegrationVerificationWorker } from './app/ai/integrationVerification';
+import { startAutopilotWorker } from './app/ai/autopilot';
+import { startExecutionEventRetentionWorker } from './app/ai/executionEvents';
+import { startHumanChallengeRetentionWorker } from './app/ai/humanPresence';
+import { startAiBudgetWorker } from './app/ai/budget';
+import { startDecisionOutbox } from './app/ai/decisionOutbox';
 
 async function main() {
 
@@ -45,6 +54,15 @@ async function main() {
     startTimeout();
     startMessageDeliveryTimeoutWorker();
     startOrchestratorScheduler();
+    startGithubIssueIntentReconciler();
+    startGithubDeliveryVerifier();
+    startSteeringOutbox();
+    startIntegrationVerificationWorker();
+    startAutopilotWorker();
+    startExecutionEventRetentionWorker();
+    startHumanChallengeRetentionWorker();
+    startAiBudgetWorker();
+    startDecisionOutbox();
     startModelCatalogRefresh();
 
     //

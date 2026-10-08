@@ -20,7 +20,7 @@ config.resolver.assetExts.push('html');
 // Try local node_modules first (Docker), then parent (monorepo development)
 const libsodiumPaths = [
   path.resolve(__dirname, 'node_modules/libsodium-wrappers/dist/modules/libsodium-wrappers.js'),
-  path.resolve(__dirname, '../node_modules/libsodium-wrappers/dist/modules/libsodium-wrappers.js'),
+  path.resolve(__dirname, '../../node_modules/libsodium-wrappers/dist/modules/libsodium-wrappers.js'),
 ];
 const libsodiumPath = libsodiumPaths.find(p => fs.existsSync(p));
 
@@ -34,8 +34,15 @@ const xtermHeadlessPaths = [
   path.resolve(__dirname, '../../node_modules/@xterm/headless/lib-headless/xterm-headless.js'),
 ];
 const xtermHeadlessPath = xtermHeadlessPaths.find(p => fs.existsSync(p));
+const appNodeModules = path.resolve(__dirname, 'node_modules');
 
 config.resolver.resolveRequest = (context, moduleName, platform) => {
+  // Expo can be hoisted to the workspace root with its own nested React/RN.
+  // Resolve these singleton modules from the app even when Expo imports them.
+  if (moduleName === 'react' || moduleName.startsWith('react/') ||
+      (platform !== 'web' && (moduleName === 'react-native' || moduleName.startsWith('react-native/')))) {
+    return context.resolveRequest(context, path.join(appNodeModules, moduleName), platform);
+  }
   if (moduleName === 'libsodium-wrappers' && libsodiumPath) {
     return {
       filePath: libsodiumPath,
@@ -52,14 +59,12 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
   return context.resolveRequest(context, moduleName, platform);
 };
 
-// Enable inlineRequires for proper Skia and Reanimated loading
-// Source: https://shopify.github.io/react-native-skia/docs/getting-started/web/
-// Without this, Skia throws "react-native-reanimated is not installed" error
-// This is cross-platform compatible (iOS, Android, web)
-config.transformer.getTransformOptions = async () => ({
+// Keep native startup imports eager so Unistyles config runs before routes load.
+// Web still needs inlineRequires for Skia/Reanimated module loading.
+config.transformer.getTransformOptions = async (_entryPoints, { platform } = {}) => ({
   transform: {
     experimentalImportSupport: false,
-    inlineRequires: true, // Critical for @shopify/react-native-skia
+    inlineRequires: platform === 'web',
   },
 });
 

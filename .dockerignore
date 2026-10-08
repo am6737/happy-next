@@ -5,3 +5,18 @@ node_modules
 **/dist
 **/.turbo
 **/.next
+
+# Runtime configuration and private account state never belong in image layers.
+.env
+.env.*
+**/.env
+**/.env.*
+.npmrc
+**/.npmrc
+.yarnrc
+**/.yarnrc
+**/auth.json
+**/access.key
+**/credentials.json
+**/.home
+**/.yarn-cache

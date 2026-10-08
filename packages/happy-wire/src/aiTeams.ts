@@ -52,6 +52,14 @@ export const AiWorkItemSchema = z.object({
     sourceResourceId: z.string(),
     executionIds: z.array(z.string()),
     acceptanceStatus: z.enum(['pending', 'approved', 'changes_requested']).optional(),
+    pullRequestUrl: z.string().optional(),
+    pullRequestNumber: z.number().int().positive().optional(),
+    pullRequestState: z.string().optional(),
+    pullRequestMergedAt: z.string().optional(),
+    worktreePath: z.string().optional(),
+    branchName: z.string().optional(),
+    baseCommit: z.string().optional(),
+    commitSha: z.string().optional(),
 });
 
 export const AiExecutionEventSchema = z.object({
@@ -67,6 +75,10 @@ export const AiExecutionEventSchema = z.object({
 
 export const AiExecutionSchema = z.object({
     id: z.string(),
+    // id remains the task ID used by existing control routes. Audit and
+    // reviewed-result identity must use the actual execution attempt ID.
+    orchestratorExecutionId: z.string().min(1).max(200).nullable().optional(),
+    errorCode: z.string().regex(/^[A-Z][A-Z0-9_]{0,63}$/).nullable().optional(),
     workItemId: z.string(),
     agentId: z.string(),
     status: z.enum(['queued', 'dispatched', 'running', 'waiting_human', 'reviewing', 'completed', 'failed', 'cancelled']),

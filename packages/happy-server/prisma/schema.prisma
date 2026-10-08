@@ -50,6 +50,13 @@ model Account {
   AiTeam              AiTeam[]
   AiConversation      AiConversation[]
   AiWorkItem          AiWorkItem[]
+  AiProjects          AiProject[]
+  AiSkills            AiSkill[]
+  AiAgentTemplates    AiAgentTemplate[]
+  AiHumanCredentials  AiHumanCredential[]
+  AiWebAuthnChallenges AiWebAuthnChallenge[]
+  AiHumanCredentialTrustAudits AiHumanCredentialTrustAudit[]
+  AiAutopilots        AiAutopilot[]
   AccountPushToken    AccountPushToken[]
   TerminalAuthRequest TerminalAuthRequest[]
   AccountAuthRequest  AccountAuthRequest[]
@@ -182,6 +189,170 @@ model OrchestratorRun {
 // AI teams
 //
 
+model AiProject {
+  id String @id @default(cuid())
+  accountId String
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  name String
+  clientRequestId String
+  createPayloadHash String?
+  currentVersion Int @default(1)
+  active Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  versions AiProjectVersion[]
+
+  @@unique([accountId, clientRequestId])
+  @@index([accountId, active, updatedAt])
+}
+
+model AiProjectVersion {
+  projectId String
+  project AiProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  version Int
+  kind String @default("github")
+  repositoryId BigInt?
+  repositoryFullName String?
+  commonGitDirHash String?
+  machineId String
+  registeredRepoId String
+  registeredKvVersion Int
+  workingDirectory String
+  defaultBranch String
+  baseCommit String
+  snapshotHash String
+  createdAt DateTime @default(now())
+
+  @@id([projectId, version])
+  @@index([repositoryId, machineId])
+}
+
+model AiSkill {
+  id String @id @default(cuid())
+  accountId String
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  teamId String?
+  name String
+  currentVersion Int?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  versions AiSkillVersion[]
+  bindings AiSkillAgentBinding[]
+  proposals AiSkillProposal[]
+
+  @@unique([accountId, name])
+  @@index([accountId, teamId])
+}
+
+model AiSkillVersion {
+  skillId String
+  skill AiSkill @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  version Int
+  contentHash String
+  publishedAt DateTime?
+  createdAt DateTime @default(now())
+  files AiSkillFile[]
+
+  @@id([skillId, version])
+}
+
+model AiSkillFile {
+  skillId String
+  version Int
+  path String
+  sha256 String
+  content Bytes
+  size Int
+  skillVersion AiSkillVersion @relation(fields: [skillId, version], references: [skillId, version], onDelete: Cascade)
+
+  @@id([skillId, version, path])
+}
+
+model AiSkillAgentBinding {
+  skillId String
+  skill AiSkill @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  agentId String
+  accountId String
+  createdAt DateTime @default(now())
+
+  @@id([skillId, agentId])
+  @@index([accountId, agentId])
+}
+
+model AiSkillProposal {
+  id String @id @default(cuid())
+  skillId String
+  skill AiSkill @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  accountId String
+  text String
+  status String @default("pending")
+  createdAt DateTime @default(now())
+  reviewedAt DateTime?
+
+  @@index([accountId, status, createdAt])
+}
+
+model AiTaskSkillSnapshot {
+  taskId String
+  task OrchestratorTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  skillId String
+  version Int
+  contentHash String
+  createdAt DateTime @default(now())
+
+  @@id([taskId, skillId])
+}
+
+model AiAutopilot {
+  id String @id @default(cuid())
+  accountId String
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  projectId String
+  agentId String
+  teamId String?
+  conversationId String
+  name String
+  prompt String
+  triggerKind String
+  cronExpression String?
+  timezone String?
+  webhookSecret Bytes?
+  action String
+  concurrencyPolicy String
+  catchupLimit Int @default(1)
+  enabled Boolean @default(false)
+  lastPlannedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  runs AiAutopilotRun[]
+
+  @@index([accountId, enabled, triggerKind])
+}
+
+model AiAutopilotRun {
+  id String @id @default(cuid())
+  autopilotId String
+  autopilot AiAutopilot @relation(fields: [autopilotId], references: [id], onDelete: Cascade)
+  triggerKey String
+  payloadHash String?
+  plannedAt DateTime
+  status String @default("pending")
+  claimOwner String?
+  leaseUntil DateTime?
+  attempts Int @default(0)
+  nextAttemptAt DateTime @default(now())
+  errorCode String?
+  orchestratorRunId String?
+  workItemId String?
+  issueResourceId String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([autopilotId, triggerKey])
+  @@index([status, nextAttemptAt])
+  @@index([autopilotId, plannedAt])
+}
+
 model AiAgent {
   id               String               @id @default(cuid())
   accountId        String
@@ -203,9 +374,62 @@ model AiAgent {
   conversations    AiConversation[]
   messages         AiMessage[]
   workItems        AiWorkItem[]
+  templateVersionId String?
+  templateVersion   AiAgentTemplateVersion? @relation(fields: [templateVersionId], references: [id], onDelete: SetNull)
 
   @@unique([accountId, name])
   @@index([accountId, updatedAt(sort: Desc)])
+}
+
+model AiAgentTemplate {
+  id             String @id @default(cuid())
+  accountId      String
+  account        Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  name           String
+  currentVersion Int    @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  versions       AiAgentTemplateVersion[]
+  proposals      AiAgentTemplateProposal[]
+
+  @@unique([accountId, name])
+  @@index([accountId, updatedAt(sort: Desc)])
+}
+
+model AiAgentTemplateVersion {
+  id          String @id @default(cuid())
+  templateId  String
+  template    AiAgentTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  version     Int
+  contentHash String
+  content     Json
+  publishedAt DateTime?
+  createdAt   DateTime @default(now())
+  agents      AiAgent[]
+
+  @@unique([templateId, version])
+}
+
+model AiAgentTemplateProposal {
+  id                     String @id @default(cuid())
+  templateId             String
+  template               AiAgentTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  actorAccountId         String
+  clientRequestId        String
+  sourceAgentId          String?
+  sourceExecutionId      String?
+  expectedCurrentVersion Int
+  contentHash            String
+  content                Json
+  note                   String
+  status                 String @default("pending")
+  reviewedByAccountId    String?
+  reviewedAt             DateTime?
+  publishedVersion       Int?
+  createdAt              DateTime @default(now())
+
+  @@unique([templateId, actorAccountId, clientRequestId])
+  @@index([templateId, status, createdAt(sort: Desc)])
 }
 
 model AiTeam {
@@ -256,9 +480,257 @@ model AiConversation {
   updatedAt DateTime    @updatedAt
   messages  AiMessage[]
   workItems AiWorkItem[]
+  clarifications AiClarification[]
 
   @@unique([accountId, scopeKey])
   @@index([accountId, updatedAt(sort: Desc)])
+}
+
+model AiClarification {
+  id String @id @default(cuid())
+  accountId String
+  conversationId String
+  conversation AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  clientMessageId String
+  originalText String
+  question String
+  options String[] @default([])
+  candidates Json?
+  targetWorkItemId String?
+  status String @default("pending")
+  resolvedText String?
+  resolvedAt DateTime?
+  createdAt DateTime @default(now())
+
+  @@unique([accountId, conversationId, clientMessageId])
+  @@index([accountId, conversationId, status, createdAt])
+}
+
+model AiWorkspace {
+  id String @id @default(cuid())
+  ownerAccountId String @unique
+  name String
+  authRevision Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  members AiWorkspaceMembership[]
+  grants AiWorkspaceGrant[]
+  capabilities AiExecutionCapability[]
+  budgetPolicies AiBudgetPolicy[]
+}
+
+model AiWorkspaceMembership {
+  workspaceId String
+  workspace AiWorkspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  memberAccountId String
+  role String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@id([workspaceId, memberAccountId])
+  @@index([memberAccountId, role])
+}
+
+model AiWorkspaceGrant {
+  workspaceId String
+  workspace AiWorkspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  memberAccountId String
+  resourceKind String
+  resourceId String
+  canView Boolean @default(false)
+  canRun Boolean @default(false)
+  canApprove Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@id([workspaceId, memberAccountId, resourceKind, resourceId])
+  @@index([memberAccountId, resourceKind, resourceId])
+}
+
+model AiExecutionCapability {
+  id String @id @default(cuid())
+  tokenHash String @unique
+  workspaceId String
+  workspace AiWorkspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  accountId String
+  projectId String?
+  projectVersion Int?
+  runId String
+  taskId String
+  executionId String
+  machineId String
+  allowedOps String[]
+  recoveryMode String @default("standard")
+  authRevision Int
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([executionId, expiresAt])
+  @@index([workspaceId, revokedAt])
+}
+
+model AiCapabilityRecoveryRequest {
+  id String @id @default(cuid())
+  accountId String
+  workspaceId String
+  executionId String @unique
+  machineId String
+  dispatchTokenHash String
+  expiredCapabilityId String
+  identityHash String
+  status String @default("pending")
+  generation Int @default(1)
+  requestExpiresAt DateTime
+  confirmedAt DateTime?
+  confirmedByAccountId String?
+  drainCapabilityId String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  audit AiCapabilityRecoveryAudit[]
+
+  @@index([accountId, status, createdAt])
+}
+
+model AiCapabilityRecoveryAudit {
+  id String @id @default(cuid())
+  recoveryId String
+  recovery AiCapabilityRecoveryRequest @relation(fields: [recoveryId], references: [id], onDelete: Cascade)
+  generation Int
+  action String
+  actorAccountId String
+  createdAt DateTime @default(now())
+
+  @@unique([recoveryId, generation, action])
+  @@index([actorAccountId, createdAt(sort: Desc)])
+}
+
+model AiHumanCredential {
+  id String @id @default(cuid())
+  accountId String
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  credentialId String @unique
+  publicKey Bytes
+  counter Int @default(0)
+  deviceType String
+  backedUp Boolean @default(false)
+  transports String[] @default([])
+  status String @default("pending")
+  createdAt DateTime @default(now())
+  trustedAt DateTime?
+  revokedAt DateTime?
+  lastUsedAt DateTime?
+
+  @@index([accountId, status, createdAt(sort: Desc)])
+}
+
+model AiWebAuthnChallenge {
+  id String @id @default(cuid())
+  accountId String
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  purpose String
+  challengeHash String @unique
+  recoveryId String?
+  generation Int?
+  action String?
+  expiresAt DateTime
+  consumedAt DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([accountId, purpose, expiresAt])
+  @@index([recoveryId, generation, purpose])
+}
+
+model AiHumanCredentialTrustAudit {
+  id String @id @default(cuid())
+  accountId String
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  credentialId String
+  action String
+  actorLabel String
+  approvalNonce String @unique
+  evidenceHash String
+  createdAt DateTime @default(now())
+
+  @@index([accountId, credentialId, createdAt(sort: Desc)])
+}
+
+model AiPersistentExecutionEvent {
+  id String @id @default(cuid())
+  accountId String
+  executionId String
+  eventId String
+  seq Int
+  kind String
+  phase String
+  occurredAt DateTime
+  redactedSummary String
+  payloadHash String
+  redactedAt DateTime?
+  createdAt DateTime @default(now())
+
+  @@unique([executionId, eventId])
+  @@unique([executionId, seq])
+  @@index([accountId, executionId, seq])
+  @@index([createdAt, redactedAt])
+}
+
+model AiBudgetPolicy {
+  id String @id @default(cuid())
+  workspaceId String
+  workspace AiWorkspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  scopeKey String @unique
+  projectId String?
+  periodStart DateTime
+  periodEnd DateTime
+  limitMicros BigInt
+  perRunReserveMicros BigInt
+  usedMicros BigInt @default(0)
+  reservedMicros BigInt @default(0)
+  revision Int @default(1)
+  active Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  reservations AiBudgetReservation[]
+
+  @@index([workspaceId, active, periodEnd])
+}
+
+model AiBudgetReservation {
+  id String @id @default(cuid())
+  policyId String
+  policy AiBudgetPolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  runId String @unique
+  reserveMicros BigInt
+  policyRevision Int
+  status String @default("reserved")
+  actualMicros BigInt?
+  createdAt DateTime @default(now())
+  settledAt DateTime?
+  resolutionRequestId String?
+  resolvedBy String?
+  resolutionNote String?
+
+  @@index([policyId, status])
+}
+
+model AiUsageDelta {
+  id String @id @default(cuid())
+  accountId String
+  executionId String
+  sourceEventId String
+  provider String
+  model String
+  inputTokens Int
+  outputTokens Int
+  costMicros BigInt?
+  pricingVersion String?
+  measuredAt DateTime
+  payloadHash String
+  createdAt DateTime @default(now())
+
+  @@unique([executionId, sourceEventId])
+  @@index([accountId, executionId, measuredAt])
 }
 
 model AiMessage {
@@ -269,9 +741,11 @@ model AiMessage {
   agentId        String?
   agent          AiAgent?       @relation(fields: [agentId], references: [id], onDelete: SetNull)
   payload        Json
+  clientMessageId String?
   createdAt      DateTime       @default(now())
 
   @@index([conversationId, createdAt])
+  @@unique([conversationId, clientMessageId])
 }
 
 model AiWorkItem {
@@ -280,17 +754,38 @@ model AiWorkItem {
   account           Account            @relation(fields: [accountId], references: [id], onDelete: Cascade)
   title             String
   summary           String
+  priority          String             @default("normal")
+  labels            String[]           @default([])
+  dueDate           DateTime?
+  metadataRevision  Int                @default(1)
   sourceType        String
   sourceLabel       String
   sourceResourceId  String
+  projectId         String?
+  projectVersion    Int?
   acceptanceStatus  String             @default("pending")
   requiresDecision  Boolean            @default(false)
+  pullRequestUrl    String?
+  pullRequestNumber Int?
+  pullRequestState  String?
+  pullRequestMergedAt DateTime?
+  pullRequestEventAt DateTime?
+  deliveryVerificationStatus String @default("pending")
+  deliveryVerificationAttempts Int @default(0)
+  deliveryVerificationNextAt DateTime?
+  deliveryVerifiedAt DateTime?
+  deliveryVerificationErrorCode String?
   assigneeId        String
   assignee          AiAgent            @relation(fields: [assigneeId], references: [id])
   teamId            String?
   team              AiTeam?            @relation(fields: [teamId], references: [id], onDelete: SetNull)
   conversationId    String
   conversation      AiConversation     @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  steeringMessages  AiSteeringMessage[]
+  comments          AiWorkItemComment[]
+  subscriptions     AiWorkItemSubscription[]
+  notifications     AiWorkItemNotification[]
+  auditEntries      AiWorkItemAudit[]
   orchestratorRunId String             @unique
   orchestratorRun   OrchestratorRun    @relation(fields: [orchestratorRunId], references: [id], onDelete: Cascade)
   orchestratorTaskId String            @unique
@@ -300,6 +795,185 @@ model AiWorkItem {
   @@index([accountId, updatedAt(sort: Desc)])
   @@index([assigneeId, updatedAt(sort: Desc)])
   @@index([conversationId, createdAt])
+  @@index([deliveryVerificationStatus, deliveryVerificationNextAt])
+  @@index([accountId, projectId, projectVersion])
+}
+
+model AiWorkItemComment {
+  id String @id @default(cuid())
+  workItemId String
+  workItem AiWorkItem @relation(fields: [workItemId], references: [id], onDelete: Cascade)
+  accountId String
+  actorAccountId String
+  clientRequestId String
+  body String
+  createdAt DateTime @default(now())
+
+  @@unique([workItemId, actorAccountId, clientRequestId])
+  @@index([workItemId, createdAt, id])
+}
+
+model AiWorkItemSubscription {
+  workItemId String
+  workItem AiWorkItem @relation(fields: [workItemId], references: [id], onDelete: Cascade)
+  actorAccountId String
+  createdAt DateTime @default(now())
+
+  @@id([workItemId, actorAccountId])
+}
+
+model AiWorkItemNotification {
+  id                 String @id @default(cuid())
+  workItemId         String
+  workItem           AiWorkItem @relation(fields: [workItemId], references: [id], onDelete: Cascade)
+  recipientAccountId String
+  eventKey           String
+  action             String
+  actorAccountId     String
+  createdAt          DateTime @default(now())
+  readAt             DateTime?
+
+  @@unique([workItemId, recipientAccountId, eventKey])
+  @@index([recipientAccountId, createdAt(sort: Desc), id(sort: Desc)])
+}
+
+model AiWorkItemAudit {
+  id String @id @default(cuid())
+  workItemId String
+  workItem AiWorkItem @relation(fields: [workItemId], references: [id], onDelete: Cascade)
+  actorAccountId String
+  action String
+  before Json?
+  after Json?
+  createdAt DateTime @default(now())
+
+  @@index([workItemId, createdAt, id])
+}
+
+model AiSteeringMessage {
+  id String @id @default(cuid())
+  accountId String
+  actorAccountId String?
+  conversationId String
+  workItemId String
+  targetTaskId String
+  workItem AiWorkItem @relation(fields: [workItemId], references: [id], onDelete: Cascade)
+  clientMessageId String
+  text String
+  status String @default("pending")
+  claimOwner String?
+  leaseUntil DateTime?
+  attempts Int @default(0)
+  nextAttemptAt DateTime @default(now())
+  deliveredAt DateTime?
+  errorCode String?
+  createdAt DateTime @default(now())
+
+  @@unique([accountId, conversationId, clientMessageId])
+  @@index([status, nextAttemptAt])
+}
+
+model AiDecisionRequest {
+  id String @id @default(cuid())
+  accountId String
+  workspaceId String
+  workItemId String
+  runId String
+  taskId String
+  executionId String
+  machineId String
+  dispatchTokenHash String
+  kind String
+  operationId String?
+  actionType String?
+  actionHash String?
+  childSessionId String?
+  worktreePathHash String?
+  branchName String?
+  payload Json
+  status String @default("pending")
+  version Int @default(1)
+  expiresAt DateTime
+  decidedBy String?
+  clientRequestId String?
+  decision String?
+  note String?
+  decidedAt DateTime?
+  deliveryStatus String @default("none")
+  claimOwner String?
+  leaseUntil DateTime?
+  attempts Int @default(0)
+  nextAttemptAt DateTime @default(now())
+  deliveredAt DateTime?
+  errorCode String?
+  createdAt DateTime @default(now())
+
+  @@unique([executionId, operationId])
+  @@index([workspaceId, status, createdAt])
+  @@index([deliveryStatus, nextAttemptAt])
+}
+
+model GithubWebhookDelivery {
+  id         String   @id
+  event      String
+  payloadHash String
+  status     String   @default("processing")
+  claimOwner String?
+  leaseUntil DateTime?
+  attempts   Int      @default(1)
+  processedAt DateTime?
+  receivedAt DateTime @default(now())
+
+  @@index([receivedAt])
+}
+
+model AiGithubRepositoryGrant {
+  accountId String
+  repositoryId BigInt
+  fullName String
+  installationId BigInt?
+  verifiedAt DateTime @default(now())
+
+  @@id([accountId, repositoryId])
+  @@index([repositoryId, installationId])
+}
+
+model AiInboundRequest {
+  accountId String
+  conversationId String
+  clientMessageId String
+  payloadHash String
+  status String @default("processing")
+  claimOwner String?
+  leaseUntil DateTime?
+  response Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@id([accountId, conversationId, clientMessageId])
+}
+
+model AiGithubIssueIntent {
+  accountId String
+  conversationId String
+  clientMessageId String
+  repositoryId BigInt
+  owner String
+  repo String
+  title String
+  body String
+  issueNumber Int?
+  status String @default("pending")
+  reconcileOwner String?
+  reconcileLeaseUntil DateTime?
+  reconcileAttempts Int @default(0)
+  lastCheckedAt DateTime?
+  lastErrorCode String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@id([accountId, conversationId, clientMessageId])
+  @@index([status, lastCheckedAt])
 }
 
 model OrchestratorTask {
@@ -314,26 +988,59 @@ model OrchestratorTask {
   prompt            String
   workingDirectory  String?
   permissionMode    String?
+  worktreePath      String?
+  branchName        String?
+  baseCommit        String?
+  commitSha         String?
+  pullRequestUrl    String?
+  pullRequestNumber Int?
   timeoutMs         Int?
   targetMachineId   String?
   dependsOnTaskKeys String[]                @default([])
+  parentTaskId      String?
+  parentTask        OrchestratorTask?       @relation("DelegatedTasks", fields: [parentTaskId], references: [id], onDelete: SetNull)
+  childTasks        OrchestratorTask[]      @relation("DelegatedTasks")
+  assignedAgentId   String?
+  delegationKey     String?
+  delegationHash    String?
+  delegationRequirements String?
+  delegationDepth   Int                     @default(0)
+  collaborationRole String?
   retryMaxAttempts  Int                     @default(1)
   retryBackoffMs    Int                     @default(0)
   nextAttemptAt     DateTime?
   status            String
   outputSummary     String?
   outputText        String?
+  finalResponse     String?
   errorCode         String?
   errorMessage      String?
   createdAt         DateTime                @default(now())
   updatedAt         DateTime                @updatedAt
   executions        OrchestratorExecution[]
+  delegationAudits  AiDelegationAudit[]
+  skillSnapshots AiTaskSkillSnapshot[]
 
   @@unique([runId, seq])
   @@unique([runId, taskKey])
   @@index([runId, status, seq])
   @@index([runId, status, nextAttemptAt, seq])
   @@index([targetMachineId])
+  @@unique([parentTaskId, delegationKey])
+  @@index([runId, parentTaskId])
+}
+
+model AiDelegationAudit {
+  id String @id @default(cuid())
+  accountId String
+  taskId String
+  task OrchestratorTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  fromAgentId String
+  toAgentId String
+  reason String
+  createdAt DateTime @default(now())
+
+  @@index([accountId, taskId, createdAt])
 }
 
 model OrchestratorExecution {
@@ -353,6 +1060,9 @@ model OrchestratorExecution {
   status          String
   attempt         Int              @default(1)
   dispatchToken   String           @unique
+  capabilityProtocolVersion Int    @default(0)
+  capabilityAllowedOps String[]     @default([])
+  templateVersionId String?
   timeoutMs       Int?
   pid             Int?
   startedAt       DateTime?
@@ -361,15 +1071,47 @@ model OrchestratorExecution {
   signal          String?
   outputSummary   String?
   outputText      String?
+  finalResponse   String?
   errorCode       String?
   errorMessage    String?
+  worktreePath    String?
+  branchName      String?
+  baseCommit      String?
+  commitSha       String?
+  pullRequestUrl  String?
+  pullRequestNumber Int?
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
+  integrationVerification AiIntegrationVerification?
 
   @@index([runId, status, createdAt])
   @@index([taskId, status, createdAt])
   @@index([machineId, status, createdAt])
   @@index([workerSessionId])
+}
+
+model AiIntegrationVerification {
+  executionId String @id
+  execution OrchestratorExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  accountId String
+  runId String
+  taskId String
+  machineId String
+  proof Json
+  expected Json
+  expectedHash String
+  status String @default("pending")
+  attempts Int @default(0)
+  claimOwner String?
+  leaseUntil DateTime?
+  nextAttemptAt DateTime @default(now())
+  errorCode String?
+  verifiedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, nextAttemptAt])
+  @@index([accountId, runId, taskId])
 }
 
 model SessionCapabilities {

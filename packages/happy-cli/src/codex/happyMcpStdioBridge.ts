@@ -18,6 +18,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { z } from 'zod';
+import { request as httpRequest } from 'node:http';
 import { shouldEnableOrchestratorTools } from '@/orchestrator/prompt';
 import {
   ORCHESTRATOR_CANCEL_TOOL_SCHEMA,
@@ -41,6 +42,85 @@ function parseArgs(argv: string[]): { url: string | null } {
 }
 
 async function main() {
+  if (process.env.HAPPY_ORCH_BRIDGE_TOOL === 'template') {
+    const socketPath = process.env.HAPPY_ORCH_TEMPLATE_SOCKET;
+    if (!socketPath || !socketPath.startsWith('/')) throw new Error('Template proposal socket unavailable');
+    const server = new McpServer({ name: 'Happy Template Proposal', version: '1.0.0' });
+    const registerTool = (server.registerTool as unknown as (name: string, schema: unknown,
+      handler: (args: Record<string, any>) => Promise<unknown>) => void).bind(server);
+    registerTool('ai_template_propose', {
+      title: 'Propose Agent Template Update',
+      description: 'Submit a pending proposal for the current execution\'s bound Agent template. A human must review it before publication.',
+      inputSchema: {
+        clientRequestId: z.string().regex(/^[A-Za-z0-9._:-]{1,128}$/),
+        content: z.object({ role: z.string(), description: z.string(), emoji: z.string(),
+          skills: z.array(z.string()), responsibilities: z.array(z.string()), instructions: z.string() }),
+        note: z.string(),
+      },
+    }, async (args) => {
+      try {
+        const result = await new Promise<string>((resolve, reject) => {
+          const request = httpRequest({ socketPath, path: '/propose', method: 'POST',
+            headers: { 'content-type': 'application/json' }, signal: AbortSignal.timeout(20_000) }, (response) => {
+            let body = '';
+            response.on('data', (chunk) => {
+              body += chunk.toString();
+              if (Buffer.byteLength(body) > 4_000) request.destroy(new Error('Proposal response too large'));
+            });
+            response.on('end', () => response.statusCode === 200 ? resolve(body)
+              : reject(new Error(response.statusCode === 503 ? 'Template proposal server unavailable'
+                : response.statusCode === 409 ? 'Template proposal input or execution scope rejected'
+                  : 'Template proposal unavailable')));
+          });
+          request.once('error', reject);
+          request.end(JSON.stringify(args));
+        });
+        const parsed = JSON.parse(result) as { id?: unknown; status?: unknown; duplicate?: unknown };
+        if (typeof parsed.id !== 'string' || parsed.status !== 'pending'
+          || typeof parsed.duplicate !== 'boolean') throw new Error('Proposal acknowledgement invalid');
+        return { content: [{ type: 'text' as const, text: JSON.stringify({
+          id: parsed.id, status: 'pending', duplicate: parsed.duplicate }) }] };
+      } catch (error) {
+        const message = error instanceof Error && [
+          'Template proposal server unavailable',
+          'Template proposal input or execution scope rejected',
+        ].includes(error.message) ? error.message : 'Template proposal unavailable';
+        return { isError: true, content: [{ type: 'text' as const, text: message }] };
+      }
+    });
+    await server.connect(new StdioServerTransport());
+    return;
+  }
+  if (process.env.HAPPY_ORCH_LEADER_PROXY_URL && process.env.HAPPY_ORCH_LEADER_CAPABILITY) {
+    const server = new McpServer({ name: 'Happy Leader Delegation', version: '1.0.0' });
+    const registerTool = (server.registerTool as unknown as (name: string, schema: unknown,
+      handler: (args: Record<string, any>) => Promise<unknown>) => void).bind(server);
+    registerTool('ai_team_delegate', {
+      title: 'Delegate To Team Member',
+      description: 'Create one bounded task for an enabled member of the current team. Existing sibling task IDs may be dependencies.',
+      inputSchema: {
+        delegationKey: z.string().regex(/^[A-Za-z0-9._:-]{1,80}$/),
+        assignedAgentId: z.string().min(1).max(256),
+        title: z.string().min(1).max(256),
+        requirements: z.string().min(1).max(32_768),
+        dependsOnTaskIds: z.array(z.string()).max(8).optional(),
+      },
+    }, async (args) => {
+      try {
+        const response = await fetch(process.env.HAPPY_ORCH_LEADER_PROXY_URL!, {
+          method: 'POST', headers: { authorization: `Bearer ${process.env.HAPPY_ORCH_LEADER_CAPABILITY}`, 'content-type': 'application/json' },
+          body: JSON.stringify(args), signal: AbortSignal.timeout(20_000),
+        });
+        if (!response.ok) throw new Error(`Delegation rejected: HTTP ${response.status}`);
+        const result = await response.json();
+        return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
+      } catch (error) {
+        return { isError: true, content: [{ type: 'text' as const, text: error instanceof Error ? error.message : 'Delegation failed' }] };
+      }
+    });
+    await server.connect(new StdioServerTransport());
+    return;
+  }
   // Resolve target HTTP MCP URL
   const { url: urlFromArgs } = parseArgs(process.argv.slice(2));
   const baseUrl = urlFromArgs || process.env.HAPPY_HTTP_MCP_URL || '';
@@ -74,13 +154,15 @@ async function main() {
     version: '1.0.0',
   });
   const enableHappyTools = shouldEnableOrchestratorTools();
+  const registerTool = (server.registerTool as unknown as (name: string, schema: unknown,
+    handler: (args: Record<string, any>) => Promise<unknown>) => void).bind(server);
 
   // Helper to register a tool that forwards calls to the HTTP MCP server
   function registerForwardedTool(
     name: string,
     opts: { description: string; title: string; inputSchema: Record<string, z.ZodType> },
   ) {
-    server.registerTool(name, opts, async (args) => {
+    registerTool(name, opts, async (args) => {
       try {
         const client = await ensureHttpClient();
         const response = await client.callTool({ name, arguments: args });

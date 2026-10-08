@@ -180,6 +180,7 @@ function parseElicitationMeta(params: unknown): ElicitationMeta {
 // ─── Backend ─────────────────────────────────────────────────
 
 export class CodexAppServerBackend implements AgentBackend {
+  private readonly approvalItems = new Map<string, { type: string; command?: unknown; changes?: unknown; cwd?: unknown }>();
   private peer: CodexJsonRpcPeer;
   private listeners: AgentMessageHandler[] = [];
   private threadId: string | null = null;
@@ -735,6 +736,7 @@ export class CodexAppServerBackend implements AgentBackend {
 
     switch (item.type) {
       case 'commandExecution':
+        if (typeof item.id === 'string') this.approvalItems.set(item.id, { type: 'command', command: item.command, cwd: item.cwd });
         this.emit({
           type: 'tool-call',
           toolName: 'CodexBash',
@@ -751,6 +753,7 @@ export class CodexAppServerBackend implements AgentBackend {
         break;
 
       case 'fileChange':
+        if (typeof item.id === 'string') this.approvalItems.set(item.id, { type: 'file', changes: item.changes });
         this.emit({
           type: 'patch-apply-begin',
           call_id: item.id,
@@ -803,6 +806,7 @@ export class CodexAppServerBackend implements AgentBackend {
 
   private handleItemCompleted(item: Record<string, any> | undefined): void {
     if (!item) return;
+    if (typeof item.id === 'string') this.approvalItems.delete(item.id);
 
     switch (item.type) {
       case 'commandExecution':
@@ -1004,7 +1008,7 @@ export class CodexAppServerBackend implements AgentBackend {
       // Delegate to permission handler
       this.options.permissionHandler
         .handleToolCall(callId, 'CodexPatch', {
-          changes,
+          changes: this.approvalItems.get(callId)?.changes ?? changes,
           reason,
         })
         .then((result) => {
@@ -1094,6 +1098,8 @@ export class CodexAppServerBackend implements AgentBackend {
     const callId = params.approvalId ?? params.itemId;
     this.dispatchV2Approval(callId, jsonRpcId, 'CodexBash', {
       command: params.command ? [params.command] : [],
+      startedCommand: this.approvalItems.get(params.itemId)?.command,
+      startedCwd: this.approvalItems.get(params.itemId)?.cwd,
       cwd: params.cwd ?? '',
       reason: params.reason,
       kind: params.kind ?? 'command',
@@ -1106,6 +1112,7 @@ export class CodexAppServerBackend implements AgentBackend {
     this.dispatchV2Approval(params.itemId, jsonRpcId, 'CodexPatch', {
       reason: params.reason,
       grantRoot: params.grantRoot,
+      changes: this.approvalItems.get(params.itemId)?.changes,
     }, params.reason);
   }
 

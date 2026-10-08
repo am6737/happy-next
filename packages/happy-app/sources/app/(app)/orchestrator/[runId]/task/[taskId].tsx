@@ -14,12 +14,13 @@ import {
     resolveTaskMachineId,
     resolveMachineName,
     resolveOrchestratorExecutionPrompt,
-    sanitizeOrchestratorOutputSummary,
+    verifiedOrchestratorAnswer,
     sortOrchestratorExecutionsByAttemptDesc,
 } from '@/components/orchestrator/display';
 import { useMachineNameMap } from '@/hooks/useMachineNameMap';
 import { formatDate } from '@/utils/formatDate';
 import { t } from '@/text';
+import { getCurrentLanguage } from '@/text';
 
 import { softHeaderOptions } from '@/components/navigation/softHeader';
 
@@ -231,6 +232,8 @@ export default function OrchestratorTaskDetailScreen() {
     }
 
     const providerLabel = formatOrchestratorProviderLabel(task);
+    const isZh = getCurrentLanguage().startsWith('zh');
+    const taskAnswer = verifiedOrchestratorAnswer(task);
     const executionSections: Array<{
         key: string;
         execution: OrchestratorExecutionRecord | null;
@@ -289,6 +292,8 @@ export default function OrchestratorTaskDetailScreen() {
                             {task.dependsOn.length > 0 && <Text style={styles.row}>{t('settings.orchestratorLabelDependsOn')}: {task.dependsOn.join(', ')}</Text>}
                             {(task.retry.maxAttempts > 1 || task.retry.backoffMs > 0) && <Text style={styles.row}>{t('settings.orchestratorLabelRetryPolicy')}: {t('settings.orchestratorRetryPolicyValue', { maxAttempts: task.retry.maxAttempts, backoffMs: task.retry.backoffMs })}</Text>}
                             {!!task.nextAttemptAt && <Text style={styles.row}>{t('settings.orchestratorLabelNextAttempt')}: {formatDate(task.nextAttemptAt)}</Text>}
+                            {taskAnswer ? <Text style={styles.row}>{isZh ? '已验证答复' : 'Verified answer'}: {taskAnswer}</Text> : null}
+                            {task.deliveryVerified === true ? <Text style={styles.row}>{isZh ? '交付已验证' : 'Delivery verified'}</Text> : null}
                         </View>
                         <Text style={styles.sectionLabel}>{t('settings.orchestratorExecutionHistoryTitle')}</Text>
                     </>
@@ -333,7 +338,7 @@ export default function OrchestratorTaskDetailScreen() {
                         const attempt = execution?.attempt ?? 1;
                         const machineId = execution ? resolveMachineName(execution.machineId, machineNameMap) : '-';
                         const status = execution?.status ?? task.status;
-                        const summary = execution ? sanitizeOrchestratorOutputSummary(execution.outputSummary) : null;
+                        const verifiedAnswer = execution ? verifiedOrchestratorAnswer(execution) : null;
                         return (
                             <Pressable style={styles.card} onPress={() => toggleExecution(section.key)}>
                                 <View style={styles.executionHeader}>
@@ -349,7 +354,7 @@ export default function OrchestratorTaskDetailScreen() {
                                         />
                                     </View>
                                 </View>
-                                {summary ? <Text style={styles.summaryPreview} numberOfLines={2}>{summary}</Text> : null}
+                                {verifiedAnswer ? <Text style={styles.summaryPreview} numberOfLines={2}>{verifiedAnswer}</Text> : null}
                             </Pressable>
                         );
                     }
@@ -365,8 +370,8 @@ export default function OrchestratorTaskDetailScreen() {
                         );
                     }
 
-                    const executionOutputSummary = sanitizeOrchestratorOutputSummary(execution.outputSummary);
                     const executionPrompt = resolveOrchestratorExecutionPrompt(task.prompt, execution);
+                    const verifiedAnswer = verifiedOrchestratorAnswer(execution);
                     return (
                         <View style={[styles.card, styles.executionDetailsCard]}>
                             <View style={styles.executionDetails}>
@@ -381,7 +386,14 @@ export default function OrchestratorTaskDetailScreen() {
                                 <Text style={styles.detailLabel}>{t('settings.orchestratorResultTitle')}</Text>
                                 {!!execution.errorCode && <Text style={styles.row}>{t('settings.orchestratorLabelErrorCode')}: {execution.errorCode}</Text>}
                                 {!!execution.errorMessage && <Text style={styles.row}>{t('settings.orchestratorLabelErrorMessage')}: {execution.errorMessage}</Text>}
-                                <Text style={styles.monoText} selectable>{execution.outputText || executionOutputSummary || '-'}</Text>
+                                <Text style={styles.row}>{verifiedAnswer ?? (execution.errorCode === 'UPGRADE_REQUIRED'
+                                    ? (isZh
+                                        ? '当前运行端版本不支持此 AI 任务。请升级运行端后创建新任务。'
+                                        : 'This runtime does not support this AI task. Upgrade it before creating a new task.')
+                                    : (isZh
+                                        ? '此页面尚无经过验证的答复；执行完成不代表答复或交付已验证。'
+                                        : 'No verified answer is available here. Execution completion does not verify an answer or delivery.'))}</Text>
+                                {execution.deliveryVerified === true ? <Text style={styles.row}>{isZh ? '交付已验证' : 'Delivery verified'}</Text> : null}
                             </View>
                         </View>
                     );

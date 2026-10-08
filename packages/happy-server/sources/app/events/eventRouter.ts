@@ -5,6 +5,7 @@ import { AccountProfile } from "@/types";
 import { getPublicUrl } from "@/storage/files";
 import { db } from "@/storage/db";
 import { allocateUserSeq } from "@/storage/seq";
+import { publishEvent, startEventBridge, stopEventBridge } from './eventBridge';
 
 // === CONNECTION TYPES ===
 
@@ -312,6 +313,15 @@ type DeliveryStats = {
 class EventRouter {
     private userConnections = new Map<string, Set<ClientConnection>>();
 
+    async startDistributed(): Promise<void> {
+        await startEventBridge((userId, eventName, payload, recipientFilter) => {
+            this.deliverLocal({ userId, eventName, payload,
+                recipientFilter: recipientFilter as RecipientFilter });
+        });
+    }
+
+    stopDistributed(): void { stopEventBridge(); }
+
     // === CONNECTION MANAGEMENT ===
 
     addConnection(userId: string, connection: ClientConnection): void {
@@ -476,6 +486,17 @@ class EventRouter {
     }
 
     private emit(params: {
+        userId: string;
+        eventName: 'update' | 'ephemeral';
+        payload: any;
+        recipientFilter: RecipientFilter;
+        skipSenderConnection?: ClientConnection;
+    }): DeliveryStats {
+        publishEvent(params.userId, params.eventName, params.payload, params.recipientFilter);
+        return this.deliverLocal(params);
+    }
+
+    private deliverLocal(params: {
         userId: string;
         eventName: 'update' | 'ephemeral';
         payload: any;

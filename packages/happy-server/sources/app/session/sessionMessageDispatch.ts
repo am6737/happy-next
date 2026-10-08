@@ -2,6 +2,7 @@ import { buildMessageDeliveryErrorEphemeral, buildNewMessageUpdate, eventRouter 
 import { db } from "@/storage/db";
 import { allocateSessionSeqBatch } from "@/storage/seq";
 import { randomKeyNaked } from "@/utils/randomKeyNaked";
+import { hasReceiptSessionPresence, hasSessionPresence } from '@/app/events/eventBridge';
 
 export type DispatchSessionMessageParams = {
     ownerId: string;
@@ -40,8 +41,10 @@ export async function dispatchSessionMessage(params: DispatchSessionMessageParam
     message: DispatchedSessionMessage;
     ownerSessionScopedDeliveries: number;
 }> {
+    const remoteReceipt = params.trackCliDelivery &&
+        await hasReceiptSessionPresence(params.ownerId, params.sessionId).catch(() => false);
     const shouldTrackCliDelivery = params.trackCliDelivery
-        && hasReceiptCapableCliConnection(params.ownerId, params.sessionId);
+        && (hasReceiptCapableCliConnection(params.ownerId, params.sessionId) || remoteReceipt);
 
     const createdMessage = await db.$transaction(async (tx) => {
         const [seq] = await allocateSessionSeqBatch(params.sessionId, 1, tx);
@@ -92,7 +95,9 @@ export async function dispatchSessionMessage(params: DispatchSessionMessageParam
         recipientFilter: { type: 'all-interested-in-session', sessionId: params.sessionId },
     });
 
-    if (params.trackCliDelivery && emitResult.ownerDelivery.sessionScoped === 0) {
+    const sessionOnline = emitResult.ownerDelivery.sessionScoped > 0 ||
+        await hasSessionPresence(params.ownerId, params.sessionId).catch(() => false);
+    if (params.trackCliDelivery && !sessionOnline) {
         await db.sessionMessageDeliveryIssue.upsert({
             where: {
                 sessionMessageId: createdMessage.id,
@@ -118,6 +123,6 @@ export async function dispatchSessionMessage(params: DispatchSessionMessageParam
 
     return {
         message: createdMessage,
-        ownerSessionScopedDeliveries: emitResult.ownerDelivery.sessionScoped,
+        ownerSessionScopedDeliveries: emitResult.ownerDelivery.sessionScoped || (sessionOnline ? 1 : 0),
     };
 }

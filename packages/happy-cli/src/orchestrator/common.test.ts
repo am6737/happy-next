@@ -6,10 +6,26 @@ import {
   buildOutputSummary,
   decodePromptFromBase64,
   mapFinishStatus,
+  requiresTaskSkillDownload,
   type OrchestratorDispatchPayload,
 } from './common';
 
 describe('orchestrator common helpers', () => {
+  it('skips skill download only for an unscoped ordinary legacy task', () => {
+    const plain: OrchestratorDispatchPayload = { executionId: 'execution', runId: 'run',
+      taskId: 'task', dispatchToken: 'dispatch', provider: 'codex',
+      executionType: 'initial', prompt: 'work', timeoutMs: 60_000,
+      workingDirectory: '/tmp/repo' };
+    expect(requiresTaskSkillDownload(plain)).toBe(false);
+    expect(requiresTaskSkillDownload({ ...plain, assignedAgentId: 'agent' })).toBe(true);
+    expect(requiresTaskSkillDownload({ ...plain, projectId: 'project' })).toBe(true);
+    expect(requiresTaskSkillDownload({ ...plain, teamId: 'team' })).toBe(true);
+    expect(requiresTaskSkillDownload({ ...plain, parentTaskId: 'parent' })).toBe(true);
+    expect(requiresTaskSkillDownload({ ...plain, executionCapability: {
+      protocolVersion: 1, token: 'a'.repeat(64), expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      allowedOps: ['finish', 'skill_download'],
+    } })).toBe(true);
+  });
   it('maps finish status by watchdog/cancel/exitCode priority', () => {
     expect(mapFinishStatus({ watchdogTriggered: true, cancelRequested: false, exitCode: 0 })).toBe('timeout');
     expect(mapFinishStatus({ watchdogTriggered: false, cancelRequested: true, exitCode: 0 })).toBe('cancelled');

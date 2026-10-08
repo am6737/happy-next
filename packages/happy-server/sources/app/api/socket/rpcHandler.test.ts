@@ -4,13 +4,65 @@ import type { Socket } from 'socket.io';
 vi.mock('@/app/events/eventRouter', () => ({ eventRouter: {} }));
 vi.mock('@/utils/log', () => ({ log: vi.fn() }));
 vi.mock('@/app/share/accessControl', () => ({ checkSessionAccess: vi.fn() }));
-vi.mock('@/storage/db', () => ({ db: { session: { findUnique: vi.fn().mockResolvedValue({ accountId: 'owner' }) } } }));
-vi.mock('./rpcRegistry', () => ({ getOrCreateUserRpcListeners: vi.fn() }));
+vi.mock('@/storage/db', () => ({ db: {
+    session: { findUnique: vi.fn().mockResolvedValue({ accountId: 'owner' }) },
+    machine: { findFirst: vi.fn(async ({ where }: any) => where.id === 'machine-1'
+        && where.accountId === 'owner' ? { id: 'machine-1' } : null) },
+} }));
+vi.mock('./rpcRegistry', () => ({ getOrCreateUserRpcListeners: vi.fn(),
+    registerUserRpcSocket: vi.fn(), unregisterUserRpcSocket: vi.fn(),
+    assertUserRpcSocketOwner: vi.fn(), invokeUserRpc: vi.fn(async () => {
+        throw new Error('RPC method not available');
+    }) }));
 vi.mock('@/app/presence/sessionTurnRuntime', () => ({ updateThinkingState: vi.fn(() => ({ turnEnded: false })) }));
 vi.mock('@/app/session/pendingMessageAutoDispatch', () => ({ dispatchNextPendingIfPossible: vi.fn() }));
 import { rpcHandler } from './rpcHandler';
 import { checkSessionAccess } from '@/app/share/accessControl';
 import { getOrCreateUserRpcListeners } from './rpcRegistry';
+
+describe('machine RPC registration identity', () => {
+    const method = 'machine-1:orchestrator-dispatch';
+    function connectedSocket() {
+        const handlers = new Map<string, (...args: any[]) => unknown>();
+        const emitted: Array<{ name: string; data: any }> = [];
+        const socket = { id: Math.random().toString(), connected: true,
+            on: (name: string, handler: (...args: any[]) => unknown) => handlers.set(name, handler),
+            emit: (name: string, data: any) => emitted.push({ name, data }),
+        } as unknown as Socket;
+        return { socket, handlers, emitted };
+    }
+    it('rejects user and mismatched machine sockets without replacing the owner', async () => {
+        const listeners = new Map<string, Socket>();
+        const owner = connectedSocket();
+        rpcHandler('owner', owner.socket, listeners, { connectionType: 'machine-scoped',
+            socket: owner.socket, userId: 'owner', machineId: 'machine-1' });
+        await owner.handlers.get('rpc-register')!({ method });
+        expect(listeners.get(method)).toBe(owner.socket);
+        const user = connectedSocket();
+        rpcHandler('owner', user.socket, listeners, { connectionType: 'user-scoped',
+            socket: user.socket, userId: 'owner' });
+        await user.handlers.get('rpc-register')!({ method });
+        expect(user.emitted.at(-1)?.name).toBe('rpc-error');
+        const otherMachine = connectedSocket();
+        rpcHandler('owner', otherMachine.socket, listeners, { connectionType: 'machine-scoped',
+            socket: otherMachine.socket, userId: 'owner', machineId: 'machine-2' });
+        await otherMachine.handlers.get('rpc-register')!({ method });
+        expect(otherMachine.emitted.at(-1)?.name).toBe('rpc-error');
+        expect(listeners.get(method)).toBe(owner.socket);
+    });
+    it('keeps the newer machine registration when the old socket unregisters', async () => {
+        const listeners = new Map<string, Socket>();
+        const oldSocket = connectedSocket();
+        const newSocket = connectedSocket();
+        for (const target of [oldSocket, newSocket]) {
+            rpcHandler('owner', target.socket, listeners, { connectionType: 'machine-scoped',
+                socket: target.socket, userId: 'owner', machineId: 'machine-1' });
+            await target.handlers.get('rpc-register')!({ method });
+        }
+        await oldSocket.handlers.get('rpc-unregister')!({ method });
+        expect(listeners.get(method)).toBe(newSocket.socket);
+    });
+});
 
 describe('RPC native history timeouts', () => {
     it.each([

@@ -1,0 +1,1 @@
+ALTER TABLE "AiClarification" ADD COLUMN "options" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];

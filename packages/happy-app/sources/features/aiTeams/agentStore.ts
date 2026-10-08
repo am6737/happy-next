@@ -1,7 +1,10 @@
 import * as React from 'react';
 import { getCurrentAuth, useAuth } from '@/auth/AuthContext';
 import type { AuthCredentials } from '@/auth/tokenStorage';
+import { withAiMutationIdentity } from '@/sync/aiMutationJournal';
+import { getServerUrl } from '@/sync/serverConfig';
 import {
+    commandAiWorkItem,
     createAiAgent,
     createAiAssignment,
     createAiTeam,
@@ -9,12 +12,19 @@ import {
     deleteAiTeam,
     duplicateAiAgent,
     ensureAiConversation,
+    fetchAiCollaboration,
+    fetchAiIntegrationVerification,
+    fetchAiPendingClarifications,
+    fetchAiSteeringStatus,
     fetchAiTeamState,
+    generateAiAgent,
+    retryAiSteering,
     sendAiConversationMessage,
     updateAiAgent,
     updateAiTeam,
     updateAiWorkAcceptance,
 } from '@/sync/apiAiTeams';
+import type { AiCollaboration, AiIntegrationVerification, AiMessageOptions, AiMessageResponse, AiPendingClarification, AiSteeringStatus } from '@/sync/apiAiTeams';
 import { applyAiAgentDraft, type AiAgentDraft } from './agentDefinition';
 import type { AiAgent, AiConversation, AiTeam, AiTeamData } from './types';
 
@@ -30,6 +40,9 @@ const emptyData: AiTeamData = {
 let data: AiTeamData = emptyData;
 let revision = 0;
 let pendingRefresh: Promise<AiTeamData> | null = null;
+let refreshScope: string | null = null;
+let dataScope: string | null = null;
+const accountScope = (auth: AuthCredentials) => JSON.stringify([getServerUrl(), auth.secret]);
 const listeners = new Set<() => void>();
 
 function emit(next: AiTeamData) {
@@ -54,20 +67,27 @@ function credentials() {
 }
 
 export async function refreshManagedAiTeamData(authCredentials?: AuthCredentials): Promise<AiTeamData> {
-    if (pendingRefresh) return pendingRefresh;
-    pendingRefresh = fetchAiTeamState(authCredentials ?? credentials())
+    const auth = authCredentials ?? credentials();
+    const scope = accountScope(auth);
+    if (pendingRefresh && refreshScope === scope) return pendingRefresh;
+    refreshScope = scope;
+    const operation = fetchAiTeamState(auth)
         .then((next) => {
+            if (refreshScope !== scope) throw new Error('AI team refresh superseded by an account switch');
+            dataScope = scope;
             emit(next);
             return next;
         })
         .finally(() => {
-            pendingRefresh = null;
+            if (pendingRefresh === operation) pendingRefresh = null;
         });
-    return pendingRefresh;
+    pendingRefresh = operation;
+    return operation;
 }
 
 export function getManagedAiTeamData(): AiTeamData {
-    return data;
+    const auth = getCurrentAuth()?.credentials;
+    return auth && dataScope === accountScope(auth) ? data : emptyData;
 }
 
 export function useManagedAiTeamData(): AiTeamData {
@@ -86,7 +106,7 @@ export function useManagedAiTeamData(): AiTeamData {
             clearInterval(timer);
         };
     }, [auth.credentials]);
-    return data;
+    return auth.credentials && dataScope === accountScope(auth.credentials) ? data : emptyData;
 }
 
 function agentInput(agent: AiAgent) {
@@ -130,6 +150,11 @@ export async function createManagedAiAgent(draft: AiAgentDraft, isZh: boolean): 
     const agent = next.agents.find((item) => item.id === created.id);
     if (!agent) throw new Error('Created agent was not returned by the server');
     return agent;
+}
+
+export async function generateManagedAiAgentDraft(prompt: string): Promise<AiAgentDraft> {
+    const generated = await generateAiAgent(credentials(), prompt);
+    return { ...generated, enabled: true };
 }
 
 export async function duplicateManagedAiAgent(agent: AiAgent, _isZh: boolean): Promise<AiAgent> {
@@ -179,29 +204,77 @@ export async function ensureManagedTeamConversation(team: AiTeam, _isZh: boolean
     return conversation;
 }
 
-export async function createManagedAiAssignment(input: { agent: AiAgent; teamId: string; title: string; summary: string; isZh: boolean }) {
-    const result = await createAiAssignment(credentials(), {
+export async function createManagedAiAssignment(input: {
+    agent: AiAgent;
+    teamId: string;
+    title: string;
+    summary: string;
+    isZh: boolean;
+    sourceType?: 'github' | 'dootask' | 'session' | 'execution';
+    sourceLabel?: string;
+    sourceResourceId?: string;
+}) {
+    const auth = credentials();
+    const payload = {
         agentId: input.agent.id,
         teamId: input.teamId || undefined,
         title: input.title,
         summary: input.summary,
-        sourceType: 'execution',
-        sourceLabel: input.isZh ? '直接分配' : 'Direct assignment',
+        sourceType: input.sourceType ?? 'execution',
+        sourceLabel: input.sourceLabel ?? (input.isZh ? '直接分配' : 'Direct assignment'),
+        sourceResourceId: input.sourceResourceId,
+    };
+    return withAiMutationIdentity(auth, 'assignment', payload, async (clientMessageId) => {
+        const result = await createAiAssignment(auth, { ...payload, clientMessageId });
+        const next = await refreshManagedAiTeamData(auth);
+        const work = next.workItems.find((item) => item.id === result.workItemId);
+        const execution = next.executions.find((item) => item.id === result.executionId);
+        const conversation = next.conversations.find((item) => item.id === result.conversationId);
+        if (!work || !execution || !conversation) throw new Error('Assignment state is incomplete');
+        return { work, execution, conversation };
     });
-    const next = await refreshManagedAiTeamData();
-    const work = next.workItems.find((item) => item.id === result.workItemId);
-    const execution = next.executions.find((item) => item.id === result.executionId);
-    const conversation = next.conversations.find((item) => item.id === result.conversationId);
-    if (!work || !execution || !conversation) throw new Error('Assignment state is incomplete');
-    return { work, execution, conversation };
 }
 
-export async function sendManagedAiMessage(conversationId: string, text: string): Promise<void> {
-    await sendAiConversationMessage(credentials(), conversationId, text);
-    await refreshManagedAiTeamData();
+export async function sendManagedAiMessage(conversationId: string, text: string, options: AiMessageOptions = {}): Promise<AiMessageResponse> {
+    const auth = credentials();
+    const payload = Object.keys(options).length ? { text, ...options } : { text };
+    const result = await withAiMutationIdentity(auth, `conversation:${conversationId}`, payload,
+        (clientMessageId) => sendAiConversationMessage(auth, conversationId, text, clientMessageId, options));
+    // Once acknowledged, a refresh failure must not offer to resend the message.
+    await refreshManagedAiTeamData(auth).catch(() => undefined);
+    return result;
 }
 
-export async function setManagedAiWorkAcceptance(workItemId: string, status: 'approved' | 'changes_requested', note?: string): Promise<void> {
-    await updateAiWorkAcceptance(credentials(), workItemId, status, note);
-    await refreshManagedAiTeamData();
+export function fetchManagedAiCollaboration(workItemId: string): Promise<AiCollaboration> {
+    return fetchAiCollaboration(credentials(), workItemId);
+}
+
+export function fetchManagedAiIntegrationVerification(workItemId: string): Promise<AiIntegrationVerification> {
+    return fetchAiIntegrationVerification(credentials(), workItemId);
+}
+
+export function fetchManagedAiPendingClarifications(conversationId: string): Promise<AiPendingClarification[]> {
+    return fetchAiPendingClarifications(credentials(), conversationId);
+}
+
+export function fetchManagedAiSteeringStatus(workItemId: string, steeringId: string): Promise<AiSteeringStatus> {
+    return fetchAiSteeringStatus(credentials(), workItemId, steeringId);
+}
+
+export function retryManagedAiSteering(workItemId: string, steeringId: string): Promise<{ status: 'pending' }> {
+    return retryAiSteering(credentials(), workItemId, steeringId);
+}
+
+export async function setManagedAiWorkAcceptance(workItemId: string, status: 'approved' | 'changes_requested', note?: string, reviewedExecutionId?: string): Promise<void> {
+    const auth = credentials();
+    await withAiMutationIdentity(auth, `acceptance:${workItemId}`, { status, note, reviewedExecutionId },
+        (clientMessageId) => updateAiWorkAcceptance(auth, workItemId, status, note, clientMessageId, reviewedExecutionId));
+    await refreshManagedAiTeamData(auth).catch(() => undefined);
+}
+
+export async function commandManagedAiWorkItem(workItemId: string, command: 'cancel' | 'retry'): Promise<void> {
+    const auth = credentials();
+    await withAiMutationIdentity(auth, `work-command:${workItemId}`, { command },
+        (clientRequestId) => commandAiWorkItem(auth, workItemId, command, clientRequestId));
+    await refreshManagedAiTeamData(auth).catch(() => undefined);
 }

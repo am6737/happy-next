@@ -4,8 +4,8 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { StyleSheet } from 'react-native-unistyles';
 import { RoundButton } from '@/components/RoundButton';
 import { AgentDefinitionForm } from '@/features/aiTeams/AgentDefinitionForm';
-import { createEmptyAiAgentDraft } from '@/features/aiTeams/agentDefinition';
-import { createManagedAiAgent, saveManagedAiTeam, useManagedAiTeamData } from '@/features/aiTeams/agentStore';
+import { applyGeneratedAiAgentDraft, createEmptyAiAgentDraft } from '@/features/aiTeams/agentDefinition';
+import { createManagedAiAgent, generateManagedAiAgentDraft, saveManagedAiTeam, useManagedAiTeamData } from '@/features/aiTeams/agentStore';
 import { findAiTeam } from '@/features/aiTeams/types';
 import { getCurrentLanguage } from '@/text';
 import { Modal } from '@/modal';
@@ -26,10 +26,25 @@ export default function CreateAiAgentPage() {
     const isZh = getCurrentLanguage().startsWith('zh');
     const [draft, setDraft] = React.useState(createEmptyAiAgentDraft);
     const [creating, setCreating] = React.useState(false);
+    const [generating, setGenerating] = React.useState(false);
     const canCreate = Boolean(draft.name.trim() && draft.description.trim());
 
+    const generate = async () => {
+        const prompt = await Modal.prompt(isZh ? '描述你想要的 Agent' : 'Describe the agent you want', isZh ? '例如：负责 React 性能优化、代码审查和测试' : 'For example: a React performance, review, and testing specialist', { confirmText: isZh ? '生成' : 'Generate' });
+        if (!prompt?.trim() || generating || creating) return;
+        setGenerating(true);
+        try {
+            const generated = await generateManagedAiAgentDraft(prompt.trim());
+            setDraft((current) => applyGeneratedAiAgentDraft(current, generated));
+        } catch (error) {
+            Modal.alert(isZh ? 'AI 生成失败' : 'AI generation failed', error instanceof Error ? error.message : undefined);
+        } finally {
+            setGenerating(false);
+        }
+    };
+
     const create = async () => {
-        if (!canCreate || creating) return;
+        if (!canCreate || creating || generating) return;
         setCreating(true);
         try {
             const agent = await createManagedAiAgent({
@@ -50,6 +65,7 @@ export default function CreateAiAgentPage() {
         <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
             <Stack.Screen options={{ headerTitle: isZh ? '创建 Agent' : 'Create an agent' }} />
             <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+                <RoundButton size="medium" display="outline" title={generating ? (isZh ? 'AI 正在生成…' : 'AI is generating…') : (isZh ? '✨ 用 AI 自动生成 Agent' : '✨ Generate with AI')} disabled={generating || creating} onPress={generate} style={{ alignSelf: 'flex-start', marginBottom: 22 }} />
                 <AgentDefinitionForm draft={draft} onChange={setDraft} isZh={isZh} avatarId="new-agent" />
             </ScrollView>
             <View style={styles.footer}>
@@ -57,7 +73,7 @@ export default function CreateAiAgentPage() {
                     <RoundButton
                         size="large"
                         title={creating ? (isZh ? '正在创建…' : 'Creating…') : (isZh ? '创建并打开 Agent' : 'Create & open agent')}
-                        disabled={!canCreate || creating}
+                        disabled={!canCreate || creating || generating}
                         style={styles.footerButton}
                         onPress={create}
                     />

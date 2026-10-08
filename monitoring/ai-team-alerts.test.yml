@@ -1,0 +1,134 @@
+rule_files:
+  - ai-team-alerts.yml
+evaluation_interval: 1m
+tests:
+  - name: Failed scrape target fires after five minutes and recovers
+    interval: 1m
+    input_series:
+      - series: 'up{job="happy-server",instance="fixture-a"}'
+        values: '0+0x6 1+0x4'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: AiServerMetricsUnavailable
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: AiServerMetricsUnavailable
+        exp_alerts:
+          - exp_labels: {job: happy-server, instance: fixture-a, severity: critical, component: ai_team}
+            exp_annotations: {summary: AI server metrics target is unavailable}
+      - eval_time: 7m
+        alertname: AiServerMetricsUnavailable
+        exp_alerts: []
+  - name: Missing scrape job fires without inventing an instance
+    interval: 1m
+    input_series: []
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: AiServerMetricsUnavailable
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: AiServerMetricsUnavailable
+        exp_alerts:
+          - exp_labels: {job: happy-server, severity: critical, component: ai_team}
+            exp_annotations: {summary: AI server metrics target is unavailable}
+  - name: Healthy scrape target never fires an availability alert
+    interval: 1m
+    input_series:
+      - series: 'up{job="happy-server",instance="fixture-a"}'
+        values: '1+0x12'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: AiServerMetricsUnavailable
+        exp_alerts: []
+  - name: Missing metrics fire only when the API target is up and recover
+    interval: 1m
+    input_series:
+      - series: 'up{job="happy-server",instance="fixture-a"}'
+        values: '1+0x12'
+      - series: 'up{job="happy-server",instance="fixture-down"}'
+        values: '0+0x12'
+      - series: 'ai_workflow_queue_items{job="happy-server",instance="fixture-a",queue="decision",status="pending"}'
+        values: '_ _ _ _ _ _ _ 0+0x5'
+      - series: 'ai_budget_max_utilization_ratio{job="happy-server",instance="fixture-a"}'
+        values: '_ _ _ _ _ _ _ 0.5+0x5'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: AiWorkflowMetricsMissing
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: AiWorkflowMetricsMissing
+        exp_alerts:
+          - exp_labels: {job: happy-server, instance: fixture-a, severity: critical, component: ai_team}
+            exp_annotations: {summary: AI workflow queue metrics are missing}
+      - eval_time: 5m
+        alertname: AiBudgetWatermarkMetricsMissing
+        exp_alerts:
+          - exp_labels: {job: happy-server, instance: fixture-a, severity: warning, component: ai_team}
+            exp_annotations: {summary: AI budget utilization metrics are missing}
+      - eval_time: 7m
+        alertname: AiWorkflowMetricsMissing
+        exp_alerts: []
+      - eval_time: 7m
+        alertname: AiBudgetWatermarkMetricsMissing
+        exp_alerts: []
+  - name: Budget high water fires at the threshold duration and recovers
+    interval: 1m
+    input_series:
+      - series: 'ai_budget_max_utilization_ratio{job="happy-server",instance="fixture-a"}'
+        values: '0.95+0x6 0.7+0x4'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: AiBudgetHighWater
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: AiBudgetHighWater
+        exp_alerts:
+          - exp_labels: {job: happy-server, instance: fixture-a, severity: warning, component: ai_team}
+            exp_annotations: {summary: AI budget utilization is above 90 percent}
+      - eval_time: 7m
+        alertname: AiBudgetHighWater
+        exp_alerts: []
+  - name: Fixed queue labels trigger blocked and backlog alerts and recover
+    interval: 1m
+    input_series:
+      - series: 'ai_workflow_queue_items{job="happy-server",instance="fixture-a",queue="decision_delivery",status="blocked"}'
+        values: '1+0x11 0+0x4'
+      - series: 'ai_workflow_queue_items{job="happy-server",instance="fixture-a",queue="decision_delivery",status="pending"}'
+        values: '11+0x11 0+0x4'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: AiDecisionDeliveryBlocked
+        exp_alerts:
+          - exp_labels: {job: happy-server, instance: fixture-a, severity: warning, component: ai_team}
+            exp_annotations: {summary: AI decision deliveries require intervention}
+      - eval_time: 9m
+        alertname: AiDecisionDeliveryBacklog
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: AiDecisionDeliveryBacklog
+        exp_alerts:
+          - exp_labels: {job: happy-server, instance: fixture-a, severity: warning, component: ai_team}
+            exp_annotations: {summary: AI decision delivery backlog is above 10 items}
+      - eval_time: 12m
+        alertname: AiDecisionDeliveryBlocked
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: AiDecisionDeliveryBacklog
+        exp_alerts: []
+  - name: Unknown costs require sustained manual attention and recover
+    interval: 1m
+    input_series:
+      - series: 'ai_workflow_queue_items{job="happy-server",instance="fixture-a",queue="budget",status="unknown"}'
+        values: '1+0x30 0+0x4'
+    alert_rule_test:
+      - eval_time: 29m
+        alertname: AiBudgetUnknownCost
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: AiBudgetUnknownCost
+        exp_alerts:
+          - exp_labels: {job: happy-server, instance: fixture-a, severity: warning, component: ai_team}
+            exp_annotations: {summary: AI budget reservations have unresolved cost}
+      - eval_time: 31m
+        alertname: AiBudgetUnknownCost
+        exp_alerts: []

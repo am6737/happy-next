@@ -9,16 +9,25 @@ import {
     buildOrchestratorActivityEphemeral,
     buildOrchestratorRunTerminalEphemeral,
 } from "@/app/events/eventRouter";
+import { hasSessionPresence } from '@/app/events/eventBridge';
 import { listConnectedUserRpcMethods, invokeUserRpc, hasUserRpcMethod } from "@/app/api/socket/rpcRegistry";
+import { isApprovalTerminalFailure } from '@/app/ai/approvalTerminalFailure';
 import { inTx } from "@/storage/inTx";
 import { feedPost } from "@/app/feed/feedPost";
 import { Context } from "@/context";
 import { randomUUID } from "node:crypto";
+import { integrationExpectedHash } from '@/app/ai/integrationHash';
+import { loadDispatchProjectSnapshot } from '@/app/ai/projectSnapshot';
+import { readAiRuntimeContract } from '@/app/ai/runtimeContract';
+import { assertExecutionCapabilityTx } from '@/app/ai/workspaceAuth';
+import { AiBudgetExceeded, reserveAiRunBudgetTx } from '@/app/ai/budget';
+import { getUserOctokit } from '@/app/github/githubApi';
 import {
     MODEL_MODE_DEFAULT,
     getValidModelModesForAgent,
     isModelMode,
     isModelModeForAgent,
+    AiIntegrationProofSchema,
 } from "happy-wire";
 import {
     addTaskCount,
@@ -44,6 +53,13 @@ const CLI_DETECTION_COMMAND =
     '(command -v gemini >/dev/null 2>&1 && echo "gemini:true" || echo "gemini:false") && ' +
     'echo "hostname:$(hostname 2>/dev/null || echo \'\')"';
 const CLI_DETECTION_TIMEOUT_MS = 20_000;
+function modelLooksIncompatibleWithProvider(provider: string, model: string): boolean {
+    const value = model.toLowerCase();
+    if (provider === 'claude') return value.startsWith('gpt-') || value.startsWith('gemini-') || value.includes('codex');
+    if (provider === 'codex') return value.startsWith('claude-') || value.startsWith('gemini-');
+    if (provider === 'gemini') return value.startsWith('claude-') || value.startsWith('gpt-') || value.includes('codex');
+    return false;
+}
 const IDEMPOTENCY_RETRY_DELAY_MS = 10;
 const DEFAULT_CONTEXT_MAX_CONCURRENCY = 2;
 const DEFAULT_CONTEXT_WAIT_TIMEOUT_MS = 120_000;
@@ -51,6 +67,69 @@ const DEFAULT_CONTEXT_POLL_INTERVAL_MS = 30_000;
 const DEFAULT_CONTEXT_RETRY_MAX_ATTEMPTS = 1;
 const DEFAULT_CONTEXT_RETRY_BACKOFF_MS = 0;
 const PEND_POLL_INTERVAL_MS = 3000;
+
+function extractGithubDeliveryMetadata(text: string | null | undefined): {
+    issue?: { resourceId: string; label: string };
+    pullRequest?: { url: string; number: number };
+} {
+    const value = text ?? '';
+    const issueMatch = value.match(/Created GitHub issue:\s*https:\/\/github\.com\/([^/\s]+)\/([^/\s]+)\/issues\/(\d+)/i);
+    const prMatch = value.match(/Created pull request:\s*https:\/\/github\.com\/([^/\s]+)\/([^/\s]+)\/pull\/(\d+)/i);
+    return {
+        issue: issueMatch ? {
+            resourceId: `${issueMatch[1]}/${issueMatch[2]}#${issueMatch[3]}`,
+            label: `GitHub ${issueMatch[1]}/${issueMatch[2]}#${issueMatch[3]}`,
+        } : undefined,
+        pullRequest: prMatch ? {
+            url: `https://github.com/${prMatch[1]}/${prMatch[2]}/pull/${prMatch[3]}`,
+            number: Number(prMatch[3]),
+        } : undefined,
+    };
+}
+
+export async function verifyGithubDeliveryMetadata(userId: string, text: string | null | undefined,
+    branchName: string | null | undefined, commitSha: string | null | undefined,
+    expectedRepositoryId: bigint, expectedIssue?: string) {
+    const candidate = extractGithubDeliveryMetadata(text);
+    if (!candidate.issue || !candidate.pullRequest || !branchName || !commitSha
+        || !/^[0-9a-f]{40}$/i.test(commitSha)
+        || (expectedIssue && expectedIssue !== candidate.issue.resourceId)) return null;
+    const issueMatch = candidate.issue.resourceId.match(/^([^/#]+)\/([^/#]+)#([1-9]\d*)$/);
+    const prMatch = candidate.pullRequest.url.match(/^https:\/\/github\.com\/([^/]+)\/([^/]+)\/pull\/([1-9]\d*)$/);
+    if (!issueMatch || !prMatch || issueMatch[1].toLowerCase() !== prMatch[1].toLowerCase()
+        || issueMatch[2].toLowerCase() !== prMatch[2].toLowerCase()) return null;
+    const [, owner, repo, issueNumber] = issueMatch;
+    const octokit = await getUserOctokit(userId);
+    const signal = AbortSignal.timeout(20_000);
+    const [{ data: repository }, { data: issue }, { data: pr }] = await Promise.all([
+        octokit.rest.repos.get({ owner, repo, request: { signal } }),
+        octokit.rest.issues.get({ owner, repo, issue_number: Number(issueNumber), request: { signal } }),
+        octokit.rest.pulls.get({ owner, repo, pull_number: candidate.pullRequest.number, request: { signal } }),
+    ]);
+    if (BigInt(repository.id) !== expectedRepositoryId || !repository.permissions?.push
+        || issue.pull_request || issue.number !== Number(issueNumber)
+        || pr.number !== candidate.pullRequest.number || pr.html_url !== candidate.pullRequest.url
+        || pr.head.ref !== branchName || (pr.state === 'closed' && !pr.merged)
+        || pr.head.repo?.id !== repository.id || pr.base.repo?.id !== repository.id
+        || pr.base.ref !== repository.default_branch
+        || !new RegExp(`\\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\\s+#${issueNumber}\\b`, 'i').test(pr.body ?? '')) return null;
+    if (pr.head.sha !== commitSha) {
+        const { data: comparison } = await octokit.rest.repos.compareCommits({ owner, repo,
+            base: commitSha, head: pr.head.sha, request: { signal } });
+        if (comparison.status !== 'ahead' && comparison.status !== 'identical') return null;
+    }
+    const [{ data: checks }, { data: statuses }] = await Promise.all([
+        octokit.rest.checks.listForRef({ owner, repo, ref: pr.head.sha, per_page: 100, request: { signal } }),
+        octokit.rest.repos.getCombinedStatusForRef({ owner, repo, ref: pr.head.sha, request: { signal } }),
+    ]);
+    if ((checks.total_count === 0 && statuses.total_count === 0)
+        || checks.total_count > checks.check_runs.length
+        || checks.check_runs.some((check: { status: string; conclusion: string | null }) => check.status !== 'completed' || check.conclusion !== 'success')
+        || (statuses.total_count > 0 && statuses.state !== 'success')) return null;
+    return { issue: candidate.issue, pullRequest: candidate.pullRequest,
+        repositoryId: BigInt(repository.id), repositoryName: repository.full_name,
+        state: pr.merged ? 'merged' : pr.state, mergedAt: pr.merged_at ? new Date(pr.merged_at) : null };
+}
 
 type ProviderName = typeof PROVIDERS[number];
 
@@ -252,11 +331,17 @@ const submitBodySchema = z.object({
     waitTimeoutMs: z.coerce.number().int().min(1000).max(60 * 60 * 1000).optional(),
     pollIntervalMs: z.coerce.number().int().min(200).max(60_000).optional(),
     idempotencyKey: z.string().min(1).max(128).optional(),
-    metadata: z.record(z.string(), z.unknown()).optional(),
+    metadata: z.record(z.string(), z.unknown()).optional().refine((metadata) =>
+        !metadata || !Object.keys(metadata).some((key) =>
+            /^(?:coordinatorChat|conversationId|aiAgentId|aiTeamId|aiWorkItem|githubRepositoryId)$/.test(key)
+            || /^(?:ai|coordinator|github)/i.test(key)),
+    { message: 'Internal metadata keys are reserved' }),
 });
 
 type RunWithTasks = {
     id: string;
+    metadata?: Prisma.JsonValue | null;
+    aiWorkItem?: { orchestratorTaskId: string; deliveryVerificationStatus: string } | null;
     title: string;
     status: string;
     maxConcurrency: number;
@@ -281,6 +366,7 @@ type RunWithTasks = {
         status: string;
         outputSummary: string | null;
         outputText: string | null;
+        finalResponse: string | null;
         errorCode: string | null;
         errorMessage: string | null;
         createdAt: Date;
@@ -303,6 +389,8 @@ type RunWithTasks = {
             errorMessage: string | null;
             outputSummary: string | null;
             outputText: string | null;
+            finalResponse: string | null;
+            capabilityProtocolVersion: number;
             createdAt: Date;
             updatedAt: Date;
         }>;
@@ -315,6 +403,8 @@ type TaskWithRun = RunWithTasks['tasks'][number] & {
         title: string;
         status: string;
         updatedAt: Date;
+        metadata?: Prisma.JsonValue | null;
+        aiWorkItem?: { orchestratorTaskId: string; deliveryVerificationStatus: string } | null;
     };
 };
 
@@ -339,7 +429,18 @@ function isUniqueConstraintError(error: unknown): boolean {
     return (error as { code?: unknown }).code === 'P2002';
 }
 
-function mapTask(task: RunWithTasks['tasks'][number]) {
+function mapTask(task: RunWithTasks['tasks'][number],
+    metadata?: Prisma.JsonValue | null,
+    deliveryWork?: RunWithTasks['aiWorkItem'], includeExecutions = false) {
+    const contract = readAiRuntimeContract(metadata);
+    const latest = task.executions?.slice().sort((a, b) => b.attempt - a.attempt)[0];
+    const trustedAnswer = task.status === 'completed' && latest?.status === 'completed'
+        && latest.capabilityProtocolVersion === 1 && contract !== 'invalid'
+        && !!latest.finalResponse?.trim() && task.finalResponse === latest.finalResponse;
+    const deliveryVerified = contract && contract !== 'invalid' && contract.deliveryProofVersion === 1
+        && deliveryWork?.orchestratorTaskId === task.id
+        ? task.status === 'completed' && latest?.status === 'completed'
+            && deliveryWork.deliveryVerificationStatus === 'verified' : null;
     return {
         taskId: task.id,
         seq: task.seq,
@@ -356,13 +457,16 @@ function mapTask(task: RunWithTasks['tasks'][number]) {
             backoffMs: task.retryBackoffMs,
         },
         nextAttemptAt: task.nextAttemptAt?.toISOString() ?? null,
-        outputSummary: task.outputSummary,
-        outputText: task.outputText,
+        outputSummary: null,
+        outputText: null,
+        finalResponse: trustedAnswer ? task.finalResponse : null,
+        answerVerified: trustedAnswer,
+        deliveryVerified,
         errorCode: task.errorCode,
         errorMessage: task.errorMessage,
         createdAt: task.createdAt.toISOString(),
         updatedAt: task.updatedAt.toISOString(),
-        ...(Array.isArray(task.executions) ? {
+        ...(includeExecutions && Array.isArray(task.executions) ? {
             executions: task.executions.map((execution) => ({
                 executionId: execution.id,
                 attempt: execution.attempt,
@@ -379,8 +483,15 @@ function mapTask(task: RunWithTasks['tasks'][number]) {
                 signal: execution.signal,
                 errorCode: execution.errorCode,
                 errorMessage: execution.errorMessage,
-                outputSummary: execution.outputSummary,
-                outputText: execution.outputText,
+                outputSummary: null,
+                outputText: null,
+                finalResponse: execution.status === 'completed'
+                    && execution.capabilityProtocolVersion === 1 && contract !== 'invalid'
+                    && !!execution.finalResponse?.trim() ? execution.finalResponse : null,
+                answerVerified: execution.status === 'completed'
+                    && execution.capabilityProtocolVersion === 1 && contract !== 'invalid'
+                    && !!execution.finalResponse?.trim(),
+                deliveryVerified: execution.id === latest?.id ? deliveryVerified : null,
                 createdAt: execution.createdAt.toISOString(),
                 updatedAt: execution.updatedAt.toISOString(),
             })),
@@ -401,7 +512,8 @@ function mapRunMachinesFromTasks(run: RunWithTasks): string[] {
     return [...machineSet];
 }
 
-function mapRunResponse(run: RunWithTasks, summary: RunSummary, includeTasks: boolean, machines: string[] = []) {
+function mapRunResponse(run: RunWithTasks, summary: RunSummary, includeTasks: boolean,
+    machines: string[] = [], includeExecutions = false) {
     return {
         runId: run.id,
         title: run.title,
@@ -414,7 +526,8 @@ function mapRunResponse(run: RunWithTasks, summary: RunSummary, includeTasks: bo
         cancelRequestedAt: run.cancelRequestedAt?.toISOString() ?? null,
         summary,
         machines,
-        ...(includeTasks ? { tasks: run.tasks.map(mapTask) } : {}),
+        ...(includeTasks ? { tasks: run.tasks.map(task => mapTask(task,
+            run.metadata, run.aiWorkItem, includeExecutions)) } : {}),
     };
 }
 
@@ -461,6 +574,8 @@ async function loadRunForUser(userId: string, runId: string, includeTasks: boole
             status: true,
             maxConcurrency: true,
             controllerSessionId: true,
+            metadata: true,
+            aiWorkItem: { select: { orchestratorTaskId: true, deliveryVerificationStatus: true } },
             createdAt: true,
             updatedAt: true,
             completedAt: true,
@@ -482,12 +597,14 @@ async function loadRunForUser(userId: string, runId: string, includeTasks: boole
                     status: true,
                     outputSummary: true,
                     outputText: true,
+                    finalResponse: true,
                     errorCode: true,
                     errorMessage: true,
                     createdAt: true,
                     updatedAt: true,
-                    executions: includeExecutions ? {
-                        orderBy: { attempt: 'asc' },
+                    executions: {
+                        orderBy: { attempt: includeExecutions ? 'asc' : 'desc' },
+                        ...(includeExecutions ? {} : { take: 1 }),
                         select: {
                             id: true,
                             attempt: true,
@@ -506,10 +623,12 @@ async function loadRunForUser(userId: string, runId: string, includeTasks: boole
                             errorMessage: true,
                             outputSummary: true,
                             outputText: true,
+                            finalResponse: true,
+                            capabilityProtocolVersion: true,
                             createdAt: true,
                             updatedAt: true,
                         },
-                    } : false,
+                    },
                 },
             } : false,
         },
@@ -564,6 +683,7 @@ async function loadTaskForUser(
             status: true,
             outputSummary: true,
             outputText: true,
+            finalResponse: true,
             errorCode: true,
             errorMessage: true,
             createdAt: true,
@@ -574,10 +694,13 @@ async function loadTaskForUser(
                     title: true,
                     status: true,
                     updatedAt: true,
+                    metadata: true,
+                    aiWorkItem: { select: { orchestratorTaskId: true, deliveryVerificationStatus: true } },
                 },
             },
-            executions: includeExecutions ? {
-                orderBy: { attempt: 'asc' },
+            executions: {
+                orderBy: { attempt: includeExecutions ? 'asc' : 'desc' },
+                ...(includeExecutions ? {} : { take: 1 }),
                 select: {
                     id: true,
                     attempt: true,
@@ -596,10 +719,12 @@ async function loadTaskForUser(
                     errorMessage: true,
                     outputSummary: true,
                     outputText: true,
+                    finalResponse: true,
+                    capabilityProtocolVersion: true,
                     createdAt: true,
                     updatedAt: true,
                 },
-            } : false,
+            },
         },
     });
 
@@ -927,7 +1052,7 @@ export function orchestratorRoutes(app: Fastify) {
                 normalizedTaskModels.push(undefined);
                 continue;
             }
-            if (isModelMode(model) && !isModelModeForAgent(task.provider, model)) {
+            if (modelLooksIncompatibleWithProvider(task.provider, model) || (isModelMode(model) && !isModelModeForAgent(task.provider, model))) {
                 return sendError(reply, 400, 'INVALID_ARGUMENT', `Task seq ${index + 1} has invalid model "${model}" for provider "${task.provider}"`);
             }
             normalizedTaskModels.push(model);
@@ -990,7 +1115,7 @@ export function orchestratorRoutes(app: Fastify) {
                         updatedAt: existing.run.updatedAt.toISOString(),
                         summary: existing.summary,
                     },
-                    tasks: existing.run.tasks.map(mapTask),
+                    tasks: existing.run.tasks.map(task => mapTask(task)),
                     next: isRunTerminal(existing.run.status) ? undefined : { hint: 'Await <orchestrator-callback>.', runId: existing.run.id },
                 },
             });
@@ -1020,6 +1145,7 @@ export function orchestratorRoutes(app: Fastify) {
                         cancelRequestedAt: true,
                     },
                 });
+                await reserveAiRunBudgetTx(tx, { accountId: userId, runId: run.id });
 
                 const taskData = body.tasks.map((task, index) => ({
                     runId: run.id,
@@ -1090,11 +1216,14 @@ export function orchestratorRoutes(app: Fastify) {
                         updatedAt: created.run.updatedAt.toISOString(),
                         summary: created.summary,
                     },
-                    tasks: created.run.tasks.map(mapTask),
+                    tasks: created.run.tasks.map(task => mapTask(task)),
                     next: { hint: 'Await <orchestrator-callback>.', runId: created.run.id },
                 },
             });
         } catch (error) {
+            if (error instanceof AiBudgetExceeded) {
+                return sendError(reply, 429, 'AI_BUDGET_EXCEEDED', 'AI budget limit exceeded');
+            }
             request.log.error({ err: error }, 'orchestrator submit failed');
             if (body.idempotencyKey && isUniqueConstraintError(error)) {
                 const duplicate = await loadExistingByIdempotencyWithRetry();
@@ -1111,7 +1240,7 @@ export function orchestratorRoutes(app: Fastify) {
                                 updatedAt: duplicate.run.updatedAt.toISOString(),
                                 summary: duplicate.summary,
                             },
-                            tasks: duplicate.run.tasks.map(mapTask),
+                            tasks: duplicate.run.tasks.map(task => mapTask(task)),
                             next: isRunTerminal(duplicate.run.status) ? undefined : { hint: 'Await <orchestrator-callback>.', runId: duplicate.run.id },
                         },
                     });
@@ -1156,7 +1285,8 @@ export function orchestratorRoutes(app: Fastify) {
 
         return reply.send({
             ok: true,
-            data: mapRunResponse(loaded.run, loaded.summary, includeTasks, [...machineSet]),
+            data: mapRunResponse(loaded.run, loaded.summary, includeTasks,
+                [...machineSet], includeExecutions),
         });
     });
 
@@ -1190,7 +1320,8 @@ export function orchestratorRoutes(app: Fastify) {
                     status: loadedTask.run.status,
                     updatedAt: loadedTask.run.updatedAt.toISOString(),
                 },
-                task: mapTask(loadedTask),
+                task: mapTask(loadedTask, loadedTask.run.metadata,
+                    loadedTask.run.aiWorkItem, includeExecutions),
             },
         });
     });
@@ -1225,6 +1356,11 @@ export function orchestratorRoutes(app: Fastify) {
                     model: true,
                     timeoutMs: true,
                     status: true,
+                    errorCode: true,
+                    targetMachineId: true,
+                    workingDirectory: true,
+                    branchName: true,
+                    baseCommit: true,
                     run: {
                         select: {
                             id: true,
@@ -1241,6 +1377,9 @@ export function orchestratorRoutes(app: Fastify) {
             if (task.status !== 'completed' && task.status !== 'failed') {
                 return { kind: 'invalid_state' as const, status: task.status };
             }
+            if (isApprovalTerminalFailure(task.errorCode)) {
+                return { kind: 'conflict' as const };
+            }
 
             const sourceExecution = await tx.orchestratorExecution.findFirst({
                 where: {
@@ -1253,10 +1392,20 @@ export function orchestratorRoutes(app: Fastify) {
                 select: {
                     childSessionId: true,
                     machineId: true,
+                    worktreePath: true,
+                    branchName: true,
+                    baseCommit: true,
                 },
             });
             if (!sourceExecution?.childSessionId) {
                 return { kind: 'missing_child_session' as const };
+            }
+            if ((task.targetMachineId && sourceExecution.machineId !== task.targetMachineId)
+                || (task.workingDirectory && (!sourceExecution.worktreePath
+                    || !sourceExecution.branchName || !sourceExecution.baseCommit
+                    || sourceExecution.branchName !== task.branchName
+                    || sourceExecution.baseCommit !== task.baseCommit))) {
+                return { kind: 'workspace_identity_mismatch' as const };
             }
 
             const latestExecution = await tx.orchestratorExecution.findFirst({
@@ -1333,6 +1482,9 @@ export function orchestratorRoutes(app: Fastify) {
         }
         if (result.kind === 'missing_child_session') {
             return sendError(reply, 409, 'CONFLICT', `Task ${taskId} has no child session id and cannot be resumed`);
+        }
+        if (result.kind === 'workspace_identity_mismatch') {
+            return sendError(reply, 409, 'CONFLICT', `Task ${taskId} workspace identity changed and cannot be resumed`);
         }
         if (result.kind === 'conflict') {
             return sendError(reply, 409, 'CONFLICT', `Task ${taskId} is no longer resumable`);
@@ -1555,7 +1707,8 @@ export function orchestratorRoutes(app: Fastify) {
                             summary: loaded.summary,
                             updatedAt: loaded.run.updatedAt.toISOString(),
                         },
-                        ...(includeTasks ? { tasks: loaded.run.tasks.map(mapTask) } : {}),
+                        ...(includeTasks ? { tasks: loaded.run.tasks.map(task => mapTask(task,
+                            loaded.run.metadata, loaded.run.aiWorkItem)) } : {}),
                     },
                 });
             }
@@ -1732,7 +1885,7 @@ export function orchestratorRoutes(app: Fastify) {
                 return { kind: 'duplicate' as const };
             }
 
-            await tx.orchestratorTask.updateMany({
+            const taskUpdated = await tx.orchestratorTask.updateMany({
                 where: {
                     id: execution.taskId,
                     status: 'dispatching',
@@ -1741,6 +1894,7 @@ export function orchestratorRoutes(app: Fastify) {
                     status: 'running',
                 },
             });
+            if (taskUpdated.count !== 1) throw new Error('Execution task owner changed');
 
             await tx.orchestratorRun.updateMany({
                 where: {
@@ -1776,6 +1930,71 @@ export function orchestratorRoutes(app: Fastify) {
         });
     });
 
+    app.post('/v1/orchestrator/executions/:id/identity', {
+        preHandler: app.authenticate,
+        schema: { params: z.object({ id: z.string() }), body: z.object({
+            dispatchToken: z.string().min(1), machineId: z.string().min(1),
+            capability: z.string().regex(/^[0-9a-f]{64}$/).optional(),
+            childSessionId: z.string().min(1).max(256),
+            worktreePath: z.string().min(1).max(1024),
+            branchName: z.string().min(1).max(256),
+        }).strict() },
+    }, async (request, reply) => {
+        const body = request.body;
+        const result = await db.$transaction(async (tx) => {
+            await tx.$queryRaw`SELECT id FROM "OrchestratorExecution"
+                WHERE id=${request.params.id} FOR UPDATE`;
+            const execution = await tx.orchestratorExecution.findFirst({ where: {
+                id: request.params.id, run: { accountId: request.userId },
+            }, include: { task: { select: { targetMachineId: true,
+                workingDirectory: true, branchName: true, baseCommit: true } },
+            run: { select: { status: true, metadata: true } } } });
+            if (!execution) return 'missing' as const;
+            if (execution.dispatchToken !== body.dispatchToken
+                || execution.machineId !== body.machineId) return 'conflict' as const;
+            if (execution.capabilityProtocolVersion > 0 || body.capability) {
+                if (!body.capability) return 'conflict' as const;
+                try {
+                    await assertExecutionCapabilityTx(tx, { accountId: request.userId,
+                        executionId: execution.id, machineId: execution.machineId,
+                        token: body.capability, operation: 'identity' });
+                } catch { return 'conflict' as const; }
+            }
+            const latest = await tx.orchestratorExecution.findFirst({ where: {
+                taskId: execution.taskId }, orderBy: { attempt: 'desc' }, select: { id: true } });
+            if (latest?.id !== execution.id || execution.status !== 'running'
+                || execution.run.status !== 'running'
+                || execution.task.targetMachineId && execution.task.targetMachineId !== body.machineId
+                || execution.task.branchName && execution.task.branchName !== body.branchName
+                || execution.task.workingDirectory && !body.worktreePath.startsWith('/')) {
+                return 'conflict' as const;
+            }
+            try {
+                await loadDispatchProjectSnapshot(tx, { runId: execution.runId,
+                    accountId: request.userId, metadata: execution.run.metadata,
+                    taskMachineId: execution.task.targetMachineId,
+                    taskDirectory: execution.task.workingDirectory,
+                    taskBaseCommit: execution.task.baseCommit,
+                    dispatchMachineId: execution.machineId });
+            } catch { return 'conflict' as const; }
+            const existing = [execution.childSessionId, execution.worktreePath, execution.branchName];
+            if (existing.some(Boolean)) return existing[0] === body.childSessionId
+                && existing[1] === body.worktreePath && existing[2] === body.branchName
+                ? 'duplicate' as const : 'conflict' as const;
+            const updated = await tx.orchestratorExecution.updateMany({ where: {
+                id: execution.id, status: 'running', childSessionId: null,
+                worktreePath: null, branchName: null,
+            }, data: { childSessionId: body.childSessionId,
+                worktreePath: body.worktreePath, branchName: body.branchName } });
+            return updated.count ? 'bound' as const : 'conflict' as const;
+        });
+        if (result === 'missing') return sendError(reply, 404, 'NOT_FOUND', 'Execution not found');
+        if (result === 'conflict') return sendError(reply, 409, 'CONFLICT', 'Execution identity changed');
+        return reply.send({ ok: true, executionId: request.params.id,
+            status: result, childSessionId: body.childSessionId,
+            branchName: body.branchName });
+    });
+
     app.post('/v1/orchestrator/executions/:id/finish', {
         preHandler: app.authenticate,
         schema: {
@@ -1785,22 +2004,59 @@ export function orchestratorRoutes(app: Fastify) {
             body: z.object({
                 dispatchToken: z.string().min(1),
                 status: z.enum(EXECUTION_FINAL_STATUSES),
+                capability: z.string().regex(/^[0-9a-f]{64}$/).optional(),
                 finishedAt: z.string().datetime().optional(),
                 exitCode: z.number().int().nullable().optional(),
                 signal: z.string().nullable().optional(),
                 childSessionId: z.string().min(1).max(256).nullable().optional(),
                 outputSummary: z.string().max(4096).nullable().optional(),
                 outputText: z.string().max(1_000_000).nullable().optional(),
+                finalResponse: z.string().max(65_536).nullable().optional(),
                 errorCode: z.string().nullable().optional(),
                 errorMessage: z.string().max(10_000).nullable().optional(),
+                worktreePath: z.string().max(1024).nullable().optional(),
+                branchName: z.string().max(256).nullable().optional(),
+                baseCommit: z.string().max(128).nullable().optional(),
+                commitSha: z.string().max(128).nullable().optional(),
+                pullRequestUrl: z.string().url().max(2048).nullable().optional(),
+                pullRequestNumber: z.number().int().positive().nullable().optional(),
+                integrationProof: AiIntegrationProofSchema.optional(),
             }),
         },
     }, async (request, reply) => {
         const userId = request.userId;
         const { id } = request.params;
         const body = request.body;
+        let verifiedDelivery: Awaited<ReturnType<typeof verifyGithubDeliveryMetadata>> = null;
+        let deliveryWork: { id: string; sourceType: string; sourceResourceId: string } | null = null;
+        if (body.status === 'completed') {
+            const preflight = await db.orchestratorExecution.findFirst({ where: {
+                id, dispatchToken: body.dispatchToken, status: { in: ['dispatching', 'running'] },
+                run: { accountId: userId },
+            }, select: { taskId: true, run: { select: { metadata: true } } } });
+            const metadata = preflight?.run.metadata as { githubRepositoryId?: string | null } | null | undefined;
+            const repositoryId = metadata?.githubRepositoryId;
+            if (preflight) deliveryWork = await db.aiWorkItem.findFirst({ where: { accountId: userId,
+                orchestratorTaskId: preflight.taskId }, select: { id: true, sourceType: true, sourceResourceId: true } });
+            const authorizedRepository = preflight && deliveryWork && repositoryId && /^\d+$/.test(repositoryId)
+                ? await db.aiGithubRepositoryGrant.findUnique({ where: {
+                    accountId_repositoryId: { accountId: userId, repositoryId: BigInt(repositoryId!) },
+                }, select: { repositoryId: true } }) : null;
+            if (authorizedRepository && deliveryWork) {
+                try {
+                    verifiedDelivery = await verifyGithubDeliveryMetadata(userId,
+                        body.finalResponse, body.branchName, body.commitSha,
+                        authorizedRepository.repositoryId, deliveryWork.sourceType === 'github' ? deliveryWork.sourceResourceId : undefined);
+                } catch {
+                    warn({ module: 'orchestrator-delivery' }, 'GitHub delivery verification failed');
+                }
+            }
+        }
 
         const result = await db.$transaction(async (tx: Prisma.TransactionClient) => {
+            await tx.$queryRaw`SELECT r.id FROM "OrchestratorRun" r
+                JOIN "OrchestratorExecution" e ON e."runId"=r.id
+                WHERE e.id=${id} AND r."accountId"=${userId} FOR UPDATE OF r`;
             const execution = await tx.orchestratorExecution.findFirst({
                 where: {
                     id,
@@ -1812,21 +2068,32 @@ export function orchestratorRoutes(app: Fastify) {
                     id: true,
                     status: true,
                     dispatchToken: true,
+                    capabilityProtocolVersion: true,
                     runId: true,
                     taskId: true,
+                    machineId: true,
                     attempt: true,
+                    errorCode: true,
                     childSessionId: true,
+                    worktreePath: true,
+                    branchName: true,
                     run: {
                         select: {
                             status: true,
                             title: true,
                             controllerSessionId: true,
+                            metadata: true,
                         },
                     },
                     task: {
                         select: {
+                            targetMachineId: true,
+                            workingDirectory: true,
+                            baseCommit: true,
                             retryMaxAttempts: true,
                             retryBackoffMs: true,
+                            collaborationRole: true,
+                            dependsOnTaskKeys: true,
                         },
                     },
                 },
@@ -1840,17 +2107,104 @@ export function orchestratorRoutes(app: Fastify) {
                 return { kind: 'token_mismatch' as const };
             }
 
+            let recoveryDrain = false;
+            if (execution.capabilityProtocolVersion > 0 || body.capability) {
+                try {
+                    if (!body.capability) return { kind: 'capability_invalid' as const };
+                    const capabilityId = await assertExecutionCapabilityTx(tx, { accountId: userId,
+                        executionId: id, machineId: execution.machineId,
+                        token: body.capability, operation: 'finish' });
+                    const capability = await tx.aiExecutionCapability.findUniqueOrThrow({ where: {
+                        id: capabilityId }, select: { recoveryMode: true } });
+                    recoveryDrain = capability.recoveryMode === 'drain';
+                } catch { return { kind: 'capability_invalid' as const }; }
+            }
+            if (recoveryDrain && (body.status !== 'failed'
+                || body.errorCode !== 'EXECUTION_CAPABILITY_EXPIRED'
+                || body.exitCode === 0 || body.finalResponse || body.commitSha
+                || body.pullRequestUrl || body.pullRequestNumber || body.integrationProof
+                || (isExecutionTerminal(execution.status)
+                    ? execution.status !== 'failed'
+                        || execution.errorCode !== 'EXECUTION_CAPABILITY_EXPIRED'
+                    : execution.run.status !== 'running'))) {
+                return { kind: 'capability_invalid' as const };
+            }
             if (isExecutionTerminal(execution.status)) {
                 return { kind: 'duplicate' as const };
             }
+            const runtimeContract = readAiRuntimeContract(execution.run.metadata);
+            if (runtimeContract === 'invalid'
+                || (runtimeContract && body.status === 'completed' && !body.finalResponse?.trim())) {
+                return { kind: 'final_response_required' as const };
+            }
+            if (runtimeContract && execution.capabilityProtocolVersion !== 1) {
+                return { kind: 'capability_invalid' as const };
+            }
+            if (execution.childSessionId && execution.worktreePath && execution.branchName
+                && (body.childSessionId !== execution.childSessionId
+                    || body.worktreePath !== execution.worktreePath
+                    || body.branchName !== execution.branchName)) {
+                return { kind: 'workspace_identity_mismatch' as const };
+            }
+            const cancelling = execution.run.status === 'canceling'
+                || execution.run.status === 'cancelled';
+            const executionStatus = cancelling ? 'cancelled' : body.status;
+            if (!cancelling) try {
+                const snapshot = await loadDispatchProjectSnapshot(tx, {
+                    runId: execution.runId, accountId: userId, metadata: execution.run.metadata,
+                    taskMachineId: execution.task.targetMachineId,
+                    taskDirectory: execution.task.workingDirectory,
+                    taskBaseCommit: execution.task.baseCommit,
+                    dispatchMachineId: execution.machineId,
+                });
+                if (snapshot && executionStatus === 'completed' && body.baseCommit !== snapshot.baseCommit) {
+                    return { kind: 'project_identity_invalid' as const };
+                }
+            } catch {
+                return { kind: 'project_identity_invalid' as const };
+            }
+
+            let integrationExpected: Prisma.InputJsonValue | null = null;
+            if (execution.task.collaborationRole === 'aggregate' && executionStatus === 'completed') {
+                const proof = body.integrationProof;
+                const members = await tx.orchestratorTask.findMany({ where: {
+                    runId: execution.runId, collaborationRole: 'delegated',
+                }, select: { id: true, taskKey: true, status: true, branchName: true,
+                    commitSha: true, baseCommit: true, targetMachineId: true,
+                    executions: { orderBy: { attempt: 'desc' }, take: 1,
+                        select: { machineId: true } } } });
+                const memberKeys = execution.task.dependsOnTaskKeys.filter((key) => key !== 'primary');
+                if (!proof || !body.commitSha || proof.aggregateCommit !== body.commitSha
+                    || members.length < 2 || members.length !== proof.members.length
+                    || members.length !== memberKeys.length
+                    || new Set(proof.members.map((member) => member.taskId)).size !== members.length
+                    || members.some((member) => !member.taskKey || !memberKeys.includes(member.taskKey)
+                        || member.status !== 'completed' || member.baseCommit !== proof.baseCommit
+                        || !member.branchName || !member.commitSha
+                        || !proof.members.some((claimed) => claimed.taskId === member.id
+                            && claimed.branchName === member.branchName
+                            && claimed.sourceCommit === member.commitSha))) {
+                    return { kind: 'integration_invalid' as const };
+                }
+                integrationExpected = {
+                    runId: execution.runId, taskId: execution.taskId, executionId: execution.id,
+                    machineId: execution.machineId, aggregateCommit: body.commitSha!,
+                    baseCommit: members[0].baseCommit!,
+                    members: members.map((member) => ({ taskId: member.id,
+                        machineId: member.executions[0]?.machineId ?? member.targetMachineId ?? execution.machineId,
+                        branchName: member.branchName!, commitSha: member.commitSha!,
+                        baseCommit: member.baseCommit! })),
+                };
+            }
 
             const finishedAt = body.finishedAt ? new Date(body.finishedAt) : new Date();
-            const executionStatus = body.status;
-            const shouldRetry = (executionStatus === 'failed' || executionStatus === 'timeout')
+            const shouldRetry = !recoveryDrain
+                && !isApprovalTerminalFailure(body.errorCode)
+                && (executionStatus === 'failed' || executionStatus === 'timeout')
                 && execution.run.status !== 'canceling'
                 && execution.run.status !== 'cancelled'
                 && execution.attempt < execution.task.retryMaxAttempts;
-            const taskStatus = shouldRetry
+            const taskStatus = integrationExpected ? 'running' : shouldRetry
                 ? 'queued'
                 : executionStatus === 'completed'
                 ? 'completed'
@@ -1876,15 +2230,22 @@ export function orchestratorRoutes(app: Fastify) {
                         : {}),
                     outputSummary: body.outputSummary ?? null,
                     outputText: body.outputText ?? null,
+                    finalResponse: body.finalResponse ?? null,
                     errorCode: body.errorCode ?? null,
                     errorMessage: body.errorMessage ?? null,
+                    worktreePath: execution.worktreePath ?? body.worktreePath ?? null,
+                    branchName: execution.branchName ?? body.branchName ?? null,
+                    baseCommit: body.baseCommit ?? null,
+                    commitSha: body.commitSha ?? null,
+                    pullRequestUrl: body.pullRequestUrl ?? null,
+                    pullRequestNumber: body.pullRequestNumber ?? null,
                 },
             });
             if (updated.count === 0) {
                 return { kind: 'duplicate' as const };
             }
 
-            await tx.orchestratorTask.updateMany({
+            const taskUpdated = await tx.orchestratorTask.updateMany({
                 where: {
                     id: execution.taskId,
                     status: { in: ['dispatching', 'running'] },
@@ -1893,11 +2254,107 @@ export function orchestratorRoutes(app: Fastify) {
                     status: taskStatus,
                     outputSummary: body.outputSummary ?? null,
                     outputText: body.outputText ?? null,
+                    finalResponse: body.finalResponse ?? null,
                     errorCode: body.errorCode ?? null,
                     errorMessage: body.errorMessage ?? null,
+                    worktreePath: execution.worktreePath ?? body.worktreePath ?? null,
+                    branchName: execution.branchName ?? body.branchName ?? null,
+                    baseCommit: body.baseCommit ?? null,
+                    commitSha: body.commitSha ?? null,
+                    pullRequestUrl: body.pullRequestUrl ?? null,
+                    pullRequestNumber: body.pullRequestNumber ?? null,
                     nextAttemptAt,
                 },
             });
+            if (taskUpdated.count !== 1) throw new Error('Execution task owner changed');
+            if (isApprovalTerminalFailure(body.errorCode) && executionStatus === 'failed') {
+                await tx.aiDecisionRequest.updateMany({ where: {
+                    executionId: execution.id, status: 'pending',
+                }, data: { status: 'expired', version: { increment: 1 } } });
+                await tx.aiDecisionRequest.updateMany({ where: {
+                    executionId: execution.id, deliveryStatus: { notIn: ['blocked', 'delivered'] },
+                }, data: { deliveryStatus: 'blocked', claimOwner: null,
+                    leaseUntil: null, errorCode: body.errorCode } });
+            }
+            if (integrationExpected && body.integrationProof) {
+                const expectedHash = integrationExpectedHash(integrationExpected);
+                await tx.aiIntegrationVerification.create({ data: {
+                    executionId: execution.id, accountId: userId, runId: execution.runId,
+                    taskId: execution.taskId, machineId: execution.machineId,
+                    proof: body.integrationProof as Prisma.InputJsonValue,
+                    expected: integrationExpected, expectedHash, status: 'pending',
+                } });
+            }
+
+            // Coordinator chat runs deliberately have no AiWorkItem. Persist
+            // the runtime's actual answer as an agent chat message when the
+            // turn completes, so the client sees a real response rather than
+            // an immediate echo of the user's text.
+            const coordinatorMetadata = execution.run.metadata as {
+                coordinatorChat?: boolean;
+                conversationId?: string;
+                aiAgentId?: string;
+            } | null;
+            if (coordinatorMetadata?.coordinatorChat
+                && coordinatorMetadata.conversationId
+                && executionStatus === 'completed') {
+                const answer = body.finalResponse?.trim() ?? '';
+                if (answer) {
+                    const conversation = await tx.aiConversation.findFirst({ where: {
+                        id: coordinatorMetadata.conversationId, accountId: userId,
+                        agent: { accountId: userId },
+                        ...(coordinatorMetadata.aiAgentId ? {
+                            OR: [
+                                { kind: 'direct', agentId: coordinatorMetadata.aiAgentId },
+                                { kind: 'group', team: { accountId: userId, members: {
+                                    some: { agentId: coordinatorMetadata.aiAgentId, agent: { accountId: userId } },
+                                } } },
+                            ],
+                        } : { id: '__missing_agent__' }),
+                    }, select: { id: true } });
+                    if (conversation) {
+                    const payload = {
+                        id: `coordinator-reply-${execution.id}`,
+                        kind: 'text' as const,
+                        sender: 'agent' as const,
+                        ...(coordinatorMetadata.aiAgentId ? { agentId: coordinatorMetadata.aiAgentId } : {}),
+                        text: answer,
+                        timeLabel: finishedAt.toISOString(),
+                    };
+                    await tx.aiMessage.create({ data: {
+                        id: payload.id,
+                        conversationId: coordinatorMetadata.conversationId,
+                        sender: 'agent',
+                        agentId: coordinatorMetadata.aiAgentId ?? null,
+                        payload: payload as Prisma.InputJsonValue,
+                    } });
+                    await tx.aiConversation.update({ where: { id: coordinatorMetadata.conversationId }, data: { updatedAt: finishedAt } });
+                    }
+                }
+            }
+
+            if (!cancelling && verifiedDelivery && deliveryWork && !integrationExpected) {
+                await tx.aiWorkItem.updateMany({
+                    where: { id: deliveryWork.id, orchestratorTaskId: execution.taskId, accountId: userId,
+                        OR: [{ sourceType: 'execution' }, { sourceResourceId: verifiedDelivery.issue.resourceId }] },
+                    data: {
+                        sourceType: 'github', sourceLabel: verifiedDelivery.issue.label,
+                        sourceResourceId: verifiedDelivery.issue.resourceId,
+                        pullRequestUrl: verifiedDelivery.pullRequest.url,
+                        pullRequestNumber: verifiedDelivery.pullRequest.number,
+                        pullRequestState: verifiedDelivery.state,
+                        deliveryVerificationStatus: 'verified', deliveryVerifiedAt: finishedAt,
+                        deliveryVerificationNextAt: null, deliveryVerificationErrorCode: null,
+                        requiresDecision: true,
+                        ...(verifiedDelivery.mergedAt ? { pullRequestMergedAt: verifiedDelivery.mergedAt } : {}),
+                    },
+                });
+            } else if (deliveryWork && executionStatus === 'completed') {
+                await tx.aiWorkItem.updateMany({ where: { id: deliveryWork.id, accountId: userId },
+                    data: { deliveryVerificationStatus: 'pending',
+                        deliveryVerificationNextAt: new Date(finishedAt.getTime() + 30_000),
+                        deliveryVerificationErrorCode: 'unverified', requiresDecision: true } });
+            }
 
             const grouped = await tx.orchestratorTask.groupBy({
                 by: ['status'],
@@ -1931,8 +2388,24 @@ export function orchestratorRoutes(app: Fastify) {
         if (result.kind === 'not_found') {
             return sendError(reply, 404, 'NOT_FOUND', 'Execution not found');
         }
+        if (result.kind === 'integration_invalid') {
+            return sendError(reply, 409, 'INTEGRATION_INVALID', 'Aggregate integration proof does not match completed members');
+        }
+        if (result.kind === 'final_response_required') {
+            return sendError(reply, 409, 'STRUCTURED_FINAL_REQUIRED',
+                'Completed AI execution requires a structured final response');
+        }
+        if (result.kind === 'project_identity_invalid') {
+            return sendError(reply, 409, 'PROJECT_IDENTITY_INVALID', 'Execution does not match the project snapshot');
+        }
+        if (result.kind === 'workspace_identity_mismatch') {
+            return sendError(reply, 409, 'WORKSPACE_IDENTITY_MISMATCH', 'Execution workspace identity changed');
+        }
         if (result.kind === 'token_mismatch') {
             return sendError(reply, 409, 'CONFLICT', 'dispatchToken mismatch');
+        }
+        if (result.kind === 'capability_invalid') {
+            return sendError(reply, 409, 'CAPABILITY_INVALID', 'Execution capability is unavailable');
         }
         if (result.kind === 'duplicate') {
             return reply.send({ ok: true, data: { duplicate: true } });
@@ -1952,7 +2425,12 @@ export function orchestratorRoutes(app: Fastify) {
                     sessionId: result.controllerSessionId,
                 },
             });
-            if (delivery.sessionScoped === 0) {
+            const sessionOnline = delivery.sessionScoped > 0 ||
+                await hasSessionPresence(userId, result.controllerSessionId).catch(error => {
+                    warn(error);
+                    return false;
+                });
+            if (!sessionOnline) {
                 const title = result.runTitle ?? 'Untitled run';
                 const s = result.summary;
                 const parts: string[] = [

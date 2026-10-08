@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { ActivityIndicator, View, Text, Pressable, useWindowDimensions, Platform } from 'react-native';
-import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Stack } from '@/components/navigation/AppStack';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { t } from '@/text';
 import { Image } from 'expo-image';

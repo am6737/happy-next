@@ -399,6 +399,7 @@ const {
             }
             return rows.map((item) => selectRun(item, args?.select));
         }),
+        count: vi.fn(async (args: any) => state.runs.filter((item) => matchesRun(item, args?.where)).length),
         update: vi.fn(async (args: any) => {
             const run = state.runs.find((item) => item.id === args?.where?.id);
             if (!run) {
@@ -696,9 +697,12 @@ const {
     };
 
     const tx = {
+        $queryRaw: vi.fn(async () => []),
         orchestratorRun: runApi,
         orchestratorTask: taskApi,
         orchestratorExecution: executionApi,
+        aiWorkspace: { findUnique: vi.fn(async () => null) },
+        aiWorkItem: { findFirst: vi.fn(async () => null) },
         machine: machineApi,
         session: sessionApi,
         accessKey: accessKeyApi,
@@ -708,6 +712,7 @@ const {
         orchestratorRun: runApi,
         orchestratorTask: taskApi,
         orchestratorExecution: executionApi,
+        aiWorkItem: { findFirst: vi.fn(async () => null) },
         machine: machineApi,
         session: sessionApi,
         accessKey: accessKeyApi,
@@ -2013,6 +2018,7 @@ describe('orchestrator integration paths', () => {
     });
 
     it('dispatches task to explicit target machine_id', async () => {
+        state.dispatchReadyMachineIds.add('machine-2');
         state.machines.push({
             id: 'machine-2',
             accountId: 'user-1',

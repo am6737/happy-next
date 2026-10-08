@@ -15,13 +15,14 @@ import { GlassSurface } from '@/components/GlassSurface';
 import { NativeMenu } from '@/components/NativeMenu';
 
 type ChatInputProps = {
-    onSendText: (text: string) => void;
+    onSendText: (text: string) => void | Promise<void>;
     onSendImage: (base64DataUri: string) => void;
     onSendFile?: (file: { uri: string; name: string; mimeType: string }) => void;
     replyTo?: { msg: DooTaskDialogMsg; senderName: string } | null;
     onCancelReply?: () => void;
     /** Floating over the chat (see `floatingComposerAvailable`): no bar behind it, glass pieces instead. */
     glass?: boolean;
+    showAttachments?: boolean;
 };
 
 function getPreviewText(msg: DooTaskDialogMsg): string {
@@ -32,26 +33,40 @@ function getPreviewText(msg: DooTaskDialogMsg): string {
     return '[Message]';
 }
 
-export const ChatInput = React.memo(({ onSendText, onSendImage, onSendFile, replyTo, onCancelReply, glass = false }: ChatInputProps) => {
+export const ChatInput = React.memo(({ onSendText, onSendImage, onSendFile, replyTo, onCancelReply, glass = false, showAttachments = true }: ChatInputProps) => {
     const { theme } = useUnistyles();
     const insets = useSafeAreaInsets();
     const [text, setText] = React.useState('');
     const [menuVisible, setMenuVisible] = React.useState(false);
     const latestTextRef = React.useRef(text);
+    const sendingRef = React.useRef(false);
+    const [sending, setSending] = React.useState(false);
 
-    const canSend = text.trim().length > 0;
+    const canSend = text.trim().length > 0 && !sending;
 
     const handleTextChange = React.useCallback((value: string) => {
         latestTextRef.current = value;
         setText(value);
     }, []);
 
-    const handleSend = React.useCallback(() => {
+    const handleSend = React.useCallback(async () => {
         const trimmed = latestTextRef.current.trim();
-        if (!trimmed) return;
-        onSendText(trimmed);
-        latestTextRef.current = '';
-        setText('');
+        if (!trimmed || sendingRef.current) return;
+        sendingRef.current = true;
+        setSending(true);
+        try {
+            await onSendText(trimmed);
+            // Keep text entered while a request was in flight.
+            if (latestTextRef.current.trim() === trimmed) {
+                latestTextRef.current = '';
+                setText('');
+            }
+        } catch {
+            // The caller displays the error; retain the draft for an explicit retry.
+        } finally {
+            sendingRef.current = false;
+            setSending(false);
+        }
     }, [onSendText]);
 
     const handlePickFromCamera = React.useCallback(async () => {
@@ -138,7 +153,7 @@ export const ChatInput = React.memo(({ onSendText, onSendImage, onSendFile, repl
                 </GlassSurface>
             )}
             <View style={styles.inputRow}>
-                <NativeMenu
+                {showAttachments && <NativeMenu
                     items={menuItems}
                     style={styles.addButton}
                     onFallbackOpen={() => setMenuVisible(true)}
@@ -146,7 +161,7 @@ export const ChatInput = React.memo(({ onSendText, onSendImage, onSendFile, repl
                     <GlassSurface glass={glass} color={theme.colors.surfaceHighest} style={styles.addCircle}>
                         <Ionicons name="add" size={24} color={theme.colors.textSecondary} />
                     </GlassSurface>
-                </NativeMenu>
+                </NativeMenu>}
                 <GlassSurface glass={glass} color={theme.colors.surfaceHighest} style={styles.inputGroup}>
                     <MultiTextInput
                         style={{ flex: 1, paddingVertical: 6 }}
@@ -160,6 +175,7 @@ export const ChatInput = React.memo(({ onSendText, onSendImage, onSendFile, repl
                     />
                     <Pressable
                         onPress={handleSend}
+                        disabled={!canSend}
                         accessibilityState={{ disabled: !canSend }}
                         hitSlop={4}
                         style={styles.sendButton}

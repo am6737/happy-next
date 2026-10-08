@@ -104,6 +104,8 @@ export default function AiAgentDetailPage() {
     const isCompact = rt.screen.width < 500;
     const data = useManagedAiTeamData();
     const [menuVisible, setMenuVisible] = React.useState(false);
+    const [mutating, setMutating] = React.useState(false);
+    const [mutationError, setMutationError] = React.useState<string | null>(null);
     const agent = findAiAgent(data, id);
 
     if (!agent) return <Text style={styles.missing}>{isZh ? '没有找到这个 Agent' : 'Agent not found'}</Text>;
@@ -136,36 +138,47 @@ export default function AiAgentDetailPage() {
     };
 
     const assignWork = () => router.push(`/settings/agents/assign/${agent.id}` as never);
+    const tryAgent = () => router.push(`/settings/agents/assign/${agent.id}?trial=1` as never);
 
-    const toggleArchived = () => saveManagedAiAgent({ ...agent, enabled: !enabled });
+    const toggleEnabled = async () => {
+        if (mutating) return;
+        setMutating(true); setMutationError(null);
+        try { await saveManagedAiAgent({ ...agent, enabled: !enabled }); }
+        catch (cause) { setMutationError(cause instanceof Error ? cause.message : String(cause)); }
+        finally { setMutating(false); }
+    };
 
     const duplicate = async () => {
         const next = await duplicateManagedAiAgent(agent, isZh);
         router.push(`/settings/agents/${next.id}` as never);
     };
 
-    const remove = async () => {
+    const archive = async () => {
+        if (mutating) return;
         const confirmed = await Modal.confirm(
-            isZh ? '删除 Agent？' : 'Delete agent?',
-            isZh ? `“${agent.name}”将被归档，已有会话和执行历史会保留。` : `“${agent.name}” will be archived. Existing conversations and execution history will be retained.`,
-            { confirmText: isZh ? '删除' : 'Delete', destructive: true },
+            isZh ? '归档 Agent？' : 'Archive agent?',
+            isZh ? `“${agent.name}”将从活跃列表移除；已有会话和执行历史会保留。` : `“${agent.name}” will leave the active list. Existing conversations and execution history will be retained.`,
+            { confirmText: isZh ? '归档' : 'Archive', destructive: true },
         );
         if (!confirmed) return;
-        await deleteManagedAiAgent(agent.id);
-        router.back();
+        setMutating(true); setMutationError(null);
+        try { await deleteManagedAiAgent(agent.id); router.back(); }
+        catch (cause) { setMutationError(cause instanceof Error ? cause.message : String(cause)); }
+        finally { setMutating(false); }
     };
 
     const menuItems: ActionMenuItem[] = [
         { label: isZh ? '编辑 Agent' : 'Edit agent', onPress: () => router.push(`/settings/agents/edit/${agent.id}` as never) },
-        { label: enabled ? (isZh ? '归档 Agent' : 'Archive agent') : (isZh ? '恢复 Agent' : 'Restore agent'), onPress: toggleArchived },
+        { label: enabled ? (isZh ? '停用 Agent' : 'Disable agent') : (isZh ? '启用 Agent' : 'Enable agent'), onPress: toggleEnabled },
         { label: isZh ? '复制 Agent' : 'Duplicate agent', onPress: duplicate },
-        { label: isZh ? '删除 Agent' : 'Delete agent', destructive: true, onPress: remove },
+        { label: isZh ? '归档 Agent' : 'Archive agent', destructive: true, onPress: archive },
     ];
 
     return (
         <View style={styles.screen}>
             <Stack.Screen options={{ headerTitle: agent.name }} />
             <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+                {mutationError ? <Text style={{ color: theme.colors.textDestructive, marginBottom: 12 }}>{mutationError}</Text> : null}
                 <View style={styles.hero}>
                     <Text style={styles.breadcrumb}>Agents / {agent.name}</Text>
                     <View style={styles.heroMain}>
@@ -192,6 +205,8 @@ export default function AiAgentDetailPage() {
                                         icon={<Ionicons name="add" size={19} color={theme.colors.button.primary.tint} />}
                                         onPress={assignWork}
                                     />
+                                    <RoundButton size="medium" display="outline" title={isZh ? '首次试跑' : 'Try agent'}
+                                        icon={<Ionicons name="play-outline" size={18} color={theme.colors.text} />} onPress={tryAgent} />
                                     <IconButton
                                         size="medium"
                                         display="outline"
@@ -220,6 +235,8 @@ export default function AiAgentDetailPage() {
                                 style={styles.actionGrow}
                                 onPress={assignWork}
                             />
+                            <RoundButton size="medium" display="outline" title={isZh ? '试跑' : 'Try'}
+                                icon={<Ionicons name="play-outline" size={18} color={theme.colors.text} />} onPress={tryAgent} />
                             <IconButton
                                 size="medium"
                                 display="outline"

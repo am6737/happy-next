@@ -11,6 +11,8 @@ import { refreshGithubToken } from '@/app/github/githubTokenRefresh';
 import { GITHUB_OAUTH_SCOPE, isGitHubOAuthToken, GitHubReauthorizationRequiredError } from "@/app/github/githubOAuth";
 import { Context } from "@/context";
 import { db } from "@/storage/db";
+import { createHash, randomUUID } from 'node:crypto';
+import { applyAuthorizedPullRequestEvent, applyGithubGrantRevocation } from '@/modules/github';
 
 export function connectRoutes(app: Fastify) {
 
@@ -243,6 +245,9 @@ export function connectRoutes(app: Fastify) {
             response: {
                 200: z.object({ received: z.boolean() }),
                 401: z.object({ error: z.string() }),
+                400: z.object({ error: z.string() }),
+                409: z.object({ error: z.string() }),
+                503: z.object({ error: z.string() }),
                 500: z.object({ error: z.string() })
             }
         }
@@ -267,16 +272,58 @@ export function connectRoutes(app: Fastify) {
             return reply.code(500).send({ error: 'Webhooks not configured' });
         }
 
-        // Verify and handle the webhook with type safety
         try {
-            await webhooks.verifyAndReceive({
-                id: deliveryId || 'unknown',
-                name: eventName,
-                payload: typeof rawBody === 'string' ? rawBody : JSON.stringify(request.body),
-                signature: signature
-            });
+            const payloadText = typeof rawBody === 'string' ? rawBody : JSON.stringify(request.body);
+            if (!(await webhooks.verify(payloadText, signature))) {
+                return reply.code(401).send({ error: 'Invalid webhook signature' });
+            }
+            if (!deliveryId) return reply.code(400).send({ error: 'Missing delivery id' });
+            const payloadHash = createHash('sha256').update(payloadText).digest('hex');
+            const claimOwner = randomUUID();
+            const leaseUntil = new Date(Date.now() + 60_000);
+            try {
+                await db.githubWebhookDelivery.create({ data: {
+                    id: deliveryId, event: eventName, payloadHash, claimOwner, leaseUntil, status: 'processing',
+                } });
+            } catch (error: any) {
+                if (error?.code !== 'P2002') throw error;
+                const existing = await db.githubWebhookDelivery.findUnique({ where: { id: deliveryId } });
+                if (!existing || existing.payloadHash !== payloadHash || existing.event !== eventName) {
+                    return reply.code(409).send({ error: 'Delivery id conflict' });
+                }
+                if (existing.status === 'succeeded') return reply.send({ received: true });
+                const claimed = await db.githubWebhookDelivery.updateMany({
+                    where: { id: deliveryId, status: existing.status, claimOwner: existing.claimOwner,
+                        ...(existing.status === 'processing' ? { leaseUntil: { lt: new Date() } } : {}) },
+                    data: { status: 'processing', claimOwner, leaseUntil, attempts: { increment: 1 } },
+                });
+                if (!claimed.count) return reply.code(503).send({ error: 'Delivery is processing' });
+            }
+            try {
+                await db.$transaction(async (tx) => {
+                    if (eventName === 'pull_request') {
+                        await applyAuthorizedPullRequestEvent(tx, request.body as any);
+                    }
+                    await applyGithubGrantRevocation(tx, eventName, request.body as any);
+                    const completed = await tx.githubWebhookDelivery.updateMany({
+                        where: { id: deliveryId, claimOwner, status: 'processing' },
+                        data: { status: 'succeeded', processedAt: new Date(), claimOwner: null, leaseUntil: null },
+                    });
+                    if (!completed.count) throw new Error('Webhook claim expired');
+                });
+            } catch (error) {
+                await db.githubWebhookDelivery.updateMany({
+                    where: { id: deliveryId, claimOwner, status: 'processing' },
+                    data: { status: 'failed', leaseUntil: null, claimOwner: null },
+                });
+                throw error;
+            }
             return reply.send({ received: true });
         } catch (error: any) {
+            const message = error instanceof Error ? error.message : String(error);
+            if (/signature|sha256|unauthorized/i.test(message)) {
+                return reply.code(401).send({ error: 'Invalid webhook signature' });
+            }
             return reply.code(500).send({ error: 'Internal server error' });
         }
     });

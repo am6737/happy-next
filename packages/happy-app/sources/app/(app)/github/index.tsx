@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { Platform, Pressable, Text, View } from 'react-native';
-import { Stack } from 'expo-router';
+import { Stack } from '@/components/navigation/AppStack';
 import { Ionicons } from '@expo/vector-icons';
 import { useUnistyles } from 'react-native-unistyles';
 import { GitHubListView } from '@/components/GitHubListView';

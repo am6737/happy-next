@@ -16,3 +16,9 @@ dist
 .env.volcrtc.local
 
 scripts/
+!scripts/
+scripts/*
+!scripts/ai-team-rpc-socket-real.mts
+!scripts/ai-team-cross-instance-real.mts
+!scripts/ai-team-dispatch-capability-real.mts
+!scripts/ai-team-member-controls-real.mts

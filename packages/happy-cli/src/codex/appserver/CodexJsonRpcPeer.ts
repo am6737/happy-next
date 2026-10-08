@@ -11,21 +11,12 @@
  * NOTE: Codex does NOT use standard JSON-RPC 2.0 (no "jsonrpc" field).
  */
 
-import { spawn, execSync, type ChildProcess } from 'node:child_process';
-import { basename } from 'node:path';
+import { spawn, type ChildProcess } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { createInterface, type Interface as ReadlineInterface } from 'node:readline';
 import { logger } from '@/ui/logger';
 import { recordManagedProcess } from '@/daemon/sessionBinding';
-
-/**
- * Package managers install the pinned package on first use, and an interrupted install leaves
- * a broken npx cache entry behind that makes every later attempt fail. A spawn that is still
- * installing therefore has to be spared when the peer gives up on it.
- */
-const INSTALLING_COMMAND = /^(npx|npm)(\.cmd|\.exe)?$/;
-
-/** How long a spared install may keep running before the escape hatch fires. */
-const INSTALL_GRACE_MS = 5 * 60_000;
+import { EXECUTION_PROCESS_MARKER, PARENT_EXECUTION_PROCESS_MARKER, ExecutionProcessGroup } from '@/orchestrator/executionProcessGroup';
 
 /** stderr lines carried into error messages — enough to see what went wrong, never a wall of it. */
 const STDERR_TAIL_LINES = 5;
@@ -57,9 +48,9 @@ export class CodexJsonRpcPeer {
   private closeHandler: (() => void) | null = null;
   private closed = false;
   private exited = false;
-  private mayInstall = false;
-  private handshakeAnswered = false;
   private exitPromise: Promise<number | null> | null = null;
+  private processGroup: ExecutionProcessGroup | null = null;
+  private closing: Promise<void> | null = null;
   private stderrBuffer: string[] = [];
   private readonly MAX_STDERR_LINES = 100;
 
@@ -71,9 +62,13 @@ export class CodexJsonRpcPeer {
       throw new Error('CodexJsonRpcPeer: already spawned');
     }
 
+    const parentMarker = process.env[EXECUTION_PROCESS_MARKER];
+    const marker = randomUUID();
     const env: Record<string, string> = {
       ...process.env as Record<string, string>,
       ...opts.env,
+      [EXECUTION_PROCESS_MARKER]: marker,
+      ...(parentMarker ? { [PARENT_EXECUTION_PROCESS_MARKER]: parentMarker } : {}),
       // Suppress noisy npm/node output
       NPM_CONFIG_LOGLEVEL: 'error',
       NODE_NO_WARNINGS: '1',
@@ -82,8 +77,6 @@ export class CodexJsonRpcPeer {
 
     logger.debug(`[CodexRPC] Spawning: ${command} ${args.join(' ')} in ${opts.cwd}`);
 
-    this.mayInstall = INSTALLING_COMMAND.test(basename(command));
-
     this.process = spawn(command, args, {
       cwd: opts.cwd,
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -91,20 +84,35 @@ export class CodexJsonRpcPeer {
       signal: opts.signal,
       detached: true,  // Create new process group so we can kill all children
     });
-
-    recordManagedProcess(this.process.pid);
+    const child = this.process;
+    let spawnError: Error | null = null;
+    const errorReported = new Promise<Error>((resolve) => {
+      child.once('error', (error) => {
+        spawnError = error;
+        logger.warn(`[CodexRPC] Process error: ${error.message}`);
+        this.rejectAllPending(new Error(`Codex process error: ${error.message}`));
+        resolve(error);
+      });
+    });
     this.exitPromise = new Promise<number | null>((resolve) => {
-      this.process!.on('close', (code) => {
+      child.on('close', (code) => {
         this.exited = true;
         logger.debug(`[CodexRPC] Process exited with code ${code}`);
         resolve(code);
       });
     });
-
-    this.process.on('error', (err) => {
-      logger.warn(`[CodexRPC] Process error: ${err.message}`);
-      this.rejectAllPending(new Error(`Codex process error: ${err.message}`));
-    });
+    if (!child.pid) {
+      const error = await errorReported;
+      await this.exitPromise;
+      throw error;
+    }
+    try { this.processGroup = new ExecutionProcessGroup(child, marker); }
+    catch (error) {
+      if (!spawnError) child.kill('SIGKILL');
+      await this.exitPromise;
+      throw error;
+    }
+    recordManagedProcess(child.pid);
 
     // Read stderr for diagnostics
     if (this.process.stderr) {
@@ -239,7 +247,12 @@ export class CodexJsonRpcPeer {
    * Close the peer and kill the child process group.
    */
   async close(): Promise<void> {
-    if (this.closed) return;
+    if (this.closing) return this.closing;
+    this.closing = this.closeOwnedProcess();
+    return this.closing;
+  }
+
+  private async closeOwnedProcess(): Promise<void> {
     this.closed = true;
 
     this.rejectAllPending(new Error('CodexJsonRpcPeer: peer closed'));
@@ -249,55 +262,13 @@ export class CodexJsonRpcPeer {
 
     const child = this.process;
     this.process = null;
-    const pid = child?.pid;
-    if (pid && !this.exited) {
-      // Close stdin first to signal the process
-      child!.stdin?.end();
-
-      if (this.isInstalling()) {
-        // A cold Codex start spends its first minutes inside `npx` fetching the pinned
-        // version. Killing that install group corrupts the cache entry it is writing, so
-        // let it finish: once installed, the app-server reads stdin, sees EOF and exits by
-        // itself. The timer is the escape hatch for a process that never gets that far.
-        return this.deferInstallKill(child!, pid);
-      }
-
-      // SIGTERM the entire process group (kills Codex + any bash children).
-      const termResult = this.killProcessGroup(child!, pid, 'SIGTERM');
-
-      // Skip wait only if process is confirmed dead; on failure, still wait
-      // (the signal may have partially worked, or process may exit on its own)
-      if (termResult !== 'dead') {
-        const didExit = await Promise.race([
-          this.exitPromise?.then(() => true),
-          new Promise<false>((resolve) => setTimeout(() => resolve(false), 3000)),
-        ]);
-
-        // SIGKILL the process group if still alive
-        if (!didExit) {
-          logger.debug('[CodexRPC] Process group did not exit after SIGTERM, sending SIGKILL');
-          const killResult = this.killProcessGroup(child!, pid, 'SIGKILL');
-
-          if (killResult !== 'dead') {
-            await Promise.race([
-              this.exitPromise?.then(() => true),
-              new Promise<false>((resolve) => setTimeout(() => resolve(false), 2000)),
-            ]);
-          }
-        }
-      }
-
-      // Brief grace period for close event delivery before warning
-      if (!this.exited) {
-        await Promise.race([
-          this.exitPromise?.then(() => true),
-          new Promise<false>((resolve) => setTimeout(() => resolve(false), 200)),
-        ]);
-      }
-      if (!this.exited) {
-        logger.warn(`[CodexRPC] Process ${pid} did not confirm exit — may have leaked`);
-      }
+    child?.stdin?.end();
+    if (!this.processGroup) return;
+    while (!(await this.processGroup.settle(3_000)).exited) {
+      // Keep the caller's workspace lease until the owned app-server tree exits.
+      await new Promise((resolve) => setTimeout(resolve, 1_000));
     }
+    await Promise.race([this.exitPromise, new Promise((resolve) => setTimeout(resolve, 200))]);
   }
 
   /**
@@ -315,29 +286,6 @@ export class CodexJsonRpcPeer {
   }
 
   // ─── Internal ──────────────────────────────────────────────────
-
-  /**
-   * An installing process that never answered `initialize` is a package manager fetching the
-   * pinned version, not a Codex we can talk to.
-   */
-  private isInstalling(): boolean {
-    return this.mayInstall && !this.handshakeAnswered;
-  }
-
-  /**
-   * Leave the install running and only kill it if it is still there after the grace period.
-   * The timer must not hold the process alive: if Happy exits first, its end of the stdin
-   * pipe closes and the freshly installed app-server exits on EOF.
-   */
-  private deferInstallKill(child: ChildProcess, pid: number): void {
-    logger.debug(`[CodexRPC] Letting npx install (pid ${pid}) finish; not killing the process group`);
-    const escape = setTimeout(() => {
-      if (this.exited) return;
-      logger.warn(`[CodexRPC] Process ${pid} still running after the install grace period, sending SIGKILL`);
-      this.killProcessGroup(child, pid, 'SIGKILL');
-    }, INSTALL_GRACE_MS);
-    escape.unref();
-  }
 
   /** A quiet process is usually a download in progress; its stderr is the only clue the caller gets. */
   private stderrTail(): string {
@@ -404,10 +352,6 @@ export class CodexJsonRpcPeer {
     this.pendingRequests.delete(id);
     clearTimeout(pending.timer);
 
-    if (pending.label === 'initialize') {
-      this.handshakeAnswered = true;
-    }
-
     if ('error' in msg && msg.error) {
       const err = msg.error as { code: number; message: string; data?: unknown };
       pending.reject(new Error(`Codex '${pending.label}' request failed: ${err.message} (code ${err.code})`));
@@ -438,61 +382,6 @@ export class CodexJsonRpcPeer {
       this.notificationHandler(method, params);
     } else {
       logger.debug(`[CodexRPC] No handler for notification '${method}'`);
-    }
-  }
-
-  /**
-   * Kill the process group. Returns:
-   * - 'sent': signal was delivered successfully
-   * - 'dead': process is already dead (ESRCH / taskkill "not found")
-   * - 'failed': kill attempt failed (EPERM, etc.) — caller should still wait
-   */
-  private killProcessGroup(child: ChildProcess, pid: number, signal: NodeJS.Signals): 'sent' | 'dead' | 'failed' {
-    if (process.platform === 'win32') {
-      return this.killProcessGroupWindows(pid, signal);
-    }
-
-    try {
-      // Unix: kill the entire process group via negative PID
-      process.kill(-pid, signal);
-      return 'sent';
-    } catch (err) {
-      const code = (err as NodeJS.ErrnoException).code;
-      if (code === 'ESRCH') {
-        return 'dead';
-      }
-      // Real failure (e.g. EPERM) — log and try direct kill as degraded fallback.
-      // Only kills the leader, not the full tree — treat as 'failed' so caller
-      // still waits and escalates, since child processes may survive.
-      logger.warn(`[CodexRPC] process.kill(-${pid}, ${signal}) failed: ${code}, falling back to direct kill`);
-      try {
-        child.kill(signal);
-      } catch { /* already dead */ }
-      return 'failed';
-    }
-  }
-
-  /**
-   * Windows process tree kill. Uses taskkill with two-phase approach:
-   * - SIGTERM phase: graceful shutdown without /F (allows cleanup)
-   * - SIGKILL phase: forced termination with /F /T (kills entire tree)
-   */
-  private killProcessGroupWindows(pid: number, signal: NodeJS.Signals): 'sent' | 'dead' | 'failed' {
-    const cmd = signal === 'SIGKILL'
-      ? `taskkill /PID ${pid} /T /F`
-      : `taskkill /PID ${pid} /T`;
-    try {
-      execSync(cmd, { stdio: 'ignore' });
-      return 'sent';
-    } catch (err) {
-      // taskkill exit code 128 = "not found" (process already dead).
-      // Use structured status field rather than error message text.
-      const status = (err as { status?: number }).status;
-      if (status === 128) {
-        return 'dead';
-      }
-      logger.warn(`[CodexRPC] taskkill failed for PID ${pid} (exit ${status}): ${err instanceof Error ? err.message : err}`);
-      return 'failed';
     }
   }
 

@@ -43,7 +43,8 @@ import { resolveCodexResumeDirectory } from './codex/resumeDirectory'
 // We keep the `happy-next-cli` token (matched by daemon process discovery in
 // `daemon/doctor.ts`, and as the truncated `comm` matched by `name.includes('happy')`)
 // and the original args (used to classify daemon / session / version-check processes).
-process.title = ['happy-next-cli', ...process.argv.slice(2)].join(' ');
+process.title = process.argv[2] === 'orchestrator-audit' ? 'happy-next-cli orchestrator-audit'
+  : ['happy-next-cli', ...process.argv.slice(2)].join(' ');
 
 (async () => {
   // Models, pricing and the Codex version as last fetched from the server by the daemon
@@ -62,6 +63,21 @@ process.title = ['happy-next-cli', ...process.argv.slice(2)].join(' ');
   }
 
   const args = invocation.kind === 'claude' ? invocation.args : rawArgs
+
+  if (invocation.kind === 'happy-command' && invocation.command === 'orchestrator-audit') {
+    if (args.length !== 3 || args[1] !== '--root' || !args[2].startsWith('/')) {
+      console.error('Usage: happy orchestrator-audit --root <absolute account queue directory>');
+      process.exit(2);
+    }
+    try {
+      const { inspectOrchestratorAudit } = await import('@/orchestrator/auditQueue');
+      console.log(JSON.stringify(await inspectOrchestratorAudit(args[2])));
+      process.exit(0);
+    } catch {
+      console.error('Unable to inspect orchestrator audit queue');
+      process.exit(1);
+    }
+  }
 
   // If --version is passed - do not log, its likely daemon inquiring about our version
   if (!args.includes('--version')) {

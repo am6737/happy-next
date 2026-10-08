@@ -34,6 +34,14 @@ describe.skipIf(process.platform === 'win32')('CodexJsonRpcPeer process cleanup'
     if (tempDir) await rm(tempDir, { recursive: true, force: true });
   });
 
+  it('rejects a missing executable and can close without an unhandled child error', async () => {
+    const peer = new CodexJsonRpcPeer();
+    await expect(peer.spawn('/tmp/happy-peer-provider-that-does-not-exist', [], {
+      cwd: '/tmp', env: {},
+    })).rejects.toThrow(/ENOENT/);
+    await expect(peer.close()).resolves.toBeUndefined();
+  });
+
   it('kills the detached process group without leaving its child behind', async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'happy-codex-peer-'));
     const childPidFile = join(tempDir, 'child.pid');
@@ -66,6 +74,23 @@ describe.skipIf(process.platform === 'win32')('CodexJsonRpcPeer process cleanup'
       !processExists(processGroupId!) && !processExists(childPid) ? true : null
     ));
     expect(processExists(processGroupId!)).toBe(false);
+    expect(processExists(childPid)).toBe(false);
+  });
+
+  it('waits for descendants even when the launcher exited first', async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'happy-codex-peer-'));
+    const childPidFile = join(tempDir, 'child.pid');
+    const peer = new CodexJsonRpcPeer();
+    await peer.spawn('/bin/sh', ['-c', 'sleep 60 </dev/null >/dev/null 2>&1 & echo $! > "$1"; exit 0',
+      'codex-test', childPidFile], { cwd: tempDir });
+    processGroupId = peer.pid!;
+    const childPid = await waitFor(async () => {
+      try { return Number(await readFile(childPidFile, 'utf8')) || null; }
+      catch { return null; }
+    });
+    await waitFor(async () => peer.isAlive ? null : true);
+    await peer.close();
+    await waitFor(async () => processExists(childPid) ? null : true);
     expect(processExists(childPid)).toBe(false);
   });
 });
@@ -107,10 +132,10 @@ describe.skipIf(process.platform === 'win32')('CodexJsonRpcPeer installs and dia
     );
   });
 
-  it('leaves an install that never answered the handshake running, so npx can finish', async () => {
+  it('waits for an interrupted install before returning from close', async () => {
     const pid = await fakeNpx('sleep 30');
     await peer!.close();
-    expect(processExists(pid)).toBe(true);
+    expect(processExists(pid)).toBe(false);
   });
 
   it('still kills the group once Codex has answered the handshake', async () => {

@@ -18,6 +18,9 @@ import type { AiAgent } from '@/features/aiTeams/types';
 import { deriveAiAgentPresence, getAiAgentPresenceLabel } from '@/features/aiTeams/agentPresence';
 import { Modal } from '@/modal';
 import { getCurrentLanguage } from '@/text';
+import { useAuth } from '@/auth/AuthContext';
+import { fetchAiArchivedAgents, restoreAiAgent, type AiArchivedAgent } from '@/sync/apiAiTeams';
+import { refreshManagedAiTeamData } from '@/features/aiTeams/agentStore';
 
 const stylesheet = StyleSheet.create((theme) => ({
     screen: { flex: 1, backgroundColor: theme.colors.surface },
@@ -48,17 +51,47 @@ const stylesheet = StyleSheet.create((theme) => ({
     emptyText: { color: theme.colors.textSecondary, fontSize: 15, textAlign: 'center', lineHeight: 22, marginTop: 7, maxWidth: 360 },
 }));
 
-type Filter = 'all' | 'online';
+type Filter = 'all' | 'online' | 'archived';
 
 export default function AiAgentsSettingsPage() {
     const router = useRouter();
     const { theme, rt } = useUnistyles();
     const styles = stylesheet;
     const data = useManagedAiTeamData();
+    const { credentials } = useAuth();
     const isZh = getCurrentLanguage().startsWith('zh');
     const isCompact = rt.screen.width < 500;
     const [filter, setFilter] = React.useState<Filter>('all');
     const [menuAgent, setMenuAgent] = React.useState<AiAgent | null>(null);
+    const [archived, setArchived] = React.useState<AiArchivedAgent[]>([]);
+    const [archiveCursor, setArchiveCursor] = React.useState<string | null>(null);
+    const [archiveBusy, setArchiveBusy] = React.useState(false);
+    const [archiveError, setArchiveError] = React.useState<string | null>(null);
+    React.useEffect(() => {
+        let active = true;
+        setArchived([]); setArchiveCursor(null); setArchiveError(null);
+        if (filter === 'archived' && credentials) {
+            setArchiveBusy(true);
+            fetchAiArchivedAgents(credentials).then((result) => {
+                if (active) { setArchived(result.items); setArchiveCursor(result.nextCursor); }
+            }).catch((cause) => {
+                if (active) setArchiveError(cause instanceof Error ? cause.message : String(cause));
+            }).finally(() => { if (active) setArchiveBusy(false); });
+        }
+        return () => { active = false; };
+    }, [filter, credentials?.secret]);
+    const restore = async (item: AiArchivedAgent) => {
+        if (!credentials || archiveBusy || !await Modal.confirm(
+            isZh ? '恢复已归档 Agent？' : 'Restore archived agent?',
+            isZh ? `“${item.name}”会恢复为停用状态，需另行启用。` : `${item.name} will remain disabled until you enable it.`)) return;
+        setArchiveBusy(true); setArchiveError(null);
+        try {
+            await restoreAiAgent(credentials, item.id);
+            setArchived((current) => current.filter((agent) => agent.id !== item.id));
+            await refreshManagedAiTeamData(credentials);
+        } catch (cause) { setArchiveError(cause instanceof Error ? cause.message : String(cause)); }
+        finally { setArchiveBusy(false); }
+    };
     const agents = filter === 'online'
         ? data.agents.filter((agent) => deriveAiAgentPresence(agent, data.workItems).availability === 'online')
         : data.agents;
@@ -74,7 +107,7 @@ export default function AiAgentsSettingsPage() {
             },
         },
         {
-            label: menuAgent.enabled === false ? (isZh ? '恢复' : 'Restore') : (isZh ? '归档' : 'Archive'),
+            label: menuAgent.enabled === false ? (isZh ? '启用' : 'Enable') : (isZh ? '停用' : 'Disable'),
             onPress: () => saveManagedAiAgent({ ...menuAgent, enabled: menuAgent.enabled === false }),
         },
         {
@@ -96,7 +129,7 @@ export default function AiAgentsSettingsPage() {
         <View style={styles.screen}>
             <Stack.Screen
                 options={{
-                    headerTitle: `${isZh ? 'Agent' : 'Agents'}  ${data.agents.length}`,
+                    headerTitle: `${isZh ? 'Agent' : 'Agents'}  ${filter === 'archived' ? archived.length : data.agents.length}`,
                     headerRight: () => (
                         <IconButton
                             size="normal"
@@ -119,10 +152,39 @@ export default function AiAgentsSettingsPage() {
                             <AiAgentPresenceDot availability="online" size={8} />
                             <Text style={styles.chipText}>{isZh ? '在线' : 'Online'}</Text>
                         </Pressable>
+                        <Pressable style={[styles.chip, filter === 'archived' && styles.chipActive]} onPress={() => setFilter('archived')}>
+                            <Ionicons name="archive-outline" size={16} color={theme.colors.text} />
+                            <Text style={styles.chipText}>{isZh ? '已归档' : 'Archived'}</Text>
+                        </Pressable>
                     </View>
+                    <IconButton size="normal" display="plain" accessibilityLabel={isZh ? 'Agent 模板' : 'Agent templates'}
+                        icon={<Ionicons name="albums-outline" size={22} color={theme.colors.text} />}
+                        onPress={() => router.push('/settings/agents/templates' as never)} />
                 </View>
 
-                {agents.length ? (
+                {filter === 'archived' ? <View style={styles.listCard}>
+                    {archived.map((item) => <View key={item.id} style={styles.row}>
+                        <View style={styles.agentText}>
+                            <Text style={styles.name}>{item.name}</Text>
+                            <Text style={styles.description}>{item.role ? `${item.role} · ` : ''}{new Date(item.archivedAt).toLocaleString()}</Text>
+                        </View>
+                        <Pressable disabled={archiveBusy} accessibilityLabel={isZh ? `恢复 ${item.name}` : `Restore ${item.name}`}
+                            onPress={() => restore(item)}><Ionicons name="arrow-undo-outline" size={21} color={theme.colors.text} /></Pressable>
+                    </View>)}
+                    {archiveCursor ? <Pressable disabled={archiveBusy} style={styles.chip} onPress={async () => {
+                        if (!credentials || !archiveCursor) return;
+                        setArchiveBusy(true); setArchiveError(null);
+                        try {
+                            const page = await fetchAiArchivedAgents(credentials, archiveCursor);
+                            setArchived((current) => [...current, ...page.items]); setArchiveCursor(page.nextCursor);
+                        } catch (cause) { setArchiveError(cause instanceof Error ? cause.message : String(cause)); }
+                        finally { setArchiveBusy(false); }
+                    }}><Ionicons name="chevron-down-outline" size={18} color={theme.colors.text} /><Text style={styles.chipText}>{isZh ? '更多' : 'More'}</Text></Pressable> : null}
+                    {!archived.length && !archiveBusy ? <Text style={styles.emptyText}>{isZh ? '暂无已归档 Agent' : 'No archived agents'}</Text> : null}
+                    {archiveError ? <Text style={{ color: theme.colors.textDestructive }}>{archiveError}</Text> : null}
+                </View> : null}
+
+                {filter === 'archived' ? null : agents.length ? (
                     <View>
                         {Platform.OS === 'web' && !isCompact ? (
                             <View style={styles.tableHeader}>

@@ -15,12 +15,10 @@ services:
       - EXPO_PUBLIC_VOICE_TOOL_BRIDGE_BASE_URL=${EXPO_PUBLIC_VOICE_TOOL_BRIDGE_BASE_URL:-http://happy-server:3031}
 
   happy-server:
-    build:
+    build: &happy-server-build
       context: .
       dockerfile: Dockerfile.server
-    command: >
-      sh -c "yarn --cwd packages/happy-server prisma migrate deploy &&
-             yarn --cwd packages/happy-server start"
+    command: ["yarn", "--cwd", "packages/happy-server", "start"]
     ports:
       - "3031:3031"
     restart: unless-stopped
@@ -28,8 +26,16 @@ services:
       # Server
       - NODE_ENV=production
       - PORT=3031
+      # Internal metrics are scraped only by the optional monitoring profile.
+      - METRICS_ENABLED=true
+      - METRICS_PORT=9090
       - HANDY_MASTER_SECRET=${HANDY_MASTER_SECRET}
       - APP_URL=${APP_URL:-http://localhost:3030}
+      # Explicit WebAuthn configuration; empty RP/origin keep WebAuthn disabled.
+      - AI_WEBAUTHN_RP_ID=${AI_WEBAUTHN_RP_ID:-}
+      - AI_WEBAUTHN_ORIGIN=${AI_WEBAUTHN_ORIGIN:-}
+      # Public Ed25519 SPKI only. Keep the operator private key outside this stack.
+      - AI_WEBAUTHN_TRUST_PUBLIC_KEY_SPKI=${AI_WEBAUTHN_TRUST_PUBLIC_KEY_SPKI:-}
       # Public service discovery (/v1/app-config)
       - PUBLIC_API_BASE_URL=${PUBLIC_API_BASE_URL}
       - PUBLIC_VOICE_BASE_URL=${PUBLIC_VOICE_BASE_URL}
@@ -43,6 +49,9 @@ services:
       - VOICE_AUTH_SECRET=${VOICE_AUTH_SECRET:-dev-voice-auth-secret-change-me-32-bytes}
       # Database
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      # Budget these per replica; reserve capacity for jobs and administration.
+      - AI_DB_POOL_MAX=${AI_DB_POOL_MAX:-10}
+      - AI_DB_READ_CONCURRENCY=${AI_DB_READ_CONCURRENCY:-64}
       # Redis
       - REDIS_URL=redis://redis:6379
       # S3 / MinIO
@@ -67,7 +76,21 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      
+
+  # Run explicitly after backup/restore validation, before starting the API:
+  # docker compose --profile maintenance run --rm happy-server-migrate
+  happy-server-migrate:
+    profiles: ["maintenance"]
+    build: *happy-server-build
+    command: ["yarn", "--cwd", "packages/happy-server", "prisma", "migrate", "deploy"]
+    restart: "no"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   happy-voice:
     build:
       context: ./packages/happy-voice
@@ -113,6 +136,32 @@ services:
       # Defaults
       - DEFAULT_LANGUAGE=${DEFAULT_LANGUAGE:-zh}
       - AGENT_WELCOME_MESSAGE=${AGENT_WELCOME_MESSAGE:-你好，需要我做点什么？}
+
+  # Opt-in local monitoring. No Alertmanager or external notification receiver.
+  # docker compose --profile monitoring up -d prometheus
+  prometheus:
+    profiles: ["monitoring"]
+    image: prom/prometheus@sha256:63805ebb8d2b3920190daf1cb14a60871b16fd38bed42b857a3182bc621f4996
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+      - --storage.tsdb.retention.size=2GB
+    ports:
+      - "127.0.0.1:9091:9090"
+    restart: unless-stopped
+    read_only: true
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=64m
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/ai-team-alerts.yml:/etc/prometheus/ai-team-alerts.yml:ro
+      - prometheus_data:/prometheus
+    depends_on:
+      happy-server:
+        condition: service_started
 
   minio:
     image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
@@ -167,3 +216,4 @@ volumes:
   postgres_data:
   redis_data:
   minio_data:
+  prometheus_data:

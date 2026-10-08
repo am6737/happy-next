@@ -26,6 +26,7 @@ export async function githubDisconnect(ctx: Context): Promise<void> {
 
     // Early exit if no GitHub connection
     if (!user?.githubUserId) {
+        await db.aiGithubRepositoryGrant.deleteMany({ where: { accountId: userId } });
         log({ module: 'github-disconnect' }, `User ${userId} has no GitHub account connected`);
         return;
     }
@@ -43,6 +44,8 @@ export async function githubDisconnect(ctx: Context): Promise<void> {
                 username: null
             }
         });
+
+        await tx.aiGithubRepositoryGrant.deleteMany({ where: { accountId: userId } });
 
         // Delete GitHub user record (includes token)
         await tx.githubUser.delete({

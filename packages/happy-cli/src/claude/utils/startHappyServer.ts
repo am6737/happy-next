@@ -62,6 +62,9 @@ function createMcpServer(client: ApiSessionClient, options: { enableHappyTools: 
         name: "Happy MCP",
         version: "1.0.0",
     });
+    // SDK's nested Zod version differs from the application's Zod v3 types.
+    const registerTool = (mcp.registerTool as unknown as (name: string, schema: unknown,
+        handler: (args: Record<string, any>) => Promise<unknown>) => void).bind(mcp);
 
     if (!options.enableHappyTools) {
         return mcp;
@@ -85,7 +88,7 @@ function createMcpServer(client: ApiSessionClient, options: { enableHappyTools: 
         }
     };
 
-    mcp.registerTool('change_title', {
+    registerTool('change_title', {
         description: 'Change the title of the current chat session',
         title: 'Change Chat Title',
         inputSchema: {
@@ -118,7 +121,7 @@ function createMcpServer(client: ApiSessionClient, options: { enableHappyTools: 
         }
     });
 
-    mcp.registerTool('preview_html', {
+    registerTool('preview_html', {
         description: 'Preview an HTML page in the client app. Pass the document inline as `html`, or pass `filePath` to preview a local .html file you just generated. The document must be complete and self-contained, with all CSS and JS inlined.',
         title: 'Preview HTML',
         inputSchema: {
@@ -167,7 +170,7 @@ function createMcpServer(client: ApiSessionClient, options: { enableHappyTools: 
     });
 
     if (options.enableOrchestratorTools) {
-        mcp.registerTool('orchestrator_get_context', ORCHESTRATOR_GET_CONTEXT_TOOL_SCHEMA, async () => {
+        registerTool('orchestrator_get_context', ORCHESTRATOR_GET_CONTEXT_TOOL_SCHEMA, async () => {
             try {
                 const metadata = client.getMetadataSnapshot();
                 const fallback = {
@@ -217,8 +220,9 @@ function createMcpServer(client: ApiSessionClient, options: { enableHappyTools: 
             }
         });
 
-        mcp.registerTool('orchestrator_submit', ORCHESTRATOR_SUBMIT_TOOL_SCHEMA, async (args) => {
+        registerTool('orchestrator_submit', ORCHESTRATOR_SUBMIT_TOOL_SCHEMA, async (rawArgs) => {
             try {
+                const args = z.object(ORCHESTRATOR_SUBMIT_TOOL_SCHEMA.inputSchema).parse(rawArgs);
                 const metadata = client.getMetadataSnapshot();
                 const submitBody = {
                     title: args.title,
@@ -242,7 +246,7 @@ function createMcpServer(client: ApiSessionClient, options: { enableHappyTools: 
             }
         });
 
-        mcp.registerTool('orchestrator_pend', ORCHESTRATOR_PEND_TOOL_SCHEMA, async (args) => {
+        registerTool('orchestrator_pend', ORCHESTRATOR_PEND_TOOL_SCHEMA, async (args) => {
             const startedAt = Date.now();
             const totalTimeoutMs = args.timeoutMs ?? 10 * 60 * 1000;
             let cursor = args.cursor;
@@ -283,7 +287,7 @@ function createMcpServer(client: ApiSessionClient, options: { enableHappyTools: 
             }
         });
 
-        mcp.registerTool('orchestrator_list', ORCHESTRATOR_LIST_TOOL_SCHEMA, async (args) => {
+        registerTool('orchestrator_list', ORCHESTRATOR_LIST_TOOL_SCHEMA, async (args) => {
             try {
                 const response = await client.orchestratorListRuns({
                     status: args.status,
@@ -296,7 +300,7 @@ function createMcpServer(client: ApiSessionClient, options: { enableHappyTools: 
             }
         });
 
-        mcp.registerTool('orchestrator_cancel', ORCHESTRATOR_CANCEL_TOOL_SCHEMA, async (args) => {
+        registerTool('orchestrator_cancel', ORCHESTRATOR_CANCEL_TOOL_SCHEMA, async (args) => {
             try {
                 const response = await client.orchestratorCancel(args.runId, { reason: args.reason });
                 return toToolSuccess(response);
@@ -305,7 +309,7 @@ function createMcpServer(client: ApiSessionClient, options: { enableHappyTools: 
             }
         });
 
-        mcp.registerTool('orchestrator_send_message', ORCHESTRATOR_SEND_MESSAGE_TOOL_SCHEMA, async (args) => {
+        registerTool('orchestrator_send_message', ORCHESTRATOR_SEND_MESSAGE_TOOL_SCHEMA, async (args) => {
             try {
                 const response = await client.orchestratorSendMessage({
                     taskId: args.taskId,

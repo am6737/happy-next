@@ -1,0 +1,4 @@
+-- Historical migration marker.
+-- The session archive feature was removed from the current schema, but this
+-- migration exists in deployed databases and must remain in local history so
+-- Prisma can reconcile the migration chain safely.

@@ -1,8 +1,9 @@
-import { eventRouter } from "@/app/events/eventRouter";
+import { eventRouter, type ClientConnection } from "@/app/events/eventRouter";
 import { log } from "@/utils/log";
 import { Socket } from "socket.io";
 import { checkSessionAccess } from "@/app/share/accessControl";
-import { getOrCreateUserRpcListeners } from "./rpcRegistry";
+import { assertUserRpcSocketOwner, getOrCreateUserRpcListeners, invokeUserRpc,
+    registerUserRpcSocket, unregisterUserRpcSocket } from "./rpcRegistry";
 import { db } from "@/storage/db";
 import { updateThinkingState } from "@/app/presence/sessionTurnRuntime";
 import { dispatchNextPendingIfPossible } from "@/app/session/pendingMessageAutoDispatch";
@@ -46,7 +47,8 @@ function canSharedUserCallSessionRpc(accessLevel: 'view' | 'edit' | 'admin', rpc
     }
 }
 
-export function rpcHandler(userId: string, socket: Socket, rpcListeners: Map<string, Socket>) {
+export function rpcHandler(userId: string, socket: Socket, rpcListeners: Map<string, Socket>,
+    connection?: ClientConnection) {
     
     // RPC register - Register this socket as a listener for an RPC method
     socket.on('rpc-register', async (data: any) => {
@@ -57,6 +59,28 @@ export function rpcHandler(userId: string, socket: Socket, rpcListeners: Map<str
                 socket.emit('rpc-error', { type: 'register', error: 'Invalid method name' });
                 return;
             }
+            const separator = method.indexOf(':');
+            const prefix = separator > 0 ? method.slice(0, separator) : null;
+            const operation = separator > 0 ? method.slice(separator + 1) : '';
+            const claimedMachine = prefix ? await db.machine.findFirst({ where: {
+                id: prefix, accountId: userId }, select: { id: true },
+            }) : null;
+            if (claimedMachine || operation.startsWith('orchestrator-')
+                || operation === 'ai-structured-model') {
+                if (connection?.connectionType !== 'machine-scoped'
+                    || connection.machineId !== prefix) {
+                    socket.emit('rpc-error', { type: 'register', error: 'Machine RPC requires its machine connection' });
+                    return;
+                }
+            } else if (connection?.connectionType === 'machine-scoped'
+                && prefix !== connection.machineId) {
+                socket.emit('rpc-error', { type: 'register', error: 'Machine RPC scope mismatch' });
+                return;
+            } else if (connection?.connectionType === 'session-scoped'
+                && prefix && prefix !== connection.sessionId) {
+                socket.emit('rpc-error', { type: 'register', error: 'Session RPC scope mismatch' });
+                return;
+            }
 
             // Check if method was already registered
             const previousSocket = rpcListeners.get(method);
@@ -65,6 +89,11 @@ export function rpcHandler(userId: string, socket: Socket, rpcListeners: Map<str
             }
 
             // Register this socket as the listener for this method
+            await registerUserRpcSocket(userId, method, socket);
+            if (!socket.connected) {
+                await unregisterUserRpcSocket(userId, method, socket);
+                throw new Error('RPC socket disconnected');
+            }
             rpcListeners.set(method, socket);
 
             socket.emit('rpc-registered', { method });
@@ -87,13 +116,11 @@ export function rpcHandler(userId: string, socket: Socket, rpcListeners: Map<str
             }
 
             if (rpcListeners.get(method) === socket) {
+                await unregisterUserRpcSocket(userId, method, socket);
                 rpcListeners.delete(method);
                 // log({ module: 'websocket-rpc' }, `RPC method unregistered: ${method} from socket ${socket.id} (user: ${userId})`);
 
-                if (rpcListeners.size === 0) {
-                    rpcListeners.delete(userId);
-                    // log({ module: 'websocket-rpc' }, `All RPC methods unregistered for user ${userId}`);
-                } else {
+                if (rpcListeners.size !== 0) {
                     // log({ module: 'websocket-rpc' }, `Remaining RPC methods for user ${userId}: ${Array.from(rpcListeners.keys()).join(', ')}`);
                 }
             } else {
@@ -123,6 +150,7 @@ export function rpcHandler(userId: string, socket: Socket, rpcListeners: Map<str
             }
 
             let targetSocket = rpcListeners.get(method);
+            let targetUserId = userId;
 
             // If not found in current user's listeners, check if this is a shared session
             if (!targetSocket || !targetSocket.connected) {
@@ -148,6 +176,7 @@ export function rpcHandler(userId: string, socket: Socket, rpcListeners: Map<str
                             select: { accountId: true }
                         });
                         if (session) {
+                            targetUserId = session.accountId;
                             const ownerListeners = getOrCreateUserRpcListeners(session.accountId);
                             const ownerSocket = ownerListeners.get(method);
                             if (ownerSocket?.connected) {
@@ -156,16 +185,6 @@ export function rpcHandler(userId: string, socket: Socket, rpcListeners: Map<str
                         }
                     }
                 }
-            }
-
-            if (!targetSocket || !targetSocket.connected) {
-                if (callback) {
-                    callback({
-                        ok: false,
-                        error: 'RPC method not available'
-                    });
-                }
-                return;
             }
 
             // Don't allow calling your own socket
@@ -190,10 +209,18 @@ export function rpcHandler(userId: string, socket: Socket, rpcListeners: Map<str
                 const nativeHistory = [':codex-archive-session', ':codex-fork-session', ':codex-duplicate-session']
                     .some(suffix => method.endsWith(suffix));
                 const filePreview = method.endsWith(':openFilePreview') || method.endsWith(':openFileDownload');
-                const response = await targetSocket.timeout(nativeHistory ? 110000 : filePreview ? 60000 : 30000).emitWithAck('rpc-request', {
-                    method,
-                    params
-                });
+                const timeoutMs = nativeHistory ? 110000 : filePreview ? 60000 : 30000;
+                const response = targetSocket?.connected
+                    ? await (async () => {
+                        try { await assertUserRpcSocketOwner(targetUserId, method, targetSocket); }
+                        catch { return invokeUserRpc(targetUserId, method, params, timeoutMs); }
+                        const value = await targetSocket.timeout(timeoutMs).emitWithAck('rpc-request', {
+                            method, params,
+                        });
+                        await assertUserRpcSocketOwner(targetUserId, method, targetSocket);
+                        return value;
+                    })()
+                    : await invokeUserRpc(targetUserId, method, params, timeoutMs);
 
                 const duration = Date.now() - startTime;
                 // log({ module: 'websocket-rpc' }, `RPC call succeeded: ${method} (${duration}ms)`);

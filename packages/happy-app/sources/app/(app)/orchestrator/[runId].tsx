@@ -14,11 +14,11 @@ import { OrchestratorStatusBadge } from '@/components/orchestrator/OrchestratorS
 import { OrchestratorProgressBar } from '@/components/orchestrator/OrchestratorProgressBar';
 import {
     formatOrchestratorProviderLabel,
+    verifiedOrchestratorAnswer,
     resolveTaskMachineId,
     resolveMachineName,
     resolveOrchestratorAttemptDisplay,
     resolveOrchestratorSummaryLineDataFromTasks,
-    sanitizeOrchestratorOutputSummary,
 } from '@/components/orchestrator/display';
 import { useMachineNameMap } from '@/hooks/useMachineNameMap';
 import { isRunActive } from '@/components/orchestrator/status';
@@ -359,7 +359,7 @@ export default function OrchestratorRunDetailScreen() {
                 {(run.tasks ?? []).map((task) => {
                     const attempt = resolveOrchestratorAttemptDisplay(task);
                     const providerLabel = formatOrchestratorProviderLabel(task);
-                    const outputSummary = sanitizeOrchestratorOutputSummary(task.outputSummary);
+                    const verifiedAnswer = verifiedOrchestratorAnswer(task);
                     return (
                         <Pressable
                             key={task.taskId}
@@ -395,7 +395,7 @@ export default function OrchestratorRunDetailScreen() {
                                     ))}
                                 </View>
                             ) : null}
-                            {outputSummary ? <Text style={styles.outputSummary}>{outputSummary}</Text> : null}
+                            {verifiedAnswer ? <Text style={styles.outputSummary} numberOfLines={2}>{verifiedAnswer}</Text> : null}
                         </Pressable>
                     );
                 })}

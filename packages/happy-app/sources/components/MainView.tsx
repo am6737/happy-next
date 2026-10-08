@@ -6,7 +6,8 @@ import { useFriendRequests, useSocketStatus, useRealtimeStatus, useDootaskProfil
 import { useVisibleSessionListViewData } from '@/hooks/useVisibleSessionListViewData';
 import { useInboxHasContent } from '@/hooks/useInboxHasContent';
 import { useIsTablet } from '@/utils/responsive';
-import { useRouter, Stack } from 'expo-router';
+import { useRouter } from 'expo-router';
+import { Stack } from '@/components/navigation/AppStack';
 import { EmptySessionsTablet } from './EmptySessionsTablet';
 import { SessionsList, SessionsSidebarTitle } from './SessionsList';
 import { FABWide } from './FABWide';

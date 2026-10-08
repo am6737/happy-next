@@ -1,7 +1,8 @@
 import * as React from 'react';
 import { View, Text, ScrollView, Pressable, ActivityIndicator, RefreshControl, Image, Alert, BackHandler, Platform, StyleSheet as RNStyleSheet } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, FadeIn, FadeOut } from 'react-native-reanimated';
-import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Stack } from '@/components/navigation/AppStack';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { DatePickerSheet } from '@/components/dootask/DatePickerSheet';
 import { BottomSheetModal } from '@gorhom/bottom-sheet';

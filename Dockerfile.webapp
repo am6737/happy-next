@@ -18,6 +18,8 @@ COPY packages/happy-wire/package.json packages/happy-wire/
 
 # Workspace postinstall requirements
 COPY packages/happy-app/patches packages/happy-app/patches
+COPY patches ./patches
+RUN cmp patches/expo+54.0.32.patch packages/happy-app/patches/expo+54.0.32.patch
 
 RUN --mount=type=cache,id=happy-yarn-cache-webapp,target=/usr/local/share/.cache/yarn,sharing=locked \
     yarn install --frozen-lockfile --ignore-engines

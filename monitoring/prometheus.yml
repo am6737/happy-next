@@ -1,0 +1,13 @@
+global:
+  scrape_interval: 15s
+  scrape_timeout: 10s
+  evaluation_interval: 1m
+
+rule_files:
+  - /etc/prometheus/ai-team-alerts.yml
+
+scrape_configs:
+  - job_name: happy-server
+    metrics_path: /metrics
+    static_configs:
+      - targets: [happy-server:9090]

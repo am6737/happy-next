@@ -8,14 +8,18 @@ import { AgentContentView } from '@/components/AgentContentView';
 import { ChatInput } from '@/components/dootask/ChatInput';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { AiGroupAvatar, AiIdentityAvatar, getAiAvatarColor } from '@/features/aiTeams/components';
+import { ConversationTaskNavigator } from '@/features/aiTeams/ConversationTaskNavigator';
+import { getConversationWorkItems } from '@/features/aiTeams/conversationWorkItems';
 import { getAiTeamCopy } from '@/features/aiTeams/copy';
 import { findAiAgent, findAiWorkItem, getAiWorkSourcePath, type AiChatMessage } from '@/features/aiTeams/types';
-import { sendManagedAiMessage, useManagedAiTeamData } from '@/features/aiTeams/agentStore';
+import { fetchManagedAiCollaboration, fetchManagedAiPendingClarifications, fetchManagedAiSteeringStatus, retryManagedAiSteering, sendManagedAiMessage, useManagedAiTeamData } from '@/features/aiTeams/agentStore';
+import type { AiCollaboration, AiMessageResponse, AiPendingClarification, AiSteeringStatus } from '@/sync/apiAiTeams';
 import { layout } from '@/components/layout';
 import { Typography } from '@/constants/Typography';
 import { getNativeHeaderTitleWidth } from '@/utils/nativeHeaderTitleWidth';
 import { isRunningOnMac } from '@/utils/platform';
 import { useIsTablet } from '@/utils/responsive';
+import { Modal } from '@/modal';
 
 const AVATAR_SIZE = 36;
 const AVATAR_GAP = 10;
@@ -248,6 +252,12 @@ const stylesheet = StyleSheet.create((theme) => ({
         overflow: 'hidden',
         borderRadius: 18,
     },
+    contextBar: { paddingHorizontal: 18, paddingVertical: 9, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.colors.divider, backgroundColor: theme.colors.surfaceHigh, gap: 5 },
+    contextTitle: { ...Typography.default('semiBold'), color: theme.colors.text, fontSize: 13 },
+    contextText: { ...Typography.default(), color: theme.colors.textSecondary, fontSize: 12, lineHeight: 17 },
+    contextActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
+    contextAction: { paddingHorizontal: 10, paddingVertical: 7, borderRadius: 6, borderWidth: StyleSheet.hairlineWidth, borderColor: theme.colors.divider },
+    contextActionText: { ...Typography.default('semiBold'), color: theme.colors.textLink, fontSize: 12 },
 }));
 
 export default function AiConversationScreen() {
@@ -263,15 +273,81 @@ export default function AiConversationScreen() {
     const isTablet = useIsTablet();
     const messages = conversation ? data.messages[conversation.id] ?? [] : [];
     const [expandedAssignmentId, setExpandedAssignmentId] = React.useState<string | null>('tl-assignment');
+    const [selectedWorkItemId, setSelectedWorkItemId] = React.useState<string | undefined>();
+    const [selectedAssigneeId, setSelectedAssigneeId] = React.useState<string | undefined>();
+    const [selectedTaskId, setSelectedTaskId] = React.useState<string | undefined>();
+    const [collaboration, setCollaboration] = React.useState<AiCollaboration | null>(null);
+    const [steering, setSteering] = React.useState<{ workItemId: string; steeringId: string; status: AiSteeringStatus['status'] } | null>(null);
+    const [clarification, setClarification] = React.useState<Extract<AiMessageResponse, { kind: 'clarify' }> | null>(null);
+    const [pendingClarifications, setPendingClarifications] = React.useState<AiPendingClarification[]>([]);
+    const pending = pendingClarifications[0];
+    const persistedClarification = pending ? { kind: 'clarify' as const, clarificationId: pending.id,
+        conversationId: conversation?.id ?? '', question: pending.question,
+        candidates: pending.candidates ?? [], targetWorkItemId: pending.targetWorkItemId } : null;
+    const activeClarification = clarification ?? persistedClarification;
 
     React.useEffect(() => {
         setExpandedAssignmentId(conversation?.kind === 'group' ? 'tl-assignment' : null);
+        setSelectedWorkItemId(undefined);
+        setSelectedAssigneeId(undefined);
+        setSelectedTaskId(undefined);
+        setSteering(null);
+        setClarification(null);
+        setPendingClarifications([]);
     }, [conversation?.id]);
 
-    const handleSendText = React.useCallback((text: string) => {
-        if (!conversation) return;
-        void sendManagedAiMessage(conversation.id, text).catch((error) => console.warn('Failed to send AI team message', error));
+    React.useEffect(() => {
+        if (!conversation?.id) return;
+        let active = true;
+        fetchManagedAiPendingClarifications(conversation.id).then((items) => {
+            if (active) setPendingClarifications(items);
+        }).catch(() => undefined);
+        return () => { active = false; };
     }, [conversation?.id]);
+
+    React.useEffect(() => {
+        if (!selectedWorkItemId) { setCollaboration(null); setSelectedTaskId(undefined); return; }
+        let active = true;
+        setCollaboration(null);
+        setSelectedTaskId(undefined);
+        fetchManagedAiCollaboration(selectedWorkItemId).then((result) => {
+            if (active) setCollaboration(result);
+        }).catch(() => undefined);
+        return () => { active = false; };
+    }, [selectedWorkItemId]);
+
+    React.useEffect(() => {
+        if (!steering || steering.status === 'delivered' || steering.status === 'blocked') return;
+        const timer = setInterval(() => {
+            fetchManagedAiSteeringStatus(steering.workItemId, steering.steeringId).then((result) => {
+                setSteering((current) => current?.steeringId === result.id ? { ...current, status: result.status } : current);
+            }).catch(() => undefined);
+        }, 3000);
+        return () => clearInterval(timer);
+    }, [steering?.workItemId, steering?.steeringId, steering?.status]);
+
+    const handleSendText = React.useCallback(async (text: string) => {
+        if (!conversation) throw new Error('Conversation is unavailable');
+        try {
+            const selectedExecution = data.executions.find((item) => item.workItemId === selectedWorkItemId);
+            const activeTasks = collaboration?.tasks.filter((task) => task.status === 'running') ?? [];
+            const isSteering = activeTasks.length > 0;
+            if (isSteering && activeTasks.length > 1 && !selectedTaskId) throw new Error(getCurrentLanguageIsChinese() ? '请先选择正在运行的子任务' : 'Select a running task first');
+            if (selectedWorkItemId && !isSteering && selectedExecution?.status !== 'completed' && selectedExecution?.status !== 'failed')
+                throw new Error(getCurrentLanguageIsChinese() ? '此任务尚未到可继续状态' : 'This task cannot be continued yet');
+            const result = await sendManagedAiMessage(conversation.id, text, activeClarification
+                ? { clarificationId: activeClarification.clarificationId, targetWorkItemId: selectedWorkItemId ?? activeClarification.targetWorkItemId ?? undefined, assigneeId: selectedAssigneeId }
+                : selectedWorkItemId ? { mode: isSteering ? 'steer' : 'continue', targetWorkItemId: selectedWorkItemId, targetTaskId: isSteering ? selectedTaskId ?? activeTasks[0]?.id : undefined } : {});
+            setClarification('kind' in result && result.kind === 'clarify' ? result : null);
+            if (!('kind' in result && result.kind === 'clarify')) setPendingClarifications((items) => items.filter((item) => item.id !== activeClarification?.clarificationId));
+            fetchManagedAiPendingClarifications(conversation.id).then(setPendingClarifications).catch(() => undefined);
+            if (!('kind' in result && result.kind === 'clarify')) setSelectedAssigneeId(undefined);
+            if ('steeringId' in result) setSteering({ workItemId: result.targetWorkItemId, steeringId: result.steeringId, status: 'pending' });
+        } catch (error) {
+            Modal.alert(getCurrentLanguageIsChinese() ? '发送失败，请重试' : 'Could not send. Please retry.', error instanceof Error ? error.message : undefined);
+            throw error;
+        }
+    }, [conversation?.id, activeClarification?.clarificationId, selectedWorkItemId, selectedAssigneeId, selectedTaskId, collaboration, data.executions]);
 
     if (!conversation || !agent) {
         return <View style={styles.body}><Text style={{ color: theme.colors.text, padding: 24 }}>{copy.notFound}</Text></View>;
@@ -282,6 +358,11 @@ export default function AiConversationScreen() {
         if (!work) return;
         const path = getAiWorkSourcePath(work);
         if (path) router.push(path as never);
+    };
+
+    const openWorkExecution = (workItemId: string) => {
+        const executionId = findAiWorkItem(data, workItemId)?.executionIds.at(-1);
+        if (executionId) router.push(`/inbox/ai/executions/${executionId}` as never);
     };
 
     const listMessages = [...messages].reverse();
@@ -487,17 +568,42 @@ export default function AiConversationScreen() {
     );
 
     const content = (
-        <FlatList
-            data={listMessages}
-            inverted
-            keyExtractor={(item) => item.id}
-            renderItem={renderMessage}
-            style={styles.list}
-            contentContainerStyle={styles.listContent}
-            keyboardShouldPersistTaps="handled"
-            keyboardDismissMode="interactive"
-            initialNumToRender={20}
-        />
+        <View style={styles.list}>
+            <ConversationTaskNavigator data={data} conversationId={conversation.id} isZh={getCurrentLanguageIsChinese()} selectedWorkItemId={selectedWorkItemId} onSelectWork={setSelectedWorkItemId} onOpenWork={openWorkExecution} />
+            {selectedWorkItemId && collaboration && collaboration.tasks.filter((task) => task.status === 'running').length > 1 ? <View style={styles.contextBar}>
+                <Text style={styles.contextTitle}>{getCurrentLanguageIsChinese() ? '选择正在运行的子任务' : 'Select a running task'}</Text>
+                <View style={styles.contextActions}>{collaboration.tasks.filter((task) => task.status === 'running').map((task) => <Pressable key={task.id} style={styles.contextAction} onPress={() => setSelectedTaskId(task.id)}><Text style={styles.contextActionText}>{task.title ?? task.taskKey ?? task.id}{selectedTaskId === task.id ? ' ✓' : ''}</Text></Pressable>)}</View>
+            </View> : null}
+            {steering ? <View style={styles.contextBar}>
+                <Text style={styles.contextTitle}>{getCurrentLanguageIsChinese() ? '补充指令' : 'Steering'} · {steering.status}</Text>
+                {steering.status === 'blocked' ? <Pressable style={styles.contextAction} onPress={async () => {
+                    try {
+                        await retryManagedAiSteering(steering.workItemId, steering.steeringId);
+                        setSteering({ ...steering, status: 'pending' });
+                    } catch (error) { Modal.alert(getCurrentLanguageIsChinese() ? '重试失败' : 'Retry failed', error instanceof Error ? error.message : undefined); }
+                }}><Text style={styles.contextActionText}>{getCurrentLanguageIsChinese() ? '重试发送' : 'Retry delivery'}</Text></Pressable> : null}
+            </View> : null}
+            {activeClarification ? <View style={styles.contextBar}>
+                <Text style={styles.contextTitle}>{getCurrentLanguageIsChinese() ? '等待补充说明' : 'Clarification needed'}</Text>
+                <Text style={styles.contextText}>{activeClarification.question}</Text>
+                <Text style={styles.contextText}>{getCurrentLanguageIsChinese() ? '选择目标后，在下方输入补充说明。' : 'Select a target, then enter your answer below.'}</Text>
+                {activeClarification.candidates.length ? <View style={styles.contextActions}>{activeClarification.candidates.map((candidate) => <Pressable key={candidate.id} style={styles.contextAction} onPress={() => {
+                    if (getConversationWorkItems(data, conversation.id).some((work) => work.id === candidate.id)) setSelectedWorkItemId(candidate.id);
+                    else if (data.agents.some((agent) => agent.id === candidate.id)) setSelectedAssigneeId(candidate.id);
+                }}><Text style={styles.contextActionText}>{candidate.name}{selectedWorkItemId === candidate.id || selectedAssigneeId === candidate.id ? ' ✓' : ''}</Text></Pressable>)}</View> : null}
+            </View> : null}
+            <FlatList
+                data={listMessages}
+                inverted
+                keyExtractor={(item) => item.id}
+                renderItem={renderMessage}
+                style={styles.list}
+                contentContainerStyle={styles.listContent}
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="interactive"
+                initialNumToRender={20}
+            />
+        </View>
     );
     const input = (
         <ChatInput

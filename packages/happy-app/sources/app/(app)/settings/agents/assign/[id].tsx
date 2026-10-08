@@ -33,24 +33,30 @@ const stylesheet = StyleSheet.create((theme) => ({
 }));
 
 export default function AssignAgentWorkPage() {
-    const { id } = useLocalSearchParams<{ id: string }>();
+    const { id, trial } = useLocalSearchParams<{ id: string; trial?: string }>();
     const router = useRouter();
     const { theme } = useUnistyles();
     const styles = stylesheet;
     const isZh = getCurrentLanguage().startsWith('zh');
     const data = useManagedAiTeamData();
     const agent = findAiAgent(data, id);
-    const availableTeams = data.teams.filter((team) => team.memberIds.includes(id));
+    const isTrial = trial === '1';
+    const availableTeams = isTrial ? [] : data.teams.filter((team) => team.memberIds.includes(id));
     const [title, setTitle] = React.useState('');
     const [summary, setSummary] = React.useState('');
     const [teamId, setTeamId] = React.useState(availableTeams[0]?.id ?? '');
     const [submitting, setSubmitting] = React.useState(false);
-    const valid = Boolean(agent && title.trim() && summary.trim());
+    const valid = Boolean(agent?.enabled && title.trim() && summary.trim());
 
     if (!agent) return <View style={styles.screen}><Text style={{ color: theme.colors.textSecondary, padding: 24 }}>{isZh ? '没有找到这个 Agent' : 'Agent not found'}</Text></View>;
 
     const submit = async () => {
         if (!valid || submitting) return;
+        if (isTrial && !await Modal.confirm(isZh ? '开始试跑？' : 'Start trial?', [
+            `${agent.name} · ${agent.settings.engine} · ${agent.settings.permissionMode}`,
+            agent.settings.workingDirectory || (isZh ? '运行时默认目录' : 'Runtime default directory'),
+            title.trim(), summary.trim(),
+        ].join('\n'), { confirmText: isZh ? '开始' : 'Start' })) return;
         setSubmitting(true);
         try {
             const result = await createManagedAiAssignment({ agent, teamId, title: title.trim(), summary: summary.trim(), isZh });
@@ -63,12 +69,17 @@ export default function AssignAgentWorkPage() {
 
     return (
         <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-            <Stack.Screen options={{ headerTitle: isZh ? '分配工作' : 'Assign work' }} />
+            <Stack.Screen options={{ headerTitle: isTrial ? (isZh ? '首次试跑' : 'Try agent') : (isZh ? '分配工作' : 'Assign work') }} />
             <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
                 <View style={styles.agent}>
                     <AiIdentityAvatar id={agent.id} name={agent.name} size={46} />
                     <View style={styles.agentBody}><Text style={styles.agentName}>{agent.name}</Text><Text style={styles.agentRole}>{agent.role}</Text></View>
                 </View>
+                {isTrial ? <View style={styles.section}>
+                    <Text style={styles.label}>{isZh ? '本次执行设置' : 'Execution settings'}</Text>
+                    <Text style={styles.help}>{agent.settings.engine} · {agent.settings.permissionMode}</Text>
+                    <Text style={styles.help}>{agent.settings.workingDirectory || (isZh ? '运行时默认目录' : 'Runtime default directory')}</Text>
+                </View> : null}
                 <View style={styles.section}>
                     <Text style={styles.label}>{isZh ? '工作目标' : 'Goal'}</Text>
                     <TextInput value={title} onChangeText={setTitle} placeholder={isZh ? '例如：完善账号切换后的设备绑定流程' : 'e.g. Improve device binding after account switching'} placeholderTextColor={theme.colors.textSecondary} style={styles.input} />
@@ -76,7 +87,7 @@ export default function AssignAgentWorkPage() {
                 <View style={styles.section}>
                     <Text style={styles.label}>{isZh ? '要求与交付标准' : 'Requirements and delivery criteria'}</Text>
                     <TextInput value={summary} onChangeText={setSummary} multiline placeholder={isZh ? '说明需要解决的问题、约束条件和期望结果。' : 'Describe the problem, constraints, and expected result.'} placeholderTextColor={theme.colors.textSecondary} style={[styles.input, styles.summary]} />
-                    <Text style={styles.help}>{isZh ? '提交后会创建真实执行任务，并由在线 CLI runtime 领取。' : 'Submitting creates a real task for an online CLI runtime.'}</Text>
+                    <Text style={styles.help}>{isZh ? '任务可能等待所选运行环境连接。' : 'The task may wait for its runtime to connect.'}</Text>
                 </View>
                 {availableTeams.length ? (
                     <View style={styles.section}>
@@ -88,7 +99,7 @@ export default function AssignAgentWorkPage() {
                     </View>
                 ) : null}
             </ScrollView>
-            <View style={styles.footer}><View style={styles.footerInner}><RoundButton size="large" title={submitting ? (isZh ? '正在创建…' : 'Creating…') : (isZh ? '创建并开始执行' : 'Create and start')} disabled={!valid || submitting} onPress={submit} /></View></View>
+            <View style={styles.footer}><View style={styles.footerInner}><RoundButton size="large" title={submitting ? (isZh ? '正在创建…' : 'Creating…') : isTrial ? (isZh ? '确认并试跑' : 'Review and run') : (isZh ? '创建并开始执行' : 'Create and start')} disabled={!valid || submitting} onPress={submit} /></View></View>
         </KeyboardAvoidingView>
     );
 }

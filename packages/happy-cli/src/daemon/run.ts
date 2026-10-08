@@ -1,4 +1,5 @@
 import fs from 'fs/promises';
+import { createHash, randomUUID } from 'node:crypto';
 import os from 'os';
 import * as tmp from 'tmp';
 
@@ -33,8 +34,34 @@ import {
   type OrchestratorCancelPayload,
   type OrchestratorDispatchPayload,
   type OrchestratorFinishStatus,
+  requiresTaskSkillDownload,
 } from '@/orchestrator/common';
-import { extractCodexSessionId, extractGeminiSessionId, extractGeminiSessionIdFromJsonLine, normalizeGeminiOutputText } from './orchestratorOutput';
+import { FinalResponseParser, safeDiagnostic, type FinalResponse, type SafeToolEvent } from './finalResponse';
+import { createStructuredModelHandler } from './structuredModel';
+import { startLeaderDelegationProxy } from '@/orchestrator/leaderDelegation';
+import { startTemplateProposalProxy } from '@/orchestrator/templateProposalProxy';
+import { integrateAggregate, verifyAggregateIntegration, type IntegratedIdentity } from '@/orchestrator/integrateAggregate';
+import { matchesIntegrationBinding, saveIntegrationBinding, verifyIntegrationRequest } from '@/orchestrator/verifyIntegration';
+import { readSteering, steeringReplay, unfinishedSteering, writeSteering } from '@/orchestrator/steeringJournal';
+import { installSkillBundle } from '@/orchestrator/skillBundle';
+import { validateProjectSnapshot } from '@/orchestrator/projectSnapshot';
+import { commitExecutionWorkspace, prepareExecutionWorkspace, rememberWorkspaceSession, type ExecutionWorkspace } from '@/orchestrator/workspace';
+import { acquireFileLock, type FileLock } from '@/orchestrator/fileLock';
+import { enqueueFinish, finishQueuePath } from '@/orchestrator/finishQueue';
+import { appendExecutionEvent } from '@/orchestrator/eventQueue';
+import { enqueueUsage, type UsageDelta } from '@/orchestrator/usageQueue';
+import { flushTelemetryAndFinishes } from '@/orchestrator/flushTelemetry';
+import { allowLegacyTelemetryExecution, saveLegacyTelemetryBinding } from '@/orchestrator/telemetryCompatibility';
+import { requireUnsupportedArchiveCapacity } from '@/orchestrator/unsupportedArchive';
+import { assertNoUnresolvedApprovals, deliverApproval, type ApprovalDelivery } from '@/orchestrator/approvalJournal';
+import { recoverInterruptedApprovals } from '@/orchestrator/approvalCrashRecovery';
+import { startApprovalProxy } from '@/orchestrator/approvalProxy';
+import { loadExecutionCapability, saveExecutionCapability } from '@/orchestrator/executionCapability';
+import { codexPackage } from '@/codex/package';
+import { resolveCodexRuntime } from '@/codex/codexRuntime';
+import { AiRuntimeContractSchema, AiRuntimeFeaturesSchema, type AiRuntimeFeatures } from 'happy-wire';
+import { cleanupIsolatedCodexAuth, cleanupStaleCodexAuth } from '@/orchestrator/codexIsolation';
+import { EXECUTION_PROCESS_MARKER, ExecutionProcessGroup } from '@/orchestrator/executionProcessGroup';
 
 const ORCHESTRATOR_WATCHDOG_GRACE_MS = 5_000;
 const ORCHESTRATOR_OUTPUT_CAPTURE_LIMIT = 64_000;
@@ -194,25 +221,101 @@ export async function startDaemon(): Promise<void> {
     type ManagedOrchestratorExecution = {
       payload: OrchestratorDispatchPayload;
       child: ChildProcess;
+      processGroup: ExecutionProcessGroup;
       startedAtIso: string;
       cancelRequested: boolean;
       watchdogTriggered: boolean;
+      workspaceLeaseLost: boolean;
+      auditCapacityExceeded: boolean;
+      capabilityLost: boolean;
       detectedChildSessionId: string | null;
       startReportPromise: Promise<void>;
+      identityReportPromise: Promise<void> | null;
+      identityReportFailed: boolean;
       finishReportPromise: Promise<void> | null;
       stdout: string;
       stderr: string;
       stdoutLineBuffer: string;
+      responseParser: FinalResponseParser;
+      finalResponse?: FinalResponse;
       watchdogTimer: NodeJS.Timeout | null;
+      capabilityRefreshTimer: NodeJS.Timeout | null;
       killTimer: NodeJS.Timeout | null;
+      workspace?: ExecutionWorkspace;
+      workspaceLease?: FileLock;
+      delegationProxy?: Awaited<ReturnType<typeof startLeaderDelegationProxy>>;
+      templateProposalProxy?: Awaited<ReturnType<typeof startTemplateProposalProxy>>;
+      approvalProxy?: Awaited<ReturnType<typeof startApprovalProxy>>;
+      integratedIdentities?: IntegratedIdentity[];
+      pendingSteering?: { id: string; message: string; resolve: (accepted: boolean) => void };
+      skillInstruction: string;
+      spawnEnv: NodeJS.ProcessEnv;
+      eventWrites: Promise<void>;
+      eventWriteFailed: boolean;
+      usageWrites: Promise<void>;
+      usageWriteFailed: boolean;
     };
 
     const executionIdToManagedExecution = new Map<string, ManagedOrchestratorExecution>();
+    let featuresAdvertised = false;
+    const structuredModel = createStructuredModelHandler();
+    const accountIdentity = credentials.encryption.type === 'dataKey' ? credentials.encryption.publicKey : credentials.encryption.secret;
+    const finishQueueRoot = finishQueuePath(configuration.happyHomeDir, configuration.serverUrl, Buffer.from(accountIdentity).toString('hex'));
+    const eventQueueRoot = join(finishQueueRoot, 'events');
+    const usageQueueRoot = join(finishQueueRoot, 'usage');
+    const integrationBindingRoot = join(finishQueueRoot, 'integration-bindings');
+    const steeringRoot = join(finishQueueRoot, 'steering');
+    const approvalRoot = join(finishQueueRoot, 'approvals');
+    const capabilityRoot = join(finishQueueRoot, 'capabilities');
+    await cleanupStaleCodexAuth(join(configuration.happyHomeDir, 'orchestrator-workspaces'));
+    let flushingFinishes = false;
+    const warnedDeliveryFiles = new Set<string>();
+    const deliveryError = (queue: string, file: string, error: unknown) => {
+      const status = (error as { response?: { status?: unknown } })?.response?.status;
+      if (typeof status === 'number' && status >= 400 && status < 500 && !warnedDeliveryFiles.has(`${queue}:${file}`)) {
+        warnedDeliveryFiles.add(`${queue}:${file}`);
+        logger.warn(`[ORCHESTRATOR] ${queue} record ${file} retained after HTTP ${status}; execution finish remains pending`);
+      } else logger.debug(`[ORCHESTRATOR] ${queue} ${file} delivery deferred`);
+    };
+    const retryFinishes = async () => {
+      if (flushingFinishes || !api) return;
+      flushingFinishes = true;
+      try {
+        await flushTelemetryAndFinishes(finishQueueRoot, api, (queue, file, error) => {
+          if (queue === 'Finish') logger.debug(`[ORCHESTRATOR] Finish report ${file} retry failed: ${error instanceof SyntaxError ? 'INVALID_RECORD' : 'DELIVERY_FAILED'}`);
+          else deliveryError(queue, file, error);
+        });
+        try { await requireUnsupportedArchiveCapacity([eventQueueRoot, usageQueueRoot]); }
+        catch (error) {
+          if (!(error instanceof Error) || !error.message.startsWith('Unsupported telemetry archive capacity reached'))
+            throw error;
+          for (const execution of executionIdToManagedExecution.values()) {
+            execution.auditCapacityExceeded = true;
+            requestExecutionTermination(execution);
+          }
+        }
+      }
+      catch { logger.debug('[ORCHESTRATOR] Finish queue retry failed'); }
+      finally { flushingFinishes = false; }
+    };
+    for (const record of unfinishedSteering(steeringRoot)) {
+      await enqueueFinish(finishQueueRoot, {
+        executionId: record.executionId, dispatchToken: record.dispatchToken, status: 'failed',
+        finishedAt: new Date().toISOString(), errorCode: 'STEERING_RECOVERY_REQUIRED',
+        errorMessage: 'Daemon exited before steering execution completed',
+      });
+      writeSteering(steeringRoot, { ...record, state: 'finished' });
+    }
+    const finishRetryTimer = setInterval(() => { void retryFinishes(); }, 15_000);
 
     const clearExecutionTimers = (execution: ManagedOrchestratorExecution) => {
       if (execution.watchdogTimer) {
         clearTimeout(execution.watchdogTimer);
         execution.watchdogTimer = null;
+      }
+      if (execution.capabilityRefreshTimer) {
+        clearInterval(execution.capabilityRefreshTimer);
+        execution.capabilityRefreshTimer = null;
       }
       if (execution.killTimer) {
         clearTimeout(execution.killTimer);
@@ -221,12 +324,8 @@ export async function startDaemon(): Promise<void> {
     };
 
     const requestExecutionTermination = (execution: ManagedOrchestratorExecution) => {
-      if (execution.child.killed) {
-        return;
-      }
-
       try {
-        execution.child.kill('SIGTERM');
+        execution.processGroup.signal('SIGTERM');
       } catch (error) {
         logger.debug(`[ORCHESTRATOR] Failed to send SIGTERM for execution ${execution.payload.executionId}`, error);
       }
@@ -236,11 +335,8 @@ export async function startDaemon(): Promise<void> {
       }
       execution.killTimer = setTimeout(() => {
         execution.killTimer = null;
-        if (execution.child.exitCode !== null || execution.child.signalCode !== null) {
-          return;
-        }
         try {
-          execution.child.kill('SIGKILL');
+          execution.processGroup.signal('SIGKILL');
         } catch (error) {
           logger.debug(`[ORCHESTRATOR] Failed to send SIGKILL for execution ${execution.payload.executionId}`, error);
         }
@@ -259,15 +355,57 @@ export async function startDaemon(): Promise<void> {
         return;
       }
       execution.finishReportPromise = (async () => {
-        const normalizedStdout = execution.payload.provider === 'gemini'
-          ? normalizeGeminiOutputText(execution.stdout)
-          : execution.stdout.trim();
-        const outputText = [normalizedStdout, execution.stderr.trim()].filter(Boolean).join('\n');
-        const outputSummary = buildOutputSummary(normalizedStdout, execution.stderr);
-        const normalizedChildSessionId = execution.detectedChildSessionId?.trim();
+        const response = execution.finalResponse ?? execution.responseParser.finish();
+        await execution.eventWrites;
+        if (execution.eventWriteFailed) opts = { ...opts, status: 'failed', errorCode: 'EVENT_JOURNAL_FAILED',
+          errorMessage: 'Execution event journal could not be persisted' };
+        await execution.usageWrites;
+        if (execution.usageWriteFailed) opts = { ...opts, status: 'failed', errorCode: 'USAGE_JOURNAL_FAILED',
+          errorMessage: 'Execution usage journal could not be persisted' };
+        const outputText = opts.status === 'completed' ? response.finalText : null;
+        const outputSummary = buildOutputSummary(outputText ?? '', response.diagnostic ?? '');
+        const normalizedChildSessionId = (response.sessionId ?? execution.detectedChildSessionId)?.trim();
+        if (normalizedChildSessionId && execution.workspace) {
+          try { await rememberWorkspaceSession(join(configuration.happyHomeDir, 'orchestrator-workspaces'), normalizedChildSessionId, execution.workspace); }
+          catch (error) { logger.debug(`[ORCHESTRATOR] Session workspace record failed for ${execution.payload.executionId}`, error); }
+        }
+        const deliveryMetadata: {
+          worktreePath?: string;
+          branchName?: string;
+          commitSha?: string;
+          baseCommit?: string;
+          pullRequestUrl?: string;
+          pullRequestNumber?: number;
+        } = {};
+        const deliveryCwd = execution.payload.workingDirectory;
+        deliveryMetadata.baseCommit = execution.workspace?.baseCommit;
+        if (deliveryCwd) {
+          try {
+            deliveryMetadata.worktreePath = deliveryCwd;
+            deliveryMetadata.branchName = execSync('git branch --show-current', { cwd: deliveryCwd, encoding: 'utf8', timeout: 10_000 }).trim() || undefined;
+            deliveryMetadata.commitSha = execSync('git rev-parse HEAD', { cwd: deliveryCwd, encoding: 'utf8', timeout: 10_000 }).trim() || undefined;
+            const pullRequestJson = execSync('gh pr view --json url,number', { cwd: deliveryCwd, encoding: 'utf8', timeout: 20_000 }).trim();
+            if (pullRequestJson) {
+              const pullRequest = JSON.parse(pullRequestJson) as { url?: string; number?: number };
+              deliveryMetadata.pullRequestUrl = pullRequest.url;
+              deliveryMetadata.pullRequestNumber = pullRequest.number;
+            }
+          } catch (error) {
+            logger.debug(`[ORCHESTRATOR] Delivery metadata collection skipped for ${execution.payload.executionId}`, error);
+          }
+        }
 
         try {
-          await api.reportOrchestratorExecutionFinish({
+          if (opts.status === 'completed' && execution.workspace && execution.integratedIdentities) {
+            saveIntegrationBinding(integrationBindingRoot, {
+              executionId: execution.payload.executionId, dispatchToken: execution.payload.dispatchToken,
+              taskId: execution.payload.taskId, runId: execution.payload.runId,
+            });
+          }
+          await appendExecutionEvent(eventQueueRoot, {
+            executionId: execution.payload.executionId, machineId, kind: 'status',
+            phase: 'finished', occurredAt: new Date().toISOString(), summary: `Execution ${opts.status}` });
+          await enqueueFinish(finishQueueRoot, {
             executionId: execution.payload.executionId,
             dispatchToken: execution.payload.dispatchToken,
             status: opts.status,
@@ -275,16 +413,36 @@ export async function startDaemon(): Promise<void> {
             exitCode: opts.exitCode,
             signal: opts.signal,
             outputSummary: outputSummary ?? undefined,
-            outputText: outputText || undefined,
+            outputText: outputText ?? undefined,
+            finalResponse: outputText ?? undefined,
             childSessionId: normalizedChildSessionId ? normalizedChildSessionId : undefined,
             errorCode: opts.errorCode,
-            errorMessage: opts.errorMessage,
+            errorMessage: opts.errorMessage ? safeDiagnostic(opts.errorMessage) : response.diagnostic,
+            ...(opts.status === 'completed' && execution.workspace && execution.integratedIdentities ? {
+              integrationProof: {
+                baseCommit: execution.workspace.baseCommit,
+                aggregateCommit: deliveryMetadata.commitSha!,
+                members: execution.integratedIdentities,
+              },
+            } : {}),
+            ...deliveryMetadata,
           });
+          await retryFinishes();
         } catch (error) {
           logger.debug(`[ORCHESTRATOR] Failed to report finish for execution ${execution.payload.executionId}`, error);
         } finally {
+          try {
+            const steering = readSteering(steeringRoot, execution.payload.executionId);
+            if (steering && steering.dispatchToken === execution.payload.dispatchToken)
+              writeSteering(steeringRoot, { ...steering, state: 'finished' });
+          } catch (error) { logger.debug('[ORCHESTRATOR] Steering journal finalization failed', error); }
           clearExecutionTimers(execution);
           executionIdToManagedExecution.delete(execution.payload.executionId);
+          if (execution.payload.provider === 'codex') cleanupIsolatedCodexAuth(execution.payload.taskId);
+          await execution.delegationProxy?.close();
+          await execution.templateProposalProxy?.close();
+          await execution.approvalProxy?.close();
+          await execution.workspaceLease?.release();
         }
       })();
       await execution.finishReportPromise;
@@ -296,38 +454,66 @@ export async function startDaemon(): Promise<void> {
         return;
       }
 
-      if (!execution.detectedChildSessionId && execution.payload.provider === 'gemini' && execution.payload.executionType === 'initial') {
-        const parsed = extractGeminiSessionId(execution.stdout);
-        if (parsed) {
-          execution.detectedChildSessionId = parsed;
-        }
-      }
+      execution.finalResponse = execution.responseParser.finish();
+      if (execution.identityReportPromise) await execution.identityReportPromise;
+      if (execution.stderr.trim()) logger.debug(`[ORCHESTRATOR] Provider diagnostic ${execution.payload.executionId}: ${safeDiagnostic(execution.stderr)}`);
 
-      const status = mapFinishStatus({
+      let status = execution.workspaceLeaseLost || execution.auditCapacityExceeded || execution.capabilityLost
+        ? 'failed' : mapFinishStatus({
         watchdogTriggered: execution.watchdogTriggered,
         cancelRequested: execution.cancelRequested,
         exitCode,
       });
+      if (status === 'completed' && !execution.finalResponse.finalText) status = 'failed';
+      if (status === 'completed' && execution.payload.permissionMode === 'approval'
+        && (execution.identityReportFailed || !execution.identityReportPromise)) status = 'failed';
+      let commitError: string | undefined;
+      if (status === 'completed' && execution.workspace && execution.payload.permissionMode
+        && ['guarded_auto', 'approval'].includes(execution.payload.permissionMode)) {
+        try {
+          commitExecutionWorkspace(execution.workspace);
+          if (execution.integratedIdentities) verifyAggregateIntegration(execution.workspace,
+            join(configuration.happyHomeDir, 'orchestrator-workspaces'), execution.integratedIdentities);
+        }
+        catch (error) {
+          status = 'failed';
+          commitError = error instanceof Error ? error.message : String(error);
+        }
+      }
 
       await execution.startReportPromise;
       await reportExecutionFinish(execution, {
         status,
         exitCode,
         signal,
-        errorCode: status === 'timeout'
+        errorCode: commitError ? 'WORKSPACE_COMMIT_FAILED' : execution.auditCapacityExceeded ? 'TELEMETRY_ARCHIVE_CAPACITY' : execution.capabilityLost ? 'EXECUTION_CAPABILITY_EXPIRED' : execution.workspaceLeaseLost ? 'WORKSPACE_LEASE_LOST' : status === 'failed' && exitCode === 0 ? 'FINAL_RESPONSE_MISSING' : status === 'timeout'
           ? 'WATCHDOG_TIMEOUT'
           : status === 'failed'
             ? 'PROCESS_EXIT_NON_ZERO'
             : undefined,
-        errorMessage: status === 'timeout'
+        errorMessage: commitError ?? (execution.auditCapacityExceeded ? 'Unsupported telemetry archive capacity reached' : execution.capabilityLost ? 'Execution capability expired before renewal' : execution.workspaceLeaseLost ? 'Execution workspace lease was lost' : status === 'failed' && exitCode === 0 ? 'Provider did not return a valid final response' : status === 'timeout'
           ? `Execution exceeded timeout (${execution.payload.timeoutMs}ms)`
           : status === 'failed'
             ? `Process exited with code ${exitCode ?? 'unknown'}${signal ? ` (signal ${signal})` : ''}`
-            : undefined,
+            : undefined),
       });
     };
 
     const handleOrchestratorDispatch = async (payload: OrchestratorDispatchPayload): Promise<{ accepted: boolean; duplicate?: boolean }> => {
+      if (payload.internalAi || payload.aiRuntimeContractInvalid || payload.aiRuntimeContract !== undefined) {
+        if (payload.aiRuntimeContractInvalid || !AiRuntimeContractSchema.safeParse(payload.aiRuntimeContract).success)
+          throw new Error('AI runtime contract is unavailable');
+      }
+      if (payload.permissionMode === 'approval' && payload.provider !== 'codex')
+        throw new Error('Approval runner is unavailable for this provider');
+      if (featuresAdvertised && !payload.executionCapability)
+        throw new Error('Versioned execution capability is required');
+      if (payload.permissionMode === 'approval' && (!payload.executionCapability
+        || !payload.executionCapability.allowedOps.includes('decision_request')))
+        throw new Error('Approval execution requires decision capability');
+      if (payload.executionCapability) await saveExecutionCapability(capabilityRoot,
+        payload.executionId, payload.dispatchToken, payload.executionCapability);
+      if (payload.permissionMode === 'approval') await assertNoUnresolvedApprovals(approvalRoot, payload.taskId);
       const existing = executionIdToManagedExecution.get(payload.executionId);
       if (existing) {
         if (existing.payload.dispatchToken !== payload.dispatchToken) {
@@ -335,33 +521,256 @@ export async function startDaemon(): Promise<void> {
         }
         return { accepted: true, duplicate: true };
       }
+      await requireUnsupportedArchiveCapacity([eventQueueRoot, usageQueueRoot]);
 
+      let workspace: ExecutionWorkspace | undefined;
+      let workspaceLease: FileLock | undefined;
+      let integratedIdentities: IntegratedIdentity[] | undefined;
+      let skillInstruction = '';
+      if (payload.projectId && (!payload.projectSnapshot || payload.projectSnapshot.projectId !== payload.projectId))
+        throw new Error('Project task requires its persisted snapshot');
+      if (payload.projectSnapshot && !payload.workingDirectory)
+        throw new Error('Project task has no repository directory');
+      if (payload.workingDirectory) {
+        try {
+          if (payload.projectSnapshot) {
+            validateProjectSnapshot(payload.projectSnapshot, machineId, payload.workingDirectory);
+            if (payload.projectSnapshot.kind === 'local') await api.verifyRegisteredProject(payload.projectSnapshot);
+          }
+          workspace = await prepareExecutionWorkspace(join(configuration.happyHomeDir, 'orchestrator-workspaces'), payload.workingDirectory, payload.taskId, payload.executionType === 'resume' ? payload.childSessionId : undefined);
+          workspaceLease = await acquireFileLock(`${workspace.worktreePath}.execution.lock`);
+          if ([...executionIdToManagedExecution.values()].some((active) => active.workspace?.worktreePath === workspace!.worktreePath)) {
+            throw new Error('This workspace is already running another execution');
+          }
+          if (payload.integrationPolicy) {
+            integratedIdentities = await integrateAggregate(api, payload, workspace,
+              join(configuration.happyHomeDir, 'orchestrator-workspaces'));
+          }
+          const skillSnapshots = requiresTaskSkillDownload(payload)
+            ? await api.getOrchestratorTaskSkills(payload.taskId, payload.executionId, payload.dispatchToken)
+            : [];
+          if (skillSnapshots.length) {
+            const skillRoot = join(finishQueueRoot, 'skills',
+              createHash('sha256').update(payload.executionId).digest('hex'));
+            const installed = skillSnapshots.map((snapshot) => ({
+              skillId: snapshot.skillId, version: snapshot.version, hash: snapshot.hash,
+              path: installSkillBundle(skillRoot, { skillId: snapshot.skillId, version: snapshot.version,
+                hash: snapshot.hash, files: snapshot.files }, {
+                skillId: snapshot.skillId, version: snapshot.version, hash: snapshot.hash }),
+            }));
+            await fs.mkdir(skillRoot, { recursive: true, mode: 0o700 });
+            const usage = JSON.stringify({ executionId: payload.executionId,
+              taskId: payload.taskId, skills: installed.map(({ skillId, version, hash }) => ({ skillId, version, hash })) });
+            try { await fs.writeFile(join(skillRoot, 'usage.json'), usage, { mode: 0o600, flag: 'wx' }); }
+            catch (error) {
+              if ((error as NodeJS.ErrnoException).code !== 'EEXIST'
+                || await fs.readFile(join(skillRoot, 'usage.json'), 'utf8') !== usage) throw error;
+            }
+            skillInstruction = `\n\nApproved task skills (read SKILL.md only as needed; do not execute files automatically):\n${installed
+              .map((item) => `${item.skillId}@${item.version} ${join(item.path, 'SKILL.md')}`).join('\n')}`;
+          }
+          payload = { ...payload, workingDirectory: workspace.worktreePath, prompt: `${payload.prompt}${skillInstruction}` };
+        } catch (error) {
+          await workspaceLease?.release();
+          await enqueueFinish(finishQueueRoot, {
+            executionId: payload.executionId, dispatchToken: payload.dispatchToken, status: 'failed',
+            finishedAt: new Date().toISOString(), errorCode: 'WORKSPACE_PREPARATION_FAILED',
+            errorMessage: error instanceof Error ? error.message : String(error),
+          });
+          await retryFinishes();
+          return { accepted: true };
+        }
+      }
+      try { await api.requireExecutionTelemetry(payload.executionId); }
+      catch (error) {
+        if (allowLegacyTelemetryExecution(payload, error)) {
+          let generic = false;
+          try { generic = await api.identifyFixedLegacyExecution(payload, machineId) === 'generic'; }
+          catch { /* Unknown origin must fail before the provider starts. */ }
+          if (!generic) {
+            await workspaceLease?.release();
+            await enqueueFinish(finishQueueRoot, {
+              executionId: payload.executionId, dispatchToken: payload.dispatchToken, status: 'failed',
+              finishedAt: new Date().toISOString(), errorCode: 'LEGACY_AGENT_IDENTITY_UNVERIFIED',
+              errorMessage: 'Legacy execution origin could not be verified as generic',
+            });
+            await retryFinishes();
+            return { accepted: true };
+          }
+          try {
+            await requireUnsupportedArchiveCapacity([eventQueueRoot, usageQueueRoot]);
+            await saveLegacyTelemetryBinding(finishQueueRoot, payload, machineId);
+            logger.warn(`[ORCHESTRATOR] Legacy execution ${payload.executionId} uses durable local telemetry archive`);
+          } catch {
+            await workspaceLease?.release();
+            await enqueueFinish(finishQueueRoot, {
+              executionId: payload.executionId, dispatchToken: payload.dispatchToken, status: 'failed',
+              finishedAt: new Date().toISOString(), errorCode: 'TELEMETRY_ARCHIVE_UNAVAILABLE',
+              errorMessage: 'Legacy telemetry archive could not be prepared',
+            });
+            await retryFinishes();
+            return { accepted: true };
+          }
+        } else {
+          await workspaceLease?.release();
+          await enqueueFinish(finishQueueRoot, {
+            executionId: payload.executionId, dispatchToken: payload.dispatchToken, status: 'failed',
+            finishedAt: new Date().toISOString(), errorCode: 'TELEMETRY_CAPABILITY_UNAVAILABLE',
+            errorMessage: 'Execution telemetry capability is unavailable',
+          });
+          await retryFinishes();
+          return { accepted: true };
+        }
+      }
       const oneshotEnv = buildOrchestratorEnv(payload);
-      const child = spawnHappyCLI(['orchestrator-oneshot', '--provider', payload.provider], {
-        cwd: os.homedir(),
-        detached: false,
-        stdio: ['ignore', 'pipe', 'pipe'],
-        env: {
-          ...process.env,
-          ...oneshotEnv,
-        },
-      });
+      let delegationProxy: Awaited<ReturnType<typeof startLeaderDelegationProxy>> | undefined;
+      let templateProposalProxy: Awaited<ReturnType<typeof startTemplateProposalProxy>> | undefined;
+      let approvalProxy: Awaited<ReturnType<typeof startApprovalProxy>> | undefined;
+      let spawnEnv: NodeJS.ProcessEnv = {};
+      let child: ChildProcess;
+      let processGroup: ExecutionProcessGroup;
+      let groupIdentityFailed = false;
+      try {
+        if (payload.provider === 'codex' && payload.teamId && payload.assignedAgentId
+          && payload.delegationDepth === 0 && !payload.parentTaskId && !payload.integrationPolicy) {
+          delegationProxy = await startLeaderDelegationProxy(api, payload);
+        }
+        if (payload.executionCapability?.protocolVersion === 1
+          && payload.executionCapability.allowedOps.includes('template_propose')) {
+          if (payload.permissionMode === 'approval')
+            throw new Error('Template proposal tool is unavailable in the Codex approval runner');
+          templateProposalProxy = await startTemplateProposalProxy({ api, payload, machineId,
+            privateRoot: join(configuration.happyHomeDir, 'orchestrator-template-proxies') });
+          payload = { ...payload, prompt: `${payload.prompt}\n\nBound Agent template (frozen for this execution): ${JSON.stringify(templateProposalProxy.frozenContent)}\nWhen this task requests a template proposal, call the MCP tool mcp__happy_template__ai_template_propose directly. Do not search the filesystem or invoke a shell to locate this tool. The tool only creates a pending proposal; a human reviews it before publication.` };
+        }
+        if (payload.permissionMode === 'approval') {
+          if (payload.provider !== 'codex' || !workspace || delegationProxy)
+            throw new Error('Approval requires a Codex task worktree without delegation');
+          approvalProxy = await startApprovalProxy({ api, payload, root: approvalRoot,
+            machineId, worktreePath: workspace.worktreePath,
+            identityReady: async (sessionId) => {
+              for (let attempt = 0; attempt < 200; attempt++) {
+                const current = executionIdToManagedExecution.get(payload.executionId);
+                if (current?.detectedChildSessionId && current.detectedChildSessionId !== sessionId)
+                  throw new Error('Execution session identity changed');
+                if (current?.identityReportPromise) {
+                  await current.identityReportPromise;
+                  if (current.identityReportFailed) throw new Error('Execution identity binding failed');
+                  return;
+                }
+                if (current?.workspaceLeaseLost || current?.cancelRequested || current?.finishReportPromise)
+                  throw new Error('Execution is no longer active');
+                await new Promise((resolve) => setTimeout(resolve, 25));
+              }
+              throw new Error('Execution identity was not bound in time');
+            },
+            active: () => {
+              const current = executionIdToManagedExecution.get(payload.executionId);
+              return !!current && !current.workspaceLeaseLost && !current.cancelRequested
+                && !current.watchdogTriggered && !current.finishReportPromise;
+            } });
+        }
+        const activeProfile = await getActiveProfile();
+        const profileEnv = activeProfile && validateProfileForAgent(activeProfile, payload.provider)
+          ? getProfileEnvironmentVariables(activeProfile) : {};
+        spawnEnv = { ...process.env, ...profileEnv, ...oneshotEnv,
+          ...(delegationProxy ? { HAPPY_ORCH_LEADER_PROXY_URL: delegationProxy.url,
+            HAPPY_ORCH_LEADER_CAPABILITY: delegationProxy.capability } : {}),
+          ...(templateProposalProxy ? { HAPPY_ORCH_TEMPLATE_SOCKET: templateProposalProxy.socketPath } : {}),
+          ...(approvalProxy ? { HAPPY_ORCH_APPROVAL_PROXY_URL: approvalProxy.url,
+            HAPPY_ORCH_APPROVAL_CAPABILITY: approvalProxy.capability } : {}) };
+        spawnEnv[EXECUTION_PROCESS_MARKER] = randomUUID();
+        child = spawnHappyCLI(['orchestrator-oneshot', '--provider', payload.provider], {
+          cwd: os.homedir(), detached: process.platform !== 'win32', stdio: ['ignore', 'pipe', 'pipe'],
+          env: spawnEnv,
+        });
+        const spawnError = new Promise<Error>((resolve) => child.once('error', resolve));
+        const childClosed = new Promise<void>((resolve) => child.once('close', () => resolve()));
+        if (!child.pid) {
+          const error = await spawnError;
+          await childClosed;
+          throw error;
+        }
+        try { processGroup = new ExecutionProcessGroup(child, spawnEnv[EXECUTION_PROCESS_MARKER]!); }
+        catch (error) {
+          groupIdentityFailed = true;
+          child.kill('SIGKILL');
+          await childClosed;
+          throw error;
+        }
+      } catch (error) {
+        await delegationProxy?.close();
+        await templateProposalProxy?.close();
+        await approvalProxy?.close();
+        if (groupIdentityFailed) {
+          logger.warn(`[ORCHESTRATOR] Process tree identity unavailable for ${payload.executionId}; retaining workspace lease and withholding finish`);
+          return { accepted: true };
+        }
+        await workspaceLease?.release();
+        await enqueueFinish(finishQueueRoot, {
+          executionId: payload.executionId, dispatchToken: payload.dispatchToken, status: 'failed',
+          finishedAt: new Date().toISOString(), errorCode: 'SPAWN_ERROR',
+          errorMessage: error instanceof Error ? error.message : String(error),
+        });
+        await retryFinishes();
+        return { accepted: true };
+      }
 
       const execution: ManagedOrchestratorExecution = {
         payload,
         child,
+        processGroup,
         startedAtIso: new Date().toISOString(),
         cancelRequested: false,
         watchdogTriggered: false,
+        workspaceLeaseLost: false,
+        auditCapacityExceeded: false,
+        capabilityLost: false,
         detectedChildSessionId: payload.childSessionId ?? null,
         startReportPromise: Promise.resolve(),
+        identityReportPromise: null,
+        identityReportFailed: false,
         finishReportPromise: null,
         stdout: '',
         stderr: '',
         stdoutLineBuffer: '',
+        responseParser: new FinalResponseParser(payload.provider),
         watchdogTimer: null,
+        capabilityRefreshTimer: null,
         killTimer: null,
+        workspace,
+        workspaceLease,
+        delegationProxy,
+        templateProposalProxy,
+        approvalProxy,
+        integratedIdentities,
+        skillInstruction,
+        spawnEnv,
+        eventWrites: Promise.resolve(),
+        eventWriteFailed: false,
+        usageWrites: Promise.resolve(),
+        usageWriteFailed: false,
       };
+      const recordToolEvent = (item: SafeToolEvent) => {
+        const summary = `${item.operation} ${item.phase}${item.durationMs === null ? '' : ` ${item.durationMs}ms`}${item.outcome ? ` ${item.outcome}` : ''}`;
+        execution.eventWrites = execution.eventWrites.then(async () => {
+          await appendExecutionEvent(eventQueueRoot, { executionId: payload.executionId, machineId,
+            kind: item.kind, phase: item.phase, occurredAt: new Date().toISOString(), summary });
+          void retryFinishes();
+        }).catch(() => { execution.eventWriteFailed = true; });
+      };
+      const recordUsage = (usage: { inputTokens: number; outputTokens: number }) => {
+        const delta: UsageDelta = { executionId: payload.executionId, machineId,
+          sourceEventId: `${payload.executionId}:codex:${randomUUID()}`,
+          provider: payload.provider, model: payload.model ?? 'default', ...usage,
+          costMicros: null, pricingVersion: null, measuredAt: new Date().toISOString() };
+        execution.usageWrites = execution.usageWrites.then(async () => {
+          await enqueueUsage(usageQueueRoot, delta);
+          void retryFinishes();
+        }).catch(() => { execution.usageWriteFailed = true; });
+      };
+      execution.responseParser = new FinalResponseParser(payload.provider, recordToolEvent, recordUsage,
+        payload.permissionMode === 'approval');
       execution.startReportPromise = api.reportOrchestratorExecutionStart({
         executionId: payload.executionId,
         dispatchToken: payload.dispatchToken,
@@ -371,61 +780,127 @@ export async function startDaemon(): Promise<void> {
         logger.debug(`[ORCHESTRATOR] Failed to report start for execution ${payload.executionId}`, error);
       });
       executionIdToManagedExecution.set(payload.executionId, execution);
-
-      child.stdout?.on('data', (chunk: Buffer | string) => {
-        const text = chunk.toString();
-        execution.stdout = appendOutputChunk(execution.stdout, text, ORCHESTRATOR_OUTPUT_CAPTURE_LIMIT);
-
-        if (!execution.detectedChildSessionId) {
-          if (payload.provider === 'codex' && payload.executionType === 'initial') {
-            const probe = `${execution.stdoutLineBuffer}${text}`;
-            const parsed = extractCodexSessionId(probe);
-            if (parsed) {
-              execution.detectedChildSessionId = parsed;
+      if (payload.executionCapability) {
+        let refreshingCapability = false;
+        execution.capabilityRefreshTimer = setInterval(() => {
+          if (refreshingCapability) return;
+          refreshingCapability = true;
+          void api.keepExecutionCapabilityAlive(payload.executionId).catch(async () => {
+            const current = await loadExecutionCapability(capabilityRoot, payload.executionId).catch(() => null);
+            if (!current || Date.parse(current.capability.expiresAt) <= Date.now()) {
+              execution.capabilityLost = true;
+              requestExecutionTermination(execution);
             }
-            execution.stdoutLineBuffer = probe.slice(-256);
-          } else if (payload.provider === 'gemini' && payload.executionType === 'initial') {
-            execution.stdoutLineBuffer += text;
-            const lines = execution.stdoutLineBuffer.split(/\r?\n/);
-            execution.stdoutLineBuffer = lines.pop() ?? '';
-            for (const line of lines) {
-              const parsed = extractGeminiSessionIdFromJsonLine(line);
-              if (parsed) {
-                execution.detectedChildSessionId = parsed;
-                break;
+          }).finally(() => { refreshingCapability = false; });
+        }, 30_000);
+      }
+      if (workspaceLease) {
+        void workspaceLease.lost.then(() => {
+          execution.workspaceLeaseLost = true;
+          execution.stderr = appendOutputChunk(execution.stderr, '\nExecution workspace lease lost\n', ORCHESTRATOR_OUTPUT_CAPTURE_LIMIT);
+          requestExecutionTermination(execution);
+        });
+      }
+
+      const attachChild = (activeChild: ChildProcess, activeGroup: ExecutionProcessGroup) => {
+        let terminalHandled = false;
+        activeChild.stdout?.on('data', (chunk: Buffer | string) => {
+          execution.responseParser.push(chunk.toString());
+          const sessionId = execution.responseParser.getSessionId();
+          if (payload.permissionMode === 'approval' && !sessionId) {
+            const lines = chunk.toString().split('\n').filter(Boolean);
+            const kinds = lines.slice(0, 3).map((line) => {
+              try {
+                const type = (JSON.parse(line) as { type?: unknown }).type;
+                return ['thread.started', 'item.started', 'item.completed', 'turn.completed'].includes(String(type))
+                  ? String(type) : 'OTHER_JSON';
+              }
+              catch { return 'NON_JSON'; }
+            });
+            logger.warn(`[ORCHESTRATOR] Approval stdout waiting: ${execution.responseParser.getParseState()} ${kinds.join(',')}`);
+          }
+          if (sessionId && execution.workspace && !execution.identityReportPromise && payload.provider === 'codex') {
+            execution.detectedChildSessionId = sessionId;
+            execution.identityReportPromise = execution.startReportPromise.then(async () => {
+              if (execution.workspaceLeaseLost) throw new Error('Workspace lease was lost');
+              const branchName = execSync('git branch --show-current', {
+                cwd: execution.workspace!.worktreePath, encoding: 'utf8', timeout: 10_000,
+              }).trim();
+              await api.bindExecutionIdentity({ executionId: payload.executionId,
+                dispatchToken: payload.dispatchToken, machineId, childSessionId: sessionId,
+                worktreePath: execution.workspace!.worktreePath, branchName });
+            }).catch((error) => {
+              execution.identityReportFailed = true;
+              const status = (error as { response?: { status?: unknown } })?.response?.status;
+              logger.warn(`[ORCHESTRATOR] Runtime identity binding unavailable for ${payload.executionId}: ${typeof status === 'number' ? `HTTP_${status}` : 'LOCAL_ERROR'}`);
+            });
+          }
+        });
+        activeChild.stderr?.on('data', (chunk: Buffer | string) => {
+          execution.stderr = appendOutputChunk(execution.stderr, chunk.toString(), ORCHESTRATOR_OUTPUT_CAPTURE_LIMIT);
+        });
+        activeChild.once('error', async (error) => {
+          if (terminalHandled) return;
+          terminalHandled = true;
+          execution.stderr = appendOutputChunk(execution.stderr, `\n${error.message}\n`, ORCHESTRATOR_OUTPUT_CAPTURE_LIMIT);
+          while (!(await activeGroup.settle()).exited) await new Promise((resolve) => setTimeout(resolve, 1_000));
+          await execution.startReportPromise;
+          await reportExecutionFinish(execution, {
+            status: execution.watchdogTriggered ? 'timeout' : (execution.cancelRequested ? 'cancelled' : 'failed'),
+            exitCode: activeChild.exitCode, signal: activeChild.signalCode,
+            errorCode: 'SPAWN_ERROR', errorMessage: error.message,
+          });
+        });
+        activeChild.once('exit', async (code, signal) => {
+          if (terminalHandled) return;
+          terminalHandled = true;
+          if (!execution.cancelRequested && !execution.watchdogTriggered && !execution.capabilityLost
+            && !execution.workspaceLeaseLost && !execution.auditCapacityExceeded)
+            await activeGroup.waitForNaturalExit(5_000);
+          let tree = await activeGroup.settle(ORCHESTRATOR_WATCHDOG_GRACE_MS);
+          while (!tree.exited) {
+            try { activeGroup.signal('SIGKILL'); } catch { /* Keep the workspace lease until exit. */ }
+            await new Promise((resolve) => setTimeout(resolve, 1_000));
+            tree = await activeGroup.settle(100);
+          }
+          if (execution.killTimer) { clearTimeout(execution.killTimer); execution.killTimer = null; }
+          const steering = execution.pendingSteering;
+          if (steering && !execution.cancelRequested && !execution.watchdogTriggered
+            && !execution.workspaceLeaseLost && !execution.capabilityLost
+            && !execution.auditCapacityExceeded) {
+            execution.pendingSteering = undefined;
+            const sessionId = execution.responseParser.getSessionId();
+            if (sessionId) {
+              try {
+                execution.detectedChildSessionId = sessionId;
+                execution.responseParser = new FinalResponseParser(payload.provider, recordToolEvent, recordUsage,
+                  payload.permissionMode === 'approval');
+                const resumePayload = { ...payload, executionType: 'resume' as const, childSessionId: sessionId,
+                  prompt: `${steering.message}${execution.skillInstruction}` };
+                const marker = randomUUID();
+                execution.child = spawnHappyCLI(['orchestrator-oneshot', '--provider', payload.provider], {
+                  cwd: os.homedir(), detached: process.platform !== 'win32', stdio: ['ignore', 'pipe', 'pipe'],
+                  env: { ...execution.spawnEnv, ...buildOrchestratorEnv(resumePayload),
+                    [EXECUTION_PROCESS_MARKER]: marker },
+                });
+                execution.processGroup = new ExecutionProcessGroup(execution.child, marker);
+                attachChild(execution.child, execution.processGroup);
+                const record = readSteering(steeringRoot, payload.executionId);
+                if (record?.steeringId === steering.id && record.dispatchToken === payload.dispatchToken) {
+                  writeSteering(steeringRoot, { ...record, state: 'injected' });
+                  steering.resolve(true);
+                } else steering.resolve(false);
+                return;
+              } catch (error) {
+                execution.stderr = appendOutputChunk(execution.stderr, `\nSteering resume failed: ${error instanceof Error ? error.message : String(error)}\n`, ORCHESTRATOR_OUTPUT_CAPTURE_LIMIT);
               }
             }
+            steering.resolve(false);
           }
-        }
-      });
-      child.stderr?.on('data', (chunk: Buffer | string) => {
-        const text = chunk.toString();
-        execution.stderr = appendOutputChunk(execution.stderr, text, ORCHESTRATOR_OUTPUT_CAPTURE_LIMIT);
-        if (!execution.detectedChildSessionId && payload.provider === 'codex' && payload.executionType === 'initial') {
-          const probe = `${execution.stdoutLineBuffer}${text}`;
-          const parsed = extractCodexSessionId(probe);
-          if (parsed) {
-            execution.detectedChildSessionId = parsed;
-          }
-          execution.stdoutLineBuffer = probe.slice(-256);
-        }
-      });
-
-      child.once('error', async (error) => {
-        execution.stderr = appendOutputChunk(execution.stderr, `\n${error.message}\n`, ORCHESTRATOR_OUTPUT_CAPTURE_LIMIT);
-        await execution.startReportPromise;
-        await reportExecutionFinish(execution, {
-          status: execution.watchdogTriggered ? 'timeout' : (execution.cancelRequested ? 'cancelled' : 'failed'),
-          exitCode: execution.child.exitCode,
-          signal: execution.child.signalCode,
-          errorCode: 'SPAWN_ERROR',
-          errorMessage: error.message,
+          await finalizeExecution(payload.executionId, code, signal);
         });
-      });
-
-      child.once('exit', async (code, signal) => {
-        await finalizeExecution(payload.executionId, code, signal);
-      });
+      };
+      attachChild(child, execution.processGroup);
 
       execution.watchdogTimer = setTimeout(() => {
         execution.watchdogTimer = null;
@@ -448,6 +923,44 @@ export async function startDaemon(): Promise<void> {
       execution.cancelRequested = true;
       requestExecutionTermination(execution);
       return { accepted: true };
+    };
+
+    const handleOrchestratorDecision = async (payload: ApprovalDelivery): Promise<{ accepted: boolean }> => {
+      const execution = executionIdToManagedExecution.get(payload.executionId);
+      if (!execution || execution.payload.dispatchToken !== payload.dispatchToken
+        || execution.workspaceLeaseLost || execution.cancelRequested || execution.watchdogTriggered
+        || execution.finishReportPromise || !execution.workspace
+        || execution.detectedChildSessionId !== payload.childSessionId) return { accepted: false };
+      try {
+        const branchName = execSync('git branch --show-current', {
+          cwd: execution.workspace.worktreePath, encoding: 'utf8', timeout: 10_000,
+        }).trim();
+        const accepted = await deliverApproval(approvalRoot, payload, {
+          taskId: execution.payload.taskId, machineId, childSessionId: execution.detectedChildSessionId,
+          worktreePath: execution.workspace.worktreePath, branchName,
+        });
+        if (accepted) execution.approvalProxy?.delivered(payload);
+        return { accepted };
+      } catch { return { accepted: false }; }
+    };
+
+    const handleOrchestratorSteer = async (payload: { steeringId: string; executionId: string; dispatchToken: string; message: string }): Promise<{ accepted: boolean }> => {
+      const execution = executionIdToManagedExecution.get(payload.executionId);
+      if (!execution || execution.payload.dispatchToken !== payload.dispatchToken || execution.payload.provider !== 'codex'
+        || execution.cancelRequested || execution.watchdogTriggered || execution.workspaceLeaseLost || execution.finishReportPromise)
+        return { accepted: false };
+      const replay = steeringReplay(steeringRoot, payload);
+      if (replay === 'ack') return { accepted: true };
+      if (replay === 'reject') return { accepted: false };
+      if (execution.pendingSteering || !execution.responseParser.getSessionId()) return { accepted: false };
+      writeSteering(steeringRoot, { steeringId: payload.steeringId, executionId: payload.executionId,
+        dispatchToken: payload.dispatchToken, taskId: execution.payload.taskId, runId: execution.payload.runId,
+        state: 'injecting' });
+      return new Promise((resolve) => {
+        execution.pendingSteering = { id: payload.steeringId, message: payload.message,
+          resolve: (accepted) => resolve({ accepted }) };
+        requestExecutionTermination(execution);
+      });
     };
 
     const stopAllOrchestratorExecutions = async (): Promise<void> => {
@@ -1074,6 +1587,15 @@ export async function startDaemon(): Promise<void> {
 
     // Create API client
     api = await ApiClient.create(credentials);
+    api.setExecutionCapabilityRoot(capabilityRoot);
+    api.setApprovalJournalRoot(approvalRoot);
+    api.setExecutionCapabilityMachine(machineId);
+    const approvalRecovery = await recoverInterruptedApprovals({ api, approvalRoot, capabilityRoot,
+      workspaceRoot: join(configuration.happyHomeDir, 'orchestrator-workspaces'),
+      finishRoot: finishQueueRoot, machineId });
+    if (approvalRecovery.queued || approvalRecovery.review)
+      logger.warn(`[ORCHESTRATOR] Interrupted approvals: ${approvalRecovery.queued} failed reports queued, ${approvalRecovery.review} require identity review`);
+    await retryFinishes();
 
     // Get or create machine
     const machine = await api.getOrCreateMachine({
@@ -1088,11 +1610,31 @@ export async function startDaemon(): Promise<void> {
 
     // Set RPC handlers
     apiMachine.setRPCHandlers({
+      orchestratorFeatures: async ({ nonce }) => {
+        let approval: AiRuntimeFeatures['approval'];
+        try {
+          resolveCodexRuntime(codexPackage(), ['app-server']);
+          approval = { provider: 'codex', runner: 'app-server', operationDecisionVersion: 1 };
+        } catch { /* Read-only Claude remains available without a Codex approval runner. */ }
+        const features = AiRuntimeFeaturesSchema.parse({ nonce, machineId,
+          protocolVersion: 1, executionCapabilityVersion: 1,
+          structuredFinalResponseVersion: 1, deliveryProofVersion: 1,
+          ...(approval ? { approval } : {}) } satisfies AiRuntimeFeatures);
+        featuresAdvertised = true;
+        return features;
+      },
+      structuredModel: structuredModel.handle,
       spawnSession,
       stopSession,
       requestShutdown: () => requestShutdown('happy-app'),
       orchestratorDispatch: handleOrchestratorDispatch,
       orchestratorCancel: handleOrchestratorCancel,
+      orchestratorSteer: handleOrchestratorSteer,
+      orchestratorDecision: handleOrchestratorDecision,
+      orchestratorVerifyIntegration: (request) => verifyIntegrationRequest(
+        join(configuration.happyHomeDir, 'orchestrator-workspaces'), machineId, request,
+        (executionId, dispatchToken, taskId, runId) => matchesIntegrationBinding(
+          integrationBindingRoot, { executionId, dispatchToken, taskId, runId })),
     });
 
     // Connect to server
@@ -1229,6 +1771,8 @@ export async function startDaemon(): Promise<void> {
       await new Promise(resolve => setTimeout(resolve, 100));
 
       await stopAllOrchestratorExecutions();
+      structuredModel.cancelAll();
+      clearInterval(finishRetryTimer);
 
       apiMachine.shutdown();
       await stopControlServer();

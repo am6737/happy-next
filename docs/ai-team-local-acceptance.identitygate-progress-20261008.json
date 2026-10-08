@@ -1,0 +1,640 @@
+{
+  "format": "happy-ai-team-independent-candidate-acceptance-v3",
+  "sourceSha256": "06fdd3dfe9dea6d3b7339da12a21ed1bb87d18324425c841a6892884bed723a7",
+  "contextSha256": "44ec0a52bafee851d22ef687d462be073d5db8c703a90d2ea9e21048752ff768",
+  "scope": "current identitygate candidate live progress; all attempts preserved; selected retry does not erase failed attempts",
+  "cases": [
+    {
+      "name": "alerts",
+      "selected": {
+        "path": "/tmp/ai-team-identitygate-alerts-root-20261008.json",
+        "sha256": "b672288f95f868d479155ffc6fecd2487a444900934e0bff3df1caf564d455ac",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-identitygate-alerts-root-20261008.json",
+          "sha256": "b672288f95f868d479155ffc6fecd2487a444900934e0bff3df1caf564d455ac",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    },
+    {
+      "name": "app-five",
+      "selected": {
+        "path": "/tmp/ai-team-identitygate-app-five-retry1-root-20261008.json",
+        "sha256": "01add90c7f7981f60e0ee923d3186976b472fe085f372345b4945d25dfa519bf",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-identitygate-app-five-root-20261008.json",
+          "sha256": "ad7a5190a1327be9b07e7fff0162220d451d8b45dc48fac2566cd0ba547bd414",
+          "result": "FAIL",
+          "exitCode": 1,
+          "artifactStable": true
+        },
+        {
+          "path": "/tmp/ai-team-identitygate-app-five-retry1-root-20261008.json",
+          "sha256": "01add90c7f7981f60e0ee923d3186976b472fe085f372345b4945d25dfa519bf",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    },
+    {
+      "name": "app-diagnostic",
+      "selected": {
+        "path": "/tmp/ai-team-identitygate-app-diagnostic-retry1-root-20261008.json",
+        "sha256": "322b2df35d4ec19112741c36f7325c8c1514ba9d7bfad2c5aaf2fb4c80d59c09",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-identitygate-app-diagnostic-root-20261008.json",
+          "sha256": "085d900fb18f9551e530bfb92b79b8cb4465c3b89c5c42529b2949169a137500",
+          "result": "FAIL",
+          "exitCode": 1,
+          "artifactStable": true
+        },
+        {
+          "path": "/tmp/ai-team-identitygate-app-diagnostic-retry1-root-20261008.json",
+          "sha256": "322b2df35d4ec19112741c36f7325c8c1514ba9d7bfad2c5aaf2fb4c80d59c09",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    },
+    {
+      "name": "capacity",
+      "selected": {
+        "path": "/tmp/ai-team-identitygate-capacity-retry3-root-20261008.json",
+        "sha256": "fe927ba8975693718b4422dfd1dabc59917bd452390130abb83174778688e01f",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-identitygate-capacity-root-20261008.json",
+          "sha256": "08fcfe84bbb01fef3e2ee779882a30954c818c742ff50f1464aa40b2089ac6bb",
+          "result": "FAIL",
+          "exitCode": 1,
+          "artifactStable": true
+        },
+        {
+          "path": "/tmp/ai-team-identitygate-capacity-retry1-root-20261008.json",
+          "sha256": "ef1f379864026fccce6d49d0ef8312fb3ab1783059fb927117e3e00ee6434c6d",
+          "result": "FAIL",
+          "exitCode": 1,
+          "artifactStable": true
+        },
+        {
+          "path": "/tmp/ai-team-identitygate-capacity-retry2-root-20261008.json",
+          "sha256": "65b6f9fa6ed7bee318822b8313ffe91a1a73c18e30f1caafd08112e2b2388f0f",
+          "result": "FAIL",
+          "exitCode": 1,
+          "artifactStable": false
+        },
+        {
+          "path": "/tmp/ai-team-identitygate-capacity-retry3-root-20261008.json",
+          "sha256": "fe927ba8975693718b4422dfd1dabc59917bd452390130abb83174778688e01f",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    },
+    {
+      "name": "compat-finish",
+      "selected": {
+        "path": "/tmp/ai-team-identitygate-compat-finish-root-20261008.json",
+        "sha256": "530f9e02b456f3d5367ecc682d9e0c2119e7919fa722153e666f93266777ec99",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-identitygate-compat-finish-root-20261008.json",
+          "sha256": "530f9e02b456f3d5367ecc682d9e0c2119e7919fa722153e666f93266777ec99",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    },
+    {
+      "name": "compat-old-generic",
+      "selected": {
+        "path": "/tmp/ai-team-identitygate-compat-old-generic-root-20261008.json",
+        "sha256": "f7551e0629f2a5fba818440638f200c4a0dc8da1e4bacd10cee0aa968f441d67",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-identitygate-compat-old-generic-root-20261008.json",
+          "sha256": "f7551e0629f2a5fba818440638f200c4a0dc8da1e4bacd10cee0aa968f441d67",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    },
+    {
+      "name": "compat-old-upgrade",
+      "selected": {
+        "path": "/tmp/ai-team-identitygate-compat-old-upgrade-root-20261008.json",
+        "sha256": "5574a1befc594f8ff60e23d51b08bd34bdcb2763ac907c04487914944f31ea4a",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-identitygate-compat-old-upgrade-root-20261008.json",
+          "sha256": "5574a1befc594f8ff60e23d51b08bd34bdcb2763ac907c04487914944f31ea4a",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    },
+    {
+      "name": "compat-owner",
+      "selected": {
+        "path": "/tmp/ai-team-identitygate-compat-owner-root-20261008.json",
+        "sha256": "0625ef5013dae589d529ee7a3855df60938013932d421550573b77161d7ba1ff",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-identitygate-compat-owner-root-20261008.json",
+          "sha256": "0625ef5013dae589d529ee7a3855df60938013932d421550573b77161d7ba1ff",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    },
+    {
+      "name": "compat-owner-cancel",
+      "selected": {
+        "path": "/tmp/ai-team-identitygate-compat-owner-cancel-root-20261008.json",
+        "sha256": "8769fa248bff42372003b123f39452537571b400344a10db88e38bedf482e3fd",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-identitygate-compat-owner-cancel-root-20261008.json",
+          "sha256": "8769fa248bff42372003b123f39452537571b400344a10db88e38bedf482e3fd",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    },
+    {
+      "name": "compat-owner-inflight",
+      "selected": {
+        "path": "/tmp/ai-team-identitygate-compat-owner-inflight-root-20261008.json",
+        "sha256": "9b6218d100f6f48a7ecff2b05de18624d03ed2df7d5aff1b21dc7d9a766e8aa8",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-identitygate-compat-owner-inflight-root-20261008.json",
+          "sha256": "9b6218d100f6f48a7ecff2b05de18624d03ed2df7d5aff1b21dc7d9a766e8aa8",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    },
+    {
+      "name": "compat-redis",
+      "selected": {
+        "path": "/tmp/ai-team-identitygate-compat-redis-root-20261008.json",
+        "sha256": "41ceb822e8e45d37b836743b1eb005ae18652d68be5d21db9f7ba4fdef61e118",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-identitygate-compat-redis-root-20261008.json",
+          "sha256": "41ceb822e8e45d37b836743b1eb005ae18652d68be5d21db9f7ba4fdef61e118",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    },
+    {
+      "name": "coordinator",
+      "selected": {
+        "path": "/tmp/ai-team-identitygate-coordinator-root-20261008.json",
+        "sha256": "5a04046a3e42d2fdcb21a9f465b0d169f3a04af189da618e8e56ff5551c349ab",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-identitygate-coordinator-root-20261008.json",
+          "sha256": "5a04046a3e42d2fdcb21a9f465b0d169f3a04af189da618e8e56ff5551c349ab",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    },
+    {
+      "name": "cross-cwd",
+      "selected": {
+        "path": "/tmp/ai-team-identitygate-cross-cwd-retry1-root-20261008.json",
+        "sha256": "c8f29c1b1b51623d70193e615f20a425cb6a3a1100cdac678b5dd242517f0a43",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-identitygate-cross-cwd-root-20261008.json",
+          "sha256": "d2d0e2bfb89c6ca5f5efebfd5352a01404c7047cbd660cfb34f7b6729da7d81a",
+          "result": "FAIL",
+          "exitCode": 1,
+          "artifactStable": true
+        },
+        {
+          "path": "/tmp/ai-team-identitygate-cross-cwd-retry1-root-20261008.json",
+          "sha256": "c8f29c1b1b51623d70193e615f20a425cb6a3a1100cdac678b5dd242517f0a43",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    },
+    {
+      "name": "git",
+      "selected": {
+        "path": "/tmp/ai-team-identitygate-git-root-20261008.json",
+        "sha256": "7e498adda66b2093583d1b6515e8dc33bca8d8d817e7da7368ef80d79469a9a2",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-identitygate-git-root-20261008.json",
+          "sha256": "7e498adda66b2093583d1b6515e8dc33bca8d8d817e7da7368ef80d79469a9a2",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    },
+    {
+      "name": "lifecycle-approval-cancel",
+      "selected": {
+        "path": "/tmp/ai-team-identitygate-lifecycle-approval-cancel-root-20261008.json",
+        "sha256": "f1708a50c979b09894a96a41a86f72a1dc403a7d76639db5e39aef97d67a1e7b",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-identitygate-lifecycle-approval-cancel-root-20261008.json",
+          "sha256": "f1708a50c979b09894a96a41a86f72a1dc403a7d76639db5e39aef97d67a1e7b",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    },
+    {
+      "name": "lifecycle-approval-timeout",
+      "selected": {
+        "path": "/tmp/ai-team-identitygate-lifecycle-approval-timeout-root-20261008.json",
+        "sha256": "9891f808de9a340e62b5d1319e984e06f340f3171acf09038fdd07789208a4de",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-identitygate-lifecycle-approval-timeout-root-20261008.json",
+          "sha256": "9891f808de9a340e62b5d1319e984e06f340f3171acf09038fdd07789208a4de",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    },
+    {
+      "name": "lifecycle-cancel",
+      "selected": {
+        "path": "/tmp/ai-team-identitygate-lifecycle-cancel-root-20261008.json",
+        "sha256": "4e2ff2c6c63ea557fbe7b1c36334e1550cb04dadbcf2d5036b1f4380cb90aa48",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-identitygate-lifecycle-cancel-root-20261008.json",
+          "sha256": "4e2ff2c6c63ea557fbe7b1c36334e1550cb04dadbcf2d5036b1f4380cb90aa48",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    },
+    {
+      "name": "lifecycle-claude-cancel-env",
+      "selected": {
+        "path": "/tmp/ai-team-identitygate-lifecycle-claude-cancel-env-root-20261008.json",
+        "sha256": "259f431ae4aa7dc142aa44952ddd3e6988337f28a9857b4e9470135b39ccdcfb",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-identitygate-lifecycle-claude-cancel-env-root-20261008.json",
+          "sha256": "259f431ae4aa7dc142aa44952ddd3e6988337f28a9857b4e9470135b39ccdcfb",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    },
+    {
+      "name": "lifecycle-claude-normal-env",
+      "selected": {
+        "path": "/tmp/ai-team-identitygate-lifecycle-claude-normal-env-root-20261008.json",
+        "sha256": "f545612866e0f5de299e3d37e6d86cdddbaa4837258d029a30c9d3706c4153ce",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-identitygate-lifecycle-claude-normal-env-root-20261008.json",
+          "sha256": "f545612866e0f5de299e3d37e6d86cdddbaa4837258d029a30c9d3706c4153ce",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    },
+    {
+      "name": "lifecycle-claude-timeout-env",
+      "selected": {
+        "path": "/tmp/ai-team-identitygate-lifecycle-claude-timeout-env-root-20261008.json",
+        "sha256": "ee4bb5dd4e18615c80933dad2d99a660d8ec9bfc46f0aec90336dea51280074d",
+        "result": "FAIL",
+        "exitCode": 1,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-identitygate-lifecycle-claude-timeout-env-root-20261008.json",
+          "sha256": "ee4bb5dd4e18615c80933dad2d99a660d8ec9bfc46f0aec90336dea51280074d",
+          "result": "FAIL",
+          "exitCode": 1,
+          "artifactStable": true
+        }
+      ]
+    },
+    {
+      "name": "lifecycle-normal",
+      "selected": {
+        "path": "/tmp/ai-team-identitygate-lifecycle-normal-root-20261008.json",
+        "sha256": "6b4d4ed120edae1fd90ddf9a735db8ab9339d009b341e8f574a86d6e6a43dc72",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-identitygate-lifecycle-normal-root-20261008.json",
+          "sha256": "6b4d4ed120edae1fd90ddf9a735db8ab9339d009b341e8f574a86d6e6a43dc72",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    },
+    {
+      "name": "lifecycle-recovery",
+      "selected": {
+        "path": "/tmp/ai-team-identitygate-lifecycle-recovery-retry2-root-20261008.json",
+        "sha256": "8354d0e59ca36d0757b8756a81d37098eb6ec7267be21c9f656e08256ac0beb1",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-identitygate-lifecycle-recovery-root-20261008.json",
+          "sha256": "53c32aea75d6437f4f4537b4bd4382f7d76426d30fd69d0566e94de6fc7c9d08",
+          "result": "FAIL",
+          "exitCode": 1,
+          "artifactStable": true
+        },
+        {
+          "path": "/tmp/ai-team-identitygate-lifecycle-recovery-retry1-root-20261008.json",
+          "sha256": "e87ee1cb2fdb9fc6a5d8302d44c9240529f6b8ad4459e262e1315f1fc51757b5",
+          "result": "FAIL",
+          "exitCode": 1,
+          "artifactStable": true
+        },
+        {
+          "path": "/tmp/ai-team-identitygate-lifecycle-recovery-retry2-root-20261008.json",
+          "sha256": "8354d0e59ca36d0757b8756a81d37098eb6ec7267be21c9f656e08256ac0beb1",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    },
+    {
+      "name": "lifecycle-steer",
+      "selected": {
+        "path": "/tmp/ai-team-identitygate-lifecycle-steer-root-20261008.json",
+        "sha256": "6dafb3cd24f5bd115394fcbbe8b1a341274d6023580e872c45821073b68e8d89",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-identitygate-lifecycle-steer-root-20261008.json",
+          "sha256": "6dafb3cd24f5bd115394fcbbe8b1a341274d6023580e872c45821073b68e8d89",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    },
+    {
+      "name": "lifecycle-timeout",
+      "selected": {
+        "path": "/tmp/ai-team-identitygate-lifecycle-timeout-root-20261008.json",
+        "sha256": "5ecbe3ab0fbd4dc218a50f9792de2e5b49d0e1020c6a8906ab435a323ad3309f",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-identitygate-lifecycle-timeout-root-20261008.json",
+          "sha256": "5ecbe3ab0fbd4dc218a50f9792de2e5b49d0e1020c6a8906ab435a323ad3309f",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    },
+    {
+      "name": "old-agent-generic",
+      "selected": {
+        "path": "/tmp/ai-team-identitygate-old-agent-generic-root-20261008.json",
+        "sha256": "bc835843b7d48d890ae5a46916e9d4cc8fbe333f36bf02633103ba9d3fed08d6",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-identitygate-old-agent-generic-root-20261008.json",
+          "sha256": "bc835843b7d48d890ae5a46916e9d4cc8fbe333f36bf02633103ba9d3fed08d6",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    },
+    {
+      "name": "old-agent-safe",
+      "selected": {
+        "path": "/tmp/ai-team-identitygate-old-agent-safe-root-20261008.json",
+        "sha256": "68b3de40bf19a325b588ea46a94e19ba27adfffa200a2aa761bfb778e133daa7",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-identitygate-old-agent-safe-root-20261008.json",
+          "sha256": "68b3de40bf19a325b588ea46a94e19ba27adfffa200a2aa761bfb778e133daa7",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    },
+    {
+      "name": "restore",
+      "selected": {
+        "path": "/tmp/ai-team-identitygate-restore-root-20261008.json",
+        "sha256": "6e35a600e1070acfc192c89816bda15ab0c28739642c8c2f6937da4c582b35bf",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-identitygate-restore-root-20261008.json",
+          "sha256": "6e35a600e1070acfc192c89816bda15ab0c28739642c8c2f6937da4c582b35bf",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    },
+    {
+      "name": "target-outage",
+      "selected": {
+        "path": "/tmp/ai-team-identitygate-target-outage-root-20261008.json",
+        "sha256": "4f0753d2ddb3a1f50832015900927150deea725fd9a2e2bfbf3e8405059dcf16",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-identitygate-target-outage-root-20261008.json",
+          "sha256": "4f0753d2ddb3a1f50832015900927150deea725fd9a2e2bfbf3e8405059dcf16",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    },
+    {
+      "name": "watchdog",
+      "selected": {
+        "path": "/tmp/ai-team-identitygate-watchdog-root-20261008.json",
+        "sha256": "e7de9907c20de247900684489e3edab4c4a802ae9b5374efc3f458f645a24a87",
+        "result": "PASS",
+        "exitCode": 0,
+        "artifactStable": true
+      },
+      "attempts": [
+        {
+          "path": "/tmp/ai-team-identitygate-watchdog-root-20261008.json",
+          "sha256": "e7de9907c20de247900684489e3edab4c4a802ae9b5374efc3f458f645a24a87",
+          "result": "PASS",
+          "exitCode": 0,
+          "artifactStable": true
+        }
+      ]
+    }
+  ],
+  "passed": 28,
+  "localRequiredCasesPassed": false,
+  "sourceDriftObserved": true,
+  "sourceDriftNote": "one transient workspace inventory mismatch during capacity retry2; subsequent inventory matched; no formal current evidence generated",
+  "serverReport": "/tmp/ai-server-identitygate-474e3dbb9f81/report.json",
+  "imageReport": "/tmp/ai-image-root-7afe535344-report.json",
+  "strictV1Negative": "/tmp/ai-team-identitygate-v1-admission-negative-root-20261008.json",
+  "stagedWork": {
+    "reviewTask": "cmuxtfrs44fj7qq14qg01mrym",
+    "appTask": "cmuxringz4ea7qq148syzq8kc",
+    "cliTask": "cmuxqs6na4dmaqq145s8e0mee"
+  },
+  "fullProductionChecklistPassed": false,
+  "productionReady": false,
+  "remaining": [
+    "strict v1 admission bypass implementation",
+    "Skills Team binding and binding state implementation",
+    "CLI recovery/Claude timeout diagnosis and qualification",
+    "same final candidate complete UI/compatibility/Server/image/evidence/strict acceptance",
+    "specified GitHub repository404",
+    "human physical authenticator and actual human alert delivery",
+    "Gemini scoped write qualification",
+    "cross-platform long-duration qualification",
+    "signed release and actual deployment/upgrade/rollback not authorized"
+  ]
+}

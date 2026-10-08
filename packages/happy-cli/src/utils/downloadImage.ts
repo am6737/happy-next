@@ -24,7 +24,8 @@ export async function downloadImage(url: string): Promise<DownloadedImage> {
             const buffer = Buffer.from(response.data);
             const base64 = buffer.toString('base64');
 
-            let mimeType = response.headers['content-type'] || 'image/jpeg';
+            const contentType = response.headers['content-type'];
+            let mimeType = typeof contentType === 'string' ? contentType : 'image/jpeg';
             if (mimeType.includes(';')) {
                 mimeType = mimeType.split(';')[0].trim();
             }

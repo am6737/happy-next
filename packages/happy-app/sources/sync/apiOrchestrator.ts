@@ -1,6 +1,11 @@
 import { AuthCredentials } from '@/auth/tokenStorage';
 import { backoff } from '@/utils/time';
 import { getServerUrl } from './serverConfig';
+import type { AiRuntimeResultProjection } from 'happy-wire';
+
+export type OrchestratorRuntimeResult = Omit<Partial<AiRuntimeResultProjection>, 'answerVerified'> & {
+    answerVerified?: AiRuntimeResultProjection['answerVerified'] | null;
+};
 
 export type OrchestratorRunStatus = 'queued' | 'running' | 'canceling' | 'completed' | 'failed' | 'cancelled';
 export type OrchestratorTaskStatus = 'queued' | 'dispatching' | 'running' | 'completed' | 'failed' | 'cancelled' | 'dependency_failed';
@@ -16,7 +21,7 @@ export type OrchestratorRunSummary = {
     cancelled: number;
 };
 
-export type OrchestratorExecutionRecord = {
+export type OrchestratorExecutionRecord = OrchestratorRuntimeResult & {
     executionId: string;
     attempt: number;
     status: OrchestratorExecutionStatus;
@@ -38,7 +43,7 @@ export type OrchestratorExecutionRecord = {
     updatedAt: string;
 };
 
-export type OrchestratorTaskRecord = {
+export type OrchestratorTaskRecord = OrchestratorRuntimeResult & {
     taskId: string;
     seq: number;
     taskKey: string | null;

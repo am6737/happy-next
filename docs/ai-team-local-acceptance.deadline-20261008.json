@@ -1,0 +1,245 @@
+{
+  "format": "happy-ai-team-independent-local-acceptance-v1",
+  "completedAt": "2026-10-08T03:21:53.025936+00:00",
+  "sourceSha256": "d1c16c51de8e8293c17567ba136224ca3c26d2a7fde59a919c76c4686be7434b",
+  "contextSha256": "d1799233c262e0f9a89c847a3dca97558173bf695fdc34f63012b9ac41f56274",
+  "localRequiredCasesPassed": 29,
+  "cases": [
+    {
+      "name": "alerts",
+      "result": "PASS",
+      "report": "/tmp/ai-team-deadline-alerts-root-20261008.json",
+      "reportSha256": "3cc21c4bcfbf629a29b1913acfd3d0bbf7ff25324828914e1eb22bcfb1da7219",
+      "logSha256": "6e5b5e0eaddbc81f1c2d3883ff3d60b0300730c0090d38d0ecb96d7d0e5a90ff"
+    },
+    {
+      "name": "app-five",
+      "result": "PASS",
+      "report": "/tmp/ai-team-deadline-app-five-root-20261008.json",
+      "reportSha256": "a4742f79bf2a3190fb65d2121f0da5c058ccf74a5238e8ac7e64be639a4e7903",
+      "logSha256": "7844f8751e93941b23c26df61578afc07278c49085fb60936c08fd9077844f41"
+    },
+    {
+      "name": "app-diagnostic",
+      "result": "PASS",
+      "report": "/tmp/ai-team-deadline-app-diagnostic-root-20261008.json",
+      "reportSha256": "7d6dd62cf1563e32b195d709086215112f955eb4b171825c3caf79b35a315321",
+      "logSha256": "d24809e21359c9bcee6c0b711b02ec511cec8c4f09ecc81b7eaebc666f60ca3f"
+    },
+    {
+      "name": "capacity",
+      "result": "PASS",
+      "report": "/tmp/ai-team-deadline-capacity-root-20261008.json",
+      "reportSha256": "98bd324a49f0fbab01f1194efd152d482c14f85814159f0149417487c774dd96",
+      "logSha256": "c23f2298200722d1948a3df52384220a717ac0ca76522ca41ef9e7fff6219075"
+    },
+    {
+      "name": "compat-finish",
+      "result": "PASS",
+      "report": "/tmp/ai-team-deadline-compat-finish-root-20261008.json",
+      "reportSha256": "bdcf58f051b31c58314a9fac273ccb1fa9c3c9e20dbe3c4d9b34f3de953c54eb",
+      "logSha256": "38b1f7ab4ac1fc8252f6ea5726758f8358f911f8fb0cb7698c197a42db41ce01"
+    },
+    {
+      "name": "compat-old-generic",
+      "result": "PASS",
+      "report": "/tmp/ai-team-deadline-compat-old-generic-root-20261008.json",
+      "reportSha256": "3cf43e11ad2915a671d4f307637f8b6186b2c6cc9608adea6f624b178a287216",
+      "logSha256": "8835ae9b36fc84130f1673ad589299a402429c8b41b6bd85434e3dda13ff4c89"
+    },
+    {
+      "name": "compat-old-upgrade",
+      "result": "PASS",
+      "report": "/tmp/ai-team-deadline-compat-old-upgrade-root-20261008.json",
+      "reportSha256": "b950b7c09dfd514398d5d2f5b7ab3f0d2f54b065f30dd29a5fa64a7dcc597843",
+      "logSha256": "8a30c4d1a4e817908633c0086b83b8843541f7677d89a314bcab12f3e015fdbc"
+    },
+    {
+      "name": "compat-owner",
+      "result": "PASS",
+      "report": "/tmp/ai-team-deadline-compat-owner-root-20261008.json",
+      "reportSha256": "ebebe2ccc84f4c7d068b26f31b90ba3f303cd815f5e8fe76ef36837d34b7899b",
+      "logSha256": "cbf762ab964d21d5a6521872da821b4eaf3663f512bf8aa3333eddd2b13ca803"
+    },
+    {
+      "name": "compat-owner-cancel",
+      "result": "PASS",
+      "report": "/tmp/ai-team-deadline-compat-owner-cancel-root-20261008.json",
+      "reportSha256": "ec52aa03f6f7341e126122a8c068fc080da2e87a2bd7263e2374f405a58f4372",
+      "logSha256": "00ec32ec01b98bdadf38513603594831d8eb24d78d4ed18e50b800ff063be5fb"
+    },
+    {
+      "name": "compat-owner-inflight",
+      "result": "PASS",
+      "report": "/tmp/ai-team-deadline-compat-owner-inflight-root-20261008.json",
+      "reportSha256": "fb8fb162f98a9643754270ca3fb2636700cacba8cb709ad3370c89a7d1f8e454",
+      "logSha256": "7de6b94e496078668b4f9270723437f973e8524599791f4597c1a27806af1af6"
+    },
+    {
+      "name": "compat-redis",
+      "result": "PASS",
+      "report": "/tmp/ai-team-deadline-compat-redis-root-20261008.json",
+      "reportSha256": "a4c1637e5ab2028251c9154f99a9c4493b0ee42bfe0969567bd9380cb53af52f",
+      "logSha256": "d575cd7d020c4eef8c414fa4791b7f5590ac4bdafb4b6d1c97e0473b3e2d2553"
+    },
+    {
+      "name": "coordinator",
+      "result": "PASS",
+      "report": "/tmp/ai-team-deadline-coordinator-root-20261008.json",
+      "reportSha256": "c1a992ec031367f9a40d1146981ced7cb45878d9f653fd87101d728e9c3a40cb",
+      "logSha256": "01bab3b0d42caf938d304d9889041173a51da00ede66e126f2a7fc58c2a27f5e"
+    },
+    {
+      "name": "cross-cwd",
+      "result": "PASS",
+      "report": "/tmp/ai-team-deadline-cross-cwd-root-20261008.json",
+      "reportSha256": "311210e165ce94384785730b6a38896e2fdd43b0c9e1ae718fd7db016268987f",
+      "logSha256": "a98a8210fb7ea95daa56610412aa31a0c76ca6403b61c2c7a9f6d58dfa00f5f8"
+    },
+    {
+      "name": "git",
+      "result": "PASS",
+      "report": "/tmp/ai-team-deadline-git-root-20261008.json",
+      "reportSha256": "45005152350c98f73a371755136b2a039b3df01e6dcb8e41754f4f21c96d1541",
+      "logSha256": "7db8cd3434a41bae4fc7d172458d45fb9a5ad515b39a3d3611339522a085bb9a"
+    },
+    {
+      "name": "lifecycle-approval-cancel",
+      "result": "PASS",
+      "report": "/tmp/ai-team-deadline-lifecycle-approval-cancel-root-20261008.json",
+      "reportSha256": "5edd67ab2973841fef25b7be7293a26529c8aaff8cf3f01604c3f49dde8abc83",
+      "logSha256": "fd822016f7d0142658247588829dbf873f73ba5ec94bf07cb372c9eb4a90c91f"
+    },
+    {
+      "name": "lifecycle-approval-timeout",
+      "result": "PASS",
+      "report": "/tmp/ai-team-deadline-lifecycle-approval-timeout-root-20261008.json",
+      "reportSha256": "06366c933cffe9f3da8913487f063cb71072b9f0ae1db6a755fe9d05014cb293",
+      "logSha256": "a1518d40e40e7ee67e60ebbf874ade1fddd8699a57400d3f0c0ecb6af37799a9"
+    },
+    {
+      "name": "lifecycle-cancel",
+      "result": "PASS",
+      "report": "/tmp/ai-team-deadline-lifecycle-cancel-root-20261008.json",
+      "reportSha256": "1103a4f6a824b4a66737921dba31860bd72c87850d58697b8fe29691a98890ce",
+      "logSha256": "2d15874639a981c53eb9844284f4f150daa9fac2231218cd1baf253066af1931"
+    },
+    {
+      "name": "lifecycle-claude-cancel-env",
+      "result": "PASS",
+      "report": "/tmp/ai-team-deadline-lifecycle-claude-cancel-env-root-20261008.json",
+      "reportSha256": "0f15fc1f16c5744aa8a4ede669dcd6a07971b8717542d679dc5009e3a7aa17b0",
+      "logSha256": "2d15874639a981c53eb9844284f4f150daa9fac2231218cd1baf253066af1931"
+    },
+    {
+      "name": "lifecycle-claude-normal-env",
+      "result": "PASS",
+      "report": "/tmp/ai-team-deadline-lifecycle-claude-normal-env-root-20261008.json",
+      "reportSha256": "cbba80b0d9ef94b2765a85d226355a7d166552f574c27fe42d9d4d449880decf",
+      "logSha256": "c45ead50906ef06fb756493bb467398aa4e2bf37e57a1b77a39be441622350e1"
+    },
+    {
+      "name": "lifecycle-claude-timeout-env",
+      "result": "PASS",
+      "report": "/tmp/ai-team-deadline-lifecycle-claude-timeout-env-root-20261008.json",
+      "reportSha256": "8f6abf0d51ba0e361e31688d0730d8175bb35acd95e896062d4bc4f5b641ea6e",
+      "logSha256": "0a3261d0be3d93b6d09aef3425e8b927f8c07ecce4945d235d55649709d4318a"
+    },
+    {
+      "name": "lifecycle-normal",
+      "result": "PASS",
+      "report": "/tmp/ai-team-deadline-lifecycle-normal-root-20261008.json",
+      "reportSha256": "d871273e7481a2a255ae8eb2e673ac6f24e2484e1730f3f5bf4265432a50956a",
+      "logSha256": "c45ead50906ef06fb756493bb467398aa4e2bf37e57a1b77a39be441622350e1"
+    },
+    {
+      "name": "lifecycle-recovery",
+      "result": "PASS",
+      "report": "/tmp/ai-team-deadline-lifecycle-recovery-root-20261008.json",
+      "reportSha256": "37035b0b4b61ca551d252622eadb70b6dfdfa0eac1c6b4f72af5b150774c76ad",
+      "logSha256": "099516822bf9974e141f5a0fe5d8b1e6f445a91fa9430259358097c71e6be361"
+    },
+    {
+      "name": "lifecycle-steer",
+      "result": "PASS",
+      "report": "/tmp/ai-team-deadline-lifecycle-steer-root-20261008.json",
+      "reportSha256": "4622fcb40e5867fefc6ee79cc05ffc59273d3374fb12a3a4076451ac47a3b011",
+      "logSha256": "ab77512b2914a54fde685da410e74e39a25220b766f1a899b6a3261593fc9f65"
+    },
+    {
+      "name": "lifecycle-timeout",
+      "result": "PASS",
+      "report": "/tmp/ai-team-deadline-lifecycle-timeout-root-20261008.json",
+      "reportSha256": "f05b1d12db354f6195f043194d9e65f38b3e39e029c80e6139a8541f2ec91932",
+      "logSha256": "0a3261d0be3d93b6d09aef3425e8b927f8c07ecce4945d235d55649709d4318a"
+    },
+    {
+      "name": "old-agent-generic",
+      "result": "PASS",
+      "report": "/tmp/ai-team-deadline-old-agent-generic-root-20261008.json",
+      "reportSha256": "7a371b215218a33c9a20079f4b9cf03d9cc8a450b9c3992f59bc63cc7c265013",
+      "logSha256": "9de477e1ca5944741e38da9b2227a16fae9eb7819be1bc5e7bcdd91a34c9dcf0"
+    },
+    {
+      "name": "old-agent-safe",
+      "result": "PASS",
+      "report": "/tmp/ai-team-deadline-old-agent-safe-root-20261008.json",
+      "reportSha256": "d0d26abe5c0d9a458955e49bd731876c9b922cbf7f332ba48e3ee82b11d1cf21",
+      "logSha256": "f3e246be9f39ae56f534ed5b99aa11aa91aca163ef3cd4a5d0b993cbe316f2ce"
+    },
+    {
+      "name": "restore",
+      "result": "PASS",
+      "report": "/tmp/ai-team-deadline-restore-root-20261008.json",
+      "reportSha256": "0e48a559957a65b8772affc4275adf47c45f55bbe9723ca370f8f770da762ae7",
+      "logSha256": "faa29a72ca45fcbe55f015f73fefaa7f702416d58668d507d6c17735ec3bc52b"
+    },
+    {
+      "name": "target-outage",
+      "result": "PASS",
+      "report": "/tmp/ai-team-deadline-target-outage-root-20261008.json",
+      "reportSha256": "60cc36cfd22466fc21c0eca150f4a3d83ae3d11ffb7bf09413492de4b5aaed8a",
+      "logSha256": "40a834636e4d0441639c96445e42514464bd70ae24bde9b2ba789eb22c025973"
+    },
+    {
+      "name": "watchdog",
+      "result": "PASS",
+      "report": "/tmp/ai-team-deadline-watchdog-root-20261008.json",
+      "reportSha256": "fb067a12f25ebabf1fb67294f8c92ee42d8d278db08c23b68aeb74ecbe7a414e",
+      "logSha256": "496c741bc999137c6f62581300f9f135f9f7c47f213ef297d1683a7345fb5687"
+    }
+  ],
+  "server": {
+    "report": "/tmp/ai-server-deadline-3e64d9c1bd8b/report.json",
+    "sha256": "e0d740fcbb3a061c0f63ceac90efef259c44dcb061adee12e5868f09ea53842a",
+    "casesPassed": 18,
+    "cleanupBoundary": "8 inbound + 1 decision remained before owned isolated containers were destroyed"
+  },
+  "localServerImage": {
+    "report": "/tmp/ai-image-root-9f95aee1fd-report.json",
+    "sha256": "36346e3b06529a482f441f5ad8ed1c4f19d265efcfe0b568b9c5ebe2abd05ac7",
+    "image": "sha256:9a936d858186f9307344f57da42ce333099f4d3e794fe51537a568422a9ba24e",
+    "serverSourceFiles": 317,
+    "signed": false,
+    "published": false
+  },
+  "releasePreflight": {
+    "report": "/tmp/ai-team-deadline-release-preflight-root-20261008.json",
+    "sha256": "f0de8300c1f2dd4053ff9334de72ca7ce37b792ba40be985b46d0a0bb16d7744",
+    "strictExitCode": 1,
+    "reasons": [
+      "dirty_worktree",
+      "compatibility_evidence_unknown"
+    ]
+  },
+  "fullProductionChecklistPassed": false,
+  "productionReady": false,
+  "remaining": [
+    "formal release compatibility evidence v1 has not been assembled; real managed per-case reports are retained",
+    "dirty working tree retained as requested",
+    "am6737/happt-next authenticated HTTP404: external Issue/PR/webhook unavailable",
+    "real human and physical WebAuthn plus actual human alert receipt unverified",
+    "Gemini write/scoped tools unsupported; full provider/platform/long-duration qualification incomplete",
+    "signed release artifacts and deployment/upgrade/rollback not performed"
+  ]
+}

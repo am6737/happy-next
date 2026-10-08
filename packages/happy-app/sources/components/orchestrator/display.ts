@@ -1,5 +1,6 @@
 import type { OrchestratorExecutionRecord, OrchestratorRunSummary, OrchestratorTaskRecord } from '@/sync/apiOrchestrator';
-import { MODEL_MODE_DEFAULT } from 'happy-wire';
+import { AiRuntimeResultProjectionSchema, MODEL_MODE_DEFAULT } from 'happy-wire';
+import type { OrchestratorRuntimeResult } from '@/sync/apiOrchestrator';
 
 function isMarkdownFenceLine(value: string): boolean {
     return /^```(?:[\w-]+)?$/.test(value.trim());
@@ -59,6 +60,13 @@ export function sanitizeOrchestratorOutputSummary(summary: string | null | undef
     }
 
     return cleaned.join(' ').trim();
+}
+
+export function verifiedOrchestratorAnswer(result: OrchestratorRuntimeResult & { status: string }): string | null {
+    if (result.status !== 'completed') return null;
+    const projection = AiRuntimeResultProjectionSchema.safeParse(result);
+    return projection.success && projection.data.answerVerified
+        ? projection.data.finalResponse?.trim() || null : null;
 }
 
 export function resolveOrchestratorExecutionPrompt(
