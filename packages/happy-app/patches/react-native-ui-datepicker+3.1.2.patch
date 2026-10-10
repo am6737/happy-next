@@ -1,0 +1,16 @@
+diff --git a/node_modules/react-native-ui-datepicker/src/components/time-picker/wheel-web.tsx b/node_modules/react-native-ui-datepicker/src/components/time-picker/wheel-web.tsx
+index e74fd8b..1b70d04 100644
+--- a/node_modules/react-native-ui-datepicker/src/components/time-picker/wheel-web.tsx
++++ b/node_modules/react-native-ui-datepicker/src/components/time-picker/wheel-web.tsx
+@@ -70,9 +70,9 @@ const WheelWeb = ({
+         if (newValue?.value === value) {
+           translateY.setOffset(0);
+           translateY.setValue(0);
+-        } else if (newValue?.value) {
++        } else if (newValue != null && newValue.value != null) {
+           setValue(newValue.value);
+-        } else if (items[0]?.value) {
++        } else if (items[0] != null && items[0].value != null) {
+           setValue(items[0].value);
+         }
+       },
