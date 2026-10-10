@@ -80,10 +80,10 @@ EOF
 npx --yes markdownlint-cli2@0.18.1 --config /tmp/handoff.markdownlint-cli2.jsonc e2e-smoke/handoff-p2.md
 git diff --check origin/main...HEAD
 test "$(head -n 1 e2e-smoke/handoff-p2.md)" = 'handoff p2 e2e'
-git diff --name-only origin/main...HEAD
+test "$(git diff --name-only origin/main...HEAD)" = 'e2e-smoke/handoff-p2.md'
 ```
 
-所有命令应退出 0；最后一条只应列出本文件。首轮记录最终标记缺失，
+所有命令应退出 0；最后一条断言确保只变更本文件。首轮记录最终标记缺失，
 修订后额外执行以下断言，必须退出 0：
 
 ```bash
