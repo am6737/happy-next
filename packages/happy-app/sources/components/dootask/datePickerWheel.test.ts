@@ -27,6 +27,7 @@ describe('Web date picker time wheel', () => {
     it('keeps numeric zero selectable for hours and minutes', () => {
         expect(selectWheelValue({ value: 0 }, 23, { value: 0 })).toBe(0);
         expect(selectWheelValue({ value: 0 }, 59, { value: 0 })).toBe(0);
+        expect(selectWheelValue(undefined, 1, { value: 0 })).toBe(0);
 
         // This guards the patch applied to react-native-ui-datepicker: the old truthy checks
         // dropped both values because JavaScript treats numeric 0 as false.
