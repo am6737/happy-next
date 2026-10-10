@@ -12,6 +12,8 @@ const wheelWebSource = readFileSync(
     'utf8',
 );
 
+// Mirrors the value-selection branch in WheelWeb so the zero cases are tested
+// independently from the package's React Native rendering implementation.
 function selectWheelValue(
     next: { value: number | string } | undefined,
     current: number | string,
@@ -24,13 +26,12 @@ function selectWheelValue(
 }
 
 describe('Web date picker time wheel', () => {
-    it('keeps numeric zero selectable for hours and minutes', () => {
+    it('keeps numeric zero selectable for hours, minutes, and fallback items', () => {
         expect(selectWheelValue({ value: 0 }, 23, { value: 0 })).toBe(0);
         expect(selectWheelValue({ value: 0 }, 59, { value: 0 })).toBe(0);
         expect(selectWheelValue(undefined, 1, { value: 0 })).toBe(0);
 
-        // This guards the patch applied to react-native-ui-datepicker: the old truthy checks
-        // dropped both values because JavaScript treats numeric 0 as false.
+        // Confirm the installed dependency contains the patch used by the app build.
         expect(wheelWebSource).toContain('newValue != null && newValue.value != null');
         expect(wheelWebSource).toContain('items[0] != null && items[0].value != null');
     });
