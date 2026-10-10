@@ -7,8 +7,9 @@ the Happy app (or web client) and back without losing the conversation.
 
 - Node.js 20 or newer is installed.
 - The Claude CLI is installed and authenticated on the computer.
-- `happy-next-cli` is installed and the Happy app is available, or the
-  [Happy web client](https://app.happy-next.com/) can be opened in a browser.
+- The Happy CLI is installed (`npm i -g happy-next-cli`) and the Happy app is
+  available, or the [Happy web client](https://app.happy-next.com/) can be
+  opened in a browser.
 - Use a disposable project directory. Do not paste the QR code, access token,
   or test prompts into an issue or pull request.
 
