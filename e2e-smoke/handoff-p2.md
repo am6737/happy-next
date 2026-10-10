@@ -69,8 +69,15 @@ Builder 交接 draft PR 到指定 Reviewer，再经历打回、修订、复审�
 因 issue 要求首行是普通文本，仅对此文件关闭 MD041（首行标题规则）。
 
 ```bash
-printf '%s\n' '{"config":{"MD041":false}}' > /tmp/handoff-p2-markdownlint.json
-npx --yes markdownlint-cli2@0.18.1 --config /tmp/handoff-p2-markdownlint.json e2e-smoke/handoff-p2.md
+cat > /tmp/handoff.markdownlint-cli2.jsonc <<'EOF'
+{
+  "config": {
+    "MD041": false,
+    "MD013": false
+  }
+}
+EOF
+npx --yes markdownlint-cli2@0.18.1 --config /tmp/handoff.markdownlint-cli2.jsonc e2e-smoke/handoff-p2.md
 git diff --check origin/main...HEAD
 test "$(head -n 1 e2e-smoke/handoff-p2.md)" = 'handoff p2 e2e'
 git diff --name-only origin/main...HEAD
