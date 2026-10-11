@@ -109,7 +109,7 @@ export class GeminiPermissionHandler extends BasePermissionHandler {
     ): Promise<PermissionResult> {
         // Check if we should auto-approve based on permission mode
         // Pass toolCallId to check by ID (e.g., change_title-* even if toolName is "other")
-        if (this.shouldAutoApprove(toolName, toolCallId, input)) {
+        if (this.shouldAutoApprove(toolName, toolCallId, input) || this.isShellCommandAllowed(toolName, input)) {
             logger.debug(`${this.getLogPrefix()} Auto-approving tool ${toolName} (${toolCallId}) in ${this.currentPermissionMode} mode`);
 
             // Do not write auto-approved tools into AgentState requests/completedRequests.

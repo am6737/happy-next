@@ -63,7 +63,7 @@ export interface CodexPermissionHandler {
     toolCallId: string,
     toolName: string,
     args: Record<string, unknown>,
-  ): Promise<{ decision: string; reason?: string; answers?: Record<string, string> }>;
+  ): Promise<{ decision: string; reason?: string; answers?: Record<string, string>; execpolicyAmendment?: string[] }>;
 }
 
 export interface CodexAppServerBackendOptions {
@@ -1099,6 +1099,7 @@ export class CodexAppServerBackend implements AgentBackend {
       kind: params.kind ?? 'command',
       approvalId: params.approvalId,
       parsed_cmd: params.commandActions ?? undefined,
+      proposedExecpolicyAmendment: params.proposedExecpolicyAmendment ?? undefined,
     }, params.reason);
   }
 
@@ -1124,7 +1125,9 @@ export class CodexAppServerBackend implements AgentBackend {
         .then((result) => {
           if (this.pendingApprovals.has(callId)) {
             this.pendingApprovals.delete(callId);
-            const decision = this.mapV2Decision(result.decision);
+            const decision: V2ApprovalDecision = result.execpolicyAmendment
+              ? { acceptWithExecpolicyAmendment: { execpolicy_amendment: result.execpolicyAmendment } }
+              : this.mapV2Decision(result.decision);
             this.peer.respond(jsonRpcId, { decision });
 
             if ((decision === 'decline' || decision === 'cancel') && feedbackReason) {

@@ -2114,6 +2114,9 @@ export const en = {
         permissions: {
             yesForSession: "Yes, and don't ask for a session",
             stopAndExplain: 'Stop, and explain what to do',
+            alwaysAllowPrefix: ({ prefix }: { prefix: string }) => `Always allow commands starting with ${prefix}`,
+            forSessionOnly: "Only for this session",
+            prefixScope: "A prefix is saved to Codex's rules and applies to later sessions too",
         }
     },
 
@@ -2122,6 +2125,13 @@ export const en = {
         permissions: {
             yesAllowAllEdits: 'Yes, allow all edits during this session',
             yesForTool: "Yes, don't ask again for this tool",
+            yesForCommands: "Yes, don't ask again for commands like this…",
+            dontAskAgainFor: "Don't ask again for",
+            allCommandsOf: ({ commands }: { commands: string[] }) => `All ${commands.join(', ')} commands`,
+            onlyThisCommand: "Only this exact command",
+            rulesSavedTo: ({ file }: { file: string }) => `Saved to this project's ${file}, so later sessions don't ask either`,
+            rulesUntilRestart: "Kept while this session runs; after a restart it asks again",
+            allowedCommands: ({ commands }: { commands: string[] }) => `Allowed: ${commands.join(', ')}`,
             noTellClaude: 'No, and provide feedback',
         }
     },

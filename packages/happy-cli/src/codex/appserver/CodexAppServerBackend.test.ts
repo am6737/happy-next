@@ -654,6 +654,37 @@ describe('CodexAppServerBackend approval request parsing', () => {
     expect(respond).toHaveBeenCalledWith(100, { decision: 'accept' });
   });
 
+  it('offers the proposed execpolicy amendment and applies it when the user allows it', async () => {
+    const permissionHandler = {
+      handleToolCall: vi.fn().mockResolvedValue({ decision: 'approved_for_session', execpolicyAmendment: ['npm', 'test'] }),
+    };
+    const backend = new CodexAppServerBackend({
+      cwd: process.cwd(),
+      command: 'codex',
+      permissionHandler,
+    });
+    const anyBackend = backend as any;
+    const respond = vi.fn();
+    anyBackend.peer = { respond };
+
+    anyBackend.handleServerRequest(Methods.COMMAND_EXECUTION_APPROVAL, {
+      threadId: 't1', turnId: 'turn-1', itemId: 'cmd-2',
+      command: 'npm test -- --watch', cwd: '/home',
+      proposedExecpolicyAmendment: ['npm', 'test'],
+    }, 101);
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(permissionHandler.handleToolCall).toHaveBeenCalledWith(
+      'cmd-2', 'CodexBash',
+      expect.objectContaining({ proposedExecpolicyAmendment: ['npm', 'test'] })
+    );
+    expect(respond).toHaveBeenCalledWith(101, {
+      decision: { acceptWithExecpolicyAmendment: { execpolicy_amendment: ['npm', 'test'] } },
+    });
+  });
+
   it('handles v2 file change approval', async () => {
     const permissionHandler = {
       handleToolCall: vi.fn().mockResolvedValue({ decision: 'approved' }),

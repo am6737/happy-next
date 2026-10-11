@@ -11,6 +11,7 @@ import { logger } from "@/ui/logger";
 import { ApiSessionClient } from "@/api/apiSession";
 import { AgentState, PermissionMode } from "@/api/types";
 import { PushNotificationClient } from "@/api/pushNotifications";
+import { SHELL_TOOLS, addBashRules, isBashCommandAllowed, shellCommandOf } from "happy-wire";
 
 /**
  * Permission response from the mobile app.
@@ -20,10 +21,15 @@ export interface PermissionResponse {
     approved: boolean;
     decision?: 'approved' | 'approved_for_session' | 'denied' | 'abort';
     answers?: Record<string, string>;
-    /** Tools the user stopped being asked about ("don't ask again") — the agent's own "always allow" applies them */
+    /**
+     * Tools the user stopped being asked about ("don't ask again"). The agent's own "always allow"
+     * applies them, except `Bash(...)` rules for a shell command, which the handler keeps itself.
+     */
     allowTools?: string[];
     /** Mode the app switched the session to with this answer ("allow all edits") — kept so the app can show which button was used */
     mode?: PermissionMode;
+    /** Codex: the proposed command prefix the user allowed from now on */
+    execpolicyAmendment?: string[];
 }
 
 /**
@@ -44,6 +50,8 @@ export interface PermissionResult {
     answers?: Record<string, string>;
     /** Mode the app switched the session to with this answer */
     mode?: PermissionMode;
+    /** Codex: the proposed command prefix the user allowed from now on */
+    execpolicyAmendment?: string[];
 }
 
 /**
@@ -57,6 +65,9 @@ export abstract class BasePermissionHandler {
     protected session: ApiSessionClient;
     protected pushClient: PushNotificationClient;
     private isResetting = false;
+    /** Shell commands "don't ask again" covers, checked by the handlers that ask for shell tools */
+    private readonly allowedShellLiterals = new Set<string>();
+    private readonly allowedShellPrefixes = new Set<string>();
 
     /**
      * Returns the log prefix for this handler.
@@ -101,12 +112,20 @@ export abstract class BasePermissionHandler {
                 // Remove from pending
                 this.pendingRequests.delete(response.id);
 
+                // Rules the user picked for a shell command are kept here rather than given to the agent,
+                // whose own "always allow" saves a rule of its choosing (often the whole command line)
+                const shellRules = SHELL_TOOLS.has(pending.toolName) ? response.allowTools?.filter((rule) => rule.startsWith('Bash(')) ?? [] : [];
+                addBashRules(shellRules, this.allowedShellLiterals, this.allowedShellPrefixes);
+                if (shellRules.length) this.persistShellRules(shellRules);
+                const forSession = !shellRules.length && (response.decision === 'approved_for_session' || !!response.allowTools?.length);
+
                 // Resolve the permission request
                 const result: PermissionResult = response.approved
                     ? {
-                        decision: response.decision === 'approved_for_session' || !!response.allowTools?.length ? 'approved_for_session' : 'approved',
+                        decision: forSession ? 'approved_for_session' : 'approved',
                         ...(response.answers ? { answers: response.answers } : {}),
-                        ...(response.mode ? { mode: response.mode } : {})
+                        ...(response.mode ? { mode: response.mode } : {}),
+                        ...(response.execpolicyAmendment?.length ? { execpolicyAmendment: response.execpolicyAmendment } : {})
                     }
                     : { decision: response.decision === 'denied' ? 'denied' : 'abort' };
 
@@ -130,7 +149,8 @@ export abstract class BasePermissionHandler {
                                 completedAt: Date.now(),
                                 status: response.approved ? 'approved' : 'denied',
                                 decision: result.decision,
-                                ...(response.mode ? { mode: response.mode } : {})
+                                ...(response.mode ? { mode: response.mode } : {}),
+                                ...(response.allowTools?.length ? { allowedTools: response.allowTools } : {})
                             }
                         }
                     } satisfies AgentState;
@@ -140,6 +160,15 @@ export abstract class BasePermissionHandler {
                 logger.debug(`${this.getLogPrefix()} Permission ${response.approved ? 'approved' : 'denied'} for ${pending.toolName}`);
             }
         );
+    }
+
+    /** Saves shell rules where the agent finds them on its next start; by default they last as long as the handler. */
+    protected persistShellRules(_rules: string[]): void {}
+
+    /** Whether "don't ask again" already covers this shell command, so it can run without asking */
+    protected isShellCommandAllowed(toolName: string, input: unknown): boolean {
+        const command = SHELL_TOOLS.has(toolName) ? shellCommandOf(input) : null;
+        return !!command && isBashCommandAllowed(command, this.allowedShellLiterals, this.allowedShellPrefixes);
     }
 
     /**

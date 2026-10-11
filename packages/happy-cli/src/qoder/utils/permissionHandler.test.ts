@@ -2,6 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/ui/logger', () => ({ logger: { debug: vi.fn(), debugLargeJson: vi.fn(), info: vi.fn(), warn: vi.fn() } }));
 
+vi.mock('@/utils/allowRulesSettings', () => ({ persistAllowRules: vi.fn() }));
+
+import { persistAllowRules } from '@/utils/allowRulesSettings';
 import { QoderPermissionHandler } from './permissionHandler';
 
 describe('QoderPermissionHandler', () => {
@@ -50,6 +53,22 @@ describe('QoderPermissionHandler', () => {
     await permissionRpcHandler!({ id: 'call-5', approved: true, allowTools: ['execute'] } as any);
     await expect(pending).resolves.toEqual({ decision: 'approved_for_session' });
     expect(agentState.completedRequests?.['call-5']).toMatchObject({ status: 'approved', decision: 'approved_for_session' });
+  });
+
+  it('keeps the shell rules the user picked and runs the commands they cover without asking', async () => {
+    const handler = new QoderPermissionHandler(session, { sendToAllDevices: vi.fn() } as any);
+    const pending = handler.handleToolCall('call-6', 'execute', { command: 'cd /repo && git status' });
+
+    await permissionRpcHandler!({ id: 'call-6', approved: true, decision: 'approved_for_session', allowTools: ['Bash(cd:*)', 'Bash(git status:*)'] } as any);
+    // Answered once, so qodercli doesn't save its own rule for the whole line
+    await expect(pending).resolves.toEqual({ decision: 'approved' });
+    expect(agentState.completedRequests?.['call-6']).toMatchObject({ allowedTools: ['Bash(cd:*)', 'Bash(git status:*)'] });
+    expect(persistAllowRules).toHaveBeenCalledWith(expect.stringMatching(/\.qoder\/settings\.local\.json$/), ['Bash(cd:*)', 'Bash(git status:*)']);
+
+    await expect(handler.handleToolCall('call-7', 'execute', { command: 'git status --short' })).resolves.toEqual({ decision: 'approved' });
+    expect(agentState.requests?.['call-7']).toBeUndefined();
+    void handler.handleToolCall('call-8', 'execute', { command: 'cd /repo && git push' });
+    expect(agentState.requests?.['call-8']).toMatchObject({ tool: 'execute' });
   });
 
   it('shows the input it is given for a request, and passes on the mode the app answered with', async () => {

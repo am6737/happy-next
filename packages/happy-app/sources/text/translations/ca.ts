@@ -2100,6 +2100,9 @@ export const ca: TranslationStructure = {
         permissions: {
             yesForSession: 'Sí, i no preguntar per aquesta sessió',
             stopAndExplain: 'Atura, i explica què fer',
+            alwaysAllowPrefix: ({ prefix }: { prefix: string }) => `Permet sempre les ordres que comencen per ${prefix}`,
+            forSessionOnly: "Només per a aquesta sessió",
+            prefixScope: "El prefix es desa a les regles de Codex i també val per a properes sessions",
         }
     },
 
@@ -2108,6 +2111,13 @@ export const ca: TranslationStructure = {
         permissions: {
             yesAllowAllEdits: 'Sí, permet totes les edicions durant aquesta sessió',
             yesForTool: 'Sí, no tornis a preguntar per aquesta eina',
+            yesForCommands: "Sí, no tornis a preguntar per ordres com aquesta…",
+            dontAskAgainFor: "No tornis a preguntar per",
+            allCommandsOf: ({ commands }: { commands: string[] }) => `Totes les ordres ${commands.join(', ')}`,
+            onlyThisCommand: "Només aquesta ordre",
+            rulesSavedTo: ({ file }: { file: string }) => `Es desa a ${file} d'aquest projecte, així que les properes sessions tampoc pregunten`,
+            rulesUntilRestart: "Val mentre aquesta sessió estigui en marxa; després de reiniciar tornarà a preguntar",
+            allowedCommands: ({ commands }: { commands: string[] }) => `Permès: ${commands.join(', ')}`,
             noTellClaude: 'No, proporciona comentaris',
         }
     },

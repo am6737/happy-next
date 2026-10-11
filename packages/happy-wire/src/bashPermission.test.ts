@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bashAllowRules, isBashCommandAllowed, splitBashCommand } from './bashPermission';
+import { addBashRules, bashAllowPrefixes, isBashCommandAllowed, shellCommandOf, splitBashCommand } from './bashPermission';
 
 describe('splitBashCommand', () => {
     it.each([
@@ -22,14 +22,40 @@ describe('splitBashCommand', () => {
     });
 });
 
-describe('bashAllowRules', () => {
+describe('bashAllowPrefixes', () => {
     it.each([
-        ['git status', ['Bash(git:*)']],
-        ['cd /repo && git log && git status', ['Bash(cd:*)', 'Bash(git:*)']],
-        ['echo $(id)', ['Bash(echo $(id))']],
-        ["'/usr/bin/ls' -la", ["Bash('/usr/bin/ls' -la)"]],
-    ])('rules for %j', (command, expected) => {
-        expect(bashAllowRules(command)).toEqual(expected);
+        ['git status', [['git'], ['git status']]],
+        ['cd /repo && git log && git status', [['cd', 'git'], ['cd', 'git log', 'git status']]],
+        ['ls -la | head -5', [['ls', 'head']]],
+        ['git -C repo status', [['git']]],
+        ['npm', [['npm']]],
+        ['echo $(id)', []],
+        ["'/usr/bin/ls' -la", []],
+    ])('prefixes for %j', (command, expected) => {
+        expect(bashAllowPrefixes(command)).toEqual(expected);
+    });
+});
+
+describe('shellCommandOf', () => {
+    it.each([
+        [{ command: ' git status ' }, 'git status'],
+        [{ command: ['ls', '-la'] }, 'ls -la'],
+        [{ toolCall: { title: 'rm a.txt [current working directory /repo] (remove it)' } }, 'rm a.txt'],
+        [{ command: '' }, null],
+        [{ description: 'x' }, null],
+        [null, null],
+    ])('command of %j', (input, expected) => {
+        expect(shellCommandOf(input)).toBe(expected);
+    });
+});
+
+describe('addBashRules', () => {
+    it('sorts rules into prefixes and exact commands', () => {
+        const literals = new Set<string>();
+        const prefixes = new Set<string>();
+        addBashRules(['Bash(git status:*)', 'Bash(rm -rf "a (b)")', 'Read', 'Bash'], literals, prefixes);
+        expect([...prefixes]).toEqual(['git status']);
+        expect([...literals]).toEqual(['rm -rf "a (b)"']);
     });
 });
 

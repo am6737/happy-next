@@ -6,7 +6,6 @@
  */
 
 import { isDeepStrictEqual } from 'node:util';
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { logger } from "@/lib";
 import { SDKAssistantMessage, SDKMessage, SDKUserMessage } from "../sdk";
@@ -17,7 +16,8 @@ import { getToolName } from "./getToolName";
 import { EnhancedMode, PermissionMode } from "../loop";
 import { getToolDescriptor } from "./getToolDescriptor";
 import { delay } from "@/utils/time";
-import { isBashCommandAllowed } from "happy-wire";
+import { addBashRules, isBashCommandAllowed } from "happy-wire";
+import { persistAllowRules } from "@/utils/allowRulesSettings";
 
 interface PermissionResponse {
     id: string;
@@ -139,16 +139,11 @@ export class PermissionHandler {
 
         // Update allowed tools (in-memory for current session)
         if (response.allowTools && response.allowTools.length > 0) {
-            response.allowTools.forEach(tool => {
-                if (tool.startsWith('Bash(') || tool === 'Bash') {
-                    this.parseBashPermission(tool);
-                } else {
-                    this.allowedTools.add(tool);
-                }
-            });
+            addBashRules(response.allowTools, this.allowedBashLiterals, this.allowedBashPrefixes);
+            response.allowTools.filter(tool => tool !== 'Bash' && !tool.startsWith('Bash(')).forEach(tool => this.allowedTools.add(tool));
 
-            // Persist to .claude/settings.local.json for cross-session permanence
-            this.persistAllowedTools(response.allowTools);
+            // Persist to .claude/settings.local.json for cross-session permanence, as Claude Code's "Allow always" does
+            void persistAllowRules(join(this.session.path, '.claude', 'settings.local.json'), response.allowTools);
         }
 
         // Update permission mode
@@ -295,80 +290,6 @@ export class PermissionHandler {
         });
     }
 
-
-    /**
-     * Persists allowed tools to .claude/settings.local.json so they survive across sessions.
-     * This matches Claude Code CLI's native behavior for "Allow always".
-     */
-    private async persistAllowedTools(tools: string[]): Promise<void> {
-        try {
-            const settingsDir = join(this.session.path, '.claude');
-            const settingsPath = join(settingsDir, 'settings.local.json');
-
-            // Read existing settings
-            let settings: any = {};
-            try {
-                const content = await readFile(settingsPath, 'utf-8');
-                settings = JSON.parse(content);
-            } catch {
-                // File doesn't exist or is invalid JSON, start fresh
-            }
-
-            // Ensure permissions.allow array exists
-            if (!settings.permissions) {
-                settings.permissions = {};
-            }
-            if (!Array.isArray(settings.permissions.allow)) {
-                settings.permissions.allow = [];
-            }
-
-            // Add new tools (avoid duplicates)
-            let changed = false;
-            for (const tool of tools) {
-                if (!settings.permissions.allow.includes(tool)) {
-                    settings.permissions.allow.push(tool);
-                    changed = true;
-                }
-            }
-
-            if (changed) {
-                await mkdir(settingsDir, { recursive: true });
-                await writeFile(settingsPath, JSON.stringify(settings, null, 2) + '\n', 'utf-8');
-                logger.debug(`Persisted allowed tools to ${settingsPath}: ${tools.join(', ')}`);
-            }
-        } catch (error) {
-            logger.debug(`Failed to persist allowed tools: ${error}`);
-        }
-    }
-
-    /**
-     * Parses Bash permission strings into literal and prefix sets
-     */
-    private parseBashPermission(permission: string): void {
-        // Ignore plain "Bash"
-        if (permission === 'Bash') {
-            return;
-        }
-
-        // Match Bash(command) or Bash(command:*)
-        const bashPattern = /^Bash\((.+?)\)$/;
-        const match = permission.match(bashPattern);
-        
-        if (!match) {
-            return;
-        }
-
-        const command = match[1];
-        
-        // Check if it's a prefix pattern (ends with :*)
-        if (command.endsWith(':*')) {
-            const prefix = command.slice(0, -2); // Remove :*
-            this.allowedBashPrefixes.add(prefix);
-        } else {
-            // Literal match
-            this.allowedBashLiterals.add(command);
-        }
-    }
 
     /**
      * Resolves tool call ID based on tool name and input

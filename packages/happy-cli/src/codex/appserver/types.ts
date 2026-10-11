@@ -218,6 +218,8 @@ export interface GetAuthStatusResponse {
 export type V2ApprovalDecision =
   | 'accept'
   | 'acceptForSession'
+  /** Accept, and add the request's proposed prefix to the user's execpolicy so matching commands stop asking */
+  | { acceptWithExecpolicyAmendment: { execpolicy_amendment: string[] } }
   | 'decline'
   | 'cancel';
 
@@ -269,6 +271,8 @@ export interface CommandExecutionApprovalParams {
   commandActions?: unknown[] | null;
   cwd?: string | null;
   reason?: string | null;
+  /** Command prefix Codex offers to allow from now on (e.g. ["npm", "test"]) */
+  proposedExecpolicyAmendment?: string[] | null;
 }
 
 export interface ToolRequestUserInputOption {

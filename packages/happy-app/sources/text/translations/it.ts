@@ -2099,6 +2099,9 @@ export const it: TranslationStructure = {
         permissions: {
             yesForSession: 'Sì, e non chiedere per una sessione',
             stopAndExplain: 'Fermati e spiega cosa devo fare',
+            alwaysAllowPrefix: ({ prefix }: { prefix: string }) => `Consenti sempre i comandi che iniziano con ${prefix}`,
+            forSessionOnly: "Solo per questa sessione",
+            prefixScope: "Il prefisso viene salvato nelle regole di Codex e vale anche per le prossime sessioni",
         }
     },
 
@@ -2107,6 +2110,13 @@ export const it: TranslationStructure = {
         permissions: {
             yesAllowAllEdits: 'Sì, consenti tutte le modifiche durante questa sessione',
             yesForTool: 'Sì, non chiedere più per questo strumento',
+            yesForCommands: "Sì, non chiedere più per comandi come questo…",
+            dontAskAgainFor: "Non chiedere più per",
+            allCommandsOf: ({ commands }: { commands: string[] }) => `Tutti i comandi ${commands.join(', ')}`,
+            onlyThisCommand: "Solo questo comando",
+            rulesSavedTo: ({ file }: { file: string }) => `Salvato in ${file} di questo progetto, quindi anche le prossime sessioni non chiedono`,
+            rulesUntilRestart: "Vale finché questa sessione è attiva; dopo un riavvio chiederà di nuovo",
+            allowedCommands: ({ commands }: { commands: string[] }) => `Consentito: ${commands.join(', ')}`,
             noTellClaude: 'No, fornisci feedback',
         }
     },

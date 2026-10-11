@@ -2102,6 +2102,9 @@ export const ja: TranslationStructure = {
         permissions: {
             yesForSession: "はい、このセッションでは確認しない",
             stopAndExplain: '停止して、何をすべきか説明',
+            alwaysAllowPrefix: ({ prefix }: { prefix: string }) => `${prefix} で始まるコマンドを常に許可`,
+            forSessionOnly: "このセッションのみ",
+            prefixScope: "プレフィックスは Codex のルールに保存され、今後のセッションにも適用されます",
         }
     },
 
@@ -2110,6 +2113,13 @@ export const ja: TranslationStructure = {
         permissions: {
             yesAllowAllEdits: 'はい、このセッション中のすべての編集を許可',
             yesForTool: "はい、このツールについては確認しない",
+            yesForCommands: "はい、この種のコマンドは確認しない…",
+            dontAskAgainFor: "今後確認しない",
+            allCommandsOf: ({ commands }: { commands: string[] }) => `すべての ${commands.join('、')} コマンド`,
+            onlyThisCommand: "このコマンドのみ",
+            rulesSavedTo: ({ file }: { file: string }) => `このプロジェクトの ${file} に保存され、今後のセッションでも確認しません`,
+            rulesUntilRestart: "このセッションの実行中のみ有効で、再起動後は再び確認します",
+            allowedCommands: ({ commands }: { commands: string[] }) => `許可済み: ${commands.join('、')}`,
             noTellClaude: 'いいえ、フィードバックを提供',
         }
     },

@@ -5,7 +5,9 @@ import { sessionAllow, sessionDeny } from '@/sync/ops';
 import { useUnistyles } from 'react-native-unistyles';
 import { storage, getSession } from '@/sync/storage';
 import { t } from '@/text';
-import { bashAllowRules } from 'happy-wire';
+import { SHELL_TOOLS, bashAllowPrefixes, shellCommandOf } from 'happy-wire';
+import { ActionMenuModal } from '@/components/ActionMenuModal';
+import type { ActionMenuItem } from '@/components/ActionMenu';
 
 // Tools that offer "allow all edits this session" instead of "don't ask again for this tool".
 // `edit` is the ACP edit tool (Gemini, Qoder).
@@ -31,16 +33,19 @@ export const PermissionFooter: React.FC<PermissionFooterProps> = ({ permission, 
     const [loadingButton, setLoadingButton] = useState<'allow' | 'deny' | 'abort' | null>(null);
     const [loadingAllEdits, setLoadingAllEdits] = useState(false);
     const [loadingForSession, setLoadingForSession] = useState(false);
+    const [ruleMenuVisible, setRuleMenuVisible] = useState(false);
     
     // Check if this is a Codex session - check both metadata.flavor and tool name prefix
     const isCodex = metadata?.flavor === 'codex' || toolName.startsWith('Codex');
     // Gemini calls its accept-edits mode auto_edit; Claude and Qoder call it acceptEdits
     const acceptEditsMode = metadata?.flavor === 'gemini' ? 'auto_edit' : 'acceptEdits';
     const offersAllowAllEdits = ALLOW_ALL_EDITS_TOOLS.has(toolName);
-    // "Don't ask again" for a shell command covers every program it runs, whatever the arguments
-    const allowRules = toolName === 'Bash' && typeof toolInput?.command === 'string'
-        ? bashAllowRules(toolInput.command)
-        : [toolName];
+    const shellCommand = SHELL_TOOLS.has(toolName) ? shellCommandOf(toolInput) : null;
+    // Codex offers its own prefix (e.g. `npm test`) to add to its execpolicy. It comes with the approval
+    // request, while the card can show the input of the command item Codex started before asking.
+    const proposal = getSession(sessionId)?.agentState?.requests?.[permission.id]?.arguments?.proposedExecpolicyAmendment
+        ?? toolInput?.proposedExecpolicyAmendment;
+    const proposedPrefix: string[] = Array.isArray(proposal) ? proposal : [];
     const getCurrentClaudeMode = (): 'default' | 'acceptEdits' | 'auto' | 'bypassPermissions' | 'plan' | undefined => {
         const mode = getSession(sessionId)?.permissionMode;
         if (mode === 'default' || mode === 'acceptEdits' || mode === 'auto' || mode === 'bypassPermissions' || mode === 'plan') {
@@ -80,12 +85,12 @@ export const PermissionFooter: React.FC<PermissionFooterProps> = ({ permission, 
         }
     };
 
-    const handleApproveForSession = async () => {
+    const handleApproveForSession = async (allowRules: string[]) => {
         if (permission.status !== 'pending' || loadingButton !== null || loadingAllEdits || loadingForSession || !toolName) return;
 
         setLoadingForSession(true);
         try {
-            // Claude keeps the rules; ACP agents (Gemini, Qoder) take the decision as their own "always allow"
+            // The CLI keeps shell rules (Claude, Gemini, Qoder); for other tools ACP agents take the decision as their own "always allow"
             await sessionAllow(sessionId, permission.id, undefined, allowRules, 'approved_for_session');
         } catch (error) {
             console.error('Failed to approve for session:', error);
@@ -121,12 +126,12 @@ export const PermissionFooter: React.FC<PermissionFooterProps> = ({ permission, 
         }
     };
     
-    const handleCodexApproveForSession = async () => {
+    const handleCodexApproveForSession = async (execpolicyAmendment?: string[]) => {
         if (permission.status !== 'pending' || loadingButton !== null || loadingForSession) return;
         
         setLoadingForSession(true);
         try {
-            await sessionAllow(sessionId, permission.id, undefined, undefined, 'approved_for_session');
+            await sessionAllow(sessionId, permission.id, undefined, undefined, 'approved_for_session', undefined, execpolicyAmendment);
         } catch (error) {
             console.error('Failed to approve for session:', error);
         } finally {
@@ -147,16 +152,40 @@ export const PermissionFooter: React.FC<PermissionFooterProps> = ({ permission, 
         }
     };
 
+    // "Don't ask again" on a shell command asks what it covers: the programs the line runs, their
+    // subcommands (`git status`), or only this command. Codex asks whether to allow its proposed prefix.
+    const ruleMenuItems: ActionMenuItem[] = isCodex
+        ? (proposedPrefix.length ? [
+            { label: t('codex.permissions.alwaysAllowPrefix', { prefix: proposedPrefix.join(' ') }), onPress: () => handleCodexApproveForSession(proposedPrefix) },
+            { label: t('codex.permissions.forSessionOnly'), onPress: () => handleCodexApproveForSession() },
+        ] : [])
+        : (shellCommand ? [
+            ...bashAllowPrefixes(shellCommand).map((prefixes) => ({
+                label: t('claude.permissions.allCommandsOf', { commands: prefixes }),
+                onPress: () => handleApproveForSession(prefixes.map((prefix) => `Bash(${prefix}:*)`)),
+            })),
+            { label: t('claude.permissions.onlyThisCommand'), onPress: () => handleApproveForSession([`Bash(${shellCommand})`]) },
+        ] : []);
+    const ruleScope = isCodex ? t('codex.permissions.prefixScope')
+        : metadata?.flavor === 'gemini' ? t('claude.permissions.rulesUntilRestart')
+        : t('claude.permissions.rulesSavedTo', { file: metadata?.flavor === 'qoder' ? '.qoder/settings.local.json' : '.claude/settings.local.json' });
+    const handlePressForSession = () => ruleMenuItems.length > 1
+        ? setRuleMenuVisible(true)
+        : isCodex ? handleCodexApproveForSession() : handleApproveForSession(shellCommand ? [`Bash(${shellCommand})`] : [toolName]);
+
     const isApproved = permission.status === 'approved';
     const isDenied = permission.status === 'denied';
     const isPending = permission.status === 'pending';
 
-    // Detect which button was used: mode for "all edits"; decision (ACP agents) or the stored rules (Claude) for "don't ask again"
+    // Detect which button was used: mode for "all edits"; decision (ACP agents) or the stored rules (shell commands, Claude) for "don't ask again"
     const isApprovedViaAllEdits = isApproved && (permission.mode === 'acceptEdits' || permission.mode === 'auto_edit');
     const isApprovedForSession = isApproved && !isApprovedViaAllEdits && (
-        permission.decision === 'approved_for_session' ||
-        allowRules.some(rule => permission.allowedTools?.includes(rule))
+        permission.decision === 'approved_for_session' || !!permission.allowedTools?.length
     );
+    // The shell commands "don't ask again" now covers, as `git status *` or the exact command
+    const allowedCommands = (permission.allowedTools ?? [])
+        .filter((rule) => rule.startsWith('Bash('))
+        .map((rule) => rule.slice(5, -1).replace(/:\*$/, ' *'));
     const isApprovedViaAllow = isApproved && !isApprovedViaAllEdits && !isApprovedForSession;
     
     // Codex-specific status detection with fallback
@@ -258,12 +287,35 @@ export const PermissionFooter: React.FC<PermissionFooterProps> = ({ permission, 
         iconDenied: {
             color: theme.colors.permissionButton.deny.background,
         },
+        allowedCommands: {
+            fontSize: 12,
+            color: theme.colors.textSecondary,
+            paddingHorizontal: 15,
+        },
+        ruleScope: {
+            fontSize: 13,
+            color: theme.colors.textSecondary,
+            textAlign: 'center',
+            paddingVertical: 12,
+            paddingHorizontal: 20,
+        },
     });
+
+    const ruleMenu = (
+        <ActionMenuModal
+            visible={ruleMenuVisible}
+            title={t('claude.permissions.dontAskAgainFor')}
+            items={ruleMenuItems}
+            footerContent={<Text style={styles.ruleScope}>{ruleScope}</Text>}
+            onClose={() => setRuleMenuVisible(false)}
+        />
+    );
 
     // Render Codex buttons if this is a Codex session
     if (isCodex) {
         return (
             <View style={styles.container}>
+                {ruleMenu}
                 <View style={styles.buttonContainer}>
                     {/* Codex: Yes button */}
                     <TouchableOpacity
@@ -302,7 +354,7 @@ export const PermissionFooter: React.FC<PermissionFooterProps> = ({ permission, 
                             isCodexApprovedForSession && styles.buttonSelected,
                             (isCodexAborted || isCodexApproved) && styles.buttonInactive
                         ]}
-                        onPress={handleCodexApproveForSession}
+                        onPress={handlePressForSession}
                         disabled={!isPending || loadingButton !== null || loadingForSession}
                         activeOpacity={isPending ? 0.7 : 1}
                     >
@@ -359,6 +411,7 @@ export const PermissionFooter: React.FC<PermissionFooterProps> = ({ permission, 
     // Render Claude buttons (existing behavior)
     return (
         <View style={styles.container}>
+            {ruleMenu}
             <View style={styles.buttonContainer}>
                 <TouchableOpacity
                     style={[
@@ -428,7 +481,7 @@ export const PermissionFooter: React.FC<PermissionFooterProps> = ({ permission, 
                             isApprovedForSession && styles.buttonSelected,
                             (isDenied || isApprovedViaAllow || isApprovedViaAllEdits) && styles.buttonInactive
                         ]}
-                        onPress={handleApproveForSession}
+                        onPress={handlePressForSession}
                         disabled={!isPending || loadingButton !== null || loadingAllEdits || loadingForSession}
                         activeOpacity={isPending ? 0.7 : 1}
                     >
@@ -443,11 +496,16 @@ export const PermissionFooter: React.FC<PermissionFooterProps> = ({ permission, 
                                     isPending && styles.buttonTextForSession,
                                     isApprovedForSession && styles.buttonTextSelected
                                 ]} numberOfLines={1} ellipsizeMode="tail">
-                                    {t('claude.permissions.yesForTool')}
+                                    {shellCommand ? t('claude.permissions.yesForCommands') : t('claude.permissions.yesForTool')}
                                 </Text>
                             </View>
                         )}
                     </TouchableOpacity>
+                )}
+                {isApprovedForSession && allowedCommands.length > 0 && (
+                    <Text style={styles.allowedCommands} numberOfLines={2}>
+                        {t('claude.permissions.allowedCommands', { commands: allowedCommands })}
+                    </Text>
                 )}
 
                 <TouchableOpacity

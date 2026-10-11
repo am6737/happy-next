@@ -2098,6 +2098,9 @@ export const ru: TranslationStructure = {
         permissions: {
             yesForSession: 'Да, и не спрашивать для этой сессии',
             stopAndExplain: 'Остановить и объяснить, что делать',
+            alwaysAllowPrefix: ({ prefix }: { prefix: string }) => `Всегда разрешать команды, начинающиеся с ${prefix}`,
+            forSessionOnly: "Только для этой сессии",
+            prefixScope: "Префикс сохраняется в правилах Codex и действует в следующих сессиях",
         }
     },
 
@@ -2106,6 +2109,13 @@ export const ru: TranslationStructure = {
         permissions: {
             yesAllowAllEdits: 'Да, разрешить все правки в этой сессии',
             yesForTool: 'Да, больше не спрашивать для этого инструмента',
+            yesForCommands: "Да, больше не спрашивать для таких команд…",
+            dontAskAgainFor: "Больше не спрашивать для",
+            allCommandsOf: ({ commands }: { commands: string[] }) => `Все команды ${commands.join(', ')}`,
+            onlyThisCommand: "Только эта команда",
+            rulesSavedTo: ({ file }: { file: string }) => `Сохраняется в ${file} этого проекта, и в следующих сессиях тоже не спрашивается`,
+            rulesUntilRestart: "Действует, пока работает эта сессия; после перезапуска спросит снова",
+            allowedCommands: ({ commands }: { commands: string[] }) => `Разрешено: ${commands.join(', ')}`,
             noTellClaude: 'Нет, дать обратную связь',
         }
     },

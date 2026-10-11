@@ -2102,6 +2102,9 @@ export const zhHans: TranslationStructure = {
         permissions: {
             yesForSession: '是，并且本次会话不再询问',
             stopAndExplain: '停止，并说明该做什么',
+            alwaysAllowPrefix: ({ prefix }: { prefix: string }) => `以 ${prefix} 开头的命令都不再询问`,
+            forSessionOnly: "仅本次会话",
+            prefixScope: "前缀会写入 Codex 的规则，以后的会话也生效",
         }
     },
 
@@ -2110,6 +2113,13 @@ export const zhHans: TranslationStructure = {
         permissions: {
             yesAllowAllEdits: '是，允许本次会话的所有编辑',
             yesForTool: '是，不再询问此工具',
+            yesForCommands: "是，不再询问这类命令…",
+            dontAskAgainFor: "以后不再询问",
+            allCommandsOf: ({ commands }: { commands: string[] }) => `所有 ${commands.join('、')} 命令`,
+            onlyThisCommand: "仅这条命令",
+            rulesSavedTo: ({ file }: { file: string }) => `保存到本项目的 ${file}，以后的会话也不再询问`,
+            rulesUntilRestart: "本次会话运行期间有效，重启后会再次询问",
+            allowedCommands: ({ commands }: { commands: string[] }) => `已允许：${commands.join('、')}`,
             noTellClaude: '否，提供反馈',
         }
     },

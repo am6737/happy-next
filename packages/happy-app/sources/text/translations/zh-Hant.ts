@@ -2101,6 +2101,9 @@ export const zhHant: TranslationStructure = {
         permissions: {
             yesForSession: '是，並且本次工作階段不再詢問',
             stopAndExplain: '停止，並說明該做什麼',
+            alwaysAllowPrefix: ({ prefix }: { prefix: string }) => `以 ${prefix} 開頭的指令都不再詢問`,
+            forSessionOnly: "僅本次工作階段",
+            prefixScope: "前綴會寫入 Codex 的規則，之後的工作階段也生效",
         }
     },
 
@@ -2109,6 +2112,13 @@ export const zhHant: TranslationStructure = {
         permissions: {
             yesAllowAllEdits: '是，允許本次工作階段的所有編輯',
             yesForTool: '是，不再詢問此工具',
+            yesForCommands: "是，不再詢問這類指令…",
+            dontAskAgainFor: "以後不再詢問",
+            allCommandsOf: ({ commands }: { commands: string[] }) => `所有 ${commands.join('、')} 指令`,
+            onlyThisCommand: "僅這條指令",
+            rulesSavedTo: ({ file }: { file: string }) => `儲存到本專案的 ${file}，之後的工作階段也不再詢問`,
+            rulesUntilRestart: "本次工作階段執行期間有效，重新啟動後會再次詢問",
+            allowedCommands: ({ commands }: { commands: string[] }) => `已允許：${commands.join('、')}`,
             noTellClaude: '否，並告訴 Claude 該如何不同地操作',
         }
     },
