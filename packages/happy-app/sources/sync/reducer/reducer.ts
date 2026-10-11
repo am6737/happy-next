@@ -514,14 +514,18 @@ export function reducer(state: ReducerState, messages: NormalizedMessage[], agen
                         if (ENABLE_LOGGING) {
                             console.log(`[REDUCER] Storing permission ${permId} for incoming tool`);
                         }
-                        // Store permission for when tool arrives in Phase 2
+                        // Store permission for when tool arrives in Phase 2, with how it was answered so the
+                        // card highlights the right button
                         state.permissions.set(permId, {
                             tool: completed.tool,
                             arguments: completed.arguments,
                             createdAt: completed.createdAt || Date.now(),
                             completedAt: completed.completedAt || undefined,
                             status: completed.status,
-                            reason: completed.reason || undefined
+                            reason: completed.reason || undefined,
+                            mode: completed.mode || undefined,
+                            allowedTools: completed.allowedTools || undefined,
+                            decision: completed.decision || undefined
                         });
                         continue;
                     }

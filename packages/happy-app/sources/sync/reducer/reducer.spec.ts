@@ -465,6 +465,49 @@ describe('reducer', () => {
             }
         });
 
+        it('keeps how a permission was answered when it arrives together with its tool call', () => {
+            const state = createReducer();
+            const agentState: AgentState = {
+                completedRequests: {
+                    'tool-1': {
+                        tool: 'execute',
+                        arguments: { command: 'rm a.txt' },
+                        createdAt: 1000,
+                        completedAt: 2000,
+                        status: 'approved',
+                        decision: 'approved_for_session',
+                        allowedTools: ['execute']
+                    }
+                }
+            };
+            const messages: NormalizedMessage[] = [{
+                id: 'msg-1',
+                localId: null,
+                createdAt: 3000,
+                role: 'agent',
+                isSidechain: false,
+                content: [{
+                    type: 'tool-call',
+                    id: 'tool-1',
+                    name: 'execute',
+                    input: { command: 'rm a.txt' },
+                    description: null,
+                    uuid: 'msg-1-uuid',
+                    parentUUID: null
+                }]
+            }];
+
+            const result = reducer(state, messages, agentState);
+            expect(result.messages).toHaveLength(1);
+            if (result.messages[0].kind === 'tool-call') {
+                expect(result.messages[0].tool.permission).toMatchObject({
+                    status: 'approved',
+                    decision: 'approved_for_session',
+                    allowedTools: ['execute']
+                });
+            }
+        });
+
         it('should match incoming tool calls to approved permission messages', () => {
             const state = createReducer();
             
