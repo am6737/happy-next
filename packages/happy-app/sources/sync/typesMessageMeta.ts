@@ -4,7 +4,7 @@ import { messageAttachmentSchema } from 'happy-wire';
 // Shared message metadata schema
 export const MessageMetaSchema = z.object({
     sentFrom: z.string().optional(), // Source identifier
-    permissionMode: z.enum(['default', 'acceptEdits', 'auto', 'bypassPermissions', 'plan', 'read-only', 'on-failure', 'full-auto', 'auto_edit', 'yolo', 'dontAsk']).optional(), // Permission mode for this message
+    permissionMode: z.enum(['default', 'acceptEdits', 'auto', 'bypassPermissions', 'plan', 'read-only', 'on-failure', 'full-auto', 'auto_edit', 'yolo']).optional().catch(undefined), // Permission mode for this message; one no longer offered is dropped rather than the message
     model: z.string().nullable().optional(), // Model name for this message (null = reset)
     reasoningEffort: z.string().nullable().optional(), // Reasoning effort for this message (null = reset)
     fallbackModel: z.string().nullable().optional(), // Fallback model for this message (null = reset)

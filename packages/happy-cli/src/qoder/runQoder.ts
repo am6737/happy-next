@@ -67,6 +67,8 @@ type QoderMode = {
 };
 
 const INTERRUPTED_MESSAGE = '[Request interrupted by user]';
+/** Whether Qoder is in plan mode once each plan tool succeeds; a rejected ExitPlanMode keeps it planning. */
+const PLAN_MODE_AFTER_TOOL: Record<string, boolean> = { EnterPlanMode: true, ExitPlanMode: false };
 
 export async function runQoder(opts: {
   credentials: Credentials;
@@ -242,6 +244,9 @@ export async function runQoder(opts: {
   let appliedEffort: string | null = null;
   // The model a fresh qodercli session starts with, used when the app asks for the default.
   let defaultModel: string | null = null;
+  // Plan mode stands apart from qodercli's permission mode and is reported by neither, so the
+  // plan tools that succeed mark it: calls of them in flight, with the plan mode each leads to.
+  const planToolCalls = new Map<string, boolean>();
 
   let accumulatedResponse = '';
   let abortRequested = false;
@@ -305,6 +310,7 @@ export async function runQoder(opts: {
         flushResponse();
         const filePath = msg.args?.file_path;
         if (typeof filePath === 'string' && dirname(filePath) === plansDir) planFile = filePath;
+        if (msg.toolName in PLAN_MODE_AFTER_TOOL) planToolCalls.set(msg.callId, PLAN_MODE_AFTER_TOOL[msg.toolName]);
         const input = withPlan(msg.toolName, inlinePreviewHtmlFileArgs(msg.toolName, msg.args) ?? {});
         messageBuffer.addMessage(`Executing: ${msg.toolName} ${JSON.stringify(msg.args ?? {}).substring(0, 100)}`, 'tool');
         session.sendAgentMessage('qoder', { type: 'tool-call', name: msg.toolName, callId: msg.callId, input, id: randomUUID() });
@@ -318,6 +324,14 @@ export async function runQoder(opts: {
           ? { content: result.map((item) => item.content) }
           : result;
         messageBuffer.addMessage(`Result: ${JSON.stringify(result ?? '').substring(0, 200)}`, 'result');
+        const inPlanMode = planToolCalls.get(msg.callId);
+        planToolCalls.delete(msg.callId);
+        if (inPlanMode !== undefined && !(result as { error?: unknown } | null)?.error) {
+          session.updateMetadata((current) => ({ ...current, inPlanMode }));
+          // An approved plan leaves Qoder in one of the few modes ExitPlanMode offers (none is auto),
+          // reported before this result; the mode chosen in the app takes over again.
+          if (!inPlanMode && qoderBackend) void applyPermissionMode(qoderBackend, desiredPermissionMode);
+        }
         session.sendAgentMessage('qoder', { type: 'tool-result', callId: msg.callId, output, id: randomUUID() });
         break;
       }

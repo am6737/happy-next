@@ -26,7 +26,6 @@ export const QODER_PERMISSION_MODES = [
   'default',
   'acceptEdits',
   'auto',
-  'dontAsk',
   'yolo',
 ] as const;
 
@@ -41,7 +40,6 @@ export const ALL_PERMISSION_MODES = [
   'full-auto',
   'auto_edit',
   'yolo',
-  'dontAsk',
 ] as const;
 
 export const PERMISSION_MODES_BY_AGENT = {

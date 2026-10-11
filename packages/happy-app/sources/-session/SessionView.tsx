@@ -596,7 +596,7 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
     }, [machineId, cliVersion, acknowledgedCliVersions]);
 
     // Function to update permission mode
-    const updatePermissionMode = React.useCallback((mode: 'default' | 'acceptEdits' | 'auto' | 'bypassPermissions' | 'plan' | 'read-only' | 'on-failure' | 'full-auto' | 'auto_edit' | 'yolo' | 'dontAsk') => {
+    const updatePermissionMode = React.useCallback((mode: 'default' | 'acceptEdits' | 'auto' | 'bypassPermissions' | 'plan' | 'read-only' | 'on-failure' | 'full-auto' | 'auto_edit' | 'yolo') => {
         storage.getState().updateSessionPermissionMode(sessionId, mode);
     }, [sessionId]);
 

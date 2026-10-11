@@ -174,7 +174,7 @@ function NewSessionWizard() {
         const validClaudeModes: PermissionMode[] = ['default', 'acceptEdits', 'plan', 'auto', 'bypassPermissions'];
         const validCodexModes: PermissionMode[] = ['default', 'read-only', 'on-failure', 'full-auto'];
         const validGeminiModes: PermissionMode[] = ['default', 'auto_edit', 'plan', 'yolo'];
-        const validQoderModes: PermissionMode[] = ['default', 'acceptEdits', 'auto', 'dontAsk', 'yolo'];
+        const validQoderModes: PermissionMode[] = ['default', 'acceptEdits', 'auto', 'yolo'];
         const validModes = agentType === 'codex' ? validCodexModes : agentType === 'gemini' ? validGeminiModes : agentType === 'qoder' ? validQoderModes : validClaudeModes;
 
         if (mode && validModes.includes(mode as PermissionMode)) {
@@ -668,7 +668,7 @@ function NewSessionWizard() {
         const validClaudeModes: PermissionMode[] = ['default', 'acceptEdits', 'plan', 'auto', 'bypassPermissions'];
         const validCodexModes: PermissionMode[] = ['default', 'read-only', 'on-failure', 'full-auto'];
         const validGeminiModes: PermissionMode[] = ['default', 'auto_edit', 'plan', 'yolo'];
-        const validQoderModes: PermissionMode[] = ['default', 'acceptEdits', 'auto', 'dontAsk', 'yolo'];
+        const validQoderModes: PermissionMode[] = ['default', 'acceptEdits', 'auto', 'yolo'];
         const validModes = agentType === 'codex' ? validCodexModes : agentType === 'gemini' ? validGeminiModes : agentType === 'qoder' ? validQoderModes : validClaudeModes;
         const manualMode = manualPermissionModeByAgentRef.current[agentType];
 

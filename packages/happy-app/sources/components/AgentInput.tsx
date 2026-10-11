@@ -640,7 +640,7 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
         : isGemini
             ? ['default', 'auto_edit', 'plan', 'yolo']
             : isQoder
-                ? ['default', 'acceptEdits', 'auto', 'dontAsk', 'yolo']
+                ? ['default', 'acceptEdits', 'auto', 'yolo']
                 : ['default', 'acceptEdits', 'plan', 'auto', 'bypassPermissions'];
 
     const getPermissionModeLabel = React.useCallback((mode: PermissionMode | undefined, badge = false): string => {
@@ -663,8 +663,8 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
             if (mode === 'default') return t('agentInput.qoderPermissionMode.default');
             if (mode === 'acceptEdits') return badge ? t('agentInput.qoderPermissionMode.badgeAcceptEdits') : t('agentInput.qoderPermissionMode.acceptEdits');
             if (mode === 'auto') return badge ? t('agentInput.qoderPermissionMode.badgeAuto') : t('agentInput.qoderPermissionMode.auto');
-            if (mode === 'dontAsk') return badge ? t('agentInput.qoderPermissionMode.badgeDontAsk') : t('agentInput.qoderPermissionMode.dontAsk');
             if (mode === 'yolo') return badge ? t('agentInput.qoderPermissionMode.badgeYolo') : t('agentInput.qoderPermissionMode.yolo');
+            if (mode === 'plan') return badge ? t('agentInput.permissionMode.badgePlanMode') : t('agentInput.permissionMode.plan');
             return '';
         }
         if (mode === 'default') return t('agentInput.permissionMode.default');
@@ -674,6 +674,17 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
         if (mode === 'plan') return badge ? t('agentInput.permissionMode.badgePlanMode') : t('agentInput.permissionMode.plan');
         return '';
     }, [isCodex, isGemini, isQoder]);
+
+    const qoderPermissionModeDescriptions: Partial<Record<PermissionMode, string>> = isQoder ? {
+        default: t('agentInput.qoderPermissionMode.defaultDescription'),
+        acceptEdits: t('agentInput.qoderPermissionMode.acceptEditsDescription'),
+        auto: t('agentInput.qoderPermissionMode.autoDescription'),
+        yolo: t('agentInput.qoderPermissionMode.yoloDescription'),
+    } : {};
+    // Qoder's plan mode stands apart from its permission mode and only an approved plan ends it.
+    // The badge shows it; the picker keeps the chosen mode, which applies once the plan is approved.
+    const isQoderPlanning = isQoder && !!props.metadata?.inPlanMode;
+    const shownPermissionMode = isQoderPlanning ? 'plan' : props.permissionMode;
 
     // Qoder has no "CLI default" entry (its own Auto plays that part), so a session still on `default` shows the model Qoder reports.
     const qoderModels = React.useMemo<QoderPickerModel[]>(() => {
@@ -1566,23 +1577,23 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                         </View>
                     </Pressable>
                 )}
-                {props.permissionMode && (
+                {shownPermissionMode && (
                     <Pressable hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }} onPress={handlePermissionPress} style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}>
                         <Text style={{
                             fontSize: 11,
-                            color: props.permissionMode === 'acceptEdits' ? theme.colors.permission.acceptEdits :
-                                props.permissionMode === 'bypassPermissions' ? theme.colors.permission.yolo :
-                                    props.permissionMode === 'plan' ? theme.colors.permission.plan :
-                                        props.permissionMode === 'read-only' ? theme.colors.permission.readOnly :
-                                            props.permissionMode === 'on-failure' ? theme.colors.permission.onFailure :
-                                                props.permissionMode === 'full-auto' ? theme.colors.permission.yolo :
-                                                    props.permissionMode === 'auto' ? theme.colors.permission.bypass :
-                                                        props.permissionMode === 'auto_edit' ? theme.colors.permission.acceptEdits :
-                                                            props.permissionMode === 'yolo' ? theme.colors.permission.yolo :
+                            color: shownPermissionMode === 'acceptEdits' ? theme.colors.permission.acceptEdits :
+                                shownPermissionMode === 'bypassPermissions' ? theme.colors.permission.yolo :
+                                    shownPermissionMode === 'plan' ? theme.colors.permission.plan :
+                                        shownPermissionMode === 'read-only' ? theme.colors.permission.readOnly :
+                                            shownPermissionMode === 'on-failure' ? theme.colors.permission.onFailure :
+                                                shownPermissionMode === 'full-auto' ? theme.colors.permission.yolo :
+                                                    shownPermissionMode === 'auto' ? theme.colors.permission.bypass :
+                                                        shownPermissionMode === 'auto_edit' ? theme.colors.permission.acceptEdits :
+                                                            shownPermissionMode === 'yolo' ? theme.colors.permission.yolo :
                                                     theme.colors.textSecondary,
                             ...Typography.default()
                         }}>
-                            {getPermissionModeLabel(props.permissionMode, true)}
+                            {getPermissionModeLabel(shownPermissionMode, true)}
                         </Text>
                     </Pressable>
                 )}
@@ -1641,7 +1652,7 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                     marginBottom: 0,
                                 }}>
                                     {(() => {
-                                        const permissionLabel = getPermissionModeLabel(props.permissionMode);
+                                        const permissionLabel = getPermissionModeLabel(shownPermissionMode);
                                         const currentModelSubtitle: React.ReactNode = props.fastMode
                                             ? <>{currentModelLabel} <MaterialCommunityIcons name="lightning-bolt" size={10} color={FAST_MODE_ICON_COLOR} /></>
                                             : currentModelLabel;
@@ -1698,8 +1709,35 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
 
                                 {/* Permission Mode Section */}
                                 {showSettings === 'permission' && <View style={styles.overlaySection}>
+                                    {isQoderPlanning && (
+                                        <View style={{
+                                            flexDirection: 'row',
+                                            alignItems: 'center',
+                                            paddingHorizontal: 16,
+                                            paddingVertical: 8,
+                                        }}>
+                                            <MaterialCommunityIcons name="clipboard-text-outline" size={16} color={theme.colors.permission.plan} style={{ marginRight: 12 }} />
+                                            <View style={{ flexShrink: 1 }}>
+                                                <Text style={{
+                                                    fontSize: 14,
+                                                    color: theme.colors.permission.plan,
+                                                    ...Typography.default()
+                                                }}>
+                                                    {t('agentInput.permissionMode.plan')}
+                                                </Text>
+                                                <Text style={{
+                                                    fontSize: 11,
+                                                    color: theme.colors.textSecondary,
+                                                    marginTop: 2,
+                                                    ...Typography.default()
+                                                }}>
+                                                    {t('agentInput.qoderPermissionMode.planningDescription')}
+                                                </Text>
+                                            </View>
+                                        </View>
+                                    )}
                                     {permissionModeOptions.map((mode) => {
-                                        const config = { label: getPermissionModeLabel(mode) };
+                                        const config = { label: getPermissionModeLabel(mode), description: qoderPermissionModeDescriptions[mode] };
                                         if (!config.label) return null;
                                         const isSelected = props.permissionMode === mode;
 
@@ -1734,13 +1772,25 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                                         }} />
                                                     )}
                                                 </View>
-                                                <Text style={{
-                                                    fontSize: 14,
-                                                    color: isSelected ? theme.colors.radio.active : theme.colors.text,
-                                                    ...Typography.default()
-                                                }}>
-                                                    {config.label}
-                                                </Text>
+                                                <View style={{ flexShrink: 1 }}>
+                                                    <Text style={{
+                                                        fontSize: 14,
+                                                        color: isSelected ? theme.colors.radio.active : theme.colors.text,
+                                                        ...Typography.default()
+                                                    }}>
+                                                        {config.label}
+                                                    </Text>
+                                                    {config.description ? (
+                                                        <Text style={{
+                                                            fontSize: 11,
+                                                            color: theme.colors.textSecondary,
+                                                            marginTop: 2,
+                                                            ...Typography.default()
+                                                        }}>
+                                                            {config.description}
+                                                        </Text>
+                                                    ) : null}
+                                                </View>
                                             </Pressable>
                                         );
                                     })}

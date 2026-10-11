@@ -4,7 +4,7 @@ export const VOICE_PERMISSION_MODES_BY_AGENT = {
     claude: ['default', 'acceptEdits', 'plan', 'auto', 'bypassPermissions'],
     codex: ['default', 'read-only', 'on-failure', 'full-auto'],
     gemini: ['default', 'auto_edit', 'plan', 'yolo'],
-    qoder: ['default', 'acceptEdits', 'auto', 'dontAsk', 'yolo'],
+    qoder: ['default', 'acceptEdits', 'auto', 'yolo'],
 } as const;
 
 export type VoicePermissionAgent = keyof typeof VOICE_PERMISSION_MODES_BY_AGENT;

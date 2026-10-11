@@ -221,7 +221,7 @@ interface StorageState {
     setSessionMessagesFetching: (sessionId: string, fetching: boolean) => void;
     setSessionUpgrading: (sessionId: string, upgrading: boolean) => void;
     setSessionFastMode: (sessionId: string, fastMode: boolean) => void;
-    updateSessionPermissionMode: (sessionId: string, mode: 'default' | 'acceptEdits' | 'auto' | 'bypassPermissions' | 'plan' | 'read-only' | 'on-failure' | 'full-auto' | 'auto_edit' | 'yolo' | 'dontAsk') => void;
+    updateSessionPermissionMode: (sessionId: string, mode: 'default' | 'acceptEdits' | 'auto' | 'bypassPermissions' | 'plan' | 'read-only' | 'on-failure' | 'full-auto' | 'auto_edit' | 'yolo') => void;
     updateSessionModelMode: (sessionId: string, mode: string) => void;
     // Artifact methods
     applyArtifacts: (artifacts: DecryptedArtifact[]) => void;
@@ -1573,7 +1573,7 @@ export const storage = create<StorageState>()((set, get) => {
                 applyLocalPatch: false,
             });
         },
-        updateSessionPermissionMode: (sessionId: string, mode: 'default' | 'acceptEdits' | 'auto' | 'bypassPermissions' | 'plan' | 'read-only' | 'on-failure' | 'full-auto' | 'auto_edit' | 'yolo' | 'dontAsk') => {
+        updateSessionPermissionMode: (sessionId: string, mode: 'default' | 'acceptEdits' | 'auto' | 'bypassPermissions' | 'plan' | 'read-only' | 'on-failure' | 'full-auto' | 'auto_edit' | 'yolo') => {
             const s = get();
             const session = s.sessions[sessionId] ?? s.sharedSessions[sessionId];
             if (!session) return;

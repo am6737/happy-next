@@ -31,6 +31,7 @@ export const MetadataSchema = z.object({
         description: z.string().nullable().optional(),
     })).optional(),
     currentThoughtLevelCode: z.string().optional(),
+    inPlanMode: z.boolean().optional(), // Qoder's plan mode, which stands apart from its permission mode
     summary: z.object({
         text: z.string(),
         updatedAt: z.number()
@@ -212,7 +213,7 @@ export interface Session {
     awaitingResponseSince?: number | null,
     messageSyncing?: boolean,
     presence: "online" | number, // "online" when active, timestamp when last seen
-    permissionMode?: 'default' | 'acceptEdits' | 'auto' | 'bypassPermissions' | 'plan' | 'read-only' | 'on-failure' | 'full-auto' | 'auto_edit' | 'yolo' | 'dontAsk' | null; // Session permission mode (cached locally; source of truth is UserKV)
+    permissionMode?: 'default' | 'acceptEdits' | 'auto' | 'bypassPermissions' | 'plan' | 'read-only' | 'on-failure' | 'full-auto' | 'auto_edit' | 'yolo' | null; // Session permission mode (cached locally; source of truth is UserKV)
     modelMode?: string | null; // Session model mode (cached locally; source of truth is UserKV)
     fastMode?: boolean; // Codex fast mode (service_tier: fast), local-only
     upgrading?: boolean; // True while session is being upgraded to new CLI version

@@ -50,7 +50,6 @@ const PERMISSION_MODES = new Set<PermissionMode>([
     'full-auto',
     'auto_edit',
     'yolo',
-    'dontAsk',
 ]);
 
 function isPermissionMode(value: unknown): value is PermissionMode {

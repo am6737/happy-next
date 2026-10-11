@@ -1663,4 +1663,17 @@ describe('Zod Transform - WOLOG Content Normalization', () => {
             }
         });
     });
+
+    describe('Message metadata', () => {
+        it('keeps a user message sent in a permission mode no longer offered', () => {
+            const result = RawRecordSchema.safeParse({
+                role: 'user',
+                content: { type: 'text', text: 'Fix the bug' },
+                meta: { sentFrom: 'web', permissionMode: 'dontAsk' }
+            });
+
+            expect(result.success).toBe(true);
+            expect(result.success && result.data.meta).toEqual({ sentFrom: 'web', permissionMode: undefined });
+        });
+    });
 });
