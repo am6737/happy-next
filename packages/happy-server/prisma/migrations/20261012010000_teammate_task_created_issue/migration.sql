@@ -1,0 +1,1 @@
+ALTER TABLE "TeammateTask" ADD COLUMN "createdIssue" BOOLEAN NOT NULL DEFAULT false;

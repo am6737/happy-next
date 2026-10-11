@@ -5,6 +5,7 @@ import { AccountProfile } from "@/types";
 import { getPublicUrl } from "@/storage/files";
 import { db } from "@/storage/db";
 import { allocateUserSeq } from "@/storage/seq";
+import type { Teammate, TeammateRun, TeammateTask, Channel, ChannelMessage } from "happy-wire";
 
 // === CONNECTION TYPES ===
 
@@ -42,6 +43,21 @@ export type RecipientFilter =
 // === UPDATE EVENT TYPES (Persistent) ===
 
 export type UpdateEvent = {
+    type: 'new-channel-message';
+    message: ChannelMessage;
+} | {
+    type: 'channel-updated';
+    channel: Channel;
+} | {
+    type: 'teammate-task-updated';
+    task: TeammateTask;
+} | {
+    type: 'teammate-run-updated';
+    run: TeammateRun;
+} | {
+    type: 'teammate-updated';
+    teammate: Teammate;
+} | {
     type: 'new-message';
     sessionId: string;
     message: {
@@ -301,6 +317,31 @@ export interface UpdatePayload {
 export interface EphemeralPayload {
     type: EphemeralEvent['type'];
     [key: string]: any;
+}
+
+/** Build the account-scoped profile update shared by create, update and archive. */
+export function buildTeammateUpdatedUpdate(teammate: Teammate, updateSeq: number, updateId: string): UpdatePayload {
+    return {
+        id: updateId,
+        seq: updateSeq,
+        body: { t: 'teammate-updated', teammate },
+        createdAt: Date.now(),
+    };
+}
+
+/** Build the account-scoped runtime update for every persisted run transition. */
+export function buildTeammateRunUpdatedUpdate(run: TeammateRun, updateSeq: number, updateId: string): UpdatePayload {
+    return { id: updateId, seq: updateSeq, body: { t: 'teammate-run-updated', run }, createdAt: Date.now() };
+}
+
+/** Build the persistent account-scoped channel metadata update. */
+export function buildChannelUpdatedUpdate(channel: Channel, updateSeq: number, updateId: string): UpdatePayload {
+    return { id: updateId, seq: updateSeq, body: { t: 'channel-updated', channel }, createdAt: Date.now() };
+}
+
+/** Build the persistent account-scoped channel message update. */
+export function buildNewChannelMessageUpdate(message: ChannelMessage, updateSeq: number, updateId: string): UpdatePayload {
+    return { id: updateId, seq: updateSeq, body: { t: 'new-channel-message', message }, createdAt: Date.now() };
 }
 
 type DeliveryStats = {
@@ -1072,4 +1113,9 @@ export function buildPublicShareDeletedUpdate(
         },
         createdAt: Date.now()
     };
+}
+
+/** Build the persistent task snapshot scoped to its owning account. */
+export function buildTeammateTaskUpdatedUpdate(task: TeammateTask, updateSeq: number, updateId: string): UpdatePayload {
+    return { id: updateId, seq: updateSeq, body: { t: 'teammate-task-updated', task }, createdAt: Date.now() };
 }

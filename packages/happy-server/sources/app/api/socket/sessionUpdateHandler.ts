@@ -1,3 +1,4 @@
+import { teammateOnSessionTurnEnded } from "@/app/teammate/teammateOnSessionTurnEnded";
 import { sessionAliveEventsCounter, websocketEventsCounter } from "@/app/monitoring/metrics2";
 import { activityCache } from "@/app/presence/sessionCache";
 import { updateThinkingState } from "@/app/presence/sessionTurnRuntime";
@@ -273,6 +274,13 @@ export function sessionUpdateHandler(userId: string, socket: Socket, connection:
                         sessionId: sid,
                     });
                 });
+            }
+            // A run message arriving while idle sets awaitingTurnStart; the next idle heartbeat can land before
+            // the agent starts thinking, so teammate runs complete only after a turn that actually ran.
+            if (thinkingState.thinkingEnded) {
+                try {
+                    await teammateOnSessionTurnEnded(sid);
+                } catch { /* Teammate runtime errors must never interrupt session-alive. */ }
             }
         } catch (error) {
             log({ module: 'websocket', level: 'error' }, `Error in session-alive: ${error}`);

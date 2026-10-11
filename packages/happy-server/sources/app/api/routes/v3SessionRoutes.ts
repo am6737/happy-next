@@ -287,6 +287,7 @@ export function v3SessionRoutes(app: Fastify) {
             messages: page.map(toResponseMessage),
             hasMore,
             oldestSeq: oldestMessage?.seq ?? null,
+            busy: isSessionBusy(sessionId),
         });
     });
 

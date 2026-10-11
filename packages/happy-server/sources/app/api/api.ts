@@ -29,6 +29,9 @@ import { orchestratorRoutes } from "./routes/orchestratorRoutes";
 import { appConfigRoutes } from "./routes/appConfigRoutes";
 import { modelCatalogRoutes } from "./routes/modelCatalogRoutes";
 import { githubRoutes } from "./routes/githubRoutes";
+import { channelRoutes } from "./routes/channelRoutes";
+import { teammateTaskRoutes } from "./routes/teammateTaskRoutes";
+import { teammateRoutes } from "./routes/teammateRoutes";
 
 export async function startApi() {
 
@@ -87,6 +90,9 @@ export async function startApi() {
     publicShareRoutes(typed);
     orchestratorRoutes(typed);
     githubRoutes(typed);
+    teammateRoutes(typed);
+    channelRoutes(typed);
+    teammateTaskRoutes(typed);
 
     // Start HTTP
     const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 3005;

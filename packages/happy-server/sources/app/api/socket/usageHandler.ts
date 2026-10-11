@@ -3,6 +3,8 @@ import { AsyncLock } from "@/utils/lock";
 import { db } from "@/storage/db";
 import { buildUsageEphemeral, eventRouter } from "@/app/events/eventRouter";
 import { log } from "@/utils/log";
+import { teammateSessionLookup } from '@/app/teammate/teammateSessionCache';
+import { teammateBudgetEvaluate } from '@/app/teammate/teammateBudgetEvaluate';
 
 function toFiniteNumber(value: unknown): number | null {
     if (typeof value !== 'number' || !Number.isFinite(value)) {
@@ -158,6 +160,9 @@ export function usageHandler(userId: string, socket: Socket) {
                             updatedAt: report.updatedAt.getTime()
                         });
                     }
+                    if (sessionId) void teammateSessionLookup(sessionId).then(session => {
+                        if (session) void teammateBudgetEvaluate(session.teammateId).catch(() => {});
+                    }).catch(() => {});
                 } catch (error) {
                     log({ module: 'websocket', level: 'error' }, `Failed to save usage report: ${error}`);
                     if (callback) {

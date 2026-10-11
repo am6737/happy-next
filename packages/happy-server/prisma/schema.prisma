@@ -46,6 +46,10 @@ model Account {
   Session             Session[]
   SessionDeletion     SessionDeletion[]
   OrchestratorRun     OrchestratorRun[]
+  teammates           Teammate[]
+  teammateTasks       TeammateTask[]
+  channels            Channel[]
+  channelMemberships  ChannelMember[]
   AccountPushToken    AccountPushToken[]
   TerminalAuthRequest TerminalAuthRequest[]
   AccountAuthRequest  AccountAuthRequest[]
@@ -128,6 +132,7 @@ model Session {
   capabilities      SessionCapabilities?
   controllerRuns    OrchestratorRun[]       @relation("ControllerRuns")
   workerExecutions  OrchestratorExecution[] @relation("WorkerExecutions")
+  teammateSession   TeammateSession?
 
   @@unique([accountId, tag])
   @@index([accountId, updatedAt(sort: Desc)])
@@ -622,4 +627,198 @@ model PublicShareBlockedUser {
   blockedAt     DateTime           @default(now())
 
   @@unique([publicShareId, userId])
+}
+
+//
+// Teammates and encrypted channels
+//
+
+model Teammate {
+  id                       String            @id @default(cuid())
+  accountId                String
+  account                  Account           @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  handle                   String
+  name                     String
+  avatar                   Json?
+  role                     String            @default("")
+  skills                   String[]          @default([])
+  repos                    String[]          @default([])
+  instructions             String            @default("")
+  machineId                String
+  controllerProvider       String            @default("claude")
+  controllerModel          String?
+  controllerPermissionMode String            @default("default")
+  controllerProfileId      String?
+  /// Profile env encrypted with the machine key by the app; opaque to the server.
+  controllerEnv            String?
+  workerProvider           String            @default("claude")
+  /// Worker model catalog mode; null is the provider default.
+  model                    String?
+  workerPermissionMode     String            @default("default")
+  workerProfileId          String?
+  workerEnv                String?
+  maxConcurrentRuns        Int               @default(3)
+  monthlyBudgetUsd         Float?
+  heartbeatIntervalMin     Int?
+  activeHours              Json?
+  timezone                 String?
+  dreamingHour             Int?
+  canSelfAssign            Boolean           @default(false)
+  status                   String            @default("active")
+  createdAt                DateTime          @default(now())
+  updatedAt                DateTime          @updatedAt
+  threads                  TeammateThread[]
+  runs                     TeammateRun[]
+  sessions                 TeammateSession[]
+  tasks                    TeammateTask[]
+  channelMemberships       ChannelMember[]
+
+  @@unique([accountId, handle])
+  @@index([accountId, createdAt])
+}
+
+model TeammateThread {
+  id                String            @id @default(cuid())
+  teammateId        String
+  teammate          Teammate          @relation(fields: [teammateId], references: [id], onDelete: Cascade)
+  kind              String
+  channelId         String?
+  channel           Channel?          @relation(fields: [channelId], references: [id], onDelete: SetNull)
+  taskId            String?
+  task              TeammateTask?     @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  providerSessionId String?
+  currentSessionId  String?
+  lastActiveAt      DateTime          @default(now())
+  resetAt           DateTime?
+  runs              TeammateRun[]
+  sessions          TeammateSession[]
+
+  @@unique([teammateId, channelId])
+  @@unique([teammateId, taskId])
+}
+
+model TeammateRun {
+  id            String           @id @default(cuid())
+  teammateId    String
+  teammate      Teammate         @relation(fields: [teammateId], references: [id], onDelete: Cascade)
+  threadId      String
+  thread        TeammateThread   @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  trigger       String
+  eventPayload  Json
+  status        String           @default("queued")
+  dispatchToken String           @unique
+  attempt       Int              @default(1)
+  failureReason String?
+  sessionId     String?
+  taskId        String?
+  task          TeammateTask?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  costUsd       Float?
+  queuedAt      DateTime         @default(now())
+  startedAt     DateTime?
+  finishedAt    DateTime?
+  messages      ChannelMessage[]
+
+  @@index([teammateId, status])
+  @@index([threadId, status])
+  @@index([teammateId, queuedAt])
+}
+
+model TeammateSession {
+  sessionId  String         @id
+  session    Session        @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  teammateId String
+  teammate   Teammate       @relation(fields: [teammateId], references: [id], onDelete: Cascade)
+  threadId   String
+  thread     TeammateThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  role       String
+  taskId     String?
+  task       TeammateTask?  @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  createdAt  DateTime       @default(now())
+
+  @@index([teammateId])
+  @@index([threadId])
+}
+
+model TeammateTask {
+  id                  String            @id @default(cuid())
+  accountId           String
+  account             Account           @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  teammateId          String
+  teammate            Teammate          @relation(fields: [teammateId], references: [id], onDelete: Cascade)
+  source              String
+  resourceId          String?
+  title               String
+  url                 String?
+  status              String            @default("todo")
+  summary             String?
+  prUrl               String?
+  createdByTeammateId String?
+  createdIssue        Boolean           @default(false)
+  createdByThreadId   String?
+  reviewerTeammateId  String?
+  parentTaskId        String?
+  reviewRound         Int               @default(0)
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  threads             TeammateThread[]
+  runs                TeammateRun[]
+  sessions            TeammateSession[]
+  messages            ChannelMessage[]
+
+  @@index([accountId, resourceId])
+  @@index([teammateId, updatedAt])
+  @@index([createdByTeammateId, createdAt])
+  @@index([parentTaskId])
+}
+
+model Channel {
+  id            String           @id @default(cuid())
+  accountId     String
+  account       Account          @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  kind          String
+  title         String?
+  seq           Int              @default(0)
+  lastMessageAt DateTime         @default(now())
+  members       ChannelMember[]
+  messages      ChannelMessage[]
+  threads       TeammateThread[]
+
+  @@index([accountId])
+}
+
+model ChannelMember {
+  id               String    @id @default(cuid())
+  channelId        String
+  channel          Channel   @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  memberType       String
+  accountId        String?
+  account          Account?  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  teammateId       String?
+  teammate         Teammate? @relation(fields: [teammateId], references: [id], onDelete: Cascade)
+  encryptedDataKey Bytes
+  lastReadSeq      Int       @default(0)
+
+  @@unique([channelId, accountId])
+  @@unique([channelId, teammateId])
+}
+
+model ChannelMessage {
+  id         String        @id @default(cuid())
+  channelId  String
+  channel    Channel       @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  seq        Int
+  localId    String?
+  senderType String
+  senderId   String
+  content    Json
+  mentions   String[]      @default([])
+  kind       String        @default("text")
+  taskId     String?
+  task       TeammateTask? @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  runId      String?
+  run        TeammateRun?  @relation(fields: [runId], references: [id], onDelete: SetNull)
+  createdAt  DateTime      @default(now())
+
+  @@unique([channelId, localId])
+  @@unique([channelId, seq])
 }

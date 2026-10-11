@@ -190,7 +190,8 @@ export function rpcHandler(userId: string, socket: Socket, rpcListeners: Map<str
                 const nativeHistory = [':codex-archive-session', ':codex-fork-session', ':codex-duplicate-session']
                     .some(suffix => method.endsWith(suffix));
                 const filePreview = method.endsWith(':openFilePreview') || method.endsWith(':openFileDownload');
-                const response = await targetSocket.timeout(nativeHistory ? 110000 : filePreview ? 60000 : 30000).emitWithAck('rpc-request', {
+                const teammateDraft = method.endsWith(':teammate-draft');
+                const response = await targetSocket.timeout(nativeHistory || teammateDraft ? 110000 : filePreview ? 60000 : 30000).emitWithAck('rpc-request', {
                     method,
                     params
                 });

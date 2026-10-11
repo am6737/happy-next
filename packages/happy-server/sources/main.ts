@@ -12,6 +12,8 @@ import { initEncrypt } from "./modules/encrypt";
 import { initGithub } from "./modules/github";
 import { loadFiles } from "./storage/files";
 import { startMessageDeliveryTimeoutWorker } from "./app/messageDelivery/timeout";
+import { startTeammateRunScheduler } from "./app/teammate/teammateRunScheduler";
+import { startTeammateAutonomyWorker } from './app/teammate/teammateAutonomyWorker';
 import { startOrchestratorScheduler } from "./app/orchestrator/scheduler";
 import { startModelCatalogRefresh } from "./app/modelCatalog/modelCatalogRefresh";
 import { backfillGitHubDisplayNames } from "./app/github/backfillGitHubDisplayNames";
@@ -47,6 +49,8 @@ async function main() {
     startMessageDeliveryTimeoutWorker();
     startScheduledMessageWorker();
     startOrchestratorScheduler();
+    startTeammateRunScheduler();
+    startTeammateAutonomyWorker();
     startModelCatalogRefresh();
 
     //

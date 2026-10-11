@@ -83,6 +83,8 @@ export function updateThinkingState(sessionId: string, thinking: boolean, timest
     thinkingChanged: boolean;
     turnStarted: boolean;
     turnEnded: boolean;
+    /** Only the true→false transition: the agent actually ran a turn (excludes the awaitingTurnStart path). */
+    thinkingEnded: boolean;
     current: SessionTurnState;
 } {
     const state = ensureSessionState(sessionId);
@@ -111,6 +113,7 @@ export function updateThinkingState(sessionId: string, thinking: boolean, timest
         thinkingChanged: previousThinking !== thinking || wasAwaiting,
         turnStarted,
         turnEnded,
+        thinkingEnded: previousThinking && !thinking,
         current: { ...state },
     };
 }

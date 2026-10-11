@@ -104,6 +104,9 @@ const {
     };
 });
 
+const teammateTurnEndedMock = vi.hoisted(() => vi.fn(async (_sessionId: string) => undefined));
+vi.mock("@/app/teammate/teammateOnSessionTurnEnded", () => ({ teammateOnSessionTurnEnded: teammateTurnEndedMock }));
+
 vi.mock("@/storage/db", () => ({
     db: dbMock
 }));
@@ -175,7 +178,7 @@ vi.mock("@/app/session/pendingMessageAutoDispatch", () => ({
 }));
 
 import { sessionUpdateHandler } from "./sessionUpdateHandler";
-import { __resetSessionTurnRuntimeForTests } from "@/app/presence/sessionTurnRuntime";
+import { __resetSessionTurnRuntimeForTests, markDispatched } from "@/app/presence/sessionTurnRuntime";
 
 describe("sessionUpdateHandler message-receipt", () => {
     beforeEach(() => {
@@ -183,6 +186,7 @@ describe("sessionUpdateHandler message-receipt", () => {
         resetState();
         emitEphemeralToSessionSubscribersMock.mockClear();
         dispatchNextPendingIfPossibleMock.mockClear();
+        teammateTurnEndedMock.mockReset();
     });
 
     const createConnection = (socket: any): ClientConnection => ({
@@ -277,6 +281,7 @@ describe("sessionUpdateHandler session-alive auto-dispatch", () => {
         resetState();
         emitEphemeralToSessionSubscribersMock.mockClear();
         dispatchNextPendingIfPossibleMock.mockClear();
+        teammateTurnEndedMock.mockReset();
     });
 
     const createConnection = (socket: any): ClientConnection => ({
@@ -298,6 +303,8 @@ describe("sessionUpdateHandler session-alive auto-dispatch", () => {
         await trigger("session-alive", { sid: "session-1", time: baseTime + 1, thinking: false });
         await trigger("session-alive", { sid: "session-1", time: baseTime + 2, thinking: false });
 
+        expect(teammateTurnEndedMock).toHaveBeenCalledTimes(1);
+        expect(teammateTurnEndedMock).toHaveBeenCalledWith("session-1");
         expect(dispatchNextPendingIfPossibleMock).toHaveBeenCalledTimes(1);
         expect(dispatchNextPendingIfPossibleMock).toHaveBeenCalledWith({
             ownerId: "user-1",
@@ -318,6 +325,35 @@ describe("sessionUpdateHandler session-alive auto-dispatch", () => {
         await trigger("session-alive", { sid: "session-1", time: baseTime + 3, thinking: false });
 
         expect(dispatchNextPendingIfPossibleMock).toHaveBeenCalledTimes(2);
+    });
+
+    it("calls the teammate hook after pending dispatch and contains hook failures", async () => {
+        const operations: string[] = [];
+        dispatchNextPendingIfPossibleMock.mockImplementationOnce(async () => { operations.push("dispatch"); return { dispatched: false }; });
+        teammateTurnEndedMock.mockImplementationOnce(async () => { operations.push("teammate"); throw new Error("runtime unavailable"); });
+        const { socket, trigger } = createSocket();
+        sessionUpdateHandler("user-1", socket, createConnection(socket));
+        const baseTime = Date.now();
+        await trigger("session-alive", { sid: "session-1", time: baseTime, thinking: true });
+        await expect(trigger("session-alive", { sid: "session-1", time: baseTime + 1, thinking: false })).resolves.toBeUndefined();
+        expect(operations).toEqual(["dispatch", "teammate"]);
+        await trigger("session-alive", { sid: "session-1", time: baseTime + 2, thinking: true });
+        await trigger("session-alive", { sid: "session-1", time: baseTime + 3, thinking: false });
+        expect(teammateTurnEndedMock).toHaveBeenCalledTimes(2);
+    });
+
+    it("does not call the teammate hook when an idle heartbeat clears awaitingTurnStart before the turn starts", async () => {
+        state.sessions.push({ id: "session-1", accountId: "user-1" });
+        const { socket, trigger } = createSocket();
+        sessionUpdateHandler("user-1", socket, createConnection(socket));
+        const baseTime = Date.now();
+        markDispatched("session-1");
+        await trigger("session-alive", { sid: "session-1", time: baseTime, thinking: false });
+        expect(dispatchNextPendingIfPossibleMock).toHaveBeenCalledTimes(1);
+        expect(teammateTurnEndedMock).not.toHaveBeenCalled();
+        await trigger("session-alive", { sid: "session-1", time: baseTime + 1, thinking: true });
+        await trigger("session-alive", { sid: "session-1", time: baseTime + 2, thinking: false });
+        expect(teammateTurnEndedMock).toHaveBeenCalledTimes(1);
     });
 
     it("broadcasts activity BEFORE awaiting dispatch so a stale thinking=false does not arrive after a concurrent thinking=true", async () => {
