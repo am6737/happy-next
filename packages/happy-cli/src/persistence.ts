@@ -29,6 +29,7 @@ interface Settings {
   daemonAutoStartWhenRunningHappy?: boolean
   codexResumeCwd?: 'session' | 'current' // CLI-only resume directory preference
   chromeMode?: boolean  // Default Chrome mode setting for Claude
+  remoteShellDisabled?: boolean  // Refuse shell commands sent to this machine's daemon from other machines
 }
 
 const defaultSettings: Settings = {

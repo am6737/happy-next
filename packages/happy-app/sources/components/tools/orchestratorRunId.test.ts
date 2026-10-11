@@ -37,6 +37,11 @@ describe('extractOrchestratorSubmitRunId', () => {
         const tool = createTool({ result: { data: { status: 'running' } } });
         expect(extractOrchestratorSubmitRunId(tool)).toBeNull();
     });
+
+    it('extracts the run a machine_exec call started', () => {
+        const tool = createTool({ name: 'mcp__happy__machine_exec', result: { data: { runId: 'run-exec', terminal: false } } });
+        expect(extractOrchestratorSubmitRunId(tool)).toBe('run-exec');
+    });
 });
 
 describe('getOrchestratorToolNavigationTarget', () => {
@@ -65,6 +70,20 @@ describe('getOrchestratorToolNavigationTarget', () => {
             input: { taskId: 'task-1' },
             result: [{ type: 'text', text: JSON.stringify({ data: { runId: 'run-message' } }) }],
         }))).toEqual({ type: 'run', runId: 'run-message', title: null });
+    });
+
+    it('routes machine_exec to its run, named after the command unless titled', () => {
+        const result = { data: { runId: 'run-exec' } };
+        expect(getOrchestratorToolNavigationTarget(createTool({
+            name: 'mcp__happy__machine_exec',
+            input: { command: '  df -h\nuptime', allOnline: true },
+            result,
+        }))).toEqual({ type: 'run', runId: 'run-exec', title: '$ df -h' });
+        expect(getOrchestratorToolNavigationTarget(createTool({
+            name: 'mcp__happy__machine_exec',
+            input: { command: 'df -h', title: 'Disk check' },
+            result,
+        }))).toEqual({ type: 'run', runId: 'run-exec', title: 'Disk check' });
     });
 
     it('routes list to the orchestrator list', () => {

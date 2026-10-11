@@ -8,13 +8,15 @@ const orchestratorTargetTypeSchema = z.preprocess(
 const orchestratorTaskSchema = z.object({
   taskKey: z.string().min(1).max(128).optional(),
   title: z.string().min(1).max(256).optional(),
-  provider: z.enum(['claude', 'codex', 'gemini', 'qoder'])
-    .describe('AI agent provider to execute the task.'),
+  provider: z.enum(['claude', 'codex', 'gemini', 'qoder', 'shell'])
+    .describe('AI agent provider to execute the task, or "shell" to run `prompt` as a shell command on the target machine (no AI; exit code 0 = completed).'),
   model: z.string().min(1).max(128).optional()
     .describe('Model mode for this provider; prefer orchestrator_get_context.data.modelModes[provider]. Use "default" for CLI default. Codex only: append "-fast" (e.g. "gpt-5.5-high-fast") to run in fast mode, which uses more quota — off unless the user asks for it.'),
   prompt: z.string().min(1).max(65536),
   workingDirectory: z.string().max(512).optional()
     .describe('Absolute path for task execution. Defaults to the controller session working directory from get_context.'),
+  timeoutMs: z.number().int().min(1000).max(2 ** 31 - 1).optional()
+    .describe('Stop the task after this long. AI tasks: at most 24h, the default. Shell tasks: no timeout when omitted.'),
   dependsOn: z.array(z.string().min(1).max(128)).max(31).optional()
     .describe('Prerequisite taskKeys, not taskIds. Ordering only; no output/context is passed.'),
   retry: z.object({
@@ -50,6 +52,28 @@ export const ORCHESTRATOR_SUBMIT_TOOL_SCHEMA = {
   },
 } as const;
 
+export const MACHINE_EXEC_TOOL_SCHEMA = {
+  description: 'Run a shell command directly (no AI) on one or more online machines of this account and get each one\'s exitCode, stdout and stderr. Waits up to waitMs; a command still running then keeps running, and its result arrives as <orchestrator-callback> (fetch it with orchestrator_pend). Non-zero exit = failed. No stdin: interactive commands fail. Ask the user before destructive commands.',
+  title: 'Machine Exec',
+  inputSchema: {
+    command: z.string().min(1).max(65536)
+      .describe('Runs as `$SHELL -lc <command>` (PowerShell -Command on Windows): see get_context machines[].shell and platform.'),
+    machineIds: z.array(z.string().min(1).max(128)).min(1).max(32).optional()
+      .describe('Target machineIds from orchestrator_get_context (with shellReady: true). Omit with allOnline.'),
+    allOnline: z.boolean().optional()
+      .describe('true: run on every online machine with shellReady instead of machineIds.'),
+    cwd: z.string().max(512).optional()
+      .describe('Working directory on each target; "~" expands. Defaults to the home directory.'),
+    timeoutMs: z.number().int().min(1000).max(2 ** 31 - 1).optional()
+      .describe('Kill the command (and everything it started) after this long. Omit for no timeout.'),
+    waitMs: z.number().int().min(0).max(50_000).optional()
+      .describe('How long this call waits for the result. Default 30000; 0 returns the runId at once.'),
+    maxConcurrency: z.number().int().min(1).max(32).optional()
+      .describe('Machines running the command at once. Default: all.'),
+    title: z.string().min(1).max(256).optional(),
+  },
+} as const;
+
 export const ORCHESTRATOR_PEND_TOOL_SCHEMA = {
   description: 'Fetch dispatch status/results. Do not poll after submit; wait for <orchestrator-callback>, then call once with include="all_tasks" and timeoutMs=0. Call earlier only on resume, missing callback, or user-requested progress.',
   title: 'Orchestrator Pend',
@@ -61,6 +85,8 @@ export const ORCHESTRATOR_PEND_TOOL_SCHEMA = {
       .describe('Total wait timeout in ms. Defaults to 10 minutes when omitted.'),
     include: z.enum(['summary', 'all_tasks']).optional()
       .describe('"summary" returns run-level status only; "all_tasks" includes per-task details.'),
+    taskId: z.string().optional()
+      .describe('Return only this task, with its full shell output (results with several shell tasks keep the last 4000 characters of each one\'s output).'),
   },
 } as const;
 

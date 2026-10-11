@@ -270,6 +270,10 @@ export const en = {
         orchestratorResultTitle: 'Result',
         orchestratorLatestMessageTitle: 'Latest message',
         orchestratorLastMessageTitle: 'Last message',
+        orchestratorStdoutTitle: 'Output (stdout)',
+        orchestratorStderrTitle: 'Errors (stderr)',
+        orchestratorShellRunningHint: 'The output appears once the command ends.',
+        orchestratorExecStillRunning: 'Some machines were still running when this call returned. Open the run for their output.',
         orchestratorExecutionHistoryTitle: 'Retry / Execution History',
         orchestratorNoExecutions: 'No execution records yet.',
 
@@ -287,6 +291,7 @@ export const en = {
         orchestratorLabelNextAttempt: 'Next Attempt At',
         orchestratorLabelOutputSummary: 'Output Summary',
         orchestratorLabelPrompt: 'Prompt',
+        orchestratorLabelCommand: 'Command',
         orchestratorLabelErrorCode: 'Error Code',
         orchestratorLabelErrorMessage: 'Error Message',
         orchestratorLabelStarted: 'Started',

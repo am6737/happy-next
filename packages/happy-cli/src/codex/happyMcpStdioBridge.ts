@@ -20,6 +20,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import { z } from 'zod';
 import { shouldEnableOrchestratorTools } from '@/orchestrator/prompt';
 import {
+  MACHINE_EXEC_TOOL_SCHEMA,
   ORCHESTRATOR_CANCEL_TOOL_SCHEMA,
   ORCHESTRATOR_GET_CONTEXT_TOOL_SCHEMA,
   ORCHESTRATOR_LIST_TOOL_SCHEMA,
@@ -117,6 +118,7 @@ async function main() {
 
     registerForwardedTool('orchestrator_get_context', ORCHESTRATOR_GET_CONTEXT_TOOL_SCHEMA);
     registerForwardedTool('orchestrator_submit', ORCHESTRATOR_SUBMIT_TOOL_SCHEMA);
+    registerForwardedTool('machine_exec', MACHINE_EXEC_TOOL_SCHEMA);
     registerForwardedTool('orchestrator_pend', ORCHESTRATOR_PEND_TOOL_SCHEMA);
     registerForwardedTool('orchestrator_list', ORCHESTRATOR_LIST_TOOL_SCHEMA);
     registerForwardedTool('orchestrator_cancel', ORCHESTRATOR_CANCEL_TOOL_SCHEMA);

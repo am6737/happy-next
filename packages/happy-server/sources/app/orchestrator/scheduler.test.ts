@@ -23,6 +23,7 @@ const {
     const dbMock = {
         orchestratorRun: {
             findMany: vi.fn(async () => []),
+            findUnique: vi.fn(async () => null),
         },
         $transaction: vi.fn(async (fn: any) => {
             const tx = {

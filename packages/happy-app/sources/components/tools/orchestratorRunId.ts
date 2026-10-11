@@ -27,9 +27,16 @@ function extractRunIdFromResult(result: unknown): string | null {
     );
 }
 
+// Tools whose call starts a run, which may still be going once the call has returned
+const RUN_STARTING_TOOL_NAMES = new Set(['orchestrator_submit', 'machine_exec']);
+
 function extractRunTitle(tool: ToolCall): string | null {
     const parsed = parseMcpResult(tool.result);
     const obj = parsed && typeof parsed === 'object' ? parsed as Record<string, any> : null;
+    // An untitled machine_exec run is named after its command's first line, as the server names it
+    const command = normalizeOrchestratorToolName(tool.name) === 'machine_exec'
+        ? asString(tool.input?.command)?.trim().split('\n')[0]
+        : null;
 
     return (
         asString(tool.input?.title)
@@ -37,7 +44,7 @@ function extractRunTitle(tool: ToolCall): string | null {
         ?? asString(obj?.data?.title)
         ?? asString(obj?.run?.title)
         ?? asString(obj?.data?.run?.title)
-        ?? null
+        ?? (command ? `$ ${command}` : null)
     );
 }
 
@@ -53,7 +60,7 @@ export function getOrchestratorToolNavigationTarget(tool: ToolCall): Orchestrato
     }
 
     let runId: string | null = null;
-    if (toolName === 'orchestrator_submit' || toolName === 'orchestrator_send_message') {
+    if (RUN_STARTING_TOOL_NAMES.has(toolName) || toolName === 'orchestrator_send_message') {
         runId = extractRunIdFromResult(tool.result);
     } else if (toolName === 'orchestrator_pend' || toolName === 'orchestrator_cancel') {
         runId = asString(tool.input?.runId);
@@ -72,8 +79,9 @@ export function getOrchestratorToolNavigationTarget(tool: ToolCall): Orchestrato
     };
 }
 
+/** The run an `orchestrator_submit` or `machine_exec` call started, or null for any other call. */
 export function extractOrchestratorSubmitRunId(tool: ToolCall): string | null {
-    if (normalizeOrchestratorToolName(tool.name) !== 'orchestrator_submit') {
+    if (!RUN_STARTING_TOOL_NAMES.has(normalizeOrchestratorToolName(tool.name))) {
         return null;
     }
     return extractRunIdFromResult(tool.result);

@@ -15,6 +15,7 @@ import { OrchestratorProgressBar } from '@/components/orchestrator/OrchestratorP
 import { OrchestratorDuration } from '@/components/orchestrator/OrchestratorDuration';
 import {
     formatOrchestratorProviderLabel,
+    resolveOrchestratorTaskName,
     resolveTaskMachineId,
     resolveMachineName,
     resolveOrchestratorAttemptDisplay,
@@ -377,7 +378,7 @@ export default function OrchestratorRunDetailScreen() {
                         >
                             <View style={styles.taskHeader}>
                                 <Text style={styles.taskTitle} numberOfLines={1}>
-                                    #{task.seq} {task.title || task.taskKey || t('settings.orchestratorProviderTask', { provider: task.provider })}
+                                    #{task.seq} {resolveOrchestratorTaskName(task) ?? t('settings.orchestratorProviderTask', { provider: task.provider })}
                                 </Text>
                                 <OrchestratorStatusBadge status={task.status} />
                             </View>

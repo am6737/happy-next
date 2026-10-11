@@ -18,6 +18,19 @@ export type OrchestratorDispatchPayload = {
   workingDirectory?: string;
 };
 
+/** A shell task: `prompt` is the command, run by the daemon itself rather than by an agent */
+export type OrchestratorShellDispatchPayload = {
+  executionId: string;
+  runId: string;
+  taskId: string;
+  dispatchToken: string;
+  provider: 'shell';
+  prompt: string;
+  /** Null: no timeout, the command runs until it exits or is cancelled */
+  timeoutMs: number | null;
+  workingDirectory?: string;
+};
+
 export type OrchestratorCancelPayload = {
   executionId: string;
   runId: string;
@@ -152,6 +165,25 @@ export function buildOutputSummary(stdout: string, stderr: string, maxChars: num
  * progress logs go to stderr, so they are only attached (as a short tail) when the run did not
  * complete or printed nothing, to explain what went wrong.
  */
+// What a result covering several shell tasks (machines) keeps of each one's output
+export const SHELL_OUTPUT_TAIL_CHARS = 4_000;
+
+/**
+ * Cut the given output fields of a shell task to their last `SHELL_OUTPUT_TAIL_CHARS`, for
+ * results that cover several machines: one call must not flood the context.
+ * `orchestrator_pend` with `taskId` returns a task's output in full.
+ */
+export function tailShellOutputFields<T extends Record<string, unknown>>(task: T, fields: readonly string[]): T {
+  const tailed: Record<string, unknown> = { ...task };
+  for (const field of fields) {
+    const value = task[field];
+    if (typeof value === 'string' && value.length > SHELL_OUTPUT_TAIL_CHARS) {
+      tailed[field] = `[... ${value.length - SHELL_OUTPUT_TAIL_CHARS} earlier characters omitted; orchestrator_pend with taskId returns all of it ...]\n${value.slice(-SHELL_OUTPUT_TAIL_CHARS)}`;
+    }
+  }
+  return tailed as T;
+}
+
 export function buildExecutionOutputText(opts: { status: string; stdout: string; stderr: string }): string {
   const stdout = opts.stdout.trim();
   if (opts.status === 'completed' && stdout) {

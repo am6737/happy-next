@@ -26,6 +26,8 @@ class Configuration {
 
   public readonly isExperimentalEnabled: boolean
   public readonly disableCaffeinate: boolean
+  // Stop the daemon from running shell commands sent from other machines (also `remoteShellDisabled` in settings.json)
+  public readonly disableRemoteShell: boolean
 
   constructor() {
     // Server configuration - priority: parameter > environment > default
@@ -53,6 +55,7 @@ class Configuration {
 
     this.isExperimentalEnabled = ['true', '1', 'yes'].includes(process.env.HAPPY_EXPERIMENTAL?.toLowerCase() || '');
     this.disableCaffeinate = ['true', '1', 'yes'].includes(process.env.HAPPY_DISABLE_CAFFEINATE?.toLowerCase() || '');
+    this.disableRemoteShell = ['true', '1', 'yes'].includes(process.env.HAPPY_DISABLE_REMOTE_SHELL?.toLowerCase() || '');
 
     this.currentCliVersion = packageJson.version
 

@@ -17,7 +17,7 @@ import packageJson from '../../package.json';
 import { getEnvironmentInfo } from '@/ui/doctor';
 import { spawnHappyCLI } from '@/utils/spawnHappyCLI';
 import { isDebug } from '@/utils/env';
-import { writeDaemonState, DaemonLocallyPersistedState, readDaemonState, acquireDaemonLock, releaseDaemonLock } from '@/persistence';
+import { writeDaemonState, DaemonLocallyPersistedState, readDaemonState, acquireDaemonLock, releaseDaemonLock, readSettings } from '@/persistence';
 
 import { cleanupDaemonState, isDaemonRunningCurrentlyInstalledHappyVersion, stopDaemon } from './controlClient';
 import { startDaemonControlServer } from './controlServer';
@@ -38,10 +38,12 @@ import {
   type OrchestratorFinishStatus,
 } from '@/orchestrator/common';
 import { extractCodexSessionId, extractGeminiSessionId, extractGeminiSessionIdFromJsonLine, normalizeGeminiOutputText } from './orchestratorOutput';
+import { createOrchestratorShellExecutor, reportWithRetry } from './orchestratorShell';
 
 const ORCHESTRATOR_WATCHDOG_GRACE_MS = 5_000;
 const ORCHESTRATOR_OUTPUT_CAPTURE_LIMIT = 64_000;
 const ORCHESTRATOR_SHUTDOWN_WAIT_MS = 8_000;
+const ORCHESTRATOR_RECONCILE_DEADLINE_MS = 5 * 60_000;
 
 // Prepare initial metadata
 export const initialMachineMetadata: MachineMetadata = {
@@ -153,6 +155,10 @@ export async function startDaemon(): Promise<void> {
     const { credentials, machineId } = await authAndSetupMachineIfNeeded();
     logger.debug('[DAEMON RUN] Auth and machine setup complete');
     let api!: ApiClient;
+    let shellExecutor: ReturnType<typeof createOrchestratorShellExecutor> | null = null;
+    // Every execution this daemon starts starts after this, on the same clock: the server fails
+    // the ones that started before and that this daemon is not running
+    const daemonStartedAt = new Date().toISOString();
 
     // Setup state - key by PID
     const pidToTrackedSession = new Map<number, TrackedSession>();
@@ -426,7 +432,7 @@ export async function startDaemon(): Promise<void> {
     const handleOrchestratorCancel = async (payload: OrchestratorCancelPayload): Promise<{ accepted: boolean; notFound?: boolean }> => {
       const execution = executionIdToManagedExecution.get(payload.executionId);
       if (!execution) {
-        return { accepted: true, notFound: true };
+        return shellExecutor?.cancel(payload) ?? { accepted: true, notFound: true };
       }
       if (execution.payload.dispatchToken !== payload.dispatchToken) {
         throw new Error(`dispatchToken mismatch for execution ${payload.executionId}`);
@@ -1030,6 +1036,11 @@ export async function startDaemon(): Promise<void> {
     // Create API client
     api = await ApiClient.create(credentials);
 
+    // Shell commands sent from other machines run unless turned off here
+    const remoteShellDisabled = configuration.disableRemoteShell || (await readSettings()).remoteShellDisabled === true;
+    shellExecutor = remoteShellDisabled ? null : createOrchestratorShellExecutor(api);
+    logger.debug(`[DAEMON RUN] Remote shell ${remoteShellDisabled ? 'disabled' : 'enabled'}`);
+
     // Get or create machine
     const machine = await api.getOrCreateMachine({
       machineId,
@@ -1048,6 +1059,12 @@ export async function startDaemon(): Promise<void> {
       requestShutdown: () => requestShutdown('happy-app'),
       orchestratorDispatch: handleOrchestratorDispatch,
       orchestratorCancel: handleOrchestratorCancel,
+      orchestratorShellDispatch: shellExecutor?.dispatch,
+      orchestratorReconcile: () => reportWithRetry('orchestrator reconcile', () => api.reconcileOrchestratorMachine({
+        machineId: machine.id,
+        liveExecutionIds: [...executionIdToManagedExecution.keys(), ...(shellExecutor?.liveExecutionIds() ?? [])],
+        daemonStartedAt,
+      }), Date.now() + ORCHESTRATOR_RECONCILE_DEADLINE_MS),
     });
 
     // Connect to server
@@ -1183,7 +1200,7 @@ export async function startDaemon(): Promise<void> {
       // Give time for metadata update to send
       await new Promise(resolve => setTimeout(resolve, 100));
 
-      await stopAllOrchestratorExecutions();
+      await Promise.all([stopAllOrchestratorExecutions(), shellExecutor?.stopAll()]);
 
       apiMachine.shutdown();
       await stopControlServer();

@@ -7,6 +7,8 @@ import {
   buildOutputSummary,
   decodePromptFromBase64,
   mapFinishStatus,
+  SHELL_OUTPUT_TAIL_CHARS,
+  tailShellOutputFields,
   type OrchestratorDispatchPayload,
 } from './common';
 
@@ -108,5 +110,15 @@ describe('orchestrator common helpers', () => {
       { prompt: 'remote-task', target: { type: 'machine_id', machineId: 'machine-B' } },
       { prompt: 'remote-with-dir', target: { type: 'machine_id', machineId: 'machine-B' }, workingDirectory: '/remote/path' },
     ]);
+  });
+
+  it('keeps the tail of long shell output fields only', () => {
+    const long = `head${'x'.repeat(SHELL_OUTPUT_TAIL_CHARS)}tail`;
+    const tailed = tailShellOutputFields({ taskId: 't1', stdout: long, stderr: 'short', exitCode: 1 }, ['stdout', 'stderr']);
+
+    expect(tailed.stdout).toMatch(/^\[\.\.\. 8 earlier characters omitted; orchestrator_pend with taskId returns all of it \.\.\.\]\n/);
+    expect(tailed.stdout.endsWith('tail')).toBe(true);
+    expect(tailed.stdout).not.toContain('head');
+    expect(tailed).toMatchObject({ taskId: 't1', stderr: 'short', exitCode: 1 });
   });
 });

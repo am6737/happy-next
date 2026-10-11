@@ -349,6 +349,7 @@ export class ApiClient {
     signal?: string | null;
     outputSummary?: string | null;
     outputText?: string | null;
+    stderrText?: string | null;
     errorCode?: string | null;
     errorMessage?: string | null;
   }): Promise<void> {
@@ -363,8 +364,35 @@ export class ApiClient {
         ...(opts.signal !== undefined ? { signal: opts.signal } : {}),
         ...(opts.outputSummary !== undefined ? { outputSummary: opts.outputSummary } : {}),
         ...(opts.outputText !== undefined ? { outputText: opts.outputText } : {}),
+        ...(opts.stderrText !== undefined ? { stderrText: opts.stderrText } : {}),
         ...(opts.errorCode !== undefined ? { errorCode: opts.errorCode } : {}),
         ...(opts.errorMessage !== undefined ? { errorMessage: opts.errorMessage } : {}),
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${this.credential.token}`,
+          'Content-Type': 'application/json'
+        },
+        timeout: 30000,
+      }
+    );
+  }
+
+  /**
+   * Tell the server which orchestrator executions this daemon is running (daemon -> server), on
+   * each connect. The server fails the ones it thinks are running here that started before this
+   * daemon did: their results were lost with the daemon that ran them.
+   */
+  async reconcileOrchestratorMachine(opts: {
+    machineId: string;
+    liveExecutionIds: string[];
+    daemonStartedAt: string;
+  }): Promise<void> {
+    await axios.post(
+      `${configuration.serverUrl}/v1/orchestrator/machines/${encodeURIComponent(opts.machineId)}/reconcile`,
+      {
+        liveExecutionIds: opts.liveExecutionIds,
+        daemonStartedAt: opts.daemonStartedAt,
       },
       {
         headers: {

@@ -1,12 +1,14 @@
 import * as React from 'react';
 import { pickLatestAssistantMessage } from '@/components/orchestrator/display';
+import type { OrchestratorProvider } from '@/sync/apiOrchestrator';
 import { machineGetClaudeSessionPreview, machineGetCodexSessionPreview, machineGetGeminiSessionPreview, type SessionPreviewMessage } from '@/sync/ops';
 
 const LIVE_MESSAGE_POLL_INTERVAL_MS = 3000;
 // Only the tail of the conversation is needed to find the latest assistant message.
 const LIVE_MESSAGE_PREVIEW_LIMIT = 10;
 
-type Provider = 'claude' | 'codex' | 'gemini' | 'qoder';
+// A shell task has no conversation to follow
+type Provider = Exclude<OrchestratorProvider, 'shell'>;
 
 async function fetchPreviewMessages(machineId: string, provider: Provider, childSessionId: string): Promise<SessionPreviewMessage[]> {
     const options = { limit: LIVE_MESSAGE_PREVIEW_LIMIT };

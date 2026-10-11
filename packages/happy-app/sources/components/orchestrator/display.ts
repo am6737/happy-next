@@ -6,8 +6,18 @@ function isMarkdownFenceLine(value: string): boolean {
 }
 
 export function formatOrchestratorProviderLabel(task: Pick<OrchestratorTaskRecord, 'provider' | 'model'>): string {
+    // A shell command runs on no model
+    if (task.provider === 'shell') {
+        return task.provider;
+    }
     const model = task.model?.trim() || MODEL_MODE_DEFAULT;
     return `${task.provider} · ${model}`;
+}
+
+/** What a task is called: its title or key, else for a shell task the first line of its command. */
+export function resolveOrchestratorTaskName(task: Pick<OrchestratorTaskRecord, 'title' | 'taskKey' | 'provider' | 'prompt'>): string | null {
+    const command = task.provider === 'shell' ? task.prompt?.trim().split('\n')[0] : undefined;
+    return task.title || task.taskKey || (command ? `$ ${command}` : null);
 }
 
 export function resolveOrchestratorAttemptDisplay(task: Pick<OrchestratorTaskRecord, 'retry' | 'executions'>): { current: number; max: number; } {

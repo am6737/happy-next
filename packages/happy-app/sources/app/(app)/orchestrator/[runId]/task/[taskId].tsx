@@ -7,7 +7,7 @@ import { Text } from '@/components/StyledText';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { layout } from '@/components/layout';
 import { useAuth } from '@/auth/AuthContext';
-import { getOrchestratorTask, type OrchestratorExecutionRecord, type OrchestratorTaskDetail, type OrchestratorTaskRecord } from '@/sync/apiOrchestrator';
+import { getOrchestratorTask, type OrchestratorExecutionRecord, type OrchestratorProvider, type OrchestratorTaskDetail, type OrchestratorTaskRecord } from '@/sync/apiOrchestrator';
 import { OrchestratorStatusBadge } from '@/components/orchestrator/OrchestratorStatusBadge';
 import { OrchestratorDuration } from '@/components/orchestrator/OrchestratorDuration';
 import {
@@ -16,6 +16,7 @@ import {
     resolveMachineName,
     resolveExecutionDurationMs,
     resolveOrchestratorExecutionPrompt,
+    resolveOrchestratorTaskName,
     sanitizeOrchestratorOutputSummary,
     sortOrchestratorExecutionsByAttemptDesc,
 } from '@/components/orchestrator/display';
@@ -153,20 +154,52 @@ const stylesheet = StyleSheet.create((theme) => ({
 }));
 
 function buildTaskTitle(task: OrchestratorTaskRecord): string {
-    return task.title || task.taskKey || t('settings.orchestratorProviderTask', { provider: task.provider });
+    return resolveOrchestratorTaskName(task) ?? t('settings.orchestratorProviderTask', { provider: task.provider });
+}
+
+function ExecutionResult({ execution }: { execution: OrchestratorExecutionRecord; }) {
+    return execution.provider === 'shell'
+        ? <ShellExecutionResult execution={execution} />
+        : <AgentExecutionResult execution={execution} provider={execution.provider} />;
 }
 
 /**
- * The result of one execution. A finished one shows the output the daemon stored (the provider's
+ * The result of one shell command: its stdout and stderr apart. The daemon reports both once the
+ * command ends, so a running one has nothing to show yet.
+ */
+function ShellExecutionResult({ execution }: { execution: OrchestratorExecutionRecord; }) {
+    const styles = stylesheet;
+    if (execution.status === 'running') {
+        return (
+            <>
+                <Text style={styles.detailLabel}>{t('settings.orchestratorResultTitle')}</Text>
+                <Text style={styles.row}>{t('settings.orchestratorShellRunningHint')}</Text>
+            </>
+        );
+    }
+    return (
+        <>
+            {!!execution.errorCode && <Text style={styles.row}>{t('settings.orchestratorLabelErrorCode')}: {execution.errorCode}</Text>}
+            {!!execution.errorMessage && <Text style={styles.row}>{t('settings.orchestratorLabelErrorMessage')}: {execution.errorMessage}</Text>}
+            <Text style={styles.detailLabel}>{t('settings.orchestratorStdoutTitle')}</Text>
+            <Text style={styles.monoText} selectable>{execution.outputText || '-'}</Text>
+            <Text style={styles.detailLabel}>{t('settings.orchestratorStderrTitle')}</Text>
+            <Text style={styles.monoText} selectable>{execution.stderrText || '-'}</Text>
+        </>
+    );
+}
+
+/**
+ * The result of one AI execution. A finished one shows the output the daemon stored (the provider's
  * final message). A running one is only mounted while its card is expanded, so following its
  * conversation starts on expand and stops on collapse.
  */
-function ExecutionResult({ execution }: { execution: OrchestratorExecutionRecord; }) {
+function AgentExecutionResult({ execution, provider }: { execution: OrchestratorExecutionRecord; provider: Exclude<OrchestratorProvider, 'shell'>; }) {
     const styles = stylesheet;
     const isRunning = execution.status === 'running';
     const liveMessage = useOrchestratorLiveMessage({
         machineId: execution.machineId,
-        provider: execution.provider,
+        provider,
         childSessionId: execution.childSessionId,
         enabled: isRunning,
     });
@@ -272,6 +305,7 @@ export default function OrchestratorTaskDetailScreen() {
     }
 
     const providerLabel = formatOrchestratorProviderLabel(task);
+    const promptLabel = task.provider === 'shell' ? t('settings.orchestratorLabelCommand') : t('settings.orchestratorLabelPrompt');
     const executionSections: Array<{
         key: string;
         execution: OrchestratorExecutionRecord | null;
@@ -406,7 +440,7 @@ export default function OrchestratorTaskDetailScreen() {
                         return (
                             <View style={[styles.card, styles.executionDetailsCard]}>
                                 <View style={styles.executionDetails}>
-                                    <Text style={[styles.detailLabel, { marginTop: 0 }]}>{t('settings.orchestratorLabelPrompt')}</Text>
+                                    <Text style={[styles.detailLabel, { marginTop: 0 }]}>{promptLabel}</Text>
                                     <Text style={styles.monoText} selectable>{task.prompt || '-'}</Text>
                                 </View>
                             </View>
@@ -428,7 +462,7 @@ export default function OrchestratorTaskDetailScreen() {
                                 <Text style={styles.row}>{t('settings.orchestratorLabelExitCode')}: {execution.exitCode ?? '-'}</Text>
                                 {!!execution.signal && <Text style={styles.row}>{t('settings.orchestratorLabelSignal')}: {execution.signal}</Text>}
 
-                                <Text style={styles.detailLabel}>{t('settings.orchestratorLabelPrompt')}</Text>
+                                <Text style={styles.detailLabel}>{promptLabel}</Text>
                                 <Text style={styles.monoText} selectable>{executionPrompt || '-'}</Text>
 
                                 <ExecutionResult execution={execution} />

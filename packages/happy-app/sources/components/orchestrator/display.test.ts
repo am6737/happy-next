@@ -8,6 +8,7 @@ import {
     resolveOrchestratorAttemptDisplay,
     resolveOrchestratorExecutionPrompt,
     resolveOrchestratorSummaryLineData,
+    resolveOrchestratorTaskName,
     resolveRunDurationMs,
     resolveTaskDurationMs,
     sanitizeOrchestratorOutputSummary,
@@ -19,6 +20,16 @@ describe('orchestrator display helpers', () => {
     it('appends model after provider when model exists', () => {
         expect(formatOrchestratorProviderLabel({ provider: 'codex', model: 'gpt-5.3-codex-medium' })).toBe('codex · gpt-5.3-codex-medium');
         expect(formatOrchestratorProviderLabel({ provider: 'claude', model: null })).toBe('claude · default');
+    });
+
+    it('labels a shell task without a model', () => {
+        expect(formatOrchestratorProviderLabel({ provider: 'shell', model: null })).toBe('shell');
+    });
+
+    it('names an untitled shell task after its command, and other untitled tasks not at all', () => {
+        expect(resolveOrchestratorTaskName({ provider: 'shell', title: null, taskKey: null, prompt: '  df -h\nuptime' })).toBe('$ df -h');
+        expect(resolveOrchestratorTaskName({ provider: 'shell', title: null, taskKey: 'disk', prompt: 'df -h' })).toBe('disk');
+        expect(resolveOrchestratorTaskName({ provider: 'claude', title: null, taskKey: null, prompt: 'Fix the bug' })).toBeNull();
     });
 
     it('keeps attempt denominator at least current executions', () => {

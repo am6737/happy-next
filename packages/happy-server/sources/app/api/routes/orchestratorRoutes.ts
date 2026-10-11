@@ -4,14 +4,8 @@ import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { delay } from "@/utils/delay";
 import { warn } from "@/utils/log";
-import {
-    eventRouter,
-    buildOrchestratorRunTerminalEphemeral,
-} from "@/app/events/eventRouter";
+import { eventRouter } from "@/app/events/eventRouter";
 import { listConnectedUserRpcMethods, invokeUserRpc, hasUserRpcMethod } from "@/app/api/socket/rpcRegistry";
-import { inTx } from "@/storage/inTx";
-import { feedPost } from "@/app/feed/feedPost";
-import { Context } from "@/context";
 import { randomUUID } from "node:crypto";
 import {
     MODEL_MODE_DEFAULT,
@@ -35,13 +29,16 @@ import {
 import {
     countOrchestratorSessionRuns,
     emitOrchestratorRunActivity,
-    orchestratorRunCallbackSessionIds,
     queryOrchestratorActivityBatch,
     queryOrchestratorSessionActivity,
     runsOfSessionWhere,
 } from "@/app/orchestrator/sessions";
+import { awaitOrchestratorRunTerminal, notifyOrchestratorRunTerminal } from "@/app/orchestrator/terminal";
+import { orchestratorMachineReconcile } from "@/app/orchestrator/reconcile";
 
-const PROVIDERS = ['claude', 'codex', 'gemini', 'qoder'] as const;
+const AI_PROVIDERS = ['claude', 'codex', 'gemini', 'qoder'] as const;
+// A shell task runs its prompt as a command on the target machine, with no AI and no session
+const PROVIDERS = [...AI_PROVIDERS, 'shell'] as const;
 const RUN_STATUSES = ['queued', 'running', 'canceling', 'completed', 'failed', 'cancelled'] as const;
 const EXECUTION_FINAL_STATUSES = ['completed', 'failed', 'cancelled', 'timeout'] as const;
 const LIST_RUN_STATUS_FILTERS = ['active', 'terminal', ...RUN_STATUSES] as const;
@@ -60,8 +57,19 @@ const DEFAULT_CONTEXT_POLL_INTERVAL_MS = 30_000;
 const DEFAULT_CONTEXT_RETRY_MAX_ATTEMPTS = 1;
 const DEFAULT_CONTEXT_RETRY_BACKOFF_MS = 0;
 const PEND_POLL_INTERVAL_MS = 3000;
+const AI_TASK_MAX_TIMEOUT_MS = 24 * 60 * 60 * 1000;
+// The largest delay a timer takes (and what the Int column holds): a shell task's longest timeout
+const SHELL_TASK_MAX_TIMEOUT_MS = 2 ** 31 - 1;
+const AI_RUN_MAX_CONCURRENCY = 8;
+const SHELL_RUN_MAX_CONCURRENCY = 32;
+const RUN_MAX_TASKS = 32;
+const EXEC_DEFAULT_WAIT_MS = 30_000;
+// Below the 60s an MCP client waits for a tool call, so the caller is still there for the result
+const EXEC_MAX_WAIT_MS = 50_000;
+const SHELL_DISPATCH_METHOD_SUFFIX = ':orchestrator-shell-dispatch';
+const EXEC_TITLE_COMMAND_MAX_LENGTH = 120;
 
-type ProviderName = typeof PROVIDERS[number];
+type ProviderName = typeof AI_PROVIDERS[number];
 
 type BashRpcResponse = {
     success: boolean;
@@ -72,16 +80,24 @@ type BashRpcResponse = {
 
 const MACHINE_IDENTITY_TIMEOUT_MS = 5_000;
 
-async function fetchMachineNames(
+type MachineIdentity = {
+    name?: string;
+    /** `os.platform()` of the machine, so a caller knows which shell syntax its commands need */
+    platform?: string;
+    /** The shell that runs shell tasks there */
+    shell?: string;
+};
+
+async function fetchMachineIdentities(
     userId: string,
     machineIds: string[],
-): Promise<Map<string, string>> {
-    const result = new Map<string, string>();
+): Promise<Map<string, MachineIdentity>> {
+    const result = new Map<string, MachineIdentity>();
     if (machineIds.length === 0) {
         return result;
     }
 
-    const promises = machineIds.map(async (machineId): Promise<[string, string | null]> => {
+    const promises = machineIds.map(async (machineId): Promise<[string, MachineIdentity | null]> => {
         if (!hasUserRpcMethod(userId, `${machineId}:machine-identity`)) {
             return [machineId, null];
         }
@@ -91,9 +107,12 @@ async function fetchMachineNames(
                 `${machineId}:machine-identity`,
                 {},
                 MACHINE_IDENTITY_TIMEOUT_MS,
-            ) as { name?: unknown } | null;
-            const name = typeof response?.name === 'string' ? response.name : null;
-            return [machineId, name];
+            ) as { name?: unknown; platform?: unknown; shell?: unknown } | null;
+            return [machineId, {
+                ...(typeof response?.name === 'string' ? { name: response.name } : {}),
+                ...(typeof response?.platform === 'string' ? { platform: response.platform } : {}),
+                ...(typeof response?.shell === 'string' ? { shell: response.shell } : {}),
+            }];
         } catch {
             return [machineId, null];
         }
@@ -106,6 +125,13 @@ async function fetchMachineNames(
         }
     }
     return result;
+}
+
+/** The machines that take shell tasks right now: connected, with remote shell turned on. */
+function listShellReadyMachineIds(userId: string): string[] {
+    return listConnectedUserRpcMethods(userId)
+        .filter((method) => method.endsWith(SHELL_DISPATCH_METHOD_SUFFIX))
+        .map((method) => method.slice(0, -SHELL_DISPATCH_METHOD_SUFFIX.length));
 }
 
 type DetectionResult = {
@@ -157,12 +183,12 @@ async function detectMachineProviders(
                     if (valueRaw) hostname = valueRaw;
                     continue;
                 }
-                if (!PROVIDERS.includes(keyRaw as ProviderName)) continue;
+                if (!AI_PROVIDERS.includes(keyRaw as ProviderName)) continue;
                 if (!valueRaw) continue;
                 statusByProvider.set(keyRaw as ProviderName, valueRaw === 'true');
             }
 
-            const providers = PROVIDERS.filter((provider) => statusByProvider.get(provider) === true);
+            const providers = AI_PROVIDERS.filter((provider) => statusByProvider.get(provider) === true);
             return [machineId, { providers, hostname }];
         } catch {
             return [machineId, { providers: [] }];
@@ -186,8 +212,8 @@ const submitTaskSchema = z.object({
     model: z.string().min(1).max(128).optional(),
     prompt: z.string().min(1).max(65536),
     workingDirectory: z.string().max(512).optional(),
-    timeoutMs: z.coerce.number().int().min(1000).max(24 * 60 * 60 * 1000).optional(),
-    dependsOn: z.array(z.string().min(1).max(128)).max(31).optional(),
+    timeoutMs: z.coerce.number().int().min(1000).max(SHELL_TASK_MAX_TIMEOUT_MS).optional(),
+    dependsOn: z.array(z.string().min(1).max(128)).max(RUN_MAX_TASKS - 1).optional(),
     retry: z.object({
         maxAttempts: z.coerce.number().int().min(1).max(10).optional(),
         backoffMs: z.coerce.number().int().min(0).max(24 * 60 * 60 * 1000).optional(),
@@ -205,19 +231,41 @@ const submitTaskSchema = z.object({
 }, {
     message: 'target.machineId is required when target.type is machine_id',
     path: ['target', 'machineId'],
+}).refine((value) => value.provider === 'shell' || !value.timeoutMs || value.timeoutMs <= AI_TASK_MAX_TIMEOUT_MS, {
+    message: `timeoutMs above ${AI_TASK_MAX_TIMEOUT_MS}ms (24h) is only allowed for shell tasks`,
+    path: ['timeoutMs'],
 });
 
 const submitBodySchema = z.object({
     title: z.string().min(1).max(256),
     controllerSessionId: z.string().optional(),
     controllerMachineId: z.string().optional(),
-    tasks: z.array(submitTaskSchema).min(1).max(32),
-    maxConcurrency: z.coerce.number().int().min(1).max(8).optional(),
+    tasks: z.array(submitTaskSchema).min(1).max(RUN_MAX_TASKS),
+    maxConcurrency: z.coerce.number().int().min(1).max(SHELL_RUN_MAX_CONCURRENCY).optional(),
     mode: z.enum(['blocking', 'async']).optional(),
     waitTimeoutMs: z.coerce.number().int().min(1000).max(60 * 60 * 1000).optional(),
     pollIntervalMs: z.coerce.number().int().min(200).max(60_000).optional(),
     idempotencyKey: z.string().min(1).max(128).optional(),
     metadata: z.record(z.string(), z.unknown()).optional(),
+}).refine((value) => !value.maxConcurrency
+    || value.maxConcurrency <= AI_RUN_MAX_CONCURRENCY
+    || value.tasks.every((task) => task.provider === 'shell'), {
+    message: `maxConcurrency above ${AI_RUN_MAX_CONCURRENCY} is only allowed when every task is a shell task`,
+    path: ['maxConcurrency'],
+});
+
+const execBodySchema = z.object({
+    command: z.string().min(1).max(65536),
+    machineIds: z.union([
+        z.array(z.string().min(1).max(128)).min(1).max(RUN_MAX_TASKS),
+        z.literal('all_online'),
+    ]),
+    cwd: z.string().max(512).optional(),
+    timeoutMs: z.coerce.number().int().min(1000).max(SHELL_TASK_MAX_TIMEOUT_MS).optional(),
+    waitMs: z.coerce.number().int().min(0).max(EXEC_MAX_WAIT_MS).optional(),
+    maxConcurrency: z.coerce.number().int().min(1).max(SHELL_RUN_MAX_CONCURRENCY).optional(),
+    title: z.string().min(1).max(256).optional(),
+    controllerSessionId: z.string().optional(),
 });
 
 type RunWithTasks = {
@@ -246,6 +294,7 @@ type RunWithTasks = {
         status: string;
         outputSummary: string | null;
         outputText: string | null;
+        stderrText: string | null;
         errorCode: string | null;
         errorMessage: string | null;
         createdAt: Date;
@@ -268,6 +317,7 @@ type RunWithTasks = {
             errorMessage: string | null;
             outputSummary: string | null;
             outputText: string | null;
+            stderrText: string | null;
             createdAt: Date;
             updatedAt: Date;
         }>;
@@ -323,6 +373,7 @@ function mapTask(task: RunWithTasks['tasks'][number]) {
         nextAttemptAt: task.nextAttemptAt?.toISOString() ?? null,
         outputSummary: task.outputSummary,
         outputText: task.outputText,
+        stderrText: task.stderrText,
         errorCode: task.errorCode,
         errorMessage: task.errorMessage,
         createdAt: task.createdAt.toISOString(),
@@ -346,6 +397,7 @@ function mapTask(task: RunWithTasks['tasks'][number]) {
                 errorMessage: execution.errorMessage,
                 outputSummary: execution.outputSummary,
                 outputText: execution.outputText,
+                stderrText: execution.stderrText,
                 createdAt: execution.createdAt.toISOString(),
                 updatedAt: execution.updatedAt.toISOString(),
             })),
@@ -447,6 +499,7 @@ async function loadRunForUser(userId: string, runId: string, includeTasks: boole
                     status: true,
                     outputSummary: true,
                     outputText: true,
+                    stderrText: true,
                     errorCode: true,
                     errorMessage: true,
                     createdAt: true,
@@ -471,6 +524,7 @@ async function loadRunForUser(userId: string, runId: string, includeTasks: boole
                             errorMessage: true,
                             outputSummary: true,
                             outputText: true,
+                            stderrText: true,
                             createdAt: true,
                             updatedAt: true,
                         },
@@ -529,6 +583,7 @@ async function loadTaskForUser(
             status: true,
             outputSummary: true,
             outputText: true,
+            stderrText: true,
             errorCode: true,
             errorMessage: true,
             createdAt: true,
@@ -561,6 +616,7 @@ async function loadTaskForUser(
                     errorMessage: true,
                     outputSummary: true,
                     outputText: true,
+                    stderrText: true,
                     createdAt: true,
                     updatedAt: true,
                 },
@@ -569,6 +625,98 @@ async function loadTaskForUser(
     });
 
     return (task as TaskWithRun | null) ?? null;
+}
+
+type NewTask = {
+    taskKey?: string;
+    title?: string;
+    provider: typeof PROVIDERS[number];
+    model: string | null;
+    prompt: string;
+    workingDirectory?: string;
+    timeoutMs?: number;
+    targetMachineId: string | null;
+    dependsOnTaskKeys: string[];
+    retryMaxAttempts: number;
+    retryBackoffMs: number;
+};
+
+/** Create a queued run with its tasks, numbered in order; the scheduler dispatches them. */
+async function createRunWithTasks(userId: string, input: {
+    title: string;
+    controllerSessionId?: string;
+    maxConcurrency: number;
+    idempotencyKey?: string;
+    metadata?: Record<string, unknown>;
+}, newTasks: NewTask[]): Promise<{ run: RunWithTasks; summary: RunSummary }> {
+    return db.$transaction(async (tx: Prisma.TransactionClient) => {
+        const run = await tx.orchestratorRun.create({
+            data: {
+                accountId: userId,
+                controllerSessionId: input.controllerSessionId,
+                title: input.title,
+                status: 'queued',
+                maxConcurrency: input.maxConcurrency,
+                idempotencyKey: input.idempotencyKey,
+                metadata: input.metadata as Prisma.InputJsonValue | undefined,
+            },
+            select: {
+                id: true,
+                title: true,
+                status: true,
+                maxConcurrency: true,
+                controllerSessionId: true,
+                createdAt: true,
+                updatedAt: true,
+                completedAt: true,
+                cancelRequestedAt: true,
+            },
+        });
+
+        await tx.orchestratorTask.createMany({
+            data: newTasks.map((task, index) => ({
+                ...task,
+                runId: run.id,
+                seq: index + 1,
+                nextAttemptAt: null,
+                status: 'queued',
+            })),
+        });
+
+        const tasks = await tx.orchestratorTask.findMany({
+            where: { runId: run.id },
+            orderBy: { seq: 'asc' },
+            select: {
+                id: true,
+                seq: true,
+                taskKey: true,
+                title: true,
+                provider: true,
+                model: true,
+                workingDirectory: true,
+                dependsOnTaskKeys: true,
+                retryMaxAttempts: true,
+                retryBackoffMs: true,
+                nextAttemptAt: true,
+                status: true,
+                outputSummary: true,
+                outputText: true,
+                stderrText: true,
+                errorCode: true,
+                errorMessage: true,
+                createdAt: true,
+                updatedAt: true,
+            },
+        });
+
+        return {
+            run: {
+                ...run,
+                tasks,
+            } as RunWithTasks,
+            summary: summarizeTasksByStatus(tasks),
+        };
+    });
 }
 
 function resolveRunStatusFilter(status?: string): string[] | undefined {
@@ -808,11 +956,12 @@ export function orchestratorRoutes(app: Fastify) {
                 lastActiveAt: true,
             },
         });
+        const shellReadyMachineIds = new Set(listShellReadyMachineIds(userId));
         const dispatchReadyIds = [...dispatchReadyMachineIds];
         const onlineIds = [...onlineMachineIds];
-        const [detectedProviders, identityNames] = await Promise.all([
+        const [detectedProviders, identities] = await Promise.all([
             detectMachineProviders(userId, dispatchReadyIds),
-            fetchMachineNames(userId, onlineIds),
+            fetchMachineIdentities(userId, onlineIds),
         ]);
 
         const machineList = machines.map((machine) => {
@@ -824,13 +973,17 @@ export function orchestratorRoutes(app: Fastify) {
             for (const provider of providers) {
                 modelModes[provider] = getValidModelModesForAgent(provider);
             }
-            const name = identityNames.get(machine.id) ?? detection?.hostname;
+            const identity = identities.get(machine.id);
+            const name = identity?.name ?? detection?.hostname;
             return {
                 machineId: machine.id,
                 ...(name ? { name } : {}),
+                ...(identity?.platform ? { platform: identity.platform } : {}),
+                ...(identity?.shell ? { shell: identity.shell } : {}),
                 active: machine.active,
                 online,
                 dispatchReady,
+                shellReady: shellReadyMachineIds.has(machine.id),
                 lastActiveAt: machine.lastActiveAt.toISOString(),
                 providers,
                 modelModes,
@@ -889,7 +1042,7 @@ export function orchestratorRoutes(app: Fastify) {
         for (let index = 0; index < body.tasks.length; index++) {
             const task = body.tasks[index];
             const model = task.model;
-            if (!model || model === MODEL_MODE_DEFAULT) {
+            if (!model || model === MODEL_MODE_DEFAULT || task.provider === 'shell') {
                 normalizedTaskModels.push(undefined);
                 continue;
             }
@@ -965,85 +1118,27 @@ export function orchestratorRoutes(app: Fastify) {
         }
 
         try {
-            const created = await db.$transaction(async (tx: Prisma.TransactionClient) => {
-                const run = await tx.orchestratorRun.create({
-                    data: {
-                        accountId: userId,
-                        controllerSessionId: body.controllerSessionId,
-                        title: body.title,
-                        status: 'queued',
-                        maxConcurrency: body.maxConcurrency ?? 2,
-                        idempotencyKey: body.idempotencyKey,
-                        metadata: body.metadata as Prisma.InputJsonValue | undefined,
-                    },
-                    select: {
-                        id: true,
-                        title: true,
-                        status: true,
-                        maxConcurrency: true,
-                        controllerSessionId: true,
-                        createdAt: true,
-                        updatedAt: true,
-                        completedAt: true,
-                        cancelRequestedAt: true,
-                    },
-                });
-
-                const taskData = body.tasks.map((task, index) => ({
-                    runId: run.id,
-                    seq: index + 1,
-                    taskKey: task.taskKey,
-                    title: task.title,
-                    provider: task.provider,
-                    model: normalizedTaskModels[index] ?? null,
-                    prompt: task.prompt,
-                    workingDirectory: task.workingDirectory,
-                    timeoutMs: task.timeoutMs,
-                    targetMachineId: task.target?.type === 'machine_id'
-                        ? task.target.machineId
-                        : controllerMachineId,
-                    dependsOnTaskKeys: task.dependsOn ?? [],
-                    retryMaxAttempts: task.retry?.maxAttempts ?? DEFAULT_CONTEXT_RETRY_MAX_ATTEMPTS,
-                    retryBackoffMs: task.retry?.backoffMs ?? DEFAULT_CONTEXT_RETRY_BACKOFF_MS,
-                    nextAttemptAt: null,
-                    status: 'queued',
-                }));
-
-                await tx.orchestratorTask.createMany({ data: taskData });
-
-                const tasks = await tx.orchestratorTask.findMany({
-                    where: { runId: run.id },
-                    orderBy: { seq: 'asc' },
-                    select: {
-                        id: true,
-                        seq: true,
-                        taskKey: true,
-                        title: true,
-                        provider: true,
-                        model: true,
-                        workingDirectory: true,
-                        dependsOnTaskKeys: true,
-                        retryMaxAttempts: true,
-                        retryBackoffMs: true,
-                        nextAttemptAt: true,
-                        status: true,
-                        outputSummary: true,
-                        outputText: true,
-                        errorCode: true,
-                        errorMessage: true,
-                        createdAt: true,
-                        updatedAt: true,
-                    },
-                });
-
-                return {
-                    run: {
-                        ...run,
-                        tasks,
-                    } as RunWithTasks,
-                    summary: summarizeTasksByStatus(tasks),
-                };
-            });
+            const created = await createRunWithTasks(userId, {
+                title: body.title,
+                controllerSessionId: body.controllerSessionId,
+                maxConcurrency: body.maxConcurrency ?? 2,
+                idempotencyKey: body.idempotencyKey,
+                metadata: body.metadata,
+            }, body.tasks.map((task, index) => ({
+                taskKey: task.taskKey,
+                title: task.title,
+                provider: task.provider,
+                model: normalizedTaskModels[index] ?? null,
+                prompt: task.prompt,
+                workingDirectory: task.workingDirectory,
+                timeoutMs: task.timeoutMs,
+                targetMachineId: task.target?.type === 'machine_id'
+                    ? task.target.machineId!
+                    : controllerMachineId,
+                dependsOnTaskKeys: task.dependsOn ?? [],
+                retryMaxAttempts: task.retry?.maxAttempts ?? DEFAULT_CONTEXT_RETRY_MAX_ATTEMPTS,
+                retryBackoffMs: task.retry?.backoffMs ?? DEFAULT_CONTEXT_RETRY_BACKOFF_MS,
+            })));
 
             return reply.send({
                 ok: true,
@@ -1086,6 +1181,146 @@ export function orchestratorRoutes(app: Fastify) {
             }
             return sendError(reply, 500, 'INTERNAL', 'Failed to submit orchestrator run');
         }
+    });
+
+    // Run a shell command on machines, as a run with one shell task per machine. Waits up to
+    // `waitMs` for it to finish to return the output in the response; a run still going by then
+    // reports through `<orchestrator-callback>` like any other.
+    app.post('/v1/orchestrator/exec', {
+        preHandler: app.authenticate,
+        schema: {
+            body: execBodySchema,
+        },
+    }, async (request, reply) => {
+        const userId = request.userId;
+        const body = request.body;
+
+        if (body.controllerSessionId) {
+            const controllerSession = await db.session.findFirst({
+                where: {
+                    id: body.controllerSessionId,
+                    accountId: userId,
+                },
+                select: { id: true },
+            });
+            if (!controllerSession) {
+                return sendError(reply, 400, 'INVALID_ARGUMENT', 'controllerSessionId does not belong to current account');
+            }
+        }
+
+        const machineIds = body.machineIds === 'all_online'
+            ? listShellReadyMachineIds(userId)
+            : [...new Set(body.machineIds)];
+        if (machineIds.length === 0) {
+            return sendError(reply, 409, 'CONFLICT', 'No machine is online with remote shell turned on');
+        }
+        if (machineIds.length > RUN_MAX_TASKS) {
+            return sendError(reply, 400, 'INVALID_ARGUMENT', `${machineIds.length} machines are online, more than the ${RUN_MAX_TASKS} one run takes; list machineIds instead`);
+        }
+        const knownMachines = await db.machine.findMany({
+            where: { accountId: userId, id: { in: machineIds } },
+            select: { id: true },
+        });
+        const knownMachineIds = new Set(knownMachines.map((machine) => machine.id));
+        const unknownMachineIds = machineIds.filter((machineId) => !knownMachineIds.has(machineId));
+        if (unknownMachineIds.length > 0) {
+            return sendError(reply, 400, 'INVALID_ARGUMENT', `Unknown machineId: ${unknownMachineIds.join(', ')}`);
+        }
+
+        const firstLine = body.command.trim().split('\n')[0];
+        const title = body.title ?? `$ ${firstLine.length > EXEC_TITLE_COMMAND_MAX_LENGTH
+            ? `${firstLine.slice(0, EXEC_TITLE_COMMAND_MAX_LENGTH)}…`
+            : firstLine}`;
+        const created = await createRunWithTasks(userId, {
+            title,
+            controllerSessionId: body.controllerSessionId,
+            maxConcurrency: body.maxConcurrency ?? machineIds.length,
+        }, machineIds.map((machineId) => ({
+            provider: 'shell' as const,
+            model: null,
+            prompt: body.command,
+            workingDirectory: body.cwd,
+            timeoutMs: body.timeoutMs,
+            targetMachineId: machineId,
+            dependsOnTaskKeys: [],
+            retryMaxAttempts: 1,
+            retryBackoffMs: 0,
+        })));
+        const runId = created.run.id;
+
+        const waitMs = body.waitMs ?? EXEC_DEFAULT_WAIT_MS;
+        if (waitMs > 0) {
+            // The caller giving up on the response must not take the run's callback with it
+            const disconnected = new AbortController();
+            reply.raw.once('close', () => disconnected.abort());
+            await awaitOrchestratorRunTerminal(runId, waitMs, async () => {
+                const run = await db.orchestratorRun.findUnique({ where: { id: runId }, select: { status: true } });
+                return !!run && isRunTerminal(run.status);
+            }, disconnected.signal);
+        }
+
+        const run = await db.orchestratorRun.findUniqueOrThrow({
+            where: { id: runId },
+            select: {
+                status: true,
+                createdAt: true,
+                updatedAt: true,
+                tasks: {
+                    orderBy: { seq: 'asc' },
+                    select: {
+                        id: true,
+                        status: true,
+                        targetMachineId: true,
+                        outputText: true,
+                        stderrText: true,
+                        errorCode: true,
+                        errorMessage: true,
+                        executions: {
+                            orderBy: { attempt: 'desc' },
+                            take: 1,
+                            select: {
+                                exitCode: true,
+                                signal: true,
+                                startedAt: true,
+                                finishedAt: true,
+                            },
+                        },
+                    },
+                },
+            },
+        });
+        const terminal = isRunTerminal(run.status);
+
+        return reply.send({
+            ok: true,
+            data: {
+                runId,
+                terminal,
+                run: {
+                    status: run.status,
+                    createdAt: run.createdAt.toISOString(),
+                    updatedAt: run.updatedAt.toISOString(),
+                    summary: summarizeTasksByStatus(run.tasks),
+                },
+                tasks: run.tasks.map((task) => {
+                    const execution = task.executions[0];
+                    return {
+                        taskId: task.id,
+                        machineId: task.targetMachineId,
+                        status: task.status,
+                        exitCode: execution?.exitCode ?? null,
+                        signal: execution?.signal ?? null,
+                        stdout: task.outputText,
+                        stderr: task.stderrText,
+                        errorCode: task.errorCode,
+                        errorMessage: task.errorMessage,
+                        startedAt: execution?.startedAt?.toISOString() ?? null,
+                        finishedAt: execution?.finishedAt?.toISOString() ?? null,
+                    };
+                }),
+                next: terminal ? undefined : { hint: 'Await <orchestrator-callback>.', runId },
+            },
+        });
     });
 
     app.get('/v1/orchestrator/runs/:runId', {
@@ -1218,6 +1453,9 @@ export function orchestratorRoutes(app: Fastify) {
             if (!task) {
                 return { kind: 'not_found' as const };
             }
+            if (task.provider === 'shell') {
+                return { kind: 'shell' as const };
+            }
 
             if (task.status !== 'completed' && task.status !== 'failed') {
                 return { kind: 'invalid_state' as const, status: task.status };
@@ -1312,6 +1550,9 @@ export function orchestratorRoutes(app: Fastify) {
 
         if (result.kind === 'not_found') {
             return sendError(reply, 404, 'NOT_FOUND', 'Task not found');
+        }
+        if (result.kind === 'shell') {
+            return sendError(reply, 400, 'INVALID_ARGUMENT', `Task ${taskId} is a shell task, which has no session to message; run another command instead`);
         }
         if (result.kind === 'invalid_state') {
             return sendError(reply, 409, 'CONFLICT', `Task ${taskId} must be in completed/failed state to accept messages`);
@@ -1836,6 +2077,7 @@ export function orchestratorRoutes(app: Fastify) {
                 childSessionId: z.string().min(1).max(256).nullable().optional(),
                 outputSummary: z.string().max(4096).nullable().optional(),
                 outputText: z.string().max(1_000_000).nullable().optional(),
+                stderrText: z.string().max(1_000_000).nullable().optional(),
                 errorCode: z.string().nullable().optional(),
                 errorMessage: z.string().max(10_000).nullable().optional(),
             }),
@@ -1864,9 +2106,6 @@ export function orchestratorRoutes(app: Fastify) {
                     run: {
                         select: {
                             status: true,
-                            title: true,
-                            controllerSessionId: true,
-                            reopenedAt: true,
                         },
                     },
                     task: {
@@ -1922,6 +2161,7 @@ export function orchestratorRoutes(app: Fastify) {
                         : {}),
                     outputSummary: body.outputSummary ?? null,
                     outputText: body.outputText ?? null,
+                    stderrText: body.stderrText ?? null,
                     errorCode: body.errorCode ?? null,
                     errorMessage: body.errorMessage ?? null,
                 },
@@ -1939,6 +2179,7 @@ export function orchestratorRoutes(app: Fastify) {
                     status: taskStatus,
                     outputSummary: body.outputSummary ?? null,
                     outputText: body.outputText ?? null,
+                    stderrText: body.stderrText ?? null,
                     errorCode: body.errorCode ?? null,
                     errorMessage: body.errorMessage ?? null,
                     nextAttemptAt,
@@ -1964,21 +2205,11 @@ export function orchestratorRoutes(app: Fastify) {
                 },
             });
 
-            const callbackSessionIds = isRunTerminal(nextRunStatus)
-                ? await orchestratorRunCallbackSessionIds(tx, {
-                    id: execution.runId,
-                    controllerSessionId: execution.run.controllerSessionId,
-                    reopenedAt: execution.run.reopenedAt,
-                })
-                : [];
-
             return {
                 kind: 'ok' as const,
                 runId: execution.runId,
-                runTitle: execution.run.title ?? null,
                 runStatus: nextRunStatus,
-                callbackSessionIds,
-                summary: toPublicSummary(internal),
+                finishedRun: !isRunTerminal(execution.run.status) && isRunTerminal(nextRunStatus),
             };
         });
 
@@ -1993,41 +2224,8 @@ export function orchestratorRoutes(app: Fastify) {
         }
 
         void emitOrchestratorRunActivity(userId, result.runId).catch(warn);
-        if (result.callbackSessionIds.length > 0) {
-            let delivered = 0;
-            for (const sessionId of result.callbackSessionIds) {
-                const delivery = eventRouter.emitEphemeral({
-                    userId,
-                    payload: buildOrchestratorRunTerminalEphemeral(
-                        result.runId,
-                        result.runStatus,
-                        result.runTitle ?? 'Untitled run',
-                    ),
-                    recipientFilter: {
-                        type: 'all-interested-in-session',
-                        sessionId,
-                    },
-                });
-                delivered += delivery.sessionScoped;
-            }
-            if (delivered === 0) {
-                const title = result.runTitle ?? 'Untitled run';
-                const s = result.summary;
-                const parts: string[] = [
-                    `Status: ${result.runStatus}`,
-                    `Tasks: ${s.total} total — ${s.completed} completed, ${s.failed} failed, ${s.cancelled} cancelled`,
-                    `Run ID: ${result.runId}`,
-                ];
-                void inTx(async (tx) => {
-                    await feedPost(tx, Context.create(userId), {
-                        kind: 'notice',
-                        title,
-                        text: parts.join('\n'),
-                    }, null, true, {
-                        links: [{ label: 'Run Details', url: `/orchestrator/${result.runId}` }],
-                    });
-                }).catch(warn);
-            }
+        if (result.finishedRun) {
+            await notifyOrchestratorRunTerminal(userId, result.runId).catch(warn);
         }
 
         return reply.send({
@@ -2037,6 +2235,27 @@ export function orchestratorRoutes(app: Fastify) {
                 runStatus: result.runStatus,
             },
         });
+    });
+
+    app.post('/v1/orchestrator/machines/:machineId/reconcile', {
+        preHandler: app.authenticate,
+        schema: {
+            params: z.object({
+                machineId: z.string(),
+            }),
+            body: z.object({
+                liveExecutionIds: z.array(z.string().min(1).max(128)).max(10_000),
+                daemonStartedAt: z.string().datetime(),
+            }),
+        },
+    }, async (request, reply) => {
+        await orchestratorMachineReconcile(
+            request.userId,
+            request.params.machineId,
+            request.body.liveExecutionIds,
+            new Date(request.body.daemonStartedAt),
+        );
+        return reply.send({ ok: true });
     });
 
     app.get('/v1/orchestrator/activity', {

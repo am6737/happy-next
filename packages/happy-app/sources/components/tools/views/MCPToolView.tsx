@@ -4,6 +4,7 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { create } from 'zustand';
 import { MMKV } from 'react-native-mmkv';
 import { parseMcpResult } from '../parseMcpResult';
+import { extractOrchestratorSubmitTitle } from '../orchestratorRunId';
 
 const mmkv = new MMKV();
 const TITLE_CACHE_KEY = 'orchestrator-title-cache';
@@ -54,7 +55,7 @@ export function formatMCPTitle(tool: ToolCall): string {
     const withoutPrefix = stripMCPPrefix(tool.name);
 
     let prefix = "MCP: ";
-    if (/^orchestrator_/.test(withoutPrefix) || /^preview_html$/.test(withoutPrefix)) {
+    if (/^orchestrator_/.test(withoutPrefix) || /^(preview_html|machine_exec)$/.test(withoutPrefix)) {
         prefix = "";
     }
 
@@ -73,6 +74,7 @@ export function formatMCPTitle(tool: ToolCall): string {
  * Hook that returns the MCP tool subtitle.
  *
  * For orchestrator_submit: caches runId→title and taskId→title from the result.
+ * For machine_exec: shows and caches its run's title, which is the command unless it was given one.
  * For orchestrator_pend/cancel/send_message: reactively resolves title from cache,
  * falls back to displaying the raw ID.
  */
@@ -103,6 +105,13 @@ export function useMCPSubtitle(tool: ToolCall): string {
         }
     }, [isSubmit, tool.input?.title, tool.result]);
 
+    const isExec = toolName === 'machine_exec';
+    const execTitle = isExec ? extractOrchestratorSubmitTitle(tool) : null;
+    const execRunId = isExec && tool.result ? parseMcpResult(tool.result)?.data?.runId : undefined;
+    useEffect(() => {
+        if (execTitle && typeof execRunId === 'string') cacheTitle(execRunId, execTitle);
+    }, [execTitle, execRunId]);
+
     // Subscribe to cached title for pend/cancel/send_message
     const lookupId =
         toolName === 'orchestrator_pend' || toolName === 'orchestrator_cancel'
@@ -121,6 +130,9 @@ export function useMCPSubtitle(tool: ToolCall): string {
     if (isSubmit) {
         return tool.input?.title ?? '';
     }
+    if (isExec) {
+        return execTitle ?? '';
+    }
     if (toolName === "orchestrator_pend" || toolName === "orchestrator_cancel") {
         return cachedTitle ?? (tool.input?.runId ? `Run ID: ${tool.input.runId}` : '');
     }
@@ -136,6 +148,10 @@ export function formatMCPIcon(tool: ToolCall, size: number = 18, color: string =
 
     if (/^orchestrator_/.test(withoutPrefix)) {
         return <MaterialCommunityIcons name="robot-outline" size={size} color={color} />;
+    }
+
+    if (withoutPrefix === "machine_exec") {
+        return <Ionicons name="terminal-outline" size={size} color={color} />;
     }
 
     if (withoutPrefix === "preview_html") {

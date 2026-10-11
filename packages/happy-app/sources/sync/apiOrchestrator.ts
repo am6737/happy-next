@@ -16,12 +16,15 @@ export type OrchestratorRunSummary = {
     cancelled: number;
 };
 
+// `shell`: the task's prompt is a command the machine's daemon runs itself, with no AI session
+export type OrchestratorProvider = 'claude' | 'codex' | 'gemini' | 'qoder' | 'shell';
+
 export type OrchestratorExecutionRecord = {
     executionId: string;
     attempt: number;
     status: OrchestratorExecutionStatus;
     machineId: string;
-    provider: 'claude' | 'codex' | 'gemini' | 'qoder';
+    provider: OrchestratorProvider;
     model: string | null;
     childSessionId: string | null;
     executionType: 'initial' | 'resume';
@@ -34,6 +37,8 @@ export type OrchestratorExecutionRecord = {
     errorMessage: string | null;
     outputSummary: string | null;
     outputText: string | null;
+    /** A shell task's stderr; AI tasks keep theirs out of the result */
+    stderrText?: string | null;
     createdAt: string;
     updatedAt: string;
 };
@@ -44,7 +49,7 @@ export type OrchestratorTaskRecord = {
     taskKey: string | null;
     title: string | null;
     status: OrchestratorTaskStatus;
-    provider: 'claude' | 'codex' | 'gemini' | 'qoder';
+    provider: OrchestratorProvider;
     model: string | null;
     prompt?: string | null;
     workingDirectory: string | null;
@@ -56,6 +61,8 @@ export type OrchestratorTaskRecord = {
     nextAttemptAt: string | null;
     outputSummary: string | null;
     outputText: string | null;
+    /** A shell task's stderr; AI tasks keep theirs out of the result */
+    stderrText?: string | null;
     errorCode: string | null;
     errorMessage: string | null;
     createdAt: string;

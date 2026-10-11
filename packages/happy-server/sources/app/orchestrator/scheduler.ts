@@ -1,11 +1,12 @@
 import { db } from "@/storage/db";
-import { invokeUserRpc } from "@/app/api/socket/rpcRegistry";
+import { hasUserRpcMethod, invokeUserRpc } from "@/app/api/socket/rpcRegistry";
 import { log, warn } from "@/utils/log";
 import { delay } from "@/utils/delay";
 import { forever } from "@/utils/forever";
 import { shutdownSignal } from "@/utils/shutdown";
 import { randomUUID } from "node:crypto";
 import { emitOrchestratorRunActivity } from "./sessions";
+import { notifyOrchestratorRunTerminal } from "./terminal";
 import {
     addTaskCount,
     createEmptySummaryInternal,
@@ -22,8 +23,10 @@ export const ORCHESTRATOR_SCHEDULER_INTERVAL_MS = 1_000;
 export const ORCHESTRATOR_RPC_TIMEOUT_MS = 15_000;
 // Stale dispatch detection: executions stuck in 'dispatching' beyond this are marked failed
 export const ORCHESTRATOR_DISPATCH_STALE_MS = 60_000;
-// Default task timeout: fallback when user does not set timeoutMs (24 hours)
+// Default task timeout: fallback when user does not set timeoutMs (24 hours). Shell tasks have none.
 export const ORCHESTRATOR_DEFAULT_TASK_TIMEOUT_MS = 24 * 60 * 60_000;
+// Running executions on a machine that has been offline this long are failed: their results will not come
+export const ORCHESTRATOR_MACHINE_OFFLINE_GRACE_MS = 30 * 60_000;
 
 export type SchedulerAction =
     | {
@@ -44,7 +47,8 @@ export type SchedulerAction =
             childSessionId?: string;
             model?: string;
             prompt: string;
-            timeoutMs: number;
+            /** Null for a shell task without a timeout: it runs until it exits or is cancelled */
+            timeoutMs: number | null;
             workingDirectory?: string;
         };
     }
@@ -64,7 +68,7 @@ export type SchedulerAction =
         };
     };
 
-async function recomputeRunStatusTx(tx: any, runId: string, currentStatus: string, completedAt: Date | null, now: Date): Promise<string> {
+export async function recomputeRunStatusTx(tx: any, runId: string, currentStatus: string, completedAt: Date | null, now: Date): Promise<string> {
     const grouped = await tx.orchestratorTask.groupBy({
         by: ['status'],
         where: { runId },
@@ -89,9 +93,10 @@ async function recomputeRunStatusTx(tx: any, runId: string, currentStatus: strin
     return nextStatus;
 }
 
-async function markDispatchFailed(action: Extract<SchedulerAction, { type: 'dispatch' }>, reason: string): Promise<void> {
+/** Returns the run's status afterwards, or null if the execution was no longer being dispatched. */
+async function markDispatchFailed(action: Extract<SchedulerAction, { type: 'dispatch' }>, reason: string): Promise<string | null> {
     const now = new Date();
-    await db.$transaction(async (tx: any) => {
+    return db.$transaction(async (tx: any) => {
         const execution = await tx.orchestratorExecution.findUnique({
             where: { id: action.executionId },
             select: {
@@ -103,7 +108,7 @@ async function markDispatchFailed(action: Extract<SchedulerAction, { type: 'disp
             },
         });
         if (!execution || execution.status !== 'dispatching') {
-            return;
+            return null;
         }
 
         const run = await tx.orchestratorRun.findUnique({
@@ -111,7 +116,7 @@ async function markDispatchFailed(action: Extract<SchedulerAction, { type: 'disp
             select: { status: true, completedAt: true },
         });
         if (!run) {
-            return;
+            return null;
         }
         const task = await tx.orchestratorTask.findUnique({
             where: { id: action.taskId },
@@ -146,31 +151,43 @@ async function markDispatchFailed(action: Extract<SchedulerAction, { type: 'disp
                 nextAttemptAt,
             },
         });
-        await recomputeRunStatusTx(tx, action.runId, run.status, run.completedAt, now);
+        return recomputeRunStatusTx(tx, action.runId, run.status, run.completedAt, now);
     });
 }
 
 export async function executeSchedulerActions(actions: SchedulerAction[]): Promise<void> {
     for (const action of actions) {
         if (action.type === 'dispatch') {
+            // Shell commands have their own handler, which a machine can turn off
+            const method = action.payload.provider === 'shell' ? 'orchestrator-shell-dispatch' : 'orchestrator-dispatch';
             try {
                 await invokeUserRpc(
                     action.accountId,
-                    `${action.machineId}:orchestrator-dispatch`,
+                    `${action.machineId}:${method}`,
                     action.payload,
                     ORCHESTRATOR_RPC_TIMEOUT_MS,
                 );
             } catch (error) {
-                const message = error instanceof Error ? error.message : String(error);
+                const rpcMessage = error instanceof Error ? error.message : String(error);
+                // A connected machine without the shell handler has remote shell turned off, or a CLI from before it
+                const message = method === 'orchestrator-shell-dispatch'
+                    && !hasUserRpcMethod(action.accountId, `${action.machineId}:${method}`)
+                    && hasUserRpcMethod(action.accountId, `${action.machineId}:orchestrator-dispatch`)
+                    ? 'Remote shell is turned off on this machine, or its Happy CLI is too old to run shell commands'
+                    : rpcMessage;
                 warn({ module: 'orchestrator-scheduler', runId: action.runId, executionId: action.executionId }, `Dispatch RPC failed: ${message}`);
+                let runStatus: string | null = null;
                 try {
-                    await markDispatchFailed(action, message);
+                    runStatus = await markDispatchFailed(action, message);
                 } catch (markError) {
                     const markMessage = markError instanceof Error ? markError.message : String(markError);
                     warn(
                         { module: 'orchestrator-scheduler', runId: action.runId, executionId: action.executionId },
                         `markDispatchFailed failed: ${markMessage}`,
                     );
+                }
+                if (runStatus && isRunTerminal(runStatus)) {
+                    await notifyOrchestratorRunTerminal(action.accountId, action.runId).catch(warn);
                 }
             }
             continue;
@@ -246,7 +263,13 @@ async function failStaleDispatchingExecutionsTx(tx: any, runId: string, runStatu
     }
 }
 
-async function failTimedOutRunningExecutionsTx(tx: any, runId: string, runStatus: string, now: Date): Promise<void> {
+/**
+ * Fail the running executions whose result will not come: those past their timeout (shell tasks
+ * without one never are), and those whose machine has been offline for
+ * {@link ORCHESTRATOR_MACHINE_OFFLINE_GRACE_MS}. A machine that comes back sooner reconciles its
+ * executions itself (`/machines/:machineId/reconcile`).
+ */
+async function failExpiredRunningExecutionsTx(tx: any, runId: string, runStatus: string, now: Date): Promise<void> {
     const runningExecutions = await tx.orchestratorExecution.findMany({
         where: {
             runId,
@@ -254,7 +277,10 @@ async function failTimedOutRunningExecutionsTx(tx: any, runId: string, runStatus
         },
         select: {
             id: true,
+            runId: true,
             taskId: true,
+            machineId: true,
+            provider: true,
             attempt: true,
             startedAt: true,
             createdAt: true,
@@ -268,55 +294,94 @@ async function failTimedOutRunningExecutionsTx(tx: any, runId: string, runStatus
         },
     });
 
+    const offlineSince = new Date(now.getTime() - ORCHESTRATOR_MACHINE_OFFLINE_GRACE_MS);
+    const longRunningMachineIds = [...new Set<string>(runningExecutions
+        .filter((execution: any) => (execution.startedAt ?? execution.createdAt) < offlineSince)
+        .map((execution: any) => execution.machineId))];
+    const offlineMachineIds = new Set<string>(longRunningMachineIds.length > 0
+        ? (await tx.machine.findMany({
+            where: { id: { in: longRunningMachineIds }, lastActiveAt: { lt: offlineSince } },
+            select: { id: true },
+        })).map((machine: any) => machine.id)
+        : []);
+
     for (const execution of runningExecutions) {
-        const timeoutMs = execution.timeoutMs ?? ORCHESTRATOR_DEFAULT_TASK_TIMEOUT_MS;
+        const timeoutMs: number | null = execution.timeoutMs ?? (execution.provider === 'shell' ? null : ORCHESTRATOR_DEFAULT_TASK_TIMEOUT_MS);
         const startedAt = execution.startedAt ?? execution.createdAt;
-        if (now.getTime() - startedAt.getTime() < timeoutMs) {
+        const failure = timeoutMs !== null && now.getTime() - startedAt.getTime() >= timeoutMs
+            ? { status: 'timeout' as const, errorCode: 'TASK_TIMEOUT', errorMessage: `Task exceeded timeout (${timeoutMs}ms)` }
+            : offlineMachineIds.has(execution.machineId)
+                ? { status: 'failed' as const, errorCode: 'MACHINE_OFFLINE', errorMessage: `Machine ${execution.machineId} has been offline for over ${ORCHESTRATOR_MACHINE_OFFLINE_GRACE_MS / 60_000} minutes` }
+                : null;
+        if (!failure) {
             continue;
         }
 
-        const updated = await tx.orchestratorExecution.updateMany({
-            where: {
-                id: execution.id,
-                status: 'running',
-            },
-            data: {
-                status: 'timeout',
-                finishedAt: now,
-                errorCode: 'TASK_TIMEOUT',
-                errorMessage: `Task exceeded timeout (${timeoutMs}ms)`,
-            },
-        });
-        if (updated.count === 0) {
-            continue;
-        }
-
-        const shouldRetry = runStatus !== 'canceling'
-            && runStatus !== 'cancelled'
-            && execution.attempt < execution.task.retryMaxAttempts;
-        warn({ module: 'orchestrator-scheduler', runId, executionId: execution.id, taskId: execution.taskId }, `Execution timed out after ${timeoutMs}ms (retry=${shouldRetry})`);
-        const nextAttemptAt = shouldRetry
-            ? new Date(now.getTime() + execution.task.retryBackoffMs)
-            : null;
-        await tx.orchestratorTask.updateMany({
-            where: { id: execution.taskId, status: 'running' },
-            data: {
-                status: shouldRetry ? 'queued' : 'failed',
-                errorCode: 'TASK_TIMEOUT',
-                errorMessage: `Task exceeded timeout (${timeoutMs}ms)`,
-                nextAttemptAt,
-            },
-        });
+        await failRunningExecutionTx(tx, execution, runStatus, failure, now);
     }
 }
 
+/**
+ * Fail an execution that is still running, and requeue its task if its retries allow it (not in
+ * a run being cancelled). Does nothing if the execution has already left `running`. The caller
+ * recomputes the run's status.
+ */
+export async function failRunningExecutionTx(
+    tx: any,
+    execution: {
+        id: string;
+        runId: string;
+        taskId: string;
+        attempt: number;
+        task: { retryMaxAttempts: number; retryBackoffMs: number };
+    },
+    runStatus: string,
+    failure: { status: 'failed' | 'timeout'; errorCode: string; errorMessage: string },
+    now: Date,
+): Promise<void> {
+    const updated = await tx.orchestratorExecution.updateMany({
+        where: {
+            id: execution.id,
+            status: 'running',
+        },
+        data: {
+            status: failure.status,
+            finishedAt: now,
+            errorCode: failure.errorCode,
+            errorMessage: failure.errorMessage,
+        },
+    });
+    if (updated.count === 0) {
+        return;
+    }
+
+    const shouldRetry = runStatus !== 'canceling'
+        && runStatus !== 'cancelled'
+        && execution.attempt < execution.task.retryMaxAttempts;
+    warn({ module: 'orchestrator-scheduler', runId: execution.runId, executionId: execution.id, taskId: execution.taskId }, `${failure.errorMessage} (retry=${shouldRetry})`);
+    const nextAttemptAt = shouldRetry
+        ? new Date(now.getTime() + execution.task.retryBackoffMs)
+        : null;
+    await tx.orchestratorTask.updateMany({
+        where: { id: execution.taskId, status: 'running' },
+        data: {
+            status: shouldRetry ? 'queued' : 'failed',
+            errorCode: failure.errorCode,
+            errorMessage: failure.errorMessage,
+            nextAttemptAt,
+        },
+    });
+}
+
+/** The RPCs to send for a run, and whether this tick finished it. */
 async function buildRunActions(run: {
     id: string;
     accountId: string;
     status: string;
     maxConcurrency: number;
-}, now: Date): Promise<SchedulerAction[]> {
+}, now: Date): Promise<{ actions: SchedulerAction[]; finished: boolean }> {
     const actions: SchedulerAction[] = [];
+    let finished = false;
     await db.$transaction(async (tx: any) => {
         const currentRun = await tx.orchestratorRun.findUnique({
             where: { id: run.id },
@@ -333,7 +398,7 @@ async function buildRunActions(run: {
         }
 
         await failStaleDispatchingExecutionsTx(tx, currentRun.id, currentRun.status, now);
-        await failTimedOutRunningExecutionsTx(tx, currentRun.id, currentRun.status, now);
+        await failExpiredRunningExecutionsTx(tx, currentRun.id, currentRun.status, now);
 
         if (currentRun.status === 'canceling') {
             await tx.orchestratorTask.updateMany({
@@ -595,7 +660,7 @@ async function buildRunActions(run: {
                         continue;
                     }
 
-                    const timeoutMs = queuedExecution?.timeoutMs ?? task.timeoutMs ?? ORCHESTRATOR_DEFAULT_TASK_TIMEOUT_MS;
+                    const timeoutMs: number | null = queuedExecution?.timeoutMs ?? task.timeoutMs ?? (task.provider === 'shell' ? null : ORCHESTRATOR_DEFAULT_TASK_TIMEOUT_MS);
                     const execution = queuedExecution
                         ? await tx.orchestratorExecution.update({
                             where: { id: queuedExecution.id },
@@ -695,11 +760,11 @@ async function buildRunActions(run: {
             },
         });
         if (refreshedRun) {
-            await recomputeRunStatusTx(tx, currentRun.id, refreshedRun.status, refreshedRun.completedAt, now);
+            finished = isRunTerminal(await recomputeRunStatusTx(tx, currentRun.id, refreshedRun.status, refreshedRun.completedAt, now));
         }
     });
 
-    return actions;
+    return { actions, finished };
 }
 
 export async function orchestratorSchedulerTick(now: Date = new Date()): Promise<void> {
@@ -720,10 +785,15 @@ export async function orchestratorSchedulerTick(now: Date = new Date()): Promise
     });
 
     for (const run of runs) {
-        const actions = await buildRunActions(run, now);
+        const { actions, finished } = await buildRunActions(run, now);
         if (actions.length > 0) {
             await executeSchedulerActions(actions);
+        }
+        if (actions.length > 0 || finished) {
             await emitOrchestratorRunActivity(run.accountId, run.id);
+        }
+        if (finished) {
+            await notifyOrchestratorRunTerminal(run.accountId, run.id).catch(warn);
         }
     }
 }

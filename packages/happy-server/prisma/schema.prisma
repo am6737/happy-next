@@ -197,6 +197,8 @@ model OrchestratorTask {
   status            String
   outputSummary     String?
   outputText        String?
+  /// Shell tasks only: what the command wrote to stderr (`outputText` holds its stdout)
+  stderrText        String?
   errorCode         String?
   errorMessage      String?
   createdAt         DateTime                @default(now())
@@ -239,6 +241,8 @@ model OrchestratorExecution {
   signal              String?
   outputSummary       String?
   outputText          String?
+  /// Shell executions only: what the command wrote to stderr (`outputText` holds its stdout)
+  stderrText          String?
   errorCode           String?
   errorMessage        String?
   createdAt           DateTime         @default(now())

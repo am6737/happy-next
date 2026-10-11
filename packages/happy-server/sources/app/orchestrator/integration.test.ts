@@ -30,7 +30,7 @@ type TaskRecord = {
     seq: number;
     taskKey: string | null;
     title: string | null;
-    provider: 'claude' | 'codex' | 'gemini';
+    provider: 'claude' | 'codex' | 'gemini' | 'shell';
     model: string | null;
     prompt: string;
     workingDirectory: string | null;
@@ -43,6 +43,7 @@ type TaskRecord = {
     status: TaskStatus;
     outputSummary: string | null;
     outputText: string | null;
+    stderrText: string | null;
     errorCode: string | null;
     errorMessage: string | null;
     createdAt: Date;
@@ -54,7 +55,7 @@ type ExecutionRecord = {
     runId: string;
     taskId: string;
     machineId: string;
-    provider: 'claude' | 'codex' | 'gemini';
+    provider: 'claude' | 'codex' | 'gemini' | 'shell';
     model: string | null;
     childSessionId: string | null;
     executionType: 'initial' | 'resume';
@@ -71,6 +72,7 @@ type ExecutionRecord = {
     signal: string | null;
     outputSummary: string | null;
     outputText: string | null;
+    stderrText: string | null;
     errorCode: string | null;
     errorMessage: string | null;
     createdAt: Date;
@@ -105,6 +107,7 @@ const {
         accessKeys: [] as Array<{ accountId: string; machineId: string; sessionId: string; updatedAt: Date }>,
         onlineMachineIds: new Set<string>(),
         dispatchReadyMachineIds: new Set<string>(),
+        shellReadyMachineIds: new Set<string>(),
     };
 
     const nextDate = () => {
@@ -137,6 +140,7 @@ const {
         ];
         state.onlineMachineIds = new Set(['machine-1']);
         state.dispatchReadyMachineIds = new Set(['machine-1']);
+        state.shellReadyMachineIds = new Set(['machine-1']);
     };
 
     const matchesStatus = (value: string, where: any): boolean => {
@@ -248,7 +252,16 @@ const {
         if (!where) {
             return true;
         }
-        if (where.id && execution.id !== where.id) {
+        if (typeof where.id === 'string' && execution.id !== where.id) {
+            return false;
+        }
+        if (Array.isArray(where.id?.notIn) && where.id.notIn.includes(execution.id)) {
+            return false;
+        }
+        if (typeof where.machineId === 'string' && execution.machineId !== where.machineId) {
+            return false;
+        }
+        if (where.startedAt?.lt && !(execution.startedAt !== null && execution.startedAt < where.startedAt.lt)) {
             return false;
         }
         if (typeof where.runId === 'string' && execution.runId !== where.runId) {
@@ -393,6 +406,13 @@ const {
             }
             return selectRun(run, args?.select);
         }),
+        findUniqueOrThrow: vi.fn(async (args: any) => {
+            const run = state.runs.find((item) => item.id === args?.where?.id);
+            if (!run) {
+                throw new Error('run not found');
+            }
+            return selectRun(run, args?.select);
+        }),
         findMany: vi.fn(async (args: any) => {
             let rows = state.runs.filter((item) => matchesRun(item, args?.where));
             const orderBy = args?.orderBy;
@@ -488,6 +508,7 @@ const {
                     status: data.status ?? 'queued',
                     outputSummary: null,
                     outputText: null,
+                    stderrText: null,
                     errorCode: null,
                     errorMessage: null,
                     createdAt: now,
@@ -592,6 +613,7 @@ const {
                 signal: null,
                 outputSummary: null,
                 outputText: null,
+                stderrText: null,
                 errorCode: null,
                 errorMessage: null,
                 createdAt: now,
@@ -657,10 +679,22 @@ const {
                     return true;
                 });
             }
-            return rows.map((item) => ({
-                ...item,
-                run: { controllerSessionId: state.runs.find((run) => run.id === item.runId)?.controllerSessionId ?? null },
-            }));
+            return rows.map((item) => {
+                const run = state.runs.find((row) => row.id === item.runId);
+                const task = state.tasks.find((row) => row.id === item.taskId);
+                return {
+                    ...item,
+                    run: {
+                        controllerSessionId: run?.controllerSessionId ?? null,
+                        status: run?.status,
+                        completedAt: run?.completedAt ?? null,
+                    },
+                    task: {
+                        retryMaxAttempts: task?.retryMaxAttempts,
+                        retryBackoffMs: task?.retryBackoffMs,
+                    },
+                };
+            });
         }),
         update: vi.fn(async (args: any) => {
             const execution = state.executions.find((item) => item.id === args?.where?.id);
@@ -792,9 +826,10 @@ const {
         }
         return {};
     });
-    const listConnectedUserRpcMethodsMock = vi.fn((_userId: string) => {
-        return Array.from(state.dispatchReadyMachineIds).map((machineId) => `${machineId}:orchestrator-dispatch`);
-    });
+    const listConnectedUserRpcMethodsMock = vi.fn((_userId: string) => [
+        ...Array.from(state.dispatchReadyMachineIds).map((machineId) => `${machineId}:orchestrator-dispatch`),
+        ...Array.from(state.shellReadyMachineIds).map((machineId) => `${machineId}:orchestrator-shell-dispatch`),
+    ]);
     const eventRouterMock = {
         emitEphemeral: vi.fn((_event: any) => ({ sessionScoped: 1 })),
         getConnections: vi.fn((_userId: string) => {
@@ -1719,6 +1754,7 @@ describe('orchestrator integration paths', () => {
             claude: getValidModelModesForAgent('claude'),
             codex: getValidModelModesForAgent('codex'),
             gemini: getValidModelModesForAgent('gemini'),
+            qoder: getValidModelModesForAgent('qoder'),
         });
         expect(body.data.defaults).toEqual(expect.objectContaining({
             retryMaxAttempts: 1,
@@ -1729,6 +1765,7 @@ describe('orchestrator integration paths', () => {
                 machineId: 'machine-1',
                 online: true,
                 dispatchReady: true,
+                shellReady: true,
                 providers: ['claude', 'codex', 'gemini'],
                 modelModes: {
                     claude: getValidModelModesForAgent('claude'),
@@ -1740,6 +1777,7 @@ describe('orchestrator integration paths', () => {
                 machineId: 'machine-2',
                 online: false,
                 dispatchReady: false,
+                shellReady: false,
                 providers: [],
                 modelModes: {},
             }),
@@ -2475,5 +2513,301 @@ describe('orchestrator integration paths', () => {
         expect(state.executions).toHaveLength(2);
         expect(state.executions[1].provider).toBe('codex');
         await app.close();
+    });
+
+    describe('shell tasks', () => {
+        const terminalCallbacks = () => eventRouterMock.emitEphemeral.mock.calls
+            .map(([event]) => event)
+            .filter((event: any) => event.payload.type === 'orchestrator-run-terminal');
+
+        it('exec runs a command on every shell-ready machine and records stdout and stderr', async () => {
+            state.machines.push({
+                id: 'machine-2',
+                accountId: 'user-1',
+                active: true,
+                lastActiveAt: new Date('2026-03-16T00:00:00.000Z'),
+            });
+            state.shellReadyMachineIds = new Set(['machine-1', 'machine-2']);
+            const app = await createApp();
+
+            const exec = await app.inject({
+                method: 'POST',
+                url: '/v1/orchestrator/exec',
+                headers: { 'x-user-id': 'user-1' },
+                payload: {
+                    command: 'uptime\necho done',
+                    machineIds: 'all_online',
+                    controllerSessionId: 'controller-session-1',
+                    waitMs: 0,
+                },
+            });
+            expect(exec.statusCode).toBe(200);
+            const data = exec.json().data;
+            expect(data.terminal).toBe(false);
+            expect(data.next).toEqual({ hint: 'Await <orchestrator-callback>.', runId: data.runId });
+            expect(data.tasks.map((task: any) => task.machineId)).toEqual(['machine-1', 'machine-2']);
+            expect(state.runs[0]).toEqual(expect.objectContaining({ title: '$ uptime', maxConcurrency: 2 }));
+            expect(state.tasks.map((task) => [task.provider, task.prompt, task.model])).toEqual([
+                ['shell', 'uptime\necho done', null],
+                ['shell', 'uptime\necho done', null],
+            ]);
+
+            await orchestratorSchedulerTick(new Date('2026-03-16T00:00:00.000Z'));
+            expect(invokeUserRpcMock).toHaveBeenCalledWith(
+                'user-1',
+                'machine-1:orchestrator-shell-dispatch',
+                expect.objectContaining({ provider: 'shell', prompt: 'uptime\necho done', timeoutMs: null }),
+                expect.any(Number),
+            );
+
+            for (const [index, execution] of state.executions.entries()) {
+                const finish = await app.inject({
+                    method: 'POST',
+                    url: `/v1/orchestrator/executions/${execution.id}/finish`,
+                    headers: { 'x-user-id': 'user-1' },
+                    payload: {
+                        dispatchToken: execution.dispatchToken,
+                        status: index === 0 ? 'completed' : 'failed',
+                        exitCode: index,
+                        outputText: `out-${index}`,
+                        stderrText: `err-${index}`,
+                    },
+                });
+                expect(finish.statusCode).toBe(200);
+            }
+            expect(state.tasks.map((task) => [task.outputText, task.stderrText])).toEqual([
+                ['out-0', 'err-0'],
+                ['out-1', 'err-1'],
+            ]);
+            expect(state.runs[0].status).toBe('failed');
+            expect(terminalCallbacks()).toHaveLength(1);
+
+            const run = await app.inject({
+                method: 'GET',
+                url: `/v1/orchestrator/runs/${data.runId}?includeExecutions=true`,
+                headers: { 'x-user-id': 'user-1' },
+            });
+            expect(run.json().data.tasks[1]).toEqual(expect.objectContaining({
+                provider: 'shell',
+                stderrText: 'err-1',
+                executions: [expect.objectContaining({ exitCode: 1, stderrText: 'err-1' })],
+            }));
+            await app.close();
+        });
+
+        it('exec returns the output itself when the run finishes while it waits, without a callback', async () => {
+            const app = await createApp();
+            const pending = app.inject({
+                method: 'POST',
+                url: '/v1/orchestrator/exec',
+                headers: { 'x-user-id': 'user-1' },
+                payload: {
+                    command: 'hostname',
+                    machineIds: ['machine-1'],
+                    controllerSessionId: 'controller-session-1',
+                    waitMs: 10_000,
+                },
+            });
+            await vi.waitFor(() => expect(state.runs).toHaveLength(1));
+            await orchestratorSchedulerTick(new Date('2026-03-16T00:00:00.000Z'));
+            const execution = state.executions[0];
+            await app.inject({
+                method: 'POST',
+                url: `/v1/orchestrator/executions/${execution.id}/finish`,
+                headers: { 'x-user-id': 'user-1' },
+                payload: {
+                    dispatchToken: execution.dispatchToken,
+                    status: 'completed',
+                    exitCode: 0,
+                    outputText: 'host-1\n',
+                    stderrText: '',
+                },
+            });
+
+            const exec = await pending;
+            expect(exec.statusCode).toBe(200);
+            const data = exec.json().data;
+            expect(data.terminal).toBe(true);
+            expect(data.next).toBeUndefined();
+            expect(data.tasks).toEqual([expect.objectContaining({
+                machineId: 'machine-1',
+                status: 'completed',
+                exitCode: 0,
+                stdout: 'host-1\n',
+                stderr: '',
+            })]);
+            expect(terminalCallbacks()).toHaveLength(0);
+            await app.close();
+        });
+
+        it('exec rejects unknown machines and having no shell-ready machine', async () => {
+            const app = await createApp();
+            const unknown = await app.inject({
+                method: 'POST',
+                url: '/v1/orchestrator/exec',
+                headers: { 'x-user-id': 'user-1' },
+                payload: { command: 'ls', machineIds: ['machine-1', 'machine-x'] },
+            });
+            expect(unknown.statusCode).toBe(400);
+            expect(unknown.json().error.message).toContain('machine-x');
+
+            state.shellReadyMachineIds = new Set();
+            const noneReady = await app.inject({
+                method: 'POST',
+                url: '/v1/orchestrator/exec',
+                headers: { 'x-user-id': 'user-1' },
+                payload: { command: 'ls', machineIds: 'all_online' },
+            });
+            expect(noneReady.statusCode).toBe(409);
+            expect(state.runs).toHaveLength(0);
+            await app.close();
+        });
+
+        it('only lets shell tasks go past the AI limits and rejects follow-ups to them', async () => {
+            const app = await createApp();
+            const aiTooLong = await app.inject({
+                method: 'POST',
+                url: '/v1/orchestrator/submit',
+                headers: { 'x-user-id': 'user-1' },
+                payload: { title: 'ai', tasks: [{ provider: 'claude', prompt: 'x', timeoutMs: 25 * 60 * 60 * 1000 }] },
+            });
+            expect(aiTooLong.statusCode).toBe(400);
+            const aiTooWide = await app.inject({
+                method: 'POST',
+                url: '/v1/orchestrator/submit',
+                headers: { 'x-user-id': 'user-1' },
+                payload: { title: 'ai', maxConcurrency: 16, tasks: [{ provider: 'claude', prompt: 'x' }] },
+            });
+            expect(aiTooWide.statusCode).toBe(400);
+
+            const shell = await app.inject({
+                method: 'POST',
+                url: '/v1/orchestrator/submit',
+                headers: { 'x-user-id': 'user-1' },
+                payload: {
+                    title: 'shell',
+                    maxConcurrency: 16,
+                    tasks: [{ provider: 'shell', prompt: 'sleep 100000', model: 'opus', timeoutMs: 7 * 24 * 60 * 60 * 1000 }],
+                },
+            });
+            expect(shell.statusCode).toBe(200);
+            expect(state.tasks[0].model).toBeNull();
+
+            state.tasks[0].status = 'completed';
+            const sendMessage = await app.inject({
+                method: 'POST',
+                url: `/v1/orchestrator/tasks/${state.tasks[0].id}/send-message`,
+                headers: { 'x-user-id': 'user-1' },
+                payload: { message: 'again' },
+            });
+            expect(sendMessage.statusCode).toBe(400);
+            expect(sendMessage.json().error.code).toBe('INVALID_ARGUMENT');
+            await app.close();
+        });
+
+        it('reconcile fails the executions a restarted daemon lost, and only those', async () => {
+            const app = await createApp();
+            const exec = await app.inject({
+                method: 'POST',
+                url: '/v1/orchestrator/submit',
+                headers: { 'x-user-id': 'user-1' },
+                payload: {
+                    title: 'long jobs',
+                    controllerSessionId: 'controller-session-1',
+                    maxConcurrency: 3,
+                    tasks: [
+                        { provider: 'shell', prompt: 'job-a', target: { type: 'machine_id', machineId: 'machine-1' } },
+                        { provider: 'shell', prompt: 'job-b', target: { type: 'machine_id', machineId: 'machine-1' } },
+                        { provider: 'shell', prompt: 'job-c', target: { type: 'machine_id', machineId: 'machine-1' } },
+                    ],
+                },
+            });
+            expect(exec.statusCode).toBe(200);
+            await orchestratorSchedulerTick(new Date('2026-03-16T00:00:00.000Z'));
+            const startedAts = ['2026-03-16T00:00:01.000Z', '2026-03-16T00:00:02.000Z', '2026-03-16T00:10:00.000Z'];
+            for (const [index, execution] of state.executions.entries()) {
+                await app.inject({
+                    method: 'POST',
+                    url: `/v1/orchestrator/executions/${execution.id}/start`,
+                    headers: { 'x-user-id': 'user-1' },
+                    payload: { dispatchToken: execution.dispatchToken, startedAt: startedAts[index] },
+                });
+            }
+            expect(state.executions.map((execution) => execution.status)).toEqual(['running', 'running', 'running']);
+
+            // job-a: lost with the old daemon; job-b: still running under it; job-c: started by the new one
+            const reconcile = () => app.inject({
+                method: 'POST',
+                url: '/v1/orchestrator/machines/machine-1/reconcile',
+                headers: { 'x-user-id': 'user-1' },
+                payload: {
+                    liveExecutionIds: [state.executions[1].id],
+                    daemonStartedAt: '2026-03-16T00:05:00.000Z',
+                },
+            });
+            expect((await reconcile()).statusCode).toBe(200);
+            expect(state.executions.map((execution) => [execution.status, execution.errorCode])).toEqual([
+                ['failed', 'EXECUTION_LOST'],
+                ['running', null],
+                ['running', null],
+            ]);
+            expect(state.tasks[0].status).toBe('failed');
+            expect(state.runs[0].status).toBe('running');
+            expect(terminalCallbacks()).toHaveLength(0);
+
+            expect((await reconcile()).statusCode).toBe(200);
+            expect(state.executions[0].finishedAt).toEqual(state.executions[0].finishedAt);
+
+            for (const execution of state.executions.slice(1)) {
+                await app.inject({
+                    method: 'POST',
+                    url: `/v1/orchestrator/executions/${execution.id}/finish`,
+                    headers: { 'x-user-id': 'user-1' },
+                    payload: { dispatchToken: execution.dispatchToken, status: 'completed', exitCode: 0 },
+                });
+            }
+            expect(state.runs[0].status).toBe('failed');
+            expect(terminalCallbacks()).toHaveLength(1);
+            await app.close();
+        });
+
+        it('reconcile ignores executions of other accounts and other machines', async () => {
+            state.machines.push({
+                id: 'machine-2',
+                accountId: 'user-1',
+                active: true,
+                lastActiveAt: new Date('2026-03-16T00:00:00.000Z'),
+            });
+            const app = await createApp();
+            await app.inject({
+                method: 'POST',
+                url: '/v1/orchestrator/submit',
+                headers: { 'x-user-id': 'user-1' },
+                payload: {
+                    title: 'job',
+                    tasks: [{ provider: 'shell', prompt: 'job', target: { type: 'machine_id', machineId: 'machine-2' } }],
+                },
+            });
+            await orchestratorSchedulerTick(new Date('2026-03-16T00:00:00.000Z'));
+            const execution = state.executions[0];
+            await app.inject({
+                method: 'POST',
+                url: `/v1/orchestrator/executions/${execution.id}/start`,
+                headers: { 'x-user-id': 'user-1' },
+                payload: { dispatchToken: execution.dispatchToken, startedAt: '2026-03-16T00:00:01.000Z' },
+            });
+
+            for (const [userId, machineId] of [['user-1', 'machine-1'], ['user-2', 'machine-2']]) {
+                const reconcile = await app.inject({
+                    method: 'POST',
+                    url: `/v1/orchestrator/machines/${machineId}/reconcile`,
+                    headers: { 'x-user-id': userId },
+                    payload: { liveExecutionIds: [], daemonStartedAt: '2026-03-16T00:05:00.000Z' },
+                });
+                expect(reconcile.statusCode).toBe(200);
+            }
+            expect(execution.status).toBe('running');
+            await app.close();
+        });
     });
 });

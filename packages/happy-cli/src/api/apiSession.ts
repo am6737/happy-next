@@ -59,7 +59,7 @@ export type ACPMessageData =
 
 export type ACPProvider = 'gemini' | 'codex' | 'claude' | 'opencode' | 'qoder';
 
-type OrchestratorProvider = 'claude' | 'codex' | 'gemini' | 'qoder';
+type OrchestratorProvider = 'claude' | 'codex' | 'gemini' | 'qoder' | 'shell';
 
 type OrchestratorSubmitTask = {
     taskKey?: string;
@@ -104,6 +104,17 @@ type OrchestratorListQuery = {
     status?: 'active' | 'terminal' | 'queued' | 'running' | 'canceling' | 'completed' | 'failed' | 'cancelled';
     limit?: number;
     cursor?: string;
+};
+
+type OrchestratorExecBody = {
+    command: string;
+    machineIds: string[] | 'all_online';
+    cwd?: string;
+    timeoutMs?: number;
+    waitMs?: number;
+    maxConcurrency?: number;
+    title?: string;
+    controllerSessionId?: string;
 };
 
 type OrchestratorSendMessageBody = {
@@ -411,6 +422,19 @@ export class ApiSessionClient extends EventEmitter {
             {
                 headers: this.orchestratorHeaders(),
                 timeout: 60_000,
+            }
+        );
+        return response.data;
+    }
+
+    async orchestratorExec(body: OrchestratorExecBody): Promise<any> {
+        const response = await axios.post(
+            `${configuration.serverUrl}/v1/orchestrator/exec`,
+            body,
+            {
+                headers: this.orchestratorHeaders(),
+                // The server holds the request open for up to waitMs
+                timeout: (body.waitMs ?? 30_000) + 30_000,
             }
         );
         return response.data;

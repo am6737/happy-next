@@ -23,6 +23,8 @@ import { readAllCodexSessionUserMessages, listCodexSessions, getCodexSessionPrev
 import { forkCodexSession, forkAndTruncateCodexSession } from '@/codex/utils/codexSessionFork';
 import { executeSessionArchive } from '@/daemon/executeSessionArchive';
 import { discoverCapabilities, type DiscoverCapabilitiesAgent } from '@/daemon/discoverCapabilities';
+import { remoteShell } from '@/daemon/orchestratorShell';
+import type { OrchestratorShellDispatchPayload } from '@/orchestrator/common';
 import { AsyncLock } from '@/utils/lock';
 import { SessionCache, matchFields, type SessionCacheRuntimeStats } from '@/cache/SessionCache';
 import { encodeBase64, decodeBase64, encrypt, decrypt } from './encryption';
@@ -163,6 +165,13 @@ type MachineRpcHandlers = {
         accepted: boolean;
         notFound?: boolean;
     }>;
+    /** Absent when remote shell is turned off: the handler is then not registered at all */
+    orchestratorShellDispatch?: (params: OrchestratorShellDispatchPayload) => Promise<{
+        accepted: boolean;
+        duplicate?: boolean;
+    }>;
+    /** Called on every connect, to let the server fail the executions this daemon has lost */
+    orchestratorReconcile: () => Promise<void>;
 }
 
 export class ApiMachineClient {
@@ -201,6 +210,8 @@ export class ApiMachineClient {
 
     private codexArchiveLock = new AsyncLock();
 
+    private orchestratorReconcile: (() => Promise<void>) | null = null;
+
     constructor(
         private token: string,
         private machine: Machine
@@ -235,9 +246,10 @@ export class ApiMachineClient {
         // read displayName itself; the daemon exposes it here to let other
         // clients resolve this machine by a user-readable name.
         this.rpcHandlerManager.registerHandler('machine-identity', async () => {
-            const { displayName, host } = this.machine.metadata;
+            const { displayName, host, platform } = this.machine.metadata;
             const trimmed = displayName?.trim();
-            return { name: trimmed || host || undefined };
+            // The shell tells the orchestrator which syntax this machine's shell tasks take
+            return { name: trimmed || host || undefined, platform, shell: remoteShell.name };
         });
     }
 
@@ -246,8 +258,12 @@ export class ApiMachineClient {
         stopSession,
         requestShutdown,
         orchestratorDispatch,
-        orchestratorCancel
+        orchestratorCancel,
+        orchestratorShellDispatch,
+        orchestratorReconcile,
     }: MachineRpcHandlers) {
+        this.orchestratorReconcile = orchestratorReconcile;
+
         // Register spawn session handler
         this.rpcHandlerManager.registerHandler('spawn-happy-session', async (params: any) => {
             const { directory, sessionId, resumeSessionId, sessionTitle, skipForkSession, machineId, approvedNewDirectoryCreation, agent, token, environmentVariables, worktreeBasePath, worktreeBranchName, workspaceRepos, workspacePath, repoScripts, mcpServers } = params || {};
@@ -455,6 +471,43 @@ export class ApiMachineClient {
                 dispatchToken,
             });
         });
+
+        // Register orchestrator shell dispatch handler: runs a command on this machine for another one.
+        // Left unregistered when turned off, so the server can tell (and say so) before dispatching.
+        if (orchestratorShellDispatch) {
+            this.rpcHandlerManager.registerHandler('orchestrator-shell-dispatch', async (params: any) => {
+                const { executionId, runId, taskId, dispatchToken, provider, prompt, timeoutMs, workingDirectory } = params || {};
+
+                for (const [name, value] of Object.entries({ executionId, runId, taskId, dispatchToken })) {
+                    if (!value || typeof value !== 'string') {
+                        throw new Error(`${name} is required`);
+                    }
+                }
+                if (provider !== 'shell') {
+                    throw new Error(`Unsupported provider: ${provider}`);
+                }
+                if (typeof prompt !== 'string' || prompt.trim().length === 0) {
+                    throw new Error('prompt is required');
+                }
+                if (timeoutMs !== null && (typeof timeoutMs !== 'number' || !Number.isFinite(timeoutMs) || timeoutMs <= 0)) {
+                    throw new Error('timeoutMs must be null or a positive number');
+                }
+                if (workingDirectory !== undefined && (typeof workingDirectory !== 'string' || workingDirectory.length > 512)) {
+                    throw new Error('workingDirectory must be a string with max length 512');
+                }
+
+                return orchestratorShellDispatch({
+                    executionId,
+                    runId,
+                    taskId,
+                    dispatchToken,
+                    provider,
+                    prompt,
+                    timeoutMs: timeoutMs === null ? null : Math.floor(timeoutMs),
+                    workingDirectory,
+                });
+            });
+        }
 
         // Discover slash commands and skills for a directory before any session runs there
         this.rpcHandlerManager.registerHandler('discover-capabilities', async (params: any) => {
@@ -964,6 +1017,10 @@ export class ApiMachineClient {
 
             // Start keep-alive
             this.startKeepAlive();
+
+            void this.orchestratorReconcile?.().catch((error) => {
+                logger.debug('[API MACHINE] Failed to reconcile orchestrator executions', error);
+            });
         });
 
         this.socket.on('disconnect', () => {

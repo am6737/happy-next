@@ -62,6 +62,8 @@ export class CodexTransport implements TransportHandler {
     const orchestratorTools = [
     'orchestrator_get_context',
     'orchestrator_submit',
+    // Before 'bash' below, whose 'exec' pattern it would otherwise match
+    'machine_exec',
     'orchestrator_pend',
     'orchestrator_list',
     'orchestrator_cancel',

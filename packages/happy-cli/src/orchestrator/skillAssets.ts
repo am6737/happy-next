@@ -22,7 +22,7 @@ user explicitly exits.`;
 const ORCHESTRATOR_CORE_GUIDANCE = `The main session is the commander: decide what to delegate, coordinate dependencies, verify results,
 and deliver one coherent answer to the user.
 
-Use only the \`orchestrator_*\` tools for delegated work. Do not mix in provider-native Task,
+Use only the \`orchestrator_*\` tools (and \`machine_exec\`) for delegated work. Do not mix in provider-native Task,
 subagent, or other multi-agent systems because they do not share Happy Orchestrator state. Before
 the first dispatch, call \`orchestrator_get_context\` unless a fresh context is already available.
 
@@ -40,6 +40,12 @@ same files, and dependency-ordered tasks may modify the same files through an ex
 
 Workers should run appropriate checks for their own work. The commander must evaluate the returned
 evidence and perform any additional verification needed before accepting the result.
+
+A known shell command needs no AI: run it with \`machine_exec\` on one machine, several, or all online
+ones, and get each one's exit code, stdout and stderr back as they are. A \`provider: "shell"\` task in
+\`orchestrator_submit\` does the same within a run, ordered with \`dependsOn\` like any task (a
+non-zero exit fails it). Shell commands have no timeout unless one is set; ask the user before
+commands that change or remove things on a machine.
 
 Use \`orchestrator_send_message\` when a completed or failed task should continue in its existing
 child session for feedback, fixes, or follow-up questions. Pass its \`taskId\`, not its \`taskKey\`.

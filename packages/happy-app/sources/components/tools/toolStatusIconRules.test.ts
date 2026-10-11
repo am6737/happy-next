@@ -12,6 +12,16 @@ describe('shouldShowOrchestratorSubmitActivityIndicator', () => {
         })).toBe(true);
     });
 
+    it('returns true for a completed machine_exec whose run is still going', () => {
+        expect(shouldShowOrchestratorSubmitActivityIndicator({
+            toolName: 'mcp__happy__machine_exec',
+            toolState: 'completed',
+            hasSessionId: true,
+            noStatus: false,
+            isMatchingOrchestratorSubmitRunId: true,
+        })).toBe(true);
+    });
+
     it('returns false when tool is not completed', () => {
         expect(shouldShowOrchestratorSubmitActivityIndicator({
             toolName: 'mcp__happy__orchestrator_submit',
