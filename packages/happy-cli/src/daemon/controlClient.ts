@@ -3,6 +3,9 @@
  * Used by CLI commands to interact with running daemon
  */
 
+import { TEAMMATE_ENV } from 'happy-wire';
+import { TeammateToolSchemas, type TeammateToolPath } from '@/teammate/toolSchemas';
+import { ChatSendSchema, ChatHistorySchema } from '@/teammate/chatSchemas';
 import { logger } from '@/ui/logger';
 import { clearDaemonState, readDaemonState } from '@/persistence';
 import { Metadata } from '@/api/types';
@@ -13,7 +16,7 @@ import { configuration } from '@/configuration';
 import { spawnHappyCLI } from '@/utils/spawnHappyCLI';
 import { delay } from '@/utils/time';
 
-async function daemonPost(path: string, body?: any): Promise<{ error?: string } | any> {
+async function daemonPost(path: string, body?: any, timeoutMs?: number): Promise<{ error?: string } | any> {
   const state = await readDaemonState();
   if (!state?.httpPort) {
     const errorMessage = 'No daemon running, no state file found';
@@ -34,7 +37,7 @@ async function daemonPost(path: string, body?: any): Promise<{ error?: string } 
   }
 
   try {
-    const timeout = process.env.HAPPY_DAEMON_HTTP_TIMEOUT ? parseInt(process.env.HAPPY_DAEMON_HTTP_TIMEOUT) : 10_000;
+    const timeout = timeoutMs ?? (process.env.HAPPY_DAEMON_HTTP_TIMEOUT ? parseInt(process.env.HAPPY_DAEMON_HTTP_TIMEOUT) : 10_000);
     const response = await fetch(`http://127.0.0.1:${state.httpPort}${path}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -44,7 +47,8 @@ async function daemonPost(path: string, body?: any): Promise<{ error?: string } 
     });
     
     if (!response.ok) {
-      const errorMessage = `Request failed: ${path}, HTTP ${response.status}`;
+      const detail = await response.json().catch(() => ({})) as { message?: string; error?: string };
+      const errorMessage = detail.message ?? detail.error ?? `Request failed: ${path}, HTTP ${response.status}`;
       logger.debug(`[CONTROL CLIENT] ${errorMessage}`);
       return {
         error: errorMessage
@@ -59,6 +63,18 @@ async function daemonPost(path: string, body?: any): Promise<{ error?: string } 
       error: errorMessage
     }
   }
+}
+
+/** Teammate tools use the same local daemon discovery as session webhooks. */
+export async function callDaemonTeammateChat(path: 'chat-send' | 'chat-history' | TeammateToolPath, input: unknown): Promise<unknown> {
+  const threadId = process.env[TEAMMATE_ENV.threadId];
+  const controlToken = process.env[TEAMMATE_ENV.controlToken];
+  if (!threadId || !controlToken) throw new Error('Missing teammate thread ID or control token');
+  const body = (path === 'chat-send' ? ChatSendSchema : path === 'chat-history' ? ChatHistorySchema : TeammateToolSchemas[path]).parse(input);
+  // Worker start may clone a large repository and spawn a session; other tools can wait behind it on the thread queue.
+  const result = await daemonPost(`/teammate/${path}`, { ...body, threadId, controlToken }, path === 'work-session-start' ? 15 * 60_000 : 2 * 60_000);
+  if (result.error) throw new Error(result.error);
+  return result;
 }
 
 export async function notifyDaemonSessionStarted(

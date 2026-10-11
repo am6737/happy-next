@@ -1,14 +1,18 @@
 import axios from 'axios'
+import { ChannelMessageSchema, TeammateChannelMessageSendRequestSchema, type ChannelMessage, type TeammateChannelMessageSendRequest, type PermissionMode, TeammateTaskAgentUpdateRequestSchema, TeammateTaskCommentRequestSchema, TeammateSessionRegisterRequestSchema, type TeammateTaskAgentUpdateRequest, type TeammateTaskCommentRequest, type TeammateSessionRegisterRequest, TeammateTaskSchema, TeammateTaskCommentResponseSchema, TeammateTaskCreateRequestSchema, TeammateTaskCreateResponseSchema, type TeammateTaskCreateRequest, TeammateActiveSessionsResponseSchema, type TeammateActiveSessionsResponse, type TeammateRunStartedRequest, type TeammateRunFinishedRequest } from 'happy-wire'
 import { logger } from '@/ui/logger'
 import type { AgentState, CreateSessionResponse, Metadata, Session, Machine, MachineMetadata, DaemonState } from '@/api/types'
 import { ApiSessionClient } from './apiSession';
 import { ApiMachineClient } from './apiMachine';
-import { decodeBase64, encodeBase64, getRandomBytes, encrypt, decrypt, libsodiumEncryptForPublicKey } from './encryption';
+import { decodeBase64, encodeBase64, encrypt, decrypt, libsodiumEncryptForPublicKey } from './encryption';
+import { resolveSessionDataKey } from './sessionDataKey';
 import { PushNotificationClient } from './pushNotifications';
 import { configuration } from '@/configuration';
 import chalk from 'chalk';
 import { Credentials } from '@/persistence';
 import { connectionState, isNetworkError } from '@/utils/serverConnectionErrors';
+
+export { resolveSessionDataKey } from './sessionDataKey';
 
 export class ApiClient {
 
@@ -39,8 +43,8 @@ export class ApiClient {
     let encryptionVariant: 'legacy' | 'dataKey';
     if (this.credential.encryption.type === 'dataKey') {
 
-      // Generate new encryption key
-      encryptionKey = getRandomBytes(32);
+      // Use the daemon-provided session key when present, otherwise generate one.
+      encryptionKey = await resolveSessionDataKey();
       encryptionVariant = 'dataKey';
 
       // Derive and encrypt data encryption key
@@ -283,6 +287,104 @@ export class ApiClient {
 
   push(): PushNotificationClient {
     return this.pushClient;
+  }
+
+  async reportTeammateRunStarted(runId: string, request: TeammateRunStartedRequest): Promise<void> {
+    await axios.post(`${configuration.serverUrl}/v1/teammate-runs/${encodeURIComponent(runId)}/started`, request, {
+      headers: { Authorization: `Bearer ${this.credential.token}`, 'Content-Type': 'application/json' },
+      timeout: 30000,
+    });
+  }
+
+  async reportTeammateRunFinished(runId: string, request: TeammateRunFinishedRequest): Promise<void> {
+    await axios.post(`${configuration.serverUrl}/v1/teammate-runs/${encodeURIComponent(runId)}/finished`, request, {
+      headers: { Authorization: `Bearer ${this.credential.token}`, 'Content-Type': 'application/json' },
+      timeout: 30000,
+    });
+  }
+
+  async getTeammateActiveSessions(machineId: string): Promise<TeammateActiveSessionsResponse> {
+    const response = await axios.get(`${configuration.serverUrl}/v1/teammate-runtime/active-sessions`, {
+      params: { machineId }, headers: { Authorization: `Bearer ${this.credential.token}` }, timeout: 30000,
+    });
+    return TeammateActiveSessionsResponseSchema.parse(response.data);
+  }
+
+  async getChannelMessages(channelId: string, query: { afterSeq?: number; beforeSeq?: number; limit?: number } = {}): Promise<ChannelMessage[]> {
+    const response = await axios.get(`${configuration.serverUrl}/v1/channels/${encodeURIComponent(channelId)}/messages`, {
+      params: query, headers: { Authorization: `Bearer ${this.credential.token}` }, timeout: 30000,
+    });
+    return ChannelMessageSchema.array().parse(response.data.messages);
+  }
+
+  async sendTeammateChannelMessage(request: TeammateChannelMessageSendRequest): Promise<ChannelMessage> {
+    const response = await axios.post(`${configuration.serverUrl}/v1/teammate-channel-messages`,
+      TeammateChannelMessageSendRequestSchema.parse(request), {
+        headers: { Authorization: `Bearer ${this.credential.token}`, 'Content-Type': 'application/json' }, timeout: 30000,
+      });
+    return ChannelMessageSchema.parse(response.data.message);
+  }
+
+  async getGithubToken(): Promise<string> {
+    const response = await axios.get(`${configuration.serverUrl}/v1/connect/github/token`, {
+      headers: { Authorization: `Bearer ${this.credential.token}` }, timeout: 30000,
+    });
+    if (typeof response.data.token !== 'string' || !response.data.token) throw new Error('Invalid GitHub token response');
+    return response.data.token;
+  }
+
+  async registerTeammateSession(request: TeammateSessionRegisterRequest): Promise<void> {
+    await axios.post(`${configuration.serverUrl}/v1/teammate-sessions`, TeammateSessionRegisterRequestSchema.parse(request), {
+      headers: { Authorization: `Bearer ${this.credential.token}` }, timeout: 30000,
+    });
+  }
+
+  async updateTeammateTask(request: TeammateTaskAgentUpdateRequest) {
+    const response = await axios.post(`${configuration.serverUrl}/v1/teammate-task-updates`, TeammateTaskAgentUpdateRequestSchema.parse(request), {
+      headers: { Authorization: `Bearer ${this.credential.token}` }, timeout: 30000,
+    });
+    return { task: TeammateTaskSchema.parse(response.data.task) };
+  }
+
+  async commentTeammateTask(request: TeammateTaskCommentRequest) {
+    const response = await axios.post(`${configuration.serverUrl}/v1/teammate-task-comments`, TeammateTaskCommentRequestSchema.parse(request), {
+      headers: { Authorization: `Bearer ${this.credential.token}` }, timeout: 30000,
+    });
+    return TeammateTaskCommentResponseSchema.parse(response.data);
+  }
+
+  async createTeammateTask(request: TeammateTaskCreateRequest) {
+    const response = await axios.post(`${configuration.serverUrl}/v1/teammate-agent-tasks`, TeammateTaskCreateRequestSchema.parse(request), {
+      headers: { Authorization: `Bearer ${this.credential.token}` }, timeout: 30000,
+    });
+    return TeammateTaskCreateResponseSchema.parse(response.data);
+  }
+
+  async getSessionMessages(sessionId: string, limit = 40): Promise<{ messages: { seq: number; content: { t: 'encrypted'; c: string } }[]; busy?: boolean }> {
+    const response = await axios.get(`${configuration.serverUrl}/v3/sessions/${encodeURIComponent(sessionId)}/messages`, {
+      params: { limit }, headers: { Authorization: `Bearer ${this.credential.token}` }, timeout: 30000,
+    });
+    if (!Array.isArray(response.data.messages)) throw new Error('Invalid session messages response');
+    return response.data;
+  }
+
+  /**
+   * Same user text record and dataKey encryption as the app's send-or-queue path.
+   * sentFrom must not be 'cli': the receiving session drops 'cli' user messages as its own echoes.
+   */
+  async sendSessionMessage(sessionId: string, text: string, key: Uint8Array, localId: string, permissionMode: PermissionMode = 'default', model: string | null = null, reasoningEffort: string | null = null): Promise<'sent' | 'queued'> {
+    const content = encodeBase64(encrypt(key, 'dataKey', {
+      role: 'user', content: { type: 'text', text },
+      meta: { sentFrom: 'teammate', permissionMode, model, reasoningEffort, fallbackModel: null },
+    }));
+    const response = await axios.post(`${configuration.serverUrl}/v3/sessions/${encodeURIComponent(sessionId)}/send`,
+      { localId, content }, {
+        headers: { Authorization: `Bearer ${this.credential.token}`, 'Content-Type': 'application/json' },
+        timeout: 30000,
+      });
+    const mode: unknown = response.data.mode;
+    if (mode !== 'sent' && mode !== 'queued') throw new Error('Invalid session message delivery mode');
+    return mode;
   }
 
   /**

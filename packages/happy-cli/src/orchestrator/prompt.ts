@@ -1,4 +1,5 @@
 import { trimIdent } from '@/utils/trimIdent';
+import { TEAMMATE_ENV } from 'happy-wire';
 import { ORCHESTRATOR_ENV_KEYS } from './common';
 
 export const CHAT_TITLE_INSTRUCTION = trimIdent(`
@@ -55,6 +56,10 @@ export function getBaseSystemPrompt(
 ): string | null {
   if (!shouldEnableOrchestratorTools(env)) {
     return null;
+  }
+  // Agent controllers and workers are spawned with a session title, so they skip the change_title turn.
+  if (env[TEAMMATE_ENV.sessionRole]) {
+    return options.includeOrchestrator ? getOrchestratorToolsInstruction(env) : null;
   }
   // claude/codex discover the orchestrator via the synced skill, so their system prompt stays lean
   // (chat title only). Gemini has no skill sync, so it opts in to keep orchestrator guidance here.

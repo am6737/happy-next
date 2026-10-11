@@ -3,21 +3,30 @@
  * Provides endpoints for listing sessions, stopping sessions, and daemon shutdown
  */
 
-import fastify, { FastifyInstance } from 'fastify';
+import fastify from 'fastify';
 import { z } from 'zod';
 import { serializerCompiler, validatorCompiler, ZodTypeProvider } from 'fastify-type-provider-zod';
+import { TeammateToolSchemas, type TeammateToolPath } from '@/teammate/toolSchemas';
+import { ChatAuthSchema, ChatSendRequestSchema, ChatHistoryRequestSchema, type ChatSendRequest, type ChatHistoryRequest } from '@/teammate/chatSchemas';
 import { logger } from '@/ui/logger';
 import { Metadata } from '@/api/types';
 import { TrackedSession } from './types';
 import { SpawnSessionOptions, SpawnSessionResult } from '@/modules/common/registerCommonHandlers';
+import { describeServerError } from '@/teammate/serverError';
 
 export function startDaemonControlServer({
   getChildren,
   stopSession,
   spawnSession,
   requestShutdown,
-  onHappySessionWebhook
+  onHappySessionWebhook,
+  teammateChat
 }: {
+  teammateChat?: {
+    executeTool?: (path: TeammateToolPath, request: unknown) => Promise<unknown>;
+    chatSend: (request: ChatSendRequest) => Promise<{ seq: number }>;
+    chatHistory: (request: ChatHistoryRequest) => Promise<unknown>;
+  };
   getChildren: () => TrackedSession[];
   stopSession: (sessionId: string) => boolean;
   spawnSession: (options: SpawnSessionOptions) => Promise<SpawnSessionResult>;
@@ -33,6 +42,22 @@ export function startDaemonControlServer({
     app.setValidatorCompiler(validatorCompiler);
     app.setSerializerCompiler(serializerCompiler);
     const typed = app.withTypeProvider<ZodTypeProvider>();
+
+    typed.post('/teammate/chat-send', { schema: { body: ChatSendRequestSchema } }, async (request, reply) => {
+      if (!teammateChat) return reply.code(503).send({ error: 'Teammate runtime is unavailable' });
+      return teammateChat.chatSend(request.body).catch(error => { throw describeServerError(error); });
+    });
+    typed.post('/teammate/chat-history', { schema: { body: ChatHistoryRequestSchema } }, async (request, reply) => {
+      if (!teammateChat) return reply.code(503).send({ error: 'Teammate runtime is unavailable' });
+      return teammateChat.chatHistory(request.body).catch(error => { throw describeServerError(error); });
+    });
+
+    for (const path of Object.keys(TeammateToolSchemas) as TeammateToolPath[]) {
+      typed.post(`/teammate/${path}`, { schema: { body: ChatAuthSchema.and(TeammateToolSchemas[path]) } }, async (request, reply) => {
+        if (!teammateChat?.executeTool) return reply.code(503).send({ error: 'Teammate runtime is unavailable' });
+        return Promise.resolve(teammateChat.executeTool(path, request.body)).catch(error => { throw describeServerError(error); });
+      });
+    }
 
     // Session reports itself after creation
     typed.post('/session-started', {

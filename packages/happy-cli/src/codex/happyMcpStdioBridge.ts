@@ -1,11 +1,10 @@
 /**
  * Happy MCP STDIO Bridge
  *
- * Minimal STDIO MCP server exposing Happy tools
- * (`change_title`, `preview_html`, `orchestrator_*`) for controller sessions.
- * Orchestrator worker sessions expose no Happy tools to avoid recursive orchestration or UI side effects.
- * On invocation it forwards tool calls to an existing Happy HTTP MCP server
- * using the StreamableHTTPClientTransport.
+ * Minimal STDIO MCP server that mirrors the tools of an existing Happy HTTP MCP server
+ * (`change_title`, `preview_html`, `orchestrator_*`, Agent tools such as `chat_send`).
+ * The HTTP server decides which tools a session gets, so the bridge forwards its tool
+ * list and calls unchanged using the StreamableHTTPClientTransport.
  *
  * Configure the target HTTP MCP URL via env var `HAPPY_HTTP_MCP_URL` or
  * via CLI flag `--url <http://127.0.0.1:PORT>`.
@@ -13,20 +12,14 @@
  * Note: This process must not print to stdout as it would break MCP STDIO.
  */
 
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { z } from 'zod';
-import { shouldEnableOrchestratorTools } from '@/orchestrator/prompt';
-import {
-  ORCHESTRATOR_CANCEL_TOOL_SCHEMA,
-  ORCHESTRATOR_GET_CONTEXT_TOOL_SCHEMA,
-  ORCHESTRATOR_LIST_TOOL_SCHEMA,
-  ORCHESTRATOR_PEND_TOOL_SCHEMA,
-  ORCHESTRATOR_SEND_MESSAGE_TOOL_SCHEMA,
-  ORCHESTRATOR_SUBMIT_TOOL_SCHEMA,
-} from '@/orchestrator/mcpToolSchemas';
+import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+
+// Matches Codex's tool_timeout_sec for Happy tools; Agent work_session_start may clone for up to 15 minutes.
+const TOOL_CALL_TIMEOUT_MS = 20 * 60_000;
 
 function parseArgs(argv: string[]): { url: string | null } {
   let url: string | null = null;
@@ -69,59 +62,35 @@ async function main() {
   }
 
   // Create STDIO MCP server
-  const server = new McpServer({
-    name: 'Happy MCP Bridge',
-    version: '1.0.0',
+  const server = new Server(
+    { name: 'Happy MCP Bridge', version: '1.0.0' },
+    { capabilities: { tools: {} } },
+  );
+
+  server.setRequestHandler(ListToolsRequestSchema, async (request) => {
+    try {
+      const client = await ensureHttpClient();
+      return await client.listTools(request.params);
+    } catch (error) {
+      process.stderr.write(`[happy-mcp] Failed to list tools: ${error instanceof Error ? error.message : String(error)}\n`);
+      return { tools: [] };
+    }
   });
-  const enableHappyTools = shouldEnableOrchestratorTools();
 
-  // Helper to register a tool that forwards calls to the HTTP MCP server
-  function registerForwardedTool(
-    name: string,
-    opts: { description: string; title: string; inputSchema: Record<string, z.ZodType> },
-  ) {
-    server.registerTool(name, opts, async (args) => {
-      try {
-        const client = await ensureHttpClient();
-        const response = await client.callTool({ name, arguments: args });
-        return response as any;
-      } catch (error) {
-        return {
-          content: [
-            { type: 'text', text: `Failed to call ${name}: ${error instanceof Error ? error.message : String(error)}` },
-          ],
-          isError: true,
-        };
-      }
-    });
-  }
-
-  if (enableHappyTools) {
-    registerForwardedTool('change_title', {
-      description: 'Change the title of the current chat session',
-      title: 'Change Chat Title',
-      inputSchema: {
-        title: z.string().describe('The new title for the chat session'),
-      },
-    });
-
-    registerForwardedTool('preview_html', {
-      description: 'Preview an HTML page in the client app. Pass the document inline as `html`, or pass `filePath` to preview a local .html file you just generated. The document must be complete and self-contained, with all CSS and JS inlined.',
-      title: 'Preview HTML',
-      inputSchema: {
-        html: z.string().optional().describe('Complete self-contained HTML document string'),
-        filePath: z.string().optional().describe('Path to a local .html file to preview. Read by the CLI, so relative paths resolve against the session working directory'),
-        title: z.string().optional().describe('Display title for the preview'),
-      },
-    });
-
-    registerForwardedTool('orchestrator_get_context', ORCHESTRATOR_GET_CONTEXT_TOOL_SCHEMA);
-    registerForwardedTool('orchestrator_submit', ORCHESTRATOR_SUBMIT_TOOL_SCHEMA);
-    registerForwardedTool('orchestrator_pend', ORCHESTRATOR_PEND_TOOL_SCHEMA);
-    registerForwardedTool('orchestrator_list', ORCHESTRATOR_LIST_TOOL_SCHEMA);
-    registerForwardedTool('orchestrator_cancel', ORCHESTRATOR_CANCEL_TOOL_SCHEMA);
-    registerForwardedTool('orchestrator_send_message', ORCHESTRATOR_SEND_MESSAGE_TOOL_SCHEMA);
-  }
+  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    const { name } = request.params;
+    try {
+      const client = await ensureHttpClient();
+      return await client.callTool(request.params, undefined, { timeout: TOOL_CALL_TIMEOUT_MS });
+    } catch (error) {
+      return {
+        content: [
+          { type: 'text' as const, text: `Failed to call ${name}: ${error instanceof Error ? error.message : String(error)}` },
+        ],
+        isError: true,
+      };
+    }
+  });
 
   // Start STDIO transport
   const stdio = new StdioServerTransport();

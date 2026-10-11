@@ -1,4 +1,5 @@
 import os from 'node:os';
+import { teammateMetadataFields } from '@/teammate/sessionHooks';
 import { randomUUID } from 'node:crypto';
 import { readdirSync } from 'node:fs';
 import { copyFile, mkdir, stat } from 'node:fs/promises';
@@ -187,6 +188,7 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
         lifecycleState: 'running',
         lifecycleStateSince: Date.now(),
         flavor: 'claude',
+        ...teammateMetadataFields(),
         // Worktree metadata: env vars from daemon take priority, otherwise detect via git
         ...detectWorktreeMetadata(workingDirectory),
     };

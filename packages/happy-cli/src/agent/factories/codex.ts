@@ -39,6 +39,8 @@ export interface CodexBackendOptions extends AgentFactoryOptions {
   permissionHandler?: CodexPermissionHandler;
   /** Rollout file path for session resume */
   resumeFile?: string | null;
+  /** Turns off Codex's spawn_agent subagents */
+  disableSubagents?: boolean;
   /** Abort signal */
   signal?: AbortSignal;
 }
@@ -68,7 +70,9 @@ export function createCodexBackend(options: CodexBackendOptions): CodexBackendRe
   const model = options.model ?? process.env.CODEX_MODEL ?? null;
   const packageSpec = codexPackage();
   const { fast } = splitFastModeSuffix(model ?? '');
-  const runtime = resolveCodexRuntime(packageSpec, ['app-server', ...codexFastModeArgs(fast)]);
+  // Thread-level feature overrides leave spawn_agent available; the process flags actually remove it.
+  const subagentArgs = options.disableSubagents ? ['--disable', 'multi_agent', '--disable', 'multi_agent_v2'] : [];
+  const runtime = resolveCodexRuntime(packageSpec, ['app-server', ...codexFastModeArgs(fast), ...subagentArgs]);
 
   const backendOptions: CodexAppServerBackendOptions = {
     cwd: options.cwd,
@@ -85,6 +89,7 @@ export function createCodexBackend(options: CodexBackendOptions): CodexBackendRe
     mcpServers: options.mcpServers,
     permissionHandler: options.permissionHandler,
     resumeFile: options.resumeFile,
+    disableSubagents: options.disableSubagents,
     signal: options.signal,
   };
 

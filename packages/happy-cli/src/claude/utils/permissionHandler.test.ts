@@ -1,4 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, vi, describe, expect, it } from 'vitest';
 import { getToolDescriptor } from './getToolDescriptor';
 import { canAutoApproveForMode, canAutoApproveTool } from './permissionHandler';
 
@@ -71,5 +74,56 @@ describe('canAutoApproveTool', () => {
         expect(approves('Edit', 'acceptEdits')).toBe(true);
         expect(approves('Edit', 'default')).toBe(false);
         expect(approves('Read', 'acceptEdits')).toBe(false);
+    });
+});
+
+describe('teammate chat tool permissions', () => {
+    afterEach(() => vi.unstubAllEnvs());
+    it.each(['chat_send', 'chat_history', 'task_update', 'task_comment', 'work_session_start', 'work_session_send', 'work_session_read', 'work_session_list', 'work_session_stop', 'memory_note'].map(name => `mcp__happy__${name}`))('exempts %s only in teammate sessions in every mode', tool => {
+        vi.stubEnv('HAPPY_TEAMMATE_THREAD_ID', '');
+        for (const mode of ALL_CLAUDE_MODES) expect(approves(tool, mode)).toBe(false);
+        vi.stubEnv('HAPPY_TEAMMATE_THREAD_ID', 'thread');
+        vi.stubEnv('HAPPY_TEAMMATE_SESSION_ROLE', 'controller');
+        for (const mode of ALL_CLAUDE_MODES) expect(approves(tool, mode)).toBe(true);
+        expect(approves('mcp__happy__orchestrator_submit', 'default')).toBe(false);
+        vi.stubEnv('HAPPY_TEAMMATE_SESSION_ROLE', 'worker');
+        for (const mode of ALL_CLAUDE_MODES) expect(approves(tool, mode)).toBe(false);
+        vi.stubEnv('HAPPY_TEAMMATE_SESSION_ROLE', '');
+        expect(approves(tool, 'default')).toBe(false);
+    });
+});
+
+describe('teammate home memory edits', () => {
+    afterEach(() => vi.unstubAllEnvs());
+    const setup = () => {
+        const root = mkdtempSync(join(tmpdir(), 'teammate-perm-'));
+        const home = join(root, 'home');
+        for (const dir of ['memory', 'skills', 'state/keys']) mkdirSync(join(home, dir), { recursive: true });
+        writeFileSync(join(root, 'outside.md'), '');
+        symlinkSync(join(root, 'outside.md'), join(home, 'skills', 'escape.md'));
+        vi.stubEnv('HAPPY_TEAMMATE_THREAD_ID', 'thread');
+        vi.stubEnv('HAPPY_TEAMMATE_SESSION_ROLE', 'controller');
+        vi.stubEnv('HAPPY_TEAMMATE_HOME', home);
+        return home;
+    };
+    const edit = (tool: string, file_path: string) => canAutoApproveTool(tool, 'default', getToolDescriptor(tool), { file_path });
+
+    it('approves controller edits to its own memory, preferences, checklist and skills', () => {
+        const home = setup();
+        for (const file of ['MEMORY.md', 'USER.md', 'HEARTBEAT.md', 'memory/2026-10-09.md', 'skills/release.md']) {
+            expect(edit('Write', join(home, file))).toBe(true);
+            expect(edit('Edit', join(home, file))).toBe(true);
+        }
+    });
+
+    it('keeps identity files, state, other paths, symlink escapes, non-edit tools and workers asking', () => {
+        const home = setup();
+        for (const file of ['AGENTS.md', 'SOUL.md', 'IDENTITY.md', 'state/keys/a.key', 'memory/nested/x.md', '../outside.md', 'skills/escape.md']) {
+            expect(edit('Write', join(home, file))).toBe(false);
+        }
+        expect(edit('Bash', join(home, 'MEMORY.md'))).toBe(false);
+        expect(edit('Write', 'MEMORY.md')).toBe(false);
+        vi.stubEnv('HAPPY_TEAMMATE_SESSION_ROLE', 'worker');
+        expect(edit('Write', join(home, 'MEMORY.md'))).toBe(false);
     });
 });

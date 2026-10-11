@@ -24,3 +24,11 @@ describe('createCodexBackend fast mode', () => {
     expect(appServerArgs('gpt-5.5-fast')).toEqual(['app-server', '--enable', 'fast_mode']);
   });
 });
+
+describe('createCodexBackend subagents', () => {
+  it('turns both multi-agent features off at process level for Agent controllers', () => {
+    const { backend } = createCodexBackend({ cwd: '/tmp', model: 'gpt-5.5', disableSubagents: true });
+    const args = (backend as unknown as { options: { args: string[] } }).options.args;
+    expect(args.slice(args.indexOf('app-server'))).toEqual(['app-server', '--disable', 'fast_mode', '--disable', 'multi_agent', '--disable', 'multi_agent_v2']);
+  });
+});

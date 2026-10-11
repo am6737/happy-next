@@ -31,6 +31,8 @@ import { MessageBuffer } from "@/ui/ink/messageBuffer";
 import { CodexDisplay } from "@/ui/ink/CodexDisplay";
 // trimIdent not currently used
 import { getFirstTurnInstruction } from '@/orchestrator/firstTurnInstruction';
+import { teammateSystemPrompt } from '@/claude/utils/systemPrompt';
+import { persistTeammateProviderSessionId } from '@/teammate/sessionHooks';
 import { notifyDaemonSessionStarted } from "@/daemon/controlClient";
 import { registerKillSessionHandler } from "@/claude/registerKillSessionHandler";
 import { inspect } from 'node:util';
@@ -48,6 +50,7 @@ import { handleConfigMetadataEvent } from '@/agent/acp/sessionUpdateHandlers';
 import { findCodexSessionFile } from './utils/codexSessionReader';
 import { summarizeBashToolOutput } from '@/modules/common/loadableToolOutput';
 import { cleanupStdinAfterInk } from '@/utils/terminalStdinCleanup';
+import { TEAMMATE_ENV } from 'happy-wire';
 
 type ReadyEventOptions = {
     pending: unknown;
@@ -119,6 +122,8 @@ export function formatCodexProcessExitMessage(error: unknown): string {
  * Map Happy permission mode to Codex approval policy
  */
 function mapApprovalPolicy(permissionMode: string): ApprovalPolicy {
+    // Read-only teammate workers run unattended: 'untrusted' would wait for approvals nobody gives.
+    if (process.env[TEAMMATE_ENV.readOnly] === '1') return 'never';
     switch (permissionMode) {
         // Codex v0.98+: untrusted, on-failure, on-request, never
         case 'default': return 'on-request';
@@ -133,6 +138,7 @@ function mapApprovalPolicy(permissionMode: string): ApprovalPolicy {
  * Map Happy permission mode to Codex sandbox mode
  */
 function mapSandbox(permissionMode: string): SandboxMode {
+    if (process.env[TEAMMATE_ENV.readOnly] === '1') return 'read-only';
     switch (permissionMode) {
         case 'default': return 'workspace-write';
         case 'read-only': return 'read-only';
@@ -291,7 +297,7 @@ export async function runCodex(opts: {
     let currentPermissionMode: PermissionMode | undefined = undefined;
     let currentModel: string | undefined = undefined;
     let sessionSystemPrompt: string | undefined = undefined;
-    const firstTurnInstruction = getFirstTurnInstruction();
+    const firstTurnInstruction = [getFirstTurnInstruction(), teammateSystemPrompt].filter(Boolean).join('\n\n');
     let currentSessionModel: string | undefined = undefined;
     let currentSessionReasoningEffort: string | undefined = undefined;
 
@@ -1010,6 +1016,8 @@ export async function runCodex(opts: {
             mcpServers,
             permissionHandler,
             resumeFile: opts.resumeFile,
+            // Agent controllers delegate through work sessions; a subagent would work in the Agent home and never wake the controller.
+            disableSubagents: process.env[TEAMMATE_ENV.sessionRole] === 'controller',
         });
 
         backend = newBackend as unknown as CodexAppServerBackend;
@@ -1050,6 +1058,7 @@ export async function runCodex(opts: {
         const codexConvId = backend!.getSessionId?.();
         if (codexConvId) {
             session.updateMetadata((m: any) => ({ ...m, codexSessionId: codexConvId }));
+            void persistTeammateProviderSessionId(codexConvId);
         }
         return backend as CodexAppServerBackend;
     }
@@ -1369,6 +1378,7 @@ Tokens used: ${goal.tokensUsed}${goal.tokenBudget ? ` / ${goal.tokenBudget}` : '
                     const codexConvId = backend!.getSessionId?.();
                     if (codexConvId) {
                         session.updateMetadata((m: any) => ({ ...m, codexSessionId: codexConvId }));
+                        void persistTeammateProviderSessionId(codexConvId);
                     }
 
                     // Wait for this turn to complete

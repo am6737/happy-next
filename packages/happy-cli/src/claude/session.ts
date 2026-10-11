@@ -1,3 +1,4 @@
+import { persistTeammateProviderSessionId } from '@/teammate/sessionHooks';
 import { ApiClient, ApiSessionClient } from "@/lib";
 import { MessageQueue2 } from "@/utils/MessageQueue2";
 import { EnhancedMode } from "./loop";
@@ -101,6 +102,7 @@ export class Session {
      */
     onSessionFound = (sessionId: string) => {
         this.sessionId = sessionId;
+        void persistTeammateProviderSessionId(sessionId);
         
         // Update metadata with Claude Code session ID
         this.client.updateMetadata((metadata) => ({

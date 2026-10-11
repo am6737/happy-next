@@ -191,6 +191,25 @@ describe('CodexAppServerBackend.waitForResponseComplete', () => {
     await expect(backend.waitForResponseComplete(100)).resolves.toBeUndefined();
   });
 
+  it('ignores subagent thread turns and output but keeps them as progress', async () => {
+    const backend = createBackend();
+    const anyBackend = backend as any;
+    const events: any[] = [];
+    backend.onMessage((msg: any) => events.push(msg));
+    anyBackend.threadId = 't1';
+
+    anyBackend.resetTurnComplete();
+    const waitPromise = backend.waitForResponseComplete(120);
+    await vi.advanceTimersByTimeAsync(90);
+    anyBackend.handleNotification(Methods.NOTIFY_AGENT_MESSAGE_DELTA, { threadId: 'sub', turnId: 'turn-2', itemId: 'i1', delta: 'sub' });
+    anyBackend.handleNotification(Methods.NOTIFY_TURN_COMPLETED, { threadId: 'sub', turn: { id: 'turn-2', status: 'completed', items: [] } });
+    await vi.advanceTimersByTimeAsync(90);
+    expect(events.filter(e => e.type === 'model-output' || e.type === 'status')).toEqual([]);
+
+    anyBackend.handleNotification(Methods.NOTIFY_TURN_COMPLETED, { threadId: 't1', turn: { id: 'turn-1', status: 'completed', items: [] } });
+    await expect(waitPromise).resolves.toBeUndefined();
+  });
+
   it('does not timeout while progress events continue', async () => {
     const backend = createBackend();
     const anyBackend = backend as any;
@@ -974,6 +993,13 @@ describe('buildThreadParams', () => {
     expect(params.model).toBe('o4-mini');
     expect(params.serviceTier).toBe('fast');
     expect(params.config?.model_reasoning_effort).toBe('high');
+  });
+
+  it('turns off subagent features only when asked', () => {
+    const plain = (new CodexAppServerBackend({ cwd: process.cwd(), command: 'codex' }) as any).buildThreadParams();
+    expect(plain.config).toBeUndefined();
+    const params = (new CodexAppServerBackend({ cwd: process.cwd(), command: 'codex', disableSubagents: true }) as any).buildThreadParams();
+    expect(params.config).toEqual({ 'features.multi_agent': false, 'features.multi_agent_v2': false });
   });
 
   it('injects default_tools_approval_mode=approve for the happy MCP server', () => {

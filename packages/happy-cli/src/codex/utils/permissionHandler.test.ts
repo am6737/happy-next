@@ -32,6 +32,19 @@ describe('CodexPermissionHandler', () => {
         pushClient = { sendToAllDevices: vi.fn() };
     });
 
+    it('redirects questions from an Agent main session to the channel instead of waiting', async () => {
+        vi.stubEnv('HAPPY_TEAMMATE_SESSION_ROLE', 'controller');
+        try {
+            const handler = new CodexPermissionHandler(session, pushClient);
+            const result = await handler.handleToolCall('question-1', 'AskUserQuestion', { questions: [{ id: 'scope' }] });
+            expect(result.decision).toBe('approved');
+            expect(result.answers?.scope).toContain('chat_send');
+            expect(agentState.requests).toBeUndefined();
+        } finally {
+            vi.unstubAllEnvs();
+        }
+    });
+
     it('forwards structured answers from the app', async () => {
         const handler = new CodexPermissionHandler(session, pushClient);
         const pending = handler.handleToolCall('question-1', 'AskUserQuestion', { questions: [] });

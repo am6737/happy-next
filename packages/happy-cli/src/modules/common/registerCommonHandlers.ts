@@ -120,6 +120,8 @@ interface DifftasticResponse {
 */
 
 export interface SpawnSessionOptions {
+    /** Internal daemon callers only; never forwarded from spawn-happy-session RPC. */
+    extraEnv?: Record<string, string>;
     machineId?: string;
     directory: string;
     sessionId?: string;

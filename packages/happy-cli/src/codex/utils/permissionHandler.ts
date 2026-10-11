@@ -9,11 +9,15 @@ import { logger } from "@/ui/logger";
 import { ApiSessionClient } from "@/api/apiSession";
 import { PushNotificationClient } from "@/api/pushNotifications";
 import type { PermissionMode } from '@/api/types';
+import { TEAMMATE_ENV } from 'happy-wire';
 import {
     BasePermissionHandler,
     PermissionResult,
     PendingRequest
 } from '@/utils/BasePermissionHandler';
+
+// An Agent's main session runs unattended, so a question asked there would wait forever.
+const TEAMMATE_QUESTION_REDIRECT = 'Nobody watches this session. Ask your owner with chat_send(kind="decision") in the channel instead, then end your turn and wait for the reply.';
 
 // Re-export types for backwards compatibility
 export type { PermissionResult, PendingRequest };
@@ -84,6 +88,10 @@ export class CodexPermissionHandler extends BasePermissionHandler {
         toolName: string,
         input: unknown
     ): Promise<PermissionResult> {
+        if (toolName === 'AskUserQuestion' && process.env[TEAMMATE_ENV.sessionRole] === 'controller') {
+            const questions = (input as { questions?: Array<{ id: string }> } | null)?.questions ?? [];
+            return { decision: 'approved', answers: Object.fromEntries(questions.map(question => [question.id, TEAMMATE_QUESTION_REDIRECT])) };
+        }
         if (this.shouldAutoApprove(toolName, toolCallId)) {
             logger.debug(`${this.getLogPrefix()} Auto-approving tool ${toolName} (${toolCallId}) in ${this.currentPermissionMode} mode`);
 

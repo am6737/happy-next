@@ -42,6 +42,10 @@ describe('orchestrator prompt helpers', () => {
 
     const worker = getBaseSystemPrompt({ HAPPY_ORCH_ONESHOT: '1' } as NodeJS.ProcessEnv);
     expect(worker).toBeNull();
+
+    const agentSession = { HAPPY_TEAMMATE_SESSION_ROLE: 'controller' } as NodeJS.ProcessEnv;
+    expect(getBaseSystemPrompt(agentSession)).toBeNull();
+    expect(getBaseSystemPrompt(agentSession, { includeOrchestrator: true })).not.toContain('# Chat title');
   });
 
   it('appends orchestrator instructions onto first-turn base instruction', () => {

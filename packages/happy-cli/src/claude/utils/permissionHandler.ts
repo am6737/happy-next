@@ -6,8 +6,9 @@
  */
 
 import { isDeepStrictEqual } from 'node:util';
+import { realpathSync } from 'node:fs';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
-import { join } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, sep } from 'node:path';
 import { logger } from "@/lib";
 import { SDKAssistantMessage, SDKMessage, SDKUserMessage } from "../sdk";
 import { PermissionResult } from "../sdk/types";
@@ -44,6 +45,26 @@ const HAPPY_UI_TOOLS: ReadonlySet<string> = new Set([
     'mcp__happy__preview_html',
 ]);
 
+const TEAMMATE_TOOLS: ReadonlySet<string> = new Set(['chat_send', 'chat_history', 'task_update', 'task_comment', 'task_create', 'work_session_start', 'work_session_send', 'work_session_read', 'work_session_list', 'work_session_stop', 'memory_note', 'memory_commit'].map(name => `mcp__happy__${name}`));
+
+// Files a teammate controller maintains in its own home: memory, owner preferences, heartbeat checklist and skills.
+// Identity files, state/ (keys) and workspaces/ stay behind the normal approval flow.
+const TEAMMATE_HOME_WRITABLE = /^(?:MEMORY\.md|USER\.md|HEARTBEAT\.md|memory\/[^/]+\.md|skills\/[^/]+\.md)$/;
+
+/** Edits by a teammate controller to its own memory files, resolved through symlinks so they cannot leave the home. */
+export function isTeammateHomeEdit(descriptor: { edit?: boolean }, input: unknown): boolean {
+    const home = process.env.HAPPY_TEAMMATE_HOME;
+    const filePath = (input as { file_path?: unknown } | null)?.file_path;
+    if (!home || process.env.HAPPY_TEAMMATE_SESSION_ROLE !== 'controller' || !descriptor.edit || typeof filePath !== 'string' || !isAbsolute(filePath)) return false;
+    try {
+        let real: string;
+        try { real = realpathSync(filePath); } catch { real = join(realpathSync(dirname(filePath)), basename(filePath)); }
+        return TEAMMATE_HOME_WRITABLE.test(relative(realpathSync(home), real).split(sep).join('/'));
+    } catch {
+        return false;
+    }
+}
+
 interface PendingRequest {
     resolve: (value: PermissionResult) => void;
     reject: (error: Error) => void;
@@ -73,8 +94,9 @@ export function canAutoApproveForMode(mode: PermissionMode, descriptor: { edit?:
  * Happy's own UI tools never ask, in any mode, and an edit asks only outside acceptEdits.
  * Everything else falls through to the user.
  */
-export function canAutoApproveTool(toolName: string, mode: PermissionMode, descriptor: { edit?: boolean }): boolean {
-    return HAPPY_UI_TOOLS.has(toolName) || canAutoApproveForMode(mode, descriptor);
+export function canAutoApproveTool(toolName: string, mode: PermissionMode, descriptor: { edit?: boolean }, input?: unknown): boolean {
+    return HAPPY_UI_TOOLS.has(toolName) || (Boolean(process.env.HAPPY_TEAMMATE_THREAD_ID) && process.env.HAPPY_TEAMMATE_SESSION_ROLE === 'controller' && TEAMMATE_TOOLS.has(toolName))
+        || canAutoApproveForMode(mode, descriptor) || isTeammateHomeEdit(descriptor, input);
 }
 
 export class PermissionHandler {
@@ -216,10 +238,10 @@ export class PermissionHandler {
         const descriptor = getToolDescriptor(toolName);
 
         //
-        // Auto-approval: Happy's own UI tools in any mode, edits under acceptEdits
+        // Auto-approval: Happy's own UI tools in any mode, edits under acceptEdits, teammate memory edits
         //
 
-        if (canAutoApproveTool(toolName, this.permissionMode, descriptor)) {
+        if (canAutoApproveTool(toolName, this.permissionMode, descriptor, input)) {
             return { behavior: 'allow', updatedInput: input as Record<string, unknown> };
         }
 

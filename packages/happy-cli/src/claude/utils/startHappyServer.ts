@@ -27,6 +27,10 @@ import {
 } from '@/orchestrator/mcpToolSchemas';
 import { getValidModelModesForAgent } from 'happy-wire';
 import { readPreviewHtmlFile } from '@/utils/previewHtmlFile';
+import { TeammateToolSchemas, TeammateToolDescriptions, teammateToolNames, teammateToolShape, type TeammateToolPath } from '@/teammate/toolSchemas';
+import { ChatSendSchema, ChatHistorySchema } from '@/teammate/chatSchemas';
+import { callDaemonTeammateChat } from '@/daemon/controlClient';
+import { registerMcpTool } from '@/utils/registerMcpTool';
 
 function toToolSuccess(data: unknown) {
     return {
@@ -57,11 +61,40 @@ function toToolError(message: string, details?: unknown) {
 }
 
 // Factory function to create MCP server with tools
-function createMcpServer(client: ApiSessionClient, options: { enableHappyTools: boolean; enableOrchestratorTools: boolean }): McpServer {
+export function createMcpServer(client: ApiSessionClient, options: { enableHappyTools: boolean; enableOrchestratorTools: boolean }): McpServer {
     const mcp = new McpServer({
         name: "Happy MCP",
         version: "1.0.0",
     });
+
+    const teammateTools = teammateToolNames();
+    if (teammateTools.length) {
+        registerMcpTool(mcp, 'chat_send', {
+            title: 'Send channel message',
+            description: "Reply to your owner's DM or group. Plain assistant text is invisible. Use kind=decision to put all questions together with options, then end your turn. Use kind=report with sections 做了什么 / 验证了什么 / 需要你关注 and links. Mention @handles only when their help is needed.",
+            inputSchema: ChatSendSchema.omit({ channelId: true }).shape,
+        }, async args => {
+            try { return toToolSuccess(await callDaemonTeammateChat('chat-send', args)); }
+            catch (error) { return toToolError(error instanceof Error ? error.message : String(error)); }
+        });
+        registerMcpTool(mcp, 'chat_history', {
+            title: 'Read channel history', description: 'Read decrypted messages from your current DM or group channel.',
+            inputSchema: ChatHistorySchema.shape,
+        }, async args => {
+            try { return toToolSuccess(await callDaemonTeammateChat('chat-history', args)); }
+            catch (error) { return toToolError(error instanceof Error ? error.message : String(error)); }
+        });
+        for (const path of Object.keys(TeammateToolSchemas) as TeammateToolPath[]) {
+            if (!teammateTools.includes(path.replace(/-/g, '_'))) continue;
+            registerMcpTool(mcp, path.replace(/-/g, '_'), {
+                title: path.replace(/-/g, ' '), description: TeammateToolDescriptions[path],
+                inputSchema: teammateToolShape(path),
+            }, async args => {
+                try { return toToolSuccess(await callDaemonTeammateChat(path, args)); }
+                catch (error) { return toToolError(error instanceof Error ? error.message : String(error)); }
+            });
+        }
+    }
 
     if (!options.enableHappyTools) {
         return mcp;
@@ -85,7 +118,7 @@ function createMcpServer(client: ApiSessionClient, options: { enableHappyTools: 
         }
     };
 
-    mcp.registerTool('change_title', {
+    registerMcpTool(mcp, 'change_title', {
         description: 'Change the title of the current chat session',
         title: 'Change Chat Title',
         inputSchema: {
@@ -118,7 +151,7 @@ function createMcpServer(client: ApiSessionClient, options: { enableHappyTools: 
         }
     });
 
-    mcp.registerTool('preview_html', {
+    registerMcpTool(mcp, 'preview_html', {
         description: 'Preview an HTML page in the client app. Pass the document inline as `html`, or pass `filePath` to preview a local .html file you just generated. The document must be complete and self-contained, with all CSS and JS inlined.',
         title: 'Preview HTML',
         inputSchema: {
@@ -167,7 +200,7 @@ function createMcpServer(client: ApiSessionClient, options: { enableHappyTools: 
     });
 
     if (options.enableOrchestratorTools) {
-        mcp.registerTool('orchestrator_get_context', ORCHESTRATOR_GET_CONTEXT_TOOL_SCHEMA, async () => {
+        registerMcpTool(mcp, 'orchestrator_get_context', ORCHESTRATOR_GET_CONTEXT_TOOL_SCHEMA, async () => {
             try {
                 const metadata = client.getMetadataSnapshot();
                 const fallback = {
@@ -217,7 +250,7 @@ function createMcpServer(client: ApiSessionClient, options: { enableHappyTools: 
             }
         });
 
-        mcp.registerTool('orchestrator_submit', ORCHESTRATOR_SUBMIT_TOOL_SCHEMA, async (args) => {
+        registerMcpTool(mcp, 'orchestrator_submit', ORCHESTRATOR_SUBMIT_TOOL_SCHEMA, async (args) => {
             try {
                 const metadata = client.getMetadataSnapshot();
                 const submitBody = {
@@ -242,7 +275,7 @@ function createMcpServer(client: ApiSessionClient, options: { enableHappyTools: 
             }
         });
 
-        mcp.registerTool('orchestrator_pend', ORCHESTRATOR_PEND_TOOL_SCHEMA, async (args) => {
+        registerMcpTool(mcp, 'orchestrator_pend', ORCHESTRATOR_PEND_TOOL_SCHEMA, async (args) => {
             const startedAt = Date.now();
             const totalTimeoutMs = args.timeoutMs ?? 10 * 60 * 1000;
             let cursor = args.cursor;
@@ -283,7 +316,7 @@ function createMcpServer(client: ApiSessionClient, options: { enableHappyTools: 
             }
         });
 
-        mcp.registerTool('orchestrator_list', ORCHESTRATOR_LIST_TOOL_SCHEMA, async (args) => {
+        registerMcpTool(mcp, 'orchestrator_list', ORCHESTRATOR_LIST_TOOL_SCHEMA, async (args) => {
             try {
                 const response = await client.orchestratorListRuns({
                     status: args.status,
@@ -296,7 +329,7 @@ function createMcpServer(client: ApiSessionClient, options: { enableHappyTools: 
             }
         });
 
-        mcp.registerTool('orchestrator_cancel', ORCHESTRATOR_CANCEL_TOOL_SCHEMA, async (args) => {
+        registerMcpTool(mcp, 'orchestrator_cancel', ORCHESTRATOR_CANCEL_TOOL_SCHEMA, async (args) => {
             try {
                 const response = await client.orchestratorCancel(args.runId, { reason: args.reason });
                 return toToolSuccess(response);
@@ -305,7 +338,7 @@ function createMcpServer(client: ApiSessionClient, options: { enableHappyTools: 
             }
         });
 
-        mcp.registerTool('orchestrator_send_message', ORCHESTRATOR_SEND_MESSAGE_TOOL_SCHEMA, async (args) => {
+        registerMcpTool(mcp, 'orchestrator_send_message', ORCHESTRATOR_SEND_MESSAGE_TOOL_SCHEMA, async (args) => {
             try {
                 const response = await client.orchestratorSendMessage({
                     taskId: args.taskId,
@@ -331,6 +364,8 @@ export async function startHappyServer(client: ApiSessionClient) {
     const toolNames = enableHappyTools
         ? ['change_title', 'preview_html', 'orchestrator_get_context', 'orchestrator_submit', 'orchestrator_pend', 'orchestrator_list', 'orchestrator_cancel', 'orchestrator_send_message']
         : [];
+
+    toolNames.push(...teammateToolNames());
 
     // Capture console.error from Hono to our logger
     const originalConsoleError = console.error;

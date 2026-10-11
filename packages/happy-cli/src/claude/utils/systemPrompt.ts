@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { TEAMMATE_ENV } from 'happy-wire';
 import { getBaseSystemPrompt } from '@/orchestrator/prompt';
 
 /**
@@ -9,3 +11,8 @@ export const systemPrompt = (() => {
   const base = getBaseSystemPrompt();
   return base ?? '';
 })();
+
+// Module initialization occurs once at startup, not once per turn or mode switch.
+export const teammateSystemPrompt = process.env[TEAMMATE_ENV.systemPromptFile]
+  ? readFileSync(process.env[TEAMMATE_ENV.systemPromptFile]!, 'utf8')
+  : '';

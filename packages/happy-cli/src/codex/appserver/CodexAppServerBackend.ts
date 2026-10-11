@@ -95,6 +95,8 @@ export interface CodexAppServerBackendOptions {
   resumeFile?: string | null;
   /** Optional thread ID for resuming a specific thread */
   resumeThreadId?: string | null;
+  /** Turns off Codex's spawn_agent subagents (Agent controllers must delegate through work sessions) */
+  disableSubagents?: boolean;
 }
 
 // ─── Model Resolution ──────────────────────────────────────────
@@ -490,16 +492,22 @@ export class CodexAppServerBackend implements AgentBackend {
       // `default_tools_approval_mode: "approve"` lets Codex's guardian skip MCP
       // approval for trusted servers; handleMcpElicitation stays as fallback.
       // Codex 0.125 renamed the variant from PascalCase `Approve` to lowercase `approve`.
+      // Codex aborts MCP calls after 60s by default; Agent work_session_start may clone for up to 15 minutes.
       const mcpServers: Record<string, unknown> = {};
       for (const [name, cfg] of Object.entries(this.options.mcpServers)) {
         mcpServers[name] = TRUSTED_MCP_SERVER_NAMES.has(name)
-          ? { ...cfg, default_tools_approval_mode: 'approve' }
+          ? { ...cfg, default_tools_approval_mode: 'approve', tool_timeout_sec: 20 * 60 }
           : cfg;
       }
       config.mcp_servers = mcpServers;
     }
     if (this.options.reasoningEffort) {
       config.model_reasoning_effort = this.options.reasoningEffort;
+    }
+    if (this.options.disableSubagents) {
+      // Dotted keys override single features without replacing the user's [features] table.
+      config['features.multi_agent'] = false;
+      config['features.multi_agent_v2'] = false;
     }
     if (Object.keys(config).length > 0) {
       params.config = config;
@@ -595,6 +603,8 @@ export class CodexAppServerBackend implements AgentBackend {
     }
 
     const p = (params ?? {}) as Record<string, any>;
+    // Subagent threads share this connection; their turns and output must not end or leak into ours.
+    if (this.threadId && typeof p.threadId === 'string' && p.threadId !== this.threadId) return;
 
     switch (method) {
       // ── Agent message streaming ──

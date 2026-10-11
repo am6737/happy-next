@@ -20,6 +20,7 @@ import type {
   SessionRole,
   Update as WireUpdate,
   PermissionMode as WirePermissionMode,
+  TeammateSessionMetadata,
 } from 'happy-wire'
 
 // Re-export shared wire protocol types from happy-wire
@@ -337,6 +338,8 @@ export const SessionCapabilitiesSchema = z.object({
 export type SessionCapabilities = z.infer<typeof SessionCapabilitiesSchema>
 
 export type Metadata = {
+  teammate?: TeammateSessionMetadata,
+  externalContext?: { source: 'github'; resourceType: 'issue'; resourceId: string; title: string; deepLink: string },
   path: string,
   host: string,
   version?: string,

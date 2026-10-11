@@ -2,10 +2,11 @@ import fs from 'fs/promises';
 import os from 'os';
 import * as tmp from 'tmp';
 
+import { createTeammateRuntime } from '@/teammate/runtime';
 import { ApiClient } from '@/api/api';
 import { startModelCatalogSync } from '@/api/modelCatalog';
 import { TrackedSession } from './types';
-import { getUnexpandedSessionAuthVariables } from './sessionAuth';
+import { getUnexpandedSessionAuthVariables, mergeSessionEnvironment, isolateTeammateEnvironment } from './sessionAuth';
 import { resolveSessionProfileEnvironment } from './sessionProfiles';
 import { MachineMetadata, DaemonState, Metadata } from '@/api/types';
 import { SpawnSessionOptions, SpawnSessionResult } from '@/modules/common/registerCommonHandlers';
@@ -499,7 +500,11 @@ export async function startDaemon(): Promise<void> {
 
     // Spawn a new session (sessionId reserved for future --resume functionality)
     const spawnSession = async (options: SpawnSessionOptions): Promise<SpawnSessionResult> => {
-      logger.debugLargeJson('[DAEMON RUN] Spawning session', options);
+      // Log files are world-readable; never write env secrets such as the teammate control token.
+      logger.debugLargeJson('[DAEMON RUN] Spawning session', {
+        ...options,
+        extraEnv: options.extraEnv && Object.fromEntries(Object.entries(options.extraEnv).map(([key, value]) => [key, /TOKEN|SECRET|^GIT_CONFIG_VALUE_/.test(key) ? '[redacted]' : value])),
+      });
 
       const { directory, sessionId, resumeSessionId, sessionTitle, skipForkSession, machineId, approvedNewDirectoryCreation = true } = options;
       const isClaudeAgent = !options.agent || options.agent === 'claude';
@@ -577,7 +582,7 @@ export async function startDaemon(): Promise<void> {
         const profileEnv = await resolveSessionProfileEnvironment(options);
 
         // Final merge: Profile vars first, then auth (auth takes precedence to protect authentication)
-        let extraEnv = { ...profileEnv, ...authEnv };
+        let extraEnv = mergeSessionEnvironment(profileEnv, options.extraEnv, authEnv);
         if (resumeSessionId && isClaudeAgent) {
           extraEnv.HAPPY_CLAUDE_BACKFILL = '1';
           extraEnv.HAPPY_CLAUDE_BACKFILL_MAX_MESSAGES = '200';
@@ -691,7 +696,8 @@ export async function startDaemon(): Promise<void> {
 
         // If tmux is not available or session name is explicitly undefined, fall back to regular spawning
         // Note: Empty string is valid (means use current/most recent tmux session)
-        if (!tmuxAvailable || tmuxSessionName === undefined) {
+        // tmux -e places environment values in argv; teammate credentials must stay in env.
+        if (!tmuxAvailable || tmuxSessionName === undefined || extraEnv.HAPPY_TEAMMATE_SESSION_ROLE) {
           useTmux = false;
           if (tmuxSessionName !== undefined) {
             logger.debug(`[DAEMON RUN] tmux session name specified but tmux not available, falling back to regular spawning`);
@@ -730,12 +736,13 @@ export async function startDaemon(): Promise<void> {
 
           // Add extra environment variables (these should already be filtered)
           Object.assign(tmuxEnv, extraEnv);
+          const isolatedTmuxEnv = isolateTeammateEnvironment(tmuxEnv) as Record<string, string>;
 
           const tmuxResult = await tmux.spawnInTmux([fullCommand], {
             sessionName: tmuxSessionName,
             windowName: windowName,
             cwd: directory
-          }, tmuxEnv);  // Pass complete environment for tmux session
+          }, isolatedTmuxEnv);  // Pass complete environment for tmux session
 
           if (tmuxResult.success) {
             logger.debug(`[DAEMON RUN] Successfully spawned in tmux session: ${tmuxResult.sessionId}, PID: ${tmuxResult.pid}`);
@@ -831,10 +838,7 @@ export async function startDaemon(): Promise<void> {
             cwd: directory,
             detached: true,  // Sessions stay alive when daemon stops
             stdio: ['ignore', 'pipe', 'pipe'],  // Capture stdout/stderr for debugging
-            env: {
-              ...process.env,
-              ...extraEnv
-            }
+            env: isolateTeammateEnvironment({ ...process.env, ...extraEnv })
           });
 
           // Log output for debugging
@@ -996,13 +1000,42 @@ export async function startDaemon(): Promise<void> {
       pidToTrackedSession.delete(pid);
     };
 
+    api = await ApiClient.create(credentials);
+    const teammateRuntime = createTeammateRuntime({
+      machineKey: credentials.encryption.type === 'dataKey' ? credentials.encryption.machineKey : null,
+      api, machineId, agentsDir: join(configuration.happyHomeDir, 'agents'),
+      spawnSession: async (options) => {
+        const result = await spawnSession(options);
+        if (result.type !== 'success') return result;
+        const tracked = [...pidToTrackedSession.values()].find(session => session.happySessionId === result.sessionId);
+        if (!tracked) return { type: 'error', errorMessage: 'Spawned teammate session has no tracked PID' };
+        return { ...result, pid: tracked.pid };
+      },
+      trackSession: (sessionId, pid) => {
+        const tracked = pidToTrackedSession.get(pid);
+        if (tracked && tracked.happySessionId !== sessionId) {
+          throw new Error('Persisted teammate PID is already tracked by another session');
+        }
+        if (!tracked) {
+          pidToTrackedSession.set(pid, { startedBy: 'daemon', happySessionId: sessionId, pid });
+          logger.debug(`[TEAMMATE] Restored session ${sessionId} tracking for PID ${pid}`);
+        }
+      },
+      stopSession,
+      isPidAlive: (pid) => {
+        try { process.kill(pid, 0); return true; }
+        catch (error) { return (error as NodeJS.ErrnoException).code === 'EPERM'; }
+      },
+    });
+
     // Start control server
     const { port: controlPort, stop: stopControlServer } = await startDaemonControlServer({
       getChildren: getCurrentChildren,
       stopSession,
       spawnSession,
       requestShutdown: () => requestShutdown('happy-cli'),
-      onHappySessionWebhook
+      onHappySessionWebhook,
+      teammateChat: teammateRuntime
     });
 
     // Write initial daemon state (no lock needed for state file)
@@ -1024,9 +1057,6 @@ export async function startDaemon(): Promise<void> {
       startedAt: Date.now()
     };
 
-    // Create API client
-    api = await ApiClient.create(credentials);
-
     // Get or create machine
     const machine = await api.getOrCreateMachine({
       machineId,
@@ -1045,6 +1075,10 @@ export async function startDaemon(): Promise<void> {
       requestShutdown: () => requestShutdown('happy-app'),
       orchestratorDispatch: handleOrchestratorDispatch,
       orchestratorCancel: handleOrchestratorCancel,
+      teammateRunDispatch: teammateRuntime.dispatch,
+      teammateRunCancel: teammateRuntime.cancel,
+      teammateTaskStop: teammateRuntime.taskStop,
+      teammateNotify: teammateRuntime.notify,
     });
 
     // Connect to server
@@ -1090,6 +1124,8 @@ export async function startDaemon(): Promise<void> {
           onChildExited(pid);
         }
       }
+
+      await teammateRuntime.reapIdle().catch(error => logger.debug('[DAEMON RUN] Teammate idle reaper failed', error));
 
       // Check if daemon needs update
       // If version on disk is different from the one in package.json - we need to restart

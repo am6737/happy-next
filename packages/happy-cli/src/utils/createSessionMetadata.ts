@@ -7,6 +7,7 @@
  * @module createSessionMetadata
  */
 
+import { teammateMetadataFields } from '@/teammate/sessionHooks';
 import { readdirSync } from 'node:fs';
 import os from 'node:os';
 import { resolve, join } from 'node:path';
@@ -160,6 +161,7 @@ export function createSessionMetadata(opts: CreateSessionMetadataOptions): Sessi
         flavor: opts.flavor,
         // Worktree metadata: env vars from daemon take priority, otherwise detect via git
         ...detectWorktreeMetadata(),
+        ...teammateMetadataFields(),
     };
 
     return { state, metadata };

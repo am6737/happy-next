@@ -9,7 +9,7 @@ import { logger } from "@/lib";
 import { PushableAsyncIterable } from "@/utils/PushableAsyncIterable";
 import { getProjectPath } from "./utils/path";
 import { awaitFileExist } from "@/modules/watcher/awaitFileExist";
-import { systemPrompt } from "./utils/systemPrompt";
+import { systemPrompt, teammateSystemPrompt } from "./utils/systemPrompt";
 import { PermissionResult } from "./sdk/types";
 import type { JsRuntime } from "./runClaude";
 import { formatMessageForClaude, ClaudeContent } from '@/utils/formatImageMessage';
@@ -153,9 +153,13 @@ export async function claudeRemote(opts: {
         effort: initial.mode.reasoningEffort,
         fallbackModel: initial.mode.fallbackModel,
         customSystemPrompt: initial.mode.customSystemPrompt ? initial.mode.customSystemPrompt + '\n\n' + systemPrompt : undefined,
-        appendSystemPrompt: initial.mode.appendSystemPrompt ? initial.mode.appendSystemPrompt + '\n\n' + systemPrompt : systemPrompt,
+        appendSystemPrompt: [initial.mode.appendSystemPrompt, systemPrompt, teammateSystemPrompt].filter(Boolean).join('\n\n'),
         allowedTools: initial.mode.allowedTools ? initial.mode.allowedTools.concat(opts.allowedTools) : opts.allowedTools,
-        disallowedTools: initial.mode.disallowedTools,
+        disallowedTools: process.env.HAPPY_TEAMMATE_THREAD_ID
+            ? [...new Set([...(initial.mode.disallowedTools ?? []), 'AskUserQuestion', 'ExitPlanMode',
+                // Controllers delegate through work sessions: a native subagent works in the Agent home and never wakes the controller.
+                ...(process.env.HAPPY_TEAMMATE_SESSION_ROLE === 'controller' ? ['Task', 'Agent'] : [])])]
+            : initial.mode.disallowedTools,
         canCallTool: (toolName: string, input: unknown, options: { signal: AbortSignal }) => opts.canCallTool(toolName, input, mode, options),
         executable: opts.jsRuntime ?? 'node',
         abort: opts.signal,

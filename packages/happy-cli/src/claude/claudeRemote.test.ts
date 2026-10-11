@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { claudeRemote } from './claudeRemote';
 import { AbortError, query } from '@/claude/sdk';
 import type { SDKMessage } from '@/claude/sdk';
@@ -19,7 +19,8 @@ vi.mock('@/ui/logger', () => ({
 }));
 
 vi.mock('@/claude/utils/systemPrompt', () => ({
-    systemPrompt: ''
+    systemPrompt: 'base prompt',
+    teammateSystemPrompt: 'teammate prompt'
 }));
 
 vi.mock('@/claude/utils/claudeCheckSession', () => ({
@@ -53,6 +54,7 @@ function createMockResponse(messages: Array<{ message: SDKMessage, delayMs?: num
 }
 
 describe('claudeRemote', () => {
+    afterEach(() => vi.unstubAllEnvs());
     beforeEach(() => {
         vi.mocked(query).mockReset();
     });
@@ -123,6 +125,34 @@ describe('claudeRemote', () => {
 
         resolveSecondNextMessage(null);
         await remotePromise;
+    });
+
+    it.each([false, true])('disallows interactive tools only for teammate controllers (%s)', async teammate => {
+        vi.stubEnv('HAPPY_TEAMMATE_THREAD_ID', teammate ? 'thread' : '');
+        vi.mocked(query).mockReturnValue(createMockResponse([]) as any);
+        await claudeRemote({
+            sessionId: null, path: process.cwd(), allowedTools: [], hookSettingsPath: '/tmp/fake-settings.json',
+            nextMessage: async () => ({ message: 'run', mode: { permissionMode: 'default', disallowedTools: ['Write'] } }),
+            onReady: vi.fn(), isAborted: () => false,
+            canCallTool: async () => ({ behavior: 'allow', updatedInput: {} }),
+            onSessionFound: vi.fn(), onMessage: vi.fn(), signal: new AbortController().signal,
+        });
+        expect(vi.mocked(query).mock.calls[0][0].options?.disallowedTools).toEqual(teammate
+            ? ['Write', 'AskUserQuestion', 'ExitPlanMode'] : ['Write']);
+    });
+
+    it('appends startup teammate instructions beside the existing system prompt', async () => {
+        vi.mocked(query).mockReturnValue(createMockResponse([]) as any);
+        await claudeRemote({
+            sessionId: null, path: process.cwd(), allowedTools: [], hookSettingsPath: '/tmp/fake-settings.json',
+            nextMessage: async () => ({ message: 'run', mode: { permissionMode: 'default', appendSystemPrompt: 'user prompt' } }),
+            onReady: vi.fn(), isAborted: () => false,
+            canCallTool: async () => ({ behavior: 'allow', updatedInput: {} }),
+            onSessionFound: vi.fn(), onMessage: vi.fn(), signal: new AbortController().signal,
+        });
+        expect(query).toHaveBeenCalledWith(expect.objectContaining({
+            options: expect.objectContaining({ appendSystemPrompt: 'user prompt\n\nbase prompt\n\nteammate prompt' }),
+        }));
     });
 
     it('does not auto-interrupt at tool_result boundaries', async () => {

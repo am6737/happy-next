@@ -11,7 +11,9 @@ import { MachineMetadata, DaemonState, Machine, Update, UpdateMachineBody } from
 import { registerCommonHandlers, SpawnSessionOptions, SpawnSessionResult } from '../modules/common/registerCommonHandlers';
 import { registerTerminalHandlers } from '../modules/terminal/registerTerminalHandlers';
 import type { TerminalManager } from '../modules/terminal/terminalManager';
-import type { TerminalFrame } from 'happy-wire';
+import { TEAMMATE_RPC_NOTIFY, TeammateNotifyPayloadSchema, type TeammateNotifyPayload, TEAMMATE_RPC_TASK_STOP, TeammateTaskStopPayloadSchema, type TeammateTaskStopPayload, TEAMMATE_RPC_RUN_DISPATCH, TEAMMATE_RPC_RUN_CANCEL, TeammateRunDispatchPayloadSchema, TeammateRunCancelPayloadSchema, type TeammateRunDispatchPayload, type TeammateRunCancelPayload, type TeammateRpcResult, type TerminalFrame, TEAMMATE_RPC_DRAFT, TeammateDraftRequestSchema, TEAMMATE_RPC_LIST_SKILLS, TeammateListSkillsResponseSchema } from 'happy-wire';
+import { generateTeammateDraft } from '@/teammate/draft';
+import { listMachineSkills } from '@/teammate/skills';
 import { listClaudeSessionsFromIndex, getClaudeSessionPreview, findClaudeProjectId, readAllClaudeSessionUserMessages, saveClaudeSessionCacheStats } from '@/claude/utils/claudeSessionIndex';
 import { forkAndTruncateSession, forkSession } from '@/claude/utils/claudeSessionFork';
 import { readGeminiSessionLog, listGeminiSessions, getGeminiSessionPreview, saveGeminiSessionCacheStats } from '@/gemini/utils/sessionReader';
@@ -70,6 +72,24 @@ function createSessionCacheStatsReporter(
         pendingStats = stats;
         scheduleFlush();
     };
+}
+
+/** Registers machine-local Agent drafting and real-Skills discovery RPCs. */
+export function registerTeammateDraftAndSkillsHandlers(rpcHandlerManager: Pick<RpcHandlerManager, 'registerHandler'>): void {
+    // WHY: drafting runs on the user's own Claude login, so the server needs no LLM key and never sees the text.
+    rpcHandlerManager.registerHandler(TEAMMATE_RPC_DRAFT, async (params: unknown) => {
+        const parsed = TeammateDraftRequestSchema.safeParse(params);
+        if (!parsed.success) return { ok: false, error: 'Invalid request' };
+        try {
+            return { ok: true, ...await generateTeammateDraft(parsed.data) };
+        } catch (error) {
+            logger.debug('[API MACHINE] Teammate draft failed', error);
+            return { ok: false, error: error instanceof Error ? error.message : 'Draft generation failed' };
+        }
+    });
+    rpcHandlerManager.registerHandler(TEAMMATE_RPC_LIST_SKILLS, async () => {
+        return TeammateListSkillsResponseSchema.parse({ skills: listMachineSkills() });
+    });
 }
 
 interface ServerToDaemonEvents {
@@ -131,6 +151,10 @@ interface DaemonToServerEvents {
 }
 
 type MachineRpcHandlers = {
+    teammateNotify: (params: TeammateNotifyPayload) => Promise<TeammateRpcResult>;
+    teammateTaskStop: (params: TeammateTaskStopPayload) => Promise<TeammateRpcResult>;
+    teammateRunDispatch: (params: TeammateRunDispatchPayload) => TeammateRpcResult | Promise<TeammateRpcResult>;
+    teammateRunCancel: (params: TeammateRunCancelPayload) => Promise<TeammateRpcResult>;
     spawnSession: (options: SpawnSessionOptions) => Promise<SpawnSessionResult>;
     stopSession: (sessionId: string) => boolean;
     requestShutdown: () => void;
@@ -228,6 +252,7 @@ export class ApiMachineClient {
             const trimmed = displayName?.trim();
             return { name: trimmed || host || undefined };
         });
+        registerTeammateDraftAndSkillsHandlers(this.rpcHandlerManager);
     }
 
     setRPCHandlers({
@@ -235,7 +260,11 @@ export class ApiMachineClient {
         stopSession,
         requestShutdown,
         orchestratorDispatch,
-        orchestratorCancel
+        orchestratorCancel,
+        teammateRunDispatch,
+        teammateRunCancel,
+        teammateTaskStop
+        , teammateNotify
     }: MachineRpcHandlers) {
         // Register spawn session handler
         this.rpcHandlerManager.registerHandler('spawn-happy-session', async (params: any) => {
@@ -358,6 +387,15 @@ export class ApiMachineClient {
 
             return { message: 'Daemon stop request acknowledged, starting shutdown sequence...' };
         });
+
+        this.rpcHandlerManager.registerHandler(TEAMMATE_RPC_TASK_STOP, async (params: unknown) =>
+            teammateTaskStop(TeammateTaskStopPayloadSchema.parse(params)));
+        this.rpcHandlerManager.registerHandler(TEAMMATE_RPC_NOTIFY, async (params: unknown) =>
+            teammateNotify(TeammateNotifyPayloadSchema.parse(params)));
+        this.rpcHandlerManager.registerHandler(TEAMMATE_RPC_RUN_DISPATCH, async (params: unknown) =>
+            teammateRunDispatch(TeammateRunDispatchPayloadSchema.parse(params)));
+        this.rpcHandlerManager.registerHandler(TEAMMATE_RPC_RUN_CANCEL, async (params: unknown) =>
+            teammateRunCancel(TeammateRunCancelPayloadSchema.parse(params)));
 
         // Register orchestrator dispatch handler
         this.rpcHandlerManager.registerHandler('orchestrator-dispatch', async (params: any) => {
