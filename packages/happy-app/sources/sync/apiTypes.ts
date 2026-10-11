@@ -1,3 +1,4 @@
+import { TeammateSchema, TeammateRunSchema, TeammateTaskSchema, ChannelSchema, ChannelMessageSchema } from 'happy-wire';
 import { z } from 'zod';
 import { GitHubProfileSchema, ImageRefSchema } from './profile';
 import { RelationshipStatusSchema } from './friendTypes';
@@ -271,7 +272,19 @@ export const ApiPublicShareDeletedSchema = z.object({
     sessionId: z.string(),
 });
 
+export const ApiTeammateUpdatedSchema = z.object({ t: z.literal('teammate-updated'), teammate: TeammateSchema });
+export const ApiTeammateTaskUpdatedSchema = z.object({ t: z.literal('teammate-task-updated'), task: TeammateTaskSchema });
+export const ApiTeammateRunUpdatedSchema = z.object({ t: z.literal('teammate-run-updated'), run: TeammateRunSchema });
+
+export const ApiChannelUpdatedSchema = z.object({ t: z.literal('channel-updated'), channel: ChannelSchema });
+export const ApiNewChannelMessageSchema = z.object({ t: z.literal('new-channel-message'), message: ChannelMessageSchema });
+
 export const ApiUpdateSchema = z.discriminatedUnion('t', [
+    ApiChannelUpdatedSchema,
+    ApiNewChannelMessageSchema,
+    ApiTeammateUpdatedSchema,
+    ApiTeammateRunUpdatedSchema,
+    ApiTeammateTaskUpdatedSchema,
     ApiUpdateNewMessageSchema,
     ApiUpdateNewSessionSchema,
     ApiDeleteSessionSchema,

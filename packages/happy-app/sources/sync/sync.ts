@@ -1,3 +1,8 @@
+import { TeammateTaskSync } from './teammateTaskSync';
+import { emptyTeammateTaskState } from './teammateTasks';
+import { ChannelSync } from './channelSync';
+import { emptyChannelState } from './channelReducers';
+import { fetchTeammates } from './apiTeammates';
 import Constants from 'expo-constants';
 import { apiSocket } from '@/sync/apiSocket';
 import { AuthCredentials } from '@/auth/tokenStorage';
@@ -278,6 +283,16 @@ class Sync {
     private sessionModeConfigSync: InvalidateSync;
     private sessionAppearanceSync: InvalidateSync;
     private profileSync: InvalidateSync;
+    readonly tasks = new TeammateTaskSync(() => this.credentials);
+    readonly channels = new ChannelSync(() => ({ credentials: this.credentials, encryption: this.encryption }), async id => {
+        // Keys are exactly those opened from Machine.dataEncryptionKey by fetchMachines.
+        let key: Uint8Array | null = null;
+        await this.fetchMachines(keys => { key = keys.get(id) ?? null; });
+        if (!key) throw new Error('Machine data encryption key unavailable');
+        return key;
+    });
+    private channelsSync: InvalidateSync;
+    private teammatesSync: InvalidateSync;
     private machinesSync: InvalidateSync;
     private pushTokenSync: InvalidateSync;
     private pushTokenRegistrationGate = new PushTokenRegistrationGate();
@@ -376,6 +391,8 @@ class Sync {
         this.sessionModeConfigSync = new InvalidateSync(this.syncSessionModeConfig);
         this.sessionAppearanceSync = new InvalidateSync(this.syncSessionAppearance);
         this.profileSync = new InvalidateSync(this.fetchProfile);
+        this.teammatesSync = new InvalidateSync(this.refreshTeammates);
+        this.channelsSync = new InvalidateSync(this.channels.refresh);
         this.machinesSync = new InvalidateSync(this.fetchMachines);
         this.nativeUpdateSync = new InvalidateSync(this.fetchNativeUpdate);
         this.artifactsSync = new InvalidateSync(this.fetchArtifactsList);
@@ -413,6 +430,9 @@ class Sync {
                 }
                 this.profileSync.invalidate();
                 this.machinesSync.invalidate();
+                if (storage.getState().teammatesLoaded) this.teammatesSync.invalidate();
+                if (storage.getState().channelsLoaded) this.channelsSync.invalidate();
+                this.tasks.refresh();
                 this.pushTokenSync.invalidate();
                 this.sessionsSync.invalidate();
                 this.sessionAppearanceSync.invalidate();
@@ -493,7 +513,18 @@ class Sync {
         });
     }
 
+    refreshTeammates = async () => {
+        const credentials = this.credentials;
+        if (!credentials) return;
+        const serverUrl = getServerUrl();
+        const teammates = await fetchTeammates(credentials, true);
+        if (credentials !== this.credentials || serverUrl !== getServerUrl()) return;
+        storage.getState().applyTeammates(teammates, true);
+    };
+
     async create(credentials: AuthCredentials, encryption: Encryption) {
+        storage.setState({ ...emptyChannelState, teammates: {}, teammatesLoaded: false, teammateRuns: {}, ...emptyTeammateTaskState, teammateSpend: {} });
+        this.machineDataKeys.clear();
         this.credentials = credentials;
         this.encryption = encryption;
         this.anonID = encryption.anonID;
@@ -515,6 +546,8 @@ class Sync {
     async restore(credentials: AuthCredentials, encryption: Encryption) {
         // NOTE: No awaiting anything here, we're restoring from a disk (ie app restarted)
         // Purchases sync is invalidated in #init() and will complete asynchronously
+        storage.setState({ ...emptyChannelState, teammates: {}, teammatesLoaded: false, teammateRuns: {}, ...emptyTeammateTaskState, teammateSpend: {} });
+        this.machineDataKeys.clear();
         this.credentials = credentials;
         this.encryption = encryption;
         this.anonID = encryption.anonID;
@@ -2696,10 +2729,12 @@ class Sync {
         }
     }
 
-    private fetchMachines = async () => {
+    private fetchMachines = async (onKeys?: (keys: Map<string, Uint8Array | null>) => void) => {
         if (!this.credentials) return;
 
         console.log('📊 Sync: Fetching machines...');
+        const credentials = this.credentials;
+        const encryption = this.encryption;
         const API_ENDPOINT = getServerUrl();
         const response = await fetch(`${API_ENDPOINT}/v1/machines`, {
             headers: {
@@ -2715,6 +2750,7 @@ class Sync {
 
         const data = await response.json();
         console.log(`📊 Sync: Fetched ${Array.isArray(data) ? data.length : 0} machines from server`);
+        if (credentials !== this.credentials || encryption !== this.encryption || API_ENDPOINT !== getServerUrl()) return;
         const machines = data as Array<{
             id: string;
             metadata: string;
@@ -2733,27 +2769,29 @@ class Sync {
         const machineKeysMap = new Map<string, Uint8Array | null>();
         for (const machine of machines) {
             if (machine.dataEncryptionKey) {
-                const decryptedKey = await this.encryption.decryptEncryptionKey(machine.dataEncryptionKey);
+                const decryptedKey = await encryption.decryptEncryptionKey(machine.dataEncryptionKey);
                 if (!decryptedKey) {
                     console.error(`Failed to decrypt data encryption key for machine ${machine.id}`);
                     continue;
                 }
                 machineKeysMap.set(machine.id, decryptedKey);
-                this.machineDataKeys.set(machine.id, decryptedKey);
             } else {
                 machineKeysMap.set(machine.id, null);
             }
         }
 
         // Initialize machine encryptions
-        await this.encryption.initializeMachines(machineKeysMap);
+        if (credentials !== this.credentials || encryption !== this.encryption || API_ENDPOINT !== getServerUrl()) return;
+        this.machineDataKeys.clear();
+        for (const [id, key] of machineKeysMap) if (key) this.machineDataKeys.set(id, key);
+        await encryption.initializeMachines(machineKeysMap);
 
         // Process all machines first, then update state once
         const decryptedMachines: Machine[] = [];
 
         for (const machine of machines) {
             // Get machine-specific encryption (might exist from previous initialization)
-            const machineEncryption = this.encryption.getMachineEncryption(machine.id);
+            const machineEncryption = encryption.getMachineEncryption(machine.id);
             if (!machineEncryption) {
                 console.error(`Machine encryption not found for ${machine.id} - this should never happen`);
                 continue;
@@ -2801,6 +2839,8 @@ class Sync {
         }
 
         // Replace entire machine state with fetched machines
+        if (credentials !== this.credentials || encryption !== this.encryption || API_ENDPOINT !== getServerUrl()) return;
+        onKeys?.(machineKeysMap);
         storage.getState().applyMachines(decryptedMachines, true);
         log.log(`🖥️ fetchMachines completed - processed ${decryptedMachines.length} machines`);
     }
@@ -4291,6 +4331,9 @@ class Sync {
             log.log('🔌 Socket reconnected');
             this.sessionsSync.invalidate();
             this.machinesSync.invalidate();
+            if (storage.getState().teammatesLoaded) this.teammatesSync.invalidate();
+            if (storage.getState().channelsLoaded) this.channelsSync.invalidate();
+            this.tasks.refresh();
             log.log('🔌 Socket reconnected: Invalidating artifacts sync');
             this.artifactsSync.invalidate();
             this.friendsSync.invalidate();
@@ -4382,6 +4425,23 @@ class Sync {
                 this.invalidateMessagesSync(sid);
             }
 
+        } else if (updateData.body.t === 'channel-updated') {
+            storage.getState().applyChannels([updateData.body.channel]);
+        } else if (updateData.body.t === 'new-channel-message') {
+            const message = updateData.body.message;
+            try { await this.channels.applyMessages(message.channelId, [message]); }
+            catch (error) {
+                log.log(`Failed to apply channel message: ${error}`);
+                this.channelsSync.invalidate();
+            }
+        } else if (updateData.body.t === 'teammate-updated') {
+            storage.getState().applyTeammates([updateData.body.teammate]);
+        } else if (updateData.body.t === 'teammate-task-updated') {
+            storage.getState().applyTeammateTask(updateData.body.task);
+            this.tasks.invalidate(updateData.body.task.id);
+        } else if (updateData.body.t === 'teammate-run-updated') {
+            storage.getState().applyTeammateRun(updateData.body.run);
+            if (updateData.body.run.taskId) this.tasks.invalidate(updateData.body.run.taskId);
         } else if (updateData.body.t === 'new-session') {
             log.log('🆕 New session update received');
             this.sessionsSync.invalidate();
@@ -5560,7 +5620,13 @@ async function syncInit(credentials: AuthCredentials, restore: boolean) {
     apiSocket.initialize({ endpoint: API_ENDPOINT, token: credentials.token }, encryption);
     onServerUrlChanged((serverUrl) => {
         clearGithubSession();
+        const teammatesLoaded = storage.getState().teammatesLoaded;
+        const channelsLoaded = storage.getState().channelsLoaded;
+        storage.setState({ ...emptyChannelState, teammates: {}, teammatesLoaded: false, teammateRuns: {}, ...emptyTeammateTaskState, teammateSpend: {} });
         apiSocket.updateEndpoint(serverUrl);
+        if (teammatesLoaded) sync.refreshTeammates().catch(error => log.log(`Failed to refresh teammates after server change: ${error}`));
+        if (channelsLoaded) sync.channels.refresh().catch(error => log.log(`Failed to refresh channels after server change: ${error}`));
+        sync.tasks.refresh();
     });
 
     // Wire socket status to storage

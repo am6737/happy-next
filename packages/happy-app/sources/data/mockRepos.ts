@@ -66,6 +66,7 @@ export interface RepoPR {
     createdAt: string;
     mergedAt?: string;
     status: 'open' | 'closed' | 'merged';
+    isDraft?: boolean;
     headRefName?: string;
     body?: string;
 }
@@ -83,6 +84,8 @@ export interface RepoIssue {
     title: string;
     body: string;
     state: 'open' | 'closed';
+    /** Why GitHub says a closed issue was closed: 'completed', 'not_planned' or 'duplicate'. */
+    stateReason?: string;
     author: string;
     authorAvatarUrl: string;
     createdAt: string;

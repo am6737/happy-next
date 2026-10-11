@@ -1,8 +1,11 @@
+import { TeammateWorkerBadge } from '@/components/teammates/TeammateWorkerBadge';
+import { useWorkerTeammates } from '@/hooks/useWorkerTeammates';
 import React from 'react';
 import { View, FlatList, Pressable, ActivityIndicator, TextInput } from 'react-native';
 import { Image } from 'expo-image';
 import { Text } from '@/components/StyledText';
 import { useAllSessions, useAllMachines, storage } from '@/sync/storage';
+import { isSessionVisibleInList } from '@/sync/sessionListFilter';
 import { Session } from '@/sync/storageTypes';
 import { Avatar } from '@/components/Avatar';
 import { generateCopyTitle, getSessionName, getSessionSubtitle, getSessionAvatarId, useSessionStatus, copySessionMetadata, copySessionModeSettings } from '@/utils/sessionUtils';
@@ -295,6 +298,7 @@ function SessionHistory() {
     const { theme } = useUnistyles();
     const safeArea = useSafeAreaInsets();
     const allSessions = useAllSessions();
+    useWorkerTeammates(allSessions);
     const machines = useAllMachines();
     const navigateToSession = useNavigateToSession();
     const [resumingSessionId, setResumingSessionId] = React.useState<string | null>(null);
@@ -362,7 +366,7 @@ function SessionHistory() {
     }, [selectedMachineId, selectedAgent, searchQuery]);
 
     const filteredSessions = React.useMemo(() => {
-        let result = mergedSessions;
+        let result = mergedSessions.filter(isSessionVisibleInList);
 
         if (selectedMachineId) {
             result = result.filter(s => s.metadata?.machineId === selectedMachineId);
@@ -783,7 +787,10 @@ const SessionHistoryItemCard = React.memo(({ session, isFirst, isLast, isSingle,
             ]}
             onPress={onPress}
         >
-            <Avatar id={avatarId} size={48} monochrome={!sessionStatus.isConnected} flavor={session.metadata?.flavor} sessionIcon={session.metadata?.sessionIcon} />
+            <View>
+                <Avatar id={avatarId} size={48} monochrome={!sessionStatus.isConnected} flavor={session.metadata?.flavor} sessionIcon={session.metadata?.sessionIcon} />
+                <TeammateWorkerBadge metadata={session.metadata} overlay />
+            </View>
             <View style={styles.sessionContent}>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                     {sessionStatus.hasUnreadCompletion && (

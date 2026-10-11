@@ -1,3 +1,7 @@
+import { TeammateEditLink } from '@/components/teammates/TeammateEditLink';
+import { storage } from '@/sync/storage';
+import { ChannelHeaderAvatar, channelTitle } from '@/components/teammates/ChannelList';
+import { TeammateTaskIssueLink } from '@/components/teammates/TeammateTaskPanel';
 import { Stack, useRouter } from 'expo-router';
 import 'react-native-reanimated';
 import * as React from 'react';
@@ -12,6 +16,7 @@ import { useUnistyles } from 'react-native-unistyles';
 import { t } from '@/text';
 import { Ionicons } from '@expo/vector-icons';
 import { isUsingCustomServer } from '@/sync/serverConfig';
+import { useChannelNotifications } from '@/hooks/useChannelNotifications';
 import { useAuth } from '@/auth/AuthContext';
 import { getDesktopPlatform } from '@/desktop/desktopWindowUtils';
 import { isDedicatedTerminalWindow } from '@/terminal/terminalPopupWindow';
@@ -25,8 +30,10 @@ export default function RootLayout() {
     const shouldUseCustomHeader = Platform.OS === 'android' || isRunningOnMac() || Platform.OS === 'web';
     const { theme } = useUnistyles();
     const router = useRouter();
+    const channels = storage(state => state.channels);
     const isCustomServer = isUsingCustomServer();
     const { isAuthenticated } = useAuth();
+    useChannelNotifications(isAuthenticated);
     const hideUnauthenticatedWindowsHeader = getDesktopPlatform() === 'windows' && !isAuthenticated;
     // The terminal window already says what it is in its tab strip, and a header
     // would only push the tabs down. On a phone the same screen is a page in the
@@ -54,6 +61,25 @@ export default function RootLayout() {
 
             }}
         >
+            <Stack.Screen name="channels/new" options={{ ...softHeaderOptions, headerTitle: t('channels.newGroup') }} />
+            <Stack.Screen name="channels/[id]" options={({ route }) => {
+                const id = (route.params as { id: string }).id;
+                const channel = channels[id];
+                return { ...softHeaderOptions, ...floatingComposerScreenOptions, headerTitle: channel ? channelTitle(channel) : t('channels.chats'),
+                    headerRight: () => <ChannelHeaderAvatar id={id} /> };
+            }} />
+            <Stack.Screen name="teammates/index" options={{ ...softHeaderOptions, headerTitle: t('tabs.teammates') }} />
+            <Stack.Screen name="teammates/delegate" options={{ ...softHeaderOptions, headerTitle: t('teammateTasks.delegate') }} />
+            <Stack.Screen name="teammates/tasks/[id]" options={({ route }) => ({ ...softHeaderOptions, headerTitle: t('teammateTasks.title'),
+                headerRight: () => <TeammateTaskIssueLink id={(route.params as { id: string }).id} />,
+            })} />
+            <Stack.Screen name="teammates/new/index" options={{ ...softHeaderOptions, headerTitle: t('teammates.add') }} />
+            <Stack.Screen name="teammates/new/manual" options={{ ...softHeaderOptions, headerTitle: t('teammates.method.manualTitle') }} />
+            <Stack.Screen name="teammates/new/ai" options={{ ...softHeaderOptions, headerTitle: t('teammates.ai.title') }} />
+            <Stack.Screen name="teammates/[id]/index" options={({ route }) => ({ ...softHeaderOptions, headerTitle: t('teammates.profile'),
+                headerRight: () => <TeammateEditLink id={(route.params as { id: string }).id} />,
+            })} />
+            <Stack.Screen name="teammates/[id]/edit" options={{ ...softHeaderOptions, headerTitle: t('teammates.edit') }} />
             <Stack.Screen
                 name="index"
                 options={{
@@ -398,7 +424,7 @@ export default function RootLayout() {
                 }}
             />
             <Stack.Screen
-                name="repos/[owner]/[repo]/pulls/[number]"
+                name="repos/[owner]/[repo]/pulls/[number]/index"
                 options={{
                     ...softHeaderOptions,
                     headerShown: true,
@@ -407,7 +433,7 @@ export default function RootLayout() {
                 }}
             />
             <Stack.Screen
-                name="repos/[owner]/[repo]/issue/[number]"
+                name="repos/[owner]/[repo]/issue/[number]/index"
                 options={{
                     ...softHeaderOptions,
                     headerShown: true,

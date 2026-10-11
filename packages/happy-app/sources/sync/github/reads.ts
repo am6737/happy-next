@@ -98,17 +98,18 @@ export type RestIssue = {
     user?: { login: string; avatar_url: string } | null; created_at: string; updated_at: string;
     repository_url?: string; labels?: (string | { name?: string; color?: string })[];
     merged_at?: string | null; pull_request?: { merged_at?: string | null }; head?: { ref: string };
+    draft?: boolean; state_reason?: string | null;
 };
 export function mapIssue(i: RestIssue): RepoIssue {
     return { repositoryFullName: i.repository_url?.split('/repos/')[1], number: i.number, title: i.title,
-        body: i.body ?? '', state: i.state, author: i.user?.login ?? '', authorAvatarUrl: i.user?.avatar_url ?? '',
+        body: i.body ?? '', state: i.state, stateReason: i.state_reason ?? undefined, author: i.user?.login ?? '', authorAvatarUrl: i.user?.avatar_url ?? '',
         createdAt: i.created_at, labels: (i.labels ?? []).map((l) => typeof l === 'string' ? { name: l, color: '' }
             : { name: l.name ?? '', color: l.color ?? '' }) };
 }
 export function mapPull(i: RestIssue): RepoPR {
     const mergedAt = i.merged_at ?? i.pull_request?.merged_at ?? undefined;
     return { repositoryFullName: i.repository_url?.split('/repos/')[1], number: i.number, title: i.title,
-        body: i.body ?? undefined, status: mergedAt ? 'merged' : i.state, mergedAt,
+        body: i.body ?? undefined, status: mergedAt ? 'merged' : i.state, mergedAt, isDraft: i.draft === true,
         author: i.user?.login ?? '', authorAvatarUrl: i.user?.avatar_url ?? '', createdAt: i.created_at, headRefName: i.head?.ref };
 }
 

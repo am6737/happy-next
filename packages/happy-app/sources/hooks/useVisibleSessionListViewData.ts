@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { SessionListViewItem, useSessionListViewData, useSharedSessions, useOwnSessionsSharedByMe } from '@/sync/storage';
 import { Session } from '@/sync/storageTypes';
+import { isSessionVisibleInList } from '@/sync/sessionListFilter';
 
 // Returns only active sessions for the main "Active" tab
 export function useVisibleSessionListViewData(): SessionListViewItem[] | null {
@@ -164,6 +165,7 @@ export function useSharedSessionListViewData(): SessionListViewItem[] | null {
         const inactiveSessions: Session[] = [];
 
         for (const session of sessions) {
+            if (!isSessionVisibleInList(session)) continue;
             if (session.active) {
                 activeSessions.push(session);
             } else {
@@ -204,6 +206,7 @@ export function useSharedByMeSessionListViewData(): SessionListViewItem[] | null
         const inactiveSessions: Session[] = [];
 
         for (const session of sharedByMe) {
+            if (!isSessionVisibleInList(session)) continue;
             if (session.active) {
                 activeSessions.push(session);
             } else {

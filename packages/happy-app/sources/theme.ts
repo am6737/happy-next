@@ -244,6 +244,8 @@ export const lightTheme = {
             stateClosed: '#8250DF',
             stateMerged: '#8250DF',
             stateDraft: '#6E7781',
+            // GitHub marks a pull request closed without merging in red, unlike a closed issue
+            stateClosedPull: '#CF222E',
             starFilled: '#E3B341',
             // Section icon bubble base colors (pair with +'22' opacity for bg)
             sectionCode: '#0969DA',
@@ -516,6 +518,7 @@ export const darkTheme = {
             stateClosed: '#A371F7',
             stateMerged: '#A371F7',
             stateDraft: '#8B949E',
+            stateClosedPull: '#F85149',
             starFilled: '#E3B341',
             sectionCode: '#58A6FF',
             sectionCommits: '#3FB950',

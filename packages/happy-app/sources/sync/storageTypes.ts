@@ -1,10 +1,12 @@
 import { z } from "zod";
+import { TeammateSessionMetadataSchema } from 'happy-wire';
 
 //
 // Agent states
 //
 
 export const MetadataSchema = z.object({
+    teammate: TeammateSessionMetadataSchema.optional(),
     path: z.string(),
     host: z.string(),
     version: z.string().optional(),

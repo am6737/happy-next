@@ -199,6 +199,9 @@ function TitleBarNavigation() {
                     />
                 </WindowsNavigationButton>
             )}
+            <WindowsNavigationButton accessibilityLabel={t('tabs.teammates')} onPress={() => router.navigate('/(app)/teammates')}>
+                <Ionicons name="people-outline" size={18} color={theme.colors.header.tint} />
+            </WindowsNavigationButton>
             <DesktopUpdateButton placement="titleBar" />
         </View>
     );

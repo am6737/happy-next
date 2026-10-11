@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { View, Text, ScrollView, RefreshControl, Platform } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
-import { useAcceptedFriends, useFriendRequests, useRequestedFriends, useFeedItems, useFeedLoaded, useFriendsLoaded, useRealtimeStatus, useDootaskProfile } from '@/sync/storage';
+import { useAcceptedFriends, useFriendRequests, useRequestedFriends, useFeedItems, useFeedLoaded, useChannels, useFriendsLoaded, useRealtimeStatus, useDootaskProfile } from '@/sync/storage';
 import { UserCard } from '@/components/UserCard';
 import { t } from '@/text';
 import { trackFriendsProfileView } from '@/track';
@@ -20,6 +20,7 @@ import { dootaskFetchUsers, dootaskFetchDialogs, dootaskOpenUserDialog } from '@
 import type { DooTaskProfile, DooTaskUser, DooTaskDialogListItem } from '@/sync/dootask/types';
 import { showToast } from './Toast';
 import { useMainTabBottomPadding } from '@/hooks/useMainTabBottomPadding';
+import { ChannelList } from '@/components/teammates/ChannelList';
 import { loadDooTaskInboxUsersCache, saveDooTaskInboxUsersCache } from '@/sync/persistence';
 
 const styles = StyleSheet.create((theme) => ({
@@ -134,6 +135,7 @@ export const InboxView = React.memo(({}: InboxViewProps) => {
     const isTablet = useIsTablet();
     const realtimeStatus = useRealtimeStatus();
     const dootaskProfile = useDootaskProfile();
+    const channels = useChannels();
     const tabBottomPadding = useMainTabBottomPadding();
 
     const [refreshing, setRefreshing] = React.useState(false);
@@ -225,12 +227,20 @@ export const InboxView = React.memo(({}: InboxViewProps) => {
         }, [loadDootaskUsers])
     );
 
+    // Agent chats need the teammates (names/avatars) as well as the channels themselves.
+    useFocusEffect(
+        React.useCallback(() => {
+            void Promise.all([sync.refreshTeammates(), sync.channels.refresh()]).catch(() => {});
+        }, [])
+    );
+
     const handleRefresh = React.useCallback(async () => {
         setRefreshing(true);
         try {
             await Promise.all([
                 sync.refreshInbox(),
                 loadDootaskUsers(),
+                Promise.all([sync.refreshTeammates(), sync.channels.refresh()]).catch(() => {}),
             ]);
         } finally {
             setRefreshing(false);
@@ -262,7 +272,7 @@ export const InboxView = React.memo(({}: InboxViewProps) => {
     }, [dootaskProfile, openingDootaskUserId, router]);
 
     const dootaskInitialLoadPending = !!dootaskProfile && dootaskUsersLoading && dootaskUsers.length === 0;
-    const isEmpty = feedLoaded && friendsLoaded && !dootaskInitialLoadPending && friendRequests.length === 0 && requestedFriends.length === 0 && friends.length === 0 && feedItems.length === 0 && dootaskUsers.length === 0;
+    const isEmpty = feedLoaded && friendsLoaded && !dootaskInitialLoadPending && friendRequests.length === 0 && requestedFriends.length === 0 && friends.length === 0 && feedItems.length === 0 && dootaskUsers.length === 0 && channels.length === 0;
 
     const refreshControl = (
         <RefreshControl
@@ -316,6 +326,8 @@ export const InboxView = React.memo(({}: InboxViewProps) => {
                 refreshControl={refreshControl}
             >
                 <UpdateBanner />
+
+                {channels.length > 0 && <ChannelList bare />}
 
                 {feedItems.length > 0 && (
                     <>

@@ -1,3 +1,10 @@
+import type { Teammate, TeammateRun, TeammateTask, TeammateSpend } from 'happy-wire';
+import { emptyTeammateTaskState, reduceTeammateTask, reduceTeammateTaskDetail, reduceTeammateTaskRun } from './teammateTasks';
+import type { TeammateTaskDetail } from 'happy-wire';
+import { isSessionVisibleInList } from './sessionListFilter';
+import { emptyChannelState, mergeChannels, reduceChannelMessages, reduceChannelRead, type StoredChannelMessage } from './channelReducers';
+import type { Channel } from 'happy-wire';
+import { mergeTeammateRunSnapshot, upsertTeammateRun } from './teammateRuns';
 import { create } from "zustand";
 import { useShallow } from 'zustand/react/shallow'
 import { Session, SessionDraft, AskUserQuestionDraft, Machine, GitStatus, PendingMessage, SessionCapabilities } from "./storageTypes";
@@ -131,6 +138,25 @@ interface StorageState {
     // cleared on success OR error. Drives the "refreshing" indicator in SessionView.
     sessionMessagesFetching: Record<string, boolean>;
     sessionGitStatus: Record<string, GitStatus | null>;
+    channels: Record<string, Channel>;
+    channelsLoaded: boolean;
+    channelMessages: Record<string, StoredChannelMessage[]>;
+    applyChannels: (channels: Channel[], loaded?: boolean, atRequest?: Record<string, Channel>) => void;
+    applyChannelMessages: (id: string, messages: StoredChannelMessage[]) => void;
+    markChannelReadLocal: (id: string, seq: number) => void;
+    teammates: Record<string, Teammate>;
+    teammatesLoaded: boolean;
+    teammateRuns: Record<string, TeammateRun[]>;
+    teammateTasks: Record<string, TeammateTask[]>;
+    teammateTaskDetails: Record<string, TeammateTaskDetail>;
+    teammateTaskResourceIndex: Record<string, string[]>;
+    applyTeammateTask: (task: TeammateTask) => void;
+    applyTeammateTaskDetail: (detail: TeammateTaskDetail, baseline?: TeammateTaskDetail) => void;
+    applyTeammateTaskList: (tasks: TeammateTask[], resourceId?: string) => void;
+    teammateSpend: Record<string, TeammateSpend>;
+    applyTeammates: (teammates: Teammate[], loaded?: boolean) => void;
+    applyTeammateRun: (run: TeammateRun) => void;
+    applyTeammateActivity: (id: string, runs: TeammateRun[], tasks: TeammateTask[], spend: TeammateSpend, runsAtRequest?: TeammateRun[]) => void;
     machines: Record<string, Machine>;
     // Registered repositories per machine (loaded from UserKVStore)
     registeredRepos: Record<string, RegisteredRepo[]>;
@@ -283,7 +309,7 @@ function buildSessionListViewData(
     const activeSessions: Session[] = [];
     const inactiveSessions: Session[] = [];
 
-    Object.values(sessions).forEach(session => {
+    Object.values(sessions).filter(isSessionVisibleInList).forEach(session => {
         if (isSessionActive(session)) {
             activeSessions.push(session);
         } else {
@@ -369,7 +395,7 @@ function buildSessionListViewData(
     }
 
     // Append shared sessions at the end
-    const sharedList = Object.values(sharedSessions ?? {});
+    const sharedList = Object.values(sharedSessions ?? {}).filter(isSessionVisibleInList);
     if (sharedList.length > 0) {
         sharedList.sort((a, b) => b.updatedAt - a.updatedAt);
         listData.push({ type: 'header', title: 'Shared with me' });
@@ -468,6 +494,41 @@ export const storage = create<StorageState>()((set, get) => {
         profile,
         sessions: {},
         sessionCapabilities: {},
+        ...emptyChannelState,
+        applyChannels: (channels, loaded = false, atRequest) => set(state => ({
+            channels: mergeChannels(state.channels, channels, atRequest), channelsLoaded: state.channelsLoaded || loaded,
+        })),
+        applyChannelMessages: (id, messages) => set(state => reduceChannelMessages(state, id, messages)),
+        markChannelReadLocal: (id, seq) => set(state => ({ channels: reduceChannelRead(state.channels, id, seq) })),
+        teammates: {},
+        teammatesLoaded: false,
+        teammateRuns: {},
+        ...emptyTeammateTaskState,
+        applyTeammateTask: task => set(state => reduceTeammateTask(state, task)),
+        applyTeammateTaskDetail: (detail, baseline) => set(state => reduceTeammateTaskDetail(state, detail, baseline)),
+        applyTeammateTaskList: (tasks, resourceId) => set(state => {
+            let next = { teammateTasks: state.teammateTasks, teammateTaskDetails: state.teammateTaskDetails, teammateTaskResourceIndex: state.teammateTaskResourceIndex };
+            for (const task of tasks) next = reduceTeammateTask(next, task);
+            if (resourceId && !next.teammateTaskResourceIndex[resourceId]) next.teammateTaskResourceIndex = { ...next.teammateTaskResourceIndex, [resourceId]: [] };
+            return next;
+        }),
+        teammateSpend: {},
+        applyTeammates: (teammates, loaded = false) => set(state => {
+            const merged = { ...state.teammates };
+            for (const teammate of teammates) {
+                if (!merged[teammate.id] || merged[teammate.id].updatedAt <= teammate.updatedAt) merged[teammate.id] = teammate;
+            }
+            return { teammates: merged, teammatesLoaded: state.teammatesLoaded || loaded };
+        }),
+        applyTeammateRun: run => set(state => ({
+            teammateTaskDetails: reduceTeammateTaskRun(state.teammateTaskDetails, run),
+            teammateRuns: { ...state.teammateRuns, [run.teammateId]: upsertTeammateRun(state.teammateRuns[run.teammateId], run) },
+        })),
+        applyTeammateActivity: (id, runs, tasks, spend, runsAtRequest) => set(state => ({
+            teammateRuns: { ...state.teammateRuns, [id]: mergeTeammateRunSnapshot(state.teammateRuns[id], runs, runsAtRequest) },
+            ...tasks.reduce((next, task) => reduceTeammateTask(next, task), { teammateTasks: state.teammateTasks, teammateTaskDetails: state.teammateTaskDetails, teammateTaskResourceIndex: state.teammateTaskResourceIndex }),
+            teammateSpend: { ...state.teammateSpend, [id]: spend },
+        })),
         machines: {},
         registeredRepos: cachedRepos.repos as Record<string, RegisteredRepo[]>,
         registeredReposVersions: cachedRepos.versions,
@@ -792,7 +853,7 @@ export const storage = create<StorageState>()((set, get) => {
             if (hasSessionChanges) {
                 // Build active set from all sessions (including existing ones)
                 const activeSet = new Set<string>();
-                Object.values(mergedSessions).forEach(session => {
+                Object.values(mergedSessions).filter(isSessionVisibleInList).forEach(session => {
                     if (isSessionActive(session)) {
                         activeSet.add(session.id);
                     }
@@ -803,7 +864,7 @@ export const storage = create<StorageState>()((set, get) => {
                 const inactiveSessions: Session[] = [];
 
                 // Process all sessions from merged set
-                Object.values(mergedSessions).forEach(session => {
+                Object.values(mergedSessions).filter(isSessionVisibleInList).forEach(session => {
                     if (activeSet.has(session.id)) {
                         activeSessions.push(session);
                     } else {
@@ -2748,4 +2809,15 @@ export function useDootaskLastSelection() {
 
 export function useDootaskTaskDetailCache(taskId: number) {
     return storage(useShallow((s) => s.dootaskTaskDetailCache[taskId] ?? null));
+}
+
+// Teammate profiles and activity are transient account-scoped metadata.
+export function useTeammates(): Teammate[] {
+    return storage(useShallow(state => Object.values(state.teammates).sort((a, b) => b.createdAt - a.createdAt)));
+}
+export function useTeammatesLoaded(): boolean { return storage(state => state.teammatesLoaded); }
+export function useTeammate(id: string): Teammate | null { return storage(state => state.teammates[id] ?? null); }
+
+export function useChannels(): Channel[] {
+    return storage(useShallow(state => Object.values(state.channels).sort((a, b) => b.lastMessageAt - a.lastMessageAt)));
 }

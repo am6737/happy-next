@@ -54,6 +54,11 @@ export function clearGithubCache(): void {
     clearGithubSession();
 }
 
+// Read suggestions without initiating a GitHub request or changing its cache.
+export function getCachedGithubRepos(credentials: AuthCredentials): RepoInfo[] {
+    return (dataCache.get(cacheKey(['repos', credentials.token, undefined, undefined])) as PageCache<RepoInfo> | undefined)?.items ?? [];
+}
+
 function requestOnce<T>(key: string, fetcher: () => Promise<T>, force = false): Promise<T> {
     const pending = inFlight.get(key);
     if (pending && !force) return pending as Promise<T>;

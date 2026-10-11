@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getNotificationSessionId } from './notificationData';
+import { getNotificationSessionId, getNotificationChannelId } from './notificationData';
 
 describe('getNotificationSessionId', () => {
     it('reads Expo notification data', () => {
@@ -17,5 +17,21 @@ describe('getNotificationSessionId', () => {
         expect(getNotificationSessionId({ data: { sessionId: 'session-3' } })).toBe('session-3');
         expect(getNotificationSessionId({ data: '{invalid' })).toBeNull();
         expect(getNotificationSessionId(null)).toBeNull();
+    });
+});
+
+describe('getNotificationChannelId', () => {
+    it('routes channel payloads from Expo and DooPush', () => {
+        const data = { type: 'teammate-channel', channelId: 'channel-1' };
+        expect(getNotificationChannelId(data)).toBe('channel-1');
+        expect(getNotificationChannelId({ data })).toBe('channel-1');
+        expect(getNotificationChannelId({ data: JSON.stringify(data) })).toBe('channel-1');
+    });
+    it('ignores session payloads and malformed channel IDs', () => {
+        expect(getNotificationChannelId({ sessionId: 's' })).toBeNull();
+        expect(getNotificationChannelId({ type: 'teammate-channel', channelId: 42 })).toBeNull();
+        expect(getNotificationChannelId({ type: 'teammate-channel', channelId: '' })).toBeNull();
+        expect(getNotificationChannelId({ data: 'broken JSON' })).toBeNull();
+        expect(getNotificationChannelId(null)).toBeNull();
     });
 });

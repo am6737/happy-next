@@ -11,6 +11,7 @@ describe('shouldProvideMainHeaderRight', () => {
         expect(shouldProvideMainHeaderRight('inbox')).toBe(true);
         expect(shouldProvideMainHeaderRight('dootask')).toBe(true);
         expect(shouldProvideMainHeaderRight('settings')).toBe(true);
+        expect(shouldProvideMainHeaderRight('teammates')).toBe(true);
     });
 
     it('does not provide headerRight for tabs that have no menu actions', () => {

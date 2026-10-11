@@ -13,6 +13,7 @@ import { VoiceAssistantStatusBar } from './VoiceAssistantStatusBar';
 import { useRealtimeStatus } from '@/sync/storage';
 import { MainView } from './MainView';
 import { Image } from 'expo-image';
+import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { t } from '@/text';
 import { useInboxHasContent } from '@/hooks/useInboxHasContent';
@@ -295,6 +296,14 @@ export const SidebarView = React.memo((props: SidebarViewProps) => {
                     />
                 </Pressable>
             )}
+            <Pressable
+                accessibilityLabel={t('tabs.teammates')}
+                accessibilityRole="button"
+                onPress={() => router.navigate('/(app)/teammates')}
+                hitSlop={10}
+            >
+                <Ionicons name="people-outline" size={20} color={theme.colors.header.tint} style={{ margin: 4 }} />
+            </Pressable>
         </>
     );
 

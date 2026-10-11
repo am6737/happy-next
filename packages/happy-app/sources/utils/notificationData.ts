@@ -26,3 +26,14 @@ export function getNotificationSessionId(data: unknown): string | null {
         return null;
     }
 }
+
+export function getNotificationChannelId(data: unknown): string | null {
+    const direct = asRecord(data);
+    if (direct?.type === 'teammate-channel' && typeof direct.channelId === 'string' && direct.channelId) return direct.channelId;
+    const nested = direct?.data;
+    if (typeof nested === 'string') {
+        try { return getNotificationChannelId(JSON.parse(nested)); } catch { return null; }
+    }
+    const payload = asRecord(nested);
+    return payload?.type === 'teammate-channel' && typeof payload.channelId === 'string' && payload.channelId ? payload.channelId : null;
+}

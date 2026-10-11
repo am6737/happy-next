@@ -1,3 +1,4 @@
+import { TeammatesList } from '@/components/teammates/TeammatesList';
 import * as React from 'react';
 import { View, ActivityIndicator, Text, Pressable, Platform, Image } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
@@ -129,11 +130,12 @@ const TAB_TITLES = {
     inbox: 'tabs.inbox',
     dootask: 'tabs.dootask',
     github: 'tabs.github',
+    teammates: 'tabs.teammates',
     settings: 'tabs.settings',
 } as const;
 
 // Active tabs
-type ActiveTabType = 'sessions' | 'inbox' | 'dootask' | 'github' | 'settings';
+type ActiveTabType = 'sessions' | 'inbox' | 'dootask' | 'github' | 'teammates' | 'settings';
 
 // Connection status rendered underneath the header title. On iOS the system draws it itself now,
 // through the native subtitle (`headerSubtitle` → `UINavigationItem.subtitle`, iOS 26+): a custom
@@ -271,6 +273,10 @@ const HeaderRight = React.memo(({ activeTab, onDootaskCreate, onSessionsCreate }
         );
     }
 
+    if (activeTab === 'teammates') {
+        return <Pressable accessibilityLabel={t('teammates.add')} onPress={() => router.push('/teammates/new')} hitSlop={15} style={styles.headerButton}><Ionicons name="person-add-outline" size={24} color={theme.colors.header.tint} /></Pressable>;
+    }
+
     if (activeTab === 'github') {
         return null;
     }
@@ -378,6 +384,7 @@ export const MainView = React.memo(({ variant }: MainViewProps) => {
                 return <InboxView />;
             case 'dootask':
                 return <DooTaskListView />;
+            case 'teammates': return <TeammatesList />;
             case 'github':
                 return <GitHubListView onRepoChange={setGithubRepo} repoPickerTriggerRef={githubRepoPickerTriggerRef} />;
             case 'settings':
@@ -422,6 +429,11 @@ export const MainView = React.memo(({ variant }: MainViewProps) => {
             focusedIcon: require('@/assets/images/navigation/github.png'),
         }] : []),
         {
+            key: 'teammates',
+            title: t('tabs.teammates'),
+            focusedIcon: Platform.OS === 'ios' ? { sfSymbol: 'person.2' } : require('@/assets/images/navigation/session.png'),
+        },
+        {
             key: 'settings',
             title: t('tabs.settings'),
             focusedIcon: require('@/assets/images/navigation/setting.png'),
@@ -437,6 +449,7 @@ export const MainView = React.memo(({ variant }: MainViewProps) => {
             case 'sessions': return <SessionsListWrapper />;
             case 'inbox': return <InboxView />;
             case 'dootask': return <DooTaskListView />;
+            case 'teammates': return <TeammatesList />;
             case 'github': return <GitHubListView onRepoChange={setGithubRepo} repoPickerTriggerRef={githubRepoPickerTriggerRef} />;
             case 'settings': return <SettingsViewWrapper />;
             default: return null;

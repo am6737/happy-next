@@ -1,3 +1,5 @@
+import { TeammateTaskPanel } from '@/components/teammates/TeammateTaskPanel';
+import { useTeammateIssueTasks } from '@/hooks/useTeammateTask';
 import * as React from 'react';
 import { View, ScrollView, Pressable, Platform } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
@@ -81,6 +83,7 @@ function IssueDetailScreen() {
 
     const { credentials } = useAuth();
     const issueNumber = parseInt(numberStr, 10);
+    const taskIds = useTeammateIssueTasks(`${owner}/${repo}#${issueNumber}`);
     const { data: originalIssue, loading: issueLoading, mutate: mutateIssue } = useGithubIssue(owner!, repo!, issueNumber);
     const { data: comments } = useGithubIssueComments(owner!, repo!, issueNumber);
     const linkedSessions = useLinkedSessions('github', `${owner}/${repo}#${issueNumber}`, 'issue');
@@ -166,6 +169,9 @@ function IssueDetailScreen() {
             },
         ];
         if (originalIssue && credentials) {
+            items.push({ label: t('teammateTasks.delegate'), onPress: () => router.push({ pathname: '/teammates/delegate',
+                params: { owner, repo, number: String(issueNumber), title: originalIssue.title },
+            }) });
             items.push({
                 label: isOpen ? t('repository.closeIssue') : t('repository.reopenIssue'),
                 destructive: isOpen,
@@ -183,7 +189,7 @@ function IssueDetailScreen() {
             });
         }
         return items;
-    }, [owner, repo, issueNumber, originalIssue, credentials, mutateIssue]);
+    }, [owner, repo, issueNumber, originalIssue, credentials, mutateIssue, router]);
 
     const headerTitle = React.useCallback(() => (
         <Pressable style={{ alignItems: 'center', justifyContent: 'center', maxWidth: 220 }}>
@@ -353,6 +359,8 @@ function IssueDetailScreen() {
                         <Text style={styles.bodyEmpty}>{t('repository.noDescription')}</Text>
                     )}
                 </View>
+
+                {taskIds.map(id => <TeammateTaskPanel key={id} id={id} />)}
 
                 {linkedSessions.length > 0 && (
                     <>

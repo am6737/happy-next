@@ -635,6 +635,7 @@ function RenderInlineImage(props: { url: string; alt: string }) {
 
 function RenderSpans(props: { spans: MarkdownSpan[], baseStyle?: any, isHeader?: boolean, disableCodeLineHeight?: boolean }) {
     const linkContext = React.useContext(MarkdownLinkContext);
+    const router = useRouter();
     return (<>
         {props.spans.map((span, index) => {
             const isCode = span.styles.includes('code');
@@ -656,6 +657,15 @@ function RenderSpans(props: { spans: MarkdownSpan[], baseStyle?: any, isHeader?:
             });
             if (isBoldItalic) {
                 spanStyles.push(isCode ? style.codeBoldItalic : style.boldItalic);
+            }
+            if (span.url?.startsWith('mention:')) {
+                // A plain Text onPress navigates at once, without the Link's gesture wait.
+                const teammateId = span.url.slice('mention:'.length);
+                return (
+                    <Text key={index} accessibilityRole="link" onPress={() => router.push(`/teammates/${teammateId}`)} style={[style.link, spanStyles]}>
+                        {span.text}
+                    </Text>
+                );
             }
             if (span.url) {
                 const link = resolveMarkdownLink({

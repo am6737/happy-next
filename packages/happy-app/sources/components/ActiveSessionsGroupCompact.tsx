@@ -1,3 +1,4 @@
+import { TeammateWorkerBadge } from './teammates/TeammateWorkerBadge';
 import React from 'react';
 import { View, Pressable, Platform, ActivityIndicator, Animated } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
@@ -550,6 +551,7 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder, isCardFir
             <View style={styles.sessionContent}>
                 {/* Title line with status */}
                 <View style={styles.sessionTitleRow}>
+                    <TeammateWorkerBadge metadata={session.metadata} />
                     <Text
                         style={[
                             styles.sessionTitle,

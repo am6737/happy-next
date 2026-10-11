@@ -1,3 +1,5 @@
+import { useWorkerTeammates } from '@/hooks/useWorkerTeammates';
+import { TeammateWorkerBadge } from './teammates/TeammateWorkerBadge';
 import React from 'react';
 import { View, Pressable, FlatList, Platform, RefreshControl, NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
@@ -482,6 +484,7 @@ export function SessionsList() {
         sharedDot,
         sharedByMeDot,
     } = scope;
+    useWorkerTeammates(React.useMemo(() => collectListSessions(data), [data]));
     const machineNames = useMachineNameMap();
     const socketStatus = useSocketStatus();
     // machineId -> name cache, so machine labels survive a restart before machines sync.
@@ -993,6 +996,7 @@ const SessionItem = React.memo(({ session, selected, isFirst, isLast, isSingle, 
             {!compactSessionView && (
                 <View style={styles.avatarContainer}>
                     <Avatar id={avatarId} size={48} monochrome={!sessionStatus.isConnected} flavor={session.metadata?.flavor} sessionIcon={session.metadata?.sessionIcon} />
+                    <TeammateWorkerBadge metadata={session.metadata} overlay />
                     {hasDraft && (
                         <View style={styles.draftIconContainer}>
                             <Ionicons
@@ -1007,6 +1011,7 @@ const SessionItem = React.memo(({ session, selected, isFirst, isLast, isSingle, 
             <View style={[styles.sessionContent, compactSessionView && { marginLeft: 0 }]}>
                 {/* Title line */}
                 <View style={styles.sessionTitleRow}>
+                    {compactSessionView && <TeammateWorkerBadge metadata={session.metadata} />}
                     {sessionStatus.hasUnreadCompletion && (
                         <View style={styles.unreadDot} />
                     )}
