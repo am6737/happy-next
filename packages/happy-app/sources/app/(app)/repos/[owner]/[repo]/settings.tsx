@@ -6,7 +6,6 @@ import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { Ionicons } from '@expo/vector-icons';
 import { Item } from '@/components/Item';
 import { ItemGroup } from '@/components/ItemGroup';
-import { Avatar } from '@/components/Avatar';
 import { Modal } from '@/modal';
 import { BottomSheetModal, BottomSheetFlatList, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
 import { ScheduleCronSheet } from '@/components/ScheduleCronSheet';
@@ -20,9 +19,8 @@ import {
     type RepoInfo,
     type AutomationRule,
 } from '@/data/mockRepos';
-import { formatTimeAgo } from '@/data/repoUtils';
 import { t } from '@/text';
-import { useProfile, storage } from '@/sync/storage';
+import { storage } from '@/sync/storage';
 import { useShallow } from 'zustand/react/shallow';
 import { isMachineOnline } from '@/utils/machineUtils';
 import type { Machine } from '@/sync/storageTypes';
@@ -132,8 +130,6 @@ export default function RepoSettingsScreen() {
     const repoInfo = MOCK_REPOS.find((r) => r.fullName === fullName);
     const automationRule = getAutomationRule(fullName);
 
-    const [syncLoading, setSyncLoading] = React.useState(false);
-    const profile = useProfile();
     const scheduleCronSheetRef = React.useRef<BottomSheetModal>(null);
     const branchSheetRef = React.useRef<BottomSheetModal>(null);
     const [selectedBranch, setSelectedBranch] = React.useState<string>(repoInfo?.defaultBranch ?? 'main');
@@ -277,11 +273,6 @@ export default function RepoSettingsScreen() {
         return machine && isMachineOnline(machine);
     });
 
-    const handleSync = React.useCallback(() => {
-        setSyncLoading(true);
-        setTimeout(() => setSyncLoading(false), 1500);
-    }, []);
-
     const handleRemoveRepo = React.useCallback(() => {
         Modal.alert(
             t('repoSettings.removeRepoTitle'),
@@ -326,31 +317,6 @@ export default function RepoSettingsScreen() {
             <Stack.Screen options={{ headerTitle: 'Settings', headerBackTitle: t('common.back') }} />
 
             <ScrollView contentContainerStyle={styles.settingsContent}>
-                {/* ===== GITHUB SYNC ===== */}
-                <ItemGroup title={t('repoSettings.githubSync')}>
-                    <Item
-                        title={t('repoSettings.githubAccount')}
-                        leftElement={
-                            profile?.github ? (
-                                <Avatar id={String(profile.github.id)} imageUrl={profile.github.avatar_url} size={29} />
-                            ) : undefined
-                        }
-                        detail={profile?.github?.login ?? t('repoSettings.notConnected')}
-                    />
-                    <Item
-                        title={t('repoSettings.lastSynced')}
-                        detail={repoInfo?.lastSyncedAt ? formatTimeAgo(repoInfo.lastSyncedAt) : t('repoSettings.never')}
-                    />
-                    <Item
-                        title={t('repoSettings.syncNow')}
-                        onPress={handleSync}
-                        loading={syncLoading}
-                        rightElement={
-                            <Ionicons name="sync" size={20} color={theme.colors.textSecondary} />
-                        }
-                    />
-                </ItemGroup>
-
                 {/* ===== MACHINE (Single Binding) ===== */}
                 <ItemGroup title={t('repoSettings.machines')} footer={t('repoSettings.machinesFooter')}>
                     {boundMachineInfo ? (
