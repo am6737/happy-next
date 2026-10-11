@@ -512,7 +512,6 @@ export async function runQoder(opts: {
   } finally {
     setThinking(false);
   }
-  sendReady();
 
   //
   // Main loop
