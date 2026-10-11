@@ -7,7 +7,7 @@ import { teammateHeartbeatTick } from './teammateHeartbeatTick';
 import { teammateDreamingTick } from './teammateDreamingTick';
 import { teammateTaskStallCheck } from './teammateTaskStallCheck';
 
-export const TEAMMATE_AUTONOMY_INTERVAL_MS = 60_000;
+const TEAMMATE_AUTONOMY_INTERVAL_MS = 60_000;
 
 /** Sweep teammates independently so malformed data or a remote outage cannot stop others. */
 export async function teammateAutonomyTick(now = new Date()): Promise<void> {

@@ -5,7 +5,7 @@ import { inTx } from '@/storage/inTx';
 import { TeammateError } from './teammateError';
 import { toTeammateRunDto } from './teammateQueries';
 import { teammateRunUpdated } from './teammateRunUpdated';
-import { TEAMMATE_ACTIVE_RUN_STATUSES } from './teammateRunFinish';
+import { TEAMMATE_ACTIVE_RUN_STATUSES } from './teammateRunStatuses';
 
 /**
  * Owner-requested retry of a failed run: its events are queued again on the same thread as a fresh attempt.

@@ -1,17 +1,18 @@
 import { randomUUID } from 'node:crypto';
 import { Prisma } from '@prisma/client';
-import { TEAMMATE_BUDGET_WARNING_RATIO } from 'happy-wire';
+import { TEAMMATE_BUDGET_WARNING_RATIO, TEAMMATE_TASK_ACTIVE_STATUSES } from 'happy-wire';
 import { db } from '@/storage/db';
-import { afterTx, inTx } from '@/storage/inTx';
-import { invokeUserRpc } from '@/app/api/socket/rpcRegistry';
+import { inTx } from '@/storage/inTx';
 import { channelSystemMessage } from '@/app/channel/channelSystemMessage';
+import { channelTeammateDmWhere } from '@/app/channel/channelQueries';
 import { teammateSpendGet } from './teammateSpend';
 import { teammateNotify } from './teammateNotify';
 import { teammateUpdated } from './teammateUpdated';
 import { toTeammateDto, toTeammateRunDto } from './teammateQueries';
 import { teammateRunTerminateTx } from './teammateRunFinish';
+import { TEAMMATE_IN_FLIGHT_RUN_STATUSES } from './teammateRunStatuses';
 import { teammateRunUpdated } from './teammateRunUpdated';
-import { teammateTaskStopRpc } from './teammateTaskTerminate';
+import { teammateRunCancelRpc, teammateTaskStopRpc } from './teammateTaskTerminate';
 import { teammateTaskWake } from './teammateTaskWake';
 
 /** Evaluate current UTC-month spend and atomically warn, pause, or resume a teammate. */
@@ -24,7 +25,7 @@ export async function teammateBudgetEvaluate(teammateId: string, now = new Date(
         const teammate = await tx.teammate.findUnique({ where: { id: teammateId } });
         if (!teammate) return;
         const budget = teammate.monthlyBudgetUsd;
-        const dm = await tx.channel.findFirst({ where: { accountId: teammate.accountId, kind: 'dm', members: { some: { memberType: 'teammate', teammateId } } }, select: { id: true } });
+        const dm = await tx.channel.findFirst({ where: channelTeammateDmWhere(teammate.accountId, teammateId), select: { id: true } });
         const month = now.toISOString().slice(0, 7);
         if (budget !== null && spend.spentUsd >= budget * TEAMMATE_BUDGET_WARNING_RATIO && spend.spentUsd < budget) {
             const localId = `system:budget_warning:${month}:${budget}`;
@@ -38,12 +39,12 @@ export async function teammateBudgetEvaluate(teammateId: string, now = new Date(
             if (!changed.count) return;
             const updated = { ...teammate, status: 'budget_paused' };
             await teammateUpdated(tx, teammate.accountId, toTeammateDto(updated));
-            const runs = await tx.teammateRun.findMany({ where: { teammateId, status: { in: ['dispatching', 'running'] } } });
+            const runs = await tx.teammateRun.findMany({ where: { teammateId, status: { in: TEAMMATE_IN_FLIGHT_RUN_STATUSES } } });
             for (const run of runs) {
                 await teammateRunTerminateTx(tx, run.id, 'cancelled', 'budget_exceeded', now);
-                afterTx(tx, () => { void invokeUserRpc(teammate.accountId, `${teammate.machineId}:teammate-run-cancel`, { runId: run.id, dispatchToken: run.dispatchToken, reason: 'budget_exceeded' }, 30_000).catch(() => {}); });
+                teammateRunCancelRpc(tx, teammate, run, 'budget_exceeded');
             }
-            const tasks = await tx.teammateTask.findMany({ where: { teammateId, status: { in: ['todo', 'in_progress', 'awaiting_input', 'in_review'] } }, include: { teammate: true } });
+            const tasks = await tx.teammateTask.findMany({ where: { teammateId, status: { in: [...TEAMMATE_TASK_ACTIVE_STATUSES] } }, include: { teammate: true } });
             for (const task of tasks) teammateTaskStopRpc(tx, task, 'budget');
             // The status guard makes each transition unique; a transaction retry reuses the same `now`.
             if (dm) await channelSystemMessage(dm.id, 'budget_paused', { spentUsd: spend.spentUsd, budgetUsd: budget }, tx, `system:budget_paused:${now.getTime()}`);
@@ -61,7 +62,7 @@ export async function teammateBudgetEvaluate(teammateId: string, now = new Date(
                 if (thread.kind === 'task') {
                     if (!thread.taskId) continue;
                     const task = await tx.teammateTask.findUnique({ where: { id: thread.taskId } });
-                    if (!task || !['todo', 'in_progress', 'awaiting_input', 'in_review'].includes(task.status)) continue;
+                    if (!task || !(TEAMMATE_TASK_ACTIVE_STATUSES as readonly string[]).includes(task.status)) continue;
                     const events = (latest.eventPayload as { events?: Array<{ type: string; at: number; data: Record<string, unknown> }> }).events ?? [];
                     for (const event of events) await teammateTaskWake(task.id, event as Parameters<typeof teammateTaskWake>[1], { tx, trigger: 'retry' });
                 } else {

@@ -6,10 +6,11 @@ import { teammateTaskWake } from './teammateTaskWake';
 import { teammateTaskHandoffNotify } from './teammateTaskHandoffNotify';
 import { teammateTaskUpdated } from './teammateTaskUpdated';
 import { toTeammateTaskDto } from './teammateQueries';
+import { SILENT_FAILURE_REASONS } from './teammateRunStatuses';
 
-export const TEAMMATE_TASK_STALL_MS = 5 * 60_000;
-export const TEAMMATE_TASK_FAILED_STALL_MS = 10 * 60_000;
-export const TEAMMATE_TASK_STALL_MAX_WAKES = 2;
+const TEAMMATE_TASK_STALL_MS = 5 * 60_000;
+const TEAMMATE_TASK_FAILED_STALL_MS = 10 * 60_000;
+const TEAMMATE_TASK_STALL_MAX_WAKES = 2;
 
 const isStallWake = (run: TeammateRun) => run.trigger === 'heartbeat'
     && ((run.eventPayload as { events?: { data?: { signal?: unknown } }[] }).events ?? []).every(event => event.data?.signal === 'stalled');
@@ -29,7 +30,7 @@ export async function teammateTaskStallCheck(teammateId: string, now = new Date(
         const runs = await db.teammateRun.findMany({ where: { threadId: thread.id }, orderBy: [{ queuedAt: 'desc' }, { id: 'desc' }], take: TEAMMATE_TASK_STALL_MAX_WAKES + 1 });
         const latest = runs[0];
         if (!latest?.finishedAt || !['completed', 'failed'].includes(latest.status)) continue;
-        if (['cancelled_by_user', 'budget_exceeded'].includes(latest.failureReason ?? '')) continue;
+        if (SILENT_FAILURE_REASONS.includes(latest.failureReason ?? '')) continue;
         if (latest.finishedAt.getTime() > now.getTime() - (latest.status === 'failed' ? TEAMMATE_TASK_FAILED_STALL_MS : TEAMMATE_TASK_STALL_MS)) continue;
         const workers = await db.teammateSession.findMany({ where: { taskId: task.id, role: 'worker' }, select: { sessionId: true } });
         if (workers.some(worker => isSessionBusy(worker.sessionId))) continue;

@@ -1,5 +1,7 @@
 import { inTx } from '@/storage/inTx';
+import { TEAMMATE_RPC_RUN_CANCEL } from 'happy-wire';
 import { invokeUserRpc } from '@/app/api/socket/rpcRegistry';
+import { TEAMMATE_RPC_TIMEOUT_MS } from './teammateTaskTerminate';
 import { TeammateError } from './teammateError';
 import { teammateRunTerminateTx } from './teammateRunFinish';
 
@@ -13,7 +15,7 @@ export async function teammateRunCancel(accountId: string, runId: string) {
         return { run: run!, cancel, machineId: row.teammate.machineId, dispatchToken: row.dispatchToken };
     });
     if (result.cancel) {
-        try { await invokeUserRpc(accountId, `${result.machineId}:teammate-run-cancel`, { runId, dispatchToken: result.dispatchToken, reason: 'cancelled_by_user' }, 30_000); } catch { /* best effort */ }
+        try { await invokeUserRpc(accountId, `${result.machineId}:${TEAMMATE_RPC_RUN_CANCEL}`, { runId, dispatchToken: result.dispatchToken, reason: 'cancelled_by_user' }, TEAMMATE_RPC_TIMEOUT_MS); } catch { /* best effort */ }
     }
     return result.run;
 }

@@ -3,22 +3,13 @@ import { Prisma } from '@prisma/client';
 import { inTx, type Tx } from '@/storage/inTx';
 import type { TeammateRunFailureReason, TeammateRunFinishedRequest } from 'happy-wire';
 import { TeammateError } from './teammateError';
+import { teammateRunAuthenticate } from './teammateRunAuthorize';
 import { toTeammateRunDto } from './teammateQueries';
 import { teammateRunUpdated } from './teammateRunUpdated';
+import { TEAMMATE_ACTIVE_RUN_STATUSES, SILENT_FAILURE_REASONS } from './teammateRunStatuses';
 import { channelSystemMessage } from '@/app/channel/channelSystemMessage';
 
-export const TEAMMATE_ACTIVE_RUN_STATUSES = ['queued', 'dispatching', 'running'];
 const RETRY_REASONS = ['spawn_failed', 'dispatch_timeout', 'runtime_recovery'];
-// Reasons the owner already knows about: they cancelled, or the budget notice explains it.
-const SILENT_FAILURE_REASONS = ['cancelled_by_user', 'budget_exceeded'];
-
-/** Authenticate callbacks even on terminal runs; foreign runs are never disclosed. */
-export async function teammateRunAuthenticate(tx: Tx, runId: string, accountId: string, dispatchToken: string) {
-    const run = await tx.teammateRun.findFirst({ where: { id: runId, teammate: { accountId } }, include: { teammate: true, thread: true } });
-    if (!run) throw new TeammateError('not_found');
-    if (run.dispatchToken !== dispatchToken) throw new TeammateError('invalid_token');
-    return run;
-}
 
 /**
  * Conditional terminal transition and its one retry share a transaction, preventing duplicate retries.

@@ -4,6 +4,7 @@ import { db } from '@/storage/db';
 import { inTx } from '@/storage/inTx';
 import { getUserOctokit, GitHubNotConnectedError } from '@/app/github/githubApi';
 import { channelSystemMessage } from '@/app/channel/channelSystemMessage';
+import { channelTeammateDmWhere } from '@/app/channel/channelQueries';
 import { teammateRunAuthorize } from './teammateRunAuthorize';
 import { teammateTaskDelegate } from './teammateTaskDelegate';
 import { teammateNotify } from './teammateNotify';
@@ -64,7 +65,7 @@ export async function teammateTaskCreate(accountId: string, input: TeammateTaskC
         const resourceId = `${req.repo}#${issue.number}`;
         const delegated = existingTask ?? await db.teammateTask.findFirst({ where: { accountId, resourceId, status: { notIn: ['done', 'cancelled'] } } });
         if (delegated && delegated.teammateId !== assignee.id) throw new TeammateError('already_delegated');
-        let task = await teammateTaskDelegate(accountId, { teammateId: assignee.id, source: 'github-issue', resourceId: `${req.repo}#${issue.number}`, title: issue.title, url: issue.html_url, ...(issue.pull_request ? { prUrl: issue.html_url } : {}) }, creator.id, run.threadId);
+        let task = await teammateTaskDelegate(accountId, { teammateId: assignee.id, source: 'github-issue', resourceId, title: issue.title, url: issue.html_url, ...(issue.pull_request ? { prUrl: issue.html_url } : {}) }, creator.id, run.threadId);
         if (reviewer && !task.reviewerTeammateId) {
             await db.teammateTask.update({ where: { id: task.id }, data: { reviewerTeammateId: reviewer.id } });
             task = { ...task, reviewerTeammateId: reviewer.id };
@@ -72,7 +73,7 @@ export async function teammateTaskCreate(accountId: string, input: TeammateTaskC
         if (created && !delegated && task.createdByTeammateId === creator.id) await db.teammateTask.update({ where: { id: task.id }, data: { createdIssue: true } });
         if (task.createdByTeammateId === creator.id) {
             await inTx(async tx => {
-                const dm = await tx.channel.findFirst({ where: { accountId, kind: 'dm', members: { some: { memberType: 'teammate', teammateId: assignee.id } } }, select: { id: true } });
+                const dm = await tx.channel.findFirst({ where: channelTeammateDmWhere(accountId, assignee.id), select: { id: true } });
                 const localId = `system:task_self_assigned:${task.id}`;
                 const sent = dm ? await tx.channelMessage.findUnique({ where: { channelId_localId: { channelId: dm.id, localId } } }) : null;
                 if ((dm && !sent) || (!dm && !delegated)) {

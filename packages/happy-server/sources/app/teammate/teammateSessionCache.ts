@@ -1,7 +1,7 @@
 import { db } from '@/storage/db';
 import type { TeammateSession } from '@prisma/client';
 
-export const TEAMMATE_SESSION_CACHE_TTL_MS = 60_000;
+const TEAMMATE_SESSION_CACHE_TTL_MS = 60_000;
 const MAX_ENTRIES = 10_000;
 const cache = new Map<string, { value: TeammateSession | null; expiresAt: number }>();
 

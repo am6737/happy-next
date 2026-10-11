@@ -1,5 +1,5 @@
 import type { TeammateTask as TeammateTaskRow } from '@prisma/client';
-import { TEAMMATE_REVIEW_MAX_ROUNDS, type TeammateTaskAgentUpdateRequest } from 'happy-wire';
+import { TEAMMATE_REVIEW_MAX_ROUNDS, TEAMMATE_TASK_ACTIVE_STATUSES, type TeammateTaskAgentUpdateRequest } from 'happy-wire';
 import type { Tx } from '@/storage/inTx';
 import { TeammateError } from './teammateError';
 import { teammateTaskHandoffNotify } from './teammateTaskHandoffNotify';
@@ -82,7 +82,7 @@ export async function teammateTaskReviewRoute(
             source: 'github-issue',
             resourceId: pr.resourceId,
             ...(existingReview ? { id: { not: existingReview.id } } : {}),
-            status: { in: ['todo', 'in_progress', 'awaiting_input', 'in_review'] },
+            status: { in: [...TEAMMATE_TASK_ACTIVE_STATUSES] },
         },
     });
     if (conflictingOpen && conflictingOpen.teammateId !== reviewer.id) return { routed: false };

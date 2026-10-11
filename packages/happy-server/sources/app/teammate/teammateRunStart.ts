@@ -1,6 +1,6 @@
 import { afterTx, inTx } from '@/storage/inTx';
 import type { TeammateRunStartedRequest } from 'happy-wire';
-import { teammateRunAuthenticate } from './teammateRunFinish';
+import { teammateRunAuthenticate } from './teammateRunAuthorize';
 import { teammateRunUpdated } from './teammateRunUpdated';
 import { toTeammateRunDto, toTeammateTaskDto } from './teammateQueries';
 import { teammateSessionCacheInvalidate } from './teammateSessionCache';
@@ -12,8 +12,7 @@ import { teammateTaskHandoffNotify } from './teammateTaskHandoffNotify';
 export async function teammateRunStart(runId: string, req: TeammateRunStartedRequest, accountId: string): Promise<void> {
     await inTx(async (tx) => {
         const row = await teammateRunAuthenticate(tx, runId, accountId, req.dispatchToken);
-        if (row.status !== 'dispatching' && row.status !== 'running') return;
-        if (row.status === 'running') return;
+        if (row.status !== 'dispatching') return;
         const session = await tx.session.findFirst({ where: { id: req.sessionId, accountId }, select: { id: true } });
         if (!session) throw new TeammateError('not_found');
         const now = new Date();

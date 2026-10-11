@@ -34,7 +34,7 @@ vi.mock('./teammateUpdated', () => ({ teammateUpdated: updated }));
 vi.mock('./teammateQueries', () => ({ toTeammateDto: (row: any) => row, toTeammateRunDto: (row: any) => row }));
 vi.mock('./teammateRunFinish', () => ({ teammateRunTerminateTx: terminate }));
 vi.mock('./teammateRunUpdated', () => ({ teammateRunUpdated: vi.fn() }));
-vi.mock('./teammateTaskTerminate', () => ({ teammateTaskStopRpc: stop }));
+vi.mock('./teammateTaskTerminate', async (importOriginal) => ({ ...await importOriginal<typeof import('./teammateTaskTerminate')>(), teammateTaskStopRpc: stop }));
 vi.mock('./teammateTaskWake', () => ({ teammateTaskWake: wake }));
 
 import { teammateBudgetEvaluate } from './teammateBudgetEvaluate';

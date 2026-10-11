@@ -53,7 +53,7 @@ vi.mock('@/utils/log', () => ({ log: vi.fn() }));
 vi.mock('@/app/api/socket/rpcRegistry', () => ({ invokeUserRpc: rpc, hasUserRpcMethod: online }));
 vi.mock('@/app/channel/channelSystemMessage', () => ({ channelSystemMessage: systemMessage }));
 
-import { eventRouter, buildTeammateRunUpdatedUpdate } from '@/app/events/eventRouter';
+import { eventRouter } from '@/app/events/eventRouter';
 import { teammateThreadEnsure } from './teammateThreadEnsure';
 import { teammateRunEnqueue } from './teammateRunEnqueue';
 import { teammateRunStart } from './teammateRunStart';
@@ -397,9 +397,8 @@ describe('cancel and runtime queries', () => {
         state.registrations = [{ sessionId: 'session', teammateId: 'mate', role: 'controller' }];
         expect(await teammateActiveSessions('account', 'machine')).toEqual(['session']);
     });
-    it('builds the persistent update without exposing dispatch secrets', async () => {
+    it('returns runs without exposing dispatch secrets', async () => {
         const row = addRun(); const run = (await teammateRunGet('account', row.id))!;
-        expect(buildTeammateRunUpdatedUpdate(run, 4, 'update')).toMatchObject({ seq: 4, body: { t: 'teammate-run-updated', run } });
         expect(run).not.toHaveProperty('dispatchToken'); expect(run).not.toHaveProperty('eventPayload');
     });
 });

@@ -1,4 +1,4 @@
-import { TeammateActiveHoursSchema } from 'happy-wire';
+import { TeammateActiveHoursSchema, TEAMMATE_RPC_RUN_DISPATCH } from 'happy-wire';
 import { db } from '@/storage/db';
 import { hasUserRpcMethod } from '@/app/api/socket/rpcRegistry';
 import { teammateLocalHour } from './teammateActiveHours';
@@ -13,7 +13,7 @@ export async function teammateDreamingTick(teammateId: string, now = new Date())
     const hours = TeammateActiveHoursSchema.safeParse(teammate.activeHours);
     const timezone = teammate.timezone ?? (hours.success ? hours.data.timezone : null) ?? 'UTC';
     if (teammateLocalHour(timezone, now) !== teammate.dreamingHour) return;
-    if (!hasUserRpcMethod(teammate.accountId, `${teammate.machineId}:teammate-run-dispatch`)) return;
+    if (!hasUserRpcMethod(teammate.accountId, `${teammate.machineId}:${TEAMMATE_RPC_RUN_DISPATCH}`)) return;
     const thread = await teammateThreadEnsure(teammateId, 'dreaming');
     const latest = await db.teammateRun.findFirst({ where: { threadId: thread.id }, orderBy: [{ queuedAt: 'desc' }, { id: 'desc' }] });
     if (latest && latest.queuedAt.getTime() > now.getTime() - 20 * 60 * 60_000) return;

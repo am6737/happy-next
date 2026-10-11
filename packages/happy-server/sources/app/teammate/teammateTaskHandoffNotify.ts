@@ -3,6 +3,7 @@ import type { Tx } from '@/storage/inTx';
 import { teammateRunEnqueue } from './teammateRunEnqueue';
 import { teammateThreadEnsure } from './teammateThreadEnsure';
 import { TeammateError } from './teammateError';
+import { channelTeammateDmWhere } from '@/app/channel/channelQueries';
 
 const HANDOFF_STATUSES = new Set(['in_review', 'awaiting_input', 'done', 'cancelled', 'paused']);
 
@@ -39,11 +40,7 @@ export async function teammateTaskHandoffNotify(
         : null;
     if (!thread) {
         const dm = await tx.channel.findFirst({
-            where: {
-                accountId: after.accountId,
-                kind: 'dm',
-                members: { some: { memberType: 'teammate', teammateId: creator.id } },
-            },
+            where: channelTeammateDmWhere(after.accountId, creator.id),
             select: { id: true },
         });
         if (!dm) return;

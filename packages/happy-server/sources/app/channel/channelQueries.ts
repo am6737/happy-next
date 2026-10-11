@@ -38,6 +38,11 @@ export async function channelMessageList(accountId: string, channelId: string, o
     return (ascending ? rows : rows.reverse()).map(toChannelMessageDto);
 }
 
+/** Prisma filter for a teammate's DM channel inside an account. */
+export function channelTeammateDmWhere(accountId: string, teammateId: string) {
+    return { accountId, kind: 'dm', members: { some: { memberType: 'teammate', teammateId } } };
+}
+
 /** Find a teammate's DM after checking account ownership. */
 export async function channelDmGet(accountId: string, teammateId: string) {
     if (!await db.teammate.findFirst({ where: { id: teammateId, accountId } })) throw new ChannelError('not_found');

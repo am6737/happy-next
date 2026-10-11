@@ -10,10 +10,8 @@ import { channelUpdated, channelMessageUpdated } from './channelUpdated';
 export async function channelSystemMessage(channelId: string, code: ChannelSystemCode, data: Record<string, unknown>, tx?: Tx, localId?: string) {
     const messageLocalId = localId ?? `system:${code}:${createHash('sha256').update(JSON.stringify(data)).digest('hex')}`;
     const insert = async (tx: Tx) => {
-        {
-            const existing = await tx.channelMessage.findUnique({ where: { channelId_localId: { channelId, localId: messageLocalId } } });
-            if (existing) return toChannelMessageDto(existing);
-        }
+        const existing = await tx.channelMessage.findUnique({ where: { channelId_localId: { channelId, localId: messageLocalId } } });
+        if (existing) return toChannelMessageDto(existing);
         const current = await tx.channel.findUnique({ where: { id: channelId } });
         if (!current) throw new ChannelError('not_found');
         const now = new Date();

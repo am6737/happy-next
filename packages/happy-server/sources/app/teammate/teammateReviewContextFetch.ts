@@ -1,9 +1,9 @@
 import type { TeammateRunEvent } from 'happy-wire';
 import { getUserOctokit } from '@/app/github/githubApi';
 
-export const TEAMMATE_REVIEW_CONTEXT_MAX_FILES = 100;
-export const TEAMMATE_REVIEW_CONTEXT_MAX_BODY = 4_000;
-export const TEAMMATE_REVIEW_CONTEXT_TIMEOUT_MS = 10_000;
+const TEAMMATE_REVIEW_CONTEXT_MAX_FILES = 100;
+const TEAMMATE_REVIEW_CONTEXT_MAX_BODY = 4_000;
+const TEAMMATE_REVIEW_CONTEXT_TIMEOUT_MS = 10_000;
 
 /**
  * Adds the PR's branches, changed files and the source issue to review assignments right before dispatch, so the

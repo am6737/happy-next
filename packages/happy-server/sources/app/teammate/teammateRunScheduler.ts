@@ -1,25 +1,26 @@
 import * as privacyKit from 'privacy-kit';
 import { randomUUID } from 'node:crypto';
-import { TeammateRunDispatchPayloadSchema, TeammateRpcResultSchema, TEAMMATE_TASK_ACTIVE_STATUSES, type TeammateRunDispatchPayload, type TeammateRunFailureReason } from 'happy-wire';
+import { TeammateRunDispatchPayloadSchema, TeammateRpcResultSchema, TEAMMATE_RPC_RUN_DISPATCH, TEAMMATE_TASK_ACTIVE_STATUSES, type TeammateRunDispatchPayload, type TeammateRunFailureReason } from 'happy-wire';
 import { db } from '@/storage/db';
 import { inTx } from '@/storage/inTx';
 import { hasUserRpcMethod, invokeUserRpc } from '@/app/api/socket/rpcRegistry';
 import { getSessionTurnState } from '@/app/presence/sessionTurnRuntime';
+import { channelTeammateDmWhere } from '@/app/channel/channelQueries';
 import { forever } from '@/utils/forever';
 import { delay } from '@/utils/delay';
 import { shutdownSignal } from '@/utils/shutdown';
 import { toTeammateDto, toTeammateRunDto, toTeammateTaskDto } from './teammateQueries';
 import { teammateRunUpdated } from './teammateRunUpdated';
 import { teammateRunTerminateTx } from './teammateRunFinish';
+import { TEAMMATE_IN_FLIGHT_RUN_STATUSES } from './teammateRunStatuses';
 import { teammateReviewContextFetch } from './teammateReviewContextFetch';
+import { TEAMMATE_RPC_TIMEOUT_MS } from './teammateTaskTerminate';
 
-export const TEAMMATE_SCHEDULER_INTERVAL_MS = 2_000;
-export const TEAMMATE_RPC_TIMEOUT_MS = 30_000;
-export const TEAMMATE_OFFLINE_GRACE_MS = 10 * 60_000;
-export const TEAMMATE_DISPATCH_STALE_MS = 120_000;
-export const TEAMMATE_SESSION_STALE_MS = 5 * 60_000;
-export const TEAMMATE_RUNNING_TIMEOUT_MS = 4 * 60 * 60_000;
-const IN_FLIGHT = ['dispatching', 'running'];
+const TEAMMATE_SCHEDULER_INTERVAL_MS = 2_000;
+const TEAMMATE_OFFLINE_GRACE_MS = 10 * 60_000;
+const TEAMMATE_DISPATCH_STALE_MS = 120_000;
+const TEAMMATE_SESSION_STALE_MS = 5 * 60_000;
+const TEAMMATE_RUNNING_TIMEOUT_MS = 4 * 60 * 60_000;
 
 type DispatchAction = { accountId: string; machineId: string; payload: TeammateRunDispatchPayload };
 
@@ -31,11 +32,11 @@ export async function teammateRunPick(runId: string, now = new Date()): Promise<
         const task = row.thread.kind === 'task' && row.thread.taskId
             ? await tx.teammateTask.findFirst({ where: { id: row.thread.taskId, accountId: row.teammate.accountId, teammateId: row.teammateId } }) : null;
         if (row.thread.kind === 'task' && (!task || !(TEAMMATE_TASK_ACTIVE_STATUSES as readonly string[]).includes(task.status))) return null;
-        if (await tx.teammateRun.count({ where: { threadId: row.threadId, status: { in: IN_FLIGHT } } })) return null;
-        const count = await tx.teammateRun.count({ where: { teammateId: row.teammateId, status: { in: IN_FLIGHT } } });
+        if (await tx.teammateRun.count({ where: { threadId: row.threadId, status: { in: TEAMMATE_IN_FLIGHT_RUN_STATUSES } } })) return null;
+        const count = await tx.teammateRun.count({ where: { teammateId: row.teammateId, status: { in: TEAMMATE_IN_FLIGHT_RUN_STATUSES } } });
         if (count >= row.teammate.maxConcurrentRuns) return null;
         const { accountId, machineId } = row.teammate;
-        if (!hasUserRpcMethod(accountId, `${machineId}:teammate-run-dispatch`)) {
+        if (!hasUserRpcMethod(accountId, `${machineId}:${TEAMMATE_RPC_RUN_DISPATCH}`)) {
             const machine = await tx.machine.findUnique({ where: { accountId_id: { accountId, id: machineId } }, select: { lastActiveAt: true } });
             if ((!machine || machine.lastActiveAt.getTime() < now.getTime() - TEAMMATE_OFFLINE_GRACE_MS)
                 && row.queuedAt.getTime() < now.getTime() - TEAMMATE_OFFLINE_GRACE_MS) {
@@ -46,10 +47,12 @@ export async function teammateRunPick(runId: string, now = new Date()): Promise<
         // Persist dispatch time in the opaque token: no dispatchedAt column exists in M1.
         const dispatchToken = `${now.getTime()}:${randomUUID()}`;
         let channel: TeammateRunDispatchPayload['channel'] = null;
-        if (['dm', 'group', 'task', 'heartbeat'].includes(row.thread.kind)) {
-            const stored = await tx.channel.findFirst({ where: ['task', 'heartbeat'].includes(row.thread.kind) ? { accountId, kind: 'dm', members: { some: { memberType: 'teammate', teammateId: row.teammateId } } } : { id: row.thread.channelId ?? '', accountId }, include: { members: { include: { account: true, teammate: true } } } });
+        // Task and heartbeat threads report through the teammate's DM when one exists.
+        const viaDm = row.thread.kind === 'task' || row.thread.kind === 'heartbeat';
+        if (viaDm || row.thread.kind === 'dm' || row.thread.kind === 'group') {
+            const stored = await tx.channel.findFirst({ where: viaDm ? channelTeammateDmWhere(accountId, row.teammateId) : { id: row.thread.channelId ?? '', accountId }, include: { members: { include: { account: true, teammate: true } } } });
             const member = stored?.members.find(m => m.memberType === 'teammate' && m.teammateId === row.teammateId);
-            if ((!stored || !member) && !['task', 'heartbeat'].includes(row.thread.kind)) {
+            if ((!stored || !member) && !viaDm) {
                 await teammateRunTerminateTx(tx, runId, 'failed', 'unknown', now, { status: 'queued' });
                 return null;
             }
@@ -85,7 +88,7 @@ export async function teammateRunDispatch(action: DispatchAction): Promise<void>
     let skipped = false;
     try {
         const payload = { ...action.payload, events: await teammateReviewContextFetch(action.accountId, action.payload.events) };
-        const result = TeammateRpcResultSchema.parse(await invokeUserRpc(action.accountId, `${action.machineId}:teammate-run-dispatch`, payload, TEAMMATE_RPC_TIMEOUT_MS));
+        const result = TeammateRpcResultSchema.parse(await invokeUserRpc(action.accountId, `${action.machineId}:${TEAMMATE_RPC_RUN_DISPATCH}`, payload, TEAMMATE_RPC_TIMEOUT_MS));
         if (!result.ok) failure = result.errorCode ?? 'unknown';
         else skipped = result.skipped === true;
     } catch { failure = 'dispatch_timeout'; }
@@ -98,7 +101,7 @@ export async function teammateRunDispatch(action: DispatchAction): Promise<void>
 
 /** Detect durable dispatch age, dead controller sessions and four-hour running limits; retry is atomic. */
 export async function teammateRunDetectStale(now = new Date()): Promise<void> {
-    const rows = await db.teammateRun.findMany({ where: { status: { in: IN_FLIGHT } } });
+    const rows = await db.teammateRun.findMany({ where: { status: { in: TEAMMATE_IN_FLIGHT_RUN_STATUSES } } });
     for (const row of rows) {
         let failure: 'dispatch_timeout' | 'runtime_recovery' | 'session_error' | null = null;
         if (row.status === 'dispatching') {

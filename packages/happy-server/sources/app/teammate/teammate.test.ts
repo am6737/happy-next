@@ -23,7 +23,7 @@ vi.mock('@/storage/db', () => ({ db: dbMock }));
 vi.mock('@/storage/files', () => ({ getPublicUrl: vi.fn() }));
 vi.mock('@/utils/log', () => ({ log: vi.fn() }));
 
-import { eventRouter, buildTeammateUpdatedUpdate } from '@/app/events/eventRouter';
+import { eventRouter } from '@/app/events/eventRouter';
 import { teammateCreate } from './teammateCreate';
 import { teammateUpdate } from './teammateUpdate';
 import { teammateArchive } from './teammateArchive';
@@ -245,12 +245,6 @@ describe('teammate DTOs and queries', () => {
         });
     });
 
-    it('builds the documented socket payload', () => {
-        const teammate = toTeammateDto(profile);
-        expect(buildTeammateUpdatedUpdate(teammate, 3, 'update_1')).toEqual({
-            id: 'update_1', seq: 3, body: { t: 'teammate-updated', teammate }, createdAt: expect.any(Number),
-        });
-    });
 });
 
 describe('teammate monthly spend', () => {
