@@ -1,12 +1,12 @@
-import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, rename, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, symlink } from 'node:fs/promises';
 import { delimiter, join } from 'node:path';
-import { promisify } from 'node:util';
 import { resolveCodexRuntime } from '@/codex/codexRuntime';
 import { codexPackage } from '@/codex/package';
 import { getCodexHomeDir } from '@/codex/utils/codexHome';
 import { logger } from '@/ui/logger';
+import { atomicFileWrite } from '@/utils/fileAtomic';
+import { execFileAsync } from './homeDir';
 
 /** User config tables that describe the owner's own projects, servers and UI rather than the model setup. */
 const PRIVATE_CODEX_TABLES = /^(projects|mcp_servers|tui)(\.|$)/;
@@ -69,20 +69,17 @@ export async function prepareTeammateIsolation(home: string, provider: string, u
     await mkdir(binDir, { recursive: true, mode: 0o700 });
     await mkdir(hooksPath, { recursive: true, mode: 0o700 });
     // Controllers and workers of one agent spawn concurrently; replace files atomically so none sees a half-written one.
-    const put = async (path: string, write: (temp: string) => Promise<void>) => {
-        const temp = `${path}.${randomUUID()}`;
-        await write(temp);
-        await rename(temp, path);
-    };
-    await put(join(binDir, 'gh'), temp => writeFile(temp, GH_SHIM, { mode: 0o700 }));
-    await Promise.all(GIT_HOOKS.map(hook => put(join(hooksPath, hook), temp => writeFile(temp, GIT_HOOK, { mode: 0o700 }))));
+    await Promise.all([atomicFileWrite(join(binDir, 'gh'), GH_SHIM, 0o700),
+        ...GIT_HOOKS.map(hook => atomicFileWrite(join(hooksPath, hook), GIT_HOOK, 0o700))]);
     const env: Record<string, string> = { PATH: [binDir, process.env.PATH].filter(Boolean).join(delimiter) };
     if (provider !== 'codex') return { env, hooksPath };
 
     const codexHome = join(state, 'codex');
     await mkdir(join(codexHome, 'rules'), { recursive: true, mode: 0o700 });
     // Link rather than copy so a refreshed login stays shared with the owner's Codex.
-    await put(join(codexHome, 'auth.json'), temp => symlink(join(userCodexHome, 'auth.json'), temp));
+    const authTemp = join(codexHome, `auth.json.${randomUUID()}`);
+    await symlink(join(userCodexHome, 'auth.json'), authTemp);
+    await rename(authTemp, join(codexHome, 'auth.json'));
     const userConfig = await readFile(join(userCodexHome, 'config.toml'), 'utf8').catch(() => '');
     let table = '';
     const kept = userConfig.split('\n').filter(line => {
@@ -91,9 +88,9 @@ export async function prepareTeammateIsolation(home: string, provider: string, u
         return table ? !PRIVATE_CODEX_TABLES.test(table) : !/^\s*allow_login_shell\s*=/.test(line);
     });
     // A login shell re-reads the profile, which can put another gh ahead of the shim.
-    await put(join(codexHome, 'config.toml'), temp => writeFile(temp, ['allow_login_shell = false', ...kept].join('\n'), { mode: 0o600 }));
-    await put(join(codexHome, 'rules', 'teammate.rules'), temp => writeFile(temp,
-        GH_DENIED.map(words => `prefix_rule(pattern=${JSON.stringify(['gh', ...words])}, decision="forbidden")\n`).join(''), { mode: 0o600 }));
+    await atomicFileWrite(join(codexHome, 'config.toml'), ['allow_login_shell = false', ...kept].join('\n'), 0o600);
+    await atomicFileWrite(join(codexHome, 'rules', 'teammate.rules'),
+        GH_DENIED.map(words => `prefix_rule(pattern=${JSON.stringify(['gh', ...words])}, decision="forbidden")\n`).join(''), 0o600);
     return { env: { ...env, CODEX_HOME: codexHome }, hooksPath, codexHome };
 }
 
@@ -107,7 +104,7 @@ export function codexSandboxWorks(): Promise<boolean> {
     const platform = ({ linux: 'linux', darwin: 'macos', win32: 'windows' } as Record<string, string>)[process.platform];
     sandboxProbe ??= platform ? (async () => {
         const runtime = resolveCodexRuntime(codexPackage(), ['sandbox', platform, '--', 'true']);
-        return promisify(execFile)(runtime.command, runtime.args, { timeout: 120_000 }).then(() => true, error => {
+        return execFileAsync(runtime.command, runtime.args, { timeout: 120_000 }).then(() => true, error => {
             logger.warn(`[TEAMMATE] Codex sandbox unavailable, review workers keep their permission mode: ${String(error.stderr ?? error).trim().split('\n').pop()}`);
             return false;
         });

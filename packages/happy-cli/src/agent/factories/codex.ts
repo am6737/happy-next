@@ -89,7 +89,6 @@ export function createCodexBackend(options: CodexBackendOptions): CodexBackendRe
     mcpServers: options.mcpServers,
     permissionHandler: options.permissionHandler,
     resumeFile: options.resumeFile,
-    disableSubagents: options.disableSubagents,
     signal: options.signal,
   };
 

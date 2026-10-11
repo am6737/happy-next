@@ -1,17 +1,24 @@
 import { execFile } from 'node:child_process';
-import { appendFile, chmod, mkdir, open, readFile, rename, rmdir, stat, unlink, writeFile } from 'node:fs/promises';
+import { appendFile, chmod, mkdir, open, readFile, rmdir, stat, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { TeammateRunDispatchPayloadSchema, TeammateControllerProviderSchema, type Teammate, type TeammateRunDispatchPayload, type TeammateControllerProvider } from 'happy-wire';
 import { configuration } from '@/configuration';
 import { encodeBase64, getRandomBytes } from '@/api/encryption';
+import { atomicFileWrite } from '@/utils/fileAtomic';
+import { delay } from '@/utils/time';
 import { INITIAL_HEARTBEAT_MD, INITIAL_MEMORY_MD, INITIAL_USER_MD, renderAgentsMd, renderIdentityMd, renderSoulMd, type TeammateSkillSyncResult } from './templates';
 import { dailyLogDate } from './dailyLogDate';
 
-const execFileAsync = promisify(execFile);
+export const execFileAsync = promisify(execFile);
+
+/** IDs become directory and file names. */
+export function isPathId(id: string): boolean {
+    return /^[a-zA-Z0-9_-]+$/.test(id);
+}
 
 function validatePathId(id: string): void {
-    if (!/^[a-zA-Z0-9_-]+$/.test(id)) {
+    if (!isPathId(id)) {
         throw new Error('Teammate and key IDs must contain only letters, numbers, underscores, or hyphens');
     }
 }
@@ -27,7 +34,7 @@ export interface EnsureTeammateHomeOptions {
     skills?: TeammateSkillSyncResult;
 }
 
-async function exists(path: string): Promise<boolean> {
+export async function exists(path: string): Promise<boolean> {
     try {
         await stat(path);
         return true;
@@ -45,11 +52,10 @@ async function createIfMissing(path: string, content: string): Promise<void> {
     }
 }
 
-async function ensurePrivateState(dir: string): Promise<string> {
-    const stateDir = join(dir, 'state');
-    await mkdir(stateDir, { recursive: true, mode: 0o700 });
-    await chmod(stateDir, 0o700);
-    return stateDir;
+async function ensurePrivateDir(path: string): Promise<string> {
+    await mkdir(path, { recursive: true, mode: 0o700 });
+    await chmod(path, 0o700);
+    return path;
 }
 
 /** Sync managed profile files while preserving owner preferences and memories. */
@@ -63,10 +69,7 @@ export async function ensureTeammateHome(
     for (const subdir of ['memory', 'skills', 'workspaces']) {
         await mkdir(join(dir, subdir), { recursive: true });
     }
-    const stateDir = await ensurePrivateState(dir);
-    const keysDir = join(stateDir, 'keys');
-    await mkdir(keysDir, { recursive: true, mode: 0o700 });
-    await chmod(keysDir, 0o700);
+    await ensurePrivateDir(join(await ensurePrivateDir(join(dir, 'state')), 'keys'));
 
     await writeFile(join(dir, 'SOUL.md'), renderSoulMd(teammate));
     await writeFile(join(dir, 'IDENTITY.md'), renderIdentityMd(teammate, opts.skills));
@@ -77,19 +80,17 @@ export async function ensureTeammateHome(
     await writeFile(join(dir, '.gitignore'), 'state/\nworkspaces/\n.claude/skills/\n.agents/skills/\n');
 
     // Check for git before initialization; an unavailable git must not prevent setup.
-    try {
-        await execFileAsync('git', ['--version']);
-    } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-            return { dir, created, committed: false };
-        }
+    const gitMissing = await execFileAsync('git', ['--version']).then(() => false, error => {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return true;
         throw error;
-    }
-    const git = (args: string[]) => execFileAsync('git', args, { cwd: dir, env: teammateGitEnv(teammate.name, `${teammate.handle}@agents.happy.local`) });
+    });
+    if (gitMissing) return { dir, created, committed: false };
+    const email = `${teammate.handle}@agents.happy.local`;
+    const git = (args: string[]) => execFileAsync('git', args, { cwd: dir, env: teammateGitEnv(teammate.name, email) });
     // Do not mistake an ancestor's repository for this teammate's repository.
     if (!await exists(join(dir, '.git'))) await git(['init']);
     await git(['config', '--local', 'user.name', teammate.name]);
-    await git(['config', '--local', 'user.email', `${teammate.handle}@agents.happy.local`]);
+    await git(['config', '--local', 'user.email', email]);
     await git(['add', '-A', '--', '.']);
     const { stdout } = await git(['status', '--porcelain']);
     const committed = stdout.trim().length > 0;
@@ -135,8 +136,9 @@ export async function appendDailyLog(dir: string, { text, runId, sessionId, at =
     const time = `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`;
     const sources = [runId ? `run ${runId}` : '', sessionId ? `session ${sessionId}` : ''].filter(Boolean);
     const suffix = sources.length ? ` (${sources.join(', ')})` : '';
-    const path = join(memoryDir, `${dailyLogDate(at)}.md`);
-    await createIfMissing(path, `# ${dailyLogDate(at)}\n\n`);
+    const date = dailyLogDate(at);
+    const path = join(memoryDir, `${date}.md`);
+    await createIfMissing(path, `# ${date}\n\n`);
     await appendFile(path, `- ${time} ${text}${suffix}\n`);
 }
 
@@ -190,15 +192,7 @@ export async function readThreadsState(dir: string): Promise<ThreadsState> {
 
 /** Atomic replacement keeps readers from seeing partial JSON. */
 async function writeStateFile(path: string, state: unknown): Promise<void> {
-    const tempPath = `${path}.${process.pid}.${encodeBase64(getRandomBytes(12), 'base64url')}.tmp`;
-    try {
-        await writeFile(tempPath, `${JSON.stringify(state, null, 2)}\n`, { flag: 'wx', mode: 0o600 });
-        await rename(tempPath, path);
-    } finally {
-        await unlink(tempPath).catch(error => {
-            if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-        });
-    }
+    await atomicFileWrite(path, `${JSON.stringify(state, null, 2)}\n`, 0o600);
 }
 
 /** Shared filesystem lock for daemon and provider-process read/modify/write. */
@@ -211,18 +205,18 @@ async function withStateLock<T>(lockPath: string, work: () => Promise<T>): Promi
             const lockStat = await stat(lockPath).catch(() => null);
             if (lockStat && Date.now() - lockStat.mtimeMs > 30_000) await rmdir(lockPath).catch(() => {});
             if (Date.now() >= deadline) throw new Error('Timed out acquiring teammate state lock');
-            await new Promise(resolve => setTimeout(resolve, 20));
+            await delay(20);
         }
     }
     try { return await work(); } finally { await rmdir(lockPath); }
 }
 
 export async function writeThreadsState(dir: string, state: ThreadsState): Promise<void> {
-    await writeStateFile(join(await ensurePrivateState(dir), 'threads.json'), state);
+    await writeStateFile(join(await ensurePrivateDir(join(dir, 'state')), 'threads.json'), state);
 }
 
 export async function mergeThreadState(dir: string, threadId: string, patch: ThreadsState[string]): Promise<void> {
-    await withStateLock(join(await ensurePrivateState(dir), 'threads.lock'), async () => {
+    await withStateLock(join(await ensurePrivateDir(join(dir, 'state')), 'threads.lock'), async () => {
         const state = await readThreadsState(dir);
         state[threadId] = { ...state[threadId], ...patch };
         await writeThreadsState(dir, state);
@@ -252,9 +246,7 @@ export async function readTaskState(dir: string, taskId: string): Promise<TaskSt
 
 export async function updateTaskState<T>(dir: string, taskId: string, update: (state: TaskState) => T): Promise<T> {
     validatePathId(taskId);
-    const tasksDir = join(await ensurePrivateState(dir), 'tasks');
-    await mkdir(tasksDir, { recursive: true, mode: 0o700 });
-    await chmod(tasksDir, 0o700);
+    const tasksDir = await ensurePrivateDir(join(await ensurePrivateDir(join(dir, 'state')), 'tasks'));
     return withStateLock(join(tasksDir, `${taskId}.lock`), async () => {
         const state = await readTaskState(dir, taskId);
         const result = update(state);
@@ -273,9 +265,7 @@ export async function mergeTaskWorker(dir: string, taskId: string, workerId: str
 export async function writeSessionKeyFile(dir: string, keyId: string, key: Uint8Array): Promise<string> {
     validatePathId(keyId);
     if (key.length !== 32) throw new Error('Session data key must be exactly 32 bytes');
-    const keysDir = join(await ensurePrivateState(resolve(dir)), 'keys');
-    await mkdir(keysDir, { recursive: true, mode: 0o700 });
-    await chmod(keysDir, 0o700);
+    const keysDir = await ensurePrivateDir(join(await ensurePrivateDir(join(resolve(dir), 'state')), 'keys'));
     const path = join(keysDir, `${keyId}.key`);
     const file = await open(path, 'w', 0o600);
     try {

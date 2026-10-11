@@ -1,4 +1,4 @@
-import { cp, lstat, mkdir, readFile, readdir, realpath, rename, rm, stat, symlink, writeFile } from 'node:fs/promises';
+import { cp, lstat, mkdir, readFile, realpath, rm, stat, symlink } from 'node:fs/promises';
 import { readFileSync, readdirSync, realpathSync } from 'node:fs';
 import os from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
@@ -8,6 +8,7 @@ import {
 } from 'happy-wire';
 import { discoverCodexSkills } from '@/codex/utils/skillDiscovery';
 import { parseMarkdownFrontmatter, readYamlString } from '@/utils/yaml';
+import { atomicFileWrite } from '@/utils/fileAtomic';
 
 export interface MachineSkillRoots {
     homeDir?: string;
@@ -21,27 +22,20 @@ export type SkillFileSystem = {
 
 const defaultFileSystem: SkillFileSystem = { symlink, cp };
 
-function normalizedPath(path: string): string {
-    return resolve(path);
-}
-
 function isInside(path: string, root: string): boolean {
     const child = relative(root, path);
     return child === '' || (child !== '..' && !child.startsWith(`..${sep}`) && !isAbsolute(child));
 }
 
 function isExcluded(path: string, agentHome: string | undefined): boolean {
-    if (!agentHome) return false;
-    const candidate = resolvedPathSync(path);
-    const root = resolvedPathSync(agentHome);
-    return isInside(candidate, root);
+    return Boolean(agentHome) && isInside(resolvedPathSync(path), resolvedPathSync(agentHome!));
 }
 
 function resolvedPathSync(path: string): string {
     try {
         return realpathSync(path);
     } catch {
-        return normalizedPath(path);
+        return resolve(path);
     }
 }
 
@@ -97,7 +91,7 @@ export function listMachineSkills(opts: MachineSkillRoots = {}): TeammateSkillIn
             scope: skill.scope,
             path: skill.path,
         }))
-        .filter(skill => !agentHome || !isInside(resolvedPathSync(skill.path), resolvedPathSync(agentHome)));
+        .filter(skill => !isExcluded(skill.path, agentHome));
 
     const result: TeammateSkillInfo[] = [];
     const seen = new Set<string>();
@@ -119,17 +113,11 @@ async function readManifest(path: string): Promise<ManagedSkillsManifest> {
         const value: unknown = JSON.parse(await readFile(path, 'utf8'));
         if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('invalid manifest');
         const record = value as { managed?: unknown; missing?: unknown };
-        return {
-            managed: Array.isArray(record.managed) ? record.managed.filter((item): item is string => typeof item === 'string' && TEAMMATE_SKILL_NAME_REGEX.test(item)) : [],
-            missing: Array.isArray(record.missing) ? record.missing.filter((item): item is string => typeof item === 'string' && TEAMMATE_SKILL_NAME_REGEX.test(item)) : [],
-        };
+        const names = (list: unknown) => Array.isArray(list) ? list.filter((item): item is string => typeof item === 'string' && TEAMMATE_SKILL_NAME_REGEX.test(item)) : [];
+        return { managed: names(record.managed), missing: names(record.missing) };
     } catch {
         return { managed: [], missing: [] };
     }
-}
-
-async function removeEntry(path: string): Promise<void> {
-    await rm(path, { recursive: true, force: true });
 }
 
 async function targetExists(path: string): Promise<boolean> {
@@ -165,15 +153,13 @@ async function validSkillTarget(path: string): Promise<string | null> {
 async function materialize(target: string, source: string, managed: boolean, fs: SkillFileSystem): Promise<'linked' | 'foreign'> {
     if (await targetExists(target)) {
         if (await pointsTo(target, source)) return 'linked';
-        if (managed) {
-            try {
-                if ((await lstat(target)).isDirectory() && (await stat(join(target, 'SKILL.md'))).isFile()) return 'linked';
-            } catch {
-                // A managed entry with an invalid copy is replaced below.
-            }
-        }
         if (!managed) return 'foreign';
-        await removeEntry(target);
+        try {
+            if ((await lstat(target)).isDirectory() && (await stat(join(target, 'SKILL.md'))).isFile()) return 'linked';
+        } catch {
+            // A managed entry with an invalid copy is replaced below.
+        }
+        await rm(target, { recursive: true, force: true });
     }
     try {
         await fs.symlink(source, target, 'dir');
@@ -181,16 +167,6 @@ async function materialize(target: string, source: string, managed: boolean, fs:
         await fs.cp(source, target, { recursive: true, force: false, errorOnExist: true });
     }
     return 'linked';
-}
-
-async function writeManifest(path: string, manifest: ManagedSkillsManifest): Promise<void> {
-    const temp = `${path}.${process.pid}.${Math.random().toString(16).slice(2)}.tmp`;
-    await writeFile(temp, `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o600 });
-    try {
-        await rename(temp, path);
-    } finally {
-        await rm(temp, { force: true });
-    }
 }
 
 /** Materializes selected skill directories into both native Agent discovery roots. */
@@ -209,9 +185,7 @@ export async function syncTeammateSkills(
     await mkdir(stateDir, { recursive: true, mode: 0o700 });
     const manifestPath = join(stateDir, 'managed-skills.json');
     const previous = await readManifest(manifestPath);
-    const selected = Array.from(new Set(names));
-    const selectedSafe = selected.filter(name => TEAMMATE_SKILL_NAME_REGEX.test(name));
-    const selectedSet = new Set(selectedSafe);
+    const selectedSet = new Set(names.filter(name => TEAMMATE_SKILL_NAME_REGEX.test(name)));
     const catalogByName = new Map<string, TeammateSkillInfo>();
     for (const skill of catalog) {
         if (!catalogByName.has(skill.name)) catalogByName.set(skill.name, skill);
@@ -220,13 +194,13 @@ export async function syncTeammateSkills(
 
     for (const name of previous.managed) {
         if (selectedSet.has(name)) continue;
-        await Promise.all([removeEntry(join(claudeRoot, name)), removeEntry(join(agentsRoot, name))]);
+        await Promise.all([claudeRoot, agentsRoot].map(dir => rm(join(dir, name), { recursive: true, force: true })));
         managed.delete(name);
     }
 
     const linked: string[] = [];
     const missing: string[] = [];
-    for (const name of selectedSafe) {
+    for (const name of selectedSet) {
         const skill = catalogByName.get(name);
         const source = skill ? await validSkillTarget(skill.path) : null;
         if (!source) {
@@ -238,16 +212,12 @@ export async function syncTeammateSkills(
             materialize(join(claudeRoot, name), source, wasManaged, fs),
             materialize(join(agentsRoot, name), source, wasManaged, fs),
         ]);
-        if (results.some(result => result === 'linked' || result === 'foreign')) {
-            linked.push(name);
-            if (results.every(result => result === 'linked') || wasManaged) managed.add(name);
-        }
+        linked.push(name);
+        if (wasManaged || results.every(result => result === 'linked')) managed.add(name);
     }
 
-    await writeManifest(manifestPath, {
-        managed: Array.from(managed).filter(name => selectedSet.has(name)).sort(),
-        missing: Array.from(new Set(missing)).sort(),
-    });
+    const manifest: ManagedSkillsManifest = { managed: Array.from(managed).filter(name => selectedSet.has(name)).sort(), missing: [...missing].sort() };
+    await atomicFileWrite(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 0o600);
     return { linked, missing };
 }
 

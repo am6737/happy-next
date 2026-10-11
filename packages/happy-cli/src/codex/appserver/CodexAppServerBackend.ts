@@ -95,8 +95,6 @@ export interface CodexAppServerBackendOptions {
   resumeFile?: string | null;
   /** Optional thread ID for resuming a specific thread */
   resumeThreadId?: string | null;
-  /** Turns off Codex's spawn_agent subagents (Agent controllers must delegate through work sessions) */
-  disableSubagents?: boolean;
 }
 
 // ─── Model Resolution ──────────────────────────────────────────
@@ -503,11 +501,6 @@ export class CodexAppServerBackend implements AgentBackend {
     }
     if (this.options.reasoningEffort) {
       config.model_reasoning_effort = this.options.reasoningEffort;
-    }
-    if (this.options.disableSubagents) {
-      // Dotted keys override single features without replacing the user's [features] table.
-      config['features.multi_agent'] = false;
-      config['features.multi_agent_v2'] = false;
     }
     if (Object.keys(config).length > 0) {
       params.config = config;

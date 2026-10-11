@@ -1,10 +1,10 @@
 import { decodeBase64, decrypt } from '@/api/encryption';
 
-type WorkerMessage = { seq: number; content: { t: 'encrypted'; c: string } };
-type WorkerEntry = { role: string; text: string } | { role: string; tool: string; input: unknown };
+export type WorkerMessage = { seq: number; content: { t: 'encrypted'; c: string } };
+export type WorkerEntry = { role: string; text: string } | { role: string; tool: string; input: unknown };
 
 /** Decode text and tool starts from the raw formats understood by the app, oldest first. */
-function decodeWorkerEntries(messages: WorkerMessage[], key: Uint8Array): WorkerEntry[] {
+export function decodeWorkerEntries(messages: WorkerMessage[], key: Uint8Array): WorkerEntry[] {
     const entries: WorkerEntry[] = [];
     const blocks = (content: unknown, role: string) => {
         if (typeof content === 'string') { entries.push({ role, text: content }); return; }
@@ -18,8 +18,8 @@ function decodeWorkerEntries(messages: WorkerMessage[], key: Uint8Array): Worker
         try { record = decrypt(key, 'dataKey', decodeBase64(message.content.c)); }
         catch { continue; }
         if (!['user', 'agent', 'session'].includes(record?.role)) continue;
-        if (record?.role === 'user') { blocks(record.content, 'user'); continue; }
-        const content = record?.content;
+        if (record.role === 'user') { blocks(record.content, 'user'); continue; }
+        const content = record.content;
         if (content?.type === 'output') {
             const data = content.data;
             if (data?.type === 'assistant' || data?.type === 'user') blocks(data.message?.content, data.type);
@@ -40,16 +40,19 @@ function decodeWorkerEntries(messages: WorkerMessage[], key: Uint8Array): Worker
 }
 
 /** Render only text and tool starts; assistant blocks and the whole transcript are capped. */
-export function renderWorkerTranscript(messages: WorkerMessage[], key: Uint8Array): string {
-    const lines = decodeWorkerEntries(messages, key).map(entry => 'tool' in entry
+export function renderWorkerTranscript(entries: WorkerEntry[]): string {
+    const lines = entries.map(entry => 'tool' in entry
         ? `[tool] ${entry.tool}: ${JSON.stringify(entry.input).slice(0, 300)}`
         : `${entry.role}: ${entry.role === 'user' ? entry.text : entry.text.slice(0, 2000)}`);
-    while (lines.length > 1 && lines.join('\n').length > 20000) lines.shift();
-    return lines.join('\n').slice(-20000);
+    // Drop the oldest whole lines first; one oversized line is cut from its start.
+    let length = lines.reduce((total, line) => total + line.length + 1, -1);
+    let start = 0;
+    while (start < lines.length - 1 && length > 20000) length -= lines[start++].length + 1;
+    return lines.slice(start).join('\n').slice(-20000);
 }
 
 /** The worker's last assistant text, uncapped, or null if it has not replied since the last prompt. */
-export function lastWorkerReply(messages: WorkerMessage[], key: Uint8Array): string | null {
-    const last = decodeWorkerEntries(messages, key).filter(entry => 'text' in entry).pop();
+export function lastWorkerReply(entries: WorkerEntry[]): string | null {
+    const last = entries.filter(entry => 'text' in entry).pop();
     return last && last.role === 'assistant' && 'text' in last ? last.text : null;
 }

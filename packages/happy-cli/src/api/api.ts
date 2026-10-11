@@ -12,7 +12,6 @@ import chalk from 'chalk';
 import { Credentials } from '@/persistence';
 import { connectionState, isNetworkError } from '@/utils/serverConnectionErrors';
 
-export { resolveSessionDataKey } from './sessionDataKey';
 
 export class ApiClient {
 

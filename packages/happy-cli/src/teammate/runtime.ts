@@ -1,8 +1,6 @@
 import { randomUUID, randomBytes, createHash, timingSafeEqual } from 'node:crypto';
-import { execFile } from 'node:child_process';
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { promisify } from 'node:util';
 import {
     TEAMMATE_ENV, TEAMMATE_REVIEW_MAX_ROUNDS, TeammateNotifyPayloadSchema, TeammateTaskStopPayloadSchema, TeammateTaskAgentUpdateRequestSchema, TeammateRunCancelPayloadSchema, TeammateRunDispatchPayloadSchema,
     TeammateRuntimeEnvSchema, MODEL_MODE_DEFAULT, FAST_MODE_SUFFIX, splitFastModeSuffix, resolveModelSelectionForFlavor,
@@ -14,14 +12,14 @@ import { readSessionDataKeyFile } from '@/api/sessionDataKey';
 import { decodeBase64, decryptWithDataKey } from '@/api/encryption';
 import { findCodexSessionFile } from '@/codex/utils/codexSessionReader';
 import { logger } from '@/ui/logger';
-import { ensureTeammateHome, generateSessionKeyFile, mergeThreadState, readThreadsState, readTaskState, mergeTaskWorker, updateTaskState, appendDailyLog, commitTeammateHome, isHeartbeatChecklistEmpty, type TaskWorker } from './homeDir';
+import { ensureTeammateHome, execFileAsync, exists, isPathId, generateSessionKeyFile, mergeThreadState, readThreadsState, readTaskState, mergeTaskWorker, updateTaskState, appendDailyLog, commitTeammateHome, isHeartbeatChecklistEmpty, type TaskWorker } from './homeDir';
 import { buildTeammateSystemPrompt } from './prompt';
 import { createChannelCrypto, decryptChannelMessage, encryptChannelMessage } from './channelCrypto';
 import { createWorkspaceManager, githubGitEnv, type WorkspaceDependencies } from './workspace';
 import { codexSandboxWorks, prepareTeammateIsolation } from './isolation';
 import { TeammateToolSchemas, type TeammateToolPath } from './toolSchemas';
 import { ChatAuthSchema } from './chatSchemas';
-import { lastWorkerReply, renderWorkerTranscript } from './transcript';
+import { decodeWorkerEntries, lastWorkerReply, renderWorkerTranscript, type WorkerEntry } from './transcript';
 import { WORKER_RESULT_INSTRUCTION, WORKER_RESULT_REMINDER, inspectWorkerWorkspace, parseWorkerReport } from './workerResult';
 import type { ChatSendRequest, ChatHistoryRequest } from './chatSchemas';
 import { listMachineSkills, syncTeammateSkills } from './skills';
@@ -111,7 +109,7 @@ export async function renderRunEventMessage(payload: TeammateRunDispatchPayload,
         sections.push('Heartbeat: follow HEARTBEAT.md. Use chat_send only when the owner needs attention; otherwise end with exactly NO_REPLY.',
             ...(checklist && !isHeartbeatChecklistEmpty(checklist) ? [`HEARTBEAT.md:\n${checklist}`] : []));
     }
-    for (const event of heartbeat.filter(event => payload.thread.kind === 'task')) {
+    for (const event of payload.thread.kind === 'task' ? heartbeat : []) {
         if (event.data.signal === 'pr_update') sections.push(`PR update: ${event.data.prUrl}. Check the PR through a worker (start with continueFrom if needed), then set done or in_review and finish with ${finish}`);
         if (event.data.signal === 'stalled') sections.push(event.data.failureReason
             ? `Stalled task (${event.data.failureReason}): inspect the failure, retry the work, or ask the owner through chat_send(kind=decision).`
@@ -122,8 +120,7 @@ export async function renderRunEventMessage(payload: TeammateRunDispatchPayload,
         const files = home ? (await readdir(join(home, 'memory')).catch(() => [])).filter(name => /^\d{4}-\d{2}-\d{2}\.md$/.test(name) && Date.parse(name.slice(0, 10)) + 86_400_000 > since).sort() : [];
         sections.push(`Dreaming: read these daily logs since ${new Date(since).toISOString()}: ${files.map(name => `memory/${name}`).join(', ') || '(none)'}. Consolidate durable knowledge with source runId/sessionId links into MEMORY.md (under about 12k characters), remove outdated entries, update USER.md, optionally add skills/<name>.md. Do not edit AGENTS.md, SOUL.md, or IDENTITY.md. Call memory_commit with a one-line summary. Stay silent; do not call chat_send.`);
     }
-    const reviewFeedback = payload.events.filter(event => event.type === 'review-feedback');
-    if (reviewFeedback.length) sections.push(...reviewFeedback.map(event => `Review feedback (round ${event.data.round ?? 1}) from @${event.data.reviewerHandle ?? 'unknown'} on ${event.data.prUrl ?? '(PR URL unavailable)'}: ${event.data.summary ?? '(no summary)'}. Address the blocking points: continue your worker session (work_session_send / start with continueFrom) or start a new one on the same PR branch, push fixes to the existing PR, then task_comment a short note and set task_update(status=in_review) again. The reviewer will be woken automatically; do not ping anyone.`));
+    sections.push(...payload.events.filter(event => event.type === 'review-feedback').map(event => `Review feedback (round ${event.data.round ?? 1}) from @${event.data.reviewerHandle ?? 'unknown'} on ${event.data.prUrl ?? '(PR URL unavailable)'}: ${event.data.summary ?? '(no summary)'}. Address the blocking points: continue your worker session (work_session_send / start with continueFrom) or start a new one on the same PR branch, push fixes to the existing PR, then task_comment a short note and set task_update(status=in_review) again. The reviewer will be woken automatically; do not ping anyone.`));
     const taskUpdates = payload.events.filter(event => event.type === 'task-update');
     if (taskUpdates.length) {
         const lines = taskUpdates.map(event => {
@@ -149,7 +146,7 @@ export async function renderRunEventMessage(payload: TeammateRunDispatchPayload,
         const previous = await chat.api.getChannelMessages(channel.id, { beforeSeq: minSeq, limit: 10 });
         // A thread reset starts a fresh conversation: earlier messages are no longer context.
         const resetAt = payload.thread.resetAt ?? 0;
-        const messages = [...previous.filter(message => message.seq < minSeq && message.createdAt > resetAt).sort((a, b) => a.seq - b.seq).slice(-10)];
+        const messages = previous.filter(message => message.seq < minSeq && message.createdAt > resetAt).sort((a, b) => a.seq - b.seq).slice(-10);
         let cursor = minSeq - 1;
         while (cursor < maxSeq) {
             const page = await chat.api.getChannelMessages(channel.id, { afterSeq: cursor, beforeSeq: maxSeq + 1, limit: 200 });
@@ -158,7 +155,9 @@ export async function renderRunEventMessage(payload: TeammateRunDispatchPayload,
             messages.push(...batch);
             cursor = batch[batch.length - 1].seq;
         }
-        if (seqs.some(seq => !messages.some(message => message.seq === seq))) throw new Error('Channel event messages are unavailable');
+        const newSeqs = new Set(seqs);
+        const loaded = new Set(messages.map(message => message.seq));
+        if (seqs.some(seq => !loaded.has(seq))) throw new Error('Channel event messages are unavailable');
         const line = (message: typeof messages[number]) => {
             const sender = channel.members.find(member => member.id === message.senderId)?.name ?? message.senderId;
             const body = message.content.t === 'encrypted' ? decryptChannelMessage(message.content.c, key)
@@ -173,7 +172,7 @@ export async function renderRunEventMessage(payload: TeammateRunDispatchPayload,
         sections.push(...(payload.thread.kind === 'task' ? ['These are DM replies about this task.'] : []), header,
             ...(channel.kind === 'group' ? [`Members: ${channel.members.map(member => `${member.name}${member.handle ? ` (@${member.handle})` : ''}`).join(', ')}`] : []),
             'Earlier messages (context):', ...messages.filter(message => message.seq < minSeq).map(line),
-            'New messages:', ...messages.filter(message => seqs.includes(message.seq)).map(line),
+            'New messages:', ...messages.filter(message => newSeqs.has(message.seq)).map(line),
             'Reply with chat_send. Do not answer in plain assistant text — the user only sees chat_send messages.');
     }
     const events = payload.events.filter(event => !['task-assigned', 'task-update', 'review-feedback', 'work-session-idle', 'channel-message', 'heartbeat', 'dreaming'].includes(event.type)).sort((a, b) => a.at - b.at).map(event => {
@@ -192,13 +191,8 @@ export function createTeammateRuntime(deps: TeammateRuntimeDependencies) {
     const now = deps.now ?? Date.now;
     const workspace = createWorkspaceManager(deps.workspace);
     const stoppedTasks = new Set<string>();
-    const taskChains = new Map<string, Promise<unknown>>();
-    const taskQueue = <T>(home: string, taskId: string, work: () => Promise<T>): Promise<T> => {
-        const key = JSON.stringify([home, taskId]);
-        const next = (taskChains.get(key) ?? Promise.resolve()).catch(() => {}).then(work);
-        taskChains.set(key, next);
-        void next.catch(() => {}).then(() => { if (taskChains.get(key) === next) taskChains.delete(key); });
-        return next;
+    const assertNotStopped = (taskId: string) => {
+        if (stoppedTasks.has(taskId)) throw new Error('Task workers have been stopped');
     };
     const crypto = createChannelCrypto(deps.machineKey);
     // Profile env blobs are sealed by the app with this machine's key; absent means the machine's own config.
@@ -209,7 +203,8 @@ export function createTeammateRuntime(deps: TeammateRuntimeDependencies) {
         if (!parsed.success) throw new Error('Unable to decrypt teammate profile environment with this machine key; re-save the Agent');
         return parsed.data;
     };
-    const lastPayloads = new Map<string, TeammateRunDispatchPayload>();
+    /** The freshest dispatch context per thread; the persisted copy lags it during the first state write. */
+    const lastPayloads = new Map<string, Pick<TeammateRunDispatchPayload, 'channel' | 'task' | 'teammate'>>();
     const threadHomes = new Map<string, string>();
     const configuredTtl = deps.idleTtlMs ?? Number(process.env.HAPPY_TEAMMATE_IDLE_TTL_MS);
     const idleTtl = Number.isFinite(configuredTtl) && configuredTtl > 0 ? configuredTtl : 30 * 60_000;
@@ -219,26 +214,39 @@ export function createTeammateRuntime(deps: TeammateRuntimeDependencies) {
     const threadOwners = new Map<string, string>();
     let lastReap = -Infinity;
     let reaping = false;
-    const execute = deps.workspace?.exec ?? promisify(execFile);
+    const execute = deps.workspace?.exec ?? execFileAsync;
+    // Public repos work without a GitHub connection.
+    const githubToken = () => deps.api.getGithubToken().catch(() => undefined);
 
     /** The worker's final reply plus, for implementation workers, its happy-result report and daemon-checked git/PR facts. */
-    const workerOutcome = async (worker: TaskWorker, messages: Parameters<typeof renderWorkerTranscript>[0]) => {
-        const reply = lastWorkerReply(messages, await readSessionDataKeyFile(worker.keyPath));
+    const workerOutcome = async (worker: TaskWorker, entries: WorkerEntry[], token: Promise<string | undefined>) => {
+        const reply = lastWorkerReply(entries);
         if (worker.review) return { reply };
-        let token: string | undefined;
-        try { token = await deps.api.getGithubToken(); } catch { /* Public repos can be checked without a connection. */ }
         return { ...(reply === null ? { reply, reportError: 'The worker has not replied yet.' } : parseWorkerReport(reply)),
-            facts: await inspectWorkerWorkspace(worker, token, { exec: execute, fetch: deps.fetch ?? fetch }) };
+            facts: await inspectWorkerWorkspace(worker, await token, { exec: execute, fetch: deps.fetch ?? fetch }) };
     };
 
     const runKey = (runId: string, token: string) => JSON.stringify([runId, token]);
     const threadKey = (home: string, threadId: string) => JSON.stringify([home, threadId]);
-    const enqueue = (key: string, work: () => Promise<void>): Promise<void> => {
+    /** Runs work after everything queued under the key; the returned promise carries its result or failure. */
+    const serialize = <T>(key: string, work: () => Promise<T>): Promise<T> => {
         const next = (chains.get(key) ?? Promise.resolve()).then(work);
-        const guarded = next.catch(error => logger.debug('[TEAMMATE] Thread operation failed', error));
+        const guarded = next.then(() => {}, error => logger.debug('[TEAMMATE] Queued operation failed', error));
         chains.set(key, guarded);
         void guarded.then(() => { if (chains.get(key) === guarded) chains.delete(key); });
-        return guarded;
+        return next;
+    };
+    const enqueue = (key: string, work: () => Promise<void>): Promise<void> => serialize(key, work).catch(() => {});
+    // Separate from the thread queue, so task-stop is not held up by a busy controller turn.
+    const taskQueue = <T>(home: string, taskId: string, work: () => Promise<T>) => serialize(JSON.stringify(['task', home, taskId]), work);
+    const listAgentHomes = async () => (await readdir(deps.agentsDir, { withFileTypes: true }).catch(error => {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+        throw error;
+    })).filter(item => item.isDirectory()).map(item => join(deps.agentsDir, item.name));
+    const stopIfAlive = async (sessionId: string | undefined, pid: number | undefined, failure: string) => {
+        if (!pid || !deps.isPidAlive(pid) || !sessionId) return;
+        deps.trackSession?.(sessionId, pid);
+        if (!await deps.stopSession(sessionId)) throw new Error(failure);
     };
 
     const dispatch = async (input: unknown): Promise<TeammateRpcResult> => {
@@ -246,7 +254,7 @@ export function createTeammateRuntime(deps: TeammateRuntimeDependencies) {
         if (!parsed.success) return { ok: false, errorCode: 'unknown', errorMessage: 'Invalid teammate dispatch payload' };
         const payload = parsed.data;
         // IDs become directory/file names; the wire DTO deliberately allows arbitrary strings.
-        if (![payload.teammate.id, payload.thread.id, ...(payload.task ? [payload.task.id] : []), ...(payload.thread.taskId ? [payload.thread.taskId] : [])].every(id => /^[a-zA-Z0-9_-]+$/.test(id))) {
+        if (![payload.teammate.id, payload.thread.id, ...(payload.task ? [payload.task.id] : []), ...(payload.thread.taskId ? [payload.thread.taskId] : [])].every(isPathId)) {
             return { ok: false, errorCode: 'unknown', errorMessage: 'Invalid teammate or thread path ID' };
         }
         if (payload.events.length > 0 && payload.events.every(event => event.type === 'heartbeat' && event.data.scheduled === true)) {
@@ -268,23 +276,21 @@ export function createTeammateRuntime(deps: TeammateRuntimeDependencies) {
             threadOwners.set(queueKey, key);
             let failureReason: 'spawn_failed' | 'unknown' = 'unknown';
             try {
-                if (payload.thread.kind === 'dreaming') {
-                    const existing = await readFile(join(home, '.git', 'HEAD'), 'utf8').then(() => true).catch(() => false);
-                    if (existing) await commitTeammateHome(home, `snapshot before dreaming ${new Date(now()).toISOString().slice(0, 10)}`);
+                if (payload.thread.kind === 'dreaming' && await exists(join(home, '.git'))) {
+                    await commitTeammateHome(home, `snapshot before dreaming ${new Date(now()).toISOString().slice(0, 10)}`);
                 }
                 const provider = payload.teammate.controllerProvider;
                 let skillSync: { linked: string[]; missing: string[] } | undefined;
-                if ((provider as string) !== 'gemini') {
-                    try {
-                        const catalog = listMachineSkills({ agentHome: home });
-                        skillSync = await syncTeammateSkills(home, payload.teammate.skills, catalog);
-                    } catch (error) {
-                        logger.warn('[TEAMMATE] Skill discovery/sync failed; continuing without materialized skills', error);
-                    }
+                try {
+                    // Discovery scans the machine synchronously; with no skills selected only stale links need removing.
+                    const catalog = payload.teammate.skills.length ? listMachineSkills({ agentHome: home }) : [];
+                    skillSync = await syncTeammateSkills(home, payload.teammate.skills, catalog);
+                } catch (error) {
+                    logger.warn('[TEAMMATE] Skill discovery/sync failed; continuing without materialized skills', error);
                 }
                 await ensureTeammateHome(payload.teammate, { dir: home, skills: skillSync });
                 let entry = (await readThreadsState(home))[payload.thread.id] ?? {};
-                lastPayloads.set(payload.thread.id, payload);
+                lastPayloads.set(payload.thread.id, { channel: payload.channel, task: payload.task, teammate: payload.teammate });
                 threadHomes.set(payload.thread.id, home);
                 await mergeThreadState(home, payload.thread.id, {
                     lastRunId: payload.runId, lastDispatchToken: payload.dispatchToken, channel: payload.channel,
@@ -293,10 +299,7 @@ export function createTeammateRuntime(deps: TeammateRuntimeDependencies) {
                     taskCreateCounter: entry.lastRunId === payload.runId ? entry.taskCreateCounter : 0,
                 });
                 if (payload.thread.resetAt !== null && payload.thread.resetAt > (entry.resetAppliedAt ?? 0)) {
-                    if (entry.pid && deps.isPidAlive(entry.pid) && entry.currentSessionId) {
-                        deps.trackSession?.(entry.currentSessionId, entry.pid);
-                        if (!await deps.stopSession(entry.currentSessionId)) throw new Error('Unable to stop controller for thread reset');
-                    }
+                    await stopIfAlive(entry.currentSessionId, entry.pid, 'Unable to stop controller for thread reset');
                     const reset = { providerSessionId: undefined, currentSessionId: undefined, pid: undefined,
                         keyPath: undefined, controlToken: undefined, resetAppliedAt: payload.thread.resetAt };
                     entry = { ...entry, ...reset };
@@ -315,10 +318,7 @@ export function createTeammateRuntime(deps: TeammateRuntimeDependencies) {
                     && entry.controllerConfig === controllerConfig;
                 if (!live) {
                     // Upgrade M2 controllers without a token by replacing the live process.
-                    if (entry.pid && deps.isPidAlive(entry.pid) && sessionId) {
-                        deps.trackSession?.(sessionId, entry.pid);
-                        if (!await deps.stopSession(sessionId)) throw new Error('Unable to replace controller');
-                    }
+                    await stopIfAlive(sessionId, entry.pid, 'Unable to replace controller');
                     const controlToken = randomBytes(32).toString('hex');
                     await mergeThreadState(home, payload.thread.id, { controlToken });
                     const sessionKey = await generateSessionKeyFile(home, randomUUID());
@@ -373,12 +373,14 @@ export function createTeammateRuntime(deps: TeammateRuntimeDependencies) {
                 if (run.cancelled) return; // The queued cancel will stop a newly spawned session.
                 const selection = teammateModelSelection(provider, payload.teammate.controllerModel);
                 // Finished workers are summarized in the wake message itself, so the controller needs no work_session_read round trip.
+                let token: Promise<string | undefined> | undefined;
                 const describeWorker = payload.task ? async (workerSessionId: string) => {
                     const worker = Object.values((await readTaskState(home, payload.task!.id)).workers).find(item => item.sessionId === workerSessionId);
                     if (!worker) return null;
                     const { messages, busy } = await deps.api.getSessionMessages(workerSessionId, 40);
                     if (busy) return null;
-                    const { reply, ...result } = await workerOutcome(worker, messages);
+                    const entries = decodeWorkerEntries(messages, await readSessionDataKeyFile(worker.keyPath));
+                    const { reply, ...result } = await workerOutcome(worker, entries, token ??= githubToken());
                     return [`Final reply:\n${reply === null ? '(none)' : reply.slice(0, 8000)}`, ...(Object.keys(result).length ? [`Result: ${JSON.stringify(result)}`] : [])].join('\n');
                 } : undefined;
                 const delivery = await deps.api.sendSessionMessage(sessionId!, await renderRunEventMessage(payload, { api: deps.api, crypto }, home, describeWorker),
@@ -403,12 +405,7 @@ export function createTeammateRuntime(deps: TeammateRuntimeDependencies) {
     const authenticateThread = async (request: { threadId: string; controlToken: string }) => {
         let home = threadHomes.get(request.threadId);
         if (!home) {
-            const homes = await readdir(deps.agentsDir, { withFileTypes: true }).catch(error => {
-                if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
-                throw error;
-            });
-            for (const item of homes.filter(item => item.isDirectory())) {
-                const candidate = join(deps.agentsDir, item.name);
+            for (const candidate of await listAgentHomes()) {
                 if ((await readThreadsState(candidate))[request.threadId]) { home = candidate; break; }
             }
         }
@@ -425,37 +422,31 @@ export function createTeammateRuntime(deps: TeammateRuntimeDependencies) {
 
     const chatSend = async (request: ChatSendRequest): Promise<{ seq: number }> => {
         const { home } = await authenticateThread(request);
-        let result: { seq: number } | undefined;
-        let failure: unknown;
-        await enqueue(threadKey(home, request.threadId), async () => {
-            try {
-                const { entry, channel } = await authenticateThread(request);
-                if (!channel) throw Object.assign(new Error('Teammate thread has no channel'), { statusCode: 409 });
-                if (request.channelId && request.channelId !== channel.id) throw Object.assign(new Error('Thread cannot send to another channel'), { statusCode: 403 });
-                if (!entry.lastRunId || !entry.lastDispatchToken) throw new Error('Teammate thread has no dispatched run');
-                const handles = new Set([...(request.mentions ?? []).map(handle => handle.replace(/^@/, '').toLowerCase()),
-                    ...Array.from(request.text.matchAll(/(?:^|[^a-zA-Z0-9_@])@([a-zA-Z0-9][a-zA-Z0-9_-]{1,31})(?![a-zA-Z0-9_-])/g), match => match[1].toLowerCase())]);
-                const mentions = channel.members.filter(member => member.memberType === 'teammate' && member.handle && handles.has(member.handle.toLowerCase())).map(member => member.id);
-                const counter = (entry.chatSendCounter ?? 0) + 1;
-                await mergeThreadState(home, request.threadId, { chatSendCounter: counter });
-                const body = { text: request.text, options: request.options, links: request.links };
-                const message = await deps.api.sendTeammateChannelMessage({
-                    runId: entry.lastRunId, dispatchToken: entry.lastDispatchToken, localId: `tm:${entry.lastRunId}:${counter}`,
-                    content: { t: 'encrypted', c: encryptChannelMessage(body, crypto.unwrap(channel.id, channel.teammateEncryptedDataKey)) },
-                    kind: request.kind, mentions,
-                });
-                if (channel.kind === 'dm' || request.kind === 'decision' || request.kind === 'report') {
-                    const prefix = request.kind === 'decision' ? '需要你决定：' : request.kind === 'report' ? '汇报：' : '';
-                    const name = entry.teammateName ?? 'Agent';
-                    deps.api.push().sendToAllDevices(channel.kind === 'group' ? `${name} · ${channel.title ?? channel.id}` : name,
-                        Array.from(prefix + request.text.replace(/\s+/g, ' ').trim()).slice(0, 120).join(''),
-                        { type: 'teammate-channel', channelId: channel.id });
-                }
-                result = { seq: message.seq };
-            } catch (error) { failure = error; }
+        return serialize(threadKey(home, request.threadId), async () => {
+            const { entry, channel } = await authenticateThread(request);
+            if (!channel) throw Object.assign(new Error('Teammate thread has no channel'), { statusCode: 409 });
+            if (request.channelId && request.channelId !== channel.id) throw Object.assign(new Error('Thread cannot send to another channel'), { statusCode: 403 });
+            if (!entry.lastRunId || !entry.lastDispatchToken) throw new Error('Teammate thread has no dispatched run');
+            const handles = new Set([...(request.mentions ?? []).map(handle => handle.replace(/^@/, '').toLowerCase()),
+                ...Array.from(request.text.matchAll(/(?:^|[^a-zA-Z0-9_@])@([a-zA-Z0-9][a-zA-Z0-9_-]{1,31})(?![a-zA-Z0-9_-])/g), match => match[1].toLowerCase())]);
+            const mentions = channel.members.filter(member => member.memberType === 'teammate' && member.handle && handles.has(member.handle.toLowerCase())).map(member => member.id);
+            const counter = (entry.chatSendCounter ?? 0) + 1;
+            await mergeThreadState(home, request.threadId, { chatSendCounter: counter });
+            const body = { text: request.text, options: request.options, links: request.links };
+            const message = await deps.api.sendTeammateChannelMessage({
+                runId: entry.lastRunId, dispatchToken: entry.lastDispatchToken, localId: `tm:${entry.lastRunId}:${counter}`,
+                content: { t: 'encrypted', c: encryptChannelMessage(body, crypto.unwrap(channel.id, channel.teammateEncryptedDataKey)) },
+                kind: request.kind, mentions,
+            });
+            if (channel.kind === 'dm' || request.kind === 'decision' || request.kind === 'report') {
+                const prefix = request.kind === 'decision' ? '需要你决定：' : request.kind === 'report' ? '汇报：' : '';
+                const name = entry.teammateName ?? 'Agent';
+                deps.api.push().sendToAllDevices(channel.kind === 'group' ? `${name} · ${channel.title ?? channel.id}` : name,
+                    Array.from(prefix + request.text.replace(/\s+/g, ' ').trim()).slice(0, 120).join(''),
+                    { type: 'teammate-channel', channelId: channel.id });
+            }
+            return { seq: message.seq };
         });
-        if (failure) throw failure;
-        return result!;
     };
 
     const chatHistory = async (request: ChatHistoryRequest) => {
@@ -468,12 +459,8 @@ export function createTeammateRuntime(deps: TeammateRuntimeDependencies) {
         })) };
     };
 
-    const stopWorker = async (home: string, taskId: string, workerId: string) => {
-        const worker = (await readTaskState(home, taskId)).workers[workerId];
-        if (worker.pid && deps.isPidAlive(worker.pid)) {
-            deps.trackSession?.(worker.sessionId, worker.pid);
-            if (!await deps.stopSession(worker.sessionId)) throw new Error('Unable to stop worker');
-        }
+    const stopWorker = async (home: string, taskId: string, workerId: string, worker: Pick<TaskWorker, 'sessionId' | 'pid'>) => {
+        await stopIfAlive(worker.sessionId, worker.pid, 'Unable to stop worker');
         await mergeTaskWorker(home, taskId, workerId, { stoppedAt: now(), pid: undefined });
     };
 
@@ -493,27 +480,22 @@ export function createTeammateRuntime(deps: TeammateRuntimeDependencies) {
         }
         if (path === 'task-create') {
             const args = TeammateToolSchemas[path].parse(input);
-            let result: unknown;
-            let failure: unknown;
-            await enqueue(threadKey(context.home, auth.threadId), async () => {
-                try {
-                    const { entry } = await authenticateThread(auth);
-                    if (!entry.lastRunId || !entry.lastDispatchToken) throw new Error('Teammate thread has no dispatched run');
-                    const counter = (entry.taskCreateCounter ?? 0) + 1;
-                    await mergeThreadState(context.home, auth.threadId, { taskCreateCounter: counter });
-                    result = await deps.api.createTeammateTask({ ...args, runId: entry.lastRunId, dispatchToken: entry.lastDispatchToken,
-                        requestId: `tc:${entry.lastRunId}:${counter}` });
-                } catch (error) { failure = error; }
+            return serialize(threadKey(context.home, auth.threadId), async () => {
+                const { entry } = await authenticateThread(auth);
+                if (!entry.lastRunId || !entry.lastDispatchToken) throw new Error('Teammate thread has no dispatched run');
+                const counter = (entry.taskCreateCounter ?? 0) + 1;
+                await mergeThreadState(context.home, auth.threadId, { taskCreateCounter: counter });
+                return deps.api.createTeammateTask({ ...args, runId: entry.lastRunId, dispatchToken: entry.lastDispatchToken,
+                    requestId: `tc:${entry.lastRunId}:${counter}` });
             });
-            if (failure) throw failure;
-            return result;
         }
         const payload = lastPayloads.get(auth.threadId);
         const task = payload?.task ?? context.entry.task;
         const teammate = payload?.teammate ?? context.entry.teammate;
         if (!task || !teammate) throw Object.assign(new Error('This tool requires a task thread'), { statusCode: 409 });
-        const runAuth = { runId: context.entry.lastRunId!, dispatchToken: context.entry.lastDispatchToken! };
-        if (!runAuth.runId || !runAuth.dispatchToken) throw new Error('Teammate thread has no dispatched run');
+        const { lastRunId: runId, lastDispatchToken: dispatchToken } = context.entry;
+        if (!runId || !dispatchToken) throw new Error('Teammate thread has no dispatched run');
+        const runAuth = { runId, dispatchToken };
         // A done update may synchronously deliver task-stop; never hold the worker queue across it.
         if (path === 'task-update') return deps.api.updateTeammateTask(TeammateTaskAgentUpdateRequestSchema.parse({ ...TeammateToolSchemas[path].parse(input), ...runAuth }));
         if (path === 'task-comment') return deps.api.commentTeammateTask({ ...TeammateToolSchemas[path].parse(input), ...runAuth });
@@ -526,14 +508,13 @@ export function createTeammateRuntime(deps: TeammateRuntimeDependencies) {
             });
             if (path === 'work-session-start') {
                 const args = TeammateToolSchemas[path].parse(input);
-                if (stoppedTasks.has(task.id)) throw new Error('Task workers have been stopped');
+                assertNotStopped(task.id);
                 if (task.source === 'github-issue' && args.repo !== task.resourceId?.split('#')[0]) throw new Error('Repository must match this task issue');
                 const previous = args.continueFrom ? Object.entries(state.workers).find(([, worker]) => worker.sessionId === args.continueFrom) : undefined;
                 if (args.continueFrom && !previous) throw new Error('continueFrom worker does not belong to this task');
-                let token: string | undefined;
-                try { token = await deps.api.getGithubToken(); } catch { /* Public repos can work without a connection. */ }
+                const token = await githubToken();
                 if (previous && previous[1].repo !== args.repo) throw new Error('continueFrom repository does not match');
-                if (previous) await stopWorker(home, task.id, previous[0]);
+                if (previous) await stopWorker(home, task.id, ...previous);
                 const work = await workspace({ home, taskId: task.id, handle: teammate.handle, repo: args.repo, token,
                     baseBranch: args.baseBranch, continueFrom: previous?.[1] });
                 const workerId = randomUUID();
@@ -549,7 +530,7 @@ export function createTeammateRuntime(deps: TeammateRuntimeDependencies) {
                 const review = Boolean(task.parentTaskId);
                 const readOnly = review && teammate.workerProvider === 'codex' && args.prompt.startsWith('/review')
                     && await (deps.codexSandboxWorks ?? codexSandboxWorks)();
-                if (stoppedTasks.has(task.id)) throw new Error('Task workers have been stopped');
+                assertNotStopped(task.id);
                 const spawned = await deps.spawnSession({
                     directory: work.worktreePath, agent: teammate.workerProvider, sessionTitle: title,
                     worktreeBasePath: work.basePath, worktreeBranchName: work.branch,
@@ -572,16 +553,16 @@ export function createTeammateRuntime(deps: TeammateRuntimeDependencies) {
                     pid: spawned.pid, provider: teammate.workerProvider, repo: args.repo, title, startedAt: now(),
                     baseBranch: args.baseBranch ?? previous?.[1].baseBranch, review });
                 try {
-                    if (stoppedTasks.has(task.id)) throw new Error('Task workers have been stopped');
+                    assertNotStopped(task.id);
                     const registrationThread = (await authenticateThread(auth)).entry;
                     await deps.api.registerTeammateSession({ runId: registrationThread.lastRunId!, dispatchToken: registrationThread.lastDispatchToken!, sessionId: spawned.sessionId, role: 'worker' });
-                    if (stoppedTasks.has(task.id)) throw new Error('Task workers have been stopped');
+                    assertNotStopped(task.id);
                     const selection = teammateModelSelection(teammate.workerProvider, teammate.model);
                     await deps.api.sendSessionMessage(spawned.sessionId, review ? args.prompt : args.prompt + WORKER_RESULT_INSTRUCTION, sessionKey.key, await nextLocalId(),
                         teammate.workerPermissionMode, selection.model, selection.reasoningEffort);
                     await mergeTaskWorker(home, task.id, workerId, { lastSentAt: now() });
                 } catch (error) {
-                    await stopWorker(home, task.id, workerId);
+                    await stopWorker(home, task.id, workerId, spawned);
                     throw error;
                 }
                 return { sessionId: spawned.sessionId, branch: work.branch, worktreePath: work.worktreePath,
@@ -599,17 +580,18 @@ export function createTeammateRuntime(deps: TeammateRuntimeDependencies) {
             const found = Object.entries(state.workers).find(([, worker]) => worker.sessionId === sessionId);
             if (!found) throw Object.assign(new Error('Worker does not belong to this task'), { statusCode: 404 });
             const [workerId, worker] = found;
-            if (path === 'work-session-stop') { await stopWorker(home, task.id, workerId); return { ok: true }; }
+            if (path === 'work-session-stop') { await stopWorker(home, task.id, workerId, worker); return { ok: true }; }
             if (path === 'work-session-read') {
                 const { limit } = TeammateToolSchemas[path].parse(input);
                 const { messages, busy } = await deps.api.getSessionMessages(sessionId, limit);
-                const transcript = renderWorkerTranscript(messages, await readSessionDataKeyFile(worker.keyPath));
+                const entries = decodeWorkerEntries(messages, await readSessionDataKeyFile(worker.keyPath));
+                const transcript = renderWorkerTranscript(entries);
                 return busy
                     ? { status: 'running', note: 'The worker is still working. End your turn now: you will be woken when it finishes. Do not poll work_session_read.', transcript }
-                    : { status: 'idle', transcript, result: await workerOutcome(worker, messages) };
+                    : { status: 'idle', transcript, result: await workerOutcome(worker, entries, githubToken()) };
             }
             if (!worker.pid || !deps.isPidAlive(worker.pid)) throw new Error('worker ended; call work_session_start with continueFrom');
-            if (stoppedTasks.has(task.id)) throw new Error('Task workers have been stopped');
+            assertNotStopped(task.id);
             deps.trackSession?.(sessionId, worker.pid);
             const { text } = TeammateToolSchemas['work-session-send'].parse(input);
             const selection = teammateModelSelection(teammate.workerProvider, teammate.model);
@@ -622,7 +604,7 @@ export function createTeammateRuntime(deps: TeammateRuntimeDependencies) {
 
     const taskStop = async (input: unknown): Promise<TeammateRpcResult> => {
         const parsed = TeammateTaskStopPayloadSchema.safeParse(input);
-        if (!parsed.success || ![parsed.data.teammateId, parsed.data.taskId].every(id => /^[a-zA-Z0-9_-]+$/.test(id))) {
+        if (!parsed.success || ![parsed.data.teammateId, parsed.data.taskId].every(isPathId)) {
             return { ok: false, errorCode: 'unknown', errorMessage: 'Invalid teammate task stop payload' };
         }
         const { teammateId, taskId } = parsed.data;
@@ -632,7 +614,7 @@ export function createTeammateRuntime(deps: TeammateRuntimeDependencies) {
             let failure: unknown;
             for (const [workerId, worker] of Object.entries((await readTaskState(home, taskId)).workers)) {
                 if (!worker.pid) continue;
-                try { await stopWorker(home, taskId, workerId); } catch (error) { failure = error; }
+                try { await stopWorker(home, taskId, workerId, worker); } catch (error) { failure = error; }
             }
             if (failure) throw failure;
         };
@@ -675,26 +657,23 @@ export function createTeammateRuntime(deps: TeammateRuntimeDependencies) {
         reaping = true;
         lastReap = now();
         try {
-            const { sessionIds } = await deps.api.getTeammateActiveSessions(deps.machineId);
-            const active = new Set(sessionIds);
-            const homes = await readdir(deps.agentsDir, { withFileTypes: true }).catch(error => {
-                if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
-                throw error;
-            });
-            for (const item of homes.filter(item => item.isDirectory())) {
-                const home = join(deps.agentsDir, item.name);
+            // Asked only once some controller is past its idle TTL.
+            let active: Promise<Set<string>> | undefined;
+            for (const home of await listAgentHomes()) {
                 for (const threadId of Object.keys(await readThreadsState(home))) {
                     await enqueue(threadKey(home, threadId), async () => {
                         const entry = (await readThreadsState(home))[threadId];
                         if (!entry?.pid || !entry.currentSessionId || entry.lastDispatchAt === undefined
-                            || now() - entry.lastDispatchAt <= idleTtl || active.has(entry.currentSessionId)
-                            || !deps.isPidAlive(entry.pid)) return;
+                            || now() - entry.lastDispatchAt <= idleTtl || !deps.isPidAlive(entry.pid)) return;
+                        active ??= deps.api.getTeammateActiveSessions(deps.machineId).then(({ sessionIds }) => new Set(sessionIds));
+                        if ((await active).has(entry.currentSessionId)) return;
                         deps.trackSession?.(entry.currentSessionId, entry.pid);
                         const stopped = await deps.stopSession(entry.currentSessionId);
                         if (stopped) await mergeThreadState(home, threadId, { pid: undefined });
                     });
                 }
             }
+            await active; // A failed lookup stops nothing and still fails the reap.
         } finally {
             reaping = false;
         }

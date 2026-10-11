@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { encodeBase64, encrypt } from '@/api/encryption';
-import { lastWorkerReply, renderWorkerTranscript } from './transcript';
+import { decodeWorkerEntries, lastWorkerReply as lastReply, renderWorkerTranscript as renderEntries, type WorkerMessage } from './transcript';
+
+const renderWorkerTranscript = (messages: WorkerMessage[], key: Uint8Array) => renderEntries(decodeWorkerEntries(messages, key));
+const lastWorkerReply = (messages: WorkerMessage[], key: Uint8Array) => lastReply(decodeWorkerEntries(messages, key));
 
 const key = new Uint8Array(32).fill(41);
 const message = (seq: number, record: unknown) => ({ seq, content: { t: 'encrypted' as const, c: encodeBase64(encrypt(key, 'dataKey', record)) } });

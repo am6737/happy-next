@@ -995,13 +995,6 @@ describe('buildThreadParams', () => {
     expect(params.config?.model_reasoning_effort).toBe('high');
   });
 
-  it('turns off subagent features only when asked', () => {
-    const plain = (new CodexAppServerBackend({ cwd: process.cwd(), command: 'codex' }) as any).buildThreadParams();
-    expect(plain.config).toBeUndefined();
-    const params = (new CodexAppServerBackend({ cwd: process.cwd(), command: 'codex', disableSubagents: true }) as any).buildThreadParams();
-    expect(params.config).toEqual({ 'features.multi_agent': false, 'features.multi_agent_v2': false });
-  });
-
   it('injects default_tools_approval_mode=approve for the happy MCP server', () => {
     const backend = new CodexAppServerBackend({
       cwd: process.cwd(),

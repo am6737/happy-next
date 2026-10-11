@@ -1,9 +1,8 @@
-import { execFile } from 'node:child_process';
-import { mkdir, rename, rm, stat } from 'node:fs/promises';
+import { mkdir, rename, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { promisify } from 'node:util';
+import { execFileAsync, exists, isPathId } from './homeDir';
 
-export const GIT_FETCH_TIMEOUT_MS = 45_000;
+const GIT_FETCH_TIMEOUT_MS = 45_000;
 export const GIT_FETCH_ATTEMPTS = 3;
 /** Abort HTTP transfers that stay below 1 KB/s for 20s instead of waiting for the process timeout. */
 const GIT_STALL_ENV = { GIT_HTTP_LOW_SPEED_LIMIT: '1000', GIT_HTTP_LOW_SPEED_TIME: '20' };
@@ -34,12 +33,12 @@ export interface WorkspaceDependencies {
 
 /** One queue per base clone covers clone, fetch and branch/worktree allocation. */
 export function createWorkspaceManager(deps: WorkspaceDependencies = {}) {
-    const execute = deps.exec ?? promisify(execFile);
+    const execute = deps.exec ?? execFileAsync;
     const queues = new Map<string, Promise<unknown>>();
     return async (options: WorkspaceOptions): Promise<Workspace> => {
         const { home, repo, taskId, handle, token, baseBranch, continueFrom } = options;
         if (!REPO_PATTERN.test(repo) || repo.split('/').some(part => part === '.' || part === '..')) throw new Error('Invalid GitHub repository');
-        if (![taskId, handle].every(value => /^[a-zA-Z0-9_-]+$/.test(value))) throw new Error('Invalid workspace path ID');
+        if (![taskId, handle].every(isPathId)) throw new Error('Invalid workspace path ID');
         if (baseBranch && (baseBranch.startsWith('-') || /[\s~^:?*\[\\]/.test(baseBranch) || baseBranch.includes('..'))) throw new Error('Invalid base branch');
         const basePath = join(home, 'workspaces', ...repo.split('/'));
         const work = (queues.get(basePath) ?? Promise.resolve()).catch(() => {}).then(async () => {
@@ -55,11 +54,7 @@ export function createWorkspaceManager(deps: WorkspaceDependencies = {}) {
             };
             // Callers pass a whole worker record; never let its session fields leak into the new worker.
             if (continueFrom) return { basePath: continueFrom.basePath, worktreePath: continueFrom.worktreePath, branch: continueFrom.branch };
-            const present = await stat(join(basePath, '.git')).catch(error => {
-                if (error.code === 'ENOENT') return null;
-                throw error;
-            });
-            if (!present) {
+            if (!await exists(join(basePath, '.git'))) {
                 // Clone beside the target and rename on success, so a killed clone never looks like a usable base.
                 const partialPath = `${basePath}.partial`;
                 await mkdir(join(home, 'workspaces', repo.split('/')[0]), { recursive: true });
@@ -77,11 +72,8 @@ export function createWorkspaceManager(deps: WorkspaceDependencies = {}) {
             for (;;) {
                 const branch = `happy/${handle}/${short}-${n}`;
                 const worktreePath = join(basePath, '.dev', 'worktree', `${short}-${n}`);
-                const pathExists = await stat(worktreePath).then(() => true, error => {
-                    if (error.code === 'ENOENT') return false;
-                    throw error;
-                });
-                const branchExists = await git(['show-ref', '--verify', '--quiet', `refs/heads/${branch}`], basePath).then(() => true, () => false);
+                const [pathExists, branchExists] = await Promise.all([exists(worktreePath),
+                    git(['show-ref', '--verify', '--quiet', `refs/heads/${branch}`], basePath).then(() => true, () => false)]);
                 if (!pathExists && !branchExists) {
                     await mkdir(join(basePath, '.dev', 'worktree'), { recursive: true });
                     await git(['worktree', 'add', '-b', branch, worktreePath, `origin/${baseBranch ?? defaultBranch}`], basePath);

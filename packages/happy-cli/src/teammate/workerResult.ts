@@ -46,24 +46,28 @@ export interface WorkerFacts {
 export async function inspectWorkerWorkspace(worker: TaskWorker, token: string | undefined, deps: {
     exec: NonNullable<WorkspaceDependencies['exec']>; fetch: typeof fetch;
 }): Promise<WorkerFacts> {
-    const facts: WorkerFacts = { branch: worker.branch };
-    const errors: string[] = [];
+    // Keys in a fixed order keep the wake message stable; checks that fail stay undefined and drop out of the JSON.
+    const facts: WorkerFacts = { branch: worker.branch, head: undefined, uncommittedFiles: undefined, pushed: undefined, diff: undefined, pr: undefined };
     const git = (args: string[]) => deps.exec('git', args, { cwd: worker.worktreePath, env: { ...process.env, ...githubGitEnv(token) }, timeout: 30_000 })
         .then(result => result.stdout.trim());
-    const step = async (name: string, work: () => Promise<void>) => {
-        try { await work(); } catch (error) { errors.push(`${name}: ${String((error as { stderr?: unknown }).stderr || (error as Error).message).trim().split('\n').pop()}`); }
-    };
-    await step('head', async () => { facts.head = await git(['rev-parse', 'HEAD']); });
-    await step('status', async () => { facts.uncommittedFiles = (await git(['status', '--porcelain'])).split('\n').filter(Boolean).length; });
-    await step('push', async () => { facts.pushed = (await git(['ls-remote', 'origin', `refs/heads/${worker.branch}`])).split(/\s/)[0] === facts.head; });
-    await step('diff', async () => { facts.diff = await git(['diff', '--shortstat', `${worker.baseBranch ? `origin/${worker.baseBranch}` : 'origin/HEAD'}...HEAD`]) || 'no changes'; });
-    await step('pr', async () => {
-        const response = await deps.fetch(`https://api.github.com/repos/${worker.repo}/pulls?state=all&per_page=1&head=${encodeURIComponent(`${worker.repo.split('/')[0]}:${worker.branch}`)}`, {
-            headers: { Accept: 'application/vnd.github+json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, signal: AbortSignal.timeout(20_000),
-        });
-        if (!response.ok) throw new Error(`GitHub ${response.status}`);
-        const [pr] = await response.json() as { html_url: string; state: string; draft: boolean; head: { sha: string } }[];
-        facts.pr = pr ? { url: pr.html_url, state: pr.state, draft: pr.draft, headMatches: pr.head.sha === facts.head } : null;
-    });
+    let remoteHead: string | undefined;
+    let pr: { html_url: string; state: string; draft: boolean; head: { sha: string } } | undefined | null;
+    // Independent checks run together; push and PR are compared with HEAD once all are in.
+    const errors = (await Promise.all(Object.entries({
+        head: async () => { facts.head = await git(['rev-parse', 'HEAD']); },
+        status: async () => { facts.uncommittedFiles = (await git(['status', '--porcelain'])).split('\n').filter(Boolean).length; },
+        push: async () => { remoteHead = (await git(['ls-remote', 'origin', `refs/heads/${worker.branch}`])).split(/\s/)[0]; },
+        diff: async () => { facts.diff = await git(['diff', '--shortstat', `${worker.baseBranch ? `origin/${worker.baseBranch}` : 'origin/HEAD'}...HEAD`]) || 'no changes'; },
+        pr: async () => {
+            const response = await deps.fetch(`https://api.github.com/repos/${worker.repo}/pulls?state=all&per_page=1&head=${encodeURIComponent(`${worker.repo.split('/')[0]}:${worker.branch}`)}`, {
+                headers: { Accept: 'application/vnd.github+json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, signal: AbortSignal.timeout(20_000),
+            });
+            if (!response.ok) throw new Error(`GitHub ${response.status}`);
+            pr = (await response.json() as NonNullable<typeof pr>[])[0] ?? null;
+        },
+    }).map(([name, work]) => work().then(() => null, error => `${name}: ${String((error as { stderr?: unknown }).stderr || (error as Error).message).trim().split('\n').pop()}`))))
+        .filter((error): error is string => error !== null);
+    if (remoteHead !== undefined) facts.pushed = remoteHead === facts.head;
+    if (pr !== undefined) facts.pr = pr && { url: pr.html_url, state: pr.state, draft: pr.draft, headMatches: pr.head.sha === facts.head };
     return errors.length ? { ...facts, errors } : facts;
 }
