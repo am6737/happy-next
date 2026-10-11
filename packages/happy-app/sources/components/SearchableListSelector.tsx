@@ -2,6 +2,7 @@ import * as React from 'react';
 import { View, Text, Pressable, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { Typography } from '@/constants/Typography';
 import { ItemGroup } from '@/components/ItemGroup';
 import { Item } from '@/components/Item';
@@ -40,6 +41,7 @@ export interface SelectorConfig<T> {
     searchPlaceholder: string;
     recentSectionTitle: string;
     favoritesSectionTitle: string;
+    allSectionTitle: string;
     noItemsMessage: string;
 
     // Optional features
@@ -166,6 +168,23 @@ const stylesheet = StyleSheet.create((theme) => ({
         color: theme.colors.button.primary.background,
     },
 }));
+
+/**
+ * Chevron for a collapsible section header: points right when collapsed and
+ * turns down while the section is expanded.
+ */
+const SectionChevron = React.memo(({ expanded, color }: { expanded: boolean; color: string }) => {
+    const rotation = useSharedValue(expanded ? 90 : 0);
+    React.useEffect(() => {
+        rotation.value = withTiming(expanded ? 90 : 0, { duration: 180 });
+    }, [expanded, rotation]);
+    const style = useAnimatedStyle(() => ({ transform: [{ rotate: `${rotation.value}deg` }] }));
+    return (
+        <Animated.View style={style}>
+            <Ionicons name="chevron-forward" size={20} color={color} />
+        </Animated.View>
+    );
+});
 
 /**
  * Generic searchable list selector component with recent items, favorites, and filtering.
@@ -392,7 +411,7 @@ export function SearchableListSelector<T>(props: SearchableListSelectorProps<T>)
                 <Text style={[
                     Typography.default('regular'),
                     {
-                        fontSize: Platform.select({ ios: 17, default: 16 }),
+                        fontSize: 12,
                         letterSpacing: Platform.select({ ios: -0.41, default: 0.15 }),
                         color: status.color
                     }
@@ -508,11 +527,7 @@ export function SearchableListSelector<T>(props: SearchableListSelectorProps<T>)
                         onPress={toggleRecentSection}
                     >
                         <Text style={styles.sectionHeaderText}>{config.recentSectionTitle}</Text>
-                        <Ionicons
-                            name={showRecentSection ? "chevron-up" : "chevron-down"}
-                            size={20}
-                            color={theme.colors.text}
-                        />
+                        <SectionChevron expanded={showRecentSection} color={theme.colors.text} />
                     </Pressable>
 
                     {showRecentSection && (
@@ -559,11 +574,7 @@ export function SearchableListSelector<T>(props: SearchableListSelectorProps<T>)
                         onPress={toggleFavoritesSection}
                     >
                         <Text style={styles.sectionHeaderText}>{config.favoritesSectionTitle}</Text>
-                        <Ionicons
-                            name={showFavoritesSection ? "chevron-up" : "chevron-down"}
-                            size={20}
-                            color={theme.colors.text}
-                        />
+                        <SectionChevron expanded={showFavoritesSection} color={theme.colors.text} />
                     </Pressable>
 
                     {showFavoritesSection && (
@@ -628,13 +639,9 @@ export function SearchableListSelector<T>(props: SearchableListSelectorProps<T>)
                         onPress={toggleAllItemsSection}
                     >
                         <Text style={styles.sectionHeaderText}>
-                            {config.recentSectionTitle.replace('Recent ', 'All ')}
+                            {config.allSectionTitle}
                         </Text>
-                        <Ionicons
-                            name={showAllItemsSection ? "chevron-up" : "chevron-down"}
-                            size={20}
-                            color={theme.colors.text}
-                        />
+                        <SectionChevron expanded={showAllItemsSection} color={theme.colors.text} />
                     </Pressable>
 
                     {showAllItemsSection && (

@@ -2298,6 +2298,7 @@ export const en = {
         filterMachines: 'Type to filter machines...',
         recentMachines: 'Recent Machines',
         favoriteMachines: 'Favorite Machines',
+        allMachines: 'All Machines',
         noMachinesAvailable: 'No machines available',
 
         // Path picker

@@ -2300,9 +2300,10 @@ export const ru: TranslationStructure = {
 
     wizard: {
         step2Title: 'Select Machine',
-        filterMachines: 'Type to filter machines...',
-        recentMachines: 'Recent Machines',
-        favoriteMachines: 'Favorite Machines',
+        filterMachines: 'Введите для фильтрации машин...',
+        recentMachines: 'Недавние машины',
+        favoriteMachines: 'Избранные машины',
+        allMachines: 'Все машины',
         noMachinesAvailable: 'No machines available',
         selectPath: 'Выбрать путь',
         enterPath: 'Ввести путь',

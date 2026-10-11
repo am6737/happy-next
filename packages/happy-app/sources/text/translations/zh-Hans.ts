@@ -2282,6 +2282,7 @@ export const zhHans: TranslationStructure = {
         filterMachines: '输入以筛选机器...',
         recentMachines: '最近使用的机器',
         favoriteMachines: '收藏的机器',
+        allMachines: '全部机器',
         noMachinesAvailable: '没有可用的机器',
         selectPath: '选择路径',
         enterPath: '输入路径',

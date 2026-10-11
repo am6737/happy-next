@@ -2281,6 +2281,7 @@ export const zhHant: TranslationStructure = {
         filterMachines: '輸入以篩選機器...',
         recentMachines: '最近使用的機器',
         favoriteMachines: '收藏的機器',
+        allMachines: '全部機器',
         noMachinesAvailable: '沒有可用的機器',
         selectPath: '選擇路徑',
         enterPath: '輸入路徑',

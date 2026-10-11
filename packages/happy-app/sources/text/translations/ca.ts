@@ -2277,9 +2277,10 @@ export const ca: TranslationStructure = {
 
     wizard: {
         step2Title: 'Select Machine',
-        filterMachines: 'Type to filter machines...',
-        recentMachines: 'Recent Machines',
-        favoriteMachines: 'Favorite Machines',
+        filterMachines: 'Escriu per filtrar màquines...',
+        recentMachines: 'Màquines recents',
+        favoriteMachines: 'Màquines preferides',
+        allMachines: 'Totes les màquines',
         noMachinesAvailable: 'No machines available',
         selectPath: 'Seleccionar ruta',
         enterPath: 'Introduir ruta',

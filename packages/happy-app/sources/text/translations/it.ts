@@ -2277,9 +2277,10 @@ export const it: TranslationStructure = {
 
     wizard: {
         step2Title: 'Select Machine',
-        filterMachines: 'Type to filter machines...',
-        recentMachines: 'Recent Machines',
-        favoriteMachines: 'Favorite Machines',
+        filterMachines: 'Digita per filtrare le macchine...',
+        recentMachines: 'Macchine recenti',
+        favoriteMachines: 'Macchine preferite',
+        allMachines: 'Tutte le macchine',
         noMachinesAvailable: 'No machines available',
         selectPath: 'Seleziona percorso',
         enterPath: 'Inserisci percorso',

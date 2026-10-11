@@ -2283,6 +2283,7 @@ export const ja: TranslationStructure = {
         filterMachines: 'マシンを検索...',
         recentMachines: '最近使用したマシン',
         favoriteMachines: 'お気に入りのマシン',
+        allMachines: 'すべてのマシン',
         noMachinesAvailable: '利用可能なマシンがありません',
         selectPath: 'パスを選択',
         enterPath: 'パスを入力',

@@ -202,6 +202,7 @@ export default function MachinePickerScreen() {
                                 searchPlaceholder: t('wizard.filterMachines'),
                                 recentSectionTitle: t('wizard.recentMachines'),
                                 favoritesSectionTitle: t('wizard.favoriteMachines'),
+                                allSectionTitle: t('wizard.allMachines'),
                                 noItemsMessage: t('wizard.noMachinesAvailable'),
                                 showFavorites: false,  // Simpler modal experience - no favorites in modal
                                 showRecent: true,
