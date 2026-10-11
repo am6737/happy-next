@@ -681,8 +681,8 @@ export class AcpBackend implements AgentBackend {
                 const proceedOnceOption = options.find((opt: any) => 
                   opt.optionId === 'proceed_once' || opt.name?.toLowerCase().includes('once')
                 );
-                const proceedAlwaysOption = options.find((opt: any) => 
-                  opt.optionId === 'proceed_always' || opt.name?.toLowerCase().includes('always')
+                const proceedAlwaysOption = options.find((opt: any) =>
+                  opt.kind === 'allow_always' || opt.optionId === 'proceed_always' || opt.name?.toLowerCase().includes('always')
                 );
                 
                 if (modeOption?.optionId) {

@@ -5,6 +5,7 @@ import { sessionAllow, sessionDeny } from '@/sync/ops';
 import { useUnistyles } from 'react-native-unistyles';
 import { storage, getSession } from '@/sync/storage';
 import { t } from '@/text';
+import { bashAllowRules } from 'happy-wire';
 
 // Tools that offer "allow all edits this session" instead of "don't ask again for this tool".
 // `edit` is the ACP edit tool (Gemini, Qoder).
@@ -36,6 +37,10 @@ export const PermissionFooter: React.FC<PermissionFooterProps> = ({ permission, 
     // Gemini calls its accept-edits mode auto_edit; Claude and Qoder call it acceptEdits
     const acceptEditsMode = metadata?.flavor === 'gemini' ? 'auto_edit' : 'acceptEdits';
     const offersAllowAllEdits = ALLOW_ALL_EDITS_TOOLS.has(toolName);
+    // "Don't ask again" for a shell command covers every program it runs, whatever the arguments
+    const allowRules = toolName === 'Bash' && typeof toolInput?.command === 'string'
+        ? bashAllowRules(toolInput.command)
+        : [toolName];
     const getCurrentClaudeMode = (): 'default' | 'acceptEdits' | 'auto' | 'bypassPermissions' | 'plan' | undefined => {
         const mode = getSession(sessionId)?.permissionMode;
         if (mode === 'default' || mode === 'acceptEdits' || mode === 'auto' || mode === 'bypassPermissions' || mode === 'plan') {
@@ -80,14 +85,8 @@ export const PermissionFooter: React.FC<PermissionFooterProps> = ({ permission, 
 
         setLoadingForSession(true);
         try {
-            // Special handling for Bash tool - include exact command
-            let toolIdentifier = toolName;
-            if (toolName === 'Bash' && toolInput?.command) {
-                const command = toolInput.command;
-                toolIdentifier = `Bash(${command})`;
-            }
-            
-            await sessionAllow(sessionId, permission.id, undefined, [toolIdentifier]);
+            // Claude keeps the rules; ACP agents (Gemini, Qoder) take the decision as their own "always allow"
+            await sessionAllow(sessionId, permission.id, undefined, allowRules, 'approved_for_session');
         } catch (error) {
             console.error('Failed to approve for session:', error);
         } finally {
@@ -152,26 +151,13 @@ export const PermissionFooter: React.FC<PermissionFooterProps> = ({ permission, 
     const isDenied = permission.status === 'denied';
     const isPending = permission.status === 'pending';
 
-    // Helper function to check if tool matches allowed pattern
-    const isToolAllowed = (toolName: string, toolInput: any, allowedTools: string[] | undefined): boolean => {
-        if (!allowedTools) return false;
-        
-        // Direct match for non-Bash tools
-        if (allowedTools.includes(toolName)) return true;
-        
-        // For Bash, check exact command match
-        if (toolName === 'Bash' && toolInput?.command) {
-            const command = toolInput.command;
-            return allowedTools.includes(`Bash(${command})`);
-        }
-        
-        return false;
-    };
-
-    // Detect which button was used based on mode (for Claude) or decision (for Codex)
+    // Detect which button was used: mode for "all edits"; decision (ACP agents) or the stored rules (Claude) for "don't ask again"
     const isApprovedViaAllEdits = isApproved && (permission.mode === 'acceptEdits' || permission.mode === 'auto_edit');
-    const isApprovedViaAllow = isApproved && !isApprovedViaAllEdits && !isToolAllowed(toolName, toolInput, permission.allowedTools);
-    const isApprovedForSession = isApproved && isToolAllowed(toolName, toolInput, permission.allowedTools);
+    const isApprovedForSession = isApproved && !isApprovedViaAllEdits && (
+        permission.decision === 'approved_for_session' ||
+        allowRules.some(rule => permission.allowedTools?.includes(rule))
+    );
+    const isApprovedViaAllow = isApproved && !isApprovedViaAllEdits && !isApprovedForSession;
     
     // Codex-specific status detection with fallback
     const isCodexApproved = isCodex && isApproved && (permission.decision === 'approved' || !permission.decision);

@@ -20,6 +20,8 @@ export interface PermissionResponse {
     approved: boolean;
     decision?: 'approved' | 'approved_for_session' | 'denied' | 'abort';
     answers?: Record<string, string>;
+    /** Tools the user stopped being asked about ("don't ask again") — the agent's own "always allow" applies them */
+    allowTools?: string[];
     /** Mode the app switched the session to with this answer ("allow all edits") — kept so the app can show which button was used */
     mode?: PermissionMode;
 }
@@ -102,7 +104,7 @@ export abstract class BasePermissionHandler {
                 // Resolve the permission request
                 const result: PermissionResult = response.approved
                     ? {
-                        decision: response.decision === 'approved_for_session' ? 'approved_for_session' : 'approved',
+                        decision: response.decision === 'approved_for_session' || !!response.allowTools?.length ? 'approved_for_session' : 'approved',
                         ...(response.answers ? { answers: response.answers } : {}),
                         ...(response.mode ? { mode: response.mode } : {})
                     }

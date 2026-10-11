@@ -535,7 +535,9 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
             const isNewSession = session.sessionId !== previousSessionId;
             if (isNewSession) {
                 messageBuffer.addMessage('Starting new Claude session...', 'status');
-                permissionHandler.reset(); // Reset permissions before starting new session
+                // A brand-new conversation only gets its id during its first run, so that change
+                // keeps the "don't ask again" rules; a different conversation (/clear) drops them
+                permissionHandler.reset({ keepAllowedTools: previousSessionId === null });
                 sdkToLogConverter.resetParentChain(); // Reset parent chain for new conversation
                 logger.debug(`[remote]: New session detected (previous: ${previousSessionId}, current: ${session.sessionId})`);
             } else {
@@ -703,7 +705,8 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
                 abortFuture?.resolve(undefined);
                 abortFuture = null;
                 logger.debug('[remote]: launch done');
-                permissionHandler.reset();
+                // The conversation goes on in the next run, so its "don't ask again" rules stay
+                permissionHandler.reset({ keepAllowedTools: true });
                 modeHash = null;
                 mode = null;
             }

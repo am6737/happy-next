@@ -43,6 +43,15 @@ describe('QoderPermissionHandler', () => {
     await expect(pending).resolves.toEqual({ decision: 'denied' });
   });
 
+  it('takes "don\'t ask again" (allowTools) as approved for the session', async () => {
+    const handler = new QoderPermissionHandler(session, { sendToAllDevices: vi.fn() } as any);
+    const pending = handler.handleToolCall('call-5', 'execute', { command: 'git status' });
+
+    await permissionRpcHandler!({ id: 'call-5', approved: true, allowTools: ['execute'] } as any);
+    await expect(pending).resolves.toEqual({ decision: 'approved_for_session' });
+    expect(agentState.completedRequests?.['call-5']).toMatchObject({ status: 'approved', decision: 'approved_for_session' });
+  });
+
   it('shows the input it is given for a request, and passes on the mode the app answered with', async () => {
     const withPlan = (toolName: string, input: Record<string, unknown>) => ({ ...input, plan: `# Plan for ${toolName}` });
     const handler = new QoderPermissionHandler(session, { sendToAllDevices: vi.fn() } as any, withPlan);

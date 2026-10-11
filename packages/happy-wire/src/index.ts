@@ -8,4 +8,5 @@ export * from './filePreview';
 export * from './fileDownload';
 export * from './fileUpload';
 export * from './toolImagePreview';
+export * from './bashPermission';
 export * from './terminal';

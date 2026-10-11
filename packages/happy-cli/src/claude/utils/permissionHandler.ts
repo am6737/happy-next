@@ -17,6 +17,7 @@ import { getToolName } from "./getToolName";
 import { EnhancedMode, PermissionMode } from "../loop";
 import { getToolDescriptor } from "./getToolDescriptor";
 import { delay } from "@/utils/time";
+import { isBashCommandAllowed } from "happy-wire";
 
 interface PermissionResponse {
     id: string;
@@ -196,17 +197,8 @@ export class PermissionHandler {
         // Check if tool is explicitly allowed
         if (toolName === 'Bash') {
             const inputObj = input as { command?: string };
-            if (inputObj?.command) {
-                // Check literal matches
-                if (this.allowedBashLiterals.has(inputObj.command)) {
-                    return { behavior: 'allow', updatedInput: input as Record<string, unknown> };
-                }
-                // Check prefix matches
-                for (const prefix of this.allowedBashPrefixes) {
-                    if (inputObj.command.startsWith(prefix)) {
-                        return { behavior: 'allow', updatedInput: input as Record<string, unknown> };
-                    }
-                }
+            if (inputObj?.command && isBashCommandAllowed(inputObj.command, this.allowedBashLiterals, this.allowedBashPrefixes)) {
+                return { behavior: 'allow', updatedInput: input as Record<string, unknown> };
             }
         } else if (this.allowedTools.has(toolName)) {
             return { behavior: 'allow', updatedInput: input as Record<string, unknown> };
@@ -453,14 +445,17 @@ export class PermissionHandler {
     }
 
     /**
-     * Resets all state for new sessions
+     * Resets all state for new sessions. `keepAllowedTools` keeps the "don't ask again" rules,
+     * for when only the Claude process restarts and the conversation goes on.
      */
-    reset(): void {
+    reset({ keepAllowedTools = false }: { keepAllowedTools?: boolean } = {}): void {
         this.toolCalls = [];
         this.responses.clear();
-        this.allowedTools.clear();
-        this.allowedBashLiterals.clear();
-        this.allowedBashPrefixes.clear();
+        if (!keepAllowedTools) {
+            this.allowedTools.clear();
+            this.allowedBashLiterals.clear();
+            this.allowedBashPrefixes.clear();
+        }
         this.permissionMode = 'default';
         this.lastNonPlanPermissionMode = 'default';
 
@@ -533,7 +528,7 @@ export class PermissionHandler {
                             status: message.approved ? 'approved' : 'denied',
                             reason: message.reason,
                             mode: message.mode,
-                            allowTools: message.allowTools
+                            allowedTools: message.allowTools
                         }
                     }
                 };

@@ -443,7 +443,7 @@ export type AgentState = {
       reason?: string,
       mode?: PermissionMode,
       decision?: 'approved' | 'approved_for_session' | 'denied' | 'abort',
-      allowTools?: string[]
+      allowedTools?: string[]
     }
   }
 }
