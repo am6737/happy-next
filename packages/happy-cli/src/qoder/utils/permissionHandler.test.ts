@@ -42,4 +42,14 @@ describe('QoderPermissionHandler', () => {
     await permissionRpcHandler!({ id: 'call-2', approved: false, decision: 'denied' });
     await expect(pending).resolves.toEqual({ decision: 'denied' });
   });
+
+  it('shows the input it is given for a request, and passes on the mode the app answered with', async () => {
+    const withPlan = (toolName: string, input: Record<string, unknown>) => ({ ...input, plan: `# Plan for ${toolName}` });
+    const handler = new QoderPermissionHandler(session, { sendToAllDevices: vi.fn() } as any, withPlan);
+    const pending = handler.handleToolCall('call-4', 'ExitPlanMode', {});
+
+    expect(agentState.requests?.['call-4']).toMatchObject({ tool: 'ExitPlanMode', arguments: { plan: '# Plan for ExitPlanMode' } });
+    await permissionRpcHandler!({ id: 'call-4', approved: true, decision: 'approved', mode: 'acceptEdits' } as any);
+    await expect(pending).resolves.toEqual({ decision: 'approved', mode: 'acceptEdits' });
+  });
 });

@@ -40,6 +40,8 @@ export interface PendingRequest {
 export interface PermissionResult {
     decision: 'approved' | 'approved_for_session' | 'denied' | 'abort';
     answers?: Record<string, string>;
+    /** Mode the app switched the session to with this answer */
+    mode?: PermissionMode;
 }
 
 /**
@@ -101,7 +103,8 @@ export abstract class BasePermissionHandler {
                 const result: PermissionResult = response.approved
                     ? {
                         decision: response.decision === 'approved_for_session' ? 'approved_for_session' : 'approved',
-                        ...(response.answers ? { answers: response.answers } : {})
+                        ...(response.answers ? { answers: response.answers } : {}),
+                        ...(response.mode ? { mode: response.mode } : {})
                     }
                     : { decision: response.decision === 'denied' ? 'denied' : 'abort' };
 

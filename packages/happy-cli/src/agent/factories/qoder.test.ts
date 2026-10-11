@@ -34,13 +34,21 @@ describe('createQoderBackend', () => {
 describe('QoderTransport', () => {
   const transport = new QoderTransport('qoder');
 
-  it('reads an MCP tool name back from the permission title', () => {
-    expect(transport.determineToolName('Unknown tool', 'call_1', { title: 'Hi', description: 'change_title (happy)' })).toBe('mcp__happy__change_title');
+  it('reads an MCP tool name back from the title', () => {
+    expect(transport.nameToolCall({ kind: 'other', title: 'change_title (happy)' })).toBe('mcp__happy__change_title');
+    expect(transport.nameToolCall({ kind: 'other', title: 'change_title (happy MCP Server)' })).toBe('mcp__happy__change_title');
   });
 
-  it('keeps names it already has and titles that are not an MCP tool', () => {
-    expect(transport.determineToolName('execute', 'call_2', { description: 'git status (repo)' })).toBe('execute');
-    expect(transport.determineToolName('Unknown tool', 'call_3', { description: 'Run git status' })).toBe('Unknown tool');
+  it('names plan mode calls from _meta, where their tool call and permission request titles differ', () => {
+    const enterPlan = { kind: 'other', _meta: { qoder: { toolName: 'EnterPlanMode' } } };
+    expect(transport.nameToolCall({ ...enterPlan, title: 'EnterPlanMode' })).toBe('EnterPlanMode');
+    expect(transport.nameToolCall({ ...enterPlan, title: 'Allow entering plan mode?' })).toBe('EnterPlanMode');
+    expect(transport.nameToolCall({ kind: 'switch_mode', title: 'Exit plan mode', _meta: { qoder: { toolName: 'ExitPlanMode' } } })).toBe('ExitPlanMode');
+  });
+
+  it('falls back to the title, and leaves calls whose kind names them alone', () => {
+    expect(transport.nameToolCall({ kind: 'other', title: 'Allow entering plan mode?' })).toBe('Allow entering plan mode?');
+    expect(transport.nameToolCall({ kind: 'execute', title: 'git status (repo)', _meta: { qoder: { toolName: 'Bash' } } })).toBeNull();
   });
 });
 

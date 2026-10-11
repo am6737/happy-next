@@ -8,12 +8,23 @@
  */
 
 import { logger } from '@/ui/logger';
+import type { ApiSessionClient } from '@/api/apiSession';
+import type { PushNotificationClient } from '@/api/pushNotifications';
 import { BasePermissionHandler, type PermissionResult } from '@/utils/BasePermissionHandler';
 
 // Named as QoderTransport reads them back from qodercli's permission titles.
 export const HAPPY_TOOLS_APPROVED_WITHOUT_ASKING = ['mcp__happy__change_title', 'mcp__happy__preview_html'];
 
 export class QoderPermissionHandler extends BasePermissionHandler {
+    /** `shownInput` gives the input the app shows for a request (ExitPlanMode's gets its plan). */
+    constructor(
+        session: ApiSessionClient,
+        pushClient: PushNotificationClient,
+        private readonly shownInput: (toolName: string, input: Record<string, unknown>) => Record<string, unknown> = (_toolName, input) => input,
+    ) {
+        super(session, pushClient);
+    }
+
     protected getLogPrefix(): string {
         return '[Qoder]';
     }
@@ -22,12 +33,13 @@ export class QoderPermissionHandler extends BasePermissionHandler {
         return 'Qoder';
     }
 
-    async handleToolCall(toolCallId: string, toolName: string, input: unknown): Promise<PermissionResult> {
+    async handleToolCall(toolCallId: string, toolName: string, toolInput: Record<string, unknown>): Promise<PermissionResult> {
         if (HAPPY_TOOLS_APPROVED_WITHOUT_ASKING.includes(toolName)) {
             logger.debug(`${this.getLogPrefix()} Auto-approving ${toolName} (${toolCallId})`);
             return { decision: 'approved' };
         }
 
+        const input = this.shownInput(toolName, toolInput);
         return new Promise<PermissionResult>((resolve, reject) => {
             this.pendingRequests.set(toolCallId, { resolve, reject, toolName, input });
             this.addPendingRequestToState(toolCallId, toolName, input);

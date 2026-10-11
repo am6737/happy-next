@@ -35,10 +35,21 @@ export function qoderMcpToolName(title: unknown): string | null {
   return match ? `mcp__${match[2]}__${match[1]}` : null;
 }
 
-/** Names MCP tools in permission requests, so the permission handler and the app know which tool is asking. */
+/** ACP kinds that do not say which tool a qodercli call is. */
+const QODER_UNNAMED_KINDS = new Set(['other', 'switch_mode']);
+
+/**
+ * Names the calls whose ACP kind does not say which tool they are: MCP tools by their
+ * title, the rest (EnterPlanMode as `other`, ExitPlanMode as `switch_mode`) by the
+ * tool name qodercli puts in `_meta.qoder`, else by the title. The tool call and its
+ * permission request get the same name, though their titles differ ("EnterPlanMode",
+ * then "Allow entering plan mode?"), so the app and the permission handler know the tool.
+ */
 export class QoderTransport extends DefaultTransport {
-  determineToolName(toolName: string, toolCallId: string, input: Record<string, unknown>): string {
-    return (toolName === 'Unknown tool' && qoderMcpToolName(input.description)) || toolName;
+  nameToolCall(toolCall: { kind?: unknown; title?: unknown; _meta?: unknown }): string | null {
+    if (!QODER_UNNAMED_KINDS.has(String(toolCall.kind))) return null;
+    const metaName = (toolCall._meta as { qoder?: { toolName?: unknown } } | undefined)?.qoder?.toolName;
+    return qoderMcpToolName(toolCall.title) || (typeof metaName === 'string' && metaName) || (typeof toolCall.title === 'string' && toolCall.title) || null;
   }
 }
 

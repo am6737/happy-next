@@ -87,6 +87,7 @@ type ExtendedRequestPermissionRequest = RequestPermissionRequest & {
     toolName?: string;
     title?: string; // Gemini ACP: JSON-stringified tool input
     rawInput?: unknown; // ACP standard: raw input parameters sent to the tool
+    _meta?: unknown;
     input?: Record<string, unknown>;
     arguments?: Record<string, unknown>;
     content?: Record<string, unknown>;
@@ -143,7 +144,7 @@ export interface AcpPermissionHandler {
     toolCallId: string,
     toolName: string,
     input: unknown
-  ): Promise<{ decision: 'approved' | 'approved_for_session' | 'denied' | 'abort' }>;
+  ): Promise<{ decision: 'approved' | 'approved_for_session' | 'denied' | 'abort'; mode?: string }>;
 }
 
 /**
@@ -566,6 +567,7 @@ export class AcpBackend implements AgentBackend {
           const toolCall = extendedParams.toolCall;
           const rawKind = toolCall?.kind;
           let toolName = toolCall?.toolName
+            || (toolCall && this.transport.nameToolCall?.(toolCall))
             || (rawKind && rawKind !== 'other' ? rawKind : null)
             || extendedParams.kind
             || 'Unknown tool';
@@ -671,6 +673,9 @@ export class AcpBackend implements AgentBackend {
               let optionId = 'cancel'; // Default to cancel/deny
               
               if (result.decision === 'approved' || result.decision === 'approved_for_session') {
+                // An option named after the mode the app chose (Qoder's ExitPlanMode offers
+                // default / acceptEdits / yolo) approves into that mode
+                const modeOption = options.find((opt) => opt.kind?.startsWith('allow') && opt.optionId === result.mode);
                 // Find the appropriate optionId from the request options
                 // Look for 'proceed_once' or 'proceed_always' in options
                 const proceedOnceOption = options.find((opt: any) => 
@@ -680,7 +685,9 @@ export class AcpBackend implements AgentBackend {
                   opt.optionId === 'proceed_always' || opt.name?.toLowerCase().includes('always')
                 );
                 
-                if (result.decision === 'approved_for_session' && proceedAlwaysOption) {
+                if (modeOption?.optionId) {
+                  optionId = modeOption.optionId;
+                } else if (result.decision === 'approved_for_session' && proceedAlwaysOption) {
                   optionId = proceedAlwaysOption.optionId || 'proceed_always';
                 } else if (proceedOnceOption) {
                   optionId = proceedOnceOption.optionId || 'proceed_once';
@@ -702,7 +709,7 @@ export class AcpBackend implements AgentBackend {
                 // Denied or aborted - find cancel option
                 const cancelOption = options.find((opt: any) =>
                   opt.optionId === 'cancel' || opt.name?.toLowerCase().includes('cancel')
-                );
+                ) ?? options.find((opt) => opt.kind?.startsWith('reject'));
                 if (cancelOption) {
                   optionId = cancelOption.optionId || 'cancel';
                 }

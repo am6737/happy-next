@@ -143,6 +143,16 @@ export interface TransportHandler {
   extractToolNameFromId?(toolCallId: string): string | null;
 
   /**
+   * Name a tool call from the call itself, for agents whose ACP kind does not say
+   * which tool it is (e.g. kind "other"). Used for both the tool call and its
+   * permission request, so the two carry the same name.
+   *
+   * @param toolCall - The tool call from a session update or permission request
+   * @returns The tool name, or null to keep the default naming
+   */
+  nameToolCall?(toolCall: { kind?: unknown; title?: unknown; _meta?: unknown }): string | null;
+
+  /**
    * Determine the real tool name from various sources.
    *
    * When the agent sends "other" or "Unknown tool", tries to determine the real name from:

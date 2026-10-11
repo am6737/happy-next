@@ -10,6 +10,8 @@
 import { render } from 'ink';
 import React from 'react';
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import type { SessionNotification } from '@agentclientprotocol/sdk';
 import { isPermissionModeForAgent } from 'happy-wire';
 
@@ -37,7 +39,7 @@ import type { AcpBackend } from '@/agent/acp/AcpBackend';
 import type { AgentMessage } from '@/agent';
 import { handleConfigMetadataEvent } from '@/agent/acp/sessionUpdateHandlers';
 import { extractConfigOptionsFromPayload } from '@/agent/acp/sessionConfigMetadata';
-import { createQoderBackend, qoderMcpToolName } from '@/agent/factories/qoder';
+import { createQoderBackend } from '@/agent/factories/qoder';
 import { GeminiDisplay } from '@/ui/ink/GeminiDisplay';
 import type { ImageContent, PermissionMode } from '@/api/types';
 import { formatMessageForGemini } from '@/utils/formatImageMessage';
@@ -46,6 +48,7 @@ import { parseOptionsFromText } from '@/gemini/utils/optionsParser';
 import { HAPPY_TOOLS_APPROVED_WITHOUT_ASKING, QoderPermissionHandler } from '@/qoder/utils/permissionHandler';
 import { buildQoderBackfillMessages } from '@/qoder/utils/backfill';
 import { buildQoderFirstTurnPrompt } from '@/qoder/prompt';
+import { qoderTranscriptStore } from '@/qoder/transcripts';
 import {
   QODER_RESUME_SESSION_ID_ENV,
   isQoderAuthError,
@@ -215,7 +218,21 @@ export async function runQoder(opts: {
 
   const mcp = await createMcpContext(session);
   const mcpServers = mcp.configForHttp();
-  permissionHandler = new QoderPermissionHandler(session, api.push());
+  // qodercli writes its plan to a file under <config>/plans and gives ExitPlanMode no
+  // arguments; the file is known from the write, or from the permission request that
+  // names it. The app's plan card reads the plan from `plan`.
+  const plansDir = join(qoderTranscriptStore().configDir, 'plans');
+  let planFile: string | null = null;
+  const withPlan = (toolName: string, input: Record<string, unknown>): Record<string, unknown> => {
+    if (toolName !== 'ExitPlanMode' || !planFile) return input;
+    try {
+      return { ...input, plan: readFileSync(planFile, 'utf8') };
+    } catch (error) {
+      logger.debug(`[Qoder] Cannot read plan file ${planFile}`, error);
+      return input;
+    }
+  };
+  permissionHandler = new QoderPermissionHandler(session, api.push(), withPlan);
 
   // Typed through a cast: TS would otherwise narrow it to null, since only closures assign it.
   let qoderBackend = null as AcpBackend | null;
@@ -286,11 +303,11 @@ export async function runQoder(opts: {
 
       case 'tool-call': {
         flushResponse();
-        // MCP calls arrive as kind `other`; their real name lets the app show change_title as a title notice.
-        const toolName = (msg.toolName === 'other' && qoderMcpToolName(msg.args?.description)) || msg.toolName;
-        const input = inlinePreviewHtmlFileArgs(toolName, msg.args);
-        messageBuffer.addMessage(`Executing: ${toolName} ${JSON.stringify(msg.args ?? {}).substring(0, 100)}`, 'tool');
-        session.sendAgentMessage('qoder', { type: 'tool-call', name: toolName, callId: msg.callId, input, id: randomUUID() });
+        const filePath = msg.args?.file_path;
+        if (typeof filePath === 'string' && dirname(filePath) === plansDir) planFile = filePath;
+        const input = withPlan(msg.toolName, inlinePreviewHtmlFileArgs(msg.toolName, msg.args) ?? {});
+        messageBuffer.addMessage(`Executing: ${msg.toolName} ${JSON.stringify(msg.args ?? {}).substring(0, 100)}`, 'tool');
+        session.sendAgentMessage('qoder', { type: 'tool-call', name: msg.toolName, callId: msg.callId, input, id: randomUUID() });
         break;
       }
 
@@ -311,7 +328,10 @@ export async function runQoder(opts: {
         break;
 
       case 'permission-request': {
-        const payload = (msg.payload ?? {}) as { toolName?: string };
+        const payload = (msg.payload ?? {}) as { toolName?: string; toolCall?: { content?: { content?: { text?: string } }[] } };
+        // ExitPlanMode's request reads "Plan file: <path>"; the permission handler, asked next, shows that plan.
+        const requestText = (payload.toolCall?.content ?? []).map((item) => item?.content?.text ?? '').join('\n');
+        planFile = requestText.match(/^Plan file: (.+)$/m)?.[1] ?? planFile;
         // Happy's own tools are approved without asking; their tool call alone is shown.
         if (HAPPY_TOOLS_APPROVED_WITHOUT_ASKING.includes(payload.toolName ?? '')) break;
         session.sendAgentMessage('qoder', {

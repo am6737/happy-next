@@ -257,7 +257,8 @@ export function startToolCall(
 
   // Extract real tool name from toolCallId
   const extractedName = ctx.transport.extractToolNameFromId?.(toolCallId);
-  const realToolName = extractedName ?? (toolKindStr || 'unknown');
+  const namedToolName = ctx.transport.nameToolCall?.(update) ?? null;
+  const realToolName = extractedName ?? namedToolName ?? (toolKindStr || 'unknown');
 
   // Store mapping for permission requests
   ctx.toolCallIdToNameMap.set(toolCallId, realToolName);
@@ -327,7 +328,7 @@ export function startToolCall(
 
   ctx.emit({
     type: 'tool-call',
-    toolName: toolKindStr || 'unknown',
+    toolName: namedToolName ?? (toolKindStr || 'unknown'),
     args,
     callId: toolCallId,
   });
