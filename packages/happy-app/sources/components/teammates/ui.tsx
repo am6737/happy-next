@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import type { PermissionMode, Teammate, TeammateWorkerProvider } from 'happy-wire';
 import { layout } from '@/components/layout';
@@ -28,6 +28,17 @@ export const styles = StyleSheet.create(theme => ({
 
 export function Action({ title, onPress, disabled = false }: { title: string; onPress?: () => void; disabled?: boolean }) {
     return <Pressable accessibilityRole="button" accessibilityState={{ disabled }} disabled={disabled} onPress={onPress} style={[styles.button, disabled && { opacity: 0.45 }]}><Text style={styles.buttonText}>{title}</Text></Pressable>;
+}
+
+/** Shown until an Agent profile has loaded, with a manual retry. */
+export function TeammateLoadFallback({ loading, error, refresh }: { loading: boolean; error: string | null; refresh: () => void }) {
+    return (
+        <View style={[styles.screen, { padding: 16, gap: 12 }]}>
+            {loading && <ActivityIndicator />}
+            {error && <Text style={styles.error}>{error}</Text>}
+            <Action title={t('common.retry')} onPress={refresh} />
+        </View>
+    );
 }
 
 /** Wire accepts theme tokens as well as hex; unresolved tokens and unset colors use the fallback. */

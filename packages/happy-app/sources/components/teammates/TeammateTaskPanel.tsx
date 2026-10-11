@@ -1,6 +1,7 @@
 import React from 'react';
 import { ActivityIndicator, Text, TouchableOpacity, View } from 'react-native';
 import { useUnistyles } from 'react-native-unistyles';
+import { useShallow } from 'zustand/react/shallow';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { TEAMMATE_TASK_ACTIVE_STATUSES } from 'happy-wire';
 import { useAuth } from '@/auth/AuthContext';
@@ -14,14 +15,17 @@ import { getServerUrl } from '@/sync/serverConfig';
 import { updateTeammateTask } from '@/sync/apiTeammateTasks';
 import { openExternalUrl } from '@/utils/tauri';
 import { t } from '@/text';
-import { TeammateRunRow, isTeammateRunCancellable } from './TeammateRunRow';
+import { isTeammateRunCancellable } from '@/sync/teammateRuns';
+import { TeammateRunRow } from './TeammateRunRow';
 import { Action, styles, TeammateAvatar } from './ui';
 
 export const TeammateTaskPanel = React.memo(({ id }: { id: string }) => {
     const detail = useTeammateTask(id);
     const teammate = storage(state => detail ? state.teammates[detail.task.teammateId] : undefined);
     const creator = storage(state => detail?.task.createdByTeammateId ? state.teammates[detail.task.createdByTeammateId] : undefined);
-    const sessions = storage(state => state.sessions);
+    const workers = React.useMemo(() => detail?.sessions.filter(session => session.role === 'worker') ?? [], [detail]);
+    const workerTitles = storage(useShallow(state => workers.map(({ sessionId }) =>
+        state.sessions[sessionId]?.metadata?.summary?.text || state.sessions[sessionId]?.metadata?.name)));
     const router = useRouter();
     const openSession = useNavigateToSession();
     const { credentials } = useAuth();
@@ -81,8 +85,8 @@ export const TeammateTaskPanel = React.memo(({ id }: { id: string }) => {
         {[...detail.runs].sort((a, b) => b.queuedAt - a.queuedAt).map(run => <TeammateRunRow key={run.id} run={run} now={now} busy={busy}
             onOpen={openSession} openLabel={t('teammateTasks.thinking')} relativeTime showCancel={false} onCancel={() => {}} />)}
         <Text style={styles.heading}>{t('teammateTasks.execution')}</Text>
-        {detail.sessions.filter(session => session.role === 'worker').map((session, index) => <Action key={session.sessionId}
-            title={sessions[session.sessionId]?.metadata?.summary?.text || sessions[session.sessionId]?.metadata?.name || `${t('teammateTasks.execution')} ${index + 1}`}
+        {workers.map((session, index) => <Action key={session.sessionId}
+            title={workerTitles[index] || `${t('teammateTasks.execution')} ${index + 1}`}
             onPress={() => openSession(session.sessionId)} />)}
     </View>;
 });

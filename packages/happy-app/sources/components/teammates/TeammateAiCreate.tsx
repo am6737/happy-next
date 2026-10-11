@@ -89,7 +89,9 @@ export function TeammateAiCreate() {
     const { theme } = useUnistyles();
     const machines = useAllMachines();
     const online = React.useMemo(() => machines.filter(isMachineOnline), [machines]);
-    const [machineId, setMachineId] = React.useState('');
+    const [pickedMachineId, setMachineId] = React.useState('');
+    // Falls back to the first online machine when the picked one goes offline.
+    const machineId = online.some(machine => machine.id === pickedMachineId) ? pickedMachineId : online[0]?.id ?? pickedMachineId;
     const [description, setDescription] = React.useState('');
     const [round, setRound] = React.useState<TeammateDraftRound | null>(null);
     const [answers, setAnswers] = React.useState<TeammateDraftAnswer[]>([]);
@@ -103,10 +105,13 @@ export function TeammateAiCreate() {
     const generation = React.useRef(0);
     const scroll = React.useRef<ScrollView>(null);
 
-    React.useEffect(() => {
-        if (!online.some(machine => machine.id === machineId) && online.length) setMachineId(online[0].id);
-    }, [online, machineId]);
     React.useEffect(() => () => { generation.current += 1; }, []);
+
+    const resetAnswers = () => {
+        setPicks({});
+        setCustoms({});
+        setFeedback('');
+    };
 
     const run = async (request: TeammateDraftRequest) => {
         const current = ++generation.current;
@@ -118,9 +123,7 @@ export function TeammateAiCreate() {
             if (current !== generation.current) return;
             setRound(result);
             setAnswers(request.answers ?? []);
-            setPicks({});
-            setCustoms({});
-            setFeedback('');
+            resetAnswers();
             scroll.current?.scrollTo({ y: 0, animated: true });
         } catch (error) {
             if (current === generation.current) setError(teammateErrorMessage(error));
@@ -129,7 +132,8 @@ export function TeammateAiCreate() {
         }
     };
 
-    const newAnswers = (round?.questions ?? []).flatMap((question, index) => {
+    const questions = round?.questions ?? [];
+    const newAnswers = questions.flatMap((question, index) => {
         const answer = customs[index]?.trim() || picks[index];
         return answer ? [{ question: question.question, answer }] : [];
     });
@@ -161,9 +165,7 @@ export function TeammateAiCreate() {
         lastRequest.current = null;
         setRound(null);
         setAnswers([]);
-        setPicks({});
-        setCustoms({});
-        setFeedback('');
+        resetAnswers();
         setLoading(false);
         setError(null);
     };
@@ -171,8 +173,6 @@ export function TeammateAiCreate() {
     const retry = () => {
         if (lastRequest.current) void run(lastRequest.current);
     };
-
-    const questions = round?.questions ?? [];
 
     return (
         <View style={styles.page}>

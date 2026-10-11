@@ -25,7 +25,7 @@ export function useTeammateProfile(id: string, activity = true) {
                 const [runs, tasks, spend] = await Promise.all([
                     fetchTeammateRuns(credentials, id), fetchTeammateTasks(credentials, id), fetchTeammateSpend(credentials, id),
                 ]);
-                if (current === generation.current && serverUrl === getServerUrl()) storage.getState().applyTeammateActivity(id, runs, tasks, spend, runsAtRequest);
+                if (current === generation.current && serverUrl === getServerUrl()) storage.getState().applyTeammateActivity(id, { runs, tasks, spend }, runsAtRequest);
             }
         } catch (error) { if (current === generation.current) setError(teammateErrorMessage(error)); }
         finally { if (current === generation.current) setLoading(false); }

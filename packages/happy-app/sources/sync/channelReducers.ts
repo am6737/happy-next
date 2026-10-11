@@ -25,16 +25,24 @@ export function mergeChannels(current: Record<string, Channel>, incoming: Channe
     return next;
 }
 export function mergeChannelMessages(current: StoredChannelMessage[] = [], incoming: StoredChannelMessage[]): StoredChannelMessage[] {
-    let next = [...current];
+    // A message matches by id, or by localId when an optimistic copy is confirmed.
+    const byId = new Map(current.map(m => [m.id, m]));
+    const byLocalId = new Map(current.flatMap(m => m.localId ? [[m.localId, m] as const] : []));
     for (const message of incoming) {
-        const matches = next.filter(m => m.id === message.id || (!!message.localId && m.localId === message.localId));
-        next = next.filter(m => !matches.includes(m));
+        const matches = [byId.get(message.id), message.localId ? byLocalId.get(message.localId) : undefined]
+            .filter((m, index, all): m is StoredChannelMessage => !!m && all.indexOf(m) === index);
+        for (const m of matches) {
+            byId.delete(m.id);
+            if (m.localId && byLocalId.get(m.localId) === m) byLocalId.delete(m.localId);
+        }
         const confirmed = matches.find(m => !m.delivery);
         const base = message.delivery && confirmed ? confirmed : message;
         const cached = matches.find(m => m.body !== undefined);
-        next.push({ ...base, body: base.body === undefined ? cached?.body ?? message.body : base.body });
+        const merged = { ...base, body: base.body === undefined ? cached?.body ?? message.body : base.body };
+        byId.set(merged.id, merged);
+        if (merged.localId) byLocalId.set(merged.localId, merged);
     }
-    return next.sort((a, b) => {
+    return [...byId.values()].sort((a, b) => {
         if (!!a.delivery !== !!b.delivery) return a.delivery ? 1 : -1;
         return a.delivery ? a.createdAt - b.createdAt : a.seq - b.seq;
     });

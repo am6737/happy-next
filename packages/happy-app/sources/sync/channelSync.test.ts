@@ -29,7 +29,7 @@ beforeEach(() => {
         },
         applyChannelMessages: (id: string, incoming: StoredChannelMessage[]) => {
             harness.state.channelMessages[id] = mergeChannelMessages(harness.state.channelMessages[id], incoming);
-        }, markChannelReadLocal: vi.fn(), applyTeammateTaskList: vi.fn(),
+        }, markChannelReadLocal: vi.fn(), applyTeammateActivity: vi.fn(),
     };
     client = new ChannelSync(() => ({ credentials, encryption }), async () => machineKey);
     vi.mocked(api.fetchChannel).mockResolvedValue(channel);

@@ -6,7 +6,6 @@ import { getServerUrl } from './serverConfig';
 import * as api from './apiChannels';
 import { decryptChannelMessage, encryptChannelMessage, generateChannelKey, unwrapChannelKey, wrapChannelKeyForAccount, wrapChannelKeyForTeammate } from './channelEncryption';
 import { fetchTeammateRuns, fetchTeammateTasks } from './apiTeammates';
-import { mergeTeammateRunSnapshot } from './teammateRuns';
 import type { StoredChannelMessage } from './channelReducers';
 
 /** Account/server guards also cover decryption awaits and late HTTP responses. */
@@ -14,14 +13,17 @@ export class ChannelSync {
     constructor(private readonly getContext: () => { credentials: AuthCredentials; encryption: Encryption },
         readonly getMachineKey: (id: string) => Promise<Uint8Array>) {}
     private visible = new Set<string>();
+    /** Unwrapped channel keys by wrapped key, per account encryption. */
+    private keys = new WeakMap<Encryption, Map<string, Promise<Uint8Array>>>();
     watch(id: string) { this.visible.add(id); return () => { this.visible.delete(id); }; }
     private context() {
         const { credentials, encryption } = this.getContext();
         const server = getServerUrl();
-        return { credentials, encryption, valid: () => {
+        const valid = () => {
             const current = this.getContext();
             return credentials === current.credentials && encryption === current.encryption && server === getServerUrl();
-        } };
+        };
+        return { credentials, encryption, valid, assertValid: () => { if (!valid()) throw new Error('Account changed'); } };
     }
     refresh = async () => {
         const context = this.context();
@@ -36,7 +38,15 @@ export class ChannelSync {
         const member = channel.members.find(m => m.memberType === 'user' && m.accountId === storage.getState().profile.id)
             ?? channel.members.find(m => m.memberType === 'user');
         if (!member) throw new Error('Missing user channel key');
-        return unwrapChannelKey(encryption, member.encryptedDataKey);
+        let keys = this.keys.get(encryption);
+        if (!keys) { keys = new Map(); this.keys.set(encryption, keys); }
+        let key = keys.get(member.encryptedDataKey);
+        if (!key) {
+            key = unwrapChannelKey(encryption, member.encryptedDataKey);
+            keys.set(member.encryptedDataKey, key);
+            key.catch(() => keys.delete(member.encryptedDataKey));
+        }
+        return key;
     }
     create = async (kind: 'dm' | 'group', teammates: Teammate[], title: string | null = null) => {
         const context = this.context();
@@ -49,19 +59,19 @@ export class ChannelSync {
             if (!machineKey) { machineKey = await this.getMachineKey(teammate.machineId); machines.set(teammate.machineId, machineKey); }
             members.push({ teammateId: teammate.id, encryptedDataKey: await wrapChannelKeyForTeammate(key, machineKey) });
         }
-        if (!context.valid()) throw new Error('Account changed');
+        context.assertValid();
         const channel = await api.createChannel(context.credentials, {
             kind, title, userEncryptedDataKey: wrapChannelKeyForAccount(key, context.encryption.contentDataKey), teammates: members,
         });
         // DM creation is idempotent: always use the returned member key, never cache the candidate K.
-        if (!context.valid()) throw new Error('Account changed');
+        context.assertValid();
         storage.getState().applyChannels([channel]);
         return channel;
     };
     openDm = async (teammate: Teammate) => {
         const context = this.context();
         const channel = await api.fetchTeammateDm(context.credentials, teammate.id);
-        if (!context.valid()) throw new Error('Account changed');
+        context.assertValid();
         if (!channel) return this.create('dm', [teammate]);
         storage.getState().applyChannels([channel]);
         return channel;
@@ -79,10 +89,15 @@ export class ChannelSync {
         }
         const key = messages.some(m => m.content.t === 'encrypted') ? await this.key(channel, context.encryption).catch(() => null) : null;
         const cached = storage.getState().channelMessages[channelId] ?? [];
+        const cachedBodies = new Map<string, StoredChannelMessage['body']>();
+        for (const m of cached) {
+            cachedBodies.set(m.id, m.body);
+            if (m.localId) cachedBodies.set(`local:${m.localId}`, m.body);
+        }
         const decrypted: StoredChannelMessage[] = [];
         for (const message of messages) {
-            const previous = cached.find(m => m.id === message.id || (!!message.localId && m.localId === message.localId));
-            const body = previous?.body ?? (message.content.t === 'encrypted' && key ? await decryptChannelMessage(key, message.content) : message.content.t === 'encrypted' ? null : undefined);
+            const previous = cachedBodies.get(message.id) ?? (message.localId ? cachedBodies.get(`local:${message.localId}`) : undefined);
+            const body = previous ?? (message.content.t !== 'encrypted' ? undefined : key ? await decryptChannelMessage(key, message.content) : null);
             decrypted.push({ ...message, body });
         }
         if (context.valid()) storage.getState().applyChannelMessages(channelId, decrypted);
@@ -114,10 +129,7 @@ export class ChannelSync {
             const teammateId = member.teammateId!;
             const snapshot = storage.getState().teammateRuns[teammateId];
             const [runs, tasks] = await Promise.all([fetchTeammateRuns(context.credentials, teammateId), fetchTeammateTasks(context.credentials, teammateId)]);
-            if (!context.valid()) return;
-            storage.setState(state => ({ teammateRuns: { ...state.teammateRuns,
-                [teammateId]: mergeTeammateRunSnapshot(state.teammateRuns[teammateId], runs, snapshot) } }));
-            storage.getState().applyTeammateTaskList(tasks);
+            if (context.valid()) storage.getState().applyTeammateActivity(teammateId, { runs, tasks }, snapshot);
         }));
     };
     loadEarlier = async (id: string): Promise<boolean> => {
@@ -139,7 +151,7 @@ export class ChannelSync {
             taskId: retry ? retry.taskId : taskId ?? null,
             content: retry?.content.t === 'encrypted' ? retry.content : await encryptChannelMessage(await this.key(channel, context.encryption), body),
         };
-        if (!context.valid()) throw new Error('Account changed');
+        context.assertValid();
         const pending: StoredChannelMessage = {
             id: request.localId, channelId: id, seq: 0, localId: request.localId,
             senderType: 'user', senderId: channel.members.find(m => m.memberType === 'user')?.accountId ?? '',
@@ -150,7 +162,7 @@ export class ChannelSync {
         onOptimistic?.();
         try {
             const message = await api.sendChannelMessage(context.credentials, id, request);
-            if (!context.valid()) throw new Error('Account changed');
+            context.assertValid();
             storage.getState().applyChannelMessages(id, [{ ...message, body }]);
             return message;
         } catch (error) {
@@ -177,13 +189,13 @@ export class ChannelSync {
         const context = this.context();
         // Fetch the complete list: profile/list caches need not contain every group.
         const channels = await api.fetchChannels(context.credentials);
-        if (!context.valid()) throw new Error('Account changed');
+        context.assertValid();
         const machineKey = await this.getMachineKey(teammate.machineId);
         for (const channel of channels.filter(c => c.members.some(m => m.teammateId === teammate.id))) {
             const encryptedDataKey = await wrapChannelKeyForTeammate(await this.key(channel, context.encryption), machineKey);
-            if (!context.valid()) throw new Error('Account changed');
+            context.assertValid();
             await api.updateChannelMemberKey(context.credentials, channel.id, teammate.id, { encryptedDataKey });
-            if (!context.valid()) throw new Error('Account changed');
+            context.assertValid();
             // Refresh canonical state so local members keep the new wrapped key.
             const updated = await api.fetchChannel(context.credentials, channel.id);
             if (context.valid()) storage.getState().applyChannels([updated]);

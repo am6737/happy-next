@@ -4,11 +4,8 @@ import { useUnistyles } from 'react-native-unistyles';
 import type { TeammateRun } from 'happy-wire';
 import { formatLastSeen } from '@/utils/sessionUtils';
 import { t } from '@/text';
+import { isTeammateRunCancellable } from '@/sync/teammateRuns';
 import { Action, styles } from './ui';
-
-export function isTeammateRunCancellable(run: TeammateRun): boolean {
-    return run.status === 'queued' || run.status === 'dispatching' || run.status === 'running';
-}
 
 export function TeammateRunRow({ run, now, busy, onOpen, onCancel, openLabel = t('teammates.openSession'), showCancel = true, relativeTime = false }: {
     openLabel?: string;

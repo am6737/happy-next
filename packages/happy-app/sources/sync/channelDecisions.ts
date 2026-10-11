@@ -1,5 +1,8 @@
 import type { StoredChannelMessage } from './channelReducers';
 
+/** An @handle not preceded by a word character; captures the lead character and the handle. */
+const MENTION = /(^|[^\p{L}\p{N}_@-])@([a-z0-9][a-z0-9_-]{1,31})(?![\p{L}\p{N}_-])/gu;
+
 /** The wire reply is just a label. Associate it with the newest unanswered matching decision. */
 export function channelDecisionSelections(messages: StoredChannelMessage[]): Record<string, string> {
     const selections: Record<string, string> = {};
@@ -7,14 +10,18 @@ export function channelDecisionSelections(messages: StoredChannelMessage[]): Rec
     for (const message of messages) {
         if (message.kind === 'decision' && message.body?.options?.length) decisions.push(message);
         if (message.senderType !== 'user' || message.kind !== 'text' || !message.body || message.delivery === 'failed') continue;
-        const decision = [...decisions].reverse().find(m => !selections[m.id] && m.taskId === message.taskId && m.body?.options?.some(option => option.label === message.body?.text));
-        const option = decision?.body?.options?.find(option => option.label === message.body?.text);
-        if (decision && option) selections[decision.id] = option.id;
+        for (let i = decisions.length - 1; i >= 0; i--) {
+            const decision = decisions[i];
+            const option = decision.body?.options?.find(option => option.label === message.body?.text);
+            if (selections[decision.id] || decision.taskId !== message.taskId || !option) continue;
+            selections[decision.id] = option.id;
+            break;
+        }
     }
     return selections;
 }
 export function channelMentions(text: string, members: Array<{ id: string; handle: string }>): string[] {
-    const handles = new Set([...text.matchAll(/(?:^|[^\p{L}\p{N}_@-])@([a-z0-9][a-z0-9_-]{1,31})(?![\p{L}\p{N}_-])/gu)].map(match => match[1]));
+    const handles = new Set([...text.matchAll(MENTION)].map(match => match[2]));
     return members.filter(m => handles.has(m.handle)).map(m => m.id);
 }
 
@@ -22,8 +29,7 @@ export function channelMentions(text: string, members: Array<{ id: string; handl
 export function channelMentionLinks(text: string, members: Array<{ id: string; handle: string }>): string {
     if (members.length === 0) return text;
     const byHandle = new Map(members.map(m => [m.handle, m.id]));
-    return text.replace(/(^|[^\p{L}\p{N}_@-])@([a-z0-9][a-z0-9_-]{1,31})(?![\p{L}\p{N}_-])/gu,
-        (match, lead: string, handle: string) => byHandle.has(handle) ? `${lead}[@${handle}](mention:${encodeURIComponent(byHandle.get(handle)!)})` : match);
+    return text.replace(MENTION, (match, lead: string, handle: string) => byHandle.has(handle) ? `${lead}[@${handle}](mention:${encodeURIComponent(byHandle.get(handle)!)})` : match);
 }
 
 /** Only the latest task decision drives the DM composer. Any successful task reply answers it. */

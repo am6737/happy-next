@@ -17,8 +17,9 @@ import { computeTeammateStats, type TeammateStatsRange } from '@/sync/teammateSt
 import { useHappyAction } from '@/hooks/useHappyAction';
 import { useTeammateProfile } from '@/hooks/useTeammateProfile';
 import { useNavigateToSession } from '@/hooks/useNavigateToSession';
-import { isTeammateRunCancellable } from '@/components/teammates/TeammateRunRow';
-import { Action, styles as shared, TeammateAvatar, TeammateAvailability, teammatePermissionLabel, useTeammateRuntimeText, teammateErrorMessage } from '@/components/teammates/ui';
+import { useTickingNow } from '@/hooks/useTickingNow';
+import { isTeammateRunCancellable } from '@/sync/teammateRuns';
+import { styles as shared, TeammateAvatar, TeammateAvailability, TeammateLoadFallback, useTeammateRuntimeText, teammateErrorMessage } from '@/components/teammates/ui';
 import { ItemList } from '@/components/ItemList';
 import { ItemGroup } from '@/components/ItemGroup';
 import { Item } from '@/components/Item';
@@ -26,8 +27,8 @@ import { Typography } from '@/constants/Typography';
 import { layout } from '@/components/layout';
 import { t } from '@/text';
 
-function RuntimeItem({ title, provider, model, permissionMode, profileId, onPress }: { title: string; provider: Parameters<typeof useTeammateRuntimeText>[0]['provider']; model: string | null; permissionMode: Parameters<typeof useTeammateRuntimeText>[0]['permissionMode']; profileId: string | null; onPress?: () => void }) {
-    const summary = useTeammateRuntimeText({ provider, model, permissionMode, profileId });
+function RuntimeItem({ title, onPress, ...runtime }: Parameters<typeof useTeammateRuntimeText>[0] & { title: string; onPress?: () => void }) {
+    const summary = useTeammateRuntimeText(runtime);
     return <Item title={title} subtitle={summary} subtitleLines={0} onPress={onPress} showChevron={!!onPress} />;
 }
 
@@ -71,69 +72,58 @@ export default React.memo(function TeammateProfileScreen() {
     const [busy, setBusy] = React.useState(false);
     const [actionError, setActionError] = React.useState<string | null>(null);
     const [note, setNote] = React.useState('');
-    const [now, setNow] = React.useState(Date.now);
     const [tab, setTab] = React.useState<Tab>('profile');
     const [range, setRange] = React.useState<TeammateStatsRange>(30);
     const [expanded, setExpanded] = React.useState(false);
     const machine = useMachine(teammate?.machineId ?? '');
     const machineSkills = useMachineSkills(teammate?.machineId);
-    const hasLiveRuns = runs?.some(isTeammateRunCancellable) ?? false;
-    const [heartbeatBusy, heartbeatNow] = useHappyAction(async () => {
+    const liveRun = runs?.filter(isTeammateRunCancellable).sort((a, b) => b.queuedAt - a.queuedAt)[0];
+    const now = useTickingNow(!!liveRun);
+    const trigger = (start: typeof triggerHeartbeat) => async () => {
         if (!credentials || teammate?.status !== 'active') return;
-        try { storage.getState().applyTeammateRun((await triggerHeartbeat(credentials, id)).run); }
+        try { storage.getState().applyTeammateRun((await start(credentials, id)).run); }
         catch (error) { setActionError(teammateErrorMessage(error)); }
-    });
-    const [dreamingBusy, dreamingNow] = useHappyAction(async () => {
-        if (!credentials || teammate?.status !== 'active') return;
-        try { storage.getState().applyTeammateRun((await triggerDreaming(credentials, id)).run); }
-        catch (error) { setActionError(teammateErrorMessage(error)); }
-    });
-    React.useEffect(() => {
-        setNow(Date.now());
-        if (!hasLiveRuns) return;
-        const timer = setInterval(() => setNow(Date.now()), 1000);
-        return () => clearInterval(timer);
-    }, [hasLiveRuns]);
-    const runNow = async () => {
-        if (!credentials || !teammate || teammate.status !== 'active' || busy) return;
+    };
+    const [heartbeatBusy, heartbeatNow] = useHappyAction(trigger(triggerHeartbeat));
+    const [dreamingBusy, dreamingNow] = useHappyAction(trigger(triggerDreaming));
+    /** Runs one profile action at a time; failures show inline. */
+    const withBusy = async (work: () => Promise<void>, errorMessage = teammateErrorMessage) => {
         setBusy(true); setActionError(null);
-        try {
+        try { await work(); }
+        catch (error) { setActionError(errorMessage(error)); }
+        finally { setBusy(false); }
+    };
+    const runNow = () => {
+        if (!credentials || !teammate || teammate.status !== 'active' || busy) return;
+        return withBusy(async () => {
             const { run } = await startTeammateRun(credentials, id, { ...(note.trim() ? { note: note.trim() } : {}) });
             storage.getState().applyTeammateRun(run);
             setNote('');
-        } catch (error) { setActionError(teammateErrorMessage(error)); }
-        finally { setBusy(false); }
+        });
     };
-    const cancelRun = async (run: TeammateRun) => {
+    const cancelRun = (run: TeammateRun) => {
         if (!credentials || busy || !isTeammateRunCancellable(run)) return;
-        setBusy(true); setActionError(null);
-        try {
+        return withBusy(async () => {
             if (!await Modal.confirm(t('teammates.cancelRun'), t('teammates.cancelRunConfirm'), { confirmText: t('teammates.cancelRun'), destructive: true })) return;
-            const result = await cancelTeammateRun(credentials, run.id);
-            storage.getState().applyTeammateRun(result.run);
-        } catch (error) { setActionError(teammateErrorMessage(error)); }
-        finally { setBusy(false); }
+            storage.getState().applyTeammateRun((await cancelTeammateRun(credentials, run.id)).run);
+        });
     };
-    const message = async () => {
+    const message = () => {
         if (!teammate || busy) return;
-        setBusy(true); setActionError(null);
-        try {
+        return withBusy(async () => {
             const channel = await sync.channels.openDm(teammate);
             router.push(`/channels/${channel.id}`);
-        } catch { setActionError(t('channels.createError')); }
-        finally { setBusy(false); }
+        }, () => t('channels.createError'));
     };
     const act = async (archive: boolean) => {
         if (!credentials || !teammate || busy) return;
         if (archive && !await Modal.confirm(t('teammates.archive'), t('teammates.archiveConfirm'), { confirmText: t('teammates.archive'), destructive: true })) return;
-        setBusy(true); setActionError(null);
-        try {
+        await withBusy(async () => {
             const updated = archive ? await archiveTeammate(credentials, id) : await updateTeammate(credentials, id, { status: teammate.status === 'active' ? 'paused' : 'active' });
             storage.getState().applyTeammates([updated]);
-        } catch (error) { setActionError(teammateErrorMessage(error)); }
-        finally { setBusy(false); }
+        });
     };
-    if (!teammate) return <View style={[shared.screen, { padding: 16, gap: 12 }]}>{loading && <ActivityIndicator />}{error && <Text style={shared.error}>{error}</Text>}<Action title={t('common.retry')} onPress={refresh} /></View>;
+    if (!teammate) return <TeammateLoadFallback loading={loading} error={error} refresh={refresh} />;
     const activeTasks = (tasks ?? []).filter(task => !['done', 'cancelled'].includes(task.status));
     const pastTasks = (tasks ?? []).filter(task => ['done', 'cancelled'].includes(task.status));
     const budget = spend ? spend.budgetUsd : teammate.monthlyBudgetUsd;
@@ -142,7 +132,6 @@ export default React.memo(function TeammateProfileScreen() {
     const isActive = teammate.status === 'active';
     const canAct = !!credentials && isActive;
     const editRuntime = teammate.status !== 'archived' ? () => router.push(`/teammates/${encodeURIComponent(id)}/edit?step=runtime`) : undefined;
-    const liveRun = runs?.filter(isTeammateRunCancellable).sort((a, b) => b.queuedAt - a.queuedAt)[0];
     const liveTask = liveRun?.taskId ? tasks?.find(task => task.id === liveRun.taskId) : undefined;
     const openLive = liveRun ? (liveRun.sessionId ? () => navigateToSession(liveRun.sessionId!) : liveTask ? () => router.push(`/teammates/tasks/${encodeURIComponent(liveTask.id)}`) : undefined) : undefined;
     const stats = computeTeammateStats(runs, range, now);
@@ -328,8 +317,6 @@ const styles = StyleSheet.create((theme) => ({
     link: { ...Typography.default('semiBold'), fontSize: 15, color: theme.colors.textLink },
     warning: { color: theme.colors.warningCritical },
     block: { paddingHorizontal: 16, paddingVertical: 12, gap: 8 },
-    chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-    chip: { ...Typography.default(), fontSize: 13, color: theme.colors.text, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, overflow: 'hidden', backgroundColor: theme.colors.groupped.background },
     dot: { width: 8, height: 8, borderRadius: 4 },
     track: { height: 6, borderRadius: 3, backgroundColor: theme.colors.divider, overflow: 'hidden' },
     fill: { height: 6 },

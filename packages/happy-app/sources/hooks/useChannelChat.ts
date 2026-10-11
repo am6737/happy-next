@@ -5,7 +5,7 @@ import { useIsFocused } from '@react-navigation/native';
 import { storage } from '@/sync/storage';
 import { sync } from '@/sync/sync';
 import type { StoredChannelMessage } from '@/sync/channelReducers';
-import { delay } from '@/utils/time';
+import { InvalidateSync } from '@/utils/sync';
 
 /**
  * Keeps an open channel live while its screen is focused.
@@ -25,20 +25,13 @@ export function useChannelChat(id: string, messages: StoredChannelMessage[]): bo
     const [active, setActive] = React.useState(AppState.currentState === 'active');
 
     useFocusEffect(React.useCallback(() => {
-        let cancelled = false;
         const stop = sync.channels.watch(id);
-        void (async () => {
-            for (let failures = 0; !cancelled; failures++) {
-                try {
-                    await Promise.all([sync.channels.load(id), sync.refreshTeammates()]);
-                    if (!cancelled) setLoaded(true);
-                    return;
-                } catch {
-                    await delay(Math.min(30_000, 1000 * 2 ** failures));
-                }
-            }
-        })();
-        return () => { cancelled = true; stop(); };
+        const loader = new InvalidateSync(async () => {
+            await Promise.all([sync.channels.load(id), sync.refreshTeammates()]);
+            setLoaded(true);
+        });
+        loader.invalidate();
+        return () => { loader.stop(); stop(); };
     }, [id]));
 
     React.useEffect(() => {

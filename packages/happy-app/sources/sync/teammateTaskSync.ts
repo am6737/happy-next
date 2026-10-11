@@ -29,16 +29,16 @@ export class TeammateTaskSync {
         const credentials = this.credentials(), server = getServerUrl();
         const baseline = storage.getState().teammateTaskDetails[id];
         const detail = await fetchTeammateTaskDetail(credentials, id);
-        if (credentials !== this.credentials() || server !== getServerUrl()) return;
+        if (!this.isCurrent(credentials, server)) return;
         storage.getState().applyTeammateTaskDetail(detail, baseline);
         if (!storage.getState().teammates[detail.task.teammateId]) {
             const teammate = await fetchTeammate(credentials, detail.task.teammateId);
-            if (credentials === this.credentials() && server === getServerUrl()) storage.getState().applyTeammates([teammate]);
+            if (this.isCurrent(credentials, server)) storage.getState().applyTeammates([teammate]);
         }
     }
     async loadResource(resourceId: string) {
         const credentials = this.credentials(), server = getServerUrl();
         const tasks = await fetchTeammateTasksByResource(credentials, resourceId);
-        if (credentials === this.credentials() && server === getServerUrl()) storage.getState().applyTeammateTaskList(tasks, resourceId);
+        if (this.isCurrent(credentials, server)) storage.getState().applyTeammateTaskList(tasks, resourceId);
     }
 }

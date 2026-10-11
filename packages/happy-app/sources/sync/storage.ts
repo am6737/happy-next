@@ -5,6 +5,15 @@ import { isSessionVisibleInList } from './sessionListFilter';
 import { emptyChannelState, mergeChannels, reduceChannelMessages, reduceChannelRead, type StoredChannelMessage } from './channelReducers';
 import type { Channel } from 'happy-wire';
 import { mergeTeammateRunSnapshot, upsertTeammateRun } from './teammateRuns';
+/** Account-scoped Agent and channel state, cleared whenever the account or server changes. */
+export const emptyTeammateState = {
+    ...emptyChannelState,
+    teammates: {} as Record<string, Teammate>,
+    teammatesLoaded: false,
+    teammateRuns: {} as Record<string, TeammateRun[]>,
+    ...emptyTeammateTaskState,
+    teammateSpend: {} as Record<string, TeammateSpend>,
+};
 import { create } from "zustand";
 import { useShallow } from 'zustand/react/shallow'
 import { Session, SessionDraft, AskUserQuestionDraft, Machine, GitStatus, PendingMessage, SessionCapabilities } from "./storageTypes";
@@ -156,7 +165,7 @@ interface StorageState {
     teammateSpend: Record<string, TeammateSpend>;
     applyTeammates: (teammates: Teammate[], loaded?: boolean) => void;
     applyTeammateRun: (run: TeammateRun) => void;
-    applyTeammateActivity: (id: string, runs: TeammateRun[], tasks: TeammateTask[], spend: TeammateSpend, runsAtRequest?: TeammateRun[]) => void;
+    applyTeammateActivity: (id: string, activity: { runs: TeammateRun[]; tasks: TeammateTask[]; spend?: TeammateSpend }, runsAtRequest?: TeammateRun[]) => void;
     machines: Record<string, Machine>;
     // Registered repositories per machine (loaded from UserKVStore)
     registeredRepos: Record<string, RegisteredRepo[]>;
@@ -494,16 +503,12 @@ export const storage = create<StorageState>()((set, get) => {
         profile,
         sessions: {},
         sessionCapabilities: {},
-        ...emptyChannelState,
+        ...emptyTeammateState,
         applyChannels: (channels, loaded = false, atRequest) => set(state => ({
             channels: mergeChannels(state.channels, channels, atRequest), channelsLoaded: state.channelsLoaded || loaded,
         })),
         applyChannelMessages: (id, messages) => set(state => reduceChannelMessages(state, id, messages)),
         markChannelReadLocal: (id, seq) => set(state => ({ channels: reduceChannelRead(state.channels, id, seq) })),
-        teammates: {},
-        teammatesLoaded: false,
-        teammateRuns: {},
-        ...emptyTeammateTaskState,
         applyTeammateTask: task => set(state => reduceTeammateTask(state, task)),
         applyTeammateTaskDetail: (detail, baseline) => set(state => reduceTeammateTaskDetail(state, detail, baseline)),
         applyTeammateTaskList: (tasks, resourceId) => set(state => {
@@ -512,22 +517,25 @@ export const storage = create<StorageState>()((set, get) => {
             if (resourceId && !next.teammateTaskResourceIndex[resourceId]) next.teammateTaskResourceIndex = { ...next.teammateTaskResourceIndex, [resourceId]: [] };
             return next;
         }),
-        teammateSpend: {},
         applyTeammates: (teammates, loaded = false) => set(state => {
+            const newer = teammates.filter(teammate => {
+                const current = state.teammates[teammate.id];
+                return current !== teammate && (!current || current.updatedAt <= teammate.updatedAt);
+            });
+            // Keep the map reference when nothing changed so subscribers don't re-render on every refresh.
+            if (newer.length === 0 && (state.teammatesLoaded || !loaded)) return state;
             const merged = { ...state.teammates };
-            for (const teammate of teammates) {
-                if (!merged[teammate.id] || merged[teammate.id].updatedAt <= teammate.updatedAt) merged[teammate.id] = teammate;
-            }
+            for (const teammate of newer) merged[teammate.id] = teammate;
             return { teammates: merged, teammatesLoaded: state.teammatesLoaded || loaded };
         }),
         applyTeammateRun: run => set(state => ({
             teammateTaskDetails: reduceTeammateTaskRun(state.teammateTaskDetails, run),
             teammateRuns: { ...state.teammateRuns, [run.teammateId]: upsertTeammateRun(state.teammateRuns[run.teammateId], run) },
         })),
-        applyTeammateActivity: (id, runs, tasks, spend, runsAtRequest) => set(state => ({
+        applyTeammateActivity: (id, { runs, tasks, spend }, runsAtRequest) => set(state => ({
             teammateRuns: { ...state.teammateRuns, [id]: mergeTeammateRunSnapshot(state.teammateRuns[id], runs, runsAtRequest) },
             ...tasks.reduce((next, task) => reduceTeammateTask(next, task), { teammateTasks: state.teammateTasks, teammateTaskDetails: state.teammateTaskDetails, teammateTaskResourceIndex: state.teammateTaskResourceIndex }),
-            teammateSpend: { ...state.teammateSpend, [id]: spend },
+            ...(spend ? { teammateSpend: { ...state.teammateSpend, [id]: spend } } : {}),
         })),
         machines: {},
         registeredRepos: cachedRepos.repos as Record<string, RegisteredRepo[]>,
@@ -2813,11 +2821,13 @@ export function useDootaskTaskDetailCache(taskId: number) {
 
 // Teammate profiles and activity are transient account-scoped metadata.
 export function useTeammates(): Teammate[] {
-    return storage(useShallow(state => Object.values(state.teammates).sort((a, b) => b.createdAt - a.createdAt)));
+    const teammates = storage(state => state.teammates);
+    return React.useMemo(() => Object.values(teammates).sort((a, b) => b.createdAt - a.createdAt), [teammates]);
 }
 export function useTeammatesLoaded(): boolean { return storage(state => state.teammatesLoaded); }
 export function useTeammate(id: string): Teammate | null { return storage(state => state.teammates[id] ?? null); }
 
 export function useChannels(): Channel[] {
-    return storage(useShallow(state => Object.values(state.channels).sort((a, b) => b.lastMessageAt - a.lastMessageAt)));
+    const channels = storage(state => state.channels);
+    return React.useMemo(() => Object.values(channels).sort((a, b) => b.lastMessageAt - a.lastMessageAt), [channels]);
 }

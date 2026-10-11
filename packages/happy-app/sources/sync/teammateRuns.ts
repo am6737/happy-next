@@ -1,16 +1,21 @@
 import type { TeammateRun } from 'happy-wire';
 
+const MAX_RUNS = 50;
+const newestRuns = (runs: TeammateRun[]) => runs.sort((a, b) => b.queuedAt - a.queuedAt || a.id.localeCompare(b.id)).slice(0, MAX_RUNS);
+
 const statusOrder: Record<TeammateRun['status'], number> = {
     queued: 0, dispatching: 1, running: 2, completed: 3, failed: 3, cancelled: 3,
 };
+
+export function isTeammateRunCancellable(run: TeammateRun): boolean {
+    return run.status === 'queued' || run.status === 'dispatching' || run.status === 'running';
+}
 
 export function upsertTeammateRun(runs: TeammateRun[] = [], run: TeammateRun): TeammateRun[] {
     const existing = runs.find(item => item.id === run.id);
     // A POST response can arrive after a later socket transition. Retries get new IDs.
     if (existing && statusOrder[existing.status] > statusOrder[run.status]) return runs;
-    return [...runs.filter(item => item.id !== run.id), run]
-        .sort((a, b) => b.queuedAt - a.queuedAt || a.id.localeCompare(b.id))
-        .slice(0, 50);
+    return newestRuns([...runs.filter(item => item.id !== run.id), run]);
 }
 
 export function mergeTeammateRunSnapshot(current: TeammateRun[] = [], snapshot: TeammateRun[], baseline: TeammateRun[] = []): TeammateRun[] {
@@ -20,5 +25,5 @@ export function mergeTeammateRunSnapshot(current: TeammateRun[] = [], snapshot: 
     for (const run of current) {
         if (beforeRequest.get(run.id) !== run) merged = upsertTeammateRun(merged, run);
     }
-    return [...merged].sort((a, b) => b.queuedAt - a.queuedAt || a.id.localeCompare(b.id)).slice(0, 50);
+    return newestRuns([...merged]);
 }

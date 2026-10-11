@@ -1,14 +1,12 @@
 import { TeammateTaskSync } from './teammateTaskSync';
-import { emptyTeammateTaskState } from './teammateTasks';
 import { ChannelSync } from './channelSync';
-import { emptyChannelState } from './channelReducers';
 import { fetchTeammates } from './apiTeammates';
 import Constants from 'expo-constants';
 import { apiSocket } from '@/sync/apiSocket';
 import { AuthCredentials } from '@/auth/tokenStorage';
 import { Encryption } from '@/sync/encryption/encryption';
 import { decodeBase64, encodeBase64 } from '@/encryption/base64';
-import { storage, getSession } from './storage';
+import { storage, getSession, emptyTeammateState } from './storage';
 import { SessionsBootstrapMachine } from './sessionsBootstrapMachine';
 import {
     ApiEphemeralUpdateSchema,
@@ -286,8 +284,8 @@ class Sync {
     readonly tasks = new TeammateTaskSync(() => this.credentials);
     readonly channels = new ChannelSync(() => ({ credentials: this.credentials, encryption: this.encryption }), async id => {
         // Keys are exactly those opened from Machine.dataEncryptionKey by fetchMachines.
-        let key: Uint8Array | null = null;
-        await this.fetchMachines(keys => { key = keys.get(id) ?? null; });
+        let key = this.machineDataKeys.get(id) ?? null;
+        if (!key) await this.fetchMachines(keys => { key = keys.get(id) ?? null; });
         if (!key) throw new Error('Machine data encryption key unavailable');
         return key;
     });
@@ -430,9 +428,7 @@ class Sync {
                 }
                 this.profileSync.invalidate();
                 this.machinesSync.invalidate();
-                if (storage.getState().teammatesLoaded) this.teammatesSync.invalidate();
-                if (storage.getState().channelsLoaded) this.channelsSync.invalidate();
-                this.tasks.refresh();
+                this.invalidateTeammateData();
                 this.pushTokenSync.invalidate();
                 this.sessionsSync.invalidate();
                 this.sessionAppearanceSync.invalidate();
@@ -513,6 +509,13 @@ class Sync {
         });
     }
 
+    /** Refreshes only the Agent data a screen has already loaded. */
+    private invalidateTeammateData() {
+        if (storage.getState().teammatesLoaded) this.teammatesSync.invalidate();
+        if (storage.getState().channelsLoaded) this.channelsSync.invalidate();
+        this.tasks.refresh();
+    }
+
     refreshTeammates = async () => {
         const credentials = this.credentials;
         if (!credentials) return;
@@ -523,7 +526,7 @@ class Sync {
     };
 
     async create(credentials: AuthCredentials, encryption: Encryption) {
-        storage.setState({ ...emptyChannelState, teammates: {}, teammatesLoaded: false, teammateRuns: {}, ...emptyTeammateTaskState, teammateSpend: {} });
+        storage.setState(emptyTeammateState);
         this.machineDataKeys.clear();
         this.credentials = credentials;
         this.encryption = encryption;
@@ -546,7 +549,7 @@ class Sync {
     async restore(credentials: AuthCredentials, encryption: Encryption) {
         // NOTE: No awaiting anything here, we're restoring from a disk (ie app restarted)
         // Purchases sync is invalidated in #init() and will complete asynchronously
-        storage.setState({ ...emptyChannelState, teammates: {}, teammatesLoaded: false, teammateRuns: {}, ...emptyTeammateTaskState, teammateSpend: {} });
+        storage.setState(emptyTeammateState);
         this.machineDataKeys.clear();
         this.credentials = credentials;
         this.encryption = encryption;
@@ -4331,9 +4334,7 @@ class Sync {
             log.log('🔌 Socket reconnected');
             this.sessionsSync.invalidate();
             this.machinesSync.invalidate();
-            if (storage.getState().teammatesLoaded) this.teammatesSync.invalidate();
-            if (storage.getState().channelsLoaded) this.channelsSync.invalidate();
-            this.tasks.refresh();
+            this.invalidateTeammateData();
             log.log('🔌 Socket reconnected: Invalidating artifacts sync');
             this.artifactsSync.invalidate();
             this.friendsSync.invalidate();
@@ -5622,7 +5623,7 @@ async function syncInit(credentials: AuthCredentials, restore: boolean) {
         clearGithubSession();
         const teammatesLoaded = storage.getState().teammatesLoaded;
         const channelsLoaded = storage.getState().channelsLoaded;
-        storage.setState({ ...emptyChannelState, teammates: {}, teammatesLoaded: false, teammateRuns: {}, ...emptyTeammateTaskState, teammateSpend: {} });
+        storage.setState(emptyTeammateState);
         apiSocket.updateEndpoint(serverUrl);
         if (teammatesLoaded) sync.refreshTeammates().catch(error => log.log(`Failed to refresh teammates after server change: ${error}`));
         if (channelsLoaded) sync.channels.refresh().catch(error => log.log(`Failed to refresh channels after server change: ${error}`));

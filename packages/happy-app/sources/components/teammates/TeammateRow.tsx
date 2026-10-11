@@ -1,6 +1,7 @@
 import React from 'react';
 import { Text, View } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
+import { useRouter } from 'expo-router';
 import type { Teammate } from 'happy-wire';
 import { Item } from '@/components/Item';
 import { storage, useMachine } from '@/sync/storage';
@@ -11,8 +12,9 @@ import { t } from '@/text';
 import { TeammateAvatar } from './ui';
 
 /** One roster row: avatar with presence, name and role; a status label only when it is worth noticing. */
-export function TeammateRow({ teammate, onPress }: { teammate: Teammate; onPress: () => void }) {
+export const TeammateRow = React.memo(function TeammateRow({ teammate }: { teammate: Teammate }) {
     const { theme } = useUnistyles();
+    const router = useRouter();
     const machine = useMachine(teammate.machineId);
     const runs = storage(state => state.teammateRuns[teammate.id]);
     const tasks = storage(state => state.teammateTasks[teammate.id]);
@@ -43,10 +45,10 @@ export function TeammateRow({ teammate, onPress }: { teammate: Teammate; onPress
                 </View>
             ) : undefined}
             showChevron
-            onPress={onPress}
+            onPress={() => router.push(`/teammates/${teammate.id}`)}
         />
     );
-}
+});
 
 const styles = StyleSheet.create((theme) => ({
     archived: {

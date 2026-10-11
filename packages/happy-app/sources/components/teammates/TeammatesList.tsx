@@ -73,7 +73,7 @@ export function TeammatesList() {
             )) : (
                 <ItemGroup>
                     {visible.map(teammate => (
-                        <TeammateRow key={teammate.id} teammate={teammate} onPress={() => router.push(`/teammates/${teammate.id}`)} />
+                        <TeammateRow key={teammate.id} teammate={teammate} />
                     ))}
                     {archivedCount > 0 && (
                         <Item

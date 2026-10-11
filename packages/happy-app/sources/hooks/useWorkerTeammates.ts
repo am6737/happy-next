@@ -8,11 +8,10 @@ import type { Session } from '@/sync/storageTypes';
 
 /** Session lists also load Agent avatars when the user has not opened the Agents tab. */
 export function useWorkerTeammates(sessions: Session[]) {
-    const teammates = storage(state => state.teammates);
-    const missingAgent = sessions.some(session => {
+    const missingAgent = storage(state => sessions.some(session => {
         const id = workerTeammateId(session.metadata);
-        return !!id && !teammates[id];
-    });
+        return !!id && !state.teammates[id];
+    }));
     useFocusEffect(React.useCallback(() => {
         if (!missingAgent) return;
         const loader = new InvalidateSync(sync.refreshTeammates);
