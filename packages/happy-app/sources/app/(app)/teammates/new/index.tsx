@@ -1,6 +1,6 @@
 import React from 'react';
-import { CreateMethodChooser } from '@/components/teammates/CreateMethodChooser';
+import { TeammateCreateStart } from '@/components/teammates/TeammateCreateStart';
 
 export default React.memo(function NewTeammateScreen() {
-    return <CreateMethodChooser />;
+    return <TeammateCreateStart />;
 });

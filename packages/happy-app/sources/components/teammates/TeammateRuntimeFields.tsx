@@ -6,9 +6,10 @@ import {
     buildClaudeModelMode, buildCodexModelMode, claudeAlways1M, claudeBaseFamily, claudeFamilyWith1M, claudeHas1MOptIn, claudeSupportsFastMode,
     formatReasoningEffortLabel, getClaudeReasoningOptions, getCodexReasoningOptions, getModelFamilyOptions, getPermissionModesForAgent,
     isModelModeForAgent, parseClaudeModelMode, parseCodexModelMode, splitFastModeSuffix,
-    type PermissionMode, type TeammateWorkerProvider,
+    type TeammateWorkerProvider,
 } from 'happy-wire';
 import { useSetting } from '@/sync/storage';
+import type { TeammateRuntimeValue } from '@/sync/teammateFormModel';
 import { DEFAULT_PROFILES, getBuiltInProfile } from '@/sync/profileUtils';
 import { Typography } from '@/constants/Typography';
 import { t } from '@/text';
@@ -17,14 +18,7 @@ import { PillGroup, Segmented, SwitchRow } from './TeammateFormFields';
 
 const MACHINE_CONFIG = '';
 
-export type TeammateRuntimeValue<P extends TeammateWorkerProvider = TeammateWorkerProvider> = {
-    provider: P;
-    /** Model catalog mode, optionally `-fast`; '' means the provider default. */
-    model: string;
-    permissionMode: PermissionMode;
-    /** '' means the machine's own configuration. */
-    profileId: string;
-};
+export type { TeammateRuntimeValue };
 
 /**
  * Provider, model (family, reasoning effort, 1M context, fast), permission mode and environment profile for one
@@ -32,7 +26,7 @@ export type TeammateRuntimeValue<P extends TeammateWorkerProvider = TeammateWork
  * values) stay selectable so editing an Agent never silently changes its model.
  */
 export function TeammateRuntimeFields<P extends TeammateWorkerProvider>({ title, hint, providers, value, onChange }: {
-    title: string; hint: string; providers: readonly P[]; value: TeammateRuntimeValue<P>; onChange: (value: TeammateRuntimeValue<P>) => void;
+    title?: string; hint: string; providers: readonly P[]; value: TeammateRuntimeValue<P>; onChange: (value: TeammateRuntimeValue<P>) => void;
 }) {
     const customProfiles = useSetting('profiles');
     const { provider } = value;
@@ -69,7 +63,7 @@ export function TeammateRuntimeFields<P extends TeammateWorkerProvider>({ title,
     return (
         <View style={styles.section}>
             <View style={styles.header}>
-                <Text style={styles.title}>{title}</Text>
+                {title && <Text style={styles.title}>{title}</Text>}
                 <Text style={styles.hint}>{hint}</Text>
             </View>
             <Segmented

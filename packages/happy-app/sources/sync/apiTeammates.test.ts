@@ -130,7 +130,7 @@ describe('teammate API', () => {
         respond({ spend });
         expect(await fetchTeammateSpend(credentials, profile.id)).toEqual(spend);
     });
-    it.each(['handle_taken', 'machine_not_found', 'archived'] as const)('surfaces %s immediately without retrying', async code => {
+    it.each(['name_taken', 'machine_not_found', 'archived'] as const)('surfaces %s immediately without retrying', async code => {
         respond({ error: code }, code === 'machine_not_found' ? 400 : 409);
         await expect(createTeammate(credentials, { name: 'Atlas', handle: 'atlas', machineId: 'machine' })).rejects.toMatchObject({ name: 'TeammateApiError', code });
         expect(fetchMock).toHaveBeenCalledTimes(1);

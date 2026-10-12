@@ -16,7 +16,7 @@ export function governanceSystemMessage(content: ChannelMessageContent): Governa
         case 'budget_resumed':
             return { code: content.code, taskId: null };
         case 'task_self_assigned':
-            return { code: content.code, agent: typeof data.byHandle === 'string' && data.byHandle ? `@${data.byHandle}` : '',
+            return { code: content.code, agent: typeof data.byName === 'string' && data.byName ? data.byName : typeof data.byHandle === 'string' && data.byHandle ? `@${data.byHandle}` : '',
                 title: typeof data.title === 'string' ? data.title : '', taskId: typeof data.taskId === 'string' && data.taskId ? data.taskId : null };
         case 'run_failed':
             return { code: content.code, name: typeof data.name === 'string' ? data.name : '',

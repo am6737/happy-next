@@ -61,7 +61,7 @@ export function ChannelList({ bare = false }: { bare?: boolean }) {
             {channels.map(channel => {
                 const members = channel.members.flatMap(m => m.teammateId && teammates[m.teammateId] ? [teammates[m.teammateId]] : []);
                 const unread = channelUnread(channel, accountId);
-                const subtitle = channel.kind === 'dm' ? (members[0] ? `@${members[0].handle}` : '') : members.map(m => m.name).join(', ');
+                const subtitle = channel.kind === 'dm' ? (members[0]?.role ?? '') : members.map(m => m.name).join(', ');
                 return (
                     <Item
                         key={channel.id}

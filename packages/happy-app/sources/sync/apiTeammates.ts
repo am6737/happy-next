@@ -9,7 +9,7 @@ import { AuthCredentials } from '@/auth/tokenStorage';
 import { backoff } from '@/utils/time';
 import { getServerUrl } from './serverConfig';
 
-export type TeammateErrorCode = 'handle_taken' | 'machine_not_found' | 'archived' | 'invalid_request' | 'invalid_timezone' | 'not_found' | 'unknown';
+export type TeammateErrorCode = 'name_taken' | 'machine_not_found' | 'archived' | 'invalid_request' | 'invalid_timezone' | 'not_found' | 'unknown';
 export class TeammateApiError extends Error {
     constructor(public readonly code: TeammateErrorCode, public readonly status: number) {
         super(code);
@@ -41,7 +41,7 @@ async function request<T>(credentials: AuthCredentials, path: string, schema: z.
     const { response } = result;
     if (!response.ok) {
         const data = await response.json().catch(() => ({}));
-        const codes: TeammateErrorCode[] = ['handle_taken', 'machine_not_found', 'archived', 'invalid_request', 'invalid_timezone', 'not_found'];
+        const codes: TeammateErrorCode[] = ['name_taken', 'machine_not_found', 'archived', 'invalid_request', 'invalid_timezone', 'not_found'];
         throw new TeammateApiError(codes.includes(data.error) ? data.error : 'unknown', response.status);
     }
     return schema.parse(await response.json());

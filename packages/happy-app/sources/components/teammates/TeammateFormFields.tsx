@@ -1,6 +1,5 @@
 import React from 'react';
-import { ActivityIndicator, Pressable, Switch, Text, TextInput, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Pressable, Switch, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import type { Machine } from '@/sync/storageTypes';
@@ -8,36 +7,7 @@ import { isMachineOnline } from '@/utils/machineUtils';
 import { Typography } from '@/constants/Typography';
 import { t } from '@/text';
 
-type IconName = React.ComponentProps<typeof Ionicons>['name'];
-
 export const AVATAR_COLORS = ['#5B6EF5', '#8B5CF6', '#EC4899', '#EF4444', '#F97316', '#EAB308', '#22C55E', '#14B8A6', '#0EA5E9', '#64748B'];
-
-export function FormSection({ icon, title, hint, expanded, onToggle, children }: {
-    icon: IconName; title: string; hint: string; expanded?: boolean; onToggle?: () => void; children: React.ReactNode;
-}) {
-    const { theme } = useUnistyles();
-    const open = expanded ?? true;
-    const header = (
-        <View style={styles.sectionHeader}>
-            <View style={styles.sectionIcon}><Ionicons name={icon} size={18} color={theme.colors.textLink} /></View>
-            <View style={styles.sectionTitles}>
-                <Text style={styles.sectionTitle}>{title}</Text>
-                <Text style={styles.sectionHint}>{hint}</Text>
-            </View>
-            {onToggle && <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={20} color={theme.colors.textSecondary} />}
-        </View>
-    );
-    return (
-        <View style={styles.section}>
-            {onToggle ? (
-                <Pressable accessibilityRole="button" accessibilityLabel={title} accessibilityState={{ expanded: open }} onPress={onToggle}>
-                    {header}
-                </Pressable>
-            ) : header}
-            {open && <View style={styles.sectionBody}>{children}</View>}
-        </View>
-    );
-}
 
 export function FieldShell({ label, hint, error, children }: { label?: string; hint?: string; error?: string; children: React.ReactNode }) {
     return (
@@ -50,7 +20,7 @@ export function FieldShell({ label, hint, error, children }: { label?: string; h
     );
 }
 
-export function TextField({ label, hideLabel = false, value, onChange, placeholder, hint, error, prefix, multiline = false, tall = false, editable = true, numeric = false, onSubmit }: {
+function TextField({ label, hideLabel = false, value, onChange, placeholder, hint, error, prefix, multiline = false, tall = false, editable = true, numeric = false, onSubmit }: {
     label: string; hideLabel?: boolean; value: string; onChange: (value: string) => void; placeholder?: string; hint?: string; error?: string;
     prefix?: string; multiline?: boolean; tall?: boolean; editable?: boolean; numeric?: boolean; onSubmit?: () => void;
 }) {
@@ -284,220 +254,7 @@ export function MachinePicker({ machines, value, onChange, error, label }: {
     );
 }
 
-export function Stepper({ label, value, onChange, min, max, hint, error }: {
-    label: string; value: string; onChange: (value: string) => void; min: number; max: number; hint?: string; error?: string;
-}) {
-    const { theme } = useUnistyles();
-    const current = Number(value) || min;
-    const step = (delta: number) => onChange(String(Math.min(max, Math.max(min, current + delta))));
-    return (
-        <FieldShell label={label} hint={hint} error={error}>
-            <View style={styles.stepper}>
-                <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`${label} −`}
-                    accessibilityState={{ disabled: current <= min }}
-                    disabled={current <= min}
-                    onPress={() => step(-1)}
-                    style={[styles.iconButton, current <= min && styles.disabled]}
-                >
-                    <Ionicons name="remove" size={18} color={theme.colors.text} />
-                </Pressable>
-                <Text style={styles.stepperValue}>{value}</Text>
-                <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`${label} +`}
-                    accessibilityState={{ disabled: current >= max }}
-                    disabled={current >= max}
-                    onPress={() => step(1)}
-                    style={[styles.iconButton, current >= max && styles.disabled]}
-                >
-                    <Ionicons name="add" size={18} color={theme.colors.text} />
-                </Pressable>
-            </View>
-        </FieldShell>
-    );
-}
-
-/** Selectable pill used for suggested answers and examples. */
-export function ChoiceChip({ label, selected = false, icon, onPress, disabled = false }: {
-    label: string; selected?: boolean; icon?: IconName; onPress: () => void; disabled?: boolean;
-}) {
-    const { theme } = useUnistyles();
-    return (
-        <Pressable
-            accessibilityRole="button"
-            accessibilityState={{ selected, disabled }}
-            disabled={disabled}
-            onPress={onPress}
-            style={({ pressed }) => [styles.choice, selected && styles.choiceSelected, (pressed || disabled) && styles.disabled]}
-        >
-            {icon && <Ionicons name={icon} size={14} color={selected ? theme.colors.textLink : theme.colors.textSecondary} />}
-            <Text style={[styles.choiceText, selected && styles.choiceTextSelected]}>{label}</Text>
-        </Pressable>
-    );
-}
-
-/** Sticky bottom bar for wizard actions, padded for the home indicator. */
-export function FooterBar({ error, children }: { error?: string | null; children: React.ReactNode }) {
-    const insets = useSafeAreaInsets();
-    return (
-        <View style={[styles.footer, { paddingBottom: insets.bottom + 12 }]}>
-            <View style={styles.footerInner}>
-                {error && <Text accessibilityRole="alert" style={styles.footerError}>{error}</Text>}
-                <View style={styles.footerActions}>{children}</View>
-            </View>
-        </View>
-    );
-}
-
-export function ActionButton({ label, onPress, kind = 'primary', disabled = false, loading = false, grow = true }: {
-    label: string; onPress: () => void; kind?: 'primary' | 'secondary'; disabled?: boolean; loading?: boolean; grow?: boolean;
-}) {
-    const { theme } = useUnistyles();
-    const primary = kind === 'primary';
-    return (
-        <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={label}
-            accessibilityState={{ disabled: disabled || loading }}
-            disabled={disabled || loading}
-            onPress={onPress}
-            style={({ pressed }) => [
-                styles.action,
-                primary ? styles.actionPrimary : styles.actionSecondary,
-                grow && styles.actionGrow,
-                disabled && styles.actionDisabled,
-                pressed && styles.actionPressed,
-            ]}
-        >
-            {loading
-                ? <ActivityIndicator color={primary ? theme.colors.button.primary.tint : theme.colors.text} />
-                : <Text style={[styles.actionText, primary ? styles.actionTextPrimary : styles.actionTextSecondary]}>{label}</Text>}
-        </Pressable>
-    );
-}
-
 const styles = StyleSheet.create((theme) => ({
-    choice: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        borderRadius: 18,
-        borderWidth: 1,
-        borderColor: theme.colors.divider,
-        backgroundColor: theme.colors.surface,
-    },
-    choiceSelected: {
-        borderColor: theme.colors.textLink,
-        backgroundColor: theme.colors.surfaceHighest,
-    },
-    choiceText: {
-        ...Typography.default(),
-        fontSize: 14,
-        color: theme.colors.text,
-    },
-    choiceTextSelected: {
-        ...Typography.default('semiBold'),
-        color: theme.colors.textLink,
-    },
-    footer: {
-        paddingTop: 12,
-        paddingHorizontal: 16,
-        borderTopWidth: StyleSheet.hairlineWidth,
-        borderTopColor: theme.colors.divider,
-        backgroundColor: theme.colors.surface,
-    },
-    footerInner: {
-        width: '100%',
-        maxWidth: 688,
-        alignSelf: 'center',
-        gap: 8,
-    },
-    footerError: {
-        ...Typography.default(),
-        fontSize: 13,
-        textAlign: 'center',
-        color: theme.colors.textDestructive,
-    },
-    footerActions: {
-        flexDirection: 'row',
-        gap: 10,
-    },
-    action: {
-        minHeight: 48,
-        paddingHorizontal: 20,
-        borderRadius: 12,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    actionGrow: {
-        flex: 1,
-    },
-    actionPrimary: {
-        backgroundColor: theme.colors.button.primary.background,
-    },
-    actionSecondary: {
-        borderWidth: 1,
-        borderColor: theme.colors.divider,
-        backgroundColor: theme.colors.surface,
-    },
-    actionDisabled: {
-        opacity: 0.45,
-    },
-    actionPressed: {
-        opacity: 0.85,
-    },
-    actionText: {
-        ...Typography.default('semiBold'),
-        fontSize: 16,
-    },
-    actionTextPrimary: {
-        color: theme.colors.button.primary.tint,
-    },
-    actionTextSecondary: {
-        color: theme.colors.text,
-    },
-    section: {
-        padding: 18,
-        borderRadius: 16,
-        borderWidth: 1,
-        borderColor: theme.colors.divider,
-        backgroundColor: theme.colors.surface,
-    },
-    sectionHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-    },
-    sectionIcon: {
-        width: 34,
-        height: 34,
-        borderRadius: 10,
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: theme.colors.surfaceHighest,
-    },
-    sectionTitles: {
-        flex: 1,
-        gap: 1,
-    },
-    sectionTitle: {
-        ...Typography.default('semiBold'),
-        fontSize: 17,
-        color: theme.colors.text,
-    },
-    sectionHint: {
-        ...Typography.default(),
-        fontSize: 13,
-        color: theme.colors.textSecondary,
-    },
-    sectionBody: {
-        gap: 18,
-        marginTop: 18,
-    },
     field: {
         gap: 7,
     },
@@ -731,17 +488,5 @@ const styles = StyleSheet.create((theme) => ({
         width: 7,
         height: 7,
         borderRadius: 4,
-    },
-    stepper: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 14,
-    },
-    stepperValue: {
-        ...Typography.default('semiBold'),
-        minWidth: 28,
-        fontSize: 18,
-        textAlign: 'center',
-        color: theme.colors.text,
     },
 }));

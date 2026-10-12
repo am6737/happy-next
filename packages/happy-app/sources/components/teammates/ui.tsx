@@ -1,10 +1,9 @@
 import React from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
-import type { PermissionMode, Teammate, TeammateWorkerProvider } from 'happy-wire';
+import type { PermissionMode, Teammate } from 'happy-wire';
 import { layout } from '@/components/layout';
-import { storage, useMachine, useSetting } from '@/sync/storage';
-import { getBuiltInProfile } from '@/sync/profileUtils';
+import { storage, useMachine } from '@/sync/storage';
 import { isMachineOnline } from '@/utils/machineUtils';
 import { getTeammateWorkload } from '@/sync/teammateWorkload';
 import { TeammateApiError } from '@/sync/apiTeammates';
@@ -98,13 +97,6 @@ export function teammatePermissionLabel(mode: PermissionMode): string {
         case 'auto_edit': return t('agentInput.geminiPermissionMode.autoEdit');
         default: return t(`agentInput.permissionMode.${mode}`);
     }
-}
-
-/** One runtime role as text: provider · model · permission mode · profile. */
-export function useTeammateRuntimeText({ provider, model, permissionMode, profileId }: { provider: TeammateWorkerProvider; model: string | null; permissionMode: PermissionMode; profileId: string | null }): string {
-    const profiles = useSetting('profiles');
-    const profile = profileId ? profiles.find(item => item.id === profileId) ?? getBuiltInProfile(profileId) : null;
-    return [t(`agentInput.agent.${provider}`), model || t('teammates.defaultModel'), teammatePermissionLabel(permissionMode), profile?.name ?? t('teammates.machineConfig')].join(' · ');
 }
 
 export function teammateErrorMessage(error: unknown): string {

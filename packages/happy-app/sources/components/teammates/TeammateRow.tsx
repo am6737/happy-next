@@ -30,7 +30,7 @@ export const TeammateRow = React.memo(function TeammateRow({ teammate }: { teamm
     return (
         <Item
             title={teammate.name || t('teammates.unnamed')}
-            subtitle={teammate.role || `@${teammate.handle}`}
+            subtitle={teammate.role || undefined}
             subtitleLines={1}
             leftElement={(
                 <View style={teammate.status === 'archived' && styles.archived}>

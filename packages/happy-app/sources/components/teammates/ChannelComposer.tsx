@@ -13,12 +13,13 @@ import { Typography } from '@/constants/Typography';
 import { t } from '@/text';
 import { TeammateAvatar } from './ui';
 
-// An @handle being typed right before the cursor, not part of an email or another word.
-const MENTION_QUERY = /(?:^|[^\p{L}\p{N}_@-])@([a-z0-9_-]*)$/iu;
+// An @mention being typed right before the cursor, not part of an email or another ASCII word. Names may be CJK, so
+// "@" may follow CJK text directly, and the query stops at whitespace.
+const MENTION_QUERY = /(?:^|[^A-Za-z0-9_@.-])@([^\s@]*)$/u;
 
 /**
  * The channel composer, built like the DooTask `ChatInput`: a "+" menu, a pill-shaped input and a round
- * send button. Groups suggest @mentions while a handle is typed; a task reply shows as DooTask's reply bar.
+ * send button. Groups suggest @mentions by name while one is typed; a task reply shows as DooTask's reply bar.
  */
 export const ChannelComposer = React.memo(({ kind, members, replyTitle, onDismissReply, disabled, onSend, onReset, glass = false }: {
     kind?: 'dm' | 'group';
@@ -41,7 +42,7 @@ export const ChannelComposer = React.memo(({ kind, members, replyTitle, onDismis
     const [menuVisible, setMenuVisible] = React.useState(false);
 
     const query = kind === 'group' ? draft.slice(0, cursor).match(MENTION_QUERY) : null;
-    const suggestions = query ? members.filter(member => member.handle.startsWith(query[1].toLowerCase())) : [];
+    const suggestions = query ? members.filter(member => member.name.toLowerCase().includes(query[1].toLowerCase())) : [];
     const canSend = !disabled && draft.trim().length > 0;
 
     const handleSelectionChange = React.useCallback((selection: { start: number; end: number }) => setCursor(selection.end), []);
@@ -52,7 +53,7 @@ export const ChannelComposer = React.memo(({ kind, members, replyTitle, onDismis
     };
     const insertMention = (member: Teammate) => {
         const start = cursor - (query?.[1].length ?? 0) - 1;
-        const prefix = `${draft.slice(0, start)}@${member.handle} `;
+        const prefix = `${draft.slice(0, start)}@${member.name} `;
         inputRef.current?.setTextAndSelection(prefix + draft.slice(cursor), { start: prefix.length, end: prefix.length });
     };
     const menuItems: ActionMenuItem[] = React.useMemo(() => [
@@ -67,7 +68,7 @@ export const ChannelComposer = React.memo(({ kind, members, replyTitle, onDismis
                         <Pressable key={member.id} accessibilityRole="button" onPress={() => insertMention(member)} style={styles.suggestion}>
                             <TeammateAvatar teammate={member} size={24} />
                             <Text style={styles.suggestionName} numberOfLines={1}>{member.name}</Text>
-                            <Text style={styles.suggestionHandle} numberOfLines={1}>@{member.handle}</Text>
+                            {!!member.role && <Text style={styles.suggestionRole} numberOfLines={1}>{member.role}</Text>}
                         </Pressable>
                     ))}
                 </GlassSurface>
@@ -142,7 +143,7 @@ const styles = StyleSheet.create((theme) => ({
         flexShrink: 1,
         color: theme.colors.text,
     },
-    suggestionHandle: {
+    suggestionRole: {
         ...Typography.default(),
         fontSize: 13,
         flexShrink: 1,

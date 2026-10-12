@@ -60,9 +60,9 @@ describe('channel decisions and mentions', () => {
         expect(channelDecisionSelections([decision, newer, { ...reply, delivery: 'failed' }])).toEqual({});
         expect(channelDecisionSelections([decision, { ...reply, delivery: 'pending' }])).toEqual({ d1: 'yes' });
     });
-    it('includes only complete member handles and ignores emails, prefixes and duplicates', () => {
-        const members = [{ id: 'a', handle: 'atlas' }, { id: 'b', handle: 'atlas-dev' }];
-        expect(channelMentions('@atlas, (@atlas-dev) @atlas @outsider email@atlas @atlas-extra @atlas中文', members)).toEqual(['a','b']);
-        expect(channelMentions('@atlas-dev', members)).toEqual(['b']);
+    it('includes only complete member names and ignores emails, prefixes and duplicates', () => {
+        const members = [{ id: 'a', name: 'Atlas' }, { id: 'b', name: 'Atlas Dev' }];
+        expect(channelMentions('@atlas, (@Atlas Dev) @atlas @outsider email@atlas @atlas-extra @atlasx', members)).toEqual(['a', 'b']);
+        expect(channelMentions('@atlas dev', members)).toEqual(['b']);
     });
 });

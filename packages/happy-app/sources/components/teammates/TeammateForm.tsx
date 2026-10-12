@@ -1,472 +1,354 @@
 import React from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { useRouter } from 'expo-router';
-import {
-    TeammateCreateRequestSchema, TEAMMATE_CONTROLLER_PROVIDERS, TEAMMATE_HANDLE_REGEX, TEAMMATE_WORKER_PROVIDERS, type Teammate, type TeammateCreateRequest,
-} from 'happy-wire';
+import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { StyleSheet, useUnistyles } from 'react-native-unistyles';
+import { TEAMMATE_CONTROLLER_PROVIDERS, TEAMMATE_WORKER_PROVIDERS, type Teammate } from 'happy-wire';
 import { useAuth } from '@/auth/AuthContext';
-import { sync } from '@/sync/sync';
-import { storage, useAllMachines } from '@/sync/storage';
-import type { Machine } from '@/sync/storageTypes';
-import { createTeammate, updateTeammate } from '@/sync/apiTeammates';
-import { encryptTeammateProfileEnv } from '@/sync/teammateRuntimeEnv';
+import { useAllMachines } from '@/sync/storage';
 import type { TeammateSeed } from '@/sync/teammateDraft';
-import { isMachineOnline } from '@/utils/machineUtils';
-import { useMachineSkills } from '@/hooks/useMachineSkills';
-import { SkillPicker } from './SkillPicker';
-import { getCachedGithubRepos } from '@/hooks/useGithubData';
-import { Typography } from '@/constants/Typography';
-import { t } from '@/text';
-import { buildTeammateSchedulePayload } from '@/sync/teammateSchedule';
-import { TeammateAvatar, teammateColor, teammateErrorMessage, teammatePermissionLabel } from './ui';
-import { TeammateRuntimeFields, type TeammateRuntimeValue } from './TeammateRuntimeFields';
 import {
-    ActionButton, ColorPicker, FooterBar, FormSection, MachinePicker, Stepper, SwitchRow, TagInput, TextField,
-} from './TeammateFormFields';
+    ALL_DAYS, TEAMMATE_HEARTBEAT_PRESETS, isAdvancedSection, teammateFormSection,
+    type TeammateFormError, type TeammateFormField, type TeammateFormSection, type TeammateRuntimeValue,
+} from '@/sync/teammateFormModel';
+import { useTeammateFormState } from '@/hooks/useTeammateFormState';
+import { useMachineSkills } from '@/hooks/useMachineSkills';
+import { getCachedGithubRepos } from '@/hooks/useGithubData';
+import { isMachineOnline } from '@/utils/machineUtils';
+import { layout } from '@/components/layout';
+import { Modal } from '@/modal';
+import { Typography } from '@/constants/Typography';
+import { getCurrentLanguage, t } from '@/text';
+import { TeammateAvatar } from './ui';
+import { SkillPicker } from './SkillPicker';
+import { TeammateRuntimeFields } from './TeammateRuntimeFields';
+import { ColorPicker, MachinePicker, TagInput } from './TeammateFormFields';
+import { TeammateSheet, SheetTextInput, useTeammateSheet } from './TeammateSheet';
+import {
+    Card, CardHeading, CollapsibleCard, CountStepper, FieldError, InputRow, KIT_PAGE_PADDING, OptionPills, PillButton, Row, SectionLabel, ToggleRow,
+} from './kit';
 
-const CONTENT_MAX_WIDTH = 720;
-const HOUR_REGEX = /^([01]\d|2[0-3]):[0-5]\d$/;
+export type TeammateFormFocus = 'runtime' | 'schedule';
 
-type StepId = 'identity' | 'persona' | 'instructions' | 'runtime' | 'review' | 'governance';
-type IconName = React.ComponentProps<typeof Ionicons>['name'];
+// Monday first; 0 is Sunday.
+const WEEK = [1, 2, 3, 4, 5, 6, 0];
+const WEEKDAYS = [1, 2, 3, 4, 5];
+const CUSTOM = 'custom';
 
-// Creating ends on a review page that also holds the optional governance settings; editing has no
-// review, so governance gets its own step and every step is reachable from the header.
-const CREATE_STEPS: StepId[] = ['identity', 'persona', 'instructions', 'runtime', 'review'];
-const EDIT_STEPS: StepId[] = ['identity', 'persona', 'instructions', 'runtime', 'governance'];
+function isHeartbeatPreset(minutes: number | null): boolean {
+    return (TEAMMATE_HEARTBEAT_PRESETS as readonly (number | null)[]).includes(minutes);
+}
 
-// Request fields shown on each step; anything unlisted (budget, schedule, dreaming) lives on the last step.
-const FIELD_STEPS: Record<string, StepId> = {
-    name: 'identity', handle: 'identity', avatar: 'identity',
-    role: 'persona', skills: 'persona', repos: 'persona',
-    instructions: 'instructions',
-    machineId: 'identity', workerProvider: 'runtime', model: 'runtime', workerPermissionMode: 'runtime', workerProfileId: 'runtime', workerEnv: 'runtime',
-    controllerProvider: 'runtime', controllerModel: 'runtime', controllerPermissionMode: 'runtime', controllerProfileId: 'runtime', controllerEnv: 'runtime',
-    maxConcurrentRuns: 'runtime', canSelfAssign: 'runtime',
-};
+function dayName(day: number): string {
+    // 2024-01-07 was a Sunday.
+    return new Intl.DateTimeFormat(getCurrentLanguage(), { weekday: 'short' }).format(new Date(2024, 0, 7 + day));
+}
 
-const STEP_ICONS: Record<StepId, IconName> = {
-    identity: 'person-circle-outline',
-    persona: 'briefcase-outline',
-    instructions: 'document-text-outline',
-    runtime: 'hardware-chip-outline',
-    review: 'checkmark-done-outline',
-    governance: 'shield-checkmark-outline',
-};
+function heartbeatLabel(minutes: number | null): string {
+    if (minutes === null) return t('teammates.form.off');
+    if (minutes === 60) return t('teammates.form.hourly');
+    if (minutes % 60 === 0) return t('teammates.form.everyHours', { count: minutes / 60 });
+    return t('teammates.form.everyMinutes', { count: minutes });
+}
 
-function stepTitle(step: StepId): string {
-    switch (step) {
-        case 'identity': return t('teammates.identity');
-        case 'persona': return t('teammates.persona');
-        case 'instructions': return t('teammates.wizard.instructionsTitle');
-        case 'runtime': return t('teammates.runtime');
-        case 'review': return t('teammates.wizard.review');
-        case 'governance': return t('teammates.governance');
+function providerName(provider: TeammateRuntimeValue['provider']): string {
+    return t(`agentInput.agent.${provider}`);
+}
+
+function runtimeLabel({ provider, model }: TeammateRuntimeValue): string {
+    return model ? `${providerName(provider)} · ${model}` : providerName(provider);
+}
+
+function errorText(field: TeammateFormField, error: TeammateFormError | undefined): string | undefined {
+    switch (error) {
+        case undefined: return undefined;
+        case 'required': return t('teammates.form.required');
+        case 'taken': return t('teammates.errors.name_taken');
+        case 'timezone': return t('teammates.timezoneHint');
+        case 'hours': return t('teammates.hoursHint');
+        case 'days': return t('teammates.form.pickDay');
+        case 'invalid':
+            if (field === 'monthlyBudgetUsd') return t('teammates.budgetHint');
+            if (field === 'heartbeatIntervalMin') return t('teammates.form.heartbeatRange');
+            if (field === 'dreamingHour') return t('teammates.form.dreamingRange');
+            if (field === 'name') return t('teammates.nameHint');
+            return t('teammates.invalidValue');
     }
 }
 
-function stepHint(step: StepId): string {
-    switch (step) {
-        case 'identity': return t('teammates.identityHint');
-        case 'persona': return t('teammates.personaHint');
-        case 'instructions': return t('teammates.wizard.instructionsHint');
-        case 'runtime': return t('teammates.runtimeHint');
-        case 'review': return t('teammates.wizard.reviewHint');
-        case 'governance': return t('teammates.governanceHint');
-    }
-}
-
-function suggestHandle(name: string): string {
-    const result = name.normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 32);
-    return result.length >= 2 ? result : '';
-}
-
-function runtimeSummary({ provider, model, permissionMode }: TeammateRuntimeValue): string {
-    return [t(`agentInput.agent.${provider}`), model || t('teammates.defaultModel'), teammatePermissionLabel(permissionMode)].join(' · ');
-}
-
-function machineName(machine: Machine | undefined): string {
-    return machine ? machine.metadata?.displayName || machine.metadata?.host || machine.id : t('teammates.wizard.noMachine');
-}
-
-/** Live preview of the Agent as it will appear in chats, tinted with its avatar color. */
-function PreviewCard({ name, handle, role, color }: { name: string; handle: string; role: string; color: string }) {
-    const { theme } = useUnistyles();
-    const tint = teammateColor({ avatar: { color } }, theme.colors.textLink);
-    return (
-        <View style={styles.preview}>
-            <View style={[styles.previewTint, { backgroundColor: tint }]} />
-            <TeammateAvatar teammate={{ name, avatar: { color } }} size={64} />
-            <View style={styles.previewText}>
-                <Text style={[styles.previewName, !name && styles.placeholder]} numberOfLines={1}>{name || t('teammates.unnamed')}</Text>
-                <Text style={styles.previewHandle} numberOfLines={1}>@{handle || '…'}</Text>
-                <Text style={[styles.previewRole, !role && styles.placeholder]} numberOfLines={2}>{role || t('teammates.noRole')}</Text>
-            </View>
-        </View>
-    );
-}
-
-/** "Step 2 of 5", the step title and a segmented progress bar whose reachable segments jump to that step. */
-function StepHeader({ steps, current, reachable, onSelect }: {
-    steps: StepId[]; current: number; reachable: number; onSelect: (index: number) => void;
-}) {
-    const { theme } = useUnistyles();
-    const step = steps[current];
-    return (
-        <View style={styles.header}>
-            <View style={styles.progress}>
-                {steps.map((id, index) => (
-                    <Pressable
-                        key={id}
-                        accessibilityRole="button"
-                        accessibilityLabel={stepTitle(id)}
-                        accessibilityState={{ selected: index === current, disabled: index > reachable }}
-                        disabled={index > reachable}
-                        hitSlop={{ top: 10, bottom: 10 }}
-                        onPress={() => onSelect(index)}
-                        style={styles.progressHit}
-                    >
-                        <View style={[styles.progressSegment, index <= current && styles.progressDone]} />
-                    </Pressable>
-                ))}
-            </View>
-            <Text style={styles.stepOf}>{t('teammates.wizard.stepOf', { current: current + 1, total: steps.length })}</Text>
-            <View style={styles.headerTitleRow}>
-                <Ionicons name={STEP_ICONS[step]} size={22} color={theme.colors.textLink} />
-                <Text style={styles.headerTitle}>{stepTitle(step)}</Text>
-            </View>
-            <Text style={styles.headerHint}>{stepHint(step)}</Text>
-        </View>
-    );
-}
-
-function SummaryCard({ title, onEdit, children }: { title: string; onEdit: () => void; children: React.ReactNode }) {
-    return (
-        <View style={styles.summary}>
-            <View style={styles.summaryHeader}>
-                <Text style={styles.summaryTitle}>{title}</Text>
-                <Pressable accessibilityRole="button" accessibilityLabel={`${t('teammates.wizard.edit')} ${title}`} hitSlop={8} onPress={onEdit}>
-                    <Text style={styles.summaryEdit}>{t('teammates.wizard.edit')}</Text>
-                </Pressable>
-            </View>
-            {children}
-        </View>
-    );
-}
-
-function SummaryRow({ label, value }: { label: string; value: string }) {
-    return (
-        <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>{label}</Text>
-            <Text style={styles.summaryValue} numberOfLines={2}>{value}</Text>
-        </View>
-    );
-}
-
-function Chips({ values }: { values: string[] }) {
-    return (
-        <View style={styles.chips}>
-            {values.map(value => (
-                <View key={value} style={styles.chip}>
-                    <Text style={styles.chipText} numberOfLines={1}>{value}</Text>
-                </View>
-            ))}
-        </View>
-    );
-}
-
-export function TeammateForm({ teammate, seed, initialStep }: { teammate?: Teammate; seed?: TeammateSeed; initialStep?: string }) {
+/**
+ * One-page form for creating (from an AI draft or blank) and editing an Agent. Basic info and instructions are
+ * always visible; runtime, schedule and budget sit in a collapsed "advanced" card that opens on `focus` or when
+ * one of its fields fails validation. Larger editors open in bottom sheets. Editing shows Discard/Save only once
+ * something changed and asks before leaving with unsaved changes.
+ */
+export function TeammateForm({ teammate, seed, focus }: { teammate?: Teammate; seed?: TeammateSeed; focus?: TeammateFormFocus }) {
     const router = useRouter();
+    const navigation = useNavigation();
+    const insets = useSafeAreaInsets();
     const { theme } = useUnistyles();
     const { credentials } = useAuth();
     const machines = useAllMachines();
-    const draft = seed?.draft;
-    const steps = teammate ? EDIT_STEPS : CREATE_STEPS;
-    const lastStep = steps.length - 1;
-    // A drafted Agent has every step filled in already, so it opens on review.
-    const [step, setStep] = React.useState(() => Math.max(steps.indexOf(initialStep as StepId), seed ? lastStep : 0));
-    const [reached, setReached] = React.useState(teammate || seed ? lastStep : 0);
-    const [name, setName] = React.useState(teammate?.name ?? draft?.name ?? '');
-    const [handle, setHandle] = React.useState(teammate?.handle ?? draft?.handle ?? '');
-    const [handleTouched, setHandleTouched] = React.useState(!!teammate || !!draft?.handle);
-    const [color, setColor] = React.useState(teammate?.avatar?.color ?? draft?.avatar?.color ?? '#5B6EF5');
-    const [role, setRole] = React.useState(teammate?.role ?? draft?.role ?? '');
-    // Skills are picked from the machine; a drafted Agent never carries any.
-    const [skills, setSkills] = React.useState(teammate?.skills ?? []);
-    const [repos, setRepos] = React.useState(teammate?.repos ?? []);
-    const [instructions, setInstructions] = React.useState(teammate?.instructions ?? draft?.instructions ?? '');
-    const [machineId, setMachineId] = React.useState(teammate?.machineId ?? seed?.machineId ?? '');
-    const machineSkills = useMachineSkills(machineId);
-    const [controller, setController] = React.useState<TeammateRuntimeValue<Teammate['controllerProvider']>>({
-        provider: teammate?.controllerProvider ?? 'claude', model: teammate?.controllerModel ?? '',
-        permissionMode: teammate?.controllerPermissionMode ?? 'default', profileId: teammate?.controllerProfileId ?? '',
-    });
-    const [worker, setWorker] = React.useState<TeammateRuntimeValue>({
-        provider: teammate?.workerProvider ?? 'claude', model: teammate?.model ?? '',
-        permissionMode: teammate?.workerPermissionMode ?? 'default', profileId: teammate?.workerProfileId ?? '',
-    });
-    const [concurrency, setConcurrency] = React.useState(String(teammate?.maxConcurrentRuns ?? 3));
-    const [selfAssign, setSelfAssign] = React.useState(teammate?.canSelfAssign ?? false);
-    const [budget, setBudget] = React.useState(teammate?.monthlyBudgetUsd?.toString() ?? '');
-    const [heartbeat, setHeartbeat] = React.useState(teammate?.heartbeatIntervalMin?.toString() ?? '');
-    const [activeHours, setActiveHours] = React.useState(!!teammate?.activeHours);
-    const [start, setStart] = React.useState(teammate?.activeHours?.start ?? '09:00');
-    const [end, setEnd] = React.useState(teammate?.activeHours?.end ?? '18:00');
-    const [timezone, setTimezone] = React.useState(teammate?.timezone ?? teammate?.activeHours?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC');
-    const [dreaming, setDreaming] = React.useState(teammate?.dreamingHour?.toString() ?? '');
-    const rewrapPending = React.useRef(false);
-    const [saving, setSaving] = React.useState(false);
-    const [error, setError] = React.useState<string | null>(null);
-    const [errors, setErrors] = React.useState<Record<string, string>>({});
-    const [advanced, setAdvanced] = React.useState(false);
+    const form = useTeammateFormState({ teammate, seed });
+    const { values, set, errors } = form;
+    const editing = !!teammate;
+    const changed = React.useMemo(() => new Set(editing ? form.changed : []), [editing, form.changed]);
+    const dirty = form.changed.length > 0;
+    const machineSkills = useMachineSkills(values.machineId);
+    const missingSkills = machineSkills.status === 'ready' ? values.skills.filter(skill => !machineSkills.skills.some(item => item.name === skill)).length : 0;
+    const repoSuggestions = credentials ? getCachedGithubRepos(credentials).map(repo => repo.fullName) : [];
+    const [advanced, setAdvanced] = React.useState(!!focus);
+    const [customHeartbeat, setCustomHeartbeat] = React.useState(() => !isHeartbeatPreset(values.heartbeatIntervalMin));
     const scroll = React.useRef<ScrollView>(null);
-    const suggestions = credentials ? getCachedGithubRepos(credentials).map(repo => repo.fullName) : [];
-
-    React.useEffect(() => {
-        if (!teammate && !machineId && machines.length) setMachineId((machines.find(isMachineOnline) ?? machines[0]).id);
-    }, [machines, machineId, teammate]);
-    React.useEffect(() => {
-        scroll.current?.scrollTo({ y: 0, animated: false });
-    }, [step]);
-
-    const goTo = (index: number) => {
-        setError(null);
-        setStep(index);
-        setReached(value => Math.max(value, index));
+    const sectionY = React.useRef<Partial<Record<TeammateFormSection, number>>>({});
+    const focused = React.useRef(false);
+    const allowExit = React.useRef(false);
+    const sheets = {
+        color: useTeammateSheet(), machine: useTeammateSheet(), library: useTeammateSheet(), instructions: useTeammateSheet(),
+        controller: useTeammateSheet(), worker: useTeammateSheet(), hours: useTeammateSheet(),
     };
 
-    const validateStep = (id: StepId): Record<string, string> => {
-        const result: Record<string, string> = {};
-        if (id === 'identity' && !name.trim()) result.name = t('teammates.invalidValue');
-        if (id === 'identity' && !TEAMMATE_HANDLE_REGEX.test(handle)) result.handle = t('teammates.handleHint');
-        if (id === 'identity' && !machineId) result.machineId = t('teammates.invalidValue');
-        return result;
-    };
+    // A new Agent defaults to the first online machine without counting as a change.
+    const { setDefault } = form;
+    React.useEffect(() => {
+        if (!editing && !values.machineId && machines.length) setDefault('machineId', (machines.find(isMachineOnline) ?? machines[0]).id);
+    }, [editing, machines, values.machineId, setDefault]);
 
-    const next = () => {
-        const stepErrors = validateStep(steps[step]);
-        setErrors(stepErrors);
-        if (Object.keys(stepErrors).length) {
-            setError(t('teammates.checkFields'));
-            return;
+    React.useEffect(() => navigation.addListener('beforeRemove', event => {
+        if (allowExit.current || !dirty) return;
+        event.preventDefault();
+        Modal.confirm(t('artifacts.discardChanges'), t('artifacts.discardChangesDescription'), { confirmText: t('common.discard'), destructive: true })
+            .then(confirmed => {
+                if (!confirmed) return;
+                allowExit.current = true;
+                navigation.dispatch(event.data.action);
+            });
+    }), [navigation, dirty]);
+
+    const scrollTo = (section: TeammateFormSection) => {
+        // Wait a frame so a just-expanded card has been laid out.
+        setTimeout(() => scroll.current?.scrollTo({ y: Math.max(0, (sectionY.current[section] ?? 0) - 16), animated: true }), 50);
+    };
+    const onSectionLayout = (section: TeammateFormSection) => (event: { nativeEvent: { layout: { y: number } } }) => {
+        sectionY.current[section] = event.nativeEvent.layout.y;
+        if (section === 'runtime' && focus && !focused.current) {
+            focused.current = true;
+            scrollTo('runtime');
         }
-        goTo(step + 1);
     };
 
     const save = async () => {
-        if (!credentials || saving) return;
-        const body: TeammateCreateRequest = {
-            name: name.trim(), handle: handle.trim(), avatar: { ...teammate?.avatar, color }, role: role.trim(), skills, repos, instructions,
-            machineId,
-            controllerProvider: controller.provider, controllerModel: controller.model || null, controllerPermissionMode: controller.permissionMode,
-            controllerProfileId: controller.profileId || null,
-            workerProvider: worker.provider, model: worker.model || null, workerPermissionMode: worker.permissionMode,
-            workerProfileId: worker.profileId || null,
-            maxConcurrentRuns: Number(concurrency), canSelfAssign: selfAssign,
-            monthlyBudgetUsd: budget.trim() ? Number(budget) : null,
-            heartbeatIntervalMin: heartbeat.trim() ? Number(heartbeat) : null,
-            ...buildTeammateSchedulePayload(timezone, activeHours, start, end, teammate?.activeHours?.days),
-            dreamingHour: dreaming.trim() ? Number(dreaming) : null,
-        };
-        const parsed = TeammateCreateRequestSchema.safeParse(body);
-        const nextErrors: Record<string, string> = {};
-        if (!parsed.success) for (const issue of parsed.error.issues) nextErrors[String(issue.path[0])] = t('teammates.invalidValue');
-        if (!TEAMMATE_HANDLE_REGEX.test(handle)) nextErrors.handle = t('teammates.handleHint');
-        try { new Intl.DateTimeFormat(undefined, { timeZone: timezone }).format(); } catch { nextErrors.timezone = t('teammates.timezoneHint'); }
-        if (activeHours && (!HOUR_REGEX.test(start) || !HOUR_REGEX.test(end))) nextErrors.activeHours = t('teammates.hoursHint');
-        setErrors(nextErrors);
-        setError(null);
-        if (!parsed.success || Object.keys(nextErrors).length) {
-            // Jump to the earliest step that holds a failing field so the error is visible.
-            const failing = Object.keys(nextErrors).map(key => steps.indexOf(FIELD_STEPS[key] ?? steps[lastStep]));
-            const target = failing.length ? Math.min(...failing) : step;
-            if (target === lastStep) setAdvanced(true);
-            setStep(target);
-            setError(t('teammates.checkFields'));
+        const result = await form.submit();
+        if (!result.ok) {
+            if (result.section) {
+                if (isAdvancedSection(result.section)) setAdvanced(true);
+                scrollTo(isAdvancedSection(result.section) ? 'runtime' : result.section);
+            }
             return;
         }
-        setSaving(true);
-        try {
-            // Profile environments may hold secrets, so they are sealed for the bound machine on every save;
-            // a profile deleted since it was picked falls back to the machine's own configuration.
-            const [controllerEnv, workerEnv] = await Promise.all([controller, worker].map(role => encryptTeammateProfileEnv(machineId, role.profileId || null, role.provider)));
-            const request = {
-                ...parsed.data, controllerEnv, workerEnv,
-                controllerProfileId: controllerEnv && parsed.data.controllerProfileId, workerProfileId: workerEnv && parsed.data.workerProfileId,
-            };
-            const { handle: _handle, ...update } = request;
-            const saved = teammate ? await updateTeammate(credentials, teammate.id, update) : await createTeammate(credentials, request);
-            rewrapPending.current ||= !!teammate && teammate.machineId !== saved.machineId;
-            storage.getState().applyTeammates([saved]);
-            if (rewrapPending.current) {
-                try { await sync.channels.rewrapMember(saved); rewrapPending.current = false; }
-                catch { setError(t('channels.rewrapError')); return; }
-            }
-            if (teammate) router.back(); else router.replace(`/teammates/${saved.id}`);
-        } catch (error) { setError(teammateErrorMessage(error)); }
-        finally { setSaving(false); }
+        allowExit.current = true;
+        if (editing) {
+            router.back();
+            return;
+        }
+        // Created from the new-Agent screen: drop it and this form so Back from the profile leaves creation.
+        const detail = `/teammates/${encodeURIComponent(result.teammate.id)}` as const;
+        const state = navigation.getState();
+        if (state && state.routes[state.index - 1]?.name === 'teammates/new/index') {
+            router.dismiss(2);
+            router.push(detail);
+        } else {
+            router.replace(detail);
+        }
     };
 
-    const disabled = saving || !credentials || !machines.length || teammate?.status === 'archived';
-    const current = steps[step];
-    const governance = (
-        <>
-            <TextField label={t('teammates.budget')} prefix="$" value={budget} onChange={setBudget} numeric hint={t('teammates.budgetHint')} error={errors.monthlyBudgetUsd} />
-            <TextField label={t('teammates.heartbeat')} value={heartbeat} onChange={setHeartbeat} numeric hint={t('teammates.heartbeatHint')} error={errors.heartbeatIntervalMin} />
-            <SwitchRow title={t('teammates.activeHours')} value={activeHours} onChange={setActiveHours} />
-            {activeHours && (
-                <View style={styles.hoursRow}>
-                    <View style={styles.hoursField}>
-                        <TextField label={t('teammates.start')} value={start} onChange={setStart} placeholder="09:00" error={errors.activeHours} />
-                    </View>
-                    <View style={styles.hoursField}>
-                        <TextField label={t('teammates.end')} value={end} onChange={setEnd} placeholder="18:00" />
-                    </View>
-                </View>
-            )}
-            <TextField label={t('teammates.timezone')} value={timezone} onChange={setTimezone} hint={t('teammates.timezoneHint')} error={errors.timezone} />
-            <TextField
-                label={t('teammates.dreaming')}
-                value={dreaming}
-                onChange={setDreaming}
-                numeric
-                hint={t('teammates.dreamingTimezoneHint', { timezone })}
-                error={errors.dreamingHour}
-            />
-        </>
-    );
+    const discard = () => {
+        Modal.confirm(t('artifacts.discardChanges'), t('artifacts.discardChangesDescription'), { confirmText: t('common.discard'), destructive: true })
+            .then(confirmed => {
+                if (!confirmed) return;
+                form.reset();
+                setCustomHeartbeat(!isHeartbeatPreset(form.initial.heartbeatIntervalMin));
+            });
+    };
+
+    const machine = machines.find(item => item.id === values.machineId);
+    const machineName = machine ? machine.metadata?.displayName || machine.metadata?.host || machine.id : undefined;
+    const libraryCount = values.skills.length + values.repos.length;
+    const allDays = ALL_DAYS.every(day => values.activeDays.includes(day));
+    const sortedDays = WEEK.filter(day => values.activeDays.includes(day));
+    const daysLabel = allDays ? t('teammates.form.everyDay')
+        : sortedDays.length === WEEKDAYS.length && WEEKDAYS.every(day => values.activeDays.includes(day)) ? t('teammates.form.weekdays')
+            : sortedDays.map(dayName).join(' ');
+    const hoursLabel = values.activeHoursEnabled ? `${daysLabel} ${values.activeHoursStart}–${values.activeHoursEnd}` : t('teammates.form.anyTime');
+    const budget = values.monthlyBudgetUsd.trim();
+    const advancedChanged = form.changed.some(field => isAdvancedSection(teammateFormSection(field)));
+    const advancedSummary = !editing && !advancedChanged ? t('teammates.form.defaultsSummary') : [
+        t('teammates.form.plannerSummary', { provider: providerName(values.controller.provider) }),
+        t('teammates.form.workerSummary', { provider: providerName(values.worker.provider) }),
+        `${t('teammates.form.heartbeat')} ${heartbeatLabel(values.heartbeatIntervalMin)}`,
+        ...budget ? [t('teammates.form.budgetSummary', { amount: budget })] : [],
+    ].join(' · ');
+    const heartbeatOptions = [
+        ...TEAMMATE_HEARTBEAT_PRESETS.map(minutes => ({ value: String(minutes), label: heartbeatLabel(minutes) })),
+        { value: CUSTOM, label: t('teammates.form.custom') },
+    ];
+    const hoursError = errorText('activeHoursStart', errors.activeHoursStart) ?? errorText('activeDays', errors.activeDays);
+    const showFooter = !editing || dirty;
 
     return (
         <View style={styles.page}>
-            <ScrollView ref={scroll} contentInsetAdjustmentBehavior="automatic" keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
-                <StepHeader steps={steps} current={step} reachable={reached} onSelect={goTo} />
-
-                {current === 'identity' && (
-                    <View style={styles.card}>
-                        <PreviewCard name={name} handle={handle} role={role} color={color} />
-                        <TextField
-                            label={t('teammates.name')}
-                            placeholder={t('teammates.namePlaceholder')}
-                            value={name}
-                            onChange={value => { setName(value); if (!handleTouched) setHandle(suggestHandle(value)); }}
-                            error={errors.name}
-                        />
-                        <TextField
-                            label={t('teammates.handle')}
-                            prefix="@"
-                            value={handle}
-                            onChange={value => { setHandleTouched(true); setHandle(value.toLowerCase().replace(/^@/, '')); }}
-                            editable={!teammate}
-                            hint={teammate ? t('teammates.handleImmutable') : t('teammates.handleHint')}
-                            error={errors.handle}
-                        />
-                        <ColorPicker value={color} onChange={setColor} />
-                        <MachinePicker machines={machines} value={machineId} onChange={setMachineId} error={errors.machineId} />
+            <ScrollView ref={scroll} contentInsetAdjustmentBehavior="automatic" keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets contentContainerStyle={styles.content}>
+                <View style={styles.lead}>
+                    <TeammateAvatar teammate={{ name: values.name, avatar: { color: values.color } }} size={48} />
+                    <View style={styles.leadText}>
+                        <Text style={[styles.leadName, !values.name && styles.muted]} numberOfLines={1}>{values.name || t('teammates.unnamed')}</Text>
+                        {!!values.role.trim() && <Text style={styles.leadRole} numberOfLines={1}>{values.role.trim()}</Text>}
                     </View>
-                )}
+                    <Pressable accessibilityRole="button" hitSlop={8} onPress={sheets.color.present}>
+                        <Text style={[styles.link, changed.has('color') && styles.changed]}>{t('teammates.form.changeColor')}</Text>
+                    </Pressable>
+                </View>
 
-                {current === 'persona' && (
-                    <View style={styles.card}>
-                        <TextField label={t('teammates.role')} placeholder={t('teammates.rolePlaceholder')} value={role} onChange={setRole} error={errors.role} />
-                        <SkillPicker state={machineSkills} value={skills} onChange={setSkills} hint={t('teammates.skillPickerHint')} error={errors.skills} />
-                        <TagInput
-                            label={t('teammates.repos')}
-                            placeholder={t('teammates.repoPlaceholder')}
-                            values={repos}
-                            onChange={setRepos}
-                            suggestions={suggestions}
-                            hint={t('teammates.reposHint')}
-                            error={errors.repos}
-                        />
-                    </View>
-                )}
+                <View onLayout={onSectionLayout('basic')}>
+                    <SectionLabel title={t('teammates.form.basics')} />
+                    <Card>
+                        <InputRow label={t('teammates.name')} value={values.name} onChange={value => set('name', value)} placeholder={t('teammates.namePlaceholder')}
+                            changed={changed.has('name')} error={errorText('name', errors.name)} />
+                        <InputRow label={t('teammates.role')} value={values.role} onChange={value => set('role', value)} placeholder={t('teammates.rolePlaceholder')}
+                            changed={changed.has('role')} error={errorText('role', errors.role)} />
+                        <Row label={t('teammates.machine')} value={machineName} placeholder={t('teammates.wizard.noMachine')} onPress={sheets.machine.present}
+                            changed={changed.has('machineId')} error={errorText('machineId', errors.machineId)} />
+                        <Row label={t('teammates.form.skillsAndRepos')} value={libraryCount ? t('teammates.form.itemCount', { count: libraryCount }) : undefined}
+                            placeholder={t('teammates.form.none')} onPress={sheets.library.present} changed={changed.has('skills') || changed.has('repos')}
+                            error={errorText('repos', errors.repos) ?? errorText('skills', errors.skills) ?? (missingSkills ? t('teammates.form.skillsMissing', { count: missingSkills }) : null)} />
+                    </Card>
+                </View>
 
-                {current === 'instructions' && (
-                    <View style={styles.card}>
-                        <TextField
-                            label={t('teammates.instructions')}
-                            hideLabel
-                            placeholder={t('teammates.instructionsPlaceholder')}
-                            value={instructions}
-                            onChange={setInstructions}
-                            multiline
-                            tall
-                            error={errors.instructions}
-                        />
-                    </View>
-                )}
-
-                {current === 'runtime' && (
-                    <View style={styles.card}>
-                        <TeammateRuntimeFields title={t('teammates.controllerRuntime')} hint={t('teammates.controllerRuntimeHint')} providers={TEAMMATE_CONTROLLER_PROVIDERS} value={controller} onChange={setController} />
-                        <TeammateRuntimeFields title={t('teammates.workerRuntime')} hint={t('teammates.workerRuntimeHint')} providers={TEAMMATE_WORKER_PROVIDERS} value={worker} onChange={setWorker} />
-                        <Stepper
-                            label={t('teammates.concurrency')}
-                            value={concurrency}
-                            onChange={setConcurrency}
-                            min={1}
-                            max={10}
-                            hint={t('teammates.concurrencyHint')}
-                            error={errors.maxConcurrentRuns}
-                        />
-                        <SwitchRow title={t('teammates.selfAssign')} hint={t('teammates.selfAssignHint')} value={selfAssign} onChange={setSelfAssign} />
-                    </View>
-                )}
-
-                {current === 'governance' && <View style={styles.card}>{governance}</View>}
-
-                {current === 'review' && (
-                    <>
-                        {seed && (
-                            <View style={styles.notice}>
-                                <Ionicons name="sparkles-outline" size={16} color={theme.colors.textLink} />
-                                <Text style={styles.noticeText}>{t('teammates.wizard.fromAi')}</Text>
-                            </View>
-                        )}
-                        <PreviewCard name={name} handle={handle} role={role} color={color} />
-                        <SummaryCard title={stepTitle('persona')} onEdit={() => goTo(steps.indexOf('persona'))}>
-                            <SummaryRow label={t('teammates.role')} value={role.trim() || t('teammates.noRole')} />
-                            {skills.length > 0 && <Chips values={skills} />}
-                            <SummaryRow label={t('teammates.repos')} value={repos.length ? repos.join(', ') : '—'} />
-                        </SummaryCard>
-                        <SummaryCard title={stepTitle('instructions')} onEdit={() => goTo(steps.indexOf('instructions'))}>
-                            <Text style={[styles.excerpt, !instructions.trim() && styles.placeholder]} numberOfLines={6}>
-                                {instructions.trim() || t('teammates.wizard.noInstructions')}
+                <View onLayout={onSectionLayout('instructions')}>
+                    <SectionLabel title={t('teammates.wizard.instructionsTitle')} />
+                    <Card>
+                        <Pressable accessibilityRole="button" accessibilityLabel={t('teammates.wizard.instructionsTitle')} onPress={sheets.instructions.present}
+                            style={({ pressed }) => [styles.instructions, pressed && styles.pressed]}>
+                            <Text style={[styles.excerpt, !values.instructions.trim() && styles.muted, changed.has('instructions') && styles.changed]} numberOfLines={3}>
+                                {values.instructions.trim() || t('teammates.wizard.noInstructions')}
                             </Text>
-                        </SummaryCard>
-                        <SummaryCard title={stepTitle('runtime')} onEdit={() => goTo(steps.indexOf('runtime'))}>
-                            <SummaryRow label={t('teammates.machine')} value={machineName(machines.find(machine => machine.id === machineId))} />
-                            <SummaryRow label={t('teammates.controllerRuntime')} value={runtimeSummary(controller)} />
-                            <SummaryRow label={t('teammates.workerRuntime')} value={runtimeSummary(worker)} />
-                            <SummaryRow label={t('teammates.concurrency')} value={concurrency} />
-                        </SummaryCard>
-                        <FormSection
-                            icon="shield-checkmark-outline"
-                            title={t('teammates.governance')}
-                            hint={t('teammates.governanceHint')}
-                            expanded={advanced}
-                            onToggle={() => setAdvanced(value => !value)}
-                        >
-                            {governance}
-                        </FormSection>
-                    </>
-                )}
+                            <Text style={styles.link}>{t('teammates.wizard.edit')}</Text>
+                        </Pressable>
+                        <FieldError message={errorText('instructions', errors.instructions)} />
+                    </Card>
+                </View>
+
+                <View onLayout={onSectionLayout('runtime')} style={styles.advanced}>
+                    <CollapsibleCard title={t('teammates.form.advanced')} summary={advancedSummary} note={editing && advancedChanged ? t('teammates.form.modified') : undefined}
+                        expanded={advanced} onToggle={() => setAdvanced(value => !value)}>
+                        <CardHeading title={t('teammates.runtime')} />
+                        <Row label={t('teammates.controllerRuntime')} value={runtimeLabel(values.controller)} onPress={sheets.controller.present}
+                            changed={changed.has('controller')} error={errorText('controller', errors.controller)} />
+                        <Row label={t('teammates.workerRuntime')} value={runtimeLabel(values.worker)} onPress={sheets.worker.present}
+                            changed={changed.has('worker')} error={errorText('worker', errors.worker)} />
+                        <Row label={t('teammates.concurrency')} error={errorText('maxConcurrentRuns', errors.maxConcurrentRuns)} right={(
+                            <CountStepper label={t('teammates.concurrency')} value={values.maxConcurrentRuns} onChange={value => set('maxConcurrentRuns', value)}
+                                min={1} max={10} changed={changed.has('maxConcurrentRuns')} />
+                        )} />
+                        <ToggleRow label={t('teammates.selfAssign')} value={values.canSelfAssign} onChange={value => set('canSelfAssign', value)} changed={changed.has('canSelfAssign')} />
+
+                        <CardHeading title={t('teammates.form.scheduleAndBudget')} />
+                        <OptionPills label={t('teammates.form.heartbeat')} options={heartbeatOptions}
+                            value={customHeartbeat ? CUSTOM : String(values.heartbeatIntervalMin)}
+                            onChange={value => {
+                                setCustomHeartbeat(value === CUSTOM);
+                                if (value !== CUSTOM) set('heartbeatIntervalMin', value === 'null' ? null : Number(value));
+                            }}
+                            changed={changed.has('heartbeatIntervalMin')} error={customHeartbeat ? undefined : errorText('heartbeatIntervalMin', errors.heartbeatIntervalMin)} />
+                        {customHeartbeat && (
+                            <InputRow label={t('teammates.form.intervalMinutes')} numeric value={values.heartbeatIntervalMin?.toString() ?? ''} placeholder="30"
+                                onChange={text => set('heartbeatIntervalMin', text.trim() ? Number(text) : null)}
+                                changed={changed.has('heartbeatIntervalMin')} error={errorText('heartbeatIntervalMin', errors.heartbeatIntervalMin)} />
+                        )}
+                        <Row label={t('teammates.activeHours')} value={hoursLabel} onPress={sheets.hours.present}
+                            changed={['activeHoursEnabled', 'activeHoursStart', 'activeHoursEnd', 'activeDays'].some(field => changed.has(field as TeammateFormField))}
+                            error={hoursError} />
+                        <InputRow label={t('teammates.timezone')} value={values.timezone} onChange={value => set('timezone', value)} placeholder="UTC"
+                            changed={changed.has('timezone')} error={errorText('timezone', errors.timezone)} />
+                        <InputRow label={t('teammates.dreaming')} numeric value={values.dreamingHour?.toString() ?? ''} placeholder={t('teammates.form.off')}
+                            onChange={text => set('dreamingHour', text.trim() ? Number(text) : null)}
+                            changed={changed.has('dreamingHour')} error={errorText('dreamingHour', errors.dreamingHour)} />
+                        <InputRow label={t('teammates.form.monthlyBudget')} prefix="$" numeric value={values.monthlyBudgetUsd} placeholder={t('teammates.form.noLimit')}
+                            onChange={value => set('monthlyBudgetUsd', value)} changed={changed.has('monthlyBudgetUsd')} error={errorText('monthlyBudgetUsd', errors.monthlyBudgetUsd)} />
+                    </CollapsibleCard>
+                </View>
             </ScrollView>
 
-            <FooterBar error={error}>
-                {teammate ? (
-                    <ActionButton label={t('common.save')} onPress={save} disabled={disabled} loading={saving} />
-                ) : (
-                    <>
-                        {step > 0 && <ActionButton kind="secondary" grow={false} label={t('common.back')} onPress={() => goTo(step - 1)} />}
-                        {step < lastStep
-                            ? <ActionButton label={t('common.continue')} onPress={next} />
-                            : <ActionButton label={t('teammates.create')} onPress={save} disabled={disabled} loading={saving} />}
-                    </>
-                )}
-            </FooterBar>
+            {showFooter && (
+                <View style={[styles.footer, { paddingBottom: insets.bottom + 12 }]}>
+                    {form.error && <Text accessibilityRole="alert" style={styles.footerError}>{form.error}</Text>}
+                    <View style={styles.footerButtons}>
+                        {editing && <PillButton kind="secondary" label={t('common.discard')} onPress={discard} disabled={form.saving} grow />}
+                        <PillButton label={editing ? t('common.save') : t('teammates.create')} onPress={save} loading={form.saving}
+                            disabled={!form.canSave || !machines.length} grow />
+                    </View>
+                </View>
+            )}
+
+            <TeammateSheet ref={sheets.color.ref} title={t('teammates.color')}>
+                <ColorPicker value={values.color} onChange={value => set('color', value)} />
+            </TeammateSheet>
+            <TeammateSheet ref={sheets.machine.ref} title={t('teammates.machine')}>
+                <MachinePicker machines={machines} label="" value={values.machineId} onChange={id => { set('machineId', id); sheets.machine.dismiss(); }} />
+            </TeammateSheet>
+            <TeammateSheet ref={sheets.library.ref} title={t('teammates.form.skillsAndRepos')} size="large">
+                <SkillPicker state={machineSkills} value={values.skills} onChange={value => set('skills', value)} hint={t('teammates.skillPickerHint')} />
+                <TagInput label={t('teammates.repos')} placeholder={t('teammates.repoPlaceholder')} values={values.repos} onChange={value => set('repos', value)}
+                    suggestions={repoSuggestions} hint={t('teammates.reposHint')} error={errorText('repos', errors.repos)} />
+            </TeammateSheet>
+            <TeammateSheet ref={sheets.instructions.ref} title={t('teammates.wizard.instructionsTitle')} size="large">
+                <Text style={styles.sheetHint}>{t('teammates.wizard.instructionsHint')}</Text>
+                <SheetTextInput
+                    accessibilityLabel={t('teammates.instructions')}
+                    value={values.instructions}
+                    onChangeText={value => set('instructions', value)}
+                    placeholder={t('teammates.instructionsPlaceholder')}
+                    placeholderTextColor={theme.colors.input.placeholder}
+                    multiline
+                    textAlignVertical="top"
+                    style={styles.instructionsInput}
+                />
+            </TeammateSheet>
+            <TeammateSheet ref={sheets.controller.ref} title={t('teammates.controllerRuntime')}>
+                <TeammateRuntimeFields title="" hint={t('teammates.controllerRuntimeHint')} providers={TEAMMATE_CONTROLLER_PROVIDERS}
+                    value={values.controller} onChange={value => set('controller', value)} />
+            </TeammateSheet>
+            <TeammateSheet ref={sheets.worker.ref} title={t('teammates.workerRuntime')}>
+                <TeammateRuntimeFields title="" hint={t('teammates.workerRuntimeHint')} providers={TEAMMATE_WORKER_PROVIDERS}
+                    value={values.worker} onChange={value => set('worker', value)} />
+            </TeammateSheet>
+            <TeammateSheet ref={sheets.hours.ref} title={t('teammates.activeHours')}>
+                <Text style={styles.sheetHint}>{t('teammates.form.activeHoursHint')}</Text>
+                <View style={styles.sheetCard}>
+                    <ToggleRow label={t('teammates.form.limitHours')} value={values.activeHoursEnabled} onChange={value => set('activeHoursEnabled', value)} />
+                    {values.activeHoursEnabled && (
+                        <>
+                            <View style={styles.days} accessibilityRole="none">
+                                {WEEK.map(day => {
+                                    const on = values.activeDays.includes(day);
+                                    return (
+                                        <Pressable key={day} accessibilityRole="checkbox" accessibilityState={{ checked: on }} accessibilityLabel={dayName(day)}
+                                            onPress={() => set('activeDays', on ? values.activeDays.filter(item => item !== day) : [...values.activeDays, day])}
+                                            style={[styles.day, on && styles.daySelected]}>
+                                            <Text style={[styles.dayText, on && styles.dayTextSelected]} numberOfLines={1}>{dayName(day)}</Text>
+                                        </Pressable>
+                                    );
+                                })}
+                            </View>
+                            <FieldError message={errorText('activeDays', errors.activeDays)} />
+                            <InputRow inSheet label={t('teammates.start')} value={values.activeHoursStart} onChange={value => set('activeHoursStart', value)} placeholder="09:00" />
+                            <InputRow inSheet label={t('teammates.end')} value={values.activeHoursEnd} onChange={value => set('activeHoursEnd', value)} placeholder="18:00"
+                                error={errorText('activeHoursStart', errors.activeHoursStart)} />
+                        </>
+                    )}
+                </View>
+            </TeammateSheet>
         </View>
     );
 }
@@ -474,183 +356,130 @@ export function TeammateForm({ teammate, seed, initialStep }: { teammate?: Teamm
 const styles = StyleSheet.create((theme) => ({
     page: {
         flex: 1,
-        backgroundColor: theme.colors.groupped.background,
+        backgroundColor: theme.colors.surface,
     },
     content: {
         width: '100%',
-        maxWidth: CONTENT_MAX_WIDTH,
+        maxWidth: layout.maxWidth,
         alignSelf: 'center',
-        gap: 16,
-        padding: 16,
-        paddingBottom: 32,
+        paddingHorizontal: KIT_PAGE_PADDING,
+        paddingTop: 16,
+        paddingBottom: 40,
     },
-    header: {
-        gap: 6,
+    lead: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 14,
         paddingHorizontal: 4,
     },
-    progress: {
-        flexDirection: 'row',
-        gap: 6,
-        marginBottom: 10,
-    },
-    progressHit: {
-        flex: 1,
-    },
-    progressSegment: {
-        height: 4,
-        borderRadius: 2,
-        backgroundColor: theme.colors.divider,
-    },
-    progressDone: {
-        backgroundColor: theme.colors.textLink,
-    },
-    stepOf: {
-        ...Typography.default('semiBold'),
-        fontSize: 12,
-        letterSpacing: 0.4,
-        textTransform: 'uppercase',
-        color: theme.colors.textSecondary,
-    },
-    headerTitleRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-    },
-    headerTitle: {
-        ...Typography.default('semiBold'),
-        fontSize: 24,
-        color: theme.colors.text,
-    },
-    headerHint: {
-        ...Typography.default(),
-        fontSize: 14,
-        lineHeight: 20,
-        color: theme.colors.textSecondary,
-    },
-    card: {
-        gap: 16,
-        padding: 16,
-        borderRadius: 16,
-        backgroundColor: theme.colors.surface,
-    },
-    preview: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 16,
-        padding: 18,
-        borderRadius: 16,
-        borderWidth: 1,
-        borderColor: theme.colors.divider,
-        backgroundColor: theme.colors.surface,
-        overflow: 'hidden',
-    },
-    previewTint: {
-        ...StyleSheet.absoluteFillObject,
-        opacity: 0.12,
-    },
-    previewText: {
+    leadText: {
         flex: 1,
         gap: 2,
     },
-    previewName: {
+    leadName: {
         ...Typography.default('semiBold'),
-        fontSize: 20,
+        fontSize: 18,
         color: theme.colors.text,
     },
-    previewHandle: {
+    leadRole: {
         ...Typography.default(),
-        fontSize: 14,
-        color: theme.colors.textSecondary,
-    },
-    previewRole: {
-        ...Typography.default(),
-        marginTop: 4,
-        fontSize: 14,
-        color: theme.colors.text,
-    },
-    placeholder: {
-        color: theme.colors.textSecondary,
-    },
-    notice: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        paddingHorizontal: 14,
-        paddingVertical: 10,
-        borderRadius: 12,
-        backgroundColor: theme.colors.surfaceHighest,
-    },
-    noticeText: {
-        ...Typography.default(),
-        flex: 1,
         fontSize: 13,
-        lineHeight: 18,
-        color: theme.colors.text,
+        color: theme.colors.textSecondary,
     },
-    summary: {
-        gap: 10,
-        padding: 16,
-        borderRadius: 16,
-        backgroundColor: theme.colors.surface,
-    },
-    summaryHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-    },
-    summaryTitle: {
-        ...Typography.default('semiBold'),
-        fontSize: 16,
-        color: theme.colors.text,
-    },
-    summaryEdit: {
+    link: {
         ...Typography.default('semiBold'),
         fontSize: 14,
         color: theme.colors.textLink,
     },
-    summaryRow: {
-        flexDirection: 'row',
-        gap: 12,
+    changed: {
+        color: theme.colors.box.warning.text,
     },
-    summaryLabel: {
-        ...Typography.default(),
-        width: 110,
-        fontSize: 14,
+    muted: {
         color: theme.colors.textSecondary,
     },
-    summaryValue: {
-        ...Typography.default(),
-        flex: 1,
-        fontSize: 14,
-        color: theme.colors.text,
+    pressed: {
+        opacity: 0.7,
     },
-    chips: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        gap: 6,
-    },
-    chip: {
-        paddingHorizontal: 10,
-        paddingVertical: 4,
-        borderRadius: 12,
-        backgroundColor: theme.colors.surfaceHighest,
-    },
-    chipText: {
-        ...Typography.default(),
-        fontSize: 13,
-        color: theme.colors.text,
+    instructions: {
+        gap: 8,
+        paddingVertical: 14,
     },
     excerpt: {
         ...Typography.default(),
-        fontSize: 14,
-        lineHeight: 20,
+        fontSize: 15,
+        lineHeight: 22,
         color: theme.colors.text,
     },
-    hoursRow: {
+    advanced: {
+        marginTop: 28,
+    },
+    footer: {
+        gap: 8,
+        paddingHorizontal: KIT_PAGE_PADDING,
+        paddingTop: 12,
+        width: '100%',
+        maxWidth: layout.maxWidth,
+        alignSelf: 'center',
+        backgroundColor: theme.colors.surface,
+    },
+    footerError: {
+        ...Typography.default(),
+        fontSize: 13,
+        textAlign: 'center',
+        color: theme.colors.textDestructive,
+    },
+    footerButtons: {
         flexDirection: 'row',
         gap: 12,
     },
-    hoursField: {
-        flex: 1,
+    sheetHint: {
+        ...Typography.default(),
+        fontSize: 13,
+        lineHeight: 18,
+        color: theme.colors.textSecondary,
+    },
+    sheetCard: {
+        borderRadius: 18,
+        paddingHorizontal: 18,
+        paddingVertical: 4,
+        backgroundColor: theme.colors.surfaceHigh,
+    },
+    instructionsInput: {
+        ...Typography.default(),
+        flexGrow: 1,
+        minHeight: 320,
+        padding: 16,
+        borderRadius: 18,
+        fontSize: 15,
+        lineHeight: 22,
+        color: theme.colors.text,
+        backgroundColor: theme.colors.surfaceHigh,
+    },
+    days: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 6,
+        paddingVertical: 8,
+    },
+    day: {
+        minWidth: 40,
+        height: 32,
+        paddingHorizontal: 8,
+        borderRadius: 16,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: theme.colors.surface,
+    },
+    daySelected: {
+        backgroundColor: theme.colors.button.primary.background,
+    },
+    dayText: {
+        ...Typography.default(),
+        fontSize: 13,
+        color: theme.colors.textSecondary,
+    },
+    dayTextSelected: {
+        ...Typography.default('semiBold'),
+        color: theme.colors.button.primary.tint,
     },
 }));

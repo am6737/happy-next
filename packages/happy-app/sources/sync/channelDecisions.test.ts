@@ -39,9 +39,9 @@ describe('DM reply chip', () => {
 });
 
 describe('channelMentionLinks', () => {
-    const members = [{ id: 'a1', handle: 'alice' }];
-    it('links known handles and leaves unknown ones and emails alone', () => {
-        expect(channelMentionLinks('hi @alice and @bob, mail me@alice.com', members))
-            .toBe('hi [@alice](mention:a1) and @bob, mail me@alice.com');
+    const members = [{ id: 'a1', name: 'Alice [QA]', handle: 'alice' }, { id: 'm', name: '小明' }];
+    it('links known names and legacy handles with the current name, leaving unknown ones and emails alone', () => {
+        expect(channelMentionLinks('hi @alice [qa]、@小明帮我 and @bob, mail me@alice.com; old @alice', members))
+            .toBe('hi [@Alice \\[QA\\]](mention:a1)、[@小明](mention:m)帮我 and @bob, mail me@alice.com; old [@Alice \\[QA\\]](mention:a1)');
     });
 });

@@ -72,7 +72,7 @@ export const TeammateTaskPanel = React.memo(({ id }: { id: string }) => {
                 <TeammateAvatar teammate={teammate} /><Text style={styles.text}>{teammate.name}</Text>
             </TouchableOpacity>}
         </View>
-        {task.createdByTeammateId && <Text style={styles.muted}>{t('teammateTasks.createdByAgent', { agent: creator ? `@${creator.handle}` : t('channels.unknownAgent') })}</Text>}
+        {task.createdByTeammateId && <Text style={styles.muted}>{t('teammateTasks.createdByAgent', { agent: creator ? creator.name : t('channels.unknownAgent') })}</Text>}
         {task.summary && <Text style={styles.text}>{task.summary}</Text>}
         {task.prUrl && <Action title={t('teammateTasks.pr')} disabled={linkBusy} onPress={openPr} />}
         <View style={styles.row}>

@@ -73,9 +73,8 @@ export default function RootLayout() {
             <Stack.Screen name="teammates/tasks/[id]" options={({ route }) => ({ ...softHeaderOptions, headerTitle: t('teammateTasks.title'),
                 headerRight: () => <TeammateTaskIssueLink id={(route.params as { id: string }).id} />,
             })} />
-            <Stack.Screen name="teammates/new/index" options={{ ...softHeaderOptions, headerTitle: t('teammates.add') }} />
-            <Stack.Screen name="teammates/new/manual" options={{ ...softHeaderOptions, headerTitle: t('teammates.method.manualTitle') }} />
-            <Stack.Screen name="teammates/new/ai" options={{ ...softHeaderOptions, headerTitle: t('teammates.ai.title') }} />
+            <Stack.Screen name="teammates/new/index" options={{ ...softHeaderOptions, headerTitle: '' }} />
+            <Stack.Screen name="teammates/new/confirm" options={{ ...softHeaderOptions, headerTitle: t('teammates.createFlow.confirmTitle') }} />
             <Stack.Screen name="teammates/[id]/index" options={({ route }) => ({ ...softHeaderOptions, headerTitle: t('teammates.profile'),
                 headerRight: () => <TeammateEditLink id={(route.params as { id: string }).id} />,
             })} />

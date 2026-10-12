@@ -57,7 +57,7 @@ export default React.memo(function NewChannelScreen() {
                         <Item
                             key={member.id}
                             title={member.name}
-                            subtitle={`@${member.handle}`}
+                            subtitle={member.role || undefined}
                             leftElement={<TeammateAvatar teammate={member} size={40} />}
                             selected={checked}
                             disabled={disabled}
