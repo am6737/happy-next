@@ -3,7 +3,7 @@ import { Modal } from '@/modal';
 import type { PendingMessage } from '@/sync/storageTypes';
 import { t } from '@/text';
 import * as React from 'react';
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, Text, useWindowDimensions, View } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { layout } from './layout';
 import { PendingMessageDetailModal } from './PendingMessageDetailModal';
@@ -25,6 +25,7 @@ type PendingQueuePanelProps = {
 
 export const PendingQueuePanel: React.FC<PendingQueuePanelProps> = React.memo(({ sessionId, messages, canManage, onSendNow, onPin, onDelete, onPause, onSaveEdit, onReschedule }) => {
     const { theme } = useUnistyles();
+    const { width: screenWidth } = useWindowDimensions();
     const [pendingAction, setPendingAction] = React.useState<{ pendingId: string; action: PendingActionType } | null>(null);
     const scrollRef = React.useRef<ScrollView>(null);
     const prevCountRef = React.useRef(messages.length);
@@ -78,7 +79,9 @@ export const PendingQueuePanel: React.FC<PendingQueuePanelProps> = React.memo(({
     }
 
     return (
-        <View style={styles.container}>
+        // Matches AgentInput's container padding, and innerContainer its panelSideMargin inset (applied inside
+        // the maxWidth clamp), so the items line up with the input card at any width.
+        <View style={[styles.container, { paddingHorizontal: screenWidth > 700 ? 16 : 8 }]}>
             <View style={styles.innerContainer}>
                 <View style={styles.headerRow}>
                     <Text style={styles.title}>{t('pendingQueue.title')}</Text>
@@ -217,7 +220,6 @@ const styles = StyleSheet.create((theme) => ({
         borderTopWidth: StyleSheet.hairlineWidth,
         borderTopColor: theme.colors.divider,
         backgroundColor: theme.colors.surface,
-        paddingHorizontal: 12,
         paddingTop: 8,
         paddingBottom: 8,
         alignItems: 'center',
@@ -225,6 +227,7 @@ const styles = StyleSheet.create((theme) => ({
     innerContainer: {
         width: '100%',
         maxWidth: layout.maxWidth,
+        paddingHorizontal: 8,
         gap: 8,
     },
     headerRow: {
