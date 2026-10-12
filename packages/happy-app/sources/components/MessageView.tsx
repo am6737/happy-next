@@ -803,7 +803,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   agentMessageContainer: {
     paddingHorizontal: 16,
-    marginBottom: 16,
+    marginBottom: 10,
     borderRadius: 16,
     alignSelf: 'flex-start',
     maxWidth: '100%',
