@@ -1,10 +1,7 @@
 import * as React from 'react';
 import { Text, TextStyle } from 'react-native';
+import { BASE_ALPHA, PAUSE_MS, SWEEP_MS, dimmed } from './textShimmerShared';
 
-/** One pass of the light, from just before the text to just past it. About the pace of 2200ms across the text alone. */
-const SWEEP_MS = 2800;
-/** How long the text rests, back to its dim colour, between the light leaving and the next pass. */
-const PAUSE_MS = 600;
 /**
  * The gradient is twice the text's width, so a window over it sees half of it at a time, and the
  * band sits on the gradient's midpoint: at 100% the band's centre is on the text's left edge, at
@@ -23,22 +20,6 @@ const SWEEP_KEYFRAMES: Keyframe[] = [
     { backgroundPosition: '-15% 0', offset: SWEEP_MS / (SWEEP_MS + PAUSE_MS) },
     { backgroundPosition: '-15% 0', offset: 1 },
 ];
-/**
- * How far the text holds back between passes of the light. It is all in the colour under the
- * gradient, and the gradient adds nothing to it away from the band, so the text rests at the same
- * strength wherever the window is — including where it has slid past the gradient's ends.
- */
-const BASE_ALPHA = 0.54;
-
-/** The same colour, see-through, so the row behind it shows through and the glyphs read as dim. */
-function dimmed(hex: string, alpha: number): string {
-    const value = hex.replace('#', '');
-    const full = value.length === 3 ? value.split('').map((c) => c + c).join('') : value;
-    const n = Number.parseInt(full, 16);
-    if (Number.isNaN(n)) return hex;
-    return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
-}
-
 /**
  * A line of text with a band of light travelling across it, for something that is still working.
  *
