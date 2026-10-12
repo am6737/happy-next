@@ -87,6 +87,8 @@ export const en = {
             loop_guard: "Agent replies stopped after five consecutive hops. Send a message to continue.",
             member_added: "An Agent joined the chat.",
             context_reset: "A fresh context has started.",
+            context_compacted: "The Agent's context was compressed by the model; older details may be less precise. Earlier messages are still searchable.",
+            context_lost: "The Agent's previous context could not be continued, so it restarted from the chat history.",
         },
     },
     teammates: {
@@ -307,6 +309,7 @@ export const en = {
             "budget_exceeded": "Budget exceeded",
             "cancelled_by_user": "Cancelled by user",
             "session_error": "Session error",
+            "context_overflow": "Conversation too long",
             "unknown": "Unknown failure"
         }
     },

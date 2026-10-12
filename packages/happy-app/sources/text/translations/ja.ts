@@ -90,6 +90,8 @@ export const ja: TranslationStructure = {
             loop_guard: "エージェントの連続返信が5回に達したため停止しました。メッセージを送信すると続行できます。",
             member_added: "エージェントがチャットに参加しました。",
             context_reset: "新しいコンテキストを開始しました。",
+            context_compacted: "モデルによってAgentのコンテキストが圧縮されました。古い詳細は正確でない可能性があります。以前のメッセージは引き続き検索できます。",
+            context_lost: "Agentの以前のコンテキストを引き継げなかったため、チャット履歴から再開しました。",
         },
     },
     teammates: {
@@ -304,6 +306,7 @@ export const ja: TranslationStructure = {
         },
         "failure": {
             "runtime_offline": "マシンがオフライン",
+            "context_overflow": "会話が長すぎます",
             "spawn_failed": "セッション開始失敗",
             "dispatch_timeout": "割り当てタイムアウト",
             "runtime_recovery": "実行環境を復旧",

@@ -89,6 +89,8 @@ export const zhHans: TranslationStructure = {
             loop_guard: "Agent 连续回复已达五次，自动接力已停止。发送消息可继续。",
             member_added: "一位 Agent 加入了聊天。",
             context_reset: "已开始新的上下文。",
+            context_compacted: "模型压缩了 Agent 的上下文，较早的细节可能不够准确；之前的消息仍可搜索。",
+            context_lost: "Agent 无法接着之前的上下文，已根据聊天记录重新开始。",
         },
     },
     teammates: {
@@ -303,6 +305,7 @@ export const zhHans: TranslationStructure = {
         },
         "failure": {
             "runtime_offline": "机器离线",
+            "context_overflow": "对话太长",
             "spawn_failed": "会话启动失败",
             "dispatch_timeout": "分派超时",
             "runtime_recovery": "运行环境恢复",

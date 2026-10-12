@@ -13,5 +13,7 @@ describe('governance system messages', () => {
         expect(governanceSystemMessage({ t: 'system', code: 'run_failed', data: { runId: 'r1', name: 'Atlas', reason: 'session_error' } })).toEqual({ code: 'run_failed', name: 'Atlas', reason: 'session_error', runId: 'r1', taskId: null });
         expect(governanceSystemMessage({ t: 'system', code: 'run_failed', data: { reason: 'nonsense' } })).toEqual({ code: 'run_failed', name: '', reason: 'unknown', runId: null, taskId: null });
         expect(governanceSystemMessage({ t: 'system', code: 'context_reset', data: {} })).toBeNull();
+        expect(governanceSystemMessage({ t: 'system', code: 'context_compacted', data: {} })).toBeNull();
+        expect(governanceSystemMessage({ t: 'system', code: 'context_lost', data: {} })).toBeNull();
     });
 });

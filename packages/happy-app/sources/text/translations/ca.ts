@@ -87,6 +87,8 @@ export const ca: TranslationStructure = {
             loop_guard: "Les respostes dels Agents s’han aturat després de cinc torns consecutius. Envia un missatge per continuar.",
             member_added: "Un Agent s’ha unit al xat.",
             context_reset: "S’ha iniciat un context nou.",
+            context_compacted: "El context de l’Agent ha estat comprimit pel model; els detalls antics poden ser menys precisos. Els missatges anteriors encara es poden cercar.",
+            context_lost: "No s’ha pogut continuar el context anterior de l’Agent; s’ha reiniciat a partir de l’historial del xat.",
         },
     },
     teammates: {
@@ -301,6 +303,7 @@ export const ca: TranslationStructure = {
         },
         "failure": {
             "runtime_offline": "Màquina fora de línia",
+            "context_overflow": "Conversa massa llarga",
             "spawn_failed": "No s’ha pogut iniciar la sessió",
             "dispatch_timeout": "Temps d’assignació exhaurit",
             "runtime_recovery": "Entorn recuperat",

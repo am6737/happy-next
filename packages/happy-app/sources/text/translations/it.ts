@@ -87,6 +87,8 @@ export const it: TranslationStructure = {
             loop_guard: "Le risposte degli Agenti si sono fermate dopo cinque turni consecutivi. Invia un messaggio per continuare.",
             member_added: "Un Agente si è unito alla chat.",
             context_reset: "È iniziato un nuovo contesto.",
+            context_compacted: "Il modello ha compresso il contesto dell'Agente; i dettagli meno recenti potrebbero essere meno precisi. I messaggi precedenti sono ancora ricercabili.",
+            context_lost: "Non è stato possibile continuare il contesto precedente dell'Agente, quindi è ripartito dalla cronologia della chat.",
         },
     },
     teammates: {
@@ -301,6 +303,7 @@ export const it: TranslationStructure = {
         },
         "failure": {
             "runtime_offline": "Macchina offline",
+            "context_overflow": "Conversazione troppo lunga",
             "spawn_failed": "Impossibile avviare la sessione",
             "dispatch_timeout": "Timeout di assegnazione",
             "runtime_recovery": "Ambiente ripristinato",
