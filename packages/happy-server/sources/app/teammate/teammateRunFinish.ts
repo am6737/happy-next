@@ -9,16 +9,17 @@ import { teammateRunUpdated } from './teammateRunUpdated';
 import { TEAMMATE_ACTIVE_RUN_STATUSES, SILENT_FAILURE_REASONS } from './teammateRunStatuses';
 import { channelSystemMessage } from '@/app/channel/channelSystemMessage';
 
-const RETRY_REASONS = ['spawn_failed', 'dispatch_timeout', 'runtime_recovery'];
+const RETRY_REASONS = ['spawn_failed', 'dispatch_timeout', 'runtime_recovery', 'context_overflow'];
 
 /**
  * Conditional terminal transition and its one retry share a transaction, preventing duplicate retries.
  * A failure that will not be retried automatically is announced in the thread's channel (keyed by run, so
  * it is posted once) so the owner sees why the Agent went quiet and can retry it from the chat.
  */
-export async function teammateRunTerminateTx(tx: Tx, runId: string, status: 'failed' | 'cancelled' | 'completed', failureReason: TeammateRunFailureReason | null, now: Date, expected: Prisma.TeammateRunWhereInput = {}) {
+export async function teammateRunTerminateTx(tx: Tx, runId: string, status: 'failed' | 'cancelled' | 'completed', failureReason: TeammateRunFailureReason | null, now: Date, expected: Prisma.TeammateRunWhereInput = {}, options: { allowCompleted?: boolean } = {}) {
     const row = await tx.teammateRun.findUnique({ where: { id: runId }, include: { teammate: true, thread: true } });
-    if (!row || !TEAMMATE_ACTIVE_RUN_STATUSES.includes(row.status)) return row ? toTeammateRunDto(row) : null;
+    const acceptable = TEAMMATE_ACTIVE_RUN_STATUSES.includes(row?.status ?? '') || (options.allowCompleted === true && row?.status === 'completed');
+    if (!row || !acceptable) return row ? toTeammateRunDto(row) : null;
     const changed = await tx.teammateRun.updateMany({ where: { AND: [{ id: runId, status: row.status, dispatchToken: row.dispatchToken }, expected] }, data: { status, failureReason, finishedAt: now } });
     if (!changed.count) return null;
     const run = toTeammateRunDto({ ...row, status, failureReason, finishedAt: now });

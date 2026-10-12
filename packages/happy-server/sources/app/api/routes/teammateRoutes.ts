@@ -3,6 +3,7 @@ import {
     TeammateSchema, TeammateCreateRequestSchema, TeammateUpdateRequestSchema,
     TeammateRunSchema, TeammateTaskSchema, TeammateSpendSchema,
     TeammateManualRunRequestSchema, TeammateRunStartedRequestSchema, TeammateRunFinishedRequestSchema,
+    TeammateContextEventRequestSchema,
     TeammateActiveSessionsResponseSchema,
     TeammateScheduledRunResponseSchema,
 } from 'happy-wire';
@@ -22,6 +23,7 @@ import { teammateRunCancel } from '@/app/teammate/teammateRunCancel';
 import { teammateRunRetry } from '@/app/teammate/teammateRunRetry';
 import { teammateRunGet, teammateActiveSessions } from '@/app/teammate/teammateRuntimeQueries';
 import { teammateManualScheduledRun } from '@/app/teammate/teammateDreamingTick';
+import { teammateRunContextEvent } from '@/app/teammate/teammateRunContextEvent';
 
 const ErrorSchema = z.object({ error: z.string() });
 const ProfileResponseSchema = z.object({ teammate: TeammateSchema });
@@ -163,6 +165,13 @@ export function teammateRoutes(app: Fastify) {
         schema: { params: RunParamsSchema, body: TeammateRunFinishedRequestSchema, response: { 200: z.object({ ok: z.literal(true) }), ...errorResponses } },
     }, async (request) => {
         await teammateRunFinish(request.params.runId, request.body, request.userId);
+        return { ok: true as const };
+    });
+    app.post('/v1/teammate-runs/:runId/context-event', {
+        ...common,
+        schema: { params: RunParamsSchema, body: TeammateContextEventRequestSchema, response: { 200: z.object({ ok: z.literal(true) }), ...errorResponses } },
+    }, async (request) => {
+        await teammateRunContextEvent(request.params.runId, request.body, request.userId);
         return { ok: true as const };
     });
     app.get('/v1/teammate-runtime/active-sessions', {
