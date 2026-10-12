@@ -911,6 +911,8 @@ export const pl: TranslationStructure = {
         in30Minutes: 'Za 30 minut',
         in1Hour: 'Za 1 godzinę',
         custom: 'Własny',
+        today: 'Dzisiaj',
+        tomorrow: 'Jutro',
         confirm: 'Zaplanuj',
         save: 'Zapisz',
         imagesAttached: ({ count }: { count: number }) => `Dołączono obrazów: ${count}`,

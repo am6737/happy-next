@@ -1,0 +1,101 @@
+/* Web date/time picker: react-day-picker keeps its own layout and sizes, with its colors taken
+   from the active theme; the hour and minute lists are ours. The --dp-* variables are set by
+   the component from the theme. */
+
+.dp-root {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: var(--dp-text);
+    user-select: none;
+}
+
+.dp-calendar {
+    padding: 8px 12px;
+    min-height: 360px;
+    box-sizing: border-box;
+    overflow: auto;
+}
+
+.dp-calendar .rdp-root {
+    --rdp-accent-color: var(--dp-primary);
+    --rdp-accent-background-color: var(--dp-accent-bg);
+    --rdp-day_button-border-radius: 8px;
+}
+
+.dp-calendar .rdp-chevron {
+    fill: var(--dp-text);
+}
+
+.dp-calendar .rdp-day_button:hover:not(:disabled) {
+    background-color: var(--dp-accent-bg);
+}
+
+/* The library outlines the selected day; fill it with the theme's primary color instead. */
+.dp-calendar .rdp-selected .rdp-day_button,
+.dp-calendar .rdp-selected .rdp-day_button:hover {
+    background-color: var(--dp-primary);
+    color: var(--dp-primary-text);
+}
+
+.dp-calendar .rdp-today:not(.rdp-selected) {
+    color: var(--dp-text);
+    font-weight: 700;
+}
+
+.dp-time {
+    display: flex;
+    gap: 4px;
+    padding: 12px;
+    border-left: 1px solid var(--dp-border);
+}
+
+/* The lists are as tall as the calendar. */
+.dp-time-col {
+    --dp-item-height: 32px;
+    --dp-col-height: 334px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    height: var(--dp-col-height);
+    width: 40px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    box-sizing: border-box;
+    scrollbar-width: none;
+}
+
+.dp-time-col::-webkit-scrollbar {
+    display: none;
+}
+
+.dp-time-item {
+    flex: none;
+    width: 100%;
+    height: var(--dp-item-height);
+    border: none;
+    border-radius: 6px;
+    background: none;
+    padding: 0;
+    color: var(--dp-text);
+    font: inherit;
+    font-size: 14px;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+    cursor: pointer;
+    transition: background-color 0.15s;
+}
+
+.dp-time-item:hover:not(:disabled):not([aria-selected="true"]) {
+    background-color: var(--dp-accent-bg);
+}
+
+.dp-time-item[aria-selected="true"] {
+    background-color: var(--dp-primary);
+    color: var(--dp-primary-text);
+}
+
+.dp-time-item:disabled {
+    opacity: 0.4;
+    cursor: default;
+}

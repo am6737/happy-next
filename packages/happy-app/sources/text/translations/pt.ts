@@ -900,6 +900,8 @@ export const pt: TranslationStructure = {
         in30Minutes: 'Em 30 minutos',
         in1Hour: 'Em 1 hora',
         custom: 'Personalizado',
+        today: 'Hoje',
+        tomorrow: 'Amanhã',
         confirm: 'Agendar',
         save: 'Salvar',
         imagesAttached: ({ count }: { count: number }) => count === 1 ? `${count} imagem anexada` : `${count} imagens anexadas`,

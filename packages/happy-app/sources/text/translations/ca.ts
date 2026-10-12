@@ -900,6 +900,8 @@ export const ca: TranslationStructure = {
         in30Minutes: 'D\'aquí a 30 minuts',
         in1Hour: 'D\'aquí a 1 hora',
         custom: 'Personalitzat',
+        today: 'Avui',
+        tomorrow: 'Demà',
         confirm: 'Programa',
         save: 'Desa',
         imagesAttached: ({ count }: { count: number }) => count === 1 ? `${count} imatge adjunta` : `${count} imatges adjuntes`,

@@ -901,6 +901,8 @@ export const zhHant: TranslationStructure = {
         in30Minutes: '30 分鐘後',
         in1Hour: '1 小時後',
         custom: '自訂',
+        today: '今天',
+        tomorrow: '明天',
         confirm: '安排傳送',
         save: '儲存',
         imagesAttached: ({ count }: { count: number }) => `已附 ${count} 張圖片`,

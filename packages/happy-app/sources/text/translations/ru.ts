@@ -1093,6 +1093,8 @@ export const ru: TranslationStructure = {
         in30Minutes: 'Через 30 минут',
         in1Hour: 'Через 1 час',
         custom: 'Своё время',
+        today: 'Сегодня',
+        tomorrow: 'Завтра',
         confirm: 'Запланировать',
         save: 'Сохранить',
         imagesAttached: ({ count }: { count: number }) => `Прикреплено изображений: ${count}`,

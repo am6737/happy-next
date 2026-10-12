@@ -902,6 +902,8 @@ export const ja: TranslationStructure = {
         in30Minutes: '30分後',
         in1Hour: '1時間後',
         custom: 'カスタム',
+        today: '今日',
+        tomorrow: '明日',
         confirm: '予約する',
         save: '保存',
         imagesAttached: ({ count }: { count: number }) => `画像 ${count} 枚を添付`,

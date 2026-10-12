@@ -13,7 +13,7 @@ function getDayjsLocale(): string {
     return LOCALE_MAP[lang] ?? lang;
 }
 
-interface DatePickerProps {
+export interface DatePickerProps {
     date: Date;
     onChange: (date: Date) => void;
     minDate?: Date;

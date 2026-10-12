@@ -902,6 +902,8 @@ export const zhHans: TranslationStructure = {
         in30Minutes: '30 分钟后',
         in1Hour: '1 小时后',
         custom: '自定义',
+        today: '今天',
+        tomorrow: '明天',
         confirm: '安排发送',
         save: '保存',
         imagesAttached: ({ count }: { count: number }) => `已附 ${count} 张图片`,

@@ -909,6 +909,8 @@ export const en = {
         in30Minutes: 'In 30 minutes',
         in1Hour: 'In 1 hour',
         custom: 'Custom',
+        today: 'Today',
+        tomorrow: 'Tomorrow',
         confirm: 'Schedule',
         save: 'Save',
         imagesAttached: ({ count }: { count: number }) => count === 1 ? `${count} image attached` : `${count} images attached`,

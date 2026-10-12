@@ -10,7 +10,7 @@ import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Typography } from '@/constants/Typography';
 import { t } from '@/text';
-import { DatePicker } from './dootask/DatePicker';
+import { DatePickerPopover } from './dootask/DatePickerPopover';
 import { liquidGlassAvailable } from './GlassSurface';
 import { GLASS_SHEET_FILL, GLASS_SHEET_MARGIN, GLASS_SHEET_RADIUS, glassSheetFramePadding } from './glassSheet';
 
@@ -46,10 +46,21 @@ const isIOS = Platform.OS === 'ios';
 const backdropFill = { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 } as const;
 
 function formatDateTime(date: Date): string {
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(today.getDate() + 1);
+    const day = date.toDateString() === today.toDateString()
+        ? t('scheduleMessage.today')
+        : date.toDateString() === tomorrow.toDateString()
+            ? t('scheduleMessage.tomorrow')
+            : null;
+    if (day) {
+        return `${day} ${date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
+    }
     return date.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
-/** Just the time when it is today, otherwise with the date. */
+/** Just the time when it is today, otherwise with the day ("Tomorrow", or the date). */
 function formatSendTime(date: Date): string {
     if (date.toDateString() === new Date().toDateString()) {
         return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
@@ -154,6 +165,8 @@ export function ScheduleMessageSheet({
         setShowDatePicker(false);
     }, []);
 
+    const closeDatePicker = React.useCallback(() => setShowDatePicker(false), []);
+
     const handleCustomDateChange = React.useCallback((next: Date) => {
         setCustomDate(next);
         setSelectedOption('custom');
@@ -250,46 +263,54 @@ export function ScheduleMessageSheet({
                     )}
 
                     <Text style={styles.sectionTitle}>{t('scheduleMessage.sendTime')}</Text>
-                    {/* `handled`: picking a quick time keeps the editor focused and the keyboard up. */}
-                    <ScrollView
-                        horizontal
-                        showsHorizontalScrollIndicator={false}
-                        keyboardShouldPersistTaps="handled"
-                        contentContainerStyle={styles.options}
-                    >
-                        {limitDate && (
-                            <Pressable
-                                style={[styles.option, selectedOption === 'limit' && styles.optionSelected]}
-                                onPress={() => chooseOption('limit')}
-                            >
-                                <Text style={styles.optionTitle}>{t('scheduleMessage.afterLimitReset')}</Text>
-                                <Text style={styles.optionSubtitle}>{formatSendTime(limitDate)}</Text>
-                            </Pressable>
-                        )}
-                        <Pressable style={[styles.option, selectedOption === 'in30' && styles.optionSelected]} onPress={() => chooseOption('in30')}>
-                            <Text style={styles.optionTitle}>{t('scheduleMessage.in30Minutes')}</Text>
-                            <Text style={styles.optionSubtitle}>{formatSendTime(new Date(now + 30 * 60_000))}</Text>
-                        </Pressable>
-                        <Pressable style={[styles.option, selectedOption === 'in60' && styles.optionSelected]} onPress={() => chooseOption('in60')}>
-                            <Text style={styles.optionTitle}>{t('scheduleMessage.in1Hour')}</Text>
-                            <Text style={styles.optionSubtitle}>{formatSendTime(new Date(now + 60 * 60_000))}</Text>
-                        </Pressable>
-                        <Pressable
-                            style={[styles.option, selectedOption === 'custom' && styles.optionSelected]}
-                            onPress={() => {
-                                setSelectedOption('custom');
-                                // The date picker needs the room the keyboard takes.
-                                if (!showDatePicker) Keyboard.dismiss();
-                                setShowDatePicker((value) => !value);
-                            }}
+                    {/* The picker floats above this row on web, so it stays inside the same parent. */}
+                    <View style={styles.timeSection}>
+                        {/* `handled`: picking a quick time keeps the editor focused and the keyboard up. */}
+                        <ScrollView
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            keyboardShouldPersistTaps="handled"
+                            contentContainerStyle={styles.options}
                         >
-                            <Text style={styles.optionTitle}>{t('scheduleMessage.custom')}</Text>
-                            <Text style={styles.optionSubtitle}>{formatDateTime(customDate)}</Text>
-                        </Pressable>
-                    </ScrollView>
-                    {showDatePicker && (
-                        <DatePicker date={customDate} onChange={handleCustomDateChange} minDate={new Date(Date.now() + 60_000)} timePicker />
-                    )}
+                            {limitDate && (
+                                <Pressable
+                                    style={[styles.option, selectedOption === 'limit' && styles.optionSelected]}
+                                    onPress={() => chooseOption('limit')}
+                                >
+                                    <Text style={styles.optionTitle}>{t('scheduleMessage.afterLimitReset')}</Text>
+                                    <Text style={styles.optionSubtitle}>{formatSendTime(limitDate)}</Text>
+                                </Pressable>
+                            )}
+                            <Pressable style={[styles.option, selectedOption === 'in30' && styles.optionSelected]} onPress={() => chooseOption('in30')}>
+                                <Text style={styles.optionTitle}>{t('scheduleMessage.in30Minutes')}</Text>
+                                <Text style={styles.optionSubtitle}>{formatSendTime(new Date(now + 30 * 60_000))}</Text>
+                            </Pressable>
+                            <Pressable style={[styles.option, selectedOption === 'in60' && styles.optionSelected]} onPress={() => chooseOption('in60')}>
+                                <Text style={styles.optionTitle}>{t('scheduleMessage.in1Hour')}</Text>
+                                <Text style={styles.optionSubtitle}>{formatSendTime(new Date(now + 60 * 60_000))}</Text>
+                            </Pressable>
+                            <Pressable
+                                style={[styles.option, selectedOption === 'custom' && styles.optionSelected]}
+                                onPress={() => {
+                                    setSelectedOption('custom');
+                                    // The date picker needs the room the keyboard takes.
+                                    if (!showDatePicker) Keyboard.dismiss();
+                                    setShowDatePicker((value) => !value);
+                                }}
+                            >
+                                <Text style={styles.optionTitle}>{t('scheduleMessage.custom')}</Text>
+                                <Text style={styles.optionSubtitle}>{formatDateTime(customDate)}</Text>
+                            </Pressable>
+                        </ScrollView>
+                        <DatePickerPopover
+                            visible={showDatePicker}
+                            onClose={closeDatePicker}
+                            date={customDate}
+                            onChange={handleCustomDateChange}
+                            minDate={new Date(Date.now() + 60_000)}
+                            timePicker
+                        />
+                    </View>
 
                     <Pressable
                         onPress={() => void submit()}
@@ -376,6 +397,9 @@ const styles = StyleSheet.create((theme) => ({
         fontSize: 13,
         color: theme.colors.textSecondary,
         ...Typography.default('semiBold'),
+    },
+    timeSection: {
+        gap: 12,
     },
     options: {
         gap: 8,
