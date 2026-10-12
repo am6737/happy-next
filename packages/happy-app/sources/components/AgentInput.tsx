@@ -178,6 +178,17 @@ const agentMarkArtworkSize: Record<keyof typeof agentFlavorIcons, number> = {
     qoder: 11,
 };
 
+// Vendor marks at full size, as on the agent button in the input and the agent picker rows. Same
+// correction as above at a larger scale: Codex and Qoder fill their frames, so they are drawn
+// smaller than Claude and Gemini to read as the same size.
+const AGENT_ICON_SLOT = 18;
+const agentIconArtworkSize: Record<keyof typeof agentFlavorIcons, number> = {
+    claude: 18,
+    codex: 15,
+    gemini: 18,
+    qoder: 16,
+};
+
 // The settings overlay grows out of the input below it and sinks back into it when closed. These are
 // driven by shared values rather than entering/exiting layout animations: on web those pin the
 // overlay's top and height, so it would grow downward over the input when its content changes.
@@ -1806,7 +1817,7 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
 
                                 <Animated.View style={[styles.settingsContent, settingsContentStyle]}>
                                     {/* Agent Section */}
-                                    {shownSettingsTab === 'agent' && <View style={styles.overlaySection}>
+                                    {shownSettingsTab === 'agent' && <ScrollView style={styles.modelListScroll} contentContainerStyle={styles.overlaySection} keyboardShouldPersistTaps="always">
                                         {(props.availableAgents ?? []).map((agent) => {
                                             const isSelected = props.agentType === agent;
                                             return (
@@ -1844,12 +1855,14 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                                             }} />
                                                         )}
                                                     </View>
-                                                    <Image
-                                                        source={agentFlavorIcons[agent]}
-                                                        style={{ width: 16, height: 16, marginRight: 8 }}
-                                                        contentFit="contain"
-                                                        tintColor={agent === 'codex' || agent === 'qoder' ? theme.colors.text : undefined}
-                                                    />
+                                                    <View style={{ width: AGENT_ICON_SLOT, height: AGENT_ICON_SLOT, alignItems: 'center', justifyContent: 'center', marginRight: 8 }}>
+                                                        <Image
+                                                            source={agentFlavorIcons[agent]}
+                                                            style={{ width: agentIconArtworkSize[agent], height: agentIconArtworkSize[agent] }}
+                                                            contentFit="contain"
+                                                            tintColor={agent === 'codex' || agent === 'qoder' ? theme.colors.text : undefined}
+                                                        />
+                                                    </View>
                                                     <Text style={{
                                                         fontSize: 14,
                                                         color: isSelected ? theme.colors.radio.active : theme.colors.text,
@@ -1860,10 +1873,10 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                                 </Pressable>
                                             );
                                         })}
-                                    </View>}
+                                    </ScrollView>}
 
                                     {/* Permission Mode Section */}
-                                    {shownSettingsTab === 'permission' && <View style={styles.overlaySection}>
+                                    {shownSettingsTab === 'permission' && <ScrollView style={styles.modelListScroll} contentContainerStyle={styles.overlaySection} keyboardShouldPersistTaps="always">
                                         {isQoderPlanning && (
                                             <View style={{
                                                 flexDirection: 'row',
@@ -1949,7 +1962,7 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                                 </Pressable>
                                             );
                                         })}
-                                    </View>}
+                                    </ScrollView>}
 
                                     {/* Model Section: wide screens scroll the model and effort columns on their own;
                                         narrow ones scroll only the model list, with the effort as a dropdown row below it. */}
@@ -2313,7 +2326,7 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                         {(() => {
                                             const isCodex = props.agentType === 'codex';
                                             const isQoder = props.agentType === 'qoder';
-                                            const iconSize = isCodex ? 15 : (isQoder ? 16 : 18);
+                                            const iconSize = agentIconArtworkSize[props.agentType as keyof typeof agentFlavorIcons] ?? agentIconArtworkSize.claude;
                                             const iconStyle = {
                                                 width: iconSize,
                                                 height: iconSize,
