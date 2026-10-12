@@ -29,6 +29,7 @@ import {
   TeammateRunDispatchPayloadSchema,
   TeammateRunFinishedRequestSchema,
   TeammateContextEventRequestSchema,
+  TEAMMATE_CONTEXT_ROLLED_REASONS,
   TeammateRunStartedRequestSchema,
   TeammateSessionRegisterRequestSchema,
   TeammateTaskAgentUpdateRequestSchema,
@@ -272,6 +273,13 @@ describe('teammate contract', () => {
     expect(CHANNEL_SYSTEM_CODES).toEqual(expect.arrayContaining([
       'budget_warning', 'budget_paused', 'budget_resumed', 'task_self_assigned',
     ]));
+  });
+
+  it('accepts context rolled events', () => {
+    expect(TEAMMATE_CONTEXT_ROLLED_REASONS).toEqual(['tokens', 'compacted']);
+    expect(TeammateContextEventRequestSchema.parse({
+      code: 'context_rolled', dispatchToken: 'token-1', provider: 'claude', reason: 'tokens', segment: 2,
+    })).toMatchObject({ code: 'context_rolled', segment: 2 });
   });
 
   it('accepts skipped dispatch acknowledgements and rejects non-boolean skipped values', () => {

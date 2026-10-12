@@ -28,6 +28,7 @@ export const TEAMMATE_RUN_FAILURE_REASONS = [
   'budget_exceeded', 'cancelled_by_user', 'session_error', 'context_overflow', 'unknown',
 ] as const;
 export const TEAMMATE_CONTEXT_LOST_REASONS = ['overflow', 'resume_failed'] as const;
+export const TEAMMATE_CONTEXT_ROLLED_REASONS = ['tokens', 'compacted'] as const;
 export const TEAMMATE_TASK_STATUSES = [
   'todo', 'in_progress', 'awaiting_input', 'in_review', 'done', 'cancelled', 'paused',
 ] as const;
@@ -43,7 +44,7 @@ export const CHANNEL_MESSAGE_KINDS = ['text', 'decision', 'report', 'system'] as
 export const CHANNEL_MEMBER_TYPES = ['user', 'teammate'] as const;
 export const CHANNEL_SYSTEM_CODES = [
   'loop_guard', 'member_added', 'context_reset',
-  'context_compacted', 'context_lost', 'budget_warning', 'budget_paused', 'budget_resumed', 'task_self_assigned', 'run_failed',
+  'context_compacted', 'context_lost', 'context_rolled', 'budget_warning', 'budget_paused', 'budget_resumed', 'task_self_assigned', 'run_failed',
 ] as const;
 export const TEAMMATE_HANDLE_REGEX = /^[a-z0-9][a-z0-9_-]{1,31}$/;
 export const TEAMMATE_SKILL_NAME_REGEX = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
@@ -318,6 +319,13 @@ export const TeammateContextEventRequestSchema = z.discriminatedUnion('code', [
     dispatchToken: z.string().min(1),
     provider: TeammateControllerProviderSchema,
     reason: z.enum(TEAMMATE_CONTEXT_LOST_REASONS),
+  }),
+  z.object({
+    code: z.literal('context_rolled'),
+    dispatchToken: z.string().min(1),
+    provider: TeammateControllerProviderSchema,
+    reason: z.enum(TEAMMATE_CONTEXT_ROLLED_REASONS),
+    segment: z.number().int().min(1),
   }),
 ]);
 export type TeammateContextEventRequest = z.infer<typeof TeammateContextEventRequestSchema>;
