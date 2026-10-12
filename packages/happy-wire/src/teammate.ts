@@ -25,8 +25,9 @@ export const TEAMMATE_RUN_TRIGGERS = [
 export const TEAMMATE_RUN_STATUSES = ['queued', 'dispatching', 'running', 'completed', 'failed', 'cancelled'] as const;
 export const TEAMMATE_RUN_FAILURE_REASONS = [
   'runtime_offline', 'spawn_failed', 'dispatch_timeout', 'runtime_recovery',
-  'budget_exceeded', 'cancelled_by_user', 'session_error', 'unknown',
+  'budget_exceeded', 'cancelled_by_user', 'session_error', 'context_overflow', 'unknown',
 ] as const;
+export const TEAMMATE_CONTEXT_LOST_REASONS = ['overflow', 'resume_failed'] as const;
 export const TEAMMATE_TASK_STATUSES = [
   'todo', 'in_progress', 'awaiting_input', 'in_review', 'done', 'cancelled', 'paused',
 ] as const;
@@ -42,7 +43,7 @@ export const CHANNEL_MESSAGE_KINDS = ['text', 'decision', 'report', 'system'] as
 export const CHANNEL_MEMBER_TYPES = ['user', 'teammate'] as const;
 export const CHANNEL_SYSTEM_CODES = [
   'loop_guard', 'member_added', 'context_reset',
-  'budget_warning', 'budget_paused', 'budget_resumed', 'task_self_assigned', 'run_failed',
+  'context_compacted', 'context_lost', 'budget_warning', 'budget_paused', 'budget_resumed', 'task_self_assigned', 'run_failed',
 ] as const;
 export const TEAMMATE_HANDLE_REGEX = /^[a-z0-9][a-z0-9_-]{1,31}$/;
 export const TEAMMATE_SKILL_NAME_REGEX = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
@@ -304,6 +305,22 @@ export const TeammateRunFinishedRequestSchema = z.object({
   errorMessage: z.string().max(4000).optional(),
 });
 export type TeammateRunFinishedRequest = z.infer<typeof TeammateRunFinishedRequestSchema>;
+
+export const TeammateContextEventRequestSchema = z.discriminatedUnion('code', [
+  z.object({
+    code: z.literal('context_compacted'),
+    dispatchToken: z.string().min(1),
+    provider: TeammateControllerProviderSchema,
+    compactions: z.number().int().min(1),
+  }),
+  z.object({
+    code: z.literal('context_lost'),
+    dispatchToken: z.string().min(1),
+    provider: TeammateControllerProviderSchema,
+    reason: z.enum(TEAMMATE_CONTEXT_LOST_REASONS),
+  }),
+]);
+export type TeammateContextEventRequest = z.infer<typeof TeammateContextEventRequestSchema>;
 
 export const TeammateActiveSessionsResponseSchema = z.object({
   sessionIds: z.array(z.string()),

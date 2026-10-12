@@ -28,6 +28,7 @@ import {
   TeammateListSkillsResponseSchema,
   TeammateRunDispatchPayloadSchema,
   TeammateRunFinishedRequestSchema,
+  TeammateContextEventRequestSchema,
   TeammateRunStartedRequestSchema,
   TeammateSessionRegisterRequestSchema,
   TeammateTaskAgentUpdateRequestSchema,
@@ -368,6 +369,20 @@ describe('teammate contract', () => {
     expect(TeammateRunFinishedRequestSchema.parse(request)).toEqual(request);
     expect(TeammateRunFinishedRequestSchema.safeParse({ ...request, failureReason: 'invalid' }).success).toBe(false);
     expect(TeammateRunFinishedRequestSchema.safeParse({ ...request, errorMessage: 'a'.repeat(4001) }).success).toBe(false);
+  });
+
+  it('validates context events', () => {
+    const compacted = {
+      code: 'context_compacted', dispatchToken: 'token-1', provider: 'claude', compactions: 2,
+    } as const;
+    expect(TeammateContextEventRequestSchema.parse(compacted)).toEqual(compacted);
+    const lost = {
+      code: 'context_lost', dispatchToken: 'token-1', provider: 'codex', reason: 'resume_failed',
+    } as const;
+    expect(TeammateContextEventRequestSchema.parse(lost)).toEqual(lost);
+    expect(TeammateContextEventRequestSchema.safeParse({ ...compacted, compactions: 0 }).success).toBe(false);
+    expect(TeammateContextEventRequestSchema.safeParse({ ...lost, reason: 'unknown' }).success).toBe(false);
+    expect(TeammateContextEventRequestSchema.safeParse({ ...lost, provider: 'gemini' }).success).toBe(false);
   });
 
   it('accepts active session ids, including an empty list, and rejects non-string ids', () => {
