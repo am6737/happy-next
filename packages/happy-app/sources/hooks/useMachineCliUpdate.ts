@@ -10,6 +10,16 @@ import { t } from '@/text';
 // States in which the daemon has a newer version it has not installed yet
 const UPDATABLE_STATES = ['available', 'failed', 'disabled'];
 
+// The deadline is at most a day away: the clock time, plus the date when it is not today
+function formatInstallBy(installBy: number): string {
+    const date = new Date(installBy);
+    const time: Intl.DateTimeFormatOptions = { hour: '2-digit', minute: '2-digit' };
+    if (date.toDateString() === new Date().toDateString()) {
+        return date.toLocaleTimeString([], time);
+    }
+    return date.toLocaleString([], { ...time, month: 'numeric', day: 'numeric' });
+}
+
 function describeCliUpdate(status: CliUpdateStatus): string | null {
     const version = status.latestVersion ?? '';
     switch (status.state) {
@@ -27,7 +37,7 @@ function describeCliUpdate(status: CliUpdateStatus): string | null {
             return status.reason === 'no-permission' ? t('cliUpdate.statusNoPermission') : t('cliUpdate.statusNotGlobal');
         case 'available':
             if (status.waitingFor === 'sessions' && status.installBy) {
-                return t('cliUpdate.statusWaitingSessions', { version, time: new Date(status.installBy).toLocaleString() });
+                return t('cliUpdate.statusWaitingSessions', { version, time: formatInstallBy(status.installBy) });
             }
             if (status.waitingFor === 'executions' || status.waitingFor === 'terminals') {
                 return t('cliUpdate.statusWaitingBusy', { version });
