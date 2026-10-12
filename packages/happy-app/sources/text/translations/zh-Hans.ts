@@ -223,7 +223,7 @@ export const zhHans: TranslationStructure = {
         history: '历史记录',
         sessionHistorySubtitle: '查看过去的 Happy 会话',
         claudeSessionsSubtitle: '浏览设备上的 Claude CLI 会话',
-        agentHistorySubtitle: '浏览 Claude、Codex、Gemini 和 Qoder 的会话历史',
+        agentHistorySubtitle: '浏览并接续设备上已有的会话',
         orchestratorRuns: '编排任务',
         orchestratorRunsSubtitle: '查看多会话编排进度和结果',
         orchestratorRunDetails: '运行详情',
@@ -791,7 +791,7 @@ export const zhHans: TranslationStructure = {
     },
 
     agentHistory: {
-        title: '智能体会话',
+        title: '设备会话',
         loadFailed: '加载会话失败',
         empty: '未找到会话',
         resumeFailed: '恢复会话失败',

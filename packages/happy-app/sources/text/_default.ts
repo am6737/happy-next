@@ -220,7 +220,7 @@ export const en = {
         history: 'History',
         sessionHistorySubtitle: 'View past Happy sessions',
         claudeSessionsSubtitle: 'Browse Claude CLI sessions on this device',
-        agentHistorySubtitle: 'Browse Claude, Codex, Gemini, and Qoder session history',
+        agentHistorySubtitle: 'Browse and continue existing sessions on your devices',
         orchestratorRuns: 'Orchestrator Runs',
         orchestratorRunsSubtitle: 'View multi-session orchestration progress and results',
         orchestratorRunDetails: 'Run Details',
@@ -797,7 +797,7 @@ export const en = {
     },
 
     agentHistory: {
-        title: 'Agent Sessions',
+        title: 'Device Sessions',
         loadFailed: 'Failed to load sessions',
         empty: 'No sessions found',
         resumeFailed: 'Failed to resume session',

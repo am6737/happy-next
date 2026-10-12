@@ -222,7 +222,7 @@ export const zhHant: TranslationStructure = {
         history: '歷史',
         sessionHistorySubtitle: '查看過去的 Happy 工作階段',
         claudeSessionsSubtitle: '瀏覽此裝置上的 Claude CLI 工作階段',
-        agentHistorySubtitle: '瀏覽 Claude、Codex、Gemini 和 Qoder 的工作階段歷史',
+        agentHistorySubtitle: '瀏覽並接續裝置上既有的工作階段',
         orchestratorRuns: '編排任務',
         orchestratorRunsSubtitle: '查看多工作階段編排進度和結果',
         orchestratorRunDetails: '執行詳情',
@@ -790,7 +790,7 @@ export const zhHant: TranslationStructure = {
     },
 
     agentHistory: {
-        title: '智慧體工作階段',
+        title: '裝置工作階段',
         loadFailed: '無法載入工作階段',
         empty: '未找到工作階段',
         resumeFailed: '無法繼續工作階段',

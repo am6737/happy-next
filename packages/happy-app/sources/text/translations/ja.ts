@@ -223,7 +223,7 @@ export const ja: TranslationStructure = {
         history: 'History',
         sessionHistorySubtitle: 'View past Happy sessions',
         claudeSessionsSubtitle: 'Browse Claude CLI sessions on this device',
-        agentHistorySubtitle: 'Claude、Codex、Gemini、Qoder のセッション履歴を閲覧',
+        agentHistorySubtitle: 'デバイス上の既存セッションを閲覧して続行',
         orchestratorRuns: 'オーケストレーター',
         orchestratorRunsSubtitle: 'マルチセッションのオーケストレーション進捗と結果を表示',
         orchestratorRunDetails: '実行の詳細',
@@ -791,7 +791,7 @@ export const ja: TranslationStructure = {
     },
 
     agentHistory: {
-        title: 'エージェントセッション',
+        title: 'デバイスのセッション',
         loadFailed: 'セッションの読み込みに失敗しました',
         empty: 'セッションが見つかりません',
         resumeFailed: 'セッションの再開に失敗しました',

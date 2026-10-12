@@ -182,7 +182,7 @@ export const ru: TranslationStructure = {
         history: 'History',
         sessionHistorySubtitle: 'View past Happy sessions',
         claudeSessionsSubtitle: 'Browse Claude CLI sessions on this device',
-        agentHistorySubtitle: 'Browse Claude, Codex, Gemini, and Qoder session history',
+        agentHistorySubtitle: 'Browse and continue existing sessions on your devices',
         orchestratorRuns: 'Оркестратор',
         orchestratorRunsSubtitle: 'Просмотр прогресса и результатов многосессионной оркестрации',
         orchestratorRunDetails: 'Детали запуска',
@@ -750,7 +750,7 @@ export const ru: TranslationStructure = {
     },
 
     agentHistory: {
-        title: 'Agent Sessions',
+        title: 'Device Sessions',
         loadFailed: 'Failed to load sessions',
         empty: 'No sessions found',
         resumeFailed: 'Failed to resume session',
