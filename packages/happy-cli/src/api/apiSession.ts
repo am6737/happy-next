@@ -18,6 +18,7 @@ import { registerCommonHandlers } from '../modules/common/registerCommonHandlers
 import { registerToolImageForCall } from '../modules/common/toolImageStore';
 import { calculateCost } from '@/utils/pricing';
 import { isDebug } from '@/utils/env';
+import { recordTeammateContextUsage } from '@/teammate/contextSignals';
 
 
 function stripCapabilitiesFromMetadata(metadata: Metadata): Metadata {
@@ -768,6 +769,9 @@ export class ApiSessionClient extends EventEmitter {
                 // to avoid misleading the user into thinking the main session switched models
                 const isSidechain = (body as any).isSidechain === true;
                 this.sendUsageData(body.message.usage, isSidechain ? undefined : body.message.model);
+                if (!isSidechain) recordTeammateContextUsage({
+                    contextTokens: body.message.usage.input_tokens + (body.message.usage.cache_creation_input_tokens || 0) + (body.message.usage.cache_read_input_tokens || 0),
+                });
             } catch (error) {
                 logger.debug('[SOCKET] Failed to send usage data:', error);
             }

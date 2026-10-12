@@ -41,7 +41,7 @@ describe('teammate local control API', () => {
                 getGithubToken: vi.fn(), registerTeammateSession: vi.fn(), getSessionMessages: vi.fn(), updateTeammateTask: vi.fn(), commentTeammateTask: vi.fn(), createTeammateTask: vi.fn(),
                 getChannelMessages: vi.fn().mockResolvedValue([makeChannelMessage()]),
                 sendTeammateChannelMessage: vi.fn().mockResolvedValue(makeChannelMessage(13)),
-                sendSessionMessage: vi.fn(), reportTeammateRunStarted: vi.fn(), reportTeammateRunFinished: vi.fn(), getTeammateActiveSessions: vi.fn(),
+                sendSessionMessage: vi.fn(), reportTeammateRunStarted: vi.fn(), reportTeammateRunFinished: vi.fn(), reportTeammateContextEvent: vi.fn(), getTeammateActiveSessions: vi.fn(),
                 push: vi.fn().mockReturnValue({ sendToAllDevices: push }),
             },
         };

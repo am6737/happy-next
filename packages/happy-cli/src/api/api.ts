@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { ChannelMessageSchema, TeammateChannelMessageSendRequestSchema, type ChannelMessage, type TeammateChannelMessageSendRequest, type PermissionMode, TeammateTaskAgentUpdateRequestSchema, TeammateTaskCommentRequestSchema, TeammateSessionRegisterRequestSchema, type TeammateTaskAgentUpdateRequest, type TeammateTaskCommentRequest, type TeammateSessionRegisterRequest, TeammateTaskSchema, TeammateTaskCommentResponseSchema, TeammateTaskCreateRequestSchema, TeammateTaskCreateResponseSchema, type TeammateTaskCreateRequest, TeammateActiveSessionsResponseSchema, type TeammateActiveSessionsResponse, type TeammateRunStartedRequest, type TeammateRunFinishedRequest } from 'happy-wire'
+import { ChannelMessageSchema, TeammateChannelMessageSendRequestSchema, type ChannelMessage, type TeammateChannelMessageSendRequest, type PermissionMode, TeammateTaskAgentUpdateRequestSchema, TeammateTaskCommentRequestSchema, TeammateSessionRegisterRequestSchema, type TeammateTaskAgentUpdateRequest, type TeammateTaskCommentRequest, type TeammateSessionRegisterRequest, TeammateTaskSchema, TeammateTaskCommentResponseSchema, TeammateTaskCreateRequestSchema, TeammateTaskCreateResponseSchema, type TeammateTaskCreateRequest, TeammateActiveSessionsResponseSchema, type TeammateActiveSessionsResponse, type TeammateRunStartedRequest, type TeammateRunFinishedRequest, type TeammateContextEventRequest } from 'happy-wire'
 import { logger } from '@/ui/logger'
 import type { AgentState, CreateSessionResponse, Metadata, Session, Machine, MachineMetadata, DaemonState } from '@/api/types'
 import { ApiSessionClient } from './apiSession';
@@ -299,6 +299,12 @@ export class ApiClient {
     await axios.post(`${configuration.serverUrl}/v1/teammate-runs/${encodeURIComponent(runId)}/finished`, request, {
       headers: { Authorization: `Bearer ${this.credential.token}`, 'Content-Type': 'application/json' },
       timeout: 30000,
+    });
+  }
+
+  async reportTeammateContextEvent(runId: string, request: TeammateContextEventRequest): Promise<void> {
+    await axios.post(`${configuration.serverUrl}/v1/teammate-runs/${encodeURIComponent(runId)}/context-event`, request, {
+      headers: { Authorization: `Bearer ${this.credential.token}`, 'Content-Type': 'application/json' }, timeout: 30000,
     });
   }
 

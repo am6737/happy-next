@@ -31,7 +31,7 @@ describe('task worker tools', () => {
             api: {
                 getGithubToken: vi.fn().mockResolvedValue('fresh-github-token'), registerTeammateSession: vi.fn(), getSessionMessages: vi.fn().mockResolvedValue({ messages: [] }),
                 updateTeammateTask: vi.fn().mockResolvedValue({ task }), commentTeammateTask: vi.fn().mockResolvedValue({ url: 'https://github.com/comment' }), createTeammateTask: vi.fn(),
-                sendSessionMessage: vi.fn().mockResolvedValue('sent'), reportTeammateRunStarted: vi.fn(), reportTeammateRunFinished: vi.fn(),
+                sendSessionMessage: vi.fn().mockResolvedValue('sent'), reportTeammateRunStarted: vi.fn(), reportTeammateRunFinished: vi.fn(), reportTeammateContextEvent: vi.fn(),
                 getTeammateActiveSessions: vi.fn(), getChannelMessages: vi.fn(), sendTeammateChannelMessage: vi.fn(), push: vi.fn(),
             },
             spawnSession: vi.fn().mockImplementation(async () => ({ type: 'success', sessionId: `worker-${++nextSession}`, pid: 100 + nextSession })),

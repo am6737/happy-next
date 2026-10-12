@@ -892,7 +892,7 @@ export class CodexAppServerBackend implements AgentBackend {
 
     if (status === 'failed' && turn.error) {
       const errorMsg = turn.error.message ?? 'Turn failed';
-      this.emit({ type: 'status', status: 'error', detail: errorMsg });
+      this.emit({ type: 'status', status: 'error', detail: errorMsg, codexErrorInfo: (turn.error as any).codexErrorInfo });
       this.resolveTurnComplete(new Error(errorMsg));
       return;
     }
@@ -934,7 +934,7 @@ export class CodexAppServerBackend implements AgentBackend {
     const errorDetail = typeof error?.message === 'string' ? error.message : JSON.stringify(error);
     const message = errorDetail && errorDetail !== 'undefined' ? errorDetail : 'Codex error';
     // Surface error to UI; don't resolve turn — let turn/completed handle lifecycle
-    this.emit({ type: 'status', status: 'error', detail: message });
+    this.emit({ type: 'status', status: 'error', detail: message, codexErrorInfo: error?.codexErrorInfo });
   }
 
   // ─── Server Request Handler (Approvals) ─────────────────────

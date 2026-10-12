@@ -4,13 +4,14 @@ import { join } from 'node:path';
 import {
     TEAMMATE_ENV, TEAMMATE_REVIEW_MAX_ROUNDS, TeammateNotifyPayloadSchema, TeammateTaskStopPayloadSchema, TeammateTaskAgentUpdateRequestSchema, TeammateRunCancelPayloadSchema, TeammateRunDispatchPayloadSchema,
     TeammateRuntimeEnvSchema, MODEL_MODE_DEFAULT, FAST_MODE_SUFFIX, splitFastModeSuffix, resolveModelSelectionForFlavor,
-    type TeammateWorkerProvider, type TeammateRunDispatchPayload, type TeammateRpcResult,
+    type TeammateWorkerProvider, type TeammateRunDispatchPayload, type TeammateRpcResult, type ChannelMessage,
 } from 'happy-wire';
 import type { ApiClient } from '@/api/api';
 import type { SpawnSessionOptions } from '@/modules/common/registerCommonHandlers';
 import { readSessionDataKeyFile } from '@/api/sessionDataKey';
 import { decodeBase64, decryptWithDataKey } from '@/api/encryption';
 import { findCodexSessionFile } from '@/codex/utils/codexSessionReader';
+import { claudeCheckSession } from '@/claude/utils/claudeCheckSession';
 import { logger } from '@/ui/logger';
 import { ensureTeammateHome, execFileAsync, exists, isPathId, generateSessionKeyFile, mergeThreadState, readThreadsState, readTaskState, mergeTaskWorker, updateTaskState, appendDailyLog, commitTeammateHome, isHeartbeatChecklistEmpty, type TaskWorker } from './homeDir';
 import { buildTeammateSystemPrompt } from './prompt';
@@ -24,6 +25,15 @@ import { WORKER_RESULT_INSTRUCTION, WORKER_RESULT_REMINDER, inspectWorkerWorkspa
 import type { ChatSendRequest, ChatHistoryRequest } from './chatSchemas';
 import { listMachineSkills, syncTeammateSkills } from './skills';
 
+const CONTEXT_MESSAGES = 30;
+const CONTEXT_MESSAGES_DEFAULT = 10;
+const HISTORY_PAGE = 200;
+const HISTORY_SCAN = 2000;
+const HISTORY_MATCHES = 20;
+const HISTORY_CACHE = 5000;
+const HISTORY_TEXT = 2000;
+interface HistoryEntry { seq: number; createdAt: number; sender: string; text: string }
+
 /** Resolve a catalog model mode (optionally suffixed -fast) into message meta exactly as the app does. */
 export function teammateModelSelection(provider: TeammateWorkerProvider, modelMode: string | null): { model: string | null; reasoningEffort: string | null } {
     const { mode, fast } = splitFastModeSuffix(modelMode ?? MODEL_MODE_DEFAULT);
@@ -32,7 +42,7 @@ export function teammateModelSelection(provider: TeammateWorkerProvider, modelMo
 }
 
 export interface TeammateRuntimeDependencies {
-    api: Pick<ApiClient, 'sendSessionMessage' | 'reportTeammateRunStarted' | 'reportTeammateRunFinished' | 'getTeammateActiveSessions' | 'getChannelMessages' | 'sendTeammateChannelMessage' | 'push' | 'getGithubToken' | 'registerTeammateSession' | 'getSessionMessages' | 'updateTeammateTask' | 'commentTeammateTask' | 'createTeammateTask'>;
+    api: Pick<ApiClient, 'sendSessionMessage' | 'reportTeammateRunStarted' | 'reportTeammateRunFinished' | 'reportTeammateContextEvent' | 'getTeammateActiveSessions' | 'getChannelMessages' | 'sendTeammateChannelMessage' | 'push' | 'getGithubToken' | 'registerTeammateSession' | 'getSessionMessages' | 'updateTeammateTask' | 'commentTeammateTask' | 'createTeammateTask'>;
     spawnSession: (options: SpawnSessionOptions) => Promise<
         { type: 'success'; sessionId: string; pid: number }
         | { type: 'error'; errorMessage: string }
@@ -79,8 +89,9 @@ function renderReviewContext(data: Record<string, unknown>): string[] {
 
 export async function renderRunEventMessage(payload: TeammateRunDispatchPayload, chat?: {
     api: Pick<ApiClient, 'getChannelMessages'>; crypto: ReturnType<typeof createChannelCrypto>;
-}, home?: string, describeWorker?: (sessionId: string) => Promise<string | null>): Promise<string> {
+}, home?: string, describeWorker?: (sessionId: string) => Promise<string | null>, continuity?: 'overflow' | 'resume_failed'): Promise<string> {
     const sections = [`[Happy Agent run ${payload.runId} · trigger: ${payload.trigger} · thread: ${payload.thread.kind}]`];
+    if (continuity) sections.push(`Session continuity: this run could not continue your previous provider session (${continuity === 'overflow' ? 'it ran out of context window' : 'it could not be restored'}). The channel history is unaffected and is the authoritative record of this conversation: before acting on anything you do not see below, read it with chat_history (use query to search). What is gone is your own unrecorded working memory from that session — what you tried, ruled out, and how far you got — so re-derive it instead of assuming it. Do not open your reply by announcing this; mention it only if the owner refers to something you can no longer see.`);
     if (payload.task) sections.push(`Task: ${payload.task.title} (${payload.task.resourceId}) ${payload.task.url ?? ''} · status ${payload.task.status}`);
     const assignedByAgent = Boolean(payload.task?.createdByTeammateId && payload.task.createdByTeammateId !== payload.teammate.id);
     const finish = assignedByAgent
@@ -143,10 +154,10 @@ export async function renderRunEventMessage(payload: TeammateRunDispatchPayload,
         const minSeq = Math.min(...seqs);
         const maxSeq = Math.max(...seqs);
         const key = chat.crypto.unwrap(channel.id, channel.teammateEncryptedDataKey);
-        const previous = await chat.api.getChannelMessages(channel.id, { beforeSeq: minSeq, limit: 10 });
+        const previous = await chat.api.getChannelMessages(channel.id, { beforeSeq: minSeq, limit: continuity ? CONTEXT_MESSAGES : CONTEXT_MESSAGES_DEFAULT });
         // A thread reset starts a fresh conversation: earlier messages are no longer context.
         const resetAt = payload.thread.resetAt ?? 0;
-        const messages = previous.filter(message => message.seq < minSeq && message.createdAt > resetAt).sort((a, b) => a.seq - b.seq).slice(-10);
+        const messages = previous.filter(message => message.seq < minSeq && message.createdAt > resetAt).sort((a, b) => a.seq - b.seq).slice(-(continuity ? CONTEXT_MESSAGES : 10));
         let cursor = minSeq - 1;
         while (cursor < maxSeq) {
             const page = await chat.api.getChannelMessages(channel.id, { afterSeq: cursor, beforeSeq: maxSeq + 1, limit: 200 });
@@ -209,6 +220,7 @@ export function createTeammateRuntime(deps: TeammateRuntimeDependencies) {
     const configuredTtl = deps.idleTtlMs ?? Number(process.env.HAPPY_TEAMMATE_IDLE_TTL_MS);
     const idleTtl = Number.isFinite(configuredTtl) && configuredTtl > 0 ? configuredTtl : 30 * 60_000;
     const chains = new Map<string, Promise<void>>();
+    const historyCache = new Map<string, Map<number, HistoryEntry>>();
     const runs = new Map<string, { payload: TeammateRunDispatchPayload; cancelled: boolean }>();
     const cancelledRuns = new Set<string>();
     const threadOwners = new Map<string, string>();
@@ -300,7 +312,7 @@ export function createTeammateRuntime(deps: TeammateRuntimeDependencies) {
                 });
                 if (payload.thread.resetAt !== null && payload.thread.resetAt > (entry.resetAppliedAt ?? 0)) {
                     await stopIfAlive(entry.currentSessionId, entry.pid, 'Unable to stop controller for thread reset');
-                    const reset = { providerSessionId: undefined, currentSessionId: undefined, pid: undefined,
+                    const reset = { providerSessionId: undefined, currentSessionId: undefined, pid: undefined, contextTokens: undefined, contextWindow: undefined, compactions: undefined, overflowed: undefined,
                         keyPath: undefined, controlToken: undefined, resetAppliedAt: payload.thread.resetAt };
                     entry = { ...entry, ...reset };
                     await mergeThreadState(home, payload.thread.id, reset);
@@ -313,8 +325,9 @@ export function createTeammateRuntime(deps: TeammateRuntimeDependencies) {
                 const controllerConfig = JSON.stringify([provider, payload.teammate.controllerEnv]);
                 // Provider transcripts are not interchangeable; threads from before this field ran on Claude.
                 const sameProvider = (entry.provider ?? 'claude') === provider;
-                const resumable = !fresh && sameProvider ? entry.providerSessionId : undefined;
-                const live = !fresh && entry.controlToken && entry.pid !== undefined && deps.isPidAlive(entry.pid) && sessionId && keyPath
+                const resumable = !fresh && !entry.overflowed && sameProvider ? entry.providerSessionId : undefined;
+                let continuity: 'overflow' | 'resume_failed' | undefined = entry.overflowed ? 'overflow' : undefined;
+                const live = !fresh && !entry.overflowed && entry.controlToken && entry.pid !== undefined && deps.isPidAlive(entry.pid) && sessionId && keyPath
                     && entry.controllerConfig === controllerConfig;
                 if (!live) {
                     // Upgrade M2 controllers without a token by replacing the live process.
@@ -331,15 +344,18 @@ export function createTeammateRuntime(deps: TeammateRuntimeDependencies) {
                         threadContext: { kind: payload.thread.kind, channelTitle: payload.channel?.title ?? undefined, taskTitle: payload.task?.title, taskUrl: payload.task?.url ?? undefined }, now: new Date(now()),
                     }), { mode: 0o600 });
                     const isolation = await prepareTeammateIsolation(home, provider);
+                    const env = profileEnv(payload.teammate.controllerEnv);
+                    const resumeFile = resumable && provider === 'codex' ? findCodexSessionFile(resumable, isolation.codexHome) ?? findCodexSessionFile(resumable) : undefined;
+                    const resumeFailed = Boolean(resumable && (provider === 'codex' ? !resumeFile : provider === 'claude' && !claudeCheckSession(resumable, home, (env.environmentVariables as Record<string, string> | undefined)?.CLAUDE_CONFIG_DIR)));
+                    if (resumeFailed) continuity = 'resume_failed';
                     if (run.cancelled) return;
                     failureReason = 'spawn_failed';
                     const spawned = await deps.spawnSession({
                         directory: home, agent: provider,
                         // Codex resumes from its rollout file (threads from before isolation live in the owner's CODEX_HOME), Gemini from the previous Happy session log.
-                        resumeSessionId: resumable && provider === 'codex'
-                            ? findCodexSessionFile(resumable, isolation.codexHome) ?? findCodexSessionFile(resumable) ?? undefined : resumable,
+                        resumeSessionId: resumeFailed ? undefined : provider === 'codex' ? resumeFile ?? undefined : resumable,
                         sessionTitle: `${payload.teammate.name} · ${payload.thread.kind}`,
-                        ...profileEnv(payload.teammate.controllerEnv),
+                        ...env,
                         extraEnv: {
                             [TEAMMATE_ENV.sessionDataKeyFile]: keyPath,
                             [TEAMMATE_ENV.teammateId]: payload.teammate.id,
@@ -360,9 +376,10 @@ export function createTeammateRuntime(deps: TeammateRuntimeDependencies) {
                     }
                     failureReason = 'unknown';
                     sessionId = spawned.sessionId;
-                    resumed = Boolean(resumable);
+                    resumed = Boolean(resumable && !resumeFailed);
                     await mergeThreadState(home, payload.thread.id, {
                         currentSessionId: sessionId, pid: spawned.pid, keyPath, lastDispatchAt: now(), provider, controllerConfig,
+                        overflowed: undefined, compactions: undefined, contextTokens: undefined, contextWindow: undefined,
                         // The provider reports its own transcript ID once it starts; another provider's ID can't be resumed.
                         ...(sameProvider ? {} : { providerSessionId: undefined }),
                     });
@@ -383,13 +400,16 @@ export function createTeammateRuntime(deps: TeammateRuntimeDependencies) {
                     const { reply, ...result } = await workerOutcome(worker, entries, token ??= githubToken());
                     return [`Final reply:\n${reply === null ? '(none)' : reply.slice(0, 8000)}`, ...(Object.keys(result).length ? [`Result: ${JSON.stringify(result)}`] : [])].join('\n');
                 } : undefined;
-                const delivery = await deps.api.sendSessionMessage(sessionId!, await renderRunEventMessage(payload, { api: deps.api, crypto }, home, describeWorker),
+                const delivery = await deps.api.sendSessionMessage(sessionId!, await renderRunEventMessage(payload, { api: deps.api, crypto }, home, describeWorker, continuity),
                     await readSessionDataKeyFile(keyPath!), `teammate-run:${payload.runId}`, payload.teammate.controllerPermissionMode,
                     selection.model, selection.reasoningEffort);
                 if (run.cancelled) return;
                 await deps.api.reportTeammateRunStarted(payload.runId, {
                     dispatchToken: payload.dispatchToken, sessionId: sessionId!, resumed, delivery,
                 });
+                if (continuity === 'resume_failed') await deps.api.reportTeammateContextEvent(payload.runId, {
+                    code: 'context_lost', reason: 'resume_failed', dispatchToken: payload.dispatchToken, provider,
+                }).catch(error => logger.debug('[TEAMMATE] Could not report lost context', error));
             } catch (error) {
                 logger.debug('[TEAMMATE] Dispatch failed', error);
                 if (run.cancelled) return;
@@ -453,10 +473,48 @@ export function createTeammateRuntime(deps: TeammateRuntimeDependencies) {
         const { channel } = await authenticateThread(request);
         if (!channel) throw Object.assign(new Error('Teammate thread has no channel'), { statusCode: 409 });
         const key = crypto.unwrap(channel.id, channel.teammateEncryptedDataKey);
-        const messages = await deps.api.getChannelMessages(channel.id, { limit: request.limit ?? 50, beforeSeq: request.beforeSeq });
-        return { messages: messages.map(message => ({ ...message,
-            content: message.content.t === 'encrypted' ? decryptChannelMessage(message.content.c, key) : message.content,
-        })) };
+        if (!request.query) {
+            const messages = await deps.api.getChannelMessages(channel.id, { limit: request.limit ?? 50, beforeSeq: request.beforeSeq });
+            return { messages: messages.map(message => ({ ...message, content: message.content.t === 'encrypted' ? decryptChannelMessage(message.content.c, key) : message.content })) };
+        }
+        const cache = historyCache.get(channel.id) ?? new Map<number, HistoryEntry>();
+        historyCache.set(channel.id, cache);
+        const label = (items: unknown) => Array.isArray(items)
+            ? items.map(item => typeof item === 'object' && item && 'label' in item ? String(item.label) : '').join(' ') : '';
+        const toEntry = (message: ChannelMessage): HistoryEntry => {
+            const body = message.content.t === 'encrypted' ? decryptChannelMessage(message.content.c, key) : { text: `[system: ${message.content.code}]` };
+            return {
+                seq: message.seq, createdAt: message.createdAt,
+                sender: channel.members.find(member => member.id === message.senderId)?.name ?? message.senderId,
+                text: [body.text, label('options' in body ? body.options : undefined), label('links' in body ? body.links : undefined)].filter(Boolean).join(' '),
+            };
+        };
+        // Walk backwards from beforeSeq. Channel seqs are contiguous from 1, so a cached run needs no request and seq 1 is the start.
+        const scanned: HistoryEntry[] = [];
+        let before = request.beforeSeq;
+        let exhausted = false;
+        while (scanned.length < HISTORY_SCAN) {
+            if (before === 1) { exhausted = true; break; }
+            let cursor = (before ?? 0) - 1;
+            const cachedLength = scanned.length;
+            while (cache.has(cursor) && scanned.length < HISTORY_SCAN) scanned.push(cache.get(cursor--)!);
+            if (scanned.length > cachedLength) { before = cursor + 1; continue; }
+            const page = await deps.api.getChannelMessages(channel.id, { limit: HISTORY_PAGE, beforeSeq: before });
+            const newestFirst = page.map(toEntry).sort((a, b) => b.seq - a.seq);
+            newestFirst.forEach(entry => cache.set(entry.seq, entry));
+            scanned.push(...newestFirst.slice(0, HISTORY_SCAN - scanned.length));
+            before = newestFirst.at(-1)?.seq;
+            if (page.length < HISTORY_PAGE) { exhausted = true; break; }
+        }
+        if (cache.size > HISTORY_CACHE) {
+            [...cache.keys()].sort((a, b) => a - b).slice(0, cache.size - HISTORY_CACHE).forEach(seq => cache.delete(seq));
+        }
+        const brief = (entry: HistoryEntry) => ({ seq: entry.seq, sender: entry.sender, text: entry.text.slice(0, HISTORY_TEXT) });
+        const terms = request.query.toLowerCase().split(/\s+/);
+        const matches = scanned.flatMap((entry, index) => terms.every(term => entry.text.toLowerCase().includes(term))
+            ? [{ ...brief(entry), createdAt: entry.createdAt, context: [scanned[index + 1], scanned[index - 1]].filter(Boolean).map(brief) }]
+            : []).slice(0, HISTORY_MATCHES);
+        return { matches, scanned: scanned.length, oldestScannedSeq: scanned.at(-1)?.seq, exhausted };
     };
 
     const stopWorker = async (home: string, taskId: string, workerId: string, worker: Pick<TaskWorker, 'sessionId' | 'pid'>) => {

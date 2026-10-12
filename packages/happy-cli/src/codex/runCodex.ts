@@ -33,6 +33,7 @@ import { CodexDisplay } from "@/ui/ink/CodexDisplay";
 import { getFirstTurnInstruction } from '@/orchestrator/firstTurnInstruction';
 import { teammateSystemPrompt } from '@/claude/utils/systemPrompt';
 import { persistTeammateProviderSessionId } from '@/teammate/sessionHooks';
+import { recordTeammateCompaction, recordTeammateContextUsage, recordTeammateOverflow } from '@/teammate/contextSignals';
 import { notifyDaemonSessionStarted } from "@/daemon/controlClient";
 import { registerKillSessionHandler } from "@/claude/registerKillSessionHandler";
 import { inspect } from 'node:util';
@@ -752,6 +753,7 @@ export async function runCodex(opts: {
                     // Note: sendReady() is called by emitReadyIfIdle() in the finally block
                     // to avoid sending duplicate push notifications
                 } else if (msg.status === 'error') {
+                    if (msg.codexErrorInfo === 'contextWindowExceeded') void recordTeammateOverflow(api, 'codex');
                     messageBuffer.addMessage(`Error: ${msg.detail ?? 'Unknown error'}`, 'status');
                     session.sendAgentMessage('codex', {
                         type: 'message',
@@ -871,6 +873,7 @@ export async function runCodex(opts: {
             case 'token-count': {
                 const { type: _type, ...tokenData } = msg as any;
                 const lastUsage = tokenData.last_token_usage;
+                if (lastUsage) recordTeammateContextUsage({ contextTokens: lastUsage.input_tokens, contextWindow: tokenData.model_context_window });
                 session.sendAgentMessage('codex', {
                     type: 'token_count',
                     ...tokenData,
@@ -958,6 +961,7 @@ export async function runCodex(opts: {
                         message: `[Plan Update] ${JSON.stringify(msg.payload)}`,
                     });
                 } else if (msg.name === 'context_compacted') {
+                    void recordTeammateCompaction(api, 'codex');
                     messageBuffer.addMessage('Context compacted', 'status');
                     session.sendSessionEvent({ type: 'message', message: 'Context compacted' });
                 } else if (msg.name === 'goal_updated') {

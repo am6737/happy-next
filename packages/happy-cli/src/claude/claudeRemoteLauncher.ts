@@ -23,6 +23,7 @@ import type { QueueMessageContent } from "./runClaude";
 import { buildClaudeSlashCommandMetadata } from "./utils/slashCommandMetadata";
 import { enhancedModeRestartHash } from "./utils/enhancedModeHash";
 import { inlinePreviewHtmlFileArgs } from "@/utils/previewHtmlFile";
+import { isClaudeContextOverflow, recordTeammateCompaction, recordTeammateContextWindow, recordTeammateOverflow } from '@/teammate/contextSignals';
 
 interface PermissionsField {
     date: number;
@@ -266,6 +267,13 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
         // Handle result messages with errors - send as session event
         if (message.type === 'result') {
             const resultMsg = message as SDKResultMessage;
+            const raw = resultMsg as any;
+            if (isClaudeContextOverflow(raw)) void recordTeammateOverflow(session.api, 'claude');
+            const modelUsage = raw.modelUsage;
+            const windows = modelUsage && typeof modelUsage === 'object'
+                ? Object.values(modelUsage).map(value => (value as { contextWindow?: unknown }).contextWindow).filter((value): value is number => typeof value === 'number')
+                : [];
+            if (windows.length) void recordTeammateContextWindow(Math.max(...windows));
             if (resultMsg.subtype === 'error_during_execution') {
                 const terminalReason = (resultMsg as any).terminal_reason as string | undefined;
                 // [ede_diagnostic] lines are Claude Code's internal post-abort noise,
@@ -292,6 +300,7 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
             // Result messages don't need further processing (not part of conversation log)
             return;
         }
+        if (message.type === 'system' && (message as any).subtype === 'compact_boundary') void recordTeammateCompaction(session.api, 'claude');
 
         // Write to permission handler for tool id resolving
         permissionHandler.onMessage(message);

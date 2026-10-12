@@ -42,7 +42,7 @@ export interface SendPromptOptions {
  */
 export type AgentMessage =
   | { type: 'model-output'; textDelta?: string; fullText?: string }
-  | { type: 'status'; status: 'starting' | 'running' | 'idle' | 'stopped' | 'error'; detail?: string }
+  | { type: 'status'; status: 'starting' | 'running' | 'idle' | 'stopped' | 'error'; detail?: string; codexErrorInfo?: unknown }
   | { type: 'tool-call'; toolName: string; args: Record<string, unknown>; callId: ToolCallId }
   | { type: 'tool-result'; toolName: string; result: unknown; callId: ToolCallId }
   | { type: 'permission-request'; id: string; reason: string; payload: unknown }

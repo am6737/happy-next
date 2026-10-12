@@ -1,12 +1,14 @@
-import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { TEAMMATE_ENV, type TeammateRunDispatchPayload } from 'happy-wire';
+import { TEAMMATE_ENV, type ChannelMessage, type TeammateRunDispatchPayload } from 'happy-wire';
 import { teammateModelSelection, createTeammateRuntime, renderRunEventMessage, type TeammateRuntimeDependencies } from './runtime';
 import { ensureTeammateHome, mergeThreadState, readThreadsState, writeSessionKeyFile, writeThreadsState } from './homeDir';
 import { makeTeammate, makeConversationPayload, makeChannelMessage } from './testFixtures';
 import { encodeBase64, encryptWithDataKey } from '@/api/encryption';
+import { getProjectPath } from '@/claude/utils/path';
+import { createChannelCrypto } from './channelCrypto';
 
 const skillHooks = vi.hoisted(() => ({ list: vi.fn(() => []), sync: vi.fn(async () => ({ linked: [], missing: [] })) }));
 vi.mock('./skills', () => ({ listMachineSkills: skillHooks.list, syncTeammateSkills: skillHooks.sync }));
@@ -29,6 +31,29 @@ describe('teammate runtime', () => {
     let runtime: ReturnType<typeof createTeammateRuntime>;
     const clock = Date.UTC(2026, 9, 9);
 
+    it('overflowed entry spawn notice includes up to 30 earlier messages', async () => {
+        const payload = makeConversationPayload();
+        payload.events[0] = { ...payload.events[0], data: { ...payload.events[0].data, seq: 36 } } as typeof payload.events[0];
+        const messages = Array.from({ length: 35 }, (_, index) => makeChannelMessage(index + 1, `earlier ${index + 1}`));
+        const api = { getChannelMessages: vi.fn().mockResolvedValueOnce(messages).mockResolvedValue([makeChannelMessage(36, 'new')]) };
+        const rendered = await renderRunEventMessage(payload, { api, crypto: createChannelCrypto(new Uint8Array(32).fill(17)) }, undefined, undefined, 'overflow');
+        expect(rendered).toContain('Session continuity');
+        expect(rendered).toContain('earlier 35');
+        expect(rendered).not.toContain('earlier 5');
+        expect(api.getChannelMessages).toHaveBeenNthCalledWith(1, 'channel-1', { beforeSeq: 36, limit: 30 });
+    });
+
+    it('without continuity renders at most ten earlier messages', async () => {
+        const payload = makeConversationPayload();
+        const messages = Array.from({ length: 11 }, (_, index) => makeChannelMessage(index + 1, `earlier ${index + 1}`));
+        const api = { getChannelMessages: vi.fn().mockResolvedValueOnce(messages).mockResolvedValue([makeChannelMessage(12, 'new')]) };
+        const rendered = await renderRunEventMessage(payload, { api, crypto: createChannelCrypto(new Uint8Array(32).fill(17)) });
+        expect(rendered).not.toContain('(seq 1,');
+        expect(rendered).toContain('earlier 2');
+        expect(api.getChannelMessages).toHaveBeenNthCalledWith(1, 'channel-1', { beforeSeq: 12, limit: 10 });
+    });
+
+
     beforeEach(async () => {
         skillHooks.list.mockClear();
         skillHooks.sync.mockClear();
@@ -43,6 +68,7 @@ describe('teammate runtime', () => {
                 push: vi.fn(),
                 sendSessionMessage: vi.fn().mockResolvedValue('sent'),
                 reportTeammateRunStarted: vi.fn().mockResolvedValue(undefined),
+                reportTeammateContextEvent: vi.fn().mockResolvedValue(undefined),
                 reportTeammateRunFinished: vi.fn().mockResolvedValue(undefined),
                 getTeammateActiveSessions: vi.fn().mockResolvedValue({ sessionIds: [] }),
             },
@@ -52,7 +78,7 @@ describe('teammate runtime', () => {
         };
         runtime = createTeammateRuntime(deps);
     });
-    afterEach(async () => { await rm(dir, { recursive: true, force: true }); });
+    afterEach(async () => { vi.unstubAllEnvs(); await rm(dir, { recursive: true, force: true }); });
 
     async function started(count = 1) {
         await vi.waitFor(() => expect(deps.api.reportTeammateRunStarted).toHaveBeenCalledTimes(count), { timeout: 5000 });
@@ -65,6 +91,162 @@ describe('teammate runtime', () => {
         });
         return keyPath;
     }
+
+    function dmPayload(provider: 'claude' | 'codex', controllerEnv: string | null = null) {
+        const event = payload();
+        event.thread.kind = 'dm';
+        event.teammate.controllerProvider = provider;
+        event.teammate.controllerEnv = controllerEnv;
+        return event;
+    }
+    function continuityReported(provider: 'claude' | 'codex') {
+        return vi.waitFor(() => expect(deps.api.reportTeammateContextEvent).toHaveBeenCalledWith('run-1', {
+            code: 'context_lost', reason: 'resume_failed', dispatchToken: 'token-run-1', provider,
+        }));
+    }
+    function sentMessage() {
+        return vi.mocked(deps.api.sendSessionMessage).mock.calls[0][1];
+    }
+
+    it('starts an overflowed thread fresh with a notice and clears its context state', async () => {
+        await seedLive();
+        await mergeThreadState(home, 'thread-1', { overflowed: true, compactions: 2, contextTokens: 190_000, contextWindow: 200_000 });
+        const event = dmPayload('claude');
+        runtime.dispatch(event); await started();
+        expect(deps.stopSession).toHaveBeenCalledWith('happy-existing');
+        expect(deps.spawnSession).toHaveBeenCalledWith(expect.objectContaining({ resumeSessionId: undefined }));
+        expect(sentMessage()).toContain('it ran out of context window');
+        expect(deps.api.reportTeammateContextEvent).not.toHaveBeenCalled();
+        const state = (await readThreadsState(home))['thread-1'];
+        expect(state).not.toHaveProperty('overflowed');
+        expect(state).not.toHaveProperty('compactions');
+        expect(state).not.toHaveProperty('contextTokens');
+        expect(state).not.toHaveProperty('contextWindow');
+    });
+
+    it('starts fresh with a notice and reports once when the Codex rollout is gone', async () => {
+        vi.stubEnv('CODEX_HOME', join(dir, 'owner-codex'));
+        await writeThreadsState(home, { 'thread-1': { pid: 999, provider: 'codex', providerSessionId: 'codex-gone' } });
+        runtime.dispatch(dmPayload('codex')); await started();
+        expect(deps.spawnSession).toHaveBeenCalledWith(expect.objectContaining({ agent: 'codex', resumeSessionId: undefined }));
+        expect(sentMessage()).toContain('it could not be restored');
+        await continuityReported('codex');
+        expect(deps.api.reportTeammateContextEvent).toHaveBeenCalledTimes(1);
+        expect(deps.api.reportTeammateRunStarted).toHaveBeenCalledWith('run-1', expect.objectContaining({ resumed: false }));
+    });
+
+    it('checks the Claude transcript in the profile CLAUDE_CONFIG_DIR before resuming', async () => {
+        const configDir = join(dir, 'claude-config');
+        const env = encodeBase64(encryptWithDataKey({ environmentVariables: { CLAUDE_CONFIG_DIR: configDir }, inheritMachineConfig: false }, deps.machineKey!));
+        await writeThreadsState(home, { 'thread-1': { pid: 999, provider: 'claude', providerSessionId: 'claude-gone' } });
+        runtime.dispatch(dmPayload('claude', env)); await started();
+        expect(deps.spawnSession).toHaveBeenCalledWith(expect.objectContaining({ resumeSessionId: undefined }));
+        expect(sentMessage()).toContain('Session continuity');
+        await continuityReported('claude');
+        expect(deps.api.reportTeammateContextEvent).toHaveBeenCalledTimes(1);
+    });
+
+    it('resumes a valid Claude transcript without a notice or event', async () => {
+        const configDir = join(dir, 'claude-config');
+        const env = encodeBase64(encryptWithDataKey({ environmentVariables: { CLAUDE_CONFIG_DIR: configDir }, inheritMachineConfig: false }, deps.machineKey!));
+        await ensureTeammateHome(makeTeammate(), { dir: home });
+        const projectDir = getProjectPath(home, configDir);
+        await mkdir(projectDir, { recursive: true });
+        await writeFile(join(projectDir, 'claude-ok.jsonl'), `${JSON.stringify({ uuid: 'message-1' })}\n`);
+        await writeThreadsState(home, { 'thread-1': { pid: 999, provider: 'claude', providerSessionId: 'claude-ok' } });
+        runtime.dispatch(dmPayload('claude', env)); await started();
+        expect(deps.spawnSession).toHaveBeenCalledWith(expect.objectContaining({ resumeSessionId: 'claude-ok' }));
+        expect(sentMessage()).not.toContain('Session continuity');
+        expect(deps.api.reportTeammateContextEvent).not.toHaveBeenCalled();
+        expect(deps.api.reportTeammateRunStarted).toHaveBeenCalledWith('run-1', expect.objectContaining({ resumed: true }));
+    });
+
+    it('clears context usage state on a thread reset', async () => {
+        await seedLive();
+        await mergeThreadState(home, 'thread-1', { compactions: 3, contextTokens: 120_000, contextWindow: 200_000 });
+        const event = payload(); event.thread.resetAt = clock;
+        runtime.dispatch(event); await started();
+        const state = (await readThreadsState(home))['thread-1'];
+        expect(state.resetAppliedAt).toBe(clock);
+        expect(state).not.toHaveProperty('compactions');
+        expect(state).not.toHaveProperty('contextTokens');
+        expect(state).not.toHaveProperty('contextWindow');
+    });
+
+    describe('chat_history query', () => {
+        type SearchResult = { matches: { seq: number; sender: string; text: string; context: { seq: number }[] }[]; scanned: number; oldestScannedSeq?: number; exhausted: boolean };
+
+        async function seedChannel(messages: ChannelMessage[], resetAt: number | null = null) {
+            await seedLive();
+            vi.mocked(deps.api.getChannelMessages).mockImplementation(async (_channelId, query = {}) => {
+                const inRange = messages.filter(message => (query.afterSeq === undefined || message.seq > query.afterSeq)
+                    && (query.beforeSeq === undefined || message.seq < query.beforeSeq));
+                const limit = query.limit ?? 50;
+                return query.afterSeq === undefined ? inRange.slice(-limit) : inRange.slice(0, limit);
+            });
+            const event = makeConversationPayload(); event.thread.id = 'thread-1'; event.thread.resetAt = resetAt;
+            const [wake] = event.events;
+            event.events = [{ ...wake, data: { ...wake.data, seq: messages.at(-1)!.seq } }];
+            runtime.dispatch(event); await started();
+            vi.mocked(deps.api.getChannelMessages).mockClear();
+            const { controlToken } = (await readThreadsState(home))['thread-1'];
+            return {
+                search: async (query: string, beforeSeq?: number) =>
+                    await runtime.chatHistory({ threadId: 'thread-1', controlToken: controlToken!, query, beforeSeq }) as SearchResult,
+                read: (limit: number) => runtime.chatHistory({ threadId: 'thread-1', controlToken: controlToken!, limit }),
+            };
+        }
+        const texts = (count: number, text: (seq: number) => string) => Array.from({ length: count }, (_, index) => makeChannelMessage(index + 1, text(index + 1)));
+
+        it('matches all terms case-insensitively, newest first, with neighbours', async () => {
+            const { search } = await seedChannel([
+                makeChannelMessage(1, 'deploy plan alpha'), makeChannelMessage(2, 'unrelated'),
+                makeChannelMessage(3, 'Alpha DEPLOY done'), makeChannelMessage(4, 'alpha only'),
+            ]);
+            const result = await search('deploy ALPHA');
+            expect(result.matches.map(match => match.seq)).toEqual([3, 1]);
+            expect(result.matches[0]).toMatchObject({ sender: 'Alex', text: 'Alpha DEPLOY done' });
+            expect(result.matches[0].context.map(neighbour => neighbour.seq)).toEqual([2, 4]);
+            expect(result.matches[1].context.map(neighbour => neighbour.seq)).toEqual([2]);
+            expect(result).toMatchObject({ scanned: 4, oldestScannedSeq: 1, exhausted: true });
+        });
+
+        it('searches across a context reset and returns at most twenty matches', async () => {
+            const { search } = await seedChannel(texts(30, seq => `needle ${seq}`), Date.UTC(2026, 9, 10));
+            const result = await search('needle');
+            expect(result.matches).toHaveLength(20);
+            expect(result.matches[0].seq).toBe(30);
+            expect(result.matches[19].seq).toBe(11);
+        });
+
+        it('stops at 2000 scanned messages and pages on from oldestScannedSeq without duplicates', async () => {
+            const { search } = await seedChannel(texts(2500, seq => seq === 100 || seq === 2400 ? `needle ${seq}` : `filler ${seq}`));
+            const first = await search('needle');
+            expect(first).toMatchObject({ scanned: 2000, oldestScannedSeq: 501, exhausted: false });
+            expect(first.matches.map(match => match.seq)).toEqual([2400]);
+            const next = await search('needle', first.oldestScannedSeq);
+            expect(next).toMatchObject({ scanned: 500, oldestScannedSeq: 1, exhausted: true });
+            expect(next.matches.map(match => match.seq)).toEqual([100]);
+        });
+
+        it('serves repeated searches from the cache', async () => {
+            const { search } = await seedChannel(texts(450, seq => `filler ${seq}`));
+            await search('filler', 400);
+            const fetched = vi.mocked(deps.api.getChannelMessages).mock.calls.length;
+            expect(fetched).toBeGreaterThan(0);
+            expect(await search('filler', 400)).toMatchObject({ scanned: 399, exhausted: true });
+            expect(deps.api.getChannelMessages).toHaveBeenCalledTimes(fetched);
+            await search('filler');
+            expect(deps.api.getChannelMessages).toHaveBeenCalledTimes(fetched + 1);
+        });
+
+        it('keeps the plain history response when no query is given', async () => {
+            const { read } = await seedChannel(texts(3, seq => `message ${seq}`));
+            const result = await read(2);
+            expect(deps.api.getChannelMessages).toHaveBeenCalledWith('channel-1', { limit: 2, beforeSeq: undefined });
+            expect(result).toEqual({ messages: [2, 3].map(seq => ({ ...makeChannelMessage(seq, `message ${seq}`), content: { text: `message ${seq}` } })) });
+        });
+    });
 
     it('skips only an empty scheduled heartbeat and runs manual or mixed events', async () => {
         const scheduled = payload();

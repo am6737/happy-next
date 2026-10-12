@@ -78,7 +78,7 @@ export function createMcpServer(client: ApiSessionClient, options: { enableHappy
             catch (error) { return toToolError(error instanceof Error ? error.message : String(error)); }
         });
         registerMcpTool(mcp, 'chat_history', {
-            title: 'Read channel history', description: 'Read decrypted messages from your current DM or group channel.',
+            title: 'Read channel history', description: 'Read decrypted messages from your whole current DM or group channel, including before a fresh context. Use query to search.',
             inputSchema: ChatHistorySchema.shape,
         }, async args => {
             try { return toToolSuccess(await callDaemonTeammateChat('chat-history', args)); }

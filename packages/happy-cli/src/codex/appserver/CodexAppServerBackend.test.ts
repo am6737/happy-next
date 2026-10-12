@@ -169,6 +169,24 @@ describe('CodexAppServerBackend.startSession resume routing', () => {
   });
 });
 
+describe('Codex error context metadata', () => {
+  it('carries codexErrorInfo from failed turns and error notifications', () => {
+    const backend = createBackend();
+    const messages: unknown[] = [];
+    backend.onMessage(message => messages.push(message));
+    const anyBackend = backend as any;
+    anyBackend.handleNotification(Methods.NOTIFY_TURN_COMPLETED, {
+      threadId: 't1', turn: { id: 'turn-1', status: 'failed', error: { message: 'full', codexErrorInfo: 'contextWindowExceeded' } },
+    });
+    anyBackend.handleNotification(Methods.NOTIFY_ERROR, { error: { message: 'full', codexErrorInfo: 'contextWindowExceeded' } });
+    const statuses = messages.filter(message => (message as { type?: string }).type === 'status');
+    expect(statuses).toEqual([
+      expect.objectContaining({ status: 'error', detail: 'full', codexErrorInfo: 'contextWindowExceeded' }),
+      expect.objectContaining({ status: 'error', detail: 'full', codexErrorInfo: 'contextWindowExceeded' }),
+    ]);
+  });
+});
+
 describe('CodexAppServerBackend.waitForResponseComplete', () => {
   beforeEach(() => {
     vi.useFakeTimers();

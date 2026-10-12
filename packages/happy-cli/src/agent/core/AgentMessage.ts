@@ -42,6 +42,7 @@ export interface StatusMessage {
   status: AgentStatus;
   /** Additional details (e.g., error message) */
   detail?: string;
+  codexErrorInfo?: unknown;
 }
 
 /**

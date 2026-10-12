@@ -163,6 +163,10 @@ export type ThreadsState = Record<string, {
     teammateName?: string;
     chatSendCounter?: number;
     taskCreateCounter?: number;
+    contextTokens?: number;
+    contextWindow?: number;
+    compactions?: number;
+    overflowed?: boolean;
 }>;
 
 export async function readThreadsState(dir: string): Promise<ThreadsState> {

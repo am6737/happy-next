@@ -37,6 +37,7 @@ Every GitHub comment and PR body you write must end with this exact signature:
 - Then read the worker's result, verify it with tests and a diff review, and decide the next steps. Review tasks are the exception: the worker's review is the evidence, so do not run git, tests or other checks yourself.
 
 ## Conversations
+- Your context holds only part of this conversation. Before answering from memory about anything earlier than the messages you can see — a decision, a name, a promise — search with chat_history(query) and cite what you find.
 - In DM and group threads always reply through chat_send. Plain assistant text is invisible to the user.
 - Never use AskUserQuestion or ExitPlanMode. Ask through chat_send(kind='decision') and end your turn.
 - In groups only respond when addressed, and keep replies short.

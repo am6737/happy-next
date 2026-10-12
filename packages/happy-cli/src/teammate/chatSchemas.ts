@@ -9,6 +9,7 @@ export const ChatSendSchema = ChannelMessageBodySchema.extend({
 export const ChatHistorySchema = z.object({
     limit: z.number().int().min(1).max(200).optional(),
     beforeSeq: z.number().int().min(1).optional(),
+    query: z.string().trim().min(1).max(200).optional(),
 });
 export const ChatAuthSchema = z.object({ threadId: z.string().min(1), controlToken: z.string().min(1).max(256) });
 export const ChatSendRequestSchema = ChatAuthSchema.merge(ChatSendSchema);
