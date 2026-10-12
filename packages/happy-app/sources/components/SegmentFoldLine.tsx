@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Animated, Easing, Pressable, Text, View } from 'react-native';
+import { Animated, Easing, Platform, Pressable, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { t } from '@/text';
@@ -54,8 +54,9 @@ export const SegmentFoldLine = React.memo((props: {
         }).start();
     }, [folded, turn]);
     const rotation = turn.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '-90deg'] });
-    // Hidden by opacity, not taken out: the chevron keeps its room, so showing it moves nothing.
-    const chevronShown = hovered || !folded;
+    // Hidden by opacity, not taken out: the chevron keeps its room, so showing it moves nothing. A
+    // touch screen has no pointer to reveal it with, so there it always says the line opens.
+    const chevronShown = Platform.OS !== 'web' || hovered || !folded;
     // Under the pointer the label and both glyphs light up, as the turn's line does.
     const glyphColor = hovered ? theme.colors.text : theme.colors.textSecondary;
 

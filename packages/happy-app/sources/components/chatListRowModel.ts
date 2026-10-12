@@ -1,5 +1,6 @@
 import type { Message, UserTextMessage } from '@/sync/typesMessage';
 import type { TurnHeaderStatus } from './messageTurnTiming';
+import { chatRowFoldsAreEqual, type ChatRowFold } from './chatRowFold';
 
 /**
  * Everything one row of the conversation needs to render, as plain data.
@@ -42,6 +43,8 @@ export type ChatRowModel = {
     turnStartedAt: number | undefined;
     /** Null while the turn runs, undefined when this row opens no turn. */
     turnCompletedAt: number | null | undefined;
+    /** The fold lines this row carries, undefined on a row that carries none (see `chatRowFold.ts`). */
+    fold: ChatRowFold | undefined;
 };
 
 /**
@@ -60,18 +63,25 @@ export function buildChatRowModels(params: {
     /** `senderVisibility` — null when the session is not shared and no row shows a sender name. */
     senderVisibility: ReadonlyMap<string, boolean> | null;
     forkingMessageId: string | null | undefined;
+    /** Fold lines by the row they are drawn on, from `buildChatRowFolds`. */
+    folds?: ReadonlyMap<string, ChatRowFold>;
+    /** Rows a folded line stands for: left out of the list altogether. */
+    hiddenIds?: ReadonlySet<string>;
     /** Last committed rows; never mutated. Unchanged rows retain their identity. */
     previousRows?: ChatRowModel[];
 }): ChatRowModel[] {
-    const { visibleMessages, completedIds, headerById, senderVisibility, forkingMessageId } = params;
+    const { visibleMessages, completedIds, headerById, senderVisibility, forkingMessageId, folds, hiddenIds } = params;
     const previousRows = params.previousRows ?? [];
     let rows: ChatRowModel[] | undefined;
     let previousByKey: Map<string, ChatRowModel> | undefined;
     // The nearest user prompt at a LOWER index, which is to say the newest one above this row.
     let newerPrompt: UserTextMessage | null = null;
+    // Where the next row lands in the output, which runs behind `index` once a row is folded away.
+    let out = 0;
 
     for (let index = 0; index < visibleMessages.length; index++) {
         const message = visibleMessages[index];
+        if (hiddenIds?.has(message.id)) continue;
         const header = headerById.get(message.id);
         const isNewestMessage = index === 0;
         const showActionBar = message.kind !== 'agent-text' || completedIds.has(message.id);
@@ -80,7 +90,8 @@ export function buildChatRowModels(params: {
         const isTurnStart = header !== undefined;
         const turnStartedAt = header?.startedAt;
         const turnCompletedAt = header === undefined ? undefined : header.state === 'running' ? null : header.completedAt;
-        let previous: ChatRowModel | undefined = previousRows[index];
+        const fold = folds?.get(message.id);
+        let previous: ChatRowModel | undefined = previousRows[out];
         if (previous?.key !== message.id) {
             // Only structural edits need a key lookup; normal streaming uses the aligned array.
             previousByKey ??= new Map(previousRows.map((row) => [row.key, row]));
@@ -95,7 +106,8 @@ export function buildChatRowModels(params: {
             && previous.showSenderName === showSenderName
             && previous.isTurnStart === isTurnStart
             && previous.turnStartedAt === turnStartedAt
-            && previous.turnCompletedAt === turnCompletedAt;
+            && previous.turnCompletedAt === turnCompletedAt
+            && chatRowFoldsAreEqual(previous.fold, fold);
         const row = unchanged && previous ? previous : {
             key: message.id,
             message,
@@ -107,17 +119,19 @@ export function buildChatRowModels(params: {
             isTurnStart,
             turnStartedAt,
             turnCompletedAt,
+            fold,
         };
         // Copy on the first changed row, not every heartbeat that recalculates the turn analysis.
-        if (!rows && row !== previousRows[index]) rows = previousRows.slice(0, index);
+        if (!rows && row !== previousRows[out]) rows = previousRows.slice(0, out);
         if (rows) rows.push(row);
+        out++;
 
         // Kept for the rows below this one (older), whose fork target is this prompt.
         if (message.kind === 'user-text') newerPrompt = message;
     }
 
     if (rows) return rows;
-    return previousRows.length === visibleMessages.length ? previousRows : previousRows.slice(0, visibleMessages.length);
+    return previousRows.length === out ? previousRows : previousRows.slice(0, out);
 }
 
 /**
@@ -137,7 +151,8 @@ export function chatRowModelsAreEqual(a: ChatRowModel, b: ChatRowModel): boolean
         && a.showSenderName === b.showSenderName
         && a.isTurnStart === b.isTurnStart
         && a.turnStartedAt === b.turnStartedAt
-        && a.turnCompletedAt === b.turnCompletedAt;
+        && a.turnCompletedAt === b.turnCompletedAt
+        && chatRowFoldsAreEqual(a.fold, b.fold);
 }
 
 /**

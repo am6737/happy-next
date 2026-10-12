@@ -122,6 +122,40 @@ describe('buildChatRowModels', () => {
         const rows = build([userText('a')], { senderVisibility: null });
         expect(rows.map((row) => row.showSenderName)).toEqual([false]);
     });
+
+    it('leaves the rows a folded line stands for out of the list', () => {
+        const rows = build([agentText('a'), toolCall('b'), toolCall('c'), userText('d')], { hiddenIds: new Set(['b', 'c']) });
+        expect(rows.map((row) => row.key)).toEqual(['a', 'd']);
+        // The reply still forks before the prompt above it, folded rows or not.
+        expect(rows[0].forkTarget).toBeNull();
+    });
+
+    it('keeps the rows it can when a fold opens or closes, and only those', () => {
+        const messages = [agentText('a'), toolCall('b'), toolCall('c'), userText('d')];
+        const open = build(messages);
+        const folded = build(messages, { hiddenIds: new Set(['b', 'c']), previousRows: open });
+        expect(folded[0]).toBe(open[0]);
+        expect(folded[1]).toBe(open[3]);
+        const reopened = build(messages, { previousRows: folded });
+        expect(reopened.map((row) => row.key)).toEqual(['a', 'b', 'c', 'd']);
+        expect(reopened[0]).toBe(folded[0]);
+        expect(reopened[3]).toBe(folded[1]);
+    });
+
+    it('carries the fold line of the row it is drawn on', () => {
+        const fold = {
+            foldFolded: true, foldKeepsRow: false, foldDivides: false, foldSteps: 2, foldSnapshot: undefined, foldDelegated: undefined,
+            segmentFolded: undefined, segmentSteps: undefined, segmentTool: undefined, segmentSnapshot: undefined, segmentDelegated: undefined, segmentRunning: false,
+        };
+        const messages = [toolCall('b'), userText('d')];
+        const rows = build(messages, { folds: new Map([['b', fold]]) });
+        expect(rows[0].fold).toBe(fold);
+        expect(rows[1].fold).toBeUndefined();
+        const toggled = build(messages, { folds: new Map([['b', { ...fold, foldFolded: false }]]), previousRows: rows });
+        expect(toggled[0]).not.toBe(rows[0]);
+        expect(toggled[1]).toBe(rows[1]);
+        expect(chatRowModelsAreEqual(rows[0], toggled[0])).toBe(false);
+    });
 });
 
 describe('chatRowModelsAreEqual', () => {

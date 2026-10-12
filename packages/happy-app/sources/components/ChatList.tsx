@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { useSession, useSessionMessages, useProfile, useSetting, storage } from "@/sync/storage";
+import { useSession, useSessionMessages, useProfile, useSetting, storage, useOrchestratorActiveRunIds } from "@/sync/storage";
 import { ActivityIndicator, Platform, StyleSheet, Text, View, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type ScrollViewProps } from 'react-native';
 import { useCallback, useRef, useState } from 'react';
 import { LegendList, LegendListRef, LegendListRenderItemProps } from '@legendapp/list/react-native';
@@ -9,6 +9,9 @@ import { ChatScrollView } from './ChatScrollView';
 import { ScrollToBottomButton } from './ScrollToBottomButton';
 import { useChatOverlayStyle, useChatVisibleAreaStyle } from '@/hooks/useChatOverlayStyle';
 import { useChatStickToEnd } from '@/hooks/useChatStickToEnd';
+import { useTurnFolding } from '@/hooks/useTurnFolding';
+import { buildChatRowFolds } from './chatRowFold';
+import { toolTitle } from './tools/toolTitle';
 import Animated, { type SharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useUnistyles } from 'react-native-unistyles';
@@ -149,6 +152,9 @@ type ChatRowEnv = {
     currentUserId: string;
     onFillInput?: (text: string, allOptions?: string[]) => void;
     onForkMessage?: (request: ForkMessageRequest) => void;
+    /** Flip a turn's fold line, or a run's. Stable for the life of the list (see `useTurnFolding`). */
+    onToggleFold: (headerId: string) => void;
+    onToggleSegment: (startId: string) => void;
 };
 
 /**
@@ -163,7 +169,7 @@ type ChatRowEnv = {
  */
 const ChatRow = React.memo((props: { env: ChatRowEnv; model: ChatRowModel }) => {
     const { env, model } = props;
-    const { message } = model;
+    const { message, fold } = model;
 
     // Fork is offered on user prompts and on AI replies (private sessions only):
     // - User message: fork truncates before this prompt; its text becomes the new session's draft.
@@ -195,6 +201,20 @@ const ChatRow = React.memo((props: { env: ChatRowEnv; model: ChatRowModel }) => 
             isTurnStart={model.isTurnStart}
             turnStartedAt={model.turnStartedAt}
             turnCompletedAt={model.turnCompletedAt}
+            foldFolded={fold?.foldFolded}
+            foldKeepsRow={fold?.foldKeepsRow}
+            foldDivides={fold?.foldDivides}
+            foldSteps={fold?.foldSteps}
+            foldSnapshot={fold?.foldSnapshot}
+            foldDelegated={fold?.foldDelegated}
+            onToggleFold={env.onToggleFold}
+            segmentFolded={fold?.segmentFolded}
+            segmentSteps={fold?.segmentSteps}
+            segmentTool={fold?.segmentTool}
+            segmentSnapshot={fold?.segmentSnapshot}
+            segmentDelegated={fold?.segmentDelegated}
+            segmentRunning={fold?.segmentRunning}
+            onToggleSegment={env.onToggleSegment}
         />
     );
 }, (previous, next) => previous.env === next.env && chatRowModelsAreEqual(previous.model, next.model));
@@ -272,8 +292,34 @@ const ChatListInternal = React.memo((props: {
         visibleMessages,
         turnInFlight: props.busy,
         taskCompletedAt: props.taskCompleted,
-        includeFold: false,
     });
+
+    // Which turns show their process and which show one line, and the same for the runs of steps
+    // inside a turn — the same rules as web (see turnFold.ts). A folded row leaves the list's data
+    // altogether: LegendList keeps the height it measured for the key, so it comes back at its size.
+    const foldTurnProcess = useSetting('foldTurnProcess');
+    const folding = useTurnFolding({
+        foldById: turns.foldById,
+        newestHeaderId: turns.newestHeaderId,
+        enabled: foldTurnProcess,
+    });
+    // For the snapshot a running turn's folded line carries, and a run's icon.
+    const messageById = React.useMemo(() => {
+        const map = new Map<string, Message>();
+        for (const message of props.messages) map.set(message.id, message);
+        return map;
+    }, [props.messages]);
+    // Runs of this session with a delegated task still going, for the folded lines that hide their submit.
+    const activeOrchestratorRunIds = useOrchestratorActiveRunIds(props.sessionId);
+    const rowFolds = React.useMemo(() => buildChatRowFolds({
+        folding,
+        foldById: turns.foldById,
+        headerById: turns.headerById,
+        messageById,
+        activeRunIds: activeOrchestratorRunIds,
+        headlineOf: (tool) => toolTitle(tool, props.metadata),
+        delegatedMore: (title, count) => t('message.delegatedMore', { title, count }),
+    }), [folding.hiddenIds, folding.controlByHeaderId, folding.segmentControlByStartId, turns, messageById, activeOrchestratorRunIds, props.metadata]);
 
     // Track if scroll-to-bottom button should be visible
     const [showScrollButton, setShowScrollButton] = useState(false);
@@ -304,9 +350,11 @@ const ChatListInternal = React.memo((props: {
             headerById: turns.headerById,
             senderVisibility,
             forkingMessageId: props.forkingMessageId,
+            folds: rowFolds,
+            hiddenIds: folding.hiddenIds,
             previousRows: committedRowsRef.current,
         }),
-        [visibleMessages, turns, senderVisibility, props.forkingMessageId],
+        [visibleMessages, turns, senderVisibility, props.forkingMessageId, rowFolds, folding.hiddenIds],
     );
 
     React.useLayoutEffect(() => { committedRowsRef.current = rows; }, [rows]);
@@ -350,7 +398,9 @@ const ChatListInternal = React.memo((props: {
         currentUserId: props.currentUserId,
         onFillInput: hasFillInput ? callFillInput : undefined,
         onForkMessage: hasForkMessage ? callForkMessage : undefined,
-    }), [props.metadata, props.sessionId, props.isSharedSession, props.currentUserId, hasFillInput, hasForkMessage, callFillInput, callForkMessage]);
+        onToggleFold: folding.toggle,
+        onToggleSegment: folding.toggleSegment,
+    }), [props.metadata, props.sessionId, props.isSharedSession, props.currentUserId, hasFillInput, hasForkMessage, callFillInput, callForkMessage, folding.toggle, folding.toggleSegment]);
 
     const keyExtractor = useCallback((row: ChatRowModel) => row.key, []);
     const getItemType = useCallback((row: ChatRowModel) => row.message.kind, []);
@@ -442,9 +492,10 @@ const ChatListInternal = React.memo((props: {
 
     const scrollToLoadedMessage = useCallback((target: MinimapMessage, animated = true): boolean => {
         // Searched in the newest-first order every other index here means, then translated: the list
-        // counts its rows from the oldest end.
-        const loaded = visibleMessagesRef.current;
-        const index = loaded.findIndex((m) => messageMatchesTarget(m, target));
+        // counts its rows from the oldest end. Among the rows in the list, not the loaded messages:
+        // a folded row is not one of them (a landmark never folds, but the rows around it may).
+        const loaded = committedRowsRef.current;
+        const index = loaded.findIndex((row) => messageMatchesTarget(row.message, target));
         if (index >= 0) {
             void listRef.current?.scrollToIndex({
                 index: listIndexFromNewestFirst(index, loaded.length),
