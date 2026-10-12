@@ -121,7 +121,8 @@ const TerminalIcon = ({ size, color }: { size: number; color: string }) => (
 const DETAILS_ANIMATION_MS = 180;
 // The button plus the footer gap before it; the slot pulls the gap back with a negative margin, so
 // collapsed it takes no room at all.
-const DETAILS_SLOT_HEIGHT = BUTTON_SIZE + 12;
+const FOOTER_GAP = 8;
+const DETAILS_SLOT_HEIGHT = BUTTON_SIZE + FOOTER_GAP;
 
 // The picked machine's details button, above settings: it opens out of the gap while a machine is
 // picked and folds back into it otherwise, keeping the last machine drawn while it folds.
@@ -280,7 +281,7 @@ export const MachineRail = React.memo(({
         { label: t('sessionScope.machineDetails'), icon: 'information-circle-outline', onPress: () => onMachineDetails(group.id) },
         ...reorderItem,
     ]));
-    // Anywhere on the rail outside a machine button: the items name what they will do next.
+    // Anywhere in the machine list outside a machine button: the items name what they will do next.
     const openRailMenu = (event: ContextMenuEvent) => setMenu(menuAt(event, [
         hideIdleMachines
             ? { label: t('sessionScope.showIdleMachines'), icon: 'eye-outline', onPress: () => onHideIdleMachinesChange(false) }
@@ -291,7 +292,6 @@ export const MachineRail = React.memo(({
     return (
         <View
             style={[styles.rail, !!header && styles.railWithHeader]}
-            {...(Platform.OS === 'web' ? { onContextMenu: openRailMenu } : {})}
         >
             {header}
             <RailButton
@@ -309,6 +309,7 @@ export const MachineRail = React.memo(({
                 style={styles.machines}
                 contentContainerStyle={styles.machinesContent}
                 showsVerticalScrollIndicator={false}
+                {...(Platform.OS === 'web' ? { onContextMenu: openRailMenu } : {})}
             >
                 <View
                     ref={(node) => { machinesRef.current = node as unknown as HTMLElement | null; }}
@@ -476,10 +477,10 @@ const stylesheet = StyleSheet.create((theme) => ({
     } as any,
     footer: {
         alignItems: 'center',
-        gap: 12,
+        gap: FOOTER_GAP,
     },
     detailsSlot: {
-        marginBottom: -16,
+        marginBottom: -FOOTER_GAP,
         overflow: 'hidden',
     },
     separator: {
