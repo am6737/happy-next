@@ -9,3 +9,4 @@ export * from './fileDownload';
 export * from './toolImagePreview';
 export * from './terminal';
 export * from './teammate';
+export * from './teammateMention';

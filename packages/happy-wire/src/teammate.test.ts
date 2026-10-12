@@ -176,12 +176,12 @@ describe('teammate contract', () => {
     expect(TeammateTaskCreateRequestSchema.safeParse({ ...createTask, repo, issueNumber: 1 }).success).toBe(false);
   });
 
-  it.each(['Aagent', 'a', 'agent.name', 'agent/name', 'agent\\n'])('rejects invalid task assignee %j', (assignee) => {
-    expect(TeammateTaskCreateRequestSchema.safeParse({ ...createTask, issueNumber: 1, assignee }).success).toBe(false);
+  it.each([['@Code Reviewer', 'Code Reviewer'], [' 小明 ', '小明'], ['@builder', 'builder']])('normalizes task agent reference %j', (reviewer, expected) => {
+    expect(TeammateTaskCreateRequestSchema.parse({ ...createTask, issueNumber: 1, assignee: reviewer, reviewer }).reviewer).toBe(expected);
   });
 
-  it.each(['Aagent', 'a', 'reviewer.name', 'reviewer/name', 'reviewer\\n'])('rejects invalid task reviewer %j', (reviewer) => {
-    expect(TeammateTaskCreateRequestSchema.safeParse({ ...createTask, issueNumber: 1, reviewer }).success).toBe(false);
+  it.each(['', '@', ' @ ', 'x'.repeat(65)])('rejects invalid task agent reference %j', (assignee) => {
+    expect(TeammateTaskCreateRequestSchema.safeParse({ ...createTask, issueNumber: 1, assignee }).success).toBe(false);
   });
 
   it('enforces task creation field bounds', () => {
@@ -413,6 +413,15 @@ describe('teammate contract', () => {
       expect(TeammateCreateRequestSchema.safeParse({ handle, name: 'Atlas', machineId: 'machine-1' }).success).toBe(false);
     },
   );
+
+  it('treats the handle as an optional hint and trims the name', () => {
+    expect(TeammateCreateRequestSchema.parse({ name: '  Code Reviewer ', machineId: 'machine-1' })).toMatchObject({ name: 'Code Reviewer' });
+    expect(TeammateCreateRequestSchema.parse({ name: '小明', machineId: 'machine-1' }).handle).toBeUndefined();
+  });
+
+  it.each(['', '   ', 'a@b', 'two\nlines', 'x'.repeat(65)])('rejects name %j', (name) => {
+    expect(TeammateCreateRequestSchema.safeParse({ name, machineId: 'machine-1' }).success).toBe(false);
+  });
 
   it('applies create defaults while leaving optional configuration absent', () => {
     const request: TeammateCreateRequest = { handle: 'atlas', name: 'Atlas', machineId: 'machine-1' };
