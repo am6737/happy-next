@@ -725,7 +725,7 @@ export const pt: TranslationStructure = {
         selectAgent: 'Selecionar tipo de sessão',
         sessionType: {
             title: 'Tipo de sessão',
-            simple: 'Simples',
+            simple: 'Pasta atual',
             worktree: 'Worktree',
             comingSoon: 'Em breve',
         },

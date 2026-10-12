@@ -727,7 +727,7 @@ export const zhHans: TranslationStructure = {
         selectAgent: '选择会话类型',
         sessionType: {
             title: '会话类型',
-            simple: '简单',
+            simple: '当前目录',
             worktree: 'Worktree',
             comingSoon: '即将推出',
         },

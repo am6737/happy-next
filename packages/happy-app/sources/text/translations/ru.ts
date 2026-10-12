@@ -686,7 +686,7 @@ export const ru: TranslationStructure = {
         selectAgent: 'Выберите тип сессии',
         sessionType: {
             title: 'Тип сессии',
-            simple: 'Простая',
+            simple: 'Текущая папка',
             worktree: 'Worktree',
             comingSoon: 'Скоро будет доступно',
         },

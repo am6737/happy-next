@@ -740,7 +740,7 @@ export const en: TranslationStructure = {
         selectAgent: 'Select Session Type',
         sessionType: {
             title: 'Session Type',
-            simple: 'Simple',
+            simple: 'Current folder',
             worktree: 'Worktree',
             comingSoon: 'Coming soon',
         },

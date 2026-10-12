@@ -727,7 +727,7 @@ export const ja: TranslationStructure = {
         selectAgent: 'セッションタイプを選択',
         sessionType: {
             title: 'セッションタイプ',
-            simple: 'シンプル',
+            simple: '現在のフォルダ',
             worktree: 'ワークツリー',
             comingSoon: '近日公開',
         },

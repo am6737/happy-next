@@ -726,7 +726,7 @@ export const zhHant: TranslationStructure = {
         selectAgent: '選擇工作階段類型',
         sessionType: {
             title: '工作階段類型',
-            simple: '簡單',
+            simple: '目前目錄',
             worktree: 'Worktree',
             comingSoon: '即將推出',
         },
