@@ -7,10 +7,6 @@ import {
     parseModelCatalog,
     setModelCatalog,
     buildCodexModelMode,
-    claudeAlways1M,
-    claudeBaseFamily,
-    claudeFamilyWith1M,
-    claudeHas1MOptIn,
     claudeSupportsFastMode,
     formatModelDisplay,
     getClaudeReasoningOptions,
@@ -55,7 +51,7 @@ describe('modelCatalog', () => {
         expect(isModelModeForAgent('gemini', 'gpt-5.6-sol-ultra')).toBe(false);
         expect(isModelModeForAgent('claude', 'claude-opus-4-6')).toBe(true);
         expect(isModelModeForAgent('claude', 'claude-opus-4-8')).toBe(true);
-        expect(isModelModeForAgent('claude', 'claude-opus-4-8[1m]-xhigh')).toBe(true);
+        expect(isModelModeForAgent('claude', 'claude-opus-4-8[1m]-xhigh')).toBe(false);
         expect(isModelModeForAgent('claude', 'claude-opus-5-max')).toBe(true);
         expect(isModelModeForAgent('claude', 'claude-sonnet-5-xhigh')).toBe(true);
         expect(isModelModeForAgent('gemini', 'gemini-3.6-flash')).toBe(true);
@@ -117,29 +113,6 @@ describe('modelCatalog', () => {
         });
     });
 
-    it('maps claude base families and the 1M opt-in toggle', () => {
-        expect(claudeBaseFamily('claude-sonnet-4-6[1m]')).toBe('claude-sonnet-4-6');
-        expect(claudeBaseFamily('claude-fable-5')).toBe('claude-fable-5');
-        expect(claudeHas1MOptIn('claude-opus-4-7')).toBe(true);
-        expect(claudeHas1MOptIn('claude-opus-4-6[1m]')).toBe(true);
-        // Claude 5 / Opus 4.8 are always 1M (no 200K tier); Haiku has no 1M variant.
-        expect(claudeHas1MOptIn('claude-fable-5')).toBe(false);
-        expect(claudeHas1MOptIn('claude-opus-4-8')).toBe(false);
-        expect(claudeHas1MOptIn('claude-haiku-4-5')).toBe(false);
-        expect(claudeAlways1M('claude-fable-5')).toBe(true);
-        expect(claudeAlways1M('claude-fable-5-1')).toBe(true);
-        expect(claudeAlways1M('claude-opus-5')).toBe(true);
-        expect(claudeAlways1M('claude-sonnet-5')).toBe(true);
-        expect(claudeAlways1M('claude-opus-4-8[1m]')).toBe(true);
-        expect(claudeAlways1M('claude-opus-4-7')).toBe(false);
-        expect(claudeAlways1M('claude-haiku-4-5')).toBe(false);
-        expect(claudeFamilyWith1M('claude-opus-4-7', true)).toBe('claude-opus-4-7[1m]');
-        expect(claudeFamilyWith1M('claude-opus-4-7[1m]', false)).toBe('claude-opus-4-7');
-        // Always-1M families canonicalize to the base name — the suffix would be a no-op.
-        expect(claudeFamilyWith1M('claude-fable-5', true)).toBe('claude-fable-5');
-        expect(claudeFamilyWith1M('claude-haiku-4-5', true)).toBe('claude-haiku-4-5');
-    });
-
     it('exposes all effort levels for Claude 5 models', () => {
         expect(getClaudeReasoningOptions('claude-fable-5-1')).toEqual(['max', 'xhigh', 'high', 'medium', 'low']);
         expect(getClaudeReasoningOptions('claude-opus-5')).toEqual(['max', 'xhigh', 'high', 'medium', 'low']);
@@ -154,18 +127,11 @@ describe('modelCatalog', () => {
         expect(claudeSupportsFastMode('claude-sonnet-5')).toBe(false);
     });
 
-    it('renders both [1m] and base model name formats consistently', () => {
-        // Opt-in families: the 1M chip is meaningful.
-        expect(formatModelDisplay('claude-opus-4-7[1m]', 'high')).toBe('Claude Opus 4.7 (1M, High)');
+    it('renders a CLI-reported [1m] model like its base model', () => {
+        expect(formatModelDisplay('claude-opus-4-7[1m]', 'high')).toBe('Claude Opus 4.7 (High)');
         expect(formatModelDisplay('claude-opus-4-7', 'high')).toBe('Claude Opus 4.7 (High)');
-        // Always-1M families: both formats render identically (no false CLI→local mismatch).
-        expect(formatModelDisplay('claude-fable-5[1m]', 'high')).toBe('Claude Fable 5 (High)');
-        expect(formatModelDisplay('claude-fable-5', 'high')).toBe('Claude Fable 5 (High)');
         expect(formatModelDisplay('claude-fable-5-1', 'max')).toBe('Claude Fable 5.1 (Max)');
         expect(formatModelDisplay('claude-opus-4-8[1m]', null)).toBe('Claude Opus 4.8');
-        // Both formats resolve the same context window.
-        expect(getMaxContextSize('claude-fable-5[1m]-high', 'claude')).toBe(1_000_000);
-        expect(getMaxContextSize('claude-fable-5-high', 'claude')).toBe(1_000_000);
         expect(getMaxContextSize('default', 'claude', 'claude-fable-5[1m]')).toBe(1_000_000);
         expect(getMaxContextSize('default', 'claude', 'claude-fable-5')).toBe(1_000_000);
     });
@@ -238,15 +204,9 @@ describe('modelCatalog', () => {
         expect(getMaxContextSize('claude-opus-5-max', 'claude')).toBe(1_000_000);
         expect(getMaxContextSize('claude-sonnet-5-xhigh', 'claude')).toBe(1_000_000);
         expect(getMaxContextSize('claude-opus-4-8-high', 'claude')).toBe(1_000_000);
-        expect(getMaxContextSize('claude-opus-4-8[1m]', 'claude')).toBe(1_000_000);
-        expect(getMaxContextSize('claude-opus-4-8[1m]-xhigh', 'claude')).toBe(1_000_000);
         expect(getMaxContextSize('claude-opus-4-6-high', 'claude')).toBe(200_000);
         expect(getMaxContextSize('claude-opus-4-6-fast', 'claude')).toBe(200_000);
         expect(getMaxContextSize('claude-opus-4-6', 'claude')).toBe(200_000);
-        // 1M context variants
-        expect(getMaxContextSize('claude-opus-4-6[1m]', 'claude')).toBe(1_000_000);
-        expect(getMaxContextSize('claude-opus-4-6[1m]-high', 'claude')).toBe(1_000_000);
-        expect(getMaxContextSize('claude-sonnet-4-6[1m]', 'claude')).toBe(1_000_000);
     });
 
     it('resolves context window from actualModel when modelMode is default', () => {
@@ -275,14 +235,14 @@ describe('modelCatalog', () => {
 
     it('infers a 1M window when actual context usage already exceeds the computed window', () => {
         // A 200K window can't hold >200K tokens — so the session must be on 1M,
-        // even when modelMode is default and the reported model lacks [1m].
+        // even when modelMode is default and nothing reports the real window.
         expect(getMaxContextSize('default', 'claude', 'claude-opus-4-7', 250_000)).toBe(1_000_000);
         expect(getMaxContextSize('default', 'claude', undefined, 300_000)).toBe(1_000_000);
         // Usage within the computed window leaves it unchanged.
         expect(getMaxContextSize('default', 'claude', 'claude-opus-4-7', 150_000)).toBe(200_000);
         expect(getMaxContextSize('default', 'claude', 'claude-opus-4-7')).toBe(200_000);
         // Never shrinks an already-larger window.
-        expect(getMaxContextSize('claude-opus-4-7[1m]', 'claude', undefined, 5_000)).toBe(1_000_000);
+        expect(getMaxContextSize('claude-fable-5-high', 'claude', undefined, 5_000)).toBe(1_000_000);
     });
 });
 

@@ -1170,8 +1170,6 @@ export const zhHant: TranslationStructure = {
             configureInCli: '在 CLI 設定中配置模型',
             reasoningEffort: '推理強度',
             fastMode: '快速模式',
-            context1m: '1M 上下文',
-            context1mAlways: '始終開啟',
             useCliConfigured: '使用 CLI 設定的模型',
             useCliDefaults: '使用設定檔/CLI 的預設設定',
         },

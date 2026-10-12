@@ -44,10 +44,6 @@ import type { ActionMenuItem } from './ActionMenu';
 import {
     buildClaudeModelMode,
     buildCodexModelMode,
-    claudeAlways1M,
-    claudeBaseFamily,
-    claudeFamilyWith1M,
-    claudeHas1MOptIn,
     ClaudeModelFamily,
     ClaudeReasoningEffort,
     CodexModelFamily,
@@ -649,7 +645,7 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
     const useGlassPanel = !!props.glassPanel && Platform.OS === 'ios' && isLiquidGlassAvailable();
     // Wide layout: show the reasoning-effort column beside the model list instead of below it.
     const isWideModelLayout = screenWidth > 700;
-    // Height of the rows under the model lists (effort dropdown, Fast mode, 1M context).
+    // Height of the rows under the model lists (effort dropdown, Fast mode).
     const modelFooterRowHeight = isWideModelLayout ? 44 : 40;
 
     // Check if this is a Codex or Gemini session
@@ -779,11 +775,6 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
     const claudeSelection = React.useMemo<{ family: ClaudeModelFamily; effort: ClaudeReasoningEffort | null }>(() => {
         return parseClaudeModelMode(selectedModelMode);
     }, [selectedModelMode, modelCatalog]);
-    // The wire family may carry the [1m] suffix; the UI splits it into base family + 1M toggle.
-    const claudeBase = claudeBaseFamily(claudeSelection.family);
-    const claudeIs1M = claudeSelection.family.includes('[1m]');
-    const claudeShow1MToggle = claudeBase !== MODEL_MODE_DEFAULT && claudeHas1MOptIn(claudeBase);
-    const claudeShow1MBadge = claudeAlways1M(claudeBase);
     const claudeFamilyOptions = React.useMemo(() => localizeCliDefault(getModelFamilyOptions('claude')), [modelCatalog]);
     const claudeReasoningOptions = React.useMemo<Array<{ value: ClaudeReasoningEffort; label: string }>>(() => {
         const options = getClaudeReasoningOptions(claudeSelection.family);
@@ -798,28 +789,16 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
             props.onModelModeChange(MODEL_MODE_DEFAULT);
             return;
         }
-        // 1M defaults to ON; only an explicit OFF on a toggle-capable family carries over.
-        const carry1M = claudeHas1MOptIn(claudeBase) ? claudeIs1M : true;
-        const target = claudeFamilyWith1M(family, carry1M);
-        const validOptions = getClaudeReasoningOptions(target);
+        const validOptions = getClaudeReasoningOptions(family);
         // Default to High (not the list's top-of-order Max) when nothing compatible carries over.
         const fallbackEffort = validOptions.includes('high') ? 'high' : validOptions[0];
         const effort = claudeSelection.effort && validOptions.includes(claudeSelection.effort) ? claudeSelection.effort : fallbackEffort;
-        props.onModelModeChange(buildClaudeModelMode(target, effort));
-    }, [claudeSelection.effort, claudeBase, claudeIs1M, props.onModelModeChange]);
-    const handleClaude1MToggle = React.useCallback((enable1M: boolean) => {
-        if (!props.onModelModeChange || claudeSelection.family === MODEL_MODE_DEFAULT) return;
-        const target = claudeFamilyWith1M(claudeSelection.family, enable1M);
-        const validOptions = getClaudeReasoningOptions(target);
-        const fallbackEffort = validOptions.includes('high') ? 'high' : validOptions[0];
-        const effort = claudeSelection.effort && validOptions.includes(claudeSelection.effort) ? claudeSelection.effort : fallbackEffort;
-        props.onModelModeChange(buildClaudeModelMode(target, effort));
-    }, [claudeSelection, props.onModelModeChange]);
+        props.onModelModeChange(buildClaudeModelMode(family, effort));
+    }, [claudeSelection.effort, props.onModelModeChange]);
     const handleClaudeReasoningChange = React.useCallback((effort: ClaudeReasoningEffort) => {
         if (!props.onModelModeChange || claudeSelection.family === MODEL_MODE_DEFAULT) return;
-        // Canonicalize: always-1M families drop the redundant [1m] suffix.
-        props.onModelModeChange(buildClaudeModelMode(claudeFamilyWith1M(claudeSelection.family, claudeIs1M), effort));
-    }, [claudeSelection.family, claudeIs1M, props.onModelModeChange]);
+        props.onModelModeChange(buildClaudeModelMode(claudeSelection.family, effort));
+    }, [claudeSelection.family, props.onModelModeChange]);
     const modelOptions = React.useMemo<Array<{ value: ModelMode; label: string; shortLabel: string; description: string; trailing?: string }>>(() => {
         if (isGemini) return localizeCliDefault(getModelFamilyOptions('gemini'));
         const cliDefault = { value: MODEL_MODE_DEFAULT, label: t('agentInput.model.useCliConfigured'), shortLabel: 'CLI', description: t('agentInput.model.useCliDefaults') };
@@ -845,9 +824,9 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
             return (codexFamilyOptions.find(o => o.value === codexSelection.family)?.shortLabel ?? '') + (codexSelection.family !== 'default' ? ` (${codexReasoningOptions.find(o => o.value === codexSelection.effort)?.label ?? codexSelection.effort})` : '');
         }
         if (isClaude && claudeSelection.family !== 'default') {
-            const base = claudeFamilyOptions.find(o => o.value === claudeBase)?.shortLabel ?? '';
-            const parts = [claudeIs1M ? '1M' : '', claudeReasoningOptions.find(o => o.value === claudeSelection.effort)?.label ?? ''].filter(Boolean);
-            return base + (parts.length > 0 ? ` (${parts.join(', ')})` : '');
+            const base = claudeFamilyOptions.find(o => o.value === claudeSelection.family)?.shortLabel ?? '';
+            const effortLabel = claudeReasoningOptions.find(o => o.value === claudeSelection.effort)?.label;
+            return base + (effortLabel ? ` (${effortLabel})` : '');
         }
         if (isQoder) {
             const effortLabel = qoderEffortOptions.find(o => o.value === qoderEffort)?.label;
@@ -2029,62 +2008,26 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                                     {renderScrollableList(claudeReasoningOptions, claudeSelection.effort, handleClaudeReasoningChange)}
                                                 </>
                                             );
-                                            const oneMillionRow = claudeShow1MToggle ? (
-                                                <>
-                                                    <View style={styles.overlayDivider} />
-                                                    <View style={[styles.fastModeRow, { height: modelFooterRowHeight }]}>
-                                                        <Text style={styles.fastModeLabel}>
-                                                            {t('agentInput.model.context1m')}
-                                                        </Text>
-                                                        <View style={[styles.fastModeSwitchSlot, { height: modelFooterRowHeight }]}>
-                                                            <Switch
-                                                                value={claudeIs1M}
-                                                                onValueChange={(value) => {
-                                                                    hapticsLight();
-                                                                    handleClaude1MToggle(value);
-                                                                }}
-                                                            />
-                                                        </View>
-                                                    </View>
-                                                </>
-                                            ) : claudeShow1MBadge ? (
-                                                // Always-1M family (no 200K tier): informational row, no switch.
-                                                <>
-                                                    <View style={styles.overlayDivider} />
-                                                    <View style={[styles.fastModeRow, { height: modelFooterRowHeight }]}>
-                                                        <Text style={styles.fastModeLabel}>
-                                                            {t('agentInput.model.context1m')}
-                                                        </Text>
-                                                        <Text style={styles.fastModeLabel}>
-                                                            {t('agentInput.model.context1mAlways')}
-                                                        </Text>
-                                                    </View>
-                                                </>
-                                            ) : null;
                                             if (isWideModelLayout) {
                                                 return (
-                                                    <>
-                                                        <View style={styles.modelColumns}>
-                                                            <View style={styles.modelColumn}>
-                                                                {renderScrollableList(claudeFamilyOptions, claudeBase, handleClaudeFamilyChange)}
-                                                            </View>
-                                                            {hasEffort && <View style={styles.overlayColumnDivider} />}
-                                                            {hasEffort && <View style={styles.modelColumn}>{reasoningColumn}</View>}
+                                                    <View style={styles.modelColumns}>
+                                                        <View style={styles.modelColumn}>
+                                                            {renderScrollableList(claudeFamilyOptions, claudeSelection.family, handleClaudeFamilyChange)}
                                                         </View>
-                                                        {oneMillionRow}
-                                                    </>
+                                                        {hasEffort && <View style={styles.overlayColumnDivider} />}
+                                                        {hasEffort && <View style={styles.modelColumn}>{reasoningColumn}</View>}
+                                                    </View>
                                                 );
                                             }
                                             return (
                                                 <>
-                                                    {renderScrollableList(claudeFamilyOptions, claudeBase, handleClaudeFamilyChange)}
+                                                    {renderScrollableList(claudeFamilyOptions, claudeSelection.family, handleClaudeFamilyChange)}
                                                     {hasEffort && (
                                                         <>
                                                             <View style={styles.overlayDivider} />
                                                             {renderEffortDropdown(claudeReasoningOptions, claudeSelection.effort, handleClaudeReasoningChange)}
                                                         </>
                                                     )}
-                                                    {oneMillionRow}
                                                 </>
                                             );
                                         })() : isQoder ? (() => {

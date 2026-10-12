@@ -23,7 +23,7 @@ export type ClaudeReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
  * a model id with an effort suffix (`claude-opus-5-high`, `gpt-5.5-medium`).
  */
 export type ModelMode = string;
-/** A Claude model id, optionally with the `[1m]` context suffix, or `default`. */
+/** A Claude model id, or `default`. */
 export type ClaudeModelFamily = string;
 /** A Codex model id, or `default`. */
 export type CodexModelFamily = string;
@@ -68,15 +68,7 @@ function buildCatalogIndex(catalog: ModelCatalog) {
     const activeModels = (agent: AgentFlavor) =>
         catalog.models.filter((model) => model.agent === agent && model.status === 'active');
 
-    /**
-     * Claude families as wire values: each active model, followed by its `[1m]`
-     * variant when 1M is an opt-in or the suffix is still accepted for old sessions.
-     */
-    const claudeFamilyModels = new Map<string, ModelCatalogEntry>();
-    for (const model of activeModels('claude')) {
-        claudeFamilyModels.set(model.id, model);
-        if (model.context1m === 'optin' || model.accepts1mSuffix) claudeFamilyModels.set(`${model.id}[1m]`, model);
-    }
+    const claudeFamilyModels = new Map<string, ModelCatalogEntry>(activeModels('claude').map((model) => [model.id, model]));
 
     const claudeModeToSelection = new Map<string, { family: ClaudeModelFamily; effort: ClaudeReasoningEffort }>();
     for (const [family, model] of claudeFamilyModels) {
@@ -115,8 +107,6 @@ function buildCatalogIndex(catalog: ModelCatalog) {
         qoder: [MODEL_MODE_DEFAULT, ...activeModels('qoder').map((model) => model.id)],
     };
 
-    // Claude options are base families only — the 1M context opt-in is a separate
-    // toggle in the UI, combined back into the `family[1m]` wire value via claudeFamilyWith1M.
     const familyOptions: Record<AgentFlavor, readonly ModelOption[]> = {
         claude: [DEFAULT_MODEL_OPTION, ...activeModels('claude').map(toModelOption)],
         codex: [DEFAULT_MODEL_OPTION, ...activeModels('codex').map(toModelOption)],
@@ -133,11 +123,7 @@ function buildCatalogIndex(catalog: ModelCatalog) {
         }))),
     ];
 
-    /** Context window per model id, plus 1M for each Claude `[1m]` family. */
     const contextWindows = new Map<string, number>(catalog.models.map((model) => [model.id, model.contextWindow]));
-    for (const family of claudeFamilyModels.keys()) {
-        if (family.endsWith('[1m]')) contextWindows.set(family, EXTENDED_CONTEXT_WINDOW);
-    }
 
     return {
         catalog,
@@ -238,28 +224,6 @@ export function claudeSupportsFastMode(family: ClaudeModelFamily): boolean {
     return index.claudeFamilyModels.get(family)?.fastMode === true;
 }
 
-/** Strip the [1m] suffix to get the base family ("default" passes through). */
-export function claudeBaseFamily(family: ClaudeModelFamily): ClaudeModelFamily {
-    return family.replace('[1m]', '');
-}
-
-/** Families where 1M context is an explicit opt-in via the [1m] suffix (see claudeAlways1M). */
-export function claudeHas1MOptIn(family: ClaudeModelFamily): boolean {
-    return index.claudeFamilyModels.get(claudeBaseFamily(family))?.context1m === 'optin';
-}
-
-/** Families whose context window is 1M by default with no 200K tier — the [1m] suffix is a no-op. */
-export function claudeAlways1M(family: ClaudeModelFamily): boolean {
-    return index.claudeFamilyModels.get(claudeBaseFamily(family))?.context1m === 'always';
-}
-
-/** Combine a base family with the 1M toggle into the wire family value. */
-export function claudeFamilyWith1M(family: ClaudeModelFamily, enable1M: boolean): ClaudeModelFamily {
-    const base = claudeBaseFamily(family);
-    if (!enable1M || !claudeHas1MOptIn(base)) return base;
-    return `${base}[1m]`;
-}
-
 export function buildClaudeModelMode(
     family: ClaudeModelFamily,
     effort: ClaudeReasoningEffort,
@@ -355,9 +319,12 @@ export function resolveLocalModelDisplay(modelMode: string | null | undefined): 
     return { model: modelMode, reasoningEffort: null };
 }
 
-/** Strip date suffix (YYYYMMDD / YYYY-MM-DD) and -fast suffix to get the canonical model key. */
+/**
+ * Strip date suffix (YYYYMMDD / YYYY-MM-DD), -fast suffix and Claude Code's `[1m]`
+ * suffix (set by the user's own Claude config) to get the canonical model key.
+ */
 function normalizeModelId(model: string): string {
-    return model.replace(/-\d{8}$/, '').replace(/-\d{4}-\d{2}-\d{2}$/, '').replace(/-fast$/, '');
+    return model.replace('[1m]', '').replace(/-\d{8}$/, '').replace(/-\d{4}-\d{2}-\d{2}$/, '').replace(/-fast$/, '');
 }
 
 export function formatModelNameLabel(model: string | null | undefined): string | null {
@@ -387,16 +354,10 @@ export function isModelFast(model: string | null | undefined): boolean {
 }
 
 export function formatModelDisplay(model: string | null | undefined, reasoningEffort: string | null | undefined): string | null {
-    const is1m = typeof model === 'string' && model.includes('[1m]');
-    const stripped = is1m ? model!.replace(/\[1m\]/g, '') : model;
-    const modelLabel = formatModelNameLabel(stripped);
+    const modelLabel = formatModelNameLabel(model);
     if (!modelLabel) return null;
     const effortLabel = formatReasoningEffortLabel(reasoningEffort);
-    // Always-1M families have no 200K tier — the "1M" chip distinguishes nothing and
-    // would make equivalent CLI/local model strings render as a false mismatch.
-    const show1m = is1m && !claudeAlways1M(stripped!);
-    const parts = [show1m ? '1M' : '', effortLabel ?? ''].filter(Boolean);
-    return parts.length > 0 ? `${modelLabel} (${parts.join(', ')})` : modelLabel;
+    return effortLabel ? `${modelLabel} (${effortLabel})` : modelLabel;
 }
 
 // ─── Context Window Sizes ──────────────────────────────────────
@@ -431,8 +392,7 @@ export function getMaxContextSize(
     // Defensive fallback: a window can't hold more tokens than its size. If the
     // session's actual usage already exceeds the computed window, the session is
     // really on the extended (1M) window — surface that so the usage bar doesn't
-    // overflow (e.g. a 1M session whose modelMode is "default" and whose reported
-    // model lacks the [1m] suffix, with no CLI-reported contextWindowSize).
+    // overflow (e.g. a 1M session with no CLI-reported contextWindowSize).
     if (actualContextSize && actualContextSize > window) {
         return EXTENDED_CONTEXT_WINDOW;
     }

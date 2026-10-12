@@ -4,7 +4,6 @@ import { Session } from '@/sync/storageTypes';
 import { sessionLastViewedAt, sync } from '@/sync/sync';
 import { sessionUpdateMetadataFields } from '@/sync/ops';
 import { t } from '@/text';
-import { resolveDuplicatedModelMode } from '@/utils/duplicateModelMode';
 import { hasUnreadCompletionSince } from '@/utils/sessionAttention';
 
 export type SessionState = 'disconnected' | 'syncing' | 'thinking' | 'awaiting' | 'waiting' | 'permission_required';
@@ -359,9 +358,7 @@ export function copySessionModeSettings(
         sessionId: newSessionId,
         agentType,
         permissionMode: originalSession.permissionMode || 'default',
-        // A "default"/CLI session may be running a 1M ([1m]) model that a headless
-        // --resume won't re-derive; pin it so the duplicate keeps 1M. See resolveDuplicatedModelMode.
-        modelMode: resolveDuplicatedModelMode(originalSession.modelMode, originalSession.metadata?.model, agentType),
+        modelMode: originalSession.modelMode || 'default',
         fastMode: originalSession.fastMode ?? false,
         includeSessionEntry: true,
         includeLastUsed: false,

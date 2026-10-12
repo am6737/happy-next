@@ -1069,14 +1069,7 @@ export class ApiSessionClient extends EventEmitter {
             return;
         }
 
-        // Don't overwrite a [1m] model with the same base model without [1m].
-        // Claude Code reports the actual API model name (without [1m]), but we
-        // want to preserve the [1m] variant set by syncModelMetadata.
         const currentModel = this.metadata?.model?.trim() ?? '';
-        if (currentModel.includes('[1m]') && currentModel.replace(/\[1m\]/g, '') === normalized) {
-            return;
-        }
-
         if (normalized === this.syncedModel && currentModel === normalized) {
             return;
         }

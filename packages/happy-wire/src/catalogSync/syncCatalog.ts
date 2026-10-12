@@ -13,9 +13,8 @@ import type { ModelCatalog, ModelCatalogEntry, ModelPricing, ReasoningEffort } f
  * - Claude (basellm/llm-metadata): prices, fast-mode prices and efforts follow
  *   upstream. A model newer than the newest catalog model of its family (e.g.
  *   `claude-opus-5-5` after `claude-opus-5`) is added, copying the sibling's
- *   description for review. Context windows of existing models are left alone,
- *   because the catalog's 1M opt-in (`[1m]`) is a Claude Code concept the API
- *   doesn't know; dropped fast mode and deprecation are only reported.
+ *   description for review. Context windows of existing models are left alone;
+ *   dropped fast mode and deprecation are only reported.
  * - Gemini is report-only: models Gemini CLI knows but the catalog doesn't are
  *   listed for a human to decide.
  *
@@ -202,7 +201,6 @@ function syncClaude(models: ModelCatalogEntry[], upstream: ClaudeUpstreamModel[]
             description: newest.description,
             efforts: up.efforts ?? newest.efforts,
             contextWindow,
-            ...(contextWindow >= 1_000_000 ? { context1m: 'always' as const } : {}),
             ...(up.fastPricing ? { fastMode: true } : {}),
             ...(up.pricing ? { pricing: up.pricing } : {}),
             ...(up.fastPricing ? { fastPricing: up.fastPricing } : {}),

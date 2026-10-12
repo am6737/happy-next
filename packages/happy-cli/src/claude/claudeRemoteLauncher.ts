@@ -265,7 +265,7 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
         // Write to message log
         formatClaudeMessageForInk(message, messageBuffer);
 
-        // Sync capabilities from system/init: the actual model ID (e.g. "claude-opus-4-8[1m]",
+        // Sync capabilities from system/init: the actual model ID (e.g. "claude-opus-4-8",
         // lets the app pick the right context window) plus tools and slash commands for
         // autocomplete. The eager probe in runClaude populates these before the first message;
         // this keeps them correct/refreshed from the real session (and covers cases the probe misses).

@@ -1171,8 +1171,6 @@ export const ja: TranslationStructure = {
             configureInCli: 'CLIの設定でモデルを構成',
             reasoningEffort: 'Reasoning Effort',
             fastMode: 'Fast Mode',
-            context1m: '1M Context',
-            context1mAlways: 'Always on',
             useCliConfigured: 'CLI 設定のモデルを使用',
             useCliDefaults: 'プロファイル/CLI の既定値を使用',
         },

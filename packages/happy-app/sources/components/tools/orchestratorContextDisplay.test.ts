@@ -17,10 +17,10 @@ describe('groupModelModes', () => {
         ]);
     });
 
-    it('keeps a model whose own name ends like an effort-less mode, and the [1m] family suffix', () => {
-        expect(groupModelModes(['claude-haiku-4-5', 'claude-opus-4-6[1m]-high', 'claude-opus-4-6[1m]-max', 'gemini-2.5-pro'])).toEqual([
+    it('keeps a model whose own name ends like an effort-less mode', () => {
+        expect(groupModelModes(['claude-haiku-4-5', 'claude-opus-4-6-high', 'claude-opus-4-6-max', 'gemini-2.5-pro'])).toEqual([
             { model: 'claude-haiku-4-5', efforts: [] },
-            { model: 'claude-opus-4-6[1m]', efforts: ['high', 'max'] },
+            { model: 'claude-opus-4-6', efforts: ['high', 'max'] },
             { model: 'gemini-2.5-pro', efforts: [] },
         ]);
     });

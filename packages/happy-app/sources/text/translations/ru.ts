@@ -1179,8 +1179,6 @@ export const ru: TranslationStructure = {
             configureInCli: 'Настройте модели в настройках CLI',
             reasoningEffort: 'Reasoning Effort',
             fastMode: 'Fast Mode',
-            context1m: '1M Context',
-            context1mAlways: 'Always on',
             useCliConfigured: 'Модель из настроек CLI',
             useCliDefaults: 'Настройки профиля или CLI по умолчанию',
         },

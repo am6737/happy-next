@@ -24,8 +24,7 @@ describe('modelCatalogSchema', () => {
 
     it('rejects flags that do not fit the agent', () => {
         expect(ModelCatalogSchema.safeParse(withModel({ efforts: ['ultra', 'high'] })).success).toBe(false);
-        expect(ModelCatalogSchema.safeParse(withModel({ agent: 'gemini', efforts: [], context1m: 'optin' })).success).toBe(false);
-        expect(ModelCatalogSchema.safeParse(withModel({ context1m: 'optin', accepts1mSuffix: true })).success).toBe(false);
+        expect(ModelCatalogSchema.safeParse(withModel({ agent: 'gemini', efforts: [], fastMode: true })).success).toBe(false);
         expect(ModelCatalogSchema.safeParse(withModel({ fastPricing: { input: 1, output: 1, cacheWrite: 1, cacheRead: 1 } })).success).toBe(false);
     });
 
@@ -51,10 +50,8 @@ describe('modelCatalogSchema', () => {
         }
     });
 
-    it('keeps the [1m] family for opt-in and legacy-suffix Claude models only', () => {
-        expect(getValidModelModesForAgent('claude')).toContain('claude-opus-4-7[1m]-high');
-        expect(getValidModelModesForAgent('claude')).toContain('claude-opus-4-8[1m]-high');
-        expect(getValidModelModesForAgent('claude')).not.toContain('claude-opus-5[1m]');
+    it('has no [1m] Claude modes', () => {
+        expect(getValidModelModesForAgent('claude').some((mode) => mode.includes('[1m]'))).toBe(false);
         expect(getValidModelModesForAgent('claude')).not.toContain('claude-haiku-4-5-low');
     });
 

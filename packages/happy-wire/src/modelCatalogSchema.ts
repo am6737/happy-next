@@ -39,13 +39,6 @@ export const ModelCatalogEntrySchema = z.object({
     /** Per-effort descriptions for Codex options, overriding the catalog defaults. */
     effortDescriptions: z.record(ReasoningEffortSchema, z.string()).optional(),
     contextWindow: z.number().int().positive(),
-    /**
-     * Claude 1M context: `optin` selects it with the `[1m]` suffix, `always` means
-     * the model is 1M by default. Omitted means no 1M tier.
-     */
-    context1m: z.enum(['optin', 'always']).optional(),
-    /** Keep accepting `${id}[1m]` for a model that became `always` 1M, so saved modes stay valid. */
-    accepts1mSuffix: z.boolean().optional(),
     /** Claude fast mode (`-fast` model suffix). */
     fastMode: z.boolean().optional(),
     pricing: ModelPricingSchema.optional(),
@@ -81,10 +74,7 @@ export const ModelCatalogSchema = z.object({
         if (model.status === 'active' && model.description === undefined) issue(`Active model "${model.id}" needs a description`);
         if (model.agent === 'claude' && model.efforts.includes('ultra')) issue(`Claude model "${model.id}" cannot use the ultra effort`);
         if (model.agent === 'gemini' && model.efforts.length > 0) issue(`Gemini model "${model.id}" has no effort control`);
-        if (model.agent !== 'claude' && (model.context1m || model.accepts1mSuffix || model.fastMode)) {
-            issue(`1M context and fast mode flags apply only to Claude models ("${model.id}")`);
-        }
-        if (model.accepts1mSuffix && model.context1m !== 'always') issue(`accepts1mSuffix needs context1m "always" ("${model.id}")`);
+        if (model.agent !== 'claude' && model.fastMode) issue(`Fast mode applies only to Claude models ("${model.id}")`);
         if (model.fastPricing && !model.fastMode) issue(`fastPricing needs fastMode ("${model.id}")`);
     });
 });

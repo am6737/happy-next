@@ -9,7 +9,7 @@ import { type CodexUpstreamModel, formatCatalogJson, formatSyncReport, hasCatalo
 const opusPricing = { input: 5, output: 25, cacheWrite: 6.25, cacheRead: 0.5 };
 const claude = (id: string, label: string, extra: Partial<ModelCatalogEntry> = {}): ModelCatalogEntry => ({
     id, agent: 'claude', status: 'active', label, displayName: `Claude ${label}`, description: `${label} description`,
-    efforts: ['max', 'xhigh', 'high', 'medium', 'low'], contextWindow: 1_000_000, context1m: 'always', pricing: opusPricing, ...extra,
+    efforts: ['max', 'xhigh', 'high', 'medium', 'low'], contextWindow: 1_000_000, pricing: opusPricing, ...extra,
 });
 const codex = (id: string, label: string, extra: Partial<ModelCatalogEntry> = {}): ModelCatalogEntry => ({
     id, agent: 'codex', status: 'active', label, shortLabel: label.replace(/^GPT-/, ''), displayName: label, description: `${label} description`,
@@ -21,8 +21,8 @@ const catalog: ModelCatalog = {
     ...BUNDLED_MODEL_CATALOG,
     models: [
         claude('claude-opus-5', 'Opus 5', { fastMode: true, fastPricing: { input: 10, output: 50, cacheWrite: 12.5, cacheRead: 1 } }),
-        claude('claude-opus-4-7', 'Opus 4.7', { contextWindow: 200_000, context1m: 'optin' }),
-        claude('claude-haiku-4-5', 'Haiku 4.5', { efforts: [], contextWindow: 200_000, context1m: undefined }),
+        claude('claude-opus-4-7', 'Opus 4.7', { contextWindow: 200_000 }),
+        claude('claude-haiku-4-5', 'Haiku 4.5', { efforts: [], contextWindow: 200_000 }),
         codex('gpt-6-astra', 'GPT-6-Astra', { contextWindow: 1_050_000 }),
         codex('gpt-5.6-sol', 'GPT-5.6-Sol'),
         codex('gpt-5.6-luna', 'GPT-5.6-Luna', { efforts: ['max', 'xhigh', 'high', 'medium', 'low'], effortDescriptions: { low: 'Fastest', medium: 'Balanced', high: 'Better' } }),
@@ -117,7 +117,6 @@ describe('syncCatalog', () => {
             label: 'Opus 5.5',
             displayName: 'Claude Opus 5.5',
             efforts: model('claude-opus-5').efforts,
-            context1m: 'always',
             pricing,
         });
         expect(model('claude-opus-5-5', result.catalog).fastMode).toBeUndefined();
