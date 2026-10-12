@@ -526,10 +526,12 @@ function NewSessionWizard() {
         return machines.find(m => m.id === selectedMachineId);
     }, [selectedMachineId, machines]);
 
-    const qoderModels = useQoderModels(selectedMachineId, selectedPath || selectedMachine?.metadata?.homeDir || '', agentType === 'qoder');
+    const { models: qoderModels, pending: qoderModelsPending } = useQoderModels(selectedMachineId, selectedPath || selectedMachine?.metadata?.homeDir || '', agentType === 'qoder');
     // Qoder models are per account and not in the catalog: a saved one is kept while the account still offers it.
+    // Until the machine lists them, the stand-ins can't tell, so the saved one is kept rather than flashing Auto.
     const isModelModeAvailable = (agent: 'claude' | 'codex' | 'gemini' | 'qoder', mode: string) => {
         if (agent !== 'qoder') return isModelModeForAgent(agent, mode);
+        if (qoderModelsPending) return true;
         const { model, effort } = parseQoderModelMode(mode);
         const listed = qoderModels?.find((candidate) => candidate.code === model);
         return !!listed && (!effort || !!listed.efforts?.some((level) => level.code === effort));
@@ -691,7 +693,7 @@ function NewSessionWizard() {
         } else {
             setModelMode((prev) => (prev === fallbackModelMode ? prev : fallbackModelMode));
         }
-    }, [agentType, lastUsedSessionMode?.modelMode, qoderModels]);
+    }, [agentType, lastUsedSessionMode?.modelMode, qoderModels, qoderModelsPending]);
 
     // Restore saved fast mode when agent type changes
     React.useEffect(() => {

@@ -356,7 +356,7 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
     // Check if CLI version is outdated and not already acknowledged
     const cliVersion = session.metadata?.version;
     const machineId = session.metadata?.machineId;
-    const qoderModels = useQoderModels(machineId, session.metadata?.path ?? '', session.metadata?.flavor === 'qoder');
+    const { models: qoderModels } = useQoderModels(machineId, session.metadata?.path ?? '', session.metadata?.flavor === 'qoder');
     const latestCliVersion = useLatestCliVersion();
     const isCliOutdated = cliVersion && latestCliVersion && !isVersionSupported(cliVersion, latestCliVersion);
     const isAcknowledged = machineId && acknowledgedCliVersions[machineId] === cliVersion;

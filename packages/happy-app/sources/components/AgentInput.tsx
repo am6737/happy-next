@@ -836,7 +836,8 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
         }
         if (isQoder) {
             const effortLabel = qoderEffortOptions.find(o => o.value === qoderEffort)?.label;
-            return (modelOptions.find(o => o.value === qoderSelection.model)?.shortLabel ?? '') + (effortLabel ? ` (${effortLabel})` : '');
+            // A saved model the stand-in list lacks shows by its code until the machine's own list arrives.
+            return (modelOptions.find(o => o.value === qoderSelection.model)?.shortLabel ?? qoderSelection.model) + (effortLabel ? ` (${effortLabel})` : '');
         }
         return modelOptions.find(o => o.value === selectedModelMode)?.shortLabel ?? '';
     }, [isCodex, isClaude, isQoder, codexFamilyOptions, codexSelection, codexReasoningOptions, claudeFamilyOptions, claudeSelection, claudeReasoningOptions, modelOptions, selectedModelMode, qoderSelection.model, qoderEffort, qoderEffortOptions]);
