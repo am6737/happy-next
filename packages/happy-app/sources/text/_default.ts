@@ -1169,6 +1169,7 @@ export const en = {
             badgePlanMode: 'Plan Mode',
         },
         agent: {
+            title: 'AI',
             claude: 'Claude',
             codex: 'Codex',
             gemini: 'Gemini',

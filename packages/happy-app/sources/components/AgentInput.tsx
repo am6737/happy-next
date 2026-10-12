@@ -115,7 +115,9 @@ interface AgentInputProps {
     // Models offered by the agent itself (Qoder lists them per account over ACP), as the machine reports
     // them: with each model's efforts and Qoder's own description. A session's list still comes from metadata.models.
     agentModels?: QoderPickerModel[];
-    onAgentClick?: () => void;
+    // New sessions only: the agents to choose from, offered as the first tab of the settings overlay.
+    availableAgents?: readonly ('claude' | 'codex' | 'gemini' | 'qoder')[];
+    onAgentChange?: (agent: 'claude' | 'codex' | 'gemini' | 'qoder') => void;
     machineName?: string | null;
     onMachineClick?: () => void;
     currentPath?: string | null;
@@ -1098,8 +1100,9 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
         hapticsLight();
     }, [suggestions, inputState, props.autocompletePrefixes]);
 
-    // Settings modal state: 'model' shows model picker, 'permission' shows permission picker, false = closed
-    const [showSettings, setShowSettings] = React.useState<'model' | 'permission' | false>(false);
+    // Settings modal state: 'agent' shows agent picker (new sessions), 'model' shows model picker,
+    // 'permission' shows permission picker, false = closed
+    const [showSettings, setShowSettings] = React.useState<'agent' | 'model' | 'permission' | false>(false);
 
     // Dismiss keyboard when settings overlay opens
     React.useEffect(() => {
@@ -1118,6 +1121,12 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
     const handlePermissionPress = React.useCallback(() => {
         hapticsLight();
         setShowSettings(prev => prev === 'permission' ? false : 'permission');
+    }, []);
+
+    // Handle agent button press (bottom-left agent name → agent selection)
+    const handleAgentPress = React.useCallback(() => {
+        hapticsLight();
+        setShowSettings(prev => prev === 'agent' ? false : 'agent');
     }, []);
 
     // Handle settings selection
@@ -1657,6 +1666,7 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                             ? <>{currentModelLabel} <MaterialCommunityIcons name="lightning-bolt" size={10} color={FAST_MODE_ICON_COLOR} /></>
                                             : currentModelLabel;
                                         const tabs = [
+                                            ...(props.onAgentChange && props.agentType ? [{ key: 'agent' as const, label: t('agentInput.agent.title'), subtitle: t(`agentInput.agent.${props.agentType}`) as React.ReactNode }] : []),
                                             { key: 'model' as const, label: t('agentInput.model.title'), subtitle: currentModelSubtitle },
                                             { key: 'permission' as const, label: t('agentInput.permissionMode.title'), subtitle: permissionLabel },
                                         ];
@@ -1706,6 +1716,63 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                         });
                                     })()}
                                 </View>
+
+                                {/* Agent Section */}
+                                {showSettings === 'agent' && <View style={styles.overlaySection}>
+                                    {(props.availableAgents ?? []).map((agent) => {
+                                        const isSelected = props.agentType === agent;
+                                        return (
+                                            <Pressable
+                                                key={agent}
+                                                onPress={() => {
+                                                    if (isSelected) return;
+                                                    hapticsLight();
+                                                    props.onAgentChange?.(agent);
+                                                }}
+                                                style={({ pressed, hovered }: any) => ({
+                                                    flexDirection: 'row',
+                                                    alignItems: 'center',
+                                                    paddingHorizontal: 16,
+                                                    paddingVertical: 10,
+                                                    backgroundColor: pressed || hovered ? theme.colors.surfacePressed : 'transparent'
+                                                })}
+                                            >
+                                                <View style={{
+                                                    width: 16,
+                                                    height: 16,
+                                                    borderRadius: 8,
+                                                    borderWidth: 2,
+                                                    borderColor: isSelected ? theme.colors.radio.active : theme.colors.radio.inactive,
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    marginRight: 12
+                                                }}>
+                                                    {isSelected && (
+                                                        <View style={{
+                                                            width: 6,
+                                                            height: 6,
+                                                            borderRadius: 3,
+                                                            backgroundColor: theme.colors.radio.dot
+                                                        }} />
+                                                    )}
+                                                </View>
+                                                <Image
+                                                    source={agentFlavorIcons[agent]}
+                                                    style={{ width: 16, height: 16, marginRight: 8 }}
+                                                    contentFit="contain"
+                                                    tintColor={agent === 'codex' || agent === 'qoder' ? theme.colors.text : undefined}
+                                                />
+                                                <Text style={{
+                                                    fontSize: 14,
+                                                    color: isSelected ? theme.colors.radio.active : theme.colors.text,
+                                                    ...Typography.default()
+                                                }}>
+                                                    {t(`agentInput.agent.${agent}`)}
+                                                </Text>
+                                            </Pressable>
+                                        );
+                                    })}
+                                </View>}
 
                                 {/* Permission Mode Section */}
                                 {showSettings === 'permission' && <View style={styles.overlaySection}>
@@ -2165,12 +2232,9 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                 )}
 
                                 {/* Agent selector button */}
-                                {props.agentType && props.onAgentClick && (
+                                {props.agentType && props.onAgentChange && (
                                     <Pressable
-                                        onPress={() => {
-                                            hapticsLight();
-                                            props.onAgentClick?.();
-                                        }}
+                                        onPress={handleAgentPress}
                                         hitSlop={{ top: 5, bottom: 10, left: 0, right: 0 }}
                                         style={(p) => ({
                                             flexDirection: 'row',

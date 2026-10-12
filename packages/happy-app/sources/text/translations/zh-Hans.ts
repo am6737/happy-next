@@ -1159,6 +1159,7 @@ export const zhHans: TranslationStructure = {
             badgePlanMode: '计划模式',
         },
         agent: {
+            title: 'AI',
             claude: 'Claude',
             codex: 'Codex',
             gemini: 'Gemini',

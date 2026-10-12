@@ -1158,6 +1158,7 @@ export const zhHant: TranslationStructure = {
             badgePlanMode: '計劃模式',
         },
         agent: {
+            title: 'AI',
             claude: 'Claude',
             codex: 'Codex',
             gemini: 'Gemini',

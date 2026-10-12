@@ -491,20 +491,13 @@ function NewSessionWizard() {
     // CLI Detection - automatic, non-blocking detection of installed CLIs on selected machine
     const cliAvailability = useCLIDetection(selectedMachineId);
 
-    // Agent cycling handler: claude -> codex -> gemini -> qoder -> claude, skipping agents detected as not installed
-    // (landing on one would make the auto-correct below jump back to the first available agent).
+    // Agents offered in the input's settings overlay: every one not detected as missing on the selected
+    // machine (picking one would make the auto-correct below jump back to the first available agent).
     // Note: Does NOT persist immediately - persistence is handled by useEffect above
-    const handleAgentClick = React.useCallback(() => {
-        const order = ['claude', 'codex', 'gemini', 'qoder'] as const;
-        setAgentType(prev => {
-            const start = order.indexOf(prev);
-            for (let step = 1; step <= order.length; step++) {
-                const next = order[(start + step) % order.length];
-                if (cliAvailability[next] !== false) return next;
-            }
-            return prev;
-        });
-    }, [cliAvailability]);
+    const availableAgents = React.useMemo(() => (
+        (['claude', 'codex', 'gemini', 'qoder'] as const)
+            .filter((agent) => agent === agentType || cliAvailability[agent] !== false)
+    ), [cliAvailability, agentType]);
 
     // Auto-correct invalid agent selection after CLI detection completes
     // This handles the case where lastUsedAgent was 'codex' but codex is not installed
@@ -1095,7 +1088,8 @@ function NewSessionWizard() {
                         autocompleteSuggestions={autocomplete.suggestions}
                         agentType={agentType}
                         agentModels={agentType === 'qoder' ? qoderModels : undefined}
-                        onAgentClick={handleAgentClick}
+                        availableAgents={availableAgents}
+                        onAgentChange={setAgentType}
                         permissionMode={permissionMode}
                         onPermissionModeChange={handlePermissionModeChange}
                         modelMode={modelMode}

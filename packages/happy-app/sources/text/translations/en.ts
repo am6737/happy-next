@@ -1173,6 +1173,7 @@ export const en: TranslationStructure = {
             badgePlanMode: 'Plan Mode',
         },
         agent: {
+            title: 'AI',
             claude: 'Claude',
             codex: 'Codex',
             gemini: 'Gemini',

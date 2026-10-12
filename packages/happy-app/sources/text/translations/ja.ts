@@ -1159,6 +1159,7 @@ export const ja: TranslationStructure = {
             badgePlanMode: 'Plan Mode',
         },
         agent: {
+            title: 'AI',
             claude: 'Claude',
             codex: 'Codex',
             gemini: 'Gemini',
