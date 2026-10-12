@@ -45,11 +45,14 @@ export type TurnFoldSetting = boolean;
  * own line above them is the whole turn at once, which starts open: the runs are what the setting
  * folds, and the line above them is for the reader who wants the lot gone.
  *
- * Every older turn is history and starts as its one line, split or not, as the setting says. That
- * shape depends on nothing but which turn is newest — not on how much history is loaded, nor on
- * whether the turn has settled — so a turn never changes shape under the reader except when a new
- * turn begins below it. Either way a tap decides this line: an explicit toggle outranks the default,
- * so one the reader opened stays open.
+ * Every older turn is history and starts as its one line, split or not, as the setting says. So is a
+ * turn that had already settled when the list opened, newest or not: what the reader comes back to is
+ * answers, and a turn they did not watch run opens in runs only if they open it. That shape depends
+ * on nothing but which turn is newest and which turns the reader watched — not on how much history is
+ * loaded, nor on whether the turn has settled since — so a turn never changes shape under the reader
+ * except when a new turn begins below it. Where a turn the reader watched should not fold even then,
+ * `keepsWatchedOpen` keeps it open in runs for as long as the list is open. Either way a tap decides
+ * this line: an explicit toggle outranks the default, so one the reader opened stays open.
  */
 export function turnFoldControl(params: {
     process: TurnProcess;
@@ -58,13 +61,17 @@ export function turnFoldControl(params: {
     override: boolean | undefined;
     /** Whether this is the conversation's newest turn. Defaults to true. */
     newest?: boolean;
+    /** Whether the reader watched this turn run since the list opened. Defaults to true. */
+    watched?: boolean;
+    /** Whether a watched turn stays open in runs once a newer turn begins below it. Defaults to false. */
+    keepsWatchedOpen?: boolean;
 }): TurnFoldControl | null {
-    const { process, enabled, override, newest = true } = params;
+    const { process, enabled, override, newest = true, watched = true, keepsWatchedOpen = false } = params;
     // `steps` counts the tool calls whose row the line takes, the row it is drawn on included: a turn
     // that opens with a tool call gets its line from that first step, and one that has only written so
     // far has no step to fold.
     if (process.steps === 0) return null;
-    const split = newest && process.segments.length > 0;
+    const split = watched && (newest || keepsWatchedOpen) && process.segments.length > 0;
     return { folded: override ?? (split ? false : enabled), steps: process.steps };
 }
 
@@ -115,8 +122,12 @@ export function resolveTurnFolding(params: {
      * treated as the newest.
      */
     newestHeaderId?: string | null;
+    /** Header rows of the turns the reader watched run (`useWatchedTurns`); left out, every turn. */
+    watchedHeaderIds?: ReadonlySet<string>;
+    /** See `turnFoldControl`. */
+    keepsWatchedOpen?: boolean;
 }): TurnFoldResolution {
-    const { foldById, enabled, turnOverrides, segmentOverrides, newestHeaderId } = params;
+    const { foldById, enabled, turnOverrides, segmentOverrides, newestHeaderId, watchedHeaderIds, keepsWatchedOpen } = params;
     const controlByHeaderId = new Map<string, TurnFoldControl>();
     const segmentControlByStartId = new Map<string, SegmentFoldControl>();
     const hiddenIds = new Set<string>();
@@ -126,6 +137,8 @@ export function resolveTurnFolding(params: {
             enabled,
             override: turnOverrides.get(headerId),
             newest: newestHeaderId === undefined || newestHeaderId === headerId,
+            watched: watchedHeaderIds === undefined || watchedHeaderIds.has(headerId),
+            keepsWatchedOpen,
         });
         if (control === null) continue;
         controlByHeaderId.set(headerId, control);

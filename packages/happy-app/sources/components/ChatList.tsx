@@ -10,6 +10,7 @@ import { ScrollToBottomButton } from './ScrollToBottomButton';
 import { useChatOverlayStyle, useChatVisibleAreaStyle } from '@/hooks/useChatOverlayStyle';
 import { useChatStickToEnd } from '@/hooks/useChatStickToEnd';
 import { useTurnFolding } from '@/hooks/useTurnFolding';
+import { useWatchedTurns } from '@/hooks/useWatchedTurns';
 import { buildChatRowFolds } from './chatRowFold';
 import { toolTitle } from './tools/toolTitle';
 import Animated, { type SharedValue } from 'react-native-reanimated';
@@ -298,9 +299,15 @@ const ChatListInternal = React.memo((props: {
     // inside a turn — the same rules as web (see turnFold.ts). A folded row leaves the list's data
     // altogether: LegendList keeps the height it measured for the key, so it comes back at its size.
     const foldTurnProcess = useSetting('foldTurnProcess');
+    const watchedTurnIds = useWatchedTurns(turns.headerById);
     const folding = useTurnFolding({
         foldById: turns.foldById,
         newestHeaderId: turns.newestHeaderId,
+        watchedHeaderIds: watchedTurnIds,
+        // Here a turn the reader watched keeps its runs open until they leave the chat, rather than
+        // folding the moment the next prompt lands: removing its rows from under a reader at the end
+        // moves what they are looking at, and only coming back in folds it.
+        keepsWatchedOpen: true,
         enabled: foldTurnProcess,
     });
     // For the snapshot a running turn's folded line carries, and a run's icon.

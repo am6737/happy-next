@@ -197,6 +197,54 @@ describe('resolveTurnFolding by the newest turn', () => {
     });
 });
 
+describe('resolveTurnFolding by the turns the reader watched', () => {
+    const split = (id: string) => process(5, 4, [segment(id, [`${id}1`]), segment(`${id}2`, [`${id}3`])]);
+    const resolve = (watched: string[], keepsWatchedOpen: boolean, overrides: [string, boolean][] = []) => resolveTurnFolding({
+        foldById: new Map([['old', split('old')], ['a', split('a')]]),
+        newestHeaderId: 'a',
+        watchedHeaderIds: new Set(watched),
+        keepsWatchedOpen,
+        enabled: true,
+        turnOverrides: new Map(overrides),
+        segmentOverrides: new Map(),
+    });
+
+    it('folds the newest turn when the reader did not watch it run', () => {
+        expect(resolve([], false).controlByHeaderId.get('a')?.folded).toBe(true);
+        expect(resolve([], true).controlByHeaderId.get('a')?.folded).toBe(true);
+    });
+
+    it('opens the newest turn in runs when the reader watched it', () => {
+        expect(resolve(['a'], false).controlByHeaderId.get('a')?.folded).toBe(false);
+    });
+
+    it('folds an older watched turn, unless watched turns are kept open', () => {
+        expect(resolve(['old', 'a'], false).controlByHeaderId.get('old')?.folded).toBe(true);
+        const kept = resolve(['old', 'a'], true);
+        expect(kept.controlByHeaderId.get('old')?.folded).toBe(false);
+        expect(kept.hiddenIds.has('old1')).toBe(true);
+        expect(kept.hiddenIds.has('old2')).toBe(false);
+    });
+
+    it('keeps open only turns that split, as the setting folds one that does not', () => {
+        const folding = resolveTurnFolding({
+            foldById: new Map([['old', process(3)]]),
+            newestHeaderId: 'a',
+            watchedHeaderIds: new Set(['old']),
+            keepsWatchedOpen: true,
+            enabled: true,
+            turnOverrides: new Map(),
+            segmentOverrides: new Map(),
+        });
+        expect(folding.controlByHeaderId.get('old')?.folded).toBe(true);
+    });
+
+    it('lets a tap outrank either default', () => {
+        expect(resolve([], false, [['a', false]]).controlByHeaderId.get('a')?.folded).toBe(false);
+        expect(resolve(['old', 'a'], true, [['old', true]]).controlByHeaderId.get('old')?.folded).toBe(true);
+    });
+});
+
 describe('foldedLineKeepsRow', () => {
     const plain = { folded: true, answer: false, mustKeep: false };
 

@@ -19,6 +19,7 @@ import { newestRowSnapshot } from './rowSnapshot';
 import { foldHidesRunningDelegatedTask, delegatedLabel } from './foldDelegated';
 import { toolTitle } from './tools/toolTitle';
 import { useTurnFolding } from '@/hooks/useTurnFolding';
+import { useWatchedTurns } from '@/hooks/useWatchedTurns';
 import { useFoldAnimation, type FoldFrame } from '@/hooks/useFoldAnimation';
 import { isSessionBusy } from '@/utils/sessionUtils';
 import { layout as appLayout } from './layout';
@@ -628,9 +629,14 @@ const ChatListInternal = React.memo((props: {
     // would have to be measured again on its way back and everything below it would move while it
     // happened. A row that is still there at zero height keeps its measurement, and can grow back
     // from it — which is also what an expand animation needs to know its endpoint.
+    const watchedTurnIds = useWatchedTurns(turns.headerById);
     const folding = useTurnFolding({
         foldById: turns.foldById,
         newestHeaderId: turns.newestHeaderId,
+        watchedHeaderIds: watchedTurnIds,
+        // A turn the reader watched folds when the next prompt lands, which the slide makes something
+        // they can follow (see `autoFold`).
+        keepsWatchedOpen: false,
         enabled: foldTurnProcess,
     });
     // Runs of this session with a delegated task still going, for the folded lines that hide their submit.
