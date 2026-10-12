@@ -3,7 +3,7 @@ import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
     TEAMMATE_ENV, TEAMMATE_REVIEW_MAX_ROUNDS, TeammateNotifyPayloadSchema, TeammateTaskStopPayloadSchema, TeammateTaskAgentUpdateRequestSchema, TeammateRunCancelPayloadSchema, TeammateRunDispatchPayloadSchema,
-    TeammateRuntimeEnvSchema, MODEL_MODE_DEFAULT, FAST_MODE_SUFFIX, splitFastModeSuffix, resolveModelSelectionForFlavor,
+    TeammateRuntimeEnvSchema, MODEL_MODE_DEFAULT, FAST_MODE_SUFFIX, splitFastModeSuffix, resolveModelSelectionForFlavor, mentionIds,
     type TeammateWorkerProvider, type TeammateRunDispatchPayload, type TeammateRpcResult, type ChannelMessage,
 } from 'happy-wire';
 import type { ApiClient } from '@/api/api';
@@ -138,12 +138,12 @@ export async function renderRunEventMessage(payload: TeammateRunDispatchPayload,
         const files = home ? (await readdir(join(home, 'memory')).catch(() => [])).filter(name => /^\d{4}-\d{2}-\d{2}\.md$/.test(name) && Date.parse(name.slice(0, 10)) + 86_400_000 > since).sort() : [];
         sections.push(`Dreaming: read these daily logs since ${new Date(since).toISOString()}: ${files.map(name => `memory/${name}`).join(', ') || '(none)'}. Consolidate durable knowledge with source runId/sessionId links into MEMORY.md (under about 12k characters), remove outdated entries, update USER.md, optionally add skills/<name>.md. Do not edit AGENTS.md, SOUL.md, or IDENTITY.md. Call memory_commit with a one-line summary. Stay silent; do not call chat_send.`);
     }
-    sections.push(...payload.events.filter(event => event.type === 'review-feedback').map(event => `Review feedback (round ${event.data.round ?? 1}) from @${event.data.reviewerHandle ?? 'unknown'} on ${event.data.prUrl ?? '(PR URL unavailable)'}: ${event.data.summary ?? '(no summary)'}. Address the blocking points: continue your worker session (work_session_send / start with continueFrom) or start a new one on the same PR branch, push fixes to the existing PR, then task_comment a short note and set task_update(status=in_review) again. The reviewer will be woken automatically; do not ping anyone.`));
+    sections.push(...payload.events.filter(event => event.type === 'review-feedback').map(event => `Review feedback (round ${event.data.round ?? 1}) from @${event.data.reviewerName ?? event.data.reviewerHandle ?? 'unknown'} on ${event.data.prUrl ?? '(PR URL unavailable)'}: ${event.data.summary ?? '(no summary)'}. Address the blocking points: continue your worker session (work_session_send / start with continueFrom) or start a new one on the same PR branch, push fixes to the existing PR, then task_comment a short note and set task_update(status=in_review) again. The reviewer will be woken automatically; do not ping anyone.`));
     const taskUpdates = payload.events.filter(event => event.type === 'task-update');
     if (taskUpdates.length) {
         const lines = taskUpdates.map(event => {
-            const { title, resourceId, assigneeHandle, from, to, by, summary, prUrl } = event.data;
-            return `- ${title} (${resourceId}) @${assigneeHandle ?? '(unknown)'}: ${from} → ${to}${by === 'owner' || by === 'system' ? ` by ${by}` : ''}; summary: ${summary || '(none)'}; PR: ${prUrl || '(none)'}`;
+            const { title, resourceId, assigneeName, assigneeHandle, from, to, by, summary, prUrl } = event.data;
+            return `- ${title} (${resourceId}) @${assigneeName ?? assigneeHandle ?? '(unknown)'}: ${from} → ${to}${by === 'owner' || by === 'system' ? ` by ${by}` : ''}; summary: ${summary || '(none)'}; PR: ${prUrl || '(none)'}`;
         });
         sections.push('Tasks you assigned changed status:', ...lines,
             'For each: report to the owner with chat_send(kind=report) in one or two sentences (what changed, what happens next). If a task is in_review and has a designated reviewer, the server routes the review automatically: do NOT task_create a review. Only assign a review manually with task_create(repo, issueNumber=<PR number>, assignee=reviewer) if no review task exists yet and the task has no reviewer. If a task is awaiting_input with summary starting "Review round limit reached", ask the owner with chat_send(kind=decision) and offer concrete options such as merge anyway, ask the builder for another round, or take over manually. If a review task is done after a verdict approved, report to the owner that the PR was approved and can be merged by them; the agent never merges. If the assignee moved it to awaiting_input, it already asked the owner; do not ask the same question again. If it was paused or cancelled by the system, decide whether the owner must choose and use chat_send(kind=decision) with concrete options. If the owner made the change (by owner), just acknowledge briefly. Do not re-assign the same work to the same agent.');
@@ -188,7 +188,7 @@ export async function renderRunEventMessage(payload: TeammateRunDispatchPayload,
             ? `New messages in DM with ${channel.members.find(member => member.memberType === 'user')?.name ?? 'You'}:`
             : `New messages in group ${channel.title ?? channel.id}:`;
         sections.push(...(payload.thread.kind === 'task' ? ['These are DM replies about this task.'] : []), header,
-            ...(channel.kind === 'group' ? [`Members: ${channel.members.map(member => `${member.name}${member.handle ? ` (@${member.handle})` : ''}`).join(', ')}`] : []),
+            ...(channel.kind === 'group' ? [`Members: ${channel.members.map(member => member.name).join(', ')}`] : []),
             'Earlier messages (context):', ...messages.filter(message => message.seq < minSeq).map(line),
             'New messages:', ...messages.filter(message => newSeqs.has(message.seq)).map(line),
             'Reply with chat_send. Do not answer in plain assistant text — the user only sees chat_send messages.');
@@ -503,9 +503,8 @@ export function createTeammateRuntime(deps: TeammateRuntimeDependencies) {
             if (!channel) throw Object.assign(new Error('Teammate thread has no channel'), { statusCode: 409 });
             if (request.channelId && request.channelId !== channel.id) throw Object.assign(new Error('Thread cannot send to another channel'), { statusCode: 403 });
             if (!entry.lastRunId || !entry.lastDispatchToken) throw new Error('Teammate thread has no dispatched run');
-            const handles = new Set([...(request.mentions ?? []).map(handle => handle.replace(/^@/, '').toLowerCase()),
-                ...Array.from(request.text.matchAll(/(?:^|[^a-zA-Z0-9_@])@([a-zA-Z0-9][a-zA-Z0-9_-]{1,31})(?![a-zA-Z0-9_-])/g), match => match[1].toLowerCase())]);
-            const mentions = channel.members.filter(member => member.memberType === 'teammate' && member.handle && handles.has(member.handle.toLowerCase())).map(member => member.id);
+            const teammates = channel.members.filter(member => member.memberType === 'teammate');
+            const mentions = mentionIds([...(request.mentions ?? []).map(ref => `@${ref.trim().replace(/^@/, '')}`), request.text].join('\n'), teammates);
             const counter = (entry.chatSendCounter ?? 0) + 1;
             await mergeThreadState(home, request.threadId, { chatSendCounter: counter });
             const body = { text: request.text, options: request.options, links: request.links };

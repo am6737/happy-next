@@ -11,7 +11,7 @@ describe('channel event rendering', () => {
             .mockResolvedValueOnce([makeChannelMessage()]) };
         const rendered = await renderRunEventMessage(makeConversationPayload(kind), { api, crypto: createChannelCrypto(machineTestKey) });
         expect(rendered).toContain(kind === 'dm' ? 'New messages in DM with Alex:' : 'New messages in group Engineering:');
-        if (kind === 'group') expect(rendered).toContain('Members: Alex, Atlas (@atlas), Nova (@nova)');
+        if (kind === 'group') expect(rendered).toContain('Members: Alex, Atlas, Nova');
         expect(rendered).toContain('(seq 12, 10:31) Alex: @atlas Review this');
         expect(rendered).toContain('context 2');
         expect(rendered).not.toContain('Alex: context 1\n');
@@ -113,11 +113,11 @@ describe('channel event rendering', () => {
         const payload = makeConversationPayload();
         payload.trigger = 'review-feedback';
         payload.events = [
-            { type: 'review-feedback', at: 2, data: { taskId: 'task-42', reviewTaskId: 'review-task', round: 1, summary: 'Add coverage for the retry path.', prUrl: 'https://github.com/owner/repo/pull/99', reviewerHandle: 'nova' } },
+            { type: 'review-feedback', at: 2, data: { taskId: 'task-42', reviewTaskId: 'review-task', round: 1, summary: 'Add coverage for the retry path.', prUrl: 'https://github.com/owner/repo/pull/99', reviewerName: 'Nova' } },
             { type: 'manual', at: 3, data: { note: 'Other event' } },
         ];
         const rendered = await renderRunEventMessage(payload);
-        expect(rendered).toContain('Review feedback (round 1) from @nova on https://github.com/owner/repo/pull/99: Add coverage for the retry path.');
+        expect(rendered).toContain('Review feedback (round 1) from @Nova on https://github.com/owner/repo/pull/99: Add coverage for the retry path.');
         expect(rendered).toContain('The reviewer will be woken automatically; do not ping anyone.');
         expect(rendered).toContain('Events (oldest first):\n- 1970-01-01 00:00 manual: Other event');
         expect(rendered).not.toContain('review-feedback:');
@@ -126,12 +126,12 @@ describe('channel event rendering', () => {
         const payload = makeConversationPayload(kind);
         payload.events.push({ type: 'task-update', at: 2, data: {
             taskId: 'task-42', title: 'Improve logging', resourceId: 'owner/repo#42', from: 'in_progress', to: 'in_review',
-            summary: 'Draft PR is ready', prUrl: 'https://github.com/owner/repo/pull/99', assigneeId: 'teammate-nova', assigneeHandle: 'nova', by: 'system',
+            summary: 'Draft PR is ready', prUrl: 'https://github.com/owner/repo/pull/99', assigneeId: 'teammate-nova', assigneeName: 'Nova', by: 'system',
         } }, { type: 'manual', at: 3, data: { note: 'Owner follow-up' } });
         const api = { getChannelMessages: vi.fn().mockResolvedValueOnce([]).mockResolvedValueOnce([makeChannelMessage()]) };
         const rendered = await renderRunEventMessage(payload, { api, crypto: createChannelCrypto(machineTestKey) });
         expect(rendered).toContain('Tasks you assigned changed status:');
-        expect(rendered).toContain('- Improve logging (owner/repo#42) @nova: in_progress → in_review by system; summary: Draft PR is ready; PR: https://github.com/owner/repo/pull/99');
+        expect(rendered).toContain('- Improve logging (owner/repo#42) @Nova: in_progress → in_review by system; summary: Draft PR is ready; PR: https://github.com/owner/repo/pull/99');
         expect(rendered).toContain(kind === 'dm' ? 'New messages in DM with Alex:' : 'New messages in group Engineering:');
         expect(rendered).toContain('@atlas Review this');
         expect(rendered).toContain('Events (oldest first):\n- 1970-01-01 00:00 manual: Owner follow-up');

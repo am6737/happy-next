@@ -527,6 +527,9 @@ describe('teammate runtime', () => {
         expect(deps.api.sendTeammateChannelMessage).toHaveBeenCalledWith(expect.objectContaining({
             runId: event.runId, dispatchToken: event.dispatchToken, localId: 'tm:run-chat:1', mentions: ['teammate-nova'],
         }));
+        // Names resolve too, from the text (no space needed after CJK) or the mentions list; the owner is never a mention target.
+        await runtime.chatSend({ threadId: 'thread-1', controlToken: 'existing-token', text: '请@Nova看下，@Alex 也看看', mentions: ['@Atlas'], kind: 'text' });
+        expect(deps.api.sendTeammateChannelMessage).toHaveBeenLastCalledWith(expect.objectContaining({ mentions: ['teammate-atlas', 'teammate-nova'] }));
     });
 
     it('persists task configuration for restart and never reopens workers on a duplicate stopped dispatch', async () => {

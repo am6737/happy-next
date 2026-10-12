@@ -26,7 +26,7 @@ export const TeammateToolSchemas = {
     }),
     'task-comment': z.object({ body: z.string().min(1).max(60000) }),
     'memory-note': z.object({ text: z.string().min(1).max(20000) }),
-    'task-create': z.object({ repo: z.string().regex(REPO_PATTERN), issueNumber: z.number().int().positive().optional().describe('Issue or pull request number; use a PR number to assign a PR review.'), title: z.string().min(1).max(256).optional(), body: z.string().max(20000).optional(), assignee: z.string().min(1).optional(), reviewer: z.string().min(1).describe('Handle of the agent who should automatically review the PR once the assignee marks the implementation task in_review.').optional() }),
+    'task-create': z.object({ repo: z.string().regex(REPO_PATTERN), issueNumber: z.number().int().positive().optional().describe('Issue or pull request number; use a PR number to assign a PR review.'), title: z.string().min(1).max(256).optional(), body: z.string().max(20000).optional(), assignee: z.string().min(1).describe('Name of the Agent to delegate to; defaults to you.').optional(), reviewer: z.string().min(1).describe('Name of the Agent who should automatically review the PR once the assignee marks the implementation task in_review.').optional() }),
     'memory-commit': z.object({ message: z.string().min(1).max(200) }),
 };
 export type TeammateToolPath = keyof typeof TeammateToolSchemas;
@@ -39,7 +39,7 @@ export const TeammateToolDescriptions: Record<TeammateToolPath, string> = {
     'task-update': 'Update task status, summary, PR URL or a review verdict; supply at least one field. verdict is for review tasks only: use approved when the PR can be merged, or changes_requested when blocking changes are required, and list them in the summary. On completion set in_review or done with prUrl and a summary; send a chat_send report only for tasks the owner assigned directly (for tasks assigned by another agent, that agent reports). done stops workers.',
     'task-comment': 'Post an issue comment through the server using the owner GitHub access. The server appends your Happy Agent signature.',
     'memory-note': 'Append a learning to today local memory log, with the current run and controller session as its source.',
-    'task-create': 'Create or take an issue or pull request in an authorized repository and delegate it to an Agent. issueNumber may be an issue number or a pull request number; use a PR number to assign a PR review. reviewer is the agent handle that should automatically review the PR after the assignee marks the implementation task in_review. If self-assignment is disabled, propose the work through chat_send(kind=decision).',
+    'task-create': 'Create or take an issue or pull request in an authorized repository and delegate it to an Agent. issueNumber may be an issue number or a pull request number; use a PR number to assign a PR review. assignee and reviewer are Agent names. reviewer is the Agent that should automatically review the PR after the assignee marks the implementation task in_review. If self-assignment is disabled, propose the work through chat_send(kind=decision).',
     'memory-commit': 'Commit pending changes in the Agent home repository with a one-line summary.',
 };
 

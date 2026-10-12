@@ -30,7 +30,7 @@ describe('teammate system prompt', () => {
         for (const file of files) await writeFile(join(dir, file), `Content of ${file}`);
         const prompt = await build();
         expect(prompt.match(/^## .+$/gm)).toEqual([...files, 'Current thread'].map(file => `## ${file}`));
-        expect(prompt).toContain('Teammate: Atlas (@atlas)');
+        expect(prompt).toContain('Teammate: Atlas');
         expect(prompt).toContain('Kind: dm');
         expect(prompt).toContain('Channel: Engineering');
         expect(prompt).toContain('Task: Fix login');

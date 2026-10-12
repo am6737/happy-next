@@ -55,7 +55,7 @@ export async function buildTeammateSystemPrompt({
         else if (archivedTopics) sections.push('## Thread summary\n\nEarlier topics in this thread are archived. Search them with chat_history(query) when the owner refers to them.');
     }
 
-    const context = [`Teammate: ${teammate.name} (@${teammate.handle})`, `Kind: ${threadKind}`];
+    const context = [`Teammate: ${teammate.name}`, `Kind: ${threadKind}`];
     if (threadContext.channelTitle) context.push(`Channel: ${threadContext.channelTitle}`);
     if (threadContext.taskTitle) context.push(`Task: ${threadContext.taskTitle}`);
     if (threadContext.taskUrl) context.push(`Task URL: ${threadContext.taskUrl}`);

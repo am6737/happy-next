@@ -11,7 +11,7 @@ const HINTS: Record<string, string> = {
     run_expired: 'This run has expired; wait for the next dispatch.',
     invalid_token: 'The run dispatch token is invalid; wait for the next dispatch.',
     archived: 'The target Agent is archived.',
-    not_found: 'The target (Agent handle, issue or resource) was not found.',
+    not_found: 'The target (Agent name, issue or resource) was not found.',
     no_dm: 'There is no DM channel with this Agent.',
 };
 

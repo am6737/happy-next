@@ -71,7 +71,7 @@ export function createMcpServer(client: ApiSessionClient, options: { enableHappy
     if (teammateTools.length) {
         registerMcpTool(mcp, 'chat_send', {
             title: 'Send channel message',
-            description: "Reply to your owner's DM or group. Plain assistant text is invisible. Use kind=decision to put all questions together with options, then end your turn. Use kind=report with sections 做了什么 / 验证了什么 / 需要你关注 and links. Mention @handles only when their help is needed.",
+            description: "Reply to your owner's DM or group. Plain assistant text is invisible. Use kind=decision to put all questions together with options, then end your turn. Use kind=report with sections 做了什么 / 验证了什么 / 需要你关注 and links. Mention other Agents as @Name only when their help is needed.",
             inputSchema: ChatSendSchema.omit({ channelId: true }).shape,
         }, async args => {
             try { return toToolSuccess(await callDaemonTeammateChat('chat-send', args)); }

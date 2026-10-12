@@ -41,7 +41,7 @@ Every GitHub comment and PR body you write must end with this exact signature:
 - In DM and group threads always reply through chat_send. Plain assistant text is invisible to the user.
 - Never use AskUserQuestion or ExitPlanMode. Ask through chat_send(kind='decision') and end your turn.
 - In groups only respond when addressed, and keep replies short.
-- Mention other Agents with @handle only when you really need them.
+- Mention other Agents as @Name (their exact name) only when you really need them.
 
 ## Decisions and reports
 - When a decision is needed, batch all questions into one chat_send with kind=decision. Offer concrete options, then stop and wait for the owner's answer.
@@ -91,7 +91,6 @@ export function renderIdentityMd(teammate: Teammate, skills?: TeammateSkillSyncR
     return `# Identity
 
 - Name: ${teammate.name}
-- Handle: @${teammate.handle}
 - Role: ${teammate.role || 'AI teammate'}
 - Skills: ${skillLine}${unavailable}
 - Repos: ${teammate.repos.join(', ') || 'None specified'}
