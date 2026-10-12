@@ -15,5 +15,6 @@ describe('governance system messages', () => {
         expect(governanceSystemMessage({ t: 'system', code: 'context_reset', data: {} })).toBeNull();
         expect(governanceSystemMessage({ t: 'system', code: 'context_compacted', data: {} })).toBeNull();
         expect(governanceSystemMessage({ t: 'system', code: 'context_lost', data: {} })).toBeNull();
+        expect(governanceSystemMessage({ t: 'system', code: 'context_rolled', data: {} })).toBeNull();
     });
 });
