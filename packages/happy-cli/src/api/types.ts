@@ -214,8 +214,25 @@ export const DaemonStateSchema = z.object({
     z.union([
       z.enum(['mobile-app', 'cli', 'os-signal', 'unknown']),
       z.string() // Forward compatibility
-    ]).optional()
+    ]).optional(),
+  cliUpdate: z.object({
+    state: z.union([
+      z.enum(['up-to-date', 'available', 'installing', 'installed', 'failed', 'disabled', 'unsupported']),
+      z.string() // Forward compatibility
+    ]),
+    // Set while an update is available but waiting: what it waits for
+    waitingFor: z.string().optional(),
+    // Set when unsupported: why this installation cannot upgrade itself
+    reason: z.string().optional(),
+    latestVersion: z.string().optional(),
+    error: z.string().optional(),
+    checkedAt: z.number().optional(),
+    // When a waiting update installs even with sessions still running
+    installBy: z.number().optional(),
+  }).optional()
 })
+
+export type CliUpdateStatus = NonNullable<z.infer<typeof DaemonStateSchema>['cliUpdate']>
 
 export type DaemonState = z.infer<typeof DaemonStateSchema>
 

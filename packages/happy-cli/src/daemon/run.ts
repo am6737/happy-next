@@ -16,6 +16,7 @@ import { startCaffeinate, stopCaffeinate } from '@/utils/caffeinate';
 import packageJson from '../../package.json';
 import { getEnvironmentInfo } from '@/ui/doctor';
 import { spawnHappyCLI } from '@/utils/spawnHappyCLI';
+import { startCliAutoUpdate } from './autoUpdate';
 import { isDebug } from '@/utils/env';
 import { writeDaemonState, DaemonLocallyPersistedState, readDaemonState, acquireDaemonLock, releaseDaemonLock, readSettings } from '@/persistence';
 
@@ -1052,6 +1053,20 @@ export async function startDaemon(): Promise<void> {
     // Create realtime machine session
     const apiMachine = api.machineSyncClient(machine);
 
+    // Install new CLI releases once the machine is idle; the heartbeat below then restarts us on them
+    const cliAutoUpdate = startCliAutoUpdate({
+      getActivity: () => ({
+        sessions: pidToTrackedSession.size,
+        terminals: apiMachine.openTerminalCount,
+        executions: executionIdToManagedExecution.size + (shellExecutor?.liveExecutionIds().length ?? 0),
+      }),
+      reportStatus: (cliUpdate) => {
+        apiMachine.updateDaemonState((state) => ({ ...state, status: state?.status ?? 'offline', cliUpdate })).catch((error) => {
+          logger.debug('[DAEMON RUN] Failed to report CLI update status', error);
+        });
+      },
+    });
+
     // Set RPC handlers
     apiMachine.setRPCHandlers({
       spawnSession,
@@ -1065,6 +1080,7 @@ export async function startDaemon(): Promise<void> {
         liveExecutionIds: [...executionIdToManagedExecution.keys(), ...(shellExecutor?.liveExecutionIds() ?? [])],
         daemonStartedAt,
       }), Date.now() + ORCHESTRATOR_RECONCILE_DEADLINE_MS),
+      updateCli: cliAutoUpdate.updateNow,
     });
 
     // Connect to server
@@ -1182,6 +1198,8 @@ export async function startDaemon(): Promise<void> {
     // Setup signal handlers
     const cleanupAndShutdown = async (source: 'happy-app' | 'happy-cli' | 'os-signal' | 'exception', errorMessage?: string) => {
       logger.debug(`[DAEMON RUN] Starting proper cleanup (source: ${source}, errorMessage: ${errorMessage})...`);
+
+      cliAutoUpdate.stop();
 
       // Clear health check interval
       if (restartOnStaleVersionAndHeartbeat) {

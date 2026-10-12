@@ -22,6 +22,7 @@ import { fetchLatestQoderModelDescriptions, readCachedQoderModelDescriptions } f
 import { readAllCodexSessionUserMessages, listCodexSessions, getCodexSessionPreview, saveCodexSessionCacheStats } from '@/codex/utils/codexSessionReader';
 import { forkCodexSession, forkAndTruncateCodexSession } from '@/codex/utils/codexSessionFork';
 import { executeSessionArchive } from '@/daemon/executeSessionArchive';
+import type { UpdateNowResult } from '@/daemon/autoUpdate';
 import { discoverCapabilities, type DiscoverCapabilitiesAgent } from '@/daemon/discoverCapabilities';
 import { remoteShell } from '@/daemon/orchestratorShell';
 import type { OrchestratorShellDispatchPayload } from '@/orchestrator/common';
@@ -172,6 +173,8 @@ type MachineRpcHandlers = {
     }>;
     /** Called on every connect, to let the server fail the executions this daemon has lost */
     orchestratorReconcile: () => Promise<void>;
+    /** Install the latest CLI now (the daemon then restarts on it by itself) */
+    updateCli: () => Promise<UpdateNowResult>;
 }
 
 export class ApiMachineClient {
@@ -261,6 +264,7 @@ export class ApiMachineClient {
         orchestratorCancel,
         orchestratorShellDispatch,
         orchestratorReconcile,
+        updateCli,
     }: MachineRpcHandlers) {
         this.orchestratorReconcile = orchestratorReconcile;
 
@@ -508,6 +512,9 @@ export class ApiMachineClient {
                 });
             });
         }
+
+        // Upgrade the CLI on this machine from the app
+        this.rpcHandlerManager.registerHandler('update-cli', () => updateCli());
 
         // Discover slash commands and skills for a directory before any session runs there
         this.rpcHandlerManager.registerHandler('discover-capabilities', async (params: any) => {
@@ -1088,6 +1095,11 @@ export class ApiMachineClient {
             this.keepAliveInterval = null;
             logger.debug('[API MACHINE] Keep-alive stopped');
         }
+    }
+
+    /** Terminals open on this machine: a daemon restart closes them */
+    get openTerminalCount(): number {
+        return this.terminalManager.openTerminalCount;
     }
 
     shutdown() {

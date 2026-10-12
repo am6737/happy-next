@@ -1,50 +1,11 @@
 import chalk from 'chalk';
-import { execSync, execFileSync } from 'node:child_process';
-import { readFileSync, realpathSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import packageJson from '../../package.json';
 import { isDaemonRunningCurrentlyInstalledHappyVersion, startDaemonDetachedAndAwaitReady } from '@/daemon/controlClient';
 import { readCredentials } from '@/persistence';
-
-const PACKAGE_NAME = 'happy-next-cli';
-
-type PackageManager = 'npm' | 'pnpm' | 'yarn';
-
-function detectPackageManager(): PackageManager {
-    try {
-        const whichOutput = execSync('which happy', { encoding: 'utf-8' }).trim();
-        const realPath = realpathSync(whichOutput);
-
-        if (realPath.includes('/pnpm/') || realPath.includes('/pnpm-global/')) {
-            return 'pnpm';
-        }
-        if (realPath.includes('/.yarn/') || realPath.includes('/yarn/')) {
-            return 'yarn';
-        }
-    } catch {
-        // Fall through to default
-    }
-    return 'npm';
-}
-
-function getUpgradeCommand(pm: PackageManager): string[] {
-    switch (pm) {
-        case 'pnpm':
-            return ['pnpm', 'add', '-g', `${PACKAGE_NAME}@latest`];
-        case 'yarn':
-            return ['yarn', 'global', 'add', `${PACKAGE_NAME}@latest`];
-        case 'npm':
-            return ['npm', 'install', '-g', `${PACKAGE_NAME}@latest`];
-    }
-}
-
-function getLatestVersion(): string | null {
-    try {
-        return execFileSync('npm', ['view', PACKAGE_NAME, 'version'], { encoding: 'utf-8' }).trim();
-    } catch {
-        return null;
-    }
-}
+import { acquireUpdateLock, detectPackageManager, fetchLatestVersion, getUpgradeCommand } from '@/update/cliUpdate';
 
 /**
  * When run as `sudo happy update`, HOME points at /root, so credentials and
@@ -115,7 +76,7 @@ export async function handleUpdateCommand(): Promise<void> {
 
     // Query latest version
     console.log(chalk.gray('Checking for updates...'));
-    const latestVersion = getLatestVersion();
+    const latestVersion = await fetchLatestVersion();
 
     if (!latestVersion) {
         console.error(chalk.red('Failed to check latest version. Please check your network connection.'));
@@ -143,15 +104,22 @@ export async function handleUpdateCommand(): Promise<void> {
     // Detect package manager and upgrade
     const pm = detectPackageManager();
     const command = getUpgradeCommand(pm);
+    const releaseLock = await acquireUpdateLock();
+    if (!releaseLock) {
+        console.error(chalk.yellow('⚠ Another upgrade is already running (likely the daemon updating itself). Try again in a few minutes.'));
+        process.exit(1);
+    }
     console.log(`Upgrading via ${chalk.bold(pm)}...`);
 
     try {
         execFileSync(command[0], command.slice(1), { stdio: 'inherit' });
     } catch {
+        await releaseLock();
         console.error(chalk.red(`\n✗ Upgrade failed. You can try manually:`));
         console.error(chalk.gray(`  ${command.join(' ')}`));
         process.exit(1);
     }
+    await releaseLock();
 
     console.log(chalk.green(`\n✓ Upgraded to ${latestVersion}`));
 

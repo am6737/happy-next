@@ -50,6 +50,11 @@ The daemon detects when `npm upgrade happy-next-cli` occurs:
 5. New daemon calls `stopDaemon()` which tries HTTP `/stop`, falls back to SIGKILL
 6. New daemon takes over
 
+The install itself is done by `autoUpdate.ts`: it checks npm for a newer version and runs the global
+upgrade once the machine is idle (no terminals or orchestrator executions; running sessions defer it for up
+to 24h), reporting progress in `daemonState.cliUpdate`. The app can trigger it right away via the `update-cli`
+RPC. Off with `HAPPY_DISABLE_AUTO_UPDATE=1` or `autoUpdateDisabled: true` in settings.json.
+
 ### Stopping the Daemon
 
 Command: `happy daemon stop`

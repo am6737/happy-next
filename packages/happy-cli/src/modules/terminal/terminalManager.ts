@@ -620,6 +620,10 @@ export class TerminalManager {
     }
 
     /** Shuts the worker down. Call on daemon exit. */
+    get openTerminalCount(): number {
+        return this.terminals.size;
+    }
+
     stop(): void {
         this.stopping = true;
 
