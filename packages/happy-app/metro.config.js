@@ -24,6 +24,15 @@ const libsodiumPaths = [
 ];
 const libsodiumPath = libsodiumPaths.find(p => fs.existsSync(p));
 
+// libsodium-wrappers does require('libsodium') internally. Metro's web resolver would otherwise pick
+// the ESM build via package `exports.import`, which has no synchronous `ready` -> "reading 'then'" error.
+const libsodiumCoreDir = [
+  path.resolve(__dirname, 'node_modules/libsodium'),
+  path.resolve(__dirname, '../../node_modules/libsodium'),
+  path.resolve(__dirname, '../node_modules/libsodium'),
+].find(p => fs.existsSync(path.join(p, 'dist/modules/libsodium.js')));
+const libsodiumCorePath = libsodiumCoreDir && path.join(libsodiumCoreDir, 'dist/modules/libsodium.js');
+
 // Force @xterm/headless to use its CJS entry.
 // Its package.json points `module` at `lib/xterm.mjs`, but the published tarball only ships
 // `lib-headless/` — so native builds (which take `main`) resolve and web builds (which prefer
@@ -39,6 +48,12 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
   if (moduleName === 'libsodium-wrappers' && libsodiumPath) {
     return {
       filePath: libsodiumPath,
+      type: 'sourceFile',
+    };
+  }
+  if (moduleName === 'libsodium' && libsodiumCorePath) {
+    return {
+      filePath: libsodiumCorePath,
       type: 'sourceFile',
     };
   }
