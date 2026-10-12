@@ -30,6 +30,25 @@ function plural({ count, singular, plural }: { count: number; singular: string; 
  * - New translation keys must be added to ALL language files
  */
 export const en: TranslationStructure = {
+    cliUpdate: {
+        updateNow: 'Update Now',
+        confirmTitle: 'Update CLI',
+        confirmMessage: ({ version }: { version: string }) => `Install v${version} on this machine now? The daemon restarts: running sessions keep running, but open terminals and running orchestrator tasks are interrupted.`,
+        started: ({ version }: { version: string }) => `Updating to v${version}…`,
+        upToDate: 'Already on the latest version',
+        busy: 'An update is already in progress',
+        checkFailed: 'Could not check for the latest version. Check the machine\'s network connection.',
+        statusUpToDate: 'Up to date',
+        statusInstalling: ({ version }: { version: string }) => `Installing v${version}…`,
+        statusInstalled: ({ version }: { version: string }) => `v${version} installed, the daemon is restarting`,
+        statusAvailable: ({ version }: { version: string }) => `v${version} available. Tap to update now`,
+        statusWaitingSessions: ({ version, time }: { version: string; time: string }) => `v${version} available, installs once sessions end (by ${time} at the latest). Tap to update now`,
+        statusWaitingBusy: ({ version }: { version: string }) => `v${version} available, installs once open terminals and orchestrator tasks finish. Tap to update now`,
+        statusFailed: ({ version, error }: { version: string; error: string }) => `Installing v${version} failed: ${error}. Tap to retry`,
+        statusDisabled: ({ version }: { version: string }) => `v${version} available (auto-update is off). Tap to update`,
+        statusNoPermission: 'Cannot update itself: no write access to the global install directory. Run happy update on the machine',
+        statusNotGlobal: 'Cannot update itself: not a global npm, pnpm or yarn install',
+    },
     sessionHoverCard: {
         created: ({ time }: { time: string }) => `Created ${time}`,
         updated: ({ time }: { time: string }) => `Updated ${time}`,

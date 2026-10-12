@@ -329,6 +329,20 @@ export async function machineStopDaemon(machineId: string): Promise<{ message: s
     return result;
 }
 
+export type MachineUpdateCliResult = {
+    status: 'started' | 'up-to-date' | 'busy' | 'unsupported' | 'check-failed';
+    reason?: string;
+    latestVersion?: string;
+};
+
+/**
+ * Install the latest CLI on a machine; its daemon restarts on it by itself
+ */
+export async function machineUpdateCli(machineId: string): Promise<MachineUpdateCliResult> {
+    // The daemon runs `npm view` before answering, which can be slow on poor networks
+    return await apiSocket.machineRPC<MachineUpdateCliResult, {}>(machineId, 'update-cli', {}, 60000);
+}
+
 /**
  * List Claude sessions from local Claude index on a machine
  */

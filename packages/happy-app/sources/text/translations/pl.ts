@@ -26,6 +26,25 @@ function plural({ count, one, few, many }: { count: number; one: string; few: st
  * Must match the exact structure of the English translations
  */
 export const pl: TranslationStructure = {
+    cliUpdate: {
+        updateNow: 'Aktualizuj teraz',
+        confirmTitle: 'Aktualizuj CLI',
+        confirmMessage: ({ version }: { version: string }) => `Zainstalować teraz v${version} na tej maszynie? Demon zostanie zrestartowany: działające sesje pozostaną aktywne, ale otwarte terminale i trwające zadania orkiestratora zostaną przerwane.`,
+        started: ({ version }: { version: string }) => `Aktualizacja do v${version}…`,
+        upToDate: 'Masz już najnowszą wersję',
+        busy: 'Aktualizacja jest już w toku',
+        checkFailed: 'Nie udało się sprawdzić najnowszej wersji. Sprawdź połączenie sieciowe maszyny.',
+        statusUpToDate: 'Aktualne',
+        statusInstalling: ({ version }: { version: string }) => `Instalowanie v${version}…`,
+        statusInstalled: ({ version }: { version: string }) => `Zainstalowano v${version}, demon jest restartowany`,
+        statusAvailable: ({ version }: { version: string }) => `Dostępna v${version}. Dotknij, aby zaktualizować teraz`,
+        statusWaitingSessions: ({ version, time }: { version: string; time: string }) => `Dostępna v${version}, zostanie zainstalowana po zakończeniu sesji (najpóźniej ${time}). Dotknij, aby zaktualizować teraz`,
+        statusWaitingBusy: ({ version }: { version: string }) => `Dostępna v${version}, zostanie zainstalowana po zamknięciu terminali i zakończeniu zadań orkiestratora. Dotknij, aby zaktualizować teraz`,
+        statusFailed: ({ version, error }: { version: string; error: string }) => `Instalacja v${version} nie powiodła się: ${error}. Dotknij, aby spróbować ponownie`,
+        statusDisabled: ({ version }: { version: string }) => `Dostępna v${version} (automatyczna aktualizacja wyłączona). Dotknij, aby zaktualizować`,
+        statusNoPermission: 'Nie może zaktualizować się sama: brak uprawnień do zapisu w globalnym katalogu instalacji. Uruchom happy update na maszynie',
+        statusNotGlobal: 'Nie może zaktualizować się sama: to nie jest globalna instalacja npm, pnpm ani yarn',
+    },
     sessionHoverCard: {
         created: ({ time }: { time: string }) => `Utworzono ${time}`,
         updated: ({ time }: { time: string }) => `Zaktualizowano ${time}`,

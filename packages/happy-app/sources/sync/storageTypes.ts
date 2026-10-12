@@ -299,8 +299,20 @@ export const DaemonStateSchema = z.object({
     httpPort: z.number().optional(),
     startedAt: z.number().optional(),
     shutdownRequestedAt: z.number().optional(),
-    shutdownSource: z.string().optional()
+    shutdownSource: z.string().optional(),
+    // The daemon's CLI auto-update (see happy-cli/src/daemon/autoUpdate.ts); absent on older CLIs
+    cliUpdate: z.object({
+        state: z.string(),
+        waitingFor: z.string().optional(),
+        reason: z.string().optional(),
+        latestVersion: z.string().optional(),
+        error: z.string().optional(),
+        checkedAt: z.number().optional(),
+        installBy: z.number().optional(),
+    }).optional()
 });
+
+export type CliUpdateStatus = NonNullable<z.infer<typeof DaemonStateSchema>['cliUpdate']>;
 
 export type DaemonState = z.infer<typeof DaemonStateSchema>;
 

@@ -15,6 +15,25 @@ function plural({ count, singular, plural }: { count: number; singular: string; 
  * Must match the exact structure of the English translations
  */
 export const it: TranslationStructure = {
+    cliUpdate: {
+        updateNow: 'Aggiorna ora',
+        confirmTitle: 'Aggiorna CLI',
+        confirmMessage: ({ version }: { version: string }) => `Installare ora la v${version} su questa macchina? Il daemon si riavvia: le sessioni in corso continuano a funzionare, ma i terminali aperti e le attività dell'orchestratore in esecuzione vengono interrotti.`,
+        started: ({ version }: { version: string }) => `Aggiornamento alla v${version}…`,
+        upToDate: 'Hai già l\'ultima versione',
+        busy: 'Un aggiornamento è già in corso',
+        checkFailed: 'Impossibile verificare l\'ultima versione. Controlla la connessione di rete della macchina.',
+        statusUpToDate: 'Aggiornato',
+        statusInstalling: ({ version }: { version: string }) => `Installazione della v${version}…`,
+        statusInstalled: ({ version }: { version: string }) => `v${version} installata, il daemon si sta riavviando`,
+        statusAvailable: ({ version }: { version: string }) => `v${version} disponibile. Tocca per aggiornare ora`,
+        statusWaitingSessions: ({ version, time }: { version: string; time: string }) => `v${version} disponibile, verrà installata al termine delle sessioni (al più tardi ${time}). Tocca per aggiornare ora`,
+        statusWaitingBusy: ({ version }: { version: string }) => `v${version} disponibile, verrà installata al termine dei terminali aperti e delle attività dell'orchestratore. Tocca per aggiornare ora`,
+        statusFailed: ({ version, error }: { version: string; error: string }) => `Installazione della v${version} non riuscita: ${error}. Tocca per riprovare`,
+        statusDisabled: ({ version }: { version: string }) => `v${version} disponibile (aggiornamento automatico disattivato). Tocca per aggiornare`,
+        statusNoPermission: 'Impossibile aggiornarsi da sola: nessun permesso di scrittura nella directory di installazione globale. Esegui happy update sulla macchina',
+        statusNotGlobal: 'Impossibile aggiornarsi da sola: non è un\'installazione globale di npm, pnpm o yarn',
+    },
     sessionHoverCard: {
         created: ({ time }: { time: string }) => `Creata ${time}`,
         updated: ({ time }: { time: string }) => `Aggiornata ${time}`,

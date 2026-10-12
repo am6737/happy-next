@@ -15,6 +15,25 @@ function plural({ count, singular, plural }: { count: number; singular: string; 
  * Must match the exact structure of the English translations
  */
 export const ca: TranslationStructure = {
+    cliUpdate: {
+        updateNow: 'Actualitza ara',
+        confirmTitle: 'Actualitza la CLI',
+        confirmMessage: ({ version }: { version: string }) => `Vols instal·lar la v${version} en aquesta màquina ara? El daemon es reinicia: les sessions en curs continuen funcionant, però els terminals oberts i les tasques de l'orquestrador en execució s'interrompen.`,
+        started: ({ version }: { version: string }) => `Actualitzant a la v${version}…`,
+        upToDate: 'Ja tens la darrera versió',
+        busy: 'Ja hi ha una actualització en curs',
+        checkFailed: 'No s\'ha pogut comprovar la darrera versió. Revisa la connexió de xarxa de la màquina.',
+        statusUpToDate: 'Actualitzat',
+        statusInstalling: ({ version }: { version: string }) => `Instal·lant la v${version}…`,
+        statusInstalled: ({ version }: { version: string }) => `v${version} instal·lada, el daemon s'està reiniciant`,
+        statusAvailable: ({ version }: { version: string }) => `v${version} disponible. Toca per actualitzar ara`,
+        statusWaitingSessions: ({ version, time }: { version: string; time: string }) => `v${version} disponible, s'instal·la quan acabin les sessions (com a molt tard ${time}). Toca per actualitzar ara`,
+        statusWaitingBusy: ({ version }: { version: string }) => `v${version} disponible, s'instal·la quan acabin els terminals oberts i les tasques de l'orquestrador. Toca per actualitzar ara`,
+        statusFailed: ({ version, error }: { version: string; error: string }) => `Ha fallat la instal·lació de la v${version}: ${error}. Toca per tornar-ho a provar`,
+        statusDisabled: ({ version }: { version: string }) => `v${version} disponible (actualització automàtica desactivada). Toca per actualitzar`,
+        statusNoPermission: 'No es pot actualitzar sola: sense permís d\'escriptura al directori d\'instal·lació global. Executa happy update a la màquina',
+        statusNotGlobal: 'No es pot actualitzar sola: no és una instal·lació global de npm, pnpm o yarn',
+    },
     sessionHoverCard: {
         created: ({ time }: { time: string }) => `Creada ${time}`,
         updated: ({ time }: { time: string }) => `Actualitzada ${time}`,

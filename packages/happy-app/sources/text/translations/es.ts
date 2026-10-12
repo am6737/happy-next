@@ -15,6 +15,25 @@ function plural({ count, singular, plural }: { count: number; singular: string; 
  * Must match the exact structure of the English translations
  */
 export const es: TranslationStructure = {
+    cliUpdate: {
+        updateNow: 'Actualizar ahora',
+        confirmTitle: 'Actualizar CLI',
+        confirmMessage: ({ version }: { version: string }) => `¿Instalar v${version} en esta máquina ahora? El daemon se reinicia: las sesiones en curso siguen funcionando, pero los terminales abiertos y las tareas del orquestador en ejecución se interrumpen.`,
+        started: ({ version }: { version: string }) => `Actualizando a v${version}…`,
+        upToDate: 'Ya tienes la última versión',
+        busy: 'Ya hay una actualización en curso',
+        checkFailed: 'No se pudo comprobar la última versión. Revisa la conexión de red de la máquina.',
+        statusUpToDate: 'Actualizado',
+        statusInstalling: ({ version }: { version: string }) => `Instalando v${version}…`,
+        statusInstalled: ({ version }: { version: string }) => `v${version} instalada, el daemon se está reiniciando`,
+        statusAvailable: ({ version }: { version: string }) => `v${version} disponible. Toca para actualizar ahora`,
+        statusWaitingSessions: ({ version, time }: { version: string; time: string }) => `v${version} disponible, se instala cuando terminen las sesiones (como muy tarde ${time}). Toca para actualizar ahora`,
+        statusWaitingBusy: ({ version }: { version: string }) => `v${version} disponible, se instala cuando terminen los terminales abiertos y las tareas del orquestador. Toca para actualizar ahora`,
+        statusFailed: ({ version, error }: { version: string; error: string }) => `Falló la instalación de v${version}: ${error}. Toca para reintentar`,
+        statusDisabled: ({ version }: { version: string }) => `v${version} disponible (actualización automática desactivada). Toca para actualizar`,
+        statusNoPermission: 'No puede actualizarse sola: sin permiso de escritura en el directorio de instalación global. Ejecuta happy update en la máquina',
+        statusNotGlobal: 'No puede actualizarse sola: no es una instalación global de npm, pnpm o yarn',
+    },
     sessionHoverCard: {
         created: ({ time }: { time: string }) => `Creada ${time}`,
         updated: ({ time }: { time: string }) => `Actualizada ${time}`,

@@ -18,6 +18,25 @@ function plural({ count, singular, plural }: { count: number; singular: string; 
 }
 
 export const ja: TranslationStructure = {
+    cliUpdate: {
+        updateNow: '今すぐ更新',
+        confirmTitle: 'CLI を更新',
+        confirmMessage: ({ version }: { version: string }) => `このマシンに v${version} を今すぐインストールしますか？デーモンが再起動します。実行中のセッションはそのまま動き続けますが、開いているターミナルと実行中のオーケストレータータスクは中断されます。`,
+        started: ({ version }: { version: string }) => `v${version} に更新中…`,
+        upToDate: 'すでに最新バージョンです',
+        busy: 'すでに更新が進行中です',
+        checkFailed: '最新バージョンを確認できませんでした。マシンのネットワーク接続を確認してください。',
+        statusUpToDate: '最新',
+        statusInstalling: ({ version }: { version: string }) => `v${version} をインストール中…`,
+        statusInstalled: ({ version }: { version: string }) => `v${version} をインストールしました。デーモンを再起動しています`,
+        statusAvailable: ({ version }: { version: string }) => `v${version} が利用可能です。タップして今すぐ更新`,
+        statusWaitingSessions: ({ version, time }: { version: string; time: string }) => `v${version} が利用可能です。セッション終了後に自動でインストールします（遅くとも ${time}）。タップして今すぐ更新`,
+        statusWaitingBusy: ({ version }: { version: string }) => `v${version} が利用可能です。開いているターミナルとオーケストレータータスクの終了後に自動でインストールします。タップして今すぐ更新`,
+        statusFailed: ({ version, error }: { version: string; error: string }) => `v${version} のインストールに失敗しました：${error}。タップして再試行`,
+        statusDisabled: ({ version }: { version: string }) => `v${version} が利用可能です（自動更新はオフ）。タップして更新`,
+        statusNoPermission: '自動更新できません：グローバルインストール先への書き込み権限がありません。マシンで happy update を実行してください',
+        statusNotGlobal: '自動更新できません：npm、pnpm、yarn のグローバルインストールではありません',
+    },
     sessionHoverCard: {
         created: ({ time }: { time: string }) => `作成 ${time}`,
         updated: ({ time }: { time: string }) => `更新 ${time}`,

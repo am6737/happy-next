@@ -17,6 +17,25 @@ function plural({ count, singular, plural }: { count: number; singular: string; 
 }
 
 export const zhHans: TranslationStructure = {
+    cliUpdate: {
+        updateNow: '立即更新',
+        confirmTitle: '更新 CLI',
+        confirmMessage: ({ version }: { version: string }) => `现在就在这台机器上安装 v${version}？守护进程会重启：正在运行的会话会继续运行，但打开的终端和正在执行的编排任务会被中断。`,
+        started: ({ version }: { version: string }) => `正在更新到 v${version}…`,
+        upToDate: '已是最新版本',
+        busy: '已有更新正在进行',
+        checkFailed: '无法检查最新版本，请检查这台机器的网络连接。',
+        statusUpToDate: '已是最新版本',
+        statusInstalling: ({ version }: { version: string }) => `正在安装 v${version}…`,
+        statusInstalled: ({ version }: { version: string }) => `v${version} 已安装，守护进程正在重启`,
+        statusAvailable: ({ version }: { version: string }) => `v${version} 可用，点击立即更新`,
+        statusWaitingSessions: ({ version, time }: { version: string; time: string }) => `v${version} 可用，会话结束后自动安装（最迟 ${time}），点击立即更新`,
+        statusWaitingBusy: ({ version }: { version: string }) => `v${version} 可用，打开的终端和编排任务结束后自动安装，点击立即更新`,
+        statusFailed: ({ version, error }: { version: string; error: string }) => `v${version} 安装失败：${error}，点击重试`,
+        statusDisabled: ({ version }: { version: string }) => `v${version} 可用（自动更新已关闭），点击更新`,
+        statusNoPermission: '无法自动更新：没有全局安装目录的写权限，请在机器上运行 happy update',
+        statusNotGlobal: '无法自动更新：不是通过 npm、pnpm 或 yarn 全局安装的',
+    },
     sessionHoverCard: {
         created: ({ time }: { time: string }) => `创建于 ${time}`,
         updated: ({ time }: { time: string }) => `更新于 ${time}`,

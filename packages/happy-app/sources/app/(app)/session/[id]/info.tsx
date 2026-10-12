@@ -1,5 +1,5 @@
 import React, { useCallback } from 'react';
-import { View, Text, Animated, Pressable, Platform } from 'react-native';
+import { View, Text, Animated, Pressable, Platform, ActivityIndicator } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
 import { Ionicons, AntDesign, MaterialCommunityIcons, FontAwesome6 } from '@expo/vector-icons';
@@ -33,6 +33,7 @@ import { isVersionSupported, useLatestCliVersion } from '@/utils/versionUtils';
 import { CodeView } from '@/components/CodeView';
 import { Session } from '@/sync/storageTypes';
 import { useHappyAction } from '@/hooks/useHappyAction';
+import { useMachineCliUpdate } from '@/hooks/useMachineCliUpdate';
 import { HappyError } from '@/utils/errors';
 import { formatModelDisplay, resolveLocalModelDisplay, isModelFast, FAST_MODE_ICON_COLOR } from 'happy-wire';
 import { NativeMenu } from '@/components/NativeMenu';
@@ -115,6 +116,7 @@ function SessionInfoContent({ session, leavingRef }: { session: Session; leaving
     // Check if machine daemon has a newer CLI version than this session
     const machineId = session.metadata?.machineId;
     const machine = useMachine(machineId ?? '');
+    const machineCliUpdate = useMachineCliUpdate(machine);
     const machineDaemonVersion = machine?.metadata?.happyCliVersion;
     const sessionVersion = session.metadata?.version;
     const isUpgradeAvailable = sessionVersion && machineDaemonVersion
@@ -916,12 +918,17 @@ function SessionInfoContent({ session, leavingRef }: { session: Session; leaving
                 {/* CLI Version Warning - only show install instructions when machine hasn't updated yet */}
                 {isCliOutdated && !isUpgradeAvailable && session.active && (
                     <ItemGroup>
+                        {/* Daemons with auto-update install it from here; older ones need `happy update` run by hand */}
                         <Item
                             title={t('sessionInfo.cliVersionOutdated')}
-                            subtitle={t('sessionInfo.updateCliInstructions')}
+                            subtitle={machineCliUpdate.subtitle ?? t('sessionInfo.updateCliInstructions')}
+                            subtitleLines={0}
                             icon={<Ionicons name="warning-outline" size={29} color="#FF9500" />}
                             showChevron={false}
-                            onPress={handleCopyUpdateCommand}
+                            onPress={machineCliUpdate.canUpdate ? machineCliUpdate.update : machineCliUpdate.status ? undefined : handleCopyUpdateCommand}
+                            rightElement={machineCliUpdate.updating || machineCliUpdate.status?.state === 'installing'
+                                ? <ActivityIndicator size="small" color={theme.colors.textSecondary} />
+                                : undefined}
                         />
                     </ItemGroup>
                 )}

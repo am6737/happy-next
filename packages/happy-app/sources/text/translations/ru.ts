@@ -26,6 +26,25 @@ function plural({ count, one, few, many }: { count: number; one: string; few: st
  * Must match the exact structure of the English translations
  */
 export const ru: TranslationStructure = {
+    cliUpdate: {
+        updateNow: 'Обновить сейчас',
+        confirmTitle: 'Обновить CLI',
+        confirmMessage: ({ version }: { version: string }) => `Установить v${version} на эту машину сейчас? Демон перезапустится: запущенные сессии продолжат работать, но открытые терминалы и выполняющиеся задачи оркестратора будут прерваны.`,
+        started: ({ version }: { version: string }) => `Обновление до v${version}…`,
+        upToDate: 'У вас уже последняя версия',
+        busy: 'Обновление уже выполняется',
+        checkFailed: 'Не удалось проверить последнюю версию. Проверьте сетевое подключение машины.',
+        statusUpToDate: 'Актуальная версия',
+        statusInstalling: ({ version }: { version: string }) => `Установка v${version}…`,
+        statusInstalled: ({ version }: { version: string }) => `v${version} установлена, демон перезапускается`,
+        statusAvailable: ({ version }: { version: string }) => `Доступна v${version}. Нажмите, чтобы обновить сейчас`,
+        statusWaitingSessions: ({ version, time }: { version: string; time: string }) => `Доступна v${version}, установится после завершения сессий (не позднее ${time}). Нажмите, чтобы обновить сейчас`,
+        statusWaitingBusy: ({ version }: { version: string }) => `Доступна v${version}, установится после закрытия терминалов и завершения задач оркестратора. Нажмите, чтобы обновить сейчас`,
+        statusFailed: ({ version, error }: { version: string; error: string }) => `Не удалось установить v${version}: ${error}. Нажмите, чтобы повторить`,
+        statusDisabled: ({ version }: { version: string }) => `Доступна v${version} (автообновление выключено). Нажмите, чтобы обновить`,
+        statusNoPermission: 'Не может обновиться сама: нет прав на запись в глобальный каталог установки. Выполните happy update на машине',
+        statusNotGlobal: 'Не может обновиться сама: это не глобальная установка npm, pnpm или yarn',
+    },
     sessionHoverCard: {
         created: ({ time }: { time: string }) => `Создана ${time}`,
         updated: ({ time }: { time: string }) => `Обновлена ${time}`,

@@ -17,6 +17,25 @@ function plural({ count, singular, plural }: { count: number; singular: string; 
 }
 
 export const zhHant: TranslationStructure = {
+    cliUpdate: {
+        updateNow: '立即更新',
+        confirmTitle: '更新 CLI',
+        confirmMessage: ({ version }: { version: string }) => `現在就在這台機器上安裝 v${version}？守護程序會重新啟動：正在執行的工作階段會繼續執行，但開啟的終端機和正在執行的編排任務會被中斷。`,
+        started: ({ version }: { version: string }) => `正在更新到 v${version}…`,
+        upToDate: '已是最新版本',
+        busy: '已有更新正在進行',
+        checkFailed: '無法檢查最新版本，請檢查這台機器的網路連線。',
+        statusUpToDate: '已是最新版本',
+        statusInstalling: ({ version }: { version: string }) => `正在安裝 v${version}…`,
+        statusInstalled: ({ version }: { version: string }) => `v${version} 已安裝，守護程序正在重新啟動`,
+        statusAvailable: ({ version }: { version: string }) => `v${version} 可用，點擊立即更新`,
+        statusWaitingSessions: ({ version, time }: { version: string; time: string }) => `v${version} 可用，工作階段結束後自動安裝（最遲 ${time}），點擊立即更新`,
+        statusWaitingBusy: ({ version }: { version: string }) => `v${version} 可用，開啟的終端機和編排任務結束後自動安裝，點擊立即更新`,
+        statusFailed: ({ version, error }: { version: string; error: string }) => `v${version} 安裝失敗：${error}，點擊重試`,
+        statusDisabled: ({ version }: { version: string }) => `v${version} 可用（自動更新已關閉），點擊更新`,
+        statusNoPermission: '無法自動更新：沒有全域安裝目錄的寫入權限，請在機器上執行 happy update',
+        statusNotGlobal: '無法自動更新：不是透過 npm、pnpm 或 yarn 全域安裝的',
+    },
     sessionHoverCard: {
         created: ({ time }: { time: string }) => `建立於 ${time}`,
         updated: ({ time }: { time: string }) => `更新於 ${time}`,

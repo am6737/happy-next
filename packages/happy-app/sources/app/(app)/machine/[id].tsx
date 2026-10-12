@@ -46,6 +46,7 @@ import { SessionHistoryCard } from '@/components/SessionHistoryCard';
 import { MachineIcon } from '@/components/MachineAvatar';
 import { MachineAvatarPicker } from '@/components/MachineAvatarPicker';
 import { useSessionFork } from '@/hooks/useSessionFork';
+import { useMachineCliUpdate } from '@/hooks/useMachineCliUpdate';
 import { SessionProjectLabelsContext, useSessionProjectLabels } from '@/hooks/useSessionProjectLabel';
 
 type AgentType = 'claude' | 'codex' | 'gemini' | 'qoder';
@@ -135,6 +136,7 @@ export default function MachineDetailScreen() {
     const router = useRouter();
     const sessions = useSessions();
     const machine = useMachine(machineId!);
+    const cliUpdate = useMachineCliUpdate(machine);
     const navigateToSession = useNavigateToSession();
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [isStoppingDaemon, setIsStoppingDaemon] = useState(false);
@@ -1039,8 +1041,15 @@ export default function MachineDetailScreen() {
                         {machine.metadata?.happyCliVersion && (
                             <Item
                                 title={t('machine.cliVersion')}
-                                subtitle={machine.metadata.happyCliVersion}
-                                subtitleStyle={{ fontFamily: 'Menlo', fontSize: 13 }}
+                                subtitle={cliUpdate.subtitle ? `${machine.metadata.happyCliVersion}\n${cliUpdate.subtitle}` : machine.metadata.happyCliVersion}
+                                subtitleLines={0}
+                                onPress={cliUpdate.canUpdate ? cliUpdate.update : undefined}
+                                showChevron={false}
+                                rightElement={cliUpdate.updating || cliUpdate.status?.state === 'installing' ? (
+                                    <ActivityIndicator size="small" color={theme.colors.textSecondary} />
+                                ) : cliUpdate.canUpdate ? (
+                                    <Ionicons name="arrow-up-circle" size={20} color="#34C759" />
+                                ) : undefined}
                             />
                         )}
                         <Item
