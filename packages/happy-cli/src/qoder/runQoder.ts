@@ -250,6 +250,7 @@ export async function runQoder(opts: {
   const planToolCalls = new Map<string, boolean>();
 
   let accumulatedResponse = '';
+  let accumulatedThinking = '';
   let abortRequested = false;
   let abortFeedbackSent = false;
   let taskStartedSent = false;
@@ -261,8 +262,18 @@ export async function runQoder(opts: {
     session.sendAgentMessage('qoder', { type: 'turn_aborted', id: randomUUID() });
   };
 
+  /**
+   * Sends the reasoning streamed so far as one message. qodercli streams it a token or so
+   * per chunk, and a message per chunk would flood the session with tens of thousands.
+   */
+  const flushThinking = () => {
+    if (accumulatedThinking.trim()) session.sendAgentMessage('qoder', { type: 'thinking', text: accumulatedThinking });
+    accumulatedThinking = '';
+  };
+
   /** Sends the text streamed so far as one message, so text and tool calls keep their order. */
   const flushResponse = () => {
+    flushThinking();
     if (!accumulatedResponse.trim()) {
       accumulatedResponse = '';
       return;
@@ -302,6 +313,7 @@ export async function runQoder(opts: {
     switch (msg.type) {
       case 'model-output':
         if (!msg.textDelta) break;
+        flushThinking();
         if (accumulatedResponse) {
           messageBuffer.updateLastMessage(msg.textDelta, 'assistant');
         } else {
@@ -389,7 +401,8 @@ export async function runQoder(opts: {
         if (msg.name === 'thinking') {
           const text = String((msg.payload as { text?: string } | undefined)?.text ?? '');
           messageBuffer.updateLastMessage(`[Thinking] ${text.substring(0, 100)}...`, 'system');
-          session.sendAgentMessage('qoder', { type: 'thinking', text });
+          if (accumulatedResponse) flushResponse();
+          accumulatedThinking += text;
         }
         break;
       }
@@ -559,6 +572,7 @@ export async function runQoder(opts: {
       abortFeedbackSent = false;
       taskStartedSent = false;
       accumulatedResponse = '';
+      accumulatedThinking = '';
       setThinking(true);
 
       try {
