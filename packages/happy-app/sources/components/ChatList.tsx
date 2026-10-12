@@ -718,21 +718,6 @@ const ChatListInternal = React.memo((props: {
         void list.scrollToEnd(chatScrollToEndOptions(list.getState()));
     }, [stickToEnd.stick]);
 
-    // A prompt landing as the newest message — sent from here, an option tapped, or another device —
-    // follows a reader resting near the end even if their last drag let go of it, as it did when
-    // nearness alone decided. The list's own follow already ran for this data without them, so the
-    // scroll is asked for here.
-    const newestMessage = visibleMessages[0];
-    const newestPromptId = newestMessage?.kind === 'user-text' ? newestMessage.id : null;
-    const seenPromptIdRef = useRef(newestPromptId);
-    React.useLayoutEffect(() => {
-        if (newestPromptId === seenPromptIdRef.current) return;
-        seenPromptIdRef.current = newestPromptId;
-        if (newestPromptId === null || stickToEnd.stuck || !stickToEnd.stickIfNear()) return;
-        const list = listRef.current;
-        if (list) void list.scrollToEnd(chatScrollToEndOptions(list.getState()));
-    }, [newestPromptId, stickToEnd.stuck, stickToEnd.stickIfNear]);
-
     const handleListLayout = useCallback((event: LayoutChangeEvent) => {
         setViewportHeight(event.nativeEvent.layout.height);
     }, []);
@@ -754,6 +739,24 @@ const ChatListInternal = React.memo((props: {
     const [readySessionId, setReadySessionId] = useState<string | null>(null);
     const listReady = readySessionId === props.sessionId;
     const handleListReady = useCallback(() => setReadySessionId(props.sessionId), [props.sessionId]);
+
+    // A prompt landing as the newest message — sent from here, an option tapped, or another device —
+    // lands at the end for a reader following it, and for one resting near it even if their last drag
+    // let go, as it did when nearness alone decided. Asked for here rather than left to the list's own
+    // follow: that one also needs the list to agree it is within its threshold, which it judges from
+    // the last scroll it saw — and while a freshly opened chat is still measuring its rows in, the end
+    // can have moved away since, so the prompt would land below the fold. Not before the list is ready:
+    // until then its own initial scroll to the end is in charge.
+    const newestMessage = visibleMessages[0];
+    const newestPromptId = newestMessage?.kind === 'user-text' ? newestMessage.id : null;
+    const seenPromptIdRef = useRef(newestPromptId);
+    React.useLayoutEffect(() => {
+        if (newestPromptId === seenPromptIdRef.current) return;
+        seenPromptIdRef.current = newestPromptId;
+        if (newestPromptId === null || !listReady || !stickToEnd.stickIfNear()) return;
+        const list = listRef.current;
+        if (list) void list.scrollToEnd(chatScrollToEndOptions(list.getState()));
+    }, [newestPromptId, listReady, stickToEnd.stickIfNear]);
     const listHeader = React.useMemo(() => (
         <View>
             <ListHeader headerOverlayInset={props.headerOverlayInset} />
