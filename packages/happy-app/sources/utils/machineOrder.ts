@@ -20,3 +20,13 @@ export function mergeMachineOrder(saved: readonly string[], visible: readonly st
     const shown = new Set(visible);
     return [...visible, ...saved.filter(id => !shown.has(id))];
 }
+
+// Machines as every list shows them: by name (display name, else host), unless the user put them
+// in an order of their own (settings > machines).
+export function sortMachines<T extends { id: string; metadata: { displayName?: string; host: string } | null }>(
+    machines: readonly T[],
+    order: readonly string[],
+): T[] {
+    const name = (machine: T) => machine.metadata?.displayName || machine.metadata?.host || machine.id;
+    return applyMachineOrder([...machines].sort((a, b) => name(a).localeCompare(name(b))), machine => machine.id, order);
+}

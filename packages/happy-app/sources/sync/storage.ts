@@ -6,6 +6,7 @@ import { createReducer, reducer, ReducerState } from "./reducer/reducer";
 import { Message } from "./typesMessage";
 import { NormalizedMessage } from "./typesRaw";
 import { isMachineOnline } from '@/utils/machineUtils';
+import { sortMachines } from '@/utils/machineOrder';
 import { applySettings, Settings } from "./settings";
 import { LocalSettings, applyLocalSettings } from "./localSettings";
 import { Profile } from "./profile";
@@ -2529,7 +2530,8 @@ export function useLocalSettings(): LocalSettings {
 export function useAllMachines(): Machine[] {
     return storage(useShallow((state) => {
         if (!state.isDataReady) return [];
-        return (Object.values(state.machines).sort((a, b) => b.createdAt - a.createdAt)).filter((v) => v.active);
+        // Online machines, in the order every machine list shares (settings > machines).
+        return sortMachines(Object.values(state.machines).filter((v) => v.active), state.settings.machineOrder);
     }));
 }
 

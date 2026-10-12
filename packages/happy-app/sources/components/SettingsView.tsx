@@ -21,8 +21,7 @@ import { useMultiClick } from '@/hooks/useMultiClick';
 import { useAllMachines } from '@/sync/storage';
 import { isMachineOnline } from '@/utils/machineUtils';
 import type { Machine } from '@/sync/storageTypes';
-import { applyMachineOrder, mergeMachineOrder } from '@/utils/machineOrder';
-import { getMachineDisplayName } from '@/components/sessionListScope';
+import { mergeMachineOrder } from '@/utils/machineOrder';
 import { SortableList } from '@/components/SortableList';
 import { useUnistyles } from 'react-native-unistyles';
 import { layout } from '@/components/layout';
@@ -45,14 +44,9 @@ export const SettingsView = React.memo(function SettingsView() {
     const auth = useAuth();
     const [devModeEnabled, setDevModeEnabled] = useLocalSettingMutable('devModeEnabled');
     const experiments = useSetting('experiments');
-    const allMachines = useAllMachines();
+    // Already in the shared machine order; reordered with the action beside the title.
+    const machines = useAllMachines();
     const [machineOrder, setMachineOrder] = useSettingMutable('machineOrder');
-    // By name, as the sidebar's machine rail, unless reordered (the action beside the title).
-    const machines = React.useMemo(() => applyMachineOrder(
-        [...allMachines].sort((a, b) => getMachineDisplayName(a, a.id, {}).localeCompare(getMachineDisplayName(b, b.id, {}))),
-        machine => machine.id,
-        machineOrder,
-    ), [allMachines, machineOrder]);
     const saveMachineOrder = React.useCallback(
         (ids: string[]) => setMachineOrder(mergeMachineOrder(machineOrder, ids)),
         [machineOrder, setMachineOrder],
