@@ -10,7 +10,7 @@ import { Avatar } from './Avatar';
 import { Typography } from '@/constants/Typography';
 import { StatusDot } from './StatusDot';
 import { useOrchestratorRunningTaskCount, useSetting, useSessionHasDraft, useSessionHasScheduled } from '@/sync/storage';
-import { StyleSheet } from 'react-native-unistyles';
+import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { isMachineOnline } from '@/utils/machineUtils';
 import { machineSpawnNewSession, sessionArchive } from '@/sync/ops';
 import { storage } from '@/sync/storage';
@@ -30,6 +30,7 @@ import { SessionForkSpinner } from './SessionForkSpinner';
 import { useSessionForking } from '@/utils/sessionForkProgress';
 import { canArchiveSession } from '@/utils/sessionLifecycle';
 import { SessionRowFlash } from './SessionRowFlash';
+import { PressHighlight } from './PressHighlight';
 import { getProjectHeaderFlashId, registerProjectHeader } from './sessionProjectLocate';
 import { ProjectLabelText } from './ProjectLabelText';
 import { SessionMarkerBar } from './SessionColorMarker';
@@ -517,6 +518,7 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder, isCardFir
     const cardRowShape = isCardFirst && isCardLast ? styles.cardRowSingle :
         isCardFirst ? styles.cardRowFirst :
             isCardLast ? styles.cardRowLast : undefined;
+    const { theme } = useUnistyles();
     const sessionStatus = useSessionStatus(session);
     const hasDraft = useSessionHasDraft(session.id);
     const hasScheduled = useSessionHasScheduled(session.id);
@@ -613,15 +615,19 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder, isCardFir
     const itemContent = (
         <SessionContextMenu session={session} highlightShape={cardRowShape}>
             <Pressable
-                // Selected, hovered (web, mouse) and pressed rows share one background.
+                // On web, selected, hovered and pressed rows share one background. In the app a press
+                // tints the row like an Item (inbox, settings) does: an overlay on iOS, a ripple on Android.
                 style={({ hovered, pressed }: any) => [
                 styles.sessionRow,
-                (selected || hovered || pressed) && styles.sessionRowSelected
+                (selected || (Platform.OS === 'web' && (hovered || pressed))) && styles.sessionRowSelected
             ]}
+            android_ripple={Platform.OS === 'android' ? { color: theme.colors.surfaceRipple, borderless: false, foreground: true } : undefined}
             onPress={() => {
                 navigateToSession(session.id);
             }}
         >
+            {({ pressed }) => (<>
+            {pressed && Platform.OS === 'ios' && <PressHighlight style={cardRowShape} />}
             <SessionRowFlash sessionId={session.id} style={cardRowShape} />
             {/* The session's colour marker, down the leading edge — out of flow, so an
                 unmarked row costs nothing and nothing shifts. See SessionMarkerBar. */}
@@ -727,6 +733,7 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder, isCardFir
                     </View>
                 </View>
             </View>
+            </>)}
             </Pressable>
         </SessionContextMenu>
     );

@@ -42,6 +42,7 @@ import { SessionContextMenu } from './SessionContextMenu';
 import { SessionForkSpinner } from './SessionForkSpinner';
 import { useSessionForking } from '@/utils/sessionForkProgress';
 import { SessionRowFlash, flashSessionRow } from './SessionRowFlash';
+import { PressHighlight } from './PressHighlight';
 import { getProjectHeader, getProjectHeaderFlashId, setSessionProjectLocator } from './sessionProjectLocate';
 import { SessionMarkerBar } from './SessionColorMarker';
 
@@ -1141,6 +1142,7 @@ const SessionItem = React.memo(({ session, selected, isFirst, isLast, isSingle, 
     registerSessionRowRef?: RegisterSessionRowRef;
 }) => {
     const styles = stylesheet;
+    const { theme } = useUnistyles();
     const sessionStatus = useSessionStatus(session);
     const hasDraft = useSessionHasDraft(session.id);
     const hasScheduled = useSessionHasScheduled(session.id);
@@ -1193,16 +1195,20 @@ const SessionItem = React.memo(({ session, selected, isFirst, isLast, isSingle, 
     const itemContent = (
         <SessionContextMenu session={session} highlightShape={rowShape}>
             <Pressable
-                // Selected, hovered (web, mouse) and pressed rows share one background.
+                // On web, selected, hovered and pressed rows share one background. In the app a press
+                // tints the row like an Item (inbox, settings) does: an overlay on iOS, a ripple on Android.
                 style={({ hovered, pressed }: any) => [
                 compactSessionView ? styles.sessionItemCompact : styles.sessionItem,
-                (selected || hovered || pressed) && styles.sessionItemSelected,
+                (selected || (Platform.OS === 'web' && (hovered || pressed))) && styles.sessionItemSelected,
                 rowShape
             ]}
+            android_ripple={Platform.OS === 'android' ? { color: theme.colors.surfaceRipple, borderless: false, foreground: true } : undefined}
             onPress={() => {
                 navigateToSession(session.id);
             }}
         >
+            {({ pressed }) => (<>
+            {pressed && Platform.OS === 'ios' && <PressHighlight style={rowShape} />}
             <SessionRowFlash sessionId={session.id} style={rowShape} />
             {/* The session's colour marker, down the leading edge — out of flow, so an
                 unmarked row costs nothing and nothing shifts. See SessionMarkerBar. */}
@@ -1309,6 +1315,7 @@ const SessionItem = React.memo(({ session, selected, isFirst, isLast, isSingle, 
                     </>
                 )}
             </View>
+            </>)}
             </Pressable>
         </SessionContextMenu>
     );

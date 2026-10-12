@@ -28,6 +28,7 @@ import { SessionForkSpinner } from './SessionForkSpinner';
 import { useSessionForking } from '@/utils/sessionForkProgress';
 import { canArchiveSession } from '@/utils/sessionLifecycle';
 import { SessionRowFlash } from './SessionRowFlash';
+import { PressHighlight } from './PressHighlight';
 import { getProjectHeaderFlashId, registerProjectHeader } from './sessionProjectLocate';
 import { ProjectLabelText } from './ProjectLabelText';
 import { SessionMarkerBar } from './SessionColorMarker';
@@ -590,16 +591,20 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder, isCardFir
     const itemContent = (
         <SessionContextMenu session={session} highlightShape={cardRowShape}>
             <Pressable
-                // Selected, hovered (web, mouse) and pressed rows share one background.
+                // On web, selected, hovered and pressed rows share one background. In the app a press
+                // tints the row like an Item (inbox, settings) does: an overlay on iOS, a ripple on Android.
                 style={({ hovered, pressed }: any) => [
                 styles.sessionRow,
                 unindented && styles.sessionRowUnindented,
-                (selected || hovered || pressed) && styles.sessionRowSelected
+                (selected || (Platform.OS === 'web' && (hovered || pressed))) && styles.sessionRowSelected
             ]}
+            android_ripple={Platform.OS === 'android' ? { color: theme.colors.surfaceRipple, borderless: false, foreground: true } : undefined}
             onPress={() => {
                 navigateToSession(session.id);
             }}
         >
+            {({ pressed }) => (<>
+            {pressed && Platform.OS === 'ios' && <PressHighlight style={cardRowShape} />}
             <SessionRowFlash sessionId={session.id} style={cardRowShape} />
             {/* The session's colour marker, down the leading edge — out of flow, so an
                 unmarked row costs nothing and nothing shifts. See SessionMarkerBar. */}
@@ -682,6 +687,7 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder, isCardFir
                     {forking && <SessionForkSpinner size={14} style={styles.statusMark} />}
                 </View>
             </View>
+            </>)}
             </Pressable>
         </SessionContextMenu>
     );
