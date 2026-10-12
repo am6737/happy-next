@@ -39,6 +39,7 @@ export const en = {
         updated: ({ time }: { time: string }) => `Updated ${time}`,
         unread: 'Unread result',
         draft: 'Unsent draft',
+        scheduled: 'Scheduled messages',
         runningTasks: ({ count }: { count: number }) => `${count} subtasks running`,
         locate: 'Locate',
         archive: 'Archive',

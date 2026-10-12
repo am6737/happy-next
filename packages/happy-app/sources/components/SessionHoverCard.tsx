@@ -7,7 +7,7 @@ import { Text } from '@/components/StyledText';
 import { Modal } from '@/modal';
 import { sessionUpdateSummary } from '@/sync/ops';
 import { Typography } from '@/constants/Typography';
-import { useLocalSetting, useMachine, useOrchestratorRunningTaskCount, useSession, useSessionHasDraft, useSessionPinned } from '@/sync/storage';
+import { useLocalSetting, useMachine, useOrchestratorRunningTaskCount, useSession, useSessionHasDraft, useSessionNextScheduledAt, useSessionPinned } from '@/sync/storage';
 import { sync } from '@/sync/sync';
 import type { Session } from '@/sync/storageTypes';
 import { t } from '@/text';
@@ -19,6 +19,7 @@ import { SessionContextMenuPortal } from './SessionContextMenuPortal';
 import { sessionHoverCard, type HoverAnchorRect } from './sessionHoverCardController';
 import { canLocateSessionProject, locateSessionProject } from './sessionProjectLocate';
 import { canArchiveSession } from '@/utils/sessionLifecycle';
+import { formatScheduleCountdown, getPendingScheduleInfo } from './pendingQueuePanelUtils';
 
 const CARD_WIDTH = 280;
 const GAP = 8;
@@ -211,6 +212,15 @@ function SessionHoverCard({ session, anchor }: { session: Session; anchor: Hover
     }, [cardHeight, settled]);
     const status = useSessionStatus(session);
     const hasDraft = useSessionHasDraft(session.id);
+    const nextScheduledAt = useSessionNextScheduledAt(session.id);
+    // Re-render every second while a countdown is shown; the card only lives while hovered.
+    const [now, setNow] = React.useState(() => Date.now());
+    React.useEffect(() => {
+        if (nextScheduledAt === null) return;
+        setNow(Date.now());
+        const timer = setInterval(() => setNow(Date.now()), 1000);
+        return () => clearInterval(timer);
+    }, [nextScheduledAt]);
     const runningTaskCount = useOrchestratorRunningTaskCount(session.id);
     const machineId = session.metadata?.machineId;
     // A pinned session is out of the list below; this finds where it would sit there.
@@ -261,10 +271,19 @@ function SessionHoverCard({ session, anchor }: { session: Session; anchor: Hover
         text: `${t('sessionHoverCard.created', { time: formatLastSeen(session.createdAt) })} · ${t('sessionHoverCard.updated', { time: formatLastSeen(session.updatedAt) })}`,
     });
 
-    const badges: string[] = [];
-    if (status.hasUnreadCompletion) badges.push(t('sessionHoverCard.unread'));
-    if (hasDraft) badges.push(t('sessionHoverCard.draft'));
-    if (runningTaskCount > 0) badges.push(t('sessionHoverCard.runningTasks', { count: runningTaskCount }));
+    // `title` is the web tooltip, for what a badge's short text leaves out.
+    const badges: { key: string; text: string; title?: string }[] = [];
+    if (status.hasUnreadCompletion) badges.push({ key: 'unread', text: t('sessionHoverCard.unread') });
+    if (hasDraft) badges.push({ key: 'draft', text: t('sessionHoverCard.draft') });
+    if (nextScheduledAt !== null) {
+        const countdown = formatScheduleCountdown(nextScheduledAt, now);
+        badges.push({
+            key: 'scheduled',
+            text: countdown ? `${t('sessionHoverCard.scheduled')} ${countdown}` : t('sessionHoverCard.scheduled'),
+            title: t('pendingQueue.scheduledAt', { time: getPendingScheduleInfo(nextScheduledAt, now)!.time }),
+        });
+    }
+    if (runningTaskCount > 0) badges.push({ key: 'runningTasks', text: t('sessionHoverCard.runningTasks', { count: runningTaskCount }) });
 
     return (
         <View
@@ -293,8 +312,16 @@ function SessionHoverCard({ session, anchor }: { session: Session; anchor: Hover
                 {badges.length > 0 && (
                     <View style={styles.badges}>
                         {badges.map(badge => (
-                            <View key={badge} style={styles.badge}>
-                                <Text style={styles.badgeText}>{badge}</Text>
+                            <View
+                                key={badge.key}
+                                style={styles.badge}
+                                ref={(el: any) => {
+                                    if (Platform.OS === 'web' && el) {
+                                        el.title = badge.title ?? '';
+                                    }
+                                }}
+                            >
+                                <Text style={styles.badgeText}>{badge.text}</Text>
                             </View>
                         ))}
                     </View>

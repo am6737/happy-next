@@ -50,6 +50,7 @@ export const pl: TranslationStructure = {
         updated: ({ time }: { time: string }) => `Zaktualizowano ${time}`,
         unread: 'Nieprzeczytany wynik',
         draft: 'Niewysłany szkic',
+        scheduled: 'Zaplanowane wiadomości',
         runningTasks: ({ count }: { count: number }) => `Uruchomione podzadania: ${count}`,
         locate: 'Pokaż',
         archive: 'Archiwizuj',

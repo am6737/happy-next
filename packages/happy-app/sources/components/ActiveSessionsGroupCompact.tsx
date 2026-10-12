@@ -11,7 +11,7 @@ import { Typography } from '@/constants/Typography';
 import { StatusDot } from './StatusDot';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { sessionArchive } from '@/sync/ops';
-import { storage, useOrchestratorRunningTaskCount, useSessionHasDraft } from '@/sync/storage';
+import { storage, useOrchestratorRunningTaskCount, useSessionHasDraft, useSessionHasScheduled } from '@/sync/storage';
 import { Modal } from '@/modal';
 import { t } from '@/text';
 import { useNavigateToSession } from '@/hooks/useNavigateToSession';
@@ -500,6 +500,7 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder, isCardFir
     const sessionStatus = useSessionStatus(session);
     const { theme } = useUnistyles();
     const hasDraft = useSessionHasDraft(session.id);
+    const hasScheduled = useSessionHasScheduled(session.id);
     const forking = useSessionForking(session.id);
     const runningTaskCount = useOrchestratorRunningTaskCount(session.id);
     const sessionName = getSessionName(session);
@@ -666,6 +667,16 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder, isCardFir
                         }
                         return null;
                     })()}
+                    {/* Scheduled messages waiting to go out: after whatever mark the row has, so
+                        after the draft icon, and shown whatever state the session is in. */}
+                    {hasScheduled && (
+                        <Ionicons
+                            name="time-outline"
+                            size={14}
+                            color={theme.colors.textSecondary}
+                            style={[styles.statusMark, { marginLeft: 8, marginRight: -4 }]}
+                        />
+                    )}
                     {/* Being copied or resumed: after whatever mark the row has, so after the
                         draft icon, and shown whatever state the session is in. */}
                     {forking && <SessionForkSpinner size={14} style={styles.statusMark} />}

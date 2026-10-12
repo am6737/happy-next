@@ -11,6 +11,7 @@ import {
     ApiPendingMessage,
     ApiPendingMessageSchema,
     ApiPendingMessagesResponseSchema,
+    ApiScheduledSessionsResponseSchema,
     ApiSendOrQueueResponseSchema,
     ApiUpdateContainerSchema
 } from './apiTypes';
@@ -288,6 +289,7 @@ class Sync {
     private friendsSync: InvalidateSync;
     private friendRequestsSync: InvalidateSync;
     private feedSync: InvalidateSync;
+    private scheduledSessionsSync: InvalidateSync;
     private feedFullRefresh = false;
     private sharedSessionsSync: InvalidateSync;
     private activityAccumulator: ActivityUpdateAccumulator;
@@ -384,6 +386,7 @@ class Sync {
         this.friendsSync = new InvalidateSync(this.fetchFriends);
         this.friendRequestsSync = new InvalidateSync(this.fetchFriendRequests);
         this.feedSync = new InvalidateSync(this.fetchFeed);
+        this.scheduledSessionsSync = new InvalidateSync(this.fetchScheduledSessions);
         this.sharedSessionsSync = new InvalidateSync(this.fetchSharedSessions);
 
         const registerPushToken = async () => {
@@ -424,6 +427,7 @@ class Sync {
                 this.friendsSync.invalidate();
                 this.friendRequestsSync.invalidate();
                 this.feedSync.invalidate();
+                this.scheduledSessionsSync.invalidate();
                 this.sharedSessionsSync.invalidate();
                 gitStatusSync.invalidateForSessions([...Object.keys(storage.getState().sessions), ...Object.keys(storage.getState().sharedSessions)]);
                 if (this.viewingSessionId) {
@@ -589,6 +593,7 @@ class Sync {
         this.friendRequestsSync.invalidate();
         this.artifactsSync.invalidate();
         this.feedSync.invalidate();
+        this.scheduledSessionsSync.invalidate();
         this.sharedSessionsSync.invalidate();
         log.log('🔄 #init: All syncs invalidated, including artifacts');
 
@@ -1018,6 +1023,26 @@ class Sync {
         const data = ApiPendingMessagesResponseSchema.parse(await response.json());
         const decrypted = await Promise.all(data.messages.map((pending) => this.decryptPendingMessage(sessionId, pending)));
         storage.getState().applyPendingMessages(sessionId, decrypted.filter((item): item is PendingMessage => item !== null));
+        // The full queue is authoritative for this session's schedule icon.
+        const scheduledTimes = data.messages.flatMap((m) => m.deliverAt !== null && m.pausedAt === null ? [m.deliverAt] : []);
+        storage.getState().setSessionNextScheduledAt(sessionId, scheduledTimes.length > 0 ? Math.min(...scheduledTimes) : null);
+    }
+
+    private fetchScheduledSessions = async () => {
+        if (!this.credentials) return;
+
+        const response = await fetch(`${getServerUrl()}/v3/sessions/scheduled`, {
+            headers: {
+                'Authorization': `Bearer ${this.credentials.token}`,
+                'Content-Type': 'application/json'
+            }
+        });
+        if (!response.ok) {
+            throw new Error(`Failed to fetch scheduled sessions: ${response.status}`);
+        }
+
+        const data = ApiScheduledSessionsResponseSchema.parse(await response.json());
+        storage.getState().applyScheduledSessions(data.sessions);
     }
 
     async pinPendingMessage(sessionId: string, pendingId: string): Promise<boolean> {
@@ -4320,6 +4345,7 @@ class Sync {
             this.friendsSync.invalidate();
             this.friendRequestsSync.invalidate();
             this.feedSync.invalidate();
+            this.scheduledSessionsSync.invalidate();
             if (this.viewingSessionId) {
                 this.fetchOrchestratorActivity(this.viewingSessionId);
             }
@@ -5440,6 +5466,11 @@ class Sync {
 
         if (updateData.type === 'pending-message-delete') {
             storage.getState().removePendingMessage(updateData.sid, updateData.pendingId);
+        }
+
+        // Any queue change can add or clear a schedule; the summary is one cheap query.
+        if (updateData.type === 'pending-message-upsert' || updateData.type === 'pending-message-delete') {
+            this.scheduledSessionsSync.invalidate();
         }
 
         // Handle machine activity updates

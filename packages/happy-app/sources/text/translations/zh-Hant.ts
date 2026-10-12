@@ -41,6 +41,7 @@ export const zhHant: TranslationStructure = {
         updated: ({ time }: { time: string }) => `更新於 ${time}`,
         unread: '有未讀結果',
         draft: '有未送出的草稿',
+        scheduled: '有排程訊息',
         runningTasks: ({ count }: { count: number }) => `${count} 個子任務執行中`,
         locate: '定位',
         archive: '封存',

@@ -9,7 +9,7 @@ import { getSessionName, useSessionStatus, getSessionAvatarId } from '@/utils/se
 import { Avatar } from './Avatar';
 import { Typography } from '@/constants/Typography';
 import { StatusDot } from './StatusDot';
-import { useOrchestratorRunningTaskCount, useSetting, useSessionHasDraft } from '@/sync/storage';
+import { useOrchestratorRunningTaskCount, useSetting, useSessionHasDraft, useSessionHasScheduled } from '@/sync/storage';
 import { StyleSheet } from 'react-native-unistyles';
 import { isMachineOnline } from '@/utils/machineUtils';
 import { machineSpawnNewSession, sessionArchive } from '@/sync/ops';
@@ -519,6 +519,7 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder, isCardFir
             isCardLast ? styles.cardRowLast : undefined;
     const sessionStatus = useSessionStatus(session);
     const hasDraft = useSessionHasDraft(session.id);
+    const hasScheduled = useSessionHasScheduled(session.id);
     const forking = useSessionForking(session.id);
     const sessionName = getSessionName(session);
     const runningTaskCount = useOrchestratorRunningTaskCount(session.id);
@@ -671,6 +672,17 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder, isCardFir
                             <View style={styles.taskStatusContainer}>
                                 <Ionicons
                                     name="create-outline"
+                                    size={10}
+                                    color={styles.taskStatusText.color}
+                                />
+                            </View>
+                        )}
+
+                        {/* Has scheduled messages waiting to go out */}
+                        {hasScheduled && (
+                            <View style={styles.taskStatusContainer}>
+                                <Ionicons
+                                    name="time-outline"
                                     size={10}
                                     color={styles.taskStatusText.color}
                                 />

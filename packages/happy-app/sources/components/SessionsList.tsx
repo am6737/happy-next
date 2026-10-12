@@ -3,7 +3,7 @@ import { View, Pressable, FlatList, Platform, RefreshControl, NativeScrollEvent,
 import { Swipeable } from 'react-native-gesture-handler';
 import { Text } from '@/components/StyledText';
 import { usePathname } from 'expo-router';
-import { SessionListViewItem, storage, useOrchestratorRunningTaskCount, useSessionAppearanceLoaded, useSessionHasDraft, useSessionPins, useSocketStatus } from '@/sync/storage';
+import { SessionListViewItem, storage, useOrchestratorRunningTaskCount, useSessionAppearanceLoaded, useSessionHasDraft, useSessionHasScheduled, useSessionPins, useSocketStatus } from '@/sync/storage';
 import { useCompactSessionView } from '@/hooks/useCompactSessionView';
 import { Ionicons } from '@expo/vector-icons';
 import { getSessionName, useSessionStatus, getSessionAvatarId, hasUnreadCompletion } from '@/utils/sessionUtils';
@@ -208,8 +208,8 @@ const stylesheet = StyleSheet.create((theme) => ({
         width: 48,
         height: 48,
     },
-    // The marks on the avatar's lower corner, in a row so that a spinner for a copy in progress
-    // sits after the draft icon rather than on it.
+    // The marks on the avatar's lower corner, in a row so that the schedule icon and a spinner
+    // for a copy in progress sit after the draft icon rather than on it.
     avatarBadges: {
         position: 'absolute',
         bottom: -2,
@@ -1143,6 +1143,7 @@ const SessionItem = React.memo(({ session, selected, isFirst, isLast, isSingle, 
     const styles = stylesheet;
     const sessionStatus = useSessionStatus(session);
     const hasDraft = useSessionHasDraft(session.id);
+    const hasScheduled = useSessionHasScheduled(session.id);
     const forking = useSessionForking(session.id);
     const sessionName = getSessionName(session);
     const sessionSubtitle = useSessionProjectLabel(session);
@@ -1209,12 +1210,21 @@ const SessionItem = React.memo(({ session, selected, isFirst, isLast, isSingle, 
             {!compactSessionView && (
                 <View style={styles.avatarContainer}>
                     <Avatar id={avatarId} size={48} monochrome={!sessionStatus.isConnected} flavor={session.metadata?.flavor} sessionIcon={session.metadata?.sessionIcon} />
-                    {(hasDraft || forking) && (
+                    {(hasDraft || hasScheduled || forking) && (
                         <View style={styles.avatarBadges}>
                             {hasDraft && (
                                 <View style={styles.draftIconContainer}>
                                     <Ionicons
                                         name="create-outline"
+                                        size={12}
+                                        style={styles.draftIconOverlay}
+                                    />
+                                </View>
+                            )}
+                            {hasScheduled && (
+                                <View style={styles.draftIconContainer}>
+                                    <Ionicons
+                                        name="time-outline"
                                         size={12}
                                         style={styles.draftIconOverlay}
                                     />

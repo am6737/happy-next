@@ -39,6 +39,7 @@ export const it: TranslationStructure = {
         updated: ({ time }: { time: string }) => `Aggiornata ${time}`,
         unread: 'Risultato non letto',
         draft: 'Bozza non inviata',
+        scheduled: 'Messaggi programmati',
         runningTasks: ({ count }: { count: number }) => `${count} sottoattività in corso`,
         locate: 'Trova',
         archive: 'Archivia',

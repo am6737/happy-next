@@ -62,6 +62,13 @@ export const ApiPendingMessagesResponseSchema = z.object({
     messages: z.array(ApiPendingMessageSchema),
 });
 
+export const ApiScheduledSessionsResponseSchema = z.object({
+    sessions: z.array(z.object({
+        sessionId: z.string(),
+        nextDeliverAt: z.number(),
+    })),
+});
+
 export const ApiSendOrQueueResponseSchema = z.discriminatedUnion('mode', [
     z.object({
         mode: z.literal('sent'),

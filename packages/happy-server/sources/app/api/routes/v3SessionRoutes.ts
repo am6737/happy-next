@@ -9,6 +9,7 @@ import {
     deletePendingMessage,
     enqueuePendingMessage,
     listPendingMessages,
+    listScheduledSessions,
     hasDispatchablePendingMessage,
     pausePendingMessage,
     pinPendingMessage,
@@ -384,6 +385,15 @@ export function v3SessionRoutes(app: Fastify) {
         return reply.send({
             messages: responseMessages.map(toSendResponseMessage),
         });
+    });
+
+    // Sessions with scheduled messages, so the session list can mark them without
+    // loading every session's pending queue.
+    app.get("/v3/sessions/scheduled", {
+        preHandler: app.authenticate,
+    }, async (request, reply) => {
+        const sessions = await listScheduledSessions(request.userId);
+        return reply.send({ sessions });
     });
 
     app.get("/v3/sessions/:sessionId/pending-messages", {

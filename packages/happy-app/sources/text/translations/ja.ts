@@ -42,6 +42,7 @@ export const ja: TranslationStructure = {
         updated: ({ time }: { time: string }) => `更新 ${time}`,
         unread: '未読の結果',
         draft: '未送信の下書き',
+        scheduled: '予約メッセージあり',
         runningTasks: ({ count }: { count: number }) => `${count} 件のサブタスク実行中`,
         locate: '位置を表示',
         archive: 'アーカイブ',

@@ -120,6 +120,9 @@ interface StorageState {
     sessionListViewData: SessionListViewItem[] | null;
     sessionMessages: Record<string, SessionMessages>;
     sessionPendingMessages: Record<string, PendingMessage[]>;
+    // Sessions with a scheduled (non-paused) pending message -> its earliest deliverAt. Kept apart
+    // from sessionPendingMessages because the list needs it for sessions whose queue was never loaded.
+    scheduledSessions: Record<string, number>;
     // Per-session input drafts. Single source of truth, mirrored to the `session-drafts`
     // MMKV key on every write. Deliberately NOT a field on Session — drafts must never
     // take part in session sync/merge/cache. See useDraft.
@@ -195,6 +198,8 @@ interface StorageState {
     applyPendingMessages: (sessionId: string, messages: PendingMessage[]) => void;
     upsertPendingMessage: (sessionId: string, message: PendingMessage) => void;
     removePendingMessage: (sessionId: string, pendingId: string) => void;
+    applyScheduledSessions: (sessions: { sessionId: string; nextDeliverAt: number }[]) => void;
+    setSessionNextScheduledAt: (sessionId: string, nextDeliverAt: number | null) => void;
     applySettings: (settings: Settings, version: number) => void;
     applySettingsLocal: (settings: Partial<Settings>) => void;
     applySessionModeConfigFromCloud: (doc: SessionModeConfigDocument, version: number) => void;
@@ -490,6 +495,7 @@ export const storage = create<StorageState>()((set, get) => {
         sessionListViewData: null,
         sessionMessages: {},
         sessionPendingMessages: {},
+        scheduledSessions: {},
         drafts: loadSessionDrafts(),
         askUserQuestionDrafts: loadAskUserQuestionDrafts(),
         sessionMessagesFetching: {},
@@ -1165,6 +1171,29 @@ export const storage = create<StorageState>()((set, get) => {
                     [sessionId]: updated
                 }
             };
+        }),
+        applyScheduledSessions: (sessions: { sessionId: string; nextDeliverAt: number }[]) => set((state) => {
+            const existing = state.scheduledSessions;
+            if (Object.keys(existing).length === sessions.length && sessions.every((s) => existing[s.sessionId] === s.nextDeliverAt)) {
+                return state;
+            }
+            const next: Record<string, number> = {};
+            for (const s of sessions) {
+                next[s.sessionId] = s.nextDeliverAt;
+            }
+            return { ...state, scheduledSessions: next };
+        }),
+        setSessionNextScheduledAt: (sessionId: string, nextDeliverAt: number | null) => set((state) => {
+            if ((state.scheduledSessions[sessionId] ?? null) === nextDeliverAt) {
+                return state;
+            }
+            const next = { ...state.scheduledSessions };
+            if (nextDeliverAt !== null) {
+                next[sessionId] = nextDeliverAt;
+            } else {
+                delete next[sessionId];
+            }
+            return { ...state, scheduledSessions: next };
         }),
         removePendingMessage: (sessionId: string, pendingId: string) => set((state) => {
             const existing = state.sessionPendingMessages[sessionId] ?? [];
@@ -2439,6 +2468,14 @@ export function useSessionMessages(sessionId: string): { messages: Message[], is
 // re-render when only the bootstrap-fetch flag flips. See SessionView's refreshing indicator.
 export function useSessionMessagesFetching(sessionId: string): boolean {
     return storage((state) => !!state.sessionMessagesFetching[sessionId]);
+}
+
+export function useSessionHasScheduled(sessionId: string): boolean {
+    return storage((state) => state.scheduledSessions[sessionId] !== undefined);
+}
+
+export function useSessionNextScheduledAt(sessionId: string): number | null {
+    return storage((state) => state.scheduledSessions[sessionId] ?? null);
 }
 
 export function useSessionPendingMessages(sessionId: string): PendingMessage[] {

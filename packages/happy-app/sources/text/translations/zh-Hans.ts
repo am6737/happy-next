@@ -41,6 +41,7 @@ export const zhHans: TranslationStructure = {
         updated: ({ time }: { time: string }) => `更新于 ${time}`,
         unread: '有未读结果',
         draft: '有未发送的草稿',
+        scheduled: '有定时消息',
         runningTasks: ({ count }: { count: number }) => `${count} 个子任务运行中`,
         locate: '定位',
         archive: '归档',

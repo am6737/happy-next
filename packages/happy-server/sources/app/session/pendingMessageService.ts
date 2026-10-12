@@ -301,6 +301,27 @@ export async function listSessionIdsWithDueScheduledMessages(limit = 100): Promi
     return rows.map((row) => row.sessionId);
 }
 
+// Owned sessions that still have a scheduled message waiting to go out, with the earliest
+// delivery time — paused ones won't fire on their own, so they don't count. Feeds the
+// session list's schedule icon and the hover card's countdown.
+export async function listScheduledSessions(accountId: string): Promise<{ sessionId: string; nextDeliverAt: number }[]> {
+    const rows = await db.sessionPendingMessage.groupBy({
+        by: ["sessionId"],
+        where: {
+            pausedAt: null,
+            deliverAt: { not: null },
+            session: { accountId },
+        },
+        _min: {
+            deliverAt: true,
+        },
+    });
+
+    return rows.flatMap((row) => row._min.deliverAt
+        ? [{ sessionId: row.sessionId, nextDeliverAt: row._min.deliverAt.getTime() }]
+        : []);
+}
+
 export async function deletePendingMessage(sessionId: string, pendingId: string): Promise<PendingMessageRecord | null> {
     return db.$transaction(async (tx) => {
         const message = await tx.sessionPendingMessage.findUnique({

@@ -50,6 +50,7 @@ export const ru: TranslationStructure = {
         updated: ({ time }: { time: string }) => `Обновлена ${time}`,
         unread: 'Непрочитанный результат',
         draft: 'Неотправленный черновик',
+        scheduled: 'Запланированные сообщения',
         runningTasks: ({ count }: { count: number }) => `Выполняется подзадач: ${count}`,
         locate: 'Найти',
         archive: 'В архив',
