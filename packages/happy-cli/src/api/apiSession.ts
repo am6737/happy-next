@@ -59,7 +59,7 @@ export type ACPMessageData =
 
 export type ACPProvider = 'gemini' | 'codex' | 'claude' | 'opencode' | 'qoder';
 
-type OrchestratorProvider = 'claude' | 'codex' | 'gemini' | 'qoder' | 'shell';
+type OrchestratorProvider = 'claude' | 'codex' | 'gemini' | 'qoder';
 
 type OrchestratorSubmitTask = {
     taskKey?: string;
@@ -109,7 +109,7 @@ type OrchestratorListQuery = {
 type OrchestratorExecBody = {
     command: string;
     machineIds: string[] | 'all_online';
-    cwd?: string;
+    workingDirectory?: string;
     timeoutMs?: number;
     waitMs?: number;
     maxConcurrency?: number;

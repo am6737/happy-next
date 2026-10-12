@@ -1,4 +1,5 @@
 import fastify from 'fastify';
+import { Prisma } from '@prisma/client';
 import { serializerCompiler, validatorCompiler, ZodTypeProvider } from 'fastify-type-provider-zod';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { type Fastify } from '@/app/api/types';
@@ -44,6 +45,8 @@ type TaskRecord = {
     outputSummary: string | null;
     outputText: string | null;
     stderrText: string | null;
+    stdoutFile: unknown;
+    stderrFile: unknown;
     errorCode: string | null;
     errorMessage: string | null;
     createdAt: Date;
@@ -73,6 +76,8 @@ type ExecutionRecord = {
     outputSummary: string | null;
     outputText: string | null;
     stderrText: string | null;
+    stdoutFile: unknown;
+    stderrFile: unknown;
     errorCode: string | null;
     errorMessage: string | null;
     createdAt: Date;
@@ -214,6 +219,9 @@ const {
         if (where.runId && task.runId !== where.runId) {
             return false;
         }
+        if (where.provider && task.provider !== where.provider) {
+            return false;
+        }
         if (where.taskKey?.not === null && task.taskKey === null) {
             return false;
         }
@@ -308,13 +316,17 @@ const {
         return run;
     };
 
+    // A JSON column set to `Prisma.DbNull` reads back as null
+    const withDbNulls = (data: any) => Object.fromEntries(Object.entries(data)
+        .map(([key, value]) => [key, value === Prisma.DbNull ? null : value]));
+
     const updateTask = (task: TaskRecord, data: any) => {
-        Object.assign(task, data, { updatedAt: nextDate() });
+        Object.assign(task, withDbNulls(data), { updatedAt: nextDate() });
         return task;
     };
 
     const updateExecution = (execution: ExecutionRecord, data: any) => {
-        Object.assign(execution, data, { updatedAt: nextDate() });
+        Object.assign(execution, withDbNulls(data), { updatedAt: nextDate() });
         return execution;
     };
 
@@ -509,6 +521,8 @@ const {
                     outputSummary: null,
                     outputText: null,
                     stderrText: null,
+                    stdoutFile: null,
+                    stderrFile: null,
                     errorCode: null,
                     errorMessage: null,
                     createdAt: now,
@@ -614,6 +628,8 @@ const {
                 outputSummary: null,
                 outputText: null,
                 stderrText: null,
+                stdoutFile: null,
+                stderrFile: null,
                 errorCode: null,
                 errorMessage: null,
                 createdAt: now,
@@ -2640,6 +2656,58 @@ describe('orchestrator integration paths', () => {
             await app.close();
         });
 
+        it('pend returns shell tasks the way exec does, with where the daemon saved output too long to send', async () => {
+            const app = await createApp();
+            const exec = await app.inject({
+                method: 'POST',
+                url: '/v1/orchestrator/exec',
+                headers: { 'x-user-id': 'user-1' },
+                payload: { command: 'cat big.log', machineIds: ['machine-1'], waitMs: 0 },
+            });
+            const runId = exec.json().data.runId;
+            await orchestratorSchedulerTick(new Date('2026-03-16T00:00:00.000Z'));
+            const execution = state.executions[0];
+            const stdoutFile = { path: '/home/u/.happy-next/exec-output/r/t.stdout.log', chars: 500_000, lines: 9_000, complete: true };
+            const finish = await app.inject({
+                method: 'POST',
+                url: `/v1/orchestrator/executions/${execution.id}/finish`,
+                headers: { 'x-user-id': 'user-1' },
+                payload: {
+                    dispatchToken: execution.dispatchToken,
+                    status: 'completed',
+                    exitCode: 0,
+                    outputText: 'last part',
+                    stderrText: '',
+                    stdoutFile,
+                    stderrFile: null,
+                },
+            });
+            expect(finish.statusCode).toBe(200);
+            expect(state.executions[0]).toEqual(expect.objectContaining({ stdoutFile, stderrFile: null }));
+
+            const pend = await app.inject({
+                method: 'GET',
+                url: `/v1/orchestrator/runs/${runId}/pend?include=all_tasks&timeoutMs=0`,
+                headers: { 'x-user-id': 'user-1' },
+            });
+            expect(pend.json().data.tasks).toEqual([{
+                taskId: state.tasks[0].id,
+                machineId: 'machine-1',
+                status: 'completed',
+                exitCode: 0,
+                signal: null,
+                stdout: 'last part',
+                stderr: '',
+                stdoutFile,
+                stderrFile: null,
+                errorCode: null,
+                errorMessage: null,
+                startedAt: null,
+                finishedAt: expect.any(String),
+            }]);
+            await app.close();
+        });
+
         it('exec rejects unknown machines and having no shell-ready machine', async () => {
             const app = await createApp();
             const unknown = await app.inject({
@@ -2650,6 +2718,14 @@ describe('orchestrator integration paths', () => {
             });
             expect(unknown.statusCode).toBe(400);
             expect(unknown.json().error.message).toContain('machine-x');
+
+            const tooLong = await app.inject({
+                method: 'POST',
+                url: '/v1/orchestrator/exec',
+                headers: { 'x-user-id': 'user-1' },
+                payload: { command: 'x'.repeat(32_001), machineIds: ['machine-1'] },
+            });
+            expect(tooLong.statusCode).toBe(400);
 
             state.shellReadyMachineIds = new Set();
             const noneReady = await app.inject({
@@ -2663,35 +2739,37 @@ describe('orchestrator integration paths', () => {
             await app.close();
         });
 
-        it('only lets shell tasks go past the AI limits and rejects follow-ups to them', async () => {
+        it('leaves shell tasks to exec, which alone goes past the AI limits, and rejects follow-ups to them', async () => {
             const app = await createApp();
-            const aiTooLong = await app.inject({
-                method: 'POST',
-                url: '/v1/orchestrator/submit',
-                headers: { 'x-user-id': 'user-1' },
-                payload: { title: 'ai', tasks: [{ provider: 'claude', prompt: 'x', timeoutMs: 25 * 60 * 60 * 1000 }] },
-            });
-            expect(aiTooLong.statusCode).toBe(400);
-            const aiTooWide = await app.inject({
-                method: 'POST',
-                url: '/v1/orchestrator/submit',
-                headers: { 'x-user-id': 'user-1' },
-                payload: { title: 'ai', maxConcurrency: 16, tasks: [{ provider: 'claude', prompt: 'x' }] },
-            });
-            expect(aiTooWide.statusCode).toBe(400);
+            for (const payload of [
+                { title: 'ai', tasks: [{ provider: 'claude', prompt: 'x', timeoutMs: 25 * 60 * 60 * 1000 }] },
+                { title: 'ai', maxConcurrency: 16, tasks: [{ provider: 'claude', prompt: 'x' }] },
+                { title: 'shell', tasks: [{ provider: 'shell', prompt: 'ls' }] },
+            ]) {
+                const submit = await app.inject({
+                    method: 'POST',
+                    url: '/v1/orchestrator/submit',
+                    headers: { 'x-user-id': 'user-1' },
+                    payload,
+                });
+                expect(submit.statusCode).toBe(400);
+            }
+            expect(state.runs).toHaveLength(0);
 
-            const shell = await app.inject({
+            const exec = await app.inject({
                 method: 'POST',
-                url: '/v1/orchestrator/submit',
+                url: '/v1/orchestrator/exec',
                 headers: { 'x-user-id': 'user-1' },
                 payload: {
-                    title: 'shell',
+                    command: 'sleep 100000',
+                    machineIds: ['machine-1'],
+                    timeoutMs: 7 * 24 * 60 * 60 * 1000,
                     maxConcurrency: 16,
-                    tasks: [{ provider: 'shell', prompt: 'sleep 100000', model: 'opus', timeoutMs: 7 * 24 * 60 * 60 * 1000 }],
+                    waitMs: 0,
                 },
             });
-            expect(shell.statusCode).toBe(200);
-            expect(state.tasks[0].model).toBeNull();
+            expect(exec.statusCode).toBe(200);
+            expect(state.tasks[0]).toEqual(expect.objectContaining({ model: null, timeoutMs: 7 * 24 * 60 * 60 * 1000 }));
 
             state.tasks[0].status = 'completed';
             const sendMessage = await app.inject({
@@ -2707,22 +2785,15 @@ describe('orchestrator integration paths', () => {
 
         it('reconcile fails the executions a restarted daemon lost, and only those', async () => {
             const app = await createApp();
-            const exec = await app.inject({
-                method: 'POST',
-                url: '/v1/orchestrator/submit',
-                headers: { 'x-user-id': 'user-1' },
-                payload: {
-                    title: 'long jobs',
-                    controllerSessionId: 'controller-session-1',
-                    maxConcurrency: 3,
-                    tasks: [
-                        { provider: 'shell', prompt: 'job-a', target: { type: 'machine_id', machineId: 'machine-1' } },
-                        { provider: 'shell', prompt: 'job-b', target: { type: 'machine_id', machineId: 'machine-1' } },
-                        { provider: 'shell', prompt: 'job-c', target: { type: 'machine_id', machineId: 'machine-1' } },
-                    ],
-                },
-            });
-            expect(exec.statusCode).toBe(200);
+            for (const command of ['job-a', 'job-b', 'job-c']) {
+                const exec = await app.inject({
+                    method: 'POST',
+                    url: '/v1/orchestrator/exec',
+                    headers: { 'x-user-id': 'user-1' },
+                    payload: { command, machineIds: ['machine-1'], controllerSessionId: 'controller-session-1', waitMs: 0 },
+                });
+                expect(exec.statusCode).toBe(200);
+            }
             await orchestratorSchedulerTick(new Date('2026-03-16T00:00:00.000Z'));
             const startedAts = ['2026-03-16T00:00:01.000Z', '2026-03-16T00:00:02.000Z', '2026-03-16T00:10:00.000Z'];
             for (const [index, execution] of state.executions.entries()) {
@@ -2751,12 +2822,11 @@ describe('orchestrator integration paths', () => {
                 ['running', null],
                 ['running', null],
             ]);
-            expect(state.tasks[0].status).toBe('failed');
-            expect(state.runs[0].status).toBe('running');
-            expect(terminalCallbacks()).toHaveLength(0);
+            expect(state.runs.map((run) => run.status)).toEqual(['failed', 'running', 'running']);
+            expect(terminalCallbacks()).toHaveLength(1);
 
             expect((await reconcile()).statusCode).toBe(200);
-            expect(state.executions[0].finishedAt).toEqual(state.executions[0].finishedAt);
+            expect(terminalCallbacks()).toHaveLength(1);
 
             for (const execution of state.executions.slice(1)) {
                 await app.inject({
@@ -2766,8 +2836,8 @@ describe('orchestrator integration paths', () => {
                     payload: { dispatchToken: execution.dispatchToken, status: 'completed', exitCode: 0 },
                 });
             }
-            expect(state.runs[0].status).toBe('failed');
-            expect(terminalCallbacks()).toHaveLength(1);
+            expect(state.runs.map((run) => run.status)).toEqual(['failed', 'completed', 'completed']);
+            expect(terminalCallbacks()).toHaveLength(3);
             await app.close();
         });
 
@@ -2781,12 +2851,9 @@ describe('orchestrator integration paths', () => {
             const app = await createApp();
             await app.inject({
                 method: 'POST',
-                url: '/v1/orchestrator/submit',
+                url: '/v1/orchestrator/exec',
                 headers: { 'x-user-id': 'user-1' },
-                payload: {
-                    title: 'job',
-                    tasks: [{ provider: 'shell', prompt: 'job', target: { type: 'machine_id', machineId: 'machine-2' } }],
-                },
+                payload: { command: 'job', machineIds: ['machine-2'], waitMs: 0 },
             });
             await orchestratorSchedulerTick(new Date('2026-03-16T00:00:00.000Z'));
             const execution = state.executions[0];

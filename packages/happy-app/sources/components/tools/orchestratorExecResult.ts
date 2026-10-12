@@ -1,8 +1,8 @@
 import type { OrchestratorTaskStatus } from '@/sync/apiOrchestrator';
 import { parseMcpResult } from './parseMcpResult';
 
-/** One machine's part of a `machine_exec` result. */
-export type MachineExecTaskResult = {
+/** One machine's part of an `orchestrator_exec` result. */
+export type OrchestratorExecTaskResult = {
     taskId: string;
     machineId: string;
     status: OrchestratorTaskStatus;
@@ -11,26 +11,26 @@ export type MachineExecTaskResult = {
     errorMessage: string | null;
 };
 
-export type MachineExecResult = {
+export type OrchestratorExecResult = {
     runId: string;
     /** Whether every machine had finished when the call returned; the run goes on otherwise. */
     terminal: boolean;
-    tasks: MachineExecTaskResult[];
+    tasks: OrchestratorExecTaskResult[];
 };
 
 function asString(value: unknown): string | null {
     return typeof value === 'string' && value.length > 0 ? value : null;
 }
 
-export function isMachineExecToolName(toolName: string): boolean {
-    return /(^|__)machine_exec$/.test(toolName.replace(/:/g, '__'));
+export function isOrchestratorExecToolName(toolName: string): boolean {
+    return /(^|__)orchestrator_exec$/.test(toolName.replace(/:/g, '__'));
 }
 
 /**
- * How far the command a `machine_exec` call ran had got on each machine when the call returned;
+ * How far the command an `orchestrator_exec` call ran had got on each machine when the call returned;
  * null for a result of another shape, such as an error.
  */
-export function parseMachineExecResult(result: unknown): MachineExecResult | null {
+export function parseOrchestratorExecResult(result: unknown): OrchestratorExecResult | null {
     const parsed = parseMcpResult(result);
     const data = parsed && typeof parsed === 'object' ? (parsed as Record<string, any>).data : null;
     const runId = asString(data?.runId);

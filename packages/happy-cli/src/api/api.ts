@@ -9,6 +9,7 @@ import { configuration } from '@/configuration';
 import chalk from 'chalk';
 import { Credentials } from '@/persistence';
 import { connectionState, isNetworkError } from '@/utils/serverConnectionErrors';
+import type { OrchestratorOutputFile } from '@/orchestrator/common';
 
 export class ApiClient {
 
@@ -350,6 +351,8 @@ export class ApiClient {
     outputSummary?: string | null;
     outputText?: string | null;
     stderrText?: string | null;
+    stdoutFile?: OrchestratorOutputFile | null;
+    stderrFile?: OrchestratorOutputFile | null;
     errorCode?: string | null;
     errorMessage?: string | null;
   }): Promise<void> {
@@ -365,6 +368,8 @@ export class ApiClient {
         ...(opts.outputSummary !== undefined ? { outputSummary: opts.outputSummary } : {}),
         ...(opts.outputText !== undefined ? { outputText: opts.outputText } : {}),
         ...(opts.stderrText !== undefined ? { stderrText: opts.stderrText } : {}),
+        ...(opts.stdoutFile !== undefined ? { stdoutFile: opts.stdoutFile } : {}),
+        ...(opts.stderrFile !== undefined ? { stderrFile: opts.stderrFile } : {}),
         ...(opts.errorCode !== undefined ? { errorCode: opts.errorCode } : {}),
         ...(opts.errorMessage !== undefined ? { errorMessage: opts.errorMessage } : {}),
       },

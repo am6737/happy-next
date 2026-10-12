@@ -36,9 +36,7 @@ import {
 import { awaitOrchestratorRunTerminal, notifyOrchestratorRunTerminal } from "@/app/orchestrator/terminal";
 import { orchestratorMachineReconcile } from "@/app/orchestrator/reconcile";
 
-const AI_PROVIDERS = ['claude', 'codex', 'gemini', 'qoder'] as const;
-// A shell task runs its prompt as a command on the target machine, with no AI and no session
-const PROVIDERS = [...AI_PROVIDERS, 'shell'] as const;
+const PROVIDERS = ['claude', 'codex', 'gemini', 'qoder'] as const;
 const RUN_STATUSES = ['queued', 'running', 'canceling', 'completed', 'failed', 'cancelled'] as const;
 const EXECUTION_FINAL_STATUSES = ['completed', 'failed', 'cancelled', 'timeout'] as const;
 const LIST_RUN_STATUS_FILTERS = ['active', 'terminal', ...RUN_STATUSES] as const;
@@ -57,10 +55,8 @@ const DEFAULT_CONTEXT_POLL_INTERVAL_MS = 30_000;
 const DEFAULT_CONTEXT_RETRY_MAX_ATTEMPTS = 1;
 const DEFAULT_CONTEXT_RETRY_BACKOFF_MS = 0;
 const PEND_POLL_INTERVAL_MS = 3000;
-const AI_TASK_MAX_TIMEOUT_MS = 24 * 60 * 60 * 1000;
-// The largest delay a timer takes (and what the Int column holds): a shell task's longest timeout
+// The largest delay a timer takes (and what the Int column holds): the longest timeout of an exec command
 const SHELL_TASK_MAX_TIMEOUT_MS = 2 ** 31 - 1;
-const AI_RUN_MAX_CONCURRENCY = 8;
 const SHELL_RUN_MAX_CONCURRENCY = 32;
 const RUN_MAX_TASKS = 32;
 const EXEC_DEFAULT_WAIT_MS = 30_000;
@@ -69,7 +65,7 @@ const EXEC_MAX_WAIT_MS = 50_000;
 const SHELL_DISPATCH_METHOD_SUFFIX = ':orchestrator-shell-dispatch';
 const EXEC_TITLE_COMMAND_MAX_LENGTH = 120;
 
-type ProviderName = typeof AI_PROVIDERS[number];
+type ProviderName = typeof PROVIDERS[number];
 
 type BashRpcResponse = {
     success: boolean;
@@ -183,12 +179,12 @@ async function detectMachineProviders(
                     if (valueRaw) hostname = valueRaw;
                     continue;
                 }
-                if (!AI_PROVIDERS.includes(keyRaw as ProviderName)) continue;
+                if (!PROVIDERS.includes(keyRaw as ProviderName)) continue;
                 if (!valueRaw) continue;
                 statusByProvider.set(keyRaw as ProviderName, valueRaw === 'true');
             }
 
-            const providers = AI_PROVIDERS.filter((provider) => statusByProvider.get(provider) === true);
+            const providers = PROVIDERS.filter((provider) => statusByProvider.get(provider) === true);
             return [machineId, { providers, hostname }];
         } catch {
             return [machineId, { providers: [] }];
@@ -212,7 +208,7 @@ const submitTaskSchema = z.object({
     model: z.string().min(1).max(128).optional(),
     prompt: z.string().min(1).max(65536),
     workingDirectory: z.string().max(512).optional(),
-    timeoutMs: z.coerce.number().int().min(1000).max(SHELL_TASK_MAX_TIMEOUT_MS).optional(),
+    timeoutMs: z.coerce.number().int().min(1000).max(24 * 60 * 60 * 1000).optional(),
     dependsOn: z.array(z.string().min(1).max(128)).max(RUN_MAX_TASKS - 1).optional(),
     retry: z.object({
         maxAttempts: z.coerce.number().int().min(1).max(10).optional(),
@@ -231,9 +227,6 @@ const submitTaskSchema = z.object({
 }, {
     message: 'target.machineId is required when target.type is machine_id',
     path: ['target', 'machineId'],
-}).refine((value) => value.provider === 'shell' || !value.timeoutMs || value.timeoutMs <= AI_TASK_MAX_TIMEOUT_MS, {
-    message: `timeoutMs above ${AI_TASK_MAX_TIMEOUT_MS}ms (24h) is only allowed for shell tasks`,
-    path: ['timeoutMs'],
 });
 
 const submitBodySchema = z.object({
@@ -241,31 +234,39 @@ const submitBodySchema = z.object({
     controllerSessionId: z.string().optional(),
     controllerMachineId: z.string().optional(),
     tasks: z.array(submitTaskSchema).min(1).max(RUN_MAX_TASKS),
-    maxConcurrency: z.coerce.number().int().min(1).max(SHELL_RUN_MAX_CONCURRENCY).optional(),
+    maxConcurrency: z.coerce.number().int().min(1).max(8).optional(),
     mode: z.enum(['blocking', 'async']).optional(),
     waitTimeoutMs: z.coerce.number().int().min(1000).max(60 * 60 * 1000).optional(),
     pollIntervalMs: z.coerce.number().int().min(200).max(60_000).optional(),
     idempotencyKey: z.string().min(1).max(128).optional(),
     metadata: z.record(z.string(), z.unknown()).optional(),
-}).refine((value) => !value.maxConcurrency
-    || value.maxConcurrency <= AI_RUN_MAX_CONCURRENCY
-    || value.tasks.every((task) => task.provider === 'shell'), {
-    message: `maxConcurrency above ${AI_RUN_MAX_CONCURRENCY} is only allowed when every task is a shell task`,
-    path: ['maxConcurrency'],
 });
 
+// A command reaches the shell as one argument: Windows caps a whole command line at 32,767
+// UTF-16 characters, and Linux caps one argument at 128 KiB
+const EXEC_COMMAND_MAX_LENGTH = 32_000;
+
 const execBodySchema = z.object({
-    command: z.string().min(1).max(65536),
+    command: z.string().min(1).max(EXEC_COMMAND_MAX_LENGTH),
     machineIds: z.union([
         z.array(z.string().min(1).max(128)).min(1).max(RUN_MAX_TASKS),
         z.literal('all_online'),
     ]),
-    cwd: z.string().max(512).optional(),
+    workingDirectory: z.string().max(512).optional(),
     timeoutMs: z.coerce.number().int().min(1000).max(SHELL_TASK_MAX_TIMEOUT_MS).optional(),
     waitMs: z.coerce.number().int().min(0).max(EXEC_MAX_WAIT_MS).optional(),
     maxConcurrency: z.coerce.number().int().min(1).max(SHELL_RUN_MAX_CONCURRENCY).optional(),
     title: z.string().min(1).max(256).optional(),
     controllerSessionId: z.string().optional(),
+});
+
+// A shell task's output too long to keep in full: the daemon saved it to `path` on its machine
+// (`complete` false: the file stopped at its size cap), and sent only part of it as the text
+const outputFileSchema = z.object({
+    path: z.string().min(1).max(1024),
+    chars: z.number().int().min(0),
+    lines: z.number().int().min(0),
+    complete: z.boolean(),
 });
 
 type RunWithTasks = {
@@ -402,6 +403,52 @@ function mapTask(task: RunWithTasks['tasks'][number]) {
                 updatedAt: execution.updatedAt.toISOString(),
             })),
         } : {}),
+    };
+}
+
+// What a shell task's result is read from, for `mapShellTask`
+const shellTaskSelect = {
+    id: true,
+    status: true,
+    targetMachineId: true,
+    outputText: true,
+    stderrText: true,
+    stdoutFile: true,
+    stderrFile: true,
+    errorCode: true,
+    errorMessage: true,
+    executions: {
+        orderBy: { attempt: 'desc' },
+        take: 1,
+        select: {
+            exitCode: true,
+            signal: true,
+            startedAt: true,
+            finishedAt: true,
+        },
+    },
+} satisfies Prisma.OrchestratorTaskSelect;
+
+/**
+ * A shell task as `/exec` and `/pend` return it: the command's result on one machine, the same
+ * whether the run ended within the exec call or later.
+ */
+function mapShellTask(task: Prisma.OrchestratorTaskGetPayload<{ select: typeof shellTaskSelect }>) {
+    const execution = task.executions[0];
+    return {
+        taskId: task.id,
+        machineId: task.targetMachineId,
+        status: task.status,
+        exitCode: execution?.exitCode ?? null,
+        signal: execution?.signal ?? null,
+        stdout: task.outputText,
+        stderr: task.stderrText,
+        stdoutFile: task.stdoutFile,
+        stderrFile: task.stderrFile,
+        errorCode: task.errorCode,
+        errorMessage: task.errorMessage,
+        startedAt: execution?.startedAt?.toISOString() ?? null,
+        finishedAt: execution?.finishedAt?.toISOString() ?? null,
     };
 }
 
@@ -630,7 +677,8 @@ async function loadTaskForUser(
 type NewTask = {
     taskKey?: string;
     title?: string;
-    provider: typeof PROVIDERS[number];
+    // exec creates shell tasks, which run their prompt as a command, with no AI and no session
+    provider: ProviderName | 'shell';
     model: string | null;
     prompt: string;
     workingDirectory?: string;
@@ -1042,7 +1090,7 @@ export function orchestratorRoutes(app: Fastify) {
         for (let index = 0; index < body.tasks.length; index++) {
             const task = body.tasks[index];
             const model = task.model;
-            if (!model || model === MODEL_MODE_DEFAULT || task.provider === 'shell') {
+            if (!model || model === MODEL_MODE_DEFAULT) {
                 normalizedTaskModels.push(undefined);
                 continue;
             }
@@ -1239,7 +1287,7 @@ export function orchestratorRoutes(app: Fastify) {
             provider: 'shell' as const,
             model: null,
             prompt: body.command,
-            workingDirectory: body.cwd,
+            workingDirectory: body.workingDirectory,
             timeoutMs: body.timeoutMs,
             targetMachineId: machineId,
             dependsOnTaskKeys: [],
@@ -1267,25 +1315,7 @@ export function orchestratorRoutes(app: Fastify) {
                 updatedAt: true,
                 tasks: {
                     orderBy: { seq: 'asc' },
-                    select: {
-                        id: true,
-                        status: true,
-                        targetMachineId: true,
-                        outputText: true,
-                        stderrText: true,
-                        errorCode: true,
-                        errorMessage: true,
-                        executions: {
-                            orderBy: { attempt: 'desc' },
-                            take: 1,
-                            select: {
-                                exitCode: true,
-                                signal: true,
-                                startedAt: true,
-                                finishedAt: true,
-                            },
-                        },
-                    },
+                    select: shellTaskSelect,
                 },
             },
         });
@@ -1302,22 +1332,7 @@ export function orchestratorRoutes(app: Fastify) {
                     updatedAt: run.updatedAt.toISOString(),
                     summary: summarizeTasksByStatus(run.tasks),
                 },
-                tasks: run.tasks.map((task) => {
-                    const execution = task.executions[0];
-                    return {
-                        taskId: task.id,
-                        machineId: task.targetMachineId,
-                        status: task.status,
-                        exitCode: execution?.exitCode ?? null,
-                        signal: execution?.signal ?? null,
-                        stdout: task.outputText,
-                        stderr: task.stderrText,
-                        errorCode: task.errorCode,
-                        errorMessage: task.errorMessage,
-                        startedAt: execution?.startedAt?.toISOString() ?? null,
-                        finishedAt: execution?.finishedAt?.toISOString() ?? null,
-                    };
-                }),
+                tasks: run.tasks.map(mapShellTask),
                 next: terminal ? undefined : { hint: 'Await <orchestrator-callback>.', runId },
             },
         });
@@ -1777,6 +1792,13 @@ export function orchestratorRoutes(app: Fastify) {
             const isLastPoll = pollIndex >= maxPolls - 1;
 
             if (waitSatisfied || timeoutReached || isLastPoll) {
+                // Shell tasks read as `/exec` returns them, for one shape however the result is fetched
+                const shellTasks = includeTasks && loaded.run.tasks.some((task) => task.provider === 'shell')
+                    ? new Map((await db.orchestratorTask.findMany({
+                        where: { runId: loaded.run.id, provider: 'shell' },
+                        select: shellTaskSelect,
+                    })).map((task) => [task.id, mapShellTask(task)]))
+                    : null;
                 return reply.send({
                     ok: true,
                     data: {
@@ -1789,7 +1811,9 @@ export function orchestratorRoutes(app: Fastify) {
                             summary: loaded.summary,
                             updatedAt: loaded.run.updatedAt.toISOString(),
                         },
-                        ...(includeTasks ? { tasks: loaded.run.tasks.map(mapTask) } : {}),
+                        ...(includeTasks ? {
+                            tasks: loaded.run.tasks.map((task) => shellTasks?.get(task.id) ?? mapTask(task)),
+                        } : {}),
                     },
                 });
             }
@@ -2078,6 +2102,8 @@ export function orchestratorRoutes(app: Fastify) {
                 outputSummary: z.string().max(4096).nullable().optional(),
                 outputText: z.string().max(1_000_000).nullable().optional(),
                 stderrText: z.string().max(1_000_000).nullable().optional(),
+                stdoutFile: outputFileSchema.nullable().optional(),
+                stderrFile: outputFileSchema.nullable().optional(),
                 errorCode: z.string().nullable().optional(),
                 errorMessage: z.string().max(10_000).nullable().optional(),
             }),
@@ -2162,6 +2188,8 @@ export function orchestratorRoutes(app: Fastify) {
                     outputSummary: body.outputSummary ?? null,
                     outputText: body.outputText ?? null,
                     stderrText: body.stderrText ?? null,
+                    stdoutFile: body.stdoutFile ?? Prisma.DbNull,
+                    stderrFile: body.stderrFile ?? Prisma.DbNull,
                     errorCode: body.errorCode ?? null,
                     errorMessage: body.errorMessage ?? null,
                 },
@@ -2180,6 +2208,8 @@ export function orchestratorRoutes(app: Fastify) {
                     outputSummary: body.outputSummary ?? null,
                     outputText: body.outputText ?? null,
                     stderrText: body.stderrText ?? null,
+                    stdoutFile: body.stdoutFile ?? Prisma.DbNull,
+                    stderrFile: body.stderrFile ?? Prisma.DbNull,
                     errorCode: body.errorCode ?? null,
                     errorMessage: body.errorMessage ?? null,
                     nextAttemptAt,

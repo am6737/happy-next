@@ -55,7 +55,7 @@ export function formatMCPTitle(tool: ToolCall): string {
     const withoutPrefix = stripMCPPrefix(tool.name);
 
     let prefix = "MCP: ";
-    if (/^orchestrator_/.test(withoutPrefix) || /^(preview_html|machine_exec)$/.test(withoutPrefix)) {
+    if (/^orchestrator_/.test(withoutPrefix) || /^preview_html$/.test(withoutPrefix)) {
         prefix = "";
     }
 
@@ -74,7 +74,7 @@ export function formatMCPTitle(tool: ToolCall): string {
  * Hook that returns the MCP tool subtitle.
  *
  * For orchestrator_submit: caches runId→title and taskId→title from the result.
- * For machine_exec: shows and caches its run's title, which is the command unless it was given one.
+ * For orchestrator_exec: shows and caches its run's title, which is the command unless it was given one.
  * For orchestrator_pend/cancel/send_message: reactively resolves title from cache,
  * falls back to displaying the raw ID.
  */
@@ -105,7 +105,7 @@ export function useMCPSubtitle(tool: ToolCall): string {
         }
     }, [isSubmit, tool.input?.title, tool.result]);
 
-    const isExec = toolName === 'machine_exec';
+    const isExec = toolName === 'orchestrator_exec';
     const execTitle = isExec ? extractOrchestratorSubmitTitle(tool) : null;
     const execRunId = isExec && tool.result ? parseMcpResult(tool.result)?.data?.runId : undefined;
     useEffect(() => {
@@ -146,12 +146,12 @@ export function useMCPSubtitle(tool: ToolCall): string {
 export function formatMCPIcon(tool: ToolCall, size: number = 18, color: string = '#000', secondaryColor: string = '') {
     const withoutPrefix = stripMCPPrefix(tool.name);
 
-    if (/^orchestrator_/.test(withoutPrefix)) {
-        return <MaterialCommunityIcons name="robot-outline" size={size} color={color} />;
+    if (withoutPrefix === "orchestrator_exec") {
+        return <Ionicons name="terminal-outline" size={size} color={color} />;
     }
 
-    if (withoutPrefix === "machine_exec") {
-        return <Ionicons name="terminal-outline" size={size} color={color} />;
+    if (/^orchestrator_/.test(withoutPrefix)) {
+        return <MaterialCommunityIcons name="robot-outline" size={size} color={color} />;
     }
 
     if (withoutPrefix === "preview_html") {

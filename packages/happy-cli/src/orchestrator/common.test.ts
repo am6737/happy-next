@@ -5,10 +5,10 @@ import {
   buildExecutionOutputText,
   buildOrchestratorEnv,
   buildOutputSummary,
+  compactShellTasks,
   decodePromptFromBase64,
   mapFinishStatus,
-  SHELL_OUTPUT_TAIL_CHARS,
-  tailShellOutputFields,
+  SHELL_OUTPUT_BUDGET_CHARS,
   type OrchestratorDispatchPayload,
 } from './common';
 
@@ -112,13 +112,49 @@ describe('orchestrator common helpers', () => {
     ]);
   });
 
-  it('keeps the tail of long shell output fields only', () => {
-    const long = `head${'x'.repeat(SHELL_OUTPUT_TAIL_CHARS)}tail`;
-    const tailed = tailShellOutputFields({ taskId: 't1', stdout: long, stderr: 'short', exitCode: 1 }, ['stdout', 'stderr']);
+  it('shows a shell task\'s output in full when it fits, without the output files', () => {
+    const tasks = [{ taskId: 't1', machineId: 'm1', exitCode: 0, stdout: 'x'.repeat(14_000), stderr: 'warn', stdoutFile: null, stderrFile: null }];
+    expect(compactShellTasks(tasks)).toEqual([{ taskId: 't1', machineId: 'm1', exitCode: 0, stdout: 'x'.repeat(14_000), stderr: 'warn' }]);
+  });
 
-    expect(tailed.stdout).toMatch(/^\[\.\.\. 8 earlier characters omitted; orchestrator_pend with taskId returns all of it \.\.\.\]\n/);
-    expect(tailed.stdout.endsWith('tail')).toBe(true);
-    expect(tailed.stdout).not.toContain('head');
-    expect(tailed).toMatchObject({ taskId: 't1', stderr: 'short', exitCode: 1 });
+  it('shows the end of an output saved to a file, and where the file is', () => {
+    const stdout = `start${'x'.repeat(20_000)}end`;
+    const [task] = compactShellTasks([{
+      taskId: 't1',
+      machineId: 'm1',
+      stdout,
+      stderr: '',
+      stdoutFile: { path: '/home/u/.happy-next/exec-output/r1/t1.stdout.log', chars: 500_000, lines: 9_000, complete: true },
+      stderrFile: null,
+    }]);
+
+    const [marker, shown] = task.stdout.split('\n');
+    expect(marker).toBe('[Output too long: 500000 characters in 9000 lines, showing the last 4000. The full output is saved on machine m1 at /home/u/.happy-next/exec-output/r1/t1.stdout.log; read parts of it with orchestrator_exec on that machine (grep -n, tail -n, sed -n).]');
+    expect(shown).toBe(stdout.slice(-4_000));
+    expect(task).not.toHaveProperty('stdoutFile');
+    expect(task.stderr).toBe('');
+
+    const [capped] = compactShellTasks([{ machineId: 'm1', stdout, stdoutFile: { path: '/p', chars: 2e8, lines: 1, complete: false } }]);
+    expect(capped.stdout).toContain('Its first 100 MB are saved on machine m1 at /p;');
+  });
+
+  it('shares the budget among several tasks, a short output leaving its rest to the long ones', () => {
+    const long = (label: string) => `${label}-start${'x'.repeat(40_000)}${label}-end`;
+    const tasks = compactShellTasks([
+      { taskId: 't1', machineId: 'm1', stdout: long('a'), stderr: 'oops' },
+      { taskId: 't2', machineId: 'm2', stdout: long('b'), stderr: '' },
+      { taskId: 'ai', outputText: 'an AI task passes through' },
+    ]);
+
+    expect(tasks[0].stderr).toBe('oops');
+    expect(tasks[2]).toEqual({ taskId: 'ai', outputText: 'an AI task passes through' });
+    for (const [task, label] of [[tasks[0], 'a'], [tasks[1], 'b']] as const) {
+      expect(task.stdout.startsWith(`${label}-start`)).toBe(true);
+      expect(task.stdout.endsWith(`${label}-end`)).toBe(true);
+      expect(task.stdout).toMatch(/\n\[\.\.\. \d+ characters omitted; orchestrator_pend with taskId shows more \.\.\.\]\n/);
+    }
+    const shown = (text: string) => text.replace(/\n\[\.\.\. .* \.\.\.\]\n/, '').length;
+    expect(shown(tasks[0].stdout) + shown(tasks[1].stdout) + 'oops'.length).toBe(SHELL_OUTPUT_BUDGET_CHARS);
+    expect(shown(tasks[0].stdout)).toBe(shown(tasks[1].stdout));
   });
 });

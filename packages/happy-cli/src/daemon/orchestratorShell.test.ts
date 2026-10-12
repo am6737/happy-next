@@ -1,5 +1,8 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterAll, describe, expect, it, vi } from 'vitest';
 import { execSync } from 'child_process';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
 
 import type { ApiClient } from '@/api/api';
 import type { OrchestratorShellDispatchPayload } from '@/orchestrator/common';
@@ -7,7 +10,10 @@ import { createOrchestratorShellExecutor } from './orchestratorShell';
 
 type FinishReport = Parameters<ApiClient['reportOrchestratorExecutionFinish']>[0];
 
-function setup() {
+const tempDir = mkdtempSync(join(tmpdir(), 'happy-shell-test-'));
+afterAll(() => rmSync(tempDir, { recursive: true, force: true }));
+
+function setup(outputDir: string = mkdtempSync(join(tempDir, 'output-'))) {
   const finished = new Map<string, (report: FinishReport) => void>();
   const reports = new Map<string, Promise<FinishReport>>();
   const api = {
@@ -16,7 +22,7 @@ function setup() {
       finished.get(report.executionId)?.(report);
     }),
   } as unknown as ApiClient;
-  const executor = createOrchestratorShellExecutor(api);
+  const executor = createOrchestratorShellExecutor(api, outputDir);
   let next = 0;
   const run = async (command: string, options: Partial<OrchestratorShellDispatchPayload> = {}) => {
     const executionId = `exec-${next++}`;
@@ -34,7 +40,7 @@ function setup() {
     await executor.dispatch(payload);
     return { payload, report: reports.get(executionId)! };
   };
-  return { api, executor, run };
+  return { api, executor, run, outputDir };
 }
 
 describe.skipIf(process.platform === 'win32')('orchestrator shell executor', () => {
@@ -98,14 +104,51 @@ describe.skipIf(process.platform === 'win32')('orchestrator shell executor', () 
     expect(Date.now() - startedAt).toBeLessThan(4_000);
   }, 15_000);
 
-  it('keeps the head and tail of a long output', async () => {
+  it('leaves a background process running and able to write after the command ends', async () => {
     const { run } = setup();
-    const { report } = await run(`echo first; head -c 200000 /dev/zero | tr '\\0' x; echo; echo last`);
-    const { outputText } = await report;
+    const marker = join(tempDir, `survived-${Date.now()}`);
+    const { report } = await run(`(sleep 2; echo late; echo late >&2; touch ${marker}) & echo started`);
+    expect(await report).toMatchObject({ status: 'completed', outputText: 'started\n' });
+    // A write to a pipe the daemon closed would have killed it with SIGPIPE before the touch
+    await vi.waitFor(() => expect(existsSync(marker)).toBe(true), { timeout: 5_000 });
+  }, 15_000);
+
+  it('saves a long output to a file, keeping its head and tail in the report', async () => {
+    const { run, outputDir } = setup();
+    const { payload, report } = await run(`echo first; head -c 200000 /dev/zero | tr '\\0' x; echo; echo last; echo err >&2`);
+    const { outputText, stdoutFile, stderrText, stderrFile } = await report;
+    const path = join(outputDir, 'run-1', `${payload.taskId}.stdout.log`);
+
+    expect(stdoutFile).toEqual({ path, chars: 200_012, lines: 3, complete: true });
+    expect(readFileSync(path, 'utf8')).toBe(`first\n${'x'.repeat(200_000)}\nlast\n`);
+    expect(statSync(path).mode & 0o777).toBe(0o600);
     expect(outputText?.startsWith('first\n')).toBe(true);
     expect(outputText?.endsWith('last\n')).toBe(true);
-    expect(outputText).toMatch(/\[\.\.\. \d+ characters omitted \.\.\.\]/);
+    expect(outputText).toContain(` characters omitted, see ${path} ...]`);
     expect(outputText!.length).toBeLessThan(70_000);
+    expect({ stderrText, stderrFile }).toEqual({ stderrText: 'err\n', stderrFile: null });
+  });
+
+  it('reports a long output without the file when it cannot be saved', async () => {
+    const notADirectory = join(tempDir, 'not-a-directory');
+    writeFileSync(notADirectory, '');
+    const { run } = setup(notADirectory);
+    const { report } = await run(`head -c 20000 /dev/zero | tr '\\0' x`);
+    expect(await report).toMatchObject({ status: 'completed', outputText: 'x'.repeat(20_000), stdoutFile: null });
+  });
+
+  it('sweeps the output files of runs last written over a week ago', async () => {
+    const outputDir = mkdtempSync(join(tempDir, 'sweep-'));
+    for (const runId of ['old-run', 'recent-run']) {
+      mkdirSync(join(outputDir, runId));
+      writeFileSync(join(outputDir, runId, 'task.stdout.log'), 'output');
+    }
+    const eightDaysAgo = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000);
+    utimesSync(join(outputDir, 'old-run', 'task.stdout.log'), eightDaysAgo, eightDaysAgo);
+
+    setup(outputDir);
+    await vi.waitFor(() => expect(existsSync(join(outputDir, 'old-run'))).toBe(false));
+    expect(existsSync(join(outputDir, 'recent-run', 'task.stdout.log'))).toBe(true);
   });
 
   it('accepts a repeated dispatch once and rejects a conflicting one', async () => {

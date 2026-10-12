@@ -1,17 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { isMachineExecToolName, parseMachineExecResult } from './machineExecResult';
+import { isOrchestratorExecToolName, parseOrchestratorExecResult } from './orchestratorExecResult';
 
-describe('isMachineExecToolName', () => {
-    it('matches machine_exec under any MCP prefix', () => {
-        expect(isMachineExecToolName('mcp__happy__machine_exec')).toBe(true);
-        expect(isMachineExecToolName('happy:machine_exec')).toBe(true);
-        expect(isMachineExecToolName('machine_exec')).toBe(true);
-        expect(isMachineExecToolName('mcp__happy__orchestrator_submit')).toBe(false);
-        expect(isMachineExecToolName('mcp__other__my_machine_exec_tool')).toBe(false);
+describe('isOrchestratorExecToolName', () => {
+    it('matches orchestrator_exec under any MCP prefix', () => {
+        expect(isOrchestratorExecToolName('mcp__happy__orchestrator_exec')).toBe(true);
+        expect(isOrchestratorExecToolName('happy:orchestrator_exec')).toBe(true);
+        expect(isOrchestratorExecToolName('orchestrator_exec')).toBe(true);
+        expect(isOrchestratorExecToolName('mcp__happy__orchestrator_submit')).toBe(false);
+        expect(isOrchestratorExecToolName('mcp__other__my_orchestrator_exec_tool')).toBe(false);
     });
 });
 
-describe('parseMachineExecResult', () => {
+describe('parseOrchestratorExecResult', () => {
     it('reads each machine of a result in MCP text content', () => {
         const result = [{
             type: 'text',
@@ -28,7 +28,7 @@ describe('parseMachineExecResult', () => {
                 },
             }),
         }];
-        expect(parseMachineExecResult(result)).toEqual({
+        expect(parseOrchestratorExecResult(result)).toEqual({
             runId: 'run-1',
             terminal: false,
             tasks: [
@@ -39,7 +39,7 @@ describe('parseMachineExecResult', () => {
     });
 
     it('returns null for an error result', () => {
-        expect(parseMachineExecResult([{ type: 'text', text: 'Error: Failed to run the command' }])).toBeNull();
-        expect(parseMachineExecResult({ ok: false, error: 'nope' })).toBeNull();
+        expect(parseOrchestratorExecResult([{ type: 'text', text: 'Error: Failed to run the command' }])).toBeNull();
+        expect(parseOrchestratorExecResult({ ok: false, error: 'nope' })).toBeNull();
     });
 });

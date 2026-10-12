@@ -31,6 +31,15 @@ export type OrchestratorShellDispatchPayload = {
   workingDirectory?: string;
 };
 
+/** Where a shell task's stream was saved in full, when it was too long for a tool result */
+export type OrchestratorOutputFile = {
+  path: string;
+  chars: number;
+  lines: number;
+  /** False when the file stopped at its size cap before the output ended */
+  complete: boolean;
+};
+
 export type OrchestratorCancelPayload = {
   executionId: string;
   runId: string;
@@ -165,25 +174,6 @@ export function buildOutputSummary(stdout: string, stderr: string, maxChars: num
  * progress logs go to stderr, so they are only attached (as a short tail) when the run did not
  * complete or printed nothing, to explain what went wrong.
  */
-// What a result covering several shell tasks (machines) keeps of each one's output
-export const SHELL_OUTPUT_TAIL_CHARS = 4_000;
-
-/**
- * Cut the given output fields of a shell task to their last `SHELL_OUTPUT_TAIL_CHARS`, for
- * results that cover several machines: one call must not flood the context.
- * `orchestrator_pend` with `taskId` returns a task's output in full.
- */
-export function tailShellOutputFields<T extends Record<string, unknown>>(task: T, fields: readonly string[]): T {
-  const tailed: Record<string, unknown> = { ...task };
-  for (const field of fields) {
-    const value = task[field];
-    if (typeof value === 'string' && value.length > SHELL_OUTPUT_TAIL_CHARS) {
-      tailed[field] = `[... ${value.length - SHELL_OUTPUT_TAIL_CHARS} earlier characters omitted; orchestrator_pend with taskId returns all of it ...]\n${value.slice(-SHELL_OUTPUT_TAIL_CHARS)}`;
-    }
-  }
-  return tailed as T;
-}
-
 export function buildExecutionOutputText(opts: { status: string; stdout: string; stderr: string }): string {
   const stdout = opts.stdout.trim();
   if (opts.status === 'completed' && stdout) {
@@ -196,4 +186,59 @@ export function buildExecutionOutputText(opts: { status: string; stdout: string;
     .join('\n')
     .slice(-ORCHESTRATOR_ERROR_LOG_TAIL_CHARS);
   return [stdout, stderrTail].filter(Boolean).join('\n');
+}
+
+// What one tool result shows of shell output in all, shared among the streams of its tasks, so
+// one call cannot flood the context
+export const SHELL_OUTPUT_BUDGET_CHARS = 30_000;
+// Per stream: output longer than this is also saved to a file on its machine, since a result
+// covering it may show only part of it
+export const SHELL_OUTPUT_FILE_THRESHOLD_CHARS = SHELL_OUTPUT_BUDGET_CHARS / 2;
+// An output file stops growing here, so a runaway command cannot fill the disk
+export const SHELL_OUTPUT_FILE_MAX_BYTES = 100 * 1024 * 1024;
+// What a result shows of a stream saved to a file: its end, the rest being read from the file
+const SHELL_OUTPUT_FILE_TAIL_CHARS = 4_000;
+// What any stream may show however many share the budget
+const SHELL_OUTPUT_MIN_SHARE_CHARS = 1_000;
+const SHELL_OUTPUT_STREAMS = [['stdout', 'stdoutFile'], ['stderr', 'stderrFile']] as const;
+
+/**
+ * Shell tasks (as `/exec` and `/pend` return them) with their output cut to what one tool result
+ * shows, and without the output files' details. Each stream gets an even share of
+ * SHELL_OUTPUT_BUDGET_CHARS, what a shorter one leaves going to the others. A stream saved to a
+ * file shows its end and says where the file is, to be read in parts; another one longer than its
+ * share keeps its start and, mostly, its end. Other tasks pass through.
+ */
+export function compactShellTasks(tasks: Array<Record<string, any>>): Array<Record<string, any>> {
+  const streams = tasks.flatMap((task, index) => SHELL_OUTPUT_STREAMS
+    .filter(([field]) => typeof task[field] === 'string' && task[field].length > 0)
+    .map(([field, fileField]) => {
+      const text: string = task[field];
+      const file: OrchestratorOutputFile | null = task[fileField] ?? null;
+      return { index, field, text, file, wanted: file ? Math.min(text.length, SHELL_OUTPUT_FILE_TAIL_CHARS) : text.length };
+    }));
+  const shares = new Map<(typeof streams)[number], number>();
+  let left = SHELL_OUTPUT_BUDGET_CHARS;
+  [...streams].sort((a, b) => a.wanted - b.wanted).forEach((stream, position, sorted) => {
+    const share = Math.min(stream.wanted, Math.max(SHELL_OUTPUT_MIN_SHARE_CHARS, Math.floor(left / (sorted.length - position))));
+    shares.set(stream, share);
+    left -= share;
+  });
+
+  const omittedHint = tasks.length > 1 ? '; orchestrator_pend with taskId shows more' : '';
+  const compacted = tasks.map(({ stdoutFile, stderrFile, ...task }) => task);
+  for (const stream of streams) {
+    const { text, file } = stream;
+    const shown = shares.get(stream)!;
+    const head = Math.floor(shown / 4);
+    const saved = file?.complete
+      ? 'The full output is saved'
+      : `Its first ${SHELL_OUTPUT_FILE_MAX_BYTES / 1024 / 1024} MB are saved`;
+    compacted[stream.index][stream.field] = file
+      ? `[Output too long: ${file.chars} characters in ${file.lines} lines, showing the last ${shown}. ${saved} on machine ${tasks[stream.index].machineId} at ${file.path}; read parts of it with orchestrator_exec on that machine (grep -n, tail -n, sed -n).]\n${text.slice(-shown)}`
+      : text.length > shown
+        ? `${text.slice(0, head)}\n[... ${text.length - shown} characters omitted${omittedHint} ...]\n${text.slice(text.length - shown + head)}`
+        : text;
+  }
+  return compacted;
 }

@@ -73,7 +73,7 @@ function createTool(config: {
 const ORCHESTRATOR_TOOLS = [
   'orchestrator_get_context',
   'orchestrator_submit',
-  'machine_exec',
+  'orchestrator_exec',
   'orchestrator_pend',
   'orchestrator_list',
   'orchestrator_cancel',

@@ -15,8 +15,8 @@ import type { ParsedOrchestratorContext } from './orchestratorContextDisplay';
 import { formatToolOutputContent, isTrimmedToolOutput } from './toolOutputContent';
 import { createToolOutputLoadingCardStyles, formatToolOutputSummaryValue } from './toolOutputLoadingCard';
 import { parseMcpResult } from './parseMcpResult';
-import { isMachineExecToolName, parseMachineExecResult } from './machineExecResult';
-import { MachineExecOutput } from './MachineExecOutput';
+import { isOrchestratorExecToolName, parseOrchestratorExecResult } from './orchestratorExecResult';
+import { OrchestratorExecOutput } from './OrchestratorExecOutput';
 import { LongPressCopy, useCopySelectable } from '../LongPressCopy';
 import { t } from '@/text';
 import { useAuth } from '@/auth/AuthContext';
@@ -204,10 +204,10 @@ type ParsedOrchestratorRunFallback = {
 };
 
 function renderOrchestratorStructuredOutput(tool: ToolCall, result: unknown, fallbackData: unknown): React.ReactElement | null {
-    if (isMachineExecToolName(tool.name)) {
-        const execResult = parseMachineExecResult(result);
+    if (isOrchestratorExecToolName(tool.name)) {
+        const execResult = parseOrchestratorExecResult(result);
         return execResult && typeof tool.input?.command === 'string'
-            ? <MachineExecOutput command={tool.input.command} result={execResult} />
+            ? <OrchestratorExecOutput command={tool.input.command} result={execResult} />
             : <SmartDataView data={fallbackData} />;
     }
     if (!isOrchestratorToolName(tool.name)) {

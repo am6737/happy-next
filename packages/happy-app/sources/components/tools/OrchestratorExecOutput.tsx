@@ -7,15 +7,15 @@ import { OrchestratorStatusBadge } from '@/components/orchestrator/OrchestratorS
 import { resolveMachineName } from '@/components/orchestrator/display';
 import { useMachineNameMap } from '@/hooks/useMachineNameMap';
 import { t } from '@/text';
-import type { MachineExecResult } from './machineExecResult';
+import type { OrchestratorExecResult } from './orchestratorExecResult';
 
 const RUNNING_STATUSES = new Set(['queued', 'dispatching', 'running']);
 
 /**
- * What a `machine_exec` call returned: the command's output on each machine, as far as it had got.
+ * What an `orchestrator_exec` call returned: the command's output on each machine, as far as it had got.
  * A machine still running has no output yet; the run page has it once the command ends.
  */
-export function MachineExecOutput({ command, result }: { command: string; result: MachineExecResult; }) {
+export function OrchestratorExecOutput({ command, result }: { command: string; result: OrchestratorExecResult; }) {
     const machineNameMap = useMachineNameMap();
 
     return (

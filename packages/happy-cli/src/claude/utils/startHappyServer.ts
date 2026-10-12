@@ -16,10 +16,10 @@ import { logger } from "@/ui/logger";
 import { ApiSessionClient } from "@/api/apiSession";
 import { randomUUID } from "node:crypto";
 import { shouldEnableOrchestratorTools } from '@/orchestrator/prompt';
-import { applyDefaultWorkingDirectory, tailShellOutputFields } from '@/orchestrator/common';
+import { applyDefaultWorkingDirectory, compactShellTasks } from '@/orchestrator/common';
 import {
-    MACHINE_EXEC_TOOL_SCHEMA,
     ORCHESTRATOR_CANCEL_TOOL_SCHEMA,
+    ORCHESTRATOR_EXEC_TOOL_SCHEMA,
     ORCHESTRATOR_GET_CONTEXT_TOOL_SCHEMA,
     ORCHESTRATOR_LIST_TOOL_SCHEMA,
     ORCHESTRATOR_PEND_TOOL_SCHEMA,
@@ -63,18 +63,15 @@ function describeRequestError(error: unknown) {
 }
 
 /**
- * A pend result as the tool returns it: only the task asked for, if one is, else every task with
- * the output of each shell task cut to its tail when there are several.
+ * An exec or pend result as the tool returns it: only the task asked for, if one is, with the
+ * shell output cut to what one result shows.
  */
-function compactPendResponse(response: any, taskId: string | undefined) {
+function compactTasksResponse(response: any, taskId?: string) {
     const tasks: any[] | undefined = response?.data?.tasks;
     if (!tasks) {
         return response;
     }
-    const shellTaskCount = tasks.filter((task) => task.provider === 'shell').length;
-    const compacted = taskId
-        ? tasks.filter((task) => task.taskId === taskId)
-        : tasks.map((task) => task.provider === 'shell' && shellTaskCount > 1 ? tailShellOutputFields(task, ['outputText', 'stderrText']) : task);
+    const compacted = compactShellTasks(taskId ? tasks.filter((task) => task.taskId === taskId) : tasks);
     return { ...response, data: { ...response.data, tasks: compacted } };
 }
 
@@ -265,7 +262,7 @@ function createMcpServer(client: ApiSessionClient, options: { enableHappyTools: 
             }
         });
 
-        mcp.registerTool('machine_exec', MACHINE_EXEC_TOOL_SCHEMA, async (args) => {
+        mcp.registerTool('orchestrator_exec', ORCHESTRATOR_EXEC_TOOL_SCHEMA, async (args) => {
             const machineIds = args.allOnline ? 'all_online' as const : args.machineIds;
             if (!machineIds) {
                 return toToolError('Pass machineIds, or allOnline: true');
@@ -274,21 +271,14 @@ function createMcpServer(client: ApiSessionClient, options: { enableHappyTools: 
                 const response = await client.orchestratorExec({
                     command: args.command,
                     machineIds,
-                    cwd: args.cwd,
+                    workingDirectory: args.workingDirectory,
                     timeoutMs: args.timeoutMs,
                     waitMs: args.waitMs,
                     maxConcurrency: args.maxConcurrency,
                     title: args.title,
                     controllerSessionId: client.sessionId,
                 });
-                const tasks: any[] = response?.data?.tasks ?? [];
-                return toToolSuccess({
-                    ...response,
-                    data: {
-                        ...response?.data,
-                        tasks: tasks.length > 1 ? tasks.map((task) => tailShellOutputFields(task, ['stdout', 'stderr'])) : tasks,
-                    },
-                });
+                return toToolSuccess(compactTasksResponse(response));
             } catch (error) {
                 return toToolError('Failed to run the command', describeRequestError(error));
             }
@@ -312,7 +302,7 @@ function createMcpServer(client: ApiSessionClient, options: { enableHappyTools: 
                         timeoutMs: Math.min(remaining, 60_000),
                         include,
                     });
-                    return toToolSuccess(compactPendResponse(response, args.taskId));
+                    return toToolSuccess(compactTasksResponse(response, args.taskId));
                 } catch (error: any) {
                     const status = error?.response?.status;
                     if (status === 504 && remaining > 1000) {
@@ -331,7 +321,7 @@ function createMcpServer(client: ApiSessionClient, options: { enableHappyTools: 
                     timeoutMs: 0,
                     include,
                 });
-                return toToolSuccess(compactPendResponse(response, args.taskId));
+                return toToolSuccess(compactTasksResponse(response, args.taskId));
             } catch (error) {
                 return toToolError('Failed to pend orchestrator run', error instanceof Error ? error.message : String(error));
             }
@@ -384,7 +374,7 @@ export async function startHappyServer(client: ApiSessionClient) {
     const enableHappyTools = shouldEnableOrchestratorTools();
     const enableOrchestratorTools = enableHappyTools;
     const toolNames = enableHappyTools
-        ? ['change_title', 'preview_html', 'orchestrator_get_context', 'orchestrator_submit', 'machine_exec', 'orchestrator_pend', 'orchestrator_list', 'orchestrator_cancel', 'orchestrator_send_message']
+        ? ['change_title', 'preview_html', 'orchestrator_get_context', 'orchestrator_submit', 'orchestrator_exec', 'orchestrator_pend', 'orchestrator_list', 'orchestrator_cancel', 'orchestrator_send_message']
         : [];
 
     // Capture console.error from Hono to our logger

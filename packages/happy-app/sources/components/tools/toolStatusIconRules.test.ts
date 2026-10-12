@@ -12,9 +12,9 @@ describe('shouldShowOrchestratorSubmitActivityIndicator', () => {
         })).toBe(true);
     });
 
-    it('returns true for a completed machine_exec whose run is still going', () => {
+    it('returns true for a completed orchestrator_exec whose run is still going', () => {
         expect(shouldShowOrchestratorSubmitActivityIndicator({
-            toolName: 'mcp__happy__machine_exec',
+            toolName: 'mcp__happy__orchestrator_exec',
             toolState: 'completed',
             hasSessionId: true,
             noStatus: false,

@@ -56,7 +56,7 @@ describe('canAutoApproveTool', () => {
         for (const mode of ALL_CLAUDE_MODES) {
             expect(approves('mcp__happy__orchestrator_submit', mode)).toBe(false);
             expect(approves('mcp__happy__orchestrator_send_message', mode)).toBe(false);
-            expect(approves('mcp__happy__machine_exec', mode)).toBe(false);
+            expect(approves('mcp__happy__orchestrator_exec', mode)).toBe(false);
         }
     });
 

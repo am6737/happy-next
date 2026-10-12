@@ -28,13 +28,13 @@ function extractRunIdFromResult(result: unknown): string | null {
 }
 
 // Tools whose call starts a run, which may still be going once the call has returned
-const RUN_STARTING_TOOL_NAMES = new Set(['orchestrator_submit', 'machine_exec']);
+const RUN_STARTING_TOOL_NAMES = new Set(['orchestrator_submit', 'orchestrator_exec']);
 
 function extractRunTitle(tool: ToolCall): string | null {
     const parsed = parseMcpResult(tool.result);
     const obj = parsed && typeof parsed === 'object' ? parsed as Record<string, any> : null;
-    // An untitled machine_exec run is named after its command's first line, as the server names it
-    const command = normalizeOrchestratorToolName(tool.name) === 'machine_exec'
+    // An untitled orchestrator_exec run is named after its command's first line, as the server names it
+    const command = normalizeOrchestratorToolName(tool.name) === 'orchestrator_exec'
         ? asString(tool.input?.command)?.trim().split('\n')[0]
         : null;
 
@@ -79,7 +79,7 @@ export function getOrchestratorToolNavigationTarget(tool: ToolCall): Orchestrato
     };
 }
 
-/** The run an `orchestrator_submit` or `machine_exec` call started, or null for any other call. */
+/** The run an `orchestrator_submit` or `orchestrator_exec` call started, or null for any other call. */
 export function extractOrchestratorSubmitRunId(tool: ToolCall): string | null {
     if (!RUN_STARTING_TOOL_NAMES.has(normalizeOrchestratorToolName(tool.name))) {
         return null;

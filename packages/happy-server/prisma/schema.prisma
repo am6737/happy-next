@@ -199,6 +199,11 @@ model OrchestratorTask {
   outputText        String?
   /// Shell tasks only: what the command wrote to stderr (`outputText` holds its stdout)
   stderrText        String?
+  /// Shell tasks only: where the daemon saved the full stdout when it was too long to keep here
+  /// ({ path, chars, lines, complete }); `outputText` is then its last part
+  stdoutFile        Json?
+  /// Shell tasks only: the same for stderr
+  stderrFile        Json?
   errorCode         String?
   errorMessage      String?
   createdAt         DateTime                @default(now())
@@ -243,6 +248,11 @@ model OrchestratorExecution {
   outputText          String?
   /// Shell executions only: what the command wrote to stderr (`outputText` holds its stdout)
   stderrText          String?
+  /// Shell executions only: where the daemon saved the full stdout when it was too long to keep
+  /// here ({ path, chars, lines, complete }); `outputText` is then its last part
+  stdoutFile          Json?
+  /// Shell executions only: the same for stderr
+  stderrFile          Json?
   errorCode           String?
   errorMessage        String?
   createdAt           DateTime         @default(now())
