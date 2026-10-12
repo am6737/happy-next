@@ -1654,13 +1654,17 @@ class Sync {
 
             // Optimistically mark the session as awaiting a response so the UI shows
             // "processing…" immediately, without waiting for the CLI thinking heartbeat.
-            storage.getState().setAwaitingResponse(sessionId, Date.now());
-
+            // Mark it together with the prompt landing: busy ahead of the prompt reads as
+            // the previous turn picking up again, and its action bar flickers off.
+            const awaitingSince = Date.now();
             if (normalizedMessage) {
                 const msg = normalizedMessage;
                 void this.enqueueSessionMessageDispatch(sessionId, 'sendOrQueueMessage:sent-local-ack', async () => {
                     this.applyMessages(sessionId, [msg]);
+                    storage.getState().setAwaitingResponse(sessionId, awaitingSince);
                 });
+            } else {
+                storage.getState().setAwaitingResponse(sessionId, awaitingSince);
             }
 
             const apiMessage: ApiMessage = {
