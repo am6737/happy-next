@@ -1090,7 +1090,8 @@ function NewSessionWizard() {
                         connectionStatus={connectionStatus}
                         machineName={selectedMachine?.metadata?.displayName || selectedMachine?.metadata?.host}
                         onMachineClick={handleMachineClick}
-                        currentPath={sessionType === 'worktree' && selectedRepos.length > 0 ? t('machine.worktreeAutoPath') : formatPathRelativeToHome(selectedPath, selectedMachine?.metadata?.homeDir)}
+                        // The path belongs to the machine row, so it waits for the machines to load rather than showing alone.
+                        currentPath={!selectedMachine ? undefined : sessionType === 'worktree' && selectedRepos.length > 0 ? t('machine.worktreeAutoPath') : formatPathRelativeToHome(selectedPath, selectedMachine.metadata?.homeDir)}
                         onPathClick={sessionType === 'worktree' && selectedRepos.length > 0 ? undefined : handlePathClick}
                         images={images}
                         onImagesChange={(newImages) => {

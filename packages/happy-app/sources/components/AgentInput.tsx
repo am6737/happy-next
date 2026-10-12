@@ -2095,122 +2095,122 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                             marginHorizontal: panelHorizontalInset,
                             marginBottom: contextCardMarginBottom,
                         }}
-                        contentStyle={{ padding: 8, gap: 4 }}
+                        contentStyle={{ padding: 8, gap: 8 }}
                     >
-                        {/* With the card's own 4pt row gap, 8pt between the header and the rows under it. */}
-                        {props.contextHeader && (
-                            <View style={(props.machineName !== undefined || props.currentPath || props.contextFooter) ? { marginBottom: 4 } : undefined}>
-                                {props.contextHeader}
-                            </View>
-                        )}
-                        {/* Machine chip */}
-                        {props.machineName !== undefined && props.onMachineClick && (
-                            <Pressable
-                                onPress={() => {
-                                    hapticsLight();
-                                    props.onMachineClick?.();
-                                }}
-                                hitSlop={{ top: 5, bottom: 10, left: 0, right: 0 }}
-                                style={(p) => ({
-                                    flexDirection: 'row',
-                                    alignItems: 'center',
-                                    borderRadius: Platform.select({ default: 16, android: 20 }),
-                                    paddingHorizontal: 10,
-                                    paddingVertical: 6,
-                                    height: 32,
-                                    opacity: p.pressed ? 0.7 : 1,
-                                    gap: 6,
-                                })}
-                            >
-                                <Ionicons
-                                    name="desktop-outline"
-                                    size={14}
-                                    color={theme.colors.textSecondary}
-                                />
-                                <Text style={{
-                                    fontSize: 13,
-                                    color: theme.colors.text,
-                                    fontWeight: '600',
-                                    ...Typography.default('semiBold'),
-                                }}>
-                                    {props.machineName === null ? t('agentInput.noMachinesAvailable') : props.machineName}
-                                </Text>
-                            </Pressable>
-                        )}
+                        {/* 8pt between the header and the rows under it, 4pt between those rows. */}
+                        {props.contextHeader}
+                        {(props.machineName !== undefined || !!props.currentPath || !!props.contextFooter) && (
+                            <View style={{ gap: 4 }}>
+                                {/* Machine chip */}
+                                {props.machineName !== undefined && props.onMachineClick && (
+                                    <Pressable
+                                        onPress={() => {
+                                            hapticsLight();
+                                            props.onMachineClick?.();
+                                        }}
+                                        hitSlop={{ top: 5, bottom: 10, left: 0, right: 0 }}
+                                        style={(p) => ({
+                                            flexDirection: 'row',
+                                            alignItems: 'center',
+                                            borderRadius: Platform.select({ default: 16, android: 20 }),
+                                            paddingHorizontal: 10,
+                                            paddingVertical: 6,
+                                            height: 32,
+                                            opacity: p.pressed ? 0.7 : 1,
+                                            gap: 6,
+                                        })}
+                                    >
+                                        <Ionicons
+                                            name="desktop-outline"
+                                            size={14}
+                                            color={theme.colors.textSecondary}
+                                        />
+                                        <Text style={{
+                                            fontSize: 13,
+                                            color: theme.colors.text,
+                                            fontWeight: '600',
+                                            ...Typography.default('semiBold'),
+                                        }}>
+                                            {props.machineName === null ? t('agentInput.noMachinesAvailable') : props.machineName}
+                                        </Text>
+                                    </Pressable>
+                                )}
 
-                        {/* Path chip */}
-                        {props.currentPath && props.onPathClick && (
-                            <Pressable
-                                onPress={() => {
-                                    hapticsLight();
-                                    props.onPathClick?.();
-                                }}
-                                hitSlop={{ top: 5, bottom: 10, left: 0, right: 0 }}
-                                style={(p) => ({
-                                    flexDirection: 'row',
-                                    alignItems: 'center',
-                                    borderRadius: Platform.select({ default: 16, android: 20 }),
-                                    paddingHorizontal: 10,
-                                    paddingVertical: 6,
-                                    height: 32,
-                                    opacity: p.pressed ? 0.7 : 1,
-                                    gap: 6,
-                                    flexShrink: 1,
-                                    minWidth: 0,
-                                })}
-                            >
-                                <Ionicons
-                                    name="folder-outline"
-                                    size={14}
-                                    color={theme.colors.textSecondary}
-                                />
-                                <Text
-                                    numberOfLines={1}
-                                    style={{
-                                        fontSize: 13,
-                                        color: theme.colors.text,
-                                        fontWeight: '600',
-                                        flexShrink: 1,
-                                        ...Typography.default('semiBold'),
-                                    }}
-                                >
-                                    {props.currentPath}
-                                </Text>
-                            </Pressable>
-                        )}
-                        {/* Path hint (non-clickable) */}
-                        {props.currentPath && !props.onPathClick && (
-                            <View
-                                style={{
-                                    flexDirection: 'row',
-                                    alignItems: 'center',
-                                    paddingHorizontal: 10,
-                                    paddingVertical: 6,
-                                    height: 32,
-                                    gap: 6,
-                                    flexShrink: 1,
-                                    minWidth: 0,
-                                }}
-                            >
-                                <Ionicons
-                                    name="folder-outline"
-                                    size={14}
-                                    color={theme.colors.textSecondary}
-                                />
-                                <Text
-                                    numberOfLines={1}
-                                    style={{
-                                        fontSize: 13,
-                                        color: theme.colors.textSecondary,
-                                        flexShrink: 1,
-                                        ...Typography.default('regular'),
-                                    }}
-                                >
-                                    {props.currentPath}
-                                </Text>
+                                {/* Path chip */}
+                                {props.currentPath && props.onPathClick && (
+                                    <Pressable
+                                        onPress={() => {
+                                            hapticsLight();
+                                            props.onPathClick?.();
+                                        }}
+                                        hitSlop={{ top: 5, bottom: 10, left: 0, right: 0 }}
+                                        style={(p) => ({
+                                            flexDirection: 'row',
+                                            alignItems: 'center',
+                                            borderRadius: Platform.select({ default: 16, android: 20 }),
+                                            paddingHorizontal: 10,
+                                            paddingVertical: 6,
+                                            height: 32,
+                                            opacity: p.pressed ? 0.7 : 1,
+                                            gap: 6,
+                                            flexShrink: 1,
+                                            minWidth: 0,
+                                        })}
+                                    >
+                                        <Ionicons
+                                            name="folder-outline"
+                                            size={14}
+                                            color={theme.colors.textSecondary}
+                                        />
+                                        <Text
+                                            numberOfLines={1}
+                                            style={{
+                                                fontSize: 13,
+                                                color: theme.colors.text,
+                                                fontWeight: '600',
+                                                flexShrink: 1,
+                                                ...Typography.default('semiBold'),
+                                            }}
+                                        >
+                                            {props.currentPath}
+                                        </Text>
+                                    </Pressable>
+                                )}
+                                {/* Path hint (non-clickable) */}
+                                {props.currentPath && !props.onPathClick && (
+                                    <View
+                                        style={{
+                                            flexDirection: 'row',
+                                            alignItems: 'center',
+                                            paddingHorizontal: 10,
+                                            paddingVertical: 6,
+                                            height: 32,
+                                            gap: 6,
+                                            flexShrink: 1,
+                                            minWidth: 0,
+                                        }}
+                                    >
+                                        <Ionicons
+                                            name="folder-outline"
+                                            size={14}
+                                            color={theme.colors.textSecondary}
+                                        />
+                                        <Text
+                                            numberOfLines={1}
+                                            style={{
+                                                fontSize: 13,
+                                                color: theme.colors.textSecondary,
+                                                flexShrink: 1,
+                                                ...Typography.default('regular'),
+                                            }}
+                                        >
+                                            {props.currentPath}
+                                        </Text>
+                                    </View>
+                                )}
+                                {props.contextFooter}
                             </View>
                         )}
-                        {props.contextFooter}
                     </AnimatedHeight>
                 )}
 
