@@ -13,6 +13,7 @@ import { useActiveWord } from './autocomplete/useActiveWord';
 import { useActiveSuggestions } from './autocomplete/useActiveSuggestions';
 import { AgentInputAutocomplete } from './AgentInputAutocomplete';
 import { FloatingOverlay } from './FloatingOverlay';
+import { AnimatedHeight } from './AnimatedHeight';
 import { FullWindowOverlay } from 'react-native-screens';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { TextInputState, MultiTextInputHandle } from './MultiTextInput';
@@ -132,6 +133,11 @@ interface AgentInputProps {
     // panel's rounded edge lines up with the message column; the new-session page, which
     // stacks the same panel under its own sections, keeps the panel flush.
     panelSideMargin?: boolean;
+    // Rows of the machine/path card above and below the machine and path — the new-session page
+    // puts its session type selector on top and its repo picker at the bottom, so everything about
+    // where the session runs sits in one card.
+    contextHeader?: React.ReactNode;
+    contextFooter?: React.ReactNode;
     // Draw the panel as Liquid Glass instead of an opaque fill — for a composer that floats over
     // the conversation. Only honoured where Liquid Glass exists (iOS 26+).
     glassPanel?: boolean;
@@ -1145,7 +1151,7 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
         : ['model', 'permission'];
     const activeSettingsTabIndex = showSettings ? settingsTabKeys.indexOf(showSettings) : -1;
     const [settingsTabBarWidth, setSettingsTabBarWidth] = React.useState(0);
-    // Height of the input panel card, which the iOS settings overlay sits on top of.
+    // Height of the input panel with its status row, which the settings overlay sits on top of.
     const [inputPanelHeight, setInputPanelHeight] = React.useState(0);
     const settingsTabWidth = settingsTabBarWidth > 0 ? (settingsTabBarWidth - SETTINGS_TAB_BAR_PADDING * 2) / settingsTabKeys.length : 0;
     const settingsTabIndicatorX = useSharedValue(0);
@@ -1399,6 +1405,10 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
     // Connection status, context warning, and permission mode. On iOS the row sits inside the
     // input panel's card, as the card's first line; elsewhere it stays above the panel.
     const statusInPanel = Platform.OS === 'ios' && !isRunningOnMac();
+    // The machine/path card. On iOS the status row lives inside the input card, so nothing else
+    // separates the two; elsewhere the row goes with the input card below, so it keeps further from this one.
+    const hasContextCard = props.machineName !== undefined || !!props.currentPath || !!props.contextHeader || !!props.contextFooter;
+    const contextCardMarginBottom = statusInPanel ? 16 : 12;
     const statusBar = (props.connectionStatus || contextWarning || props.permissionMode) ? (
         <View style={{
             flexDirection: 'row',
@@ -1717,9 +1727,11 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                             style={[
                                 styles.settingsOverlay,
                                 { paddingHorizontal: panelHorizontalInset },
-                                // On iOS the overlay's triggers live in the input card, so it opens right
-                                // above the card, covering the machine/path card rather than sitting over it.
-                                statusInPanel && { bottom: inputPanelHeight },
+                                // The overlay's triggers sit right above or in the input card, so it opens
+                                // there, covering the machine/path card rather than sitting over it.
+                                // Its bottom lines up with the machine/path card's when there is one.
+                                { bottom: inputPanelHeight },
+                                hasContextCard && { marginBottom: contextCardMarginBottom },
                                 settingsOverlayStyle,
                             ]}
                         >
@@ -1733,7 +1745,7 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                         overflow: 'hidden',
                                         padding: SETTINGS_TAB_BAR_PADDING,
                                         backgroundColor: theme.colors.floatingOverlay.segmentedBackground,
-                                        margin: 6,
+                                        margin: 8,
                                         marginBottom: 0,
                                     }}
                                 >
@@ -2073,19 +2085,23 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                     </>
                 )}
 
-                {!statusInPanel && statusBar}
-
-                {/* Box 1: Context Information (Machine + Path) - Only show if either exists */}
-                {(props.machineName !== undefined || props.currentPath) && (
-                    <View style={{
-                        backgroundColor: theme.colors.surfacePressed,
-                        borderRadius: 12,
-                        padding: 8,
-                        marginHorizontal: panelHorizontalInset,
-                        // On iOS the status row lives inside the card, so nothing else separates the two.
-                        marginBottom: statusInPanel ? 16 : 8,
-                        gap: 4,
-                    }}>
+                {/* Box 1: Context Information (Machine + Path) - Only show if there is any */}
+                {hasContextCard && (
+                    <AnimatedHeight
+                        style={{
+                            backgroundColor: theme.colors.surfacePressed,
+                            borderRadius: 12,
+                            marginHorizontal: panelHorizontalInset,
+                            marginBottom: contextCardMarginBottom,
+                        }}
+                        contentStyle={{ padding: 8, gap: 4 }}
+                    >
+                        {/* With the card's own 4pt row gap, 8pt between the header and the rows under it. */}
+                        {props.contextHeader && (
+                            <View style={(props.machineName !== undefined || props.currentPath || props.contextFooter) ? { marginBottom: 4 } : undefined}>
+                                {props.contextHeader}
+                            </View>
+                        )}
                         {/* Machine chip */}
                         {props.machineName !== undefined && props.onMachineClick && (
                             <Pressable
@@ -2193,13 +2209,17 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                 </Text>
                             </View>
                         )}
-                    </View>
+                        {props.contextFooter}
+                    </AnimatedHeight>
                 )}
+
+                {/* The status row sits right above the input card, as close to it as on iOS, where it is in the card. */}
+                <View onLayout={(e) => setInputPanelHeight(e.nativeEvent.layout.height)}>
+                {!statusInPanel && statusBar}
 
                 {/* Box 2: Action Area (Input + Send) */}
                 <View
                     ref={dropZoneRef}
-                    onLayout={statusInPanel ? (e) => setInputPanelHeight(e.nativeEvent.layout.height) : undefined}
                     style={[styles.unifiedPanel, statusInPanel && styles.unifiedPanelCompact, { marginHorizontal: panelHorizontalInset }, useGlassPanel && styles.unifiedPanelGlass]}
                 >
                     {useGlassPanel && (
@@ -2446,6 +2466,7 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                             </View>
                         </View>
                     </View>
+                </View>
                 </View>
             </View>
         </View>

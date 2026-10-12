@@ -24,7 +24,6 @@ import { saveRegisteredRepos, loadRegisteredRepos } from '@/sync/repoStore';
 import { getTempData, type NewSessionData } from '@/utils/tempDataStore';
 import { PermissionMode, ModelMode } from '@/components/PermissionModeSelector';
 import { AgentInput } from '@/components/AgentInput';
-import { isRunningOnMac } from '@/utils/platform';
 import { StyleSheet } from 'react-native-unistyles';
 import { randomUUID } from 'expo-crypto';
 import { Image } from 'expo-image';
@@ -1029,10 +1028,6 @@ function NewSessionWizard() {
         </View>
     ) : null;
 
-    // On iOS the composer's status row sits inside its card, leaving a plain stack of cards.
-    // AgentInput adds 8pt above itself, so whatever sits directly above it takes 8pt to keep
-    // every gap in the stack at 16pt.
-    const iosCardStack = Platform.OS === 'ios' && !isRunningOnMac();
     const showRepoPicker = sessionType === 'worktree' && !!selectedMachineId;
     return (
         <View ref={dropZoneRef} style={[styles.container, { position: 'relative' }, Platform.OS !== 'web' && { paddingTop: 40 + softHeaderInset }]}>
@@ -1048,34 +1043,28 @@ function NewSessionWizard() {
                     </View>
                 )}
 
-                {/* Session type selector */}
-                <View style={{ paddingHorizontal: screenWidth > 700 ? 16 : 8, marginBottom: iosCardStack && !showRepoPicker ? 8 : 16 }}>
-                    <View style={{ maxWidth: layout.maxWidth, width: '100%', paddingHorizontal: 8, alignSelf: 'center' }}>
-                        <SessionTypeSelector
-                            value={sessionType}
-                            onChange={setSessionType}
-                        />
-                    </View>
-                </View>
-
-                {/* Repo picker for worktree mode */}
-                {showRepoPicker && (
-                    <View style={{ paddingHorizontal: screenWidth > 700 ? 16 : 8, marginBottom: iosCardStack ? 8 : 12 }}>
-                        <View style={{ maxWidth: layout.maxWidth, width: '100%', paddingHorizontal: 8, alignSelf: 'center' }}>
-                            <RepoPickerBar
-                                machineId={selectedMachineId}
-                                selectedRepos={selectedRepos}
-                                onReposChange={setSelectedRepos}
-                                onAddDirectory={handleAddDirectory}
-                            />
-                        </View>
-                    </View>
-                )}
-
                 {/* AgentInput with inline chips - sticky at bottom */}
                 <View style={{ paddingBottom: safeArea.bottom + (Platform.OS === 'web' ? 8 : 0) }}>
                     <AgentInput
                         panelSideMargin
+                        contextHeader={(
+                            <SessionTypeSelector
+                                embedded
+                                value={sessionType}
+                                onChange={setSessionType}
+                            />
+                        )}
+                        contextFooter={showRepoPicker ? (
+                            // Inset like the machine and path rows above, so the chips start under their icons.
+                            <View style={{ paddingTop: 4, paddingHorizontal: 10 }}>
+                                <RepoPickerBar
+                                    machineId={selectedMachineId}
+                                    selectedRepos={selectedRepos}
+                                    onReposChange={setSelectedRepos}
+                                    onAddDirectory={handleAddDirectory}
+                                />
+                            </View>
+                        ) : null}
                         value={sessionPrompt}
                         onChangeText={setSessionPrompt}
                         inputHistory={inputHistory}

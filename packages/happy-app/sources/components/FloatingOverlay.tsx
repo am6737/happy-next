@@ -1,7 +1,8 @@
 import * as React from 'react';
 import { NativeSyntheticEvent, NativeScrollEvent, LayoutChangeEvent, ScrollView } from 'react-native';
-import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated from 'react-native-reanimated';
 import { StyleSheet } from 'react-native-unistyles';
+import { AnimatedHeight } from './AnimatedHeight';
 import { computeScrollIntoView } from './scrollIntoView';
 
 const stylesheet = StyleSheet.create((theme, runtime) => ({
@@ -11,16 +12,7 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
         overflow: 'hidden',
         backgroundColor: theme.colors.floatingOverlay.background,
     },
-    // Lays the content out at its own height (up to maxHeight) while the container animates toward it.
-    measuredContent: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-    },
 }));
-
-const HEIGHT_TIMING = { duration: 220, easing: Easing.out(Easing.cubic) };
 
 interface FloatingOverlayProps {
     children: React.ReactNode;
@@ -79,22 +71,12 @@ export const FloatingOverlay = React.memo((props: FloatingOverlayProps) => {
         }
     }, [selectedIndex, itemHeight, maxHeight]);
 
-    // 0 until the content is first measured; the first height is taken as is, later ones animate.
-    const contentHeight = useSharedValue(0);
-    const heightStyle = useAnimatedStyle(() => (contentHeight.value > 0 ? { height: contentHeight.value } : {}));
-    const handleContentLayout = React.useCallback((e: LayoutChangeEvent) => {
-        const height = e.nativeEvent.layout.height;
-        contentHeight.value = contentHeight.value > 0 ? withTiming(height, HEIGHT_TIMING) : height;
-    }, [contentHeight]);
-
     if (!scrollable) {
         if (animateHeight) {
             return (
-                <Animated.View style={[styles.container, heightStyle]}>
-                    <Animated.View style={[styles.measuredContent, { maxHeight }]} onLayout={handleContentLayout}>
-                        {children}
-                    </Animated.View>
-                </Animated.View>
+                <AnimatedHeight style={styles.container} contentStyle={{ maxHeight }}>
+                    {children}
+                </AnimatedHeight>
             );
         }
         return (

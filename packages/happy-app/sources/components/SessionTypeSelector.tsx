@@ -9,6 +9,8 @@ import { hapticsLight } from './haptics';
 interface SessionTypeSelectorProps {
     value: 'simple' | 'worktree';
     onChange: (value: 'simple' | 'worktree') => void;
+    /** Sits inside the composer's machine/path card: drawn like the settings overlay's tabs, which share that fill. */
+    embedded?: boolean;
 }
 
 // Same slide as the tabs of the composer's settings overlay.
@@ -43,6 +45,14 @@ const stylesheet = StyleSheet.create((theme, rt) => ({
         shadowRadius: 2,
         elevation: 2,
     },
+    containerEmbedded: {
+        backgroundColor: theme.colors.floatingOverlay.segmentedBackground,
+    },
+    indicatorEmbedded: {
+        backgroundColor: theme.colors.floatingOverlay.segmentedSelected,
+        shadowOpacity: 0,
+        elevation: 0,
+    },
     label: {
         fontSize: 14,
     },
@@ -58,7 +68,7 @@ const stylesheet = StyleSheet.create((theme, rt) => ({
 
 const SESSION_TYPES = ['simple', 'worktree'] as const;
 
-export const SessionTypeSelector: React.FC<SessionTypeSelectorProps> = ({ value, onChange }) => {
+export const SessionTypeSelector: React.FC<SessionTypeSelectorProps> = ({ value, onChange, embedded = false }) => {
     const styles = stylesheet;
 
     // The selection's background slides between options; it is placed without animating on first layout.
@@ -78,9 +88,9 @@ export const SessionTypeSelector: React.FC<SessionTypeSelectorProps> = ({ value,
     }));
 
     return (
-        <View style={styles.container} onLayout={(e) => setBarWidth(e.nativeEvent.layout.width)}>
+        <View style={[styles.container, embedded && styles.containerEmbedded]} onLayout={(e) => setBarWidth(e.nativeEvent.layout.width)}>
             {optionWidth > 0 && (
-                <Animated.View style={[styles.indicator, { width: optionWidth }, indicatorStyle]} />
+                <Animated.View style={[styles.indicator, embedded && styles.indicatorEmbedded, { width: optionWidth }, indicatorStyle]} />
             )}
             {SESSION_TYPES.map((type) => {
                 const isActive = value === type;
