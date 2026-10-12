@@ -24,7 +24,7 @@ const tx = {
 beforeEach(() => {
     vi.clearAllMocks();
     tx.teammate.findFirst.mockResolvedValue({ id: 'lead', status: 'active' });
-    tx.teammate.findUnique.mockResolvedValue({ handle: 'builder' });
+    tx.teammate.findUnique.mockResolvedValue({ name: 'Builder' });
     tx.teammateThread.findFirst.mockResolvedValue({ id: 'creator-thread', teammateId: 'lead', kind: 'dm', channelId: 'dm' });
     tx.channel.findFirst.mockResolvedValue({ id: 'dm' });
     ensure.mockResolvedValue({ id: 'creator-dm', teammateId: 'lead', kind: 'dm', channelId: 'dm' });
@@ -35,7 +35,7 @@ describe('teammateTaskHandoffNotify', () => {
     it.each(['in_review', 'done', 'awaiting_input'] as const)('enqueues a creator update for %s', async status => {
         const after = { ...before, status, summary: 'Ready', prUrl: 'https://github.com/owner/repo/pull/7' };
         await teammateTaskHandoffNotify(tx, before, after, 'agent');
-        expect(enqueue).toHaveBeenCalledWith(expect.objectContaining({ teammateId: 'lead', threadId: 'creator-thread', trigger: 'task-update', event: expect.objectContaining({ type: 'task-update', data: expect.objectContaining({ taskId: 'task', from: 'in_progress', to: status, summary: 'Ready', prUrl: after.prUrl, assigneeId: 'builder', assigneeHandle: 'builder', by: 'agent' }) }) }), tx);
+        expect(enqueue).toHaveBeenCalledWith(expect.objectContaining({ teammateId: 'lead', threadId: 'creator-thread', trigger: 'task-update', event: expect.objectContaining({ type: 'task-update', data: expect.objectContaining({ taskId: 'task', from: 'in_progress', to: status, summary: 'Ready', prUrl: after.prUrl, assigneeId: 'builder', assigneeName: 'Builder', by: 'agent' }) }) }), tx);
     });
 
     it.each([

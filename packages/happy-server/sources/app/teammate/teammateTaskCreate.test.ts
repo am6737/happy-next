@@ -63,7 +63,7 @@ describe('agent task creation', () => {
         run.value.teammate.canSelfAssign = true; run.value.teammate.repos = [];
         await expect(teammateTaskCreate('account', req)).rejects.toMatchObject({ code: 'repo_not_allowed' });
         run.value.teammate.repos = ['owner/repo']; dbMock.teammate.findFirst.mockResolvedValue(null);
-        await expect(teammateTaskCreate('account', req)).rejects.toMatchObject({ code: 'not_found' });
+        await expect(teammateTaskCreate('account', { ...req, assignee: 'Nobody' })).rejects.toMatchObject({ code: 'not_found' });
         expect(octokit).not.toHaveBeenCalled();
     });
 
@@ -71,7 +71,7 @@ describe('agent task creation', () => {
         const result = await teammateTaskCreate('account', { ...req, assignee: 'builder' });
         expect(result).toEqual({ task, issueUrl: issue.html_url, created: false });
         expect(delegate).toHaveBeenCalledWith('account', expect.objectContaining({ teammateId: 'assignee', resourceId: 'owner/repo#4' }), 'creator', 'creator-thread');
-        expect(message).toHaveBeenCalledWith('dm', 'task_self_assigned', expect.objectContaining({ byTeammateId: 'creator', byHandle: 'atlas' }), tx, 'system:task_self_assigned:task');
+        expect(message).toHaveBeenCalledWith('dm', 'task_self_assigned', expect.objectContaining({ byTeammateId: 'creator', byName: 'Atlas' }), tx, 'system:task_self_assigned:task');
         expect(notify).toHaveBeenCalledTimes(1);
     });
 
@@ -94,7 +94,7 @@ describe('agent task creation', () => {
     });
 
     it('creates a signed issue with marker, then reuses the marker without creating twice', async () => {
-        const input = { runId: 'run', dispatchToken: 'token', requestId: 'tc:run:2', repo: 'owner/repo', title: 'Fix issue', body: 'Details' };
+        const input = { runId: 'run', dispatchToken: 'token', requestId: 'tc:run:2', repo: 'owner/repo', title: 'Fix issue', body: 'Details', assignee: 'Builder' };
         const first = await teammateTaskCreate('account', input);
         expect(first.created).toBe(true);
         expect(dbMock.teammateTask.update).toHaveBeenCalledWith({ where: { id: task.id }, data: { createdIssue: true } });
@@ -109,16 +109,19 @@ describe('agent task creation', () => {
     });
 
     it('validates a designated reviewer and stores it on a reused task', async () => {
-        dbMock.teammate.findFirst.mockImplementation(async ({ where }: any) => where.handle === 'reviewer' ? { id: 'reviewer', accountId: 'account', status: 'active' } : { ...assignee });
-        const result = await teammateTaskCreate('account', { ...req, assignee: '@builder', reviewer: '@reviewer' });
-        expect(dbMock.teammate.findFirst).toHaveBeenCalledWith({ where: expect.objectContaining({ handle: 'builder' }) });
+        // "@Code Reviewer" is a name; "@builder" only matches the legacy handle after the name lookup misses.
+        dbMock.teammate.findFirst.mockImplementation(async ({ where }: any) => where.name?.equals === 'Code Reviewer' ? { id: 'reviewer', accountId: 'account', status: 'active' }
+            : where.handle === 'builder' ? { ...assignee } : null);
+        const result = await teammateTaskCreate('account', { ...req, assignee: '@builder', reviewer: '@Code Reviewer' });
+        expect(dbMock.teammate.findFirst).toHaveBeenCalledWith({ where: { accountId: 'account', status: 'active', name: { equals: 'builder', mode: 'insensitive' } } });
+        expect(dbMock.teammate.findFirst).toHaveBeenCalledWith({ where: { accountId: 'account', status: 'active', handle: 'builder' } });
         expect(result.task).toMatchObject({ reviewerTeammateId: 'reviewer' });
         expect(dbMock.teammateTask.update).toHaveBeenCalledWith({ where: { id: task.id }, data: { reviewerTeammateId: 'reviewer' } });
 
-        dbMock.teammate.findFirst.mockResolvedValueOnce({ ...assignee }).mockResolvedValueOnce(null);
+        dbMock.teammate.findFirst.mockResolvedValue(null);
         await expect(teammateTaskCreate('account', { ...req, reviewer: 'missing' })).rejects.toMatchObject({ code: 'not_found' });
-        dbMock.teammate.findFirst.mockResolvedValue({ ...assignee });
-        await expect(teammateTaskCreate('account', { ...req, reviewer: 'builder' })).rejects.toMatchObject({ code: 'invalid_request' });
+        dbMock.teammate.findFirst.mockResolvedValue({ ...creator });
+        await expect(teammateTaskCreate('account', { ...req, reviewer: 'Atlas' })).rejects.toMatchObject({ code: 'invalid_request' });
     });
 });
 

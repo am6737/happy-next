@@ -6,35 +6,28 @@ import { toTeammateDto } from './teammateQueries';
 import { teammateUpdated } from './teammateUpdated';
 import { teammateTimezoneValidate } from './teammateTimezoneValidate';
 import { teammateRuntimeValidate } from './teammateRuntimeValidate';
+import { teammateHandleAllocate, teammateNameAssertFree } from './teammateIdentity';
 
-/** Create only a profile in M1; the unique handle remains reserved after archival. */
+/** Create only a profile in M1; the name must be free and the internal handle is allocated here. */
 export async function teammateCreate(accountId: string, input: TeammateCreateRequest) {
-    const request = TeammateCreateRequestSchema.parse(input);
+    const { handle: handleHint, ...request } = TeammateCreateRequestSchema.parse(input);
     teammateTimezoneValidate(request.timezone);
     teammateRuntimeValidate(request);
-    try {
-        return await inTx(async (tx) => {
-            const machine = await tx.machine.findFirst({ where: { id: request.machineId, accountId }, select: { id: true } });
-            if (!machine) throw new TeammateError('machine_not_found');
-            const row = await tx.teammate.create({
-                data: {
-                    ...request,
-                    accountId,
-                    avatar: request.avatar ?? Prisma.DbNull,
-                    activeHours: request.activeHours ?? Prisma.DbNull,
-                },
-            });
-            const teammate = toTeammateDto(row);
-            await teammateUpdated(tx, accountId, teammate);
-            return teammate;
+    return await inTx(async (tx) => {
+        const machine = await tx.machine.findFirst({ where: { id: request.machineId, accountId }, select: { id: true } });
+        if (!machine) throw new TeammateError('machine_not_found');
+        await teammateNameAssertFree(tx, accountId, request.name);
+        const row = await tx.teammate.create({
+            data: {
+                ...request,
+                handle: await teammateHandleAllocate(tx, accountId, request.name, handleHint),
+                accountId,
+                avatar: request.avatar ?? Prisma.DbNull,
+                activeHours: request.activeHours ?? Prisma.DbNull,
+            },
         });
-    } catch (error) {
-        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-            const target = error.meta?.target;
-            if (Array.isArray(target) && target.includes('accountId') && target.includes('handle')) {
-                throw new TeammateError('handle_taken');
-            }
-        }
-        throw error;
-    }
+        const teammate = toTeammateDto(row);
+        await teammateUpdated(tx, accountId, teammate);
+        return teammate;
+    });
 }

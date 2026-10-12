@@ -7,6 +7,7 @@ import { teammateUpdated } from './teammateUpdated';
 import { teammateTimezoneValidate } from './teammateTimezoneValidate';
 import { teammateRuntimeValidate } from './teammateRuntimeValidate';
 import { teammateBudgetEvaluate } from './teammateBudgetEvaluate';
+import { teammateNameAssertFree } from './teammateIdentity';
 
 /** Apply only supplied fields; serializable transactions prevent editing an archived profile. */
 export async function teammateUpdate(accountId: string, teammateId: string, input: TeammateUpdateRequest) {
@@ -22,6 +23,7 @@ export async function teammateUpdate(accountId: string, teammateId: string, inpu
             workerProvider: request.workerProvider ?? TeammateWorkerProviderSchema.parse(existing.workerProvider),
             workerPermissionMode: request.workerPermissionMode ?? existing.workerPermissionMode,
         });
+        if (request.name !== undefined && request.name.toLowerCase() !== existing.name.toLowerCase()) await teammateNameAssertFree(tx, accountId, request.name, teammateId);
         if (request.machineId !== undefined && request.machineId !== existing.machineId) {
             const machine = await tx.machine.findFirst({ where: { id: request.machineId, accountId }, select: { id: true } });
             if (!machine) throw new TeammateError('machine_not_found');

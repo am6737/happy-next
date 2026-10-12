@@ -9,6 +9,7 @@ import { teammateRunAuthorize } from './teammateRunAuthorize';
 import { teammateTaskDelegate } from './teammateTaskDelegate';
 import { teammateNotify } from './teammateNotify';
 import { TeammateError } from './teammateError';
+import { teammateFindByRef } from './teammateIdentity';
 
 const limitNotifiedAt = new Map<string, number>();
 
@@ -27,10 +28,10 @@ export async function teammateTaskCreate(accountId: string, input: TeammateTaskC
     const creator = run.teammate;
     if (creator.status !== 'active' || !creator.canSelfAssign) throw new TeammateError('self_assign_disabled');
     if (!creator.repos.some(repo => repo.toLowerCase() === req.repo.toLowerCase())) throw new TeammateError('repo_not_allowed');
-    const assignee = await db.teammate.findFirst({ where: { accountId, handle: req.assignee ?? creator.handle, status: 'active' } });
+    const assignee = req.assignee ? await teammateFindByRef(db, accountId, req.assignee) : creator;
     if (!assignee) throw new TeammateError('not_found');
     const reviewer = req.reviewer
-        ? await db.teammate.findFirst({ where: { accountId, handle: req.reviewer, status: 'active' } })
+        ? await teammateFindByRef(db, accountId, req.reviewer)
         : null;
     if (req.reviewer && !reviewer) throw new TeammateError('not_found');
     if (reviewer && reviewer.id === assignee.id) throw new TeammateError('invalid_request');
@@ -77,7 +78,7 @@ export async function teammateTaskCreate(accountId: string, input: TeammateTaskC
                 const localId = `system:task_self_assigned:${task.id}`;
                 const sent = dm ? await tx.channelMessage.findUnique({ where: { channelId_localId: { channelId: dm.id, localId } } }) : null;
                 if ((dm && !sent) || (!dm && !delegated)) {
-                    if (dm) await channelSystemMessage(dm.id, 'task_self_assigned', { taskId: task.id, title: task.title, byTeammateId: creator.id, byHandle: creator.handle }, tx, localId);
+                    if (dm) await channelSystemMessage(dm.id, 'task_self_assigned', { taskId: task.id, title: task.title, byTeammateId: creator.id, byName: creator.name }, tx, localId);
                     teammateNotify(tx, assignee, 'New agent task', `${creator.name} assigned ${task.title}`, { code: 'task_self_assigned', taskId: task.id });
                 }
             });

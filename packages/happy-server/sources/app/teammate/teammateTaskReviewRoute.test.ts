@@ -22,7 +22,7 @@ const req = { runId: 'run', dispatchToken: 'token', status: 'in_review' as const
 
 function txFor(review: any = null) {
     return {
-        teammate: { findFirst: vi.fn().mockResolvedValue({ id: 'reviewer', accountId: 'account', status: 'active' }), findUnique: vi.fn().mockResolvedValue({ handle: 'reviewer' }) },
+        teammate: { findFirst: vi.fn().mockResolvedValue({ id: 'reviewer', accountId: 'account', status: 'active' }), findUnique: vi.fn().mockResolvedValue({ name: 'Reviewer' }) },
         teammateTask: {
             findFirst: vi.fn().mockImplementation(({ where }: any) => where.parentTaskId ? review : where.id === 'impl' ? base : null),
             create: vi.fn().mockImplementation(async ({ data }: any) => ({ ...data, id: 'review', createdAt: new Date(), updatedAt: new Date() })),

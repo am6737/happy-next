@@ -53,7 +53,7 @@ export async function teammateTaskReviewRoute(
                     round,
                     summary: after.summary,
                     prUrl: after.prUrl,
-                    reviewerHandle: (await tx.teammate.findUnique({ where: { id: after.teammateId }, select: { handle: true } }))?.handle ?? null,
+                    reviewerName: (await tx.teammate.findUnique({ where: { id: after.teammateId }, select: { name: true } }))?.name ?? null,
                 },
             }, { tx, trigger: 'review-feedback' });
             await teammateTaskUpdated(tx, implementation.accountId, toTeammateTaskDto(implementationAfter));

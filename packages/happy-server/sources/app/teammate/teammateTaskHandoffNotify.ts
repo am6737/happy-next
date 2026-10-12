@@ -47,7 +47,7 @@ export async function teammateTaskHandoffNotify(
         thread = await teammateThreadEnsure(creator.id, 'dm', { channelId: dm.id }, tx);
     }
 
-    const assignee = await tx.teammate.findUnique({ where: { id: after.teammateId }, select: { handle: true } });
+    const assignee = await tx.teammate.findUnique({ where: { id: after.teammateId }, select: { name: true } });
     try {
         await teammateRunEnqueue({
             teammateId: creator.id,
@@ -66,7 +66,7 @@ export async function teammateTaskHandoffNotify(
                     summary: after.summary,
                     prUrl: after.prUrl,
                     assigneeId: after.teammateId,
-                    assigneeHandle: assignee?.handle ?? null,
+                    assigneeName: assignee?.name ?? null,
                     by,
                 },
             },

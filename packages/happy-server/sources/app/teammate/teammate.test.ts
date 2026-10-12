@@ -69,7 +69,8 @@ beforeEach(() => {
         return result;
     });
     dbMock.machine.findFirst.mockResolvedValue({ id: 'machine_1' });
-    dbMock.teammate.findFirst.mockResolvedValue({ ...profile });
+    // A lookup by name is the uniqueness check; no other Agent holds the name unless a test says so.
+    dbMock.teammate.findFirst.mockImplementation(async ({ where }) => where?.name ? null : { ...profile });
     dbMock.teammate.findMany.mockResolvedValue([profile]);
     dbMock.teammate.create.mockResolvedValue({ ...profile });
     dbMock.teammate.update.mockImplementation(async ({ data }) => ({ ...profile, ...data }));
@@ -90,7 +91,7 @@ describe('teammate create', () => {
         expect(teammate.id).toBe('mate_1');
         expect(dbMock.machine.findFirst).toHaveBeenCalledWith({ where: { id: 'machine_1', accountId: 'account_1' }, select: { id: true } });
         expect(dbMock.teammate.create).toHaveBeenCalledWith({ data: {
-            ...TeammateCreateRequestSchema.parse(createInput), accountId: 'account_1',
+            ...TeammateCreateRequestSchema.parse(createInput), handle: 'atlas-2', accountId: 'account_1',
             avatar: Prisma.DbNull, activeHours: Prisma.DbNull,
         } });
         expect(dbMock.account.update).toHaveBeenCalledWith({ where: { id: 'account_1' }, data: { seq: { increment: 1 } }, select: { seq: true } });
@@ -100,12 +101,25 @@ describe('teammate create', () => {
         });
     });
 
-    it('maps the handle unique violation to a typed handle_taken error', async () => {
-        dbMock.teammate.create.mockRejectedValueOnce(new Prisma.PrismaClientKnownRequestError('duplicate', {
-            code: 'P2002', clientVersion: '6.19.3', meta: { target: ['accountId', 'handle'] },
-        }));
-        await expect(teammateCreate('account_1', createInput)).rejects.toMatchObject({ code: 'handle_taken', name: 'TeammateError' });
+    it('rejects a name another active Agent already uses, ignoring case', async () => {
+        dbMock.teammate.findFirst.mockImplementation(async ({ where }) => ({ ...profile, name: where?.name?.equals ?? profile.name }));
+        await expect(teammateCreate('account_1', { ...createInput, name: 'ATLAS' })).rejects.toMatchObject({ code: 'name_taken', name: 'TeammateError' });
+        expect(dbMock.teammate.findFirst).toHaveBeenCalledWith({
+            where: { accountId: 'account_1', name: { equals: 'ATLAS', mode: 'insensitive' }, status: { not: 'archived' } }, select: { id: true },
+        });
+        expect(dbMock.teammate.create).not.toHaveBeenCalled();
         expect(eventRouter.emitUpdate).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        [{ name: 'Atlas' }, [], 'atlas'],
+        [{ name: '小明', handle: 'reviewer' }, [{ handle: 'reviewer' }, { handle: 'reviewer-2' }], 'reviewer-3'],
+        [{ name: '小明' }, [], 'agent'],
+        [{ name: 'Café Bot' }, [], 'cafe-bot'],
+    ])('allocates a free internal handle for %j', async (input, taken, handle) => {
+        dbMock.teammate.findMany.mockResolvedValueOnce(taken);
+        await teammateCreate('account_1', { machineId: 'machine_1', ...input });
+        expect(dbMock.teammate.create).toHaveBeenCalledWith({ data: expect.objectContaining({ handle }) });
     });
 
     it('does not mislabel an unrelated unique violation', async () => {
@@ -360,12 +374,10 @@ describe('teammate REST contract', () => {
         const missingMachine = await app.inject({ method: 'POST', url: '/v1/teammates', payload: createInput, headers });
         expect(missingMachine.statusCode).toBe(400);
         expect(missingMachine.json()).toEqual({ error: 'machine_not_found' });
-        dbMock.teammate.create.mockRejectedValueOnce(new Prisma.PrismaClientKnownRequestError('duplicate', {
-            code: 'P2002', clientVersion: '6.19.3', meta: { target: ['accountId', 'handle'] },
-        }));
+        dbMock.teammate.findFirst.mockResolvedValueOnce({ id: 'mate_2' });
         const duplicate = await app.inject({ method: 'POST', url: '/v1/teammates', payload: createInput, headers });
         expect(duplicate.statusCode).toBe(409);
-        expect(duplicate.json()).toEqual({ error: 'handle_taken' });
+        expect(duplicate.json()).toEqual({ error: 'name_taken' });
         dbMock.teammate.findFirst.mockResolvedValueOnce({ ...profile, status: 'archived' });
         const archived = await app.inject({ method: 'POST', url: '/v1/teammates/mate_1', payload: { name: 'New' }, headers });
         expect(archived.statusCode).toBe(409);
