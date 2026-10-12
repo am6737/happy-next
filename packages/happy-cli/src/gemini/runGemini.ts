@@ -637,6 +637,12 @@ export async function runGemini(opts: {
 
   // Accumulate Gemini response text for sending complete message to mobile
   let accumulatedResponse = '';
+  // Gemini streams its reasoning in small chunks; a message per chunk would flood the session
+  let accumulatedThinking = '';
+  const flushThinking = () => {
+    if (accumulatedThinking.trim()) session.sendAgentMessage('gemini', { type: 'thinking', text: accumulatedThinking });
+    accumulatedThinking = '';
+  };
   let isResponseInProgress = false;
   let currentResponseMessageId: string | null = null; // Track the message ID for current response
   let hadToolCallInTurn = false; // Track if any tool calls happened in this turn (for task_complete)
@@ -654,6 +660,7 @@ export async function runGemini(opts: {
     switch (msg.type) {
       case 'model-output':
         if (msg.textDelta) {
+          flushThinking();
           // If this is the first delta of a new response, create a new message
           // Otherwise, update the existing message for this response
           if (!isResponseInProgress) {
@@ -781,6 +788,7 @@ export async function runGemini(opts: {
           logger.debug(`[gemini] 🔍 Investigation objective: ${String(msg.args.objective).substring(0, 150)}...`);
         }
         
+        flushThinking();
         messageBuffer.addMessage(`Executing: ${msg.toolName}${toolArgs ? ` ${toolArgs}${toolArgs.length >= 100 ? '...' : ''}` : ''}`, 'tool');
         // Resolve preview_html file references once, so the app and the local session log agree
         const resolvedInput = inlinePreviewHtmlFileArgs(msg.toolName, msg.args);
@@ -1032,11 +1040,8 @@ export async function runGemini(opts: {
             // For titled reasoning, ReasoningProcessor will send tool call, but we keep "Thinking..." visible
             // This ensures user sees progress during long reasoning operations
           }
-          // Also forward to mobile for UI feedback
-          session.sendAgentMessage('gemini', {
-            type: 'thinking',
-            text: thinkingText,
-          });
+          // Forwarded to mobile once the reasoning ends, see flushThinking
+          accumulatedThinking += thinkingText;
         }
         break;
     }
@@ -1288,6 +1293,7 @@ export async function runGemini(opts: {
         // Reset accumulated response for new prompt
         // This ensures a new assistant message will be created (not updating previous one)
         accumulatedResponse = '';
+        accumulatedThinking = '';
         isResponseInProgress = false;
         hadToolCallInTurn = false;
         taskStartedSent = false; // Reset so new turn can send task_started
@@ -1500,6 +1506,7 @@ export async function runGemini(opts: {
         permissionHandler.reset();
         reasoningProcessor.abort(); // Use abort to properly finish any in-progress tool calls
         diffProcessor.reset(); // Reset diff processor on turn completion
+        flushThinking();
         
         // Send accumulated response to mobile app ONLY when turn is complete
         // This prevents message fragmentation from Gemini's chunked responses
