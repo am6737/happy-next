@@ -49,9 +49,14 @@ function userText(text: string, overrides: Partial<UserTextMessage> = {}): UserT
     };
 }
 
-/** A notice the CLI wrote into the conversation: the new title, a mode switch, a usage limit. */
+/** A notice the CLI wrote into the conversation: a mode switch, a usage limit, a compaction. */
 function agentEvent(): Message {
-    return { kind: 'agent-event', id: 'event-1', createdAt: 0, event: { type: 'message', message: 'Title changed to "Ship the fold"' } };
+    return { kind: 'agent-event', id: 'event-1', createdAt: 0, event: { type: 'message', message: 'Compaction completed' } };
+}
+
+/** The notice a `change_title` call turns into. */
+function titleChange(): Message {
+    return { kind: 'agent-event', id: 'event-2', createdAt: 0, event: { type: 'message', message: 'Title changed to "Ship the fold"' } };
 }
 
 function imagePlaceholder(original: string, displayed: string, scale: string): string {
@@ -228,6 +233,12 @@ describe('isPendingPermissionRow', () => {
 describe('isAgentEventRow', () => {
     it('names the notices the CLI writes', () => {
         expect(isAgentEventRow(agentEvent())).toBe(true);
+        expect(isAgentEventRow({ kind: 'agent-event', id: 'e', createdAt: 0, event: { type: 'switch', mode: 'local' } })).toBe(true);
+        expect(isAgentEventRow({ kind: 'agent-event', id: 'e', createdAt: 0, event: { type: 'limit-reached', endsAt: 1 } })).toBe(true);
+    });
+
+    it('leaves out a title change, which is the agent\'s own bookkeeping', () => {
+        expect(isAgentEventRow(titleChange())).toBe(false);
     });
 
     it('says nothing about the agent\'s own work', () => {
@@ -259,10 +270,13 @@ describe('foldMustKeepMessage', () => {
     });
 
     it('keeps a notice the CLI wrote, which nothing else records', () => {
-        // The title change has no other row, and the rail has no mark for it either: it is kept where
-        // it stands, not jumped to.
+        // The rail has no mark for it either: it is kept where it stands, not jumped to.
         expect(isMinimapLandmarkRow(agentEvent())).toBe(false);
         expect(foldMustKeepMessage(agentEvent())).toBe(true);
+    });
+
+    it('lets a title change go with the steps around it', () => {
+        expect(foldMustKeepMessage(titleChange())).toBe(false);
     });
 
     it('lets a decided call go, exactly as the rail does', () => {

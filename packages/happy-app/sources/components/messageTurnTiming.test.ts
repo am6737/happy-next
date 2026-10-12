@@ -40,6 +40,11 @@ function event(id: string, createdAt: number): Message {
     return { kind: 'agent-event', id, createdAt, event: { type: 'message', message: id } };
 }
 
+/** The notice a `change_title` call turns into — the one notice the fold may take. */
+function titleChange(id: string, createdAt: number): Message {
+    return { kind: 'agent-event', id, createdAt, event: { type: 'message', message: `Title changed to "${id}"` } };
+}
+
 function namedTool(id: string, createdAt: number, name: string): Message {
     const call = tool(id, createdAt);
     return { ...(call as { kind: 'tool-call' }), tool: { ...(call as any).tool, name } } as Message;
@@ -629,6 +634,23 @@ describe('runs of steps inside a folded turn', () => {
     it('splits at a notice the CLI wrote', () => {
         const result = analyze([agent('a1', 90), tool('t3', 80), event('e1', 70), tool('t1', 60), user('u1', 10)]);
         expect(segments(result, 't1')?.map((s) => s.startId)).toEqual(['t1', 't3']);
+    });
+
+    it('counts a title change as a step like any tool call', () => {
+        const result = analyze([
+            agent('a1', 90),
+            tool('t3', 80),
+            titleChange('title', 70),
+            tool('t1', 60),
+            agent('mid', 50),
+            tool('t0', 40),
+            user('u1', 10),
+        ]);
+        expect(segments(result, 't0')).toEqual([
+            { startId: 't0', hiddenIds: [], steps: 1, snapshotId: 't0', running: false },
+            { startId: 't1', hiddenIds: ['title', 't3'], steps: 3, snapshotId: 't3', running: false },
+        ]);
+        expect(result.foldById.get('t0')).toMatchObject({ hiddenIds: ['mid', 't1', 'title', 't3'], steps: 4 });
     });
 
     it('stops at the last step, thinking included, leaving what follows to the conclusion', () => {

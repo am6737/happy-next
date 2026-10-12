@@ -18,6 +18,15 @@ const EVENT_TOOL_NAMES = new Set([
     'mcp__happy__change_title',
 ]);
 
+const TITLE_CHANGE_PREFIX = 'Title changed to "';
+
+/**
+ * Whether an event is the notice `parseMessageAsEvent` writes for a `change_title` call.
+ */
+export function isTitleChangeEvent(event: AgentEvent): boolean {
+    return event.type === 'message' && event.message.startsWith(TITLE_CHANGE_PREFIX);
+}
+
 /**
  * Parses a normalized message to determine if it should be converted to an event.
  * 
@@ -59,7 +68,7 @@ export function parseMessageAsEvent(msg: NormalizedMessage): AgentEvent | null {
                 if (typeof title === 'string') {
                     return {
                         type: 'message',
-                        message: `Title changed to "${title}"`,
+                        message: `${TITLE_CHANGE_PREFIX}${title}"`,
                     } as AgentEvent;
                 }
             }

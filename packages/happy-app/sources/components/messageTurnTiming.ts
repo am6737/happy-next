@@ -195,14 +195,14 @@ function lastStepIndex(rows: Message[]): number {
 }
 
 /**
- * The index of the agent's last tool call, where a settled turn's conclusion begins — or -1 when it
- * never made one. Thinking does not move it: a thought between the report and a postscript is still
+ * The index of the agent's last tool call (a title change counts as one), where a settled turn's
+ * conclusion begins — or -1 when it never made one. Thinking does not move it: a thought between the report and a postscript is still
  * working-out, but it does not make the report any less of the conclusion.
  */
 function lastToolCallIndex(rows: Message[]): number {
     for (let index = rows.length - 1; index >= 0; index--) {
         const row = rows[index];
-        if (row.kind === 'tool-call' && !foldMustKeepMessage(row)) return index;
+        if ((row.kind === 'tool-call' || row.kind === 'agent-event') && !foldMustKeepMessage(row)) return index;
     }
     return -1;
 }
@@ -226,8 +226,9 @@ function lastToolCallIndex(rows: Message[]): number {
  * Rows nothing may hide are kept either way (`foldMustKeepMessage`): a question card and a tool call
  * whose permission request is still unanswered are both things the reader answers, so hiding one
  * would hide a prompt rather than working-out — a plan proposal is kept on that count alone, and so
- * folds away with the rest once the reader has decided it — and a notice the CLI wrote (a title
- * change, a mode switch, a usage limit) is the only trace of what it reports, so it stays too.
+ * folds away with the rest once the reader has decided it — and a notice the CLI wrote (a mode
+ * switch, a usage limit) is the only trace of what it reports, so it stays too. A title change is not
+ * such a notice: it is a step like any tool call.
  */
 function turnProcess(turn: Turn, settled: boolean): TurnProcess {
     const answerId = settled ? turn.lastTextId : null;
@@ -261,13 +262,13 @@ function turnProcess(turn: Turn, settled: boolean): TurnProcess {
 }
 
 /**
- * A step: a tool call the fold may take, or the agent thinking. The two are one kind of row — the
- * agent working something out rather than writing to the reader — so they fold, count and split runs
- * alike.
+ * A step: a tool call the fold may take, the agent thinking, or a notice the fold may take (a title
+ * change, which is a tool call the reducer turned into a notice). They are one kind of row — the agent
+ * working something out rather than writing to the reader — so they fold, count and split runs alike.
  */
 function isStepRow(row: Message): boolean {
     if (foldMustKeepMessage(row)) return false;
-    return row.kind === 'tool-call' || (row.kind === 'agent-text' && row.isThinking === true);
+    return row.kind === 'tool-call' || row.kind === 'agent-event' || (row.kind === 'agent-text' && row.isThinking === true);
 }
 
 /**

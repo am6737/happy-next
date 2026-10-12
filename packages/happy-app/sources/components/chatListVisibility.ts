@@ -1,4 +1,5 @@
 import { isAskUserQuestionToolCall, isPreviewHtmlToolCall, Message, MinimapMessage } from '@/sync/typesMessage';
+import { isTitleChangeEvent } from '@/sync/reducer/messageToEvent';
 
 const LOCAL_COMMAND_STDOUT_PATTERN = /^<local-command-stdout>[\s\S]*<\/local-command-stdout>$/;
 
@@ -64,16 +65,19 @@ export function isPendingPermissionRow(message: Message): boolean {
 }
 
 /**
- * A one-line notice the CLI wrote into the conversation: a new title, a mode switch, a usage limit, a
- * compaction.
+ * A one-line notice the CLI wrote into the conversation that a fold may not take: a mode switch, a
+ * usage limit, a compaction, an error.
  *
- * It is not working-out, and it is the only trace of the thing it reports — the title change has no
- * other row, the usage limit has no other explanation for why the turn stopped — so a fold has no
- * business taking it. It is not a landmark either: the rail has nothing to jump to, and the notice
- * says what it has to say where it stands.
+ * It is not working-out, and it is the only trace of the thing it reports — the usage limit has no
+ * other explanation for why the turn stopped — so a fold has no business taking it. It is not a
+ * landmark either: the rail has nothing to jump to, and the notice says what it has to say where it
+ * stands.
+ *
+ * A title change is the exception: it is the agent's own bookkeeping, the new title already shows in
+ * the header, and it lands in the middle of the working-out — so it folds with the steps around it.
  */
 export function isAgentEventRow(message: Message): boolean {
-    return message.kind === 'agent-event';
+    return message.kind === 'agent-event' && !isTitleChangeEvent(message.event);
 }
 
 /**
