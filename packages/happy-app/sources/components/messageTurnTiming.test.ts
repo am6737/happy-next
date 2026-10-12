@@ -12,6 +12,10 @@ function agent(id: string, createdAt: number, overrides: Partial<AgentTextMessag
     return { kind: 'agent-text', id, localId: null, createdAt, text: id, ...overrides };
 }
 
+function thinking(id: string, createdAt: number): Message {
+    return agent(id, createdAt, { isThinking: true });
+}
+
 function tool(id: string, createdAt: number): Message {
     return {
         kind: 'tool-call',
@@ -207,7 +211,7 @@ describe('folded turns', () => {
     function fold(result: ReturnType<typeof analyzeTurns>, headerId: string) {
         const process = result.foldById.get(headerId);
         if (!process) return process;
-        const { segments: _segments, ...turn } = process;
+        const { segments: _segments, headerConcludes: _headerConcludes, ...turn } = process;
         return turn;
     }
 
@@ -224,6 +228,26 @@ describe('folded turns', () => {
         // `mid` included, not only the closing block. A folded turn that hid the report and left the
         // postscript under its line would be saying nothing about the turn at all.
         expect(fold(result, 't1')).toEqual({ hiddenIds: [], steps: 1, snapshotId: 't1', answerId: 'a1' });
+    });
+
+    it('hides the thinking among the conclusion, and keeps the report around it', () => {
+        const result = analyze([
+            agent('postscript', 60),
+            thinking('th', 50),
+            agent('report', 40),
+            tool('t1', 30),
+            user('u1', 10),
+        ]);
+        // Thinking is a step wherever it falls, but it does not move where the conclusion begins: the
+        // report still answers the prompt, only the thought between it and the postscript goes.
+        expect(fold(result, 't1')).toEqual({ hiddenIds: ['th'], steps: 2, snapshotId: 'th', answerId: 'postscript' });
+        expect(result.foldById.get('t1')?.headerConcludes).toBe(false);
+    });
+
+    it('folds a turn that only thought, leaving the report it opens with standing', () => {
+        const result = analyze([agent('postscript', 60), thinking('th', 50), agent('report', 40), user('u1', 10)]);
+        expect(fold(result, 'report')).toEqual({ hiddenIds: ['th'], steps: 1, snapshotId: 'th', answerId: 'postscript' });
+        expect(result.foldById.get('report')?.headerConcludes).toBe(true);
     });
 
     it('hides the words a turn wrote before its last step', () => {
@@ -504,10 +528,6 @@ describe('runs of steps inside a folded turn', () => {
         return result.foldById.get(headerId)?.segments.map(({ firstStepId: _firstStepId, ...run }) => run);
     }
 
-    function thinking(id: string, createdAt: number): Message {
-        return agent(id, createdAt, { isThinking: true });
-    }
-
     it('names each run by its oldest tool call, past any thinking it opens with', () => {
         const result = analyze([
             agent('a1', 90),
@@ -571,13 +591,14 @@ describe('runs of steps inside a folded turn', () => {
         ]);
         expect(segments(result, 't1')).toEqual([
             { startId: 't1', hiddenIds: [], steps: 1, snapshotId: 't1', running: false },
-            { startId: 't2', hiddenIds: ['th', 't3'], steps: 2, snapshotId: 't3', running: false },
+            { startId: 't2', hiddenIds: ['th', 't3'], steps: 3, snapshotId: 't3', running: false },
         ]);
     });
 
-    it('gives no line to a run where the agent only thought', () => {
+    it('gives a line to a run where the agent only thought, as it would to a tool call', () => {
         const result = analyze([agent('a1', 90), tool('t1', 70), agent('mid', 60), thinking('th', 50), user('u1', 10)]);
         expect(segments(result, 'th')).toEqual([
+            { startId: 'th', hiddenIds: [], steps: 1, snapshotId: 'th', running: false },
             { startId: 't1', hiddenIds: [], steps: 1, snapshotId: 't1', running: false },
         ]);
     });
@@ -610,7 +631,7 @@ describe('runs of steps inside a folded turn', () => {
         expect(segments(result, 't1')?.map((s) => s.startId)).toEqual(['t1', 't3']);
     });
 
-    it('stops at the last step, leaving what follows it to the conclusion', () => {
+    it('stops at the last step, thinking included, leaving what follows to the conclusion', () => {
         const result = analyze([
             agent('a1', 90),
             thinking('th', 80),
@@ -621,8 +642,35 @@ describe('runs of steps inside a folded turn', () => {
         ]);
         expect(segments(result, 't1')).toEqual([
             { startId: 't1', hiddenIds: [], steps: 1, snapshotId: 't1', running: false },
-            { startId: 't2', hiddenIds: [], steps: 1, snapshotId: 't2', running: false },
+            { startId: 't2', hiddenIds: ['th'], steps: 2, snapshotId: 'th', running: false },
         ]);
+    });
+
+    it('takes the thinking after the last tool call while the turn is still going', () => {
+        // Left out, the thought would stand on screen until the next tool call swept it into the run.
+        const result = analyze([
+            thinking('th', 80),
+            tool('t2', 70),
+            agent('mid', 60),
+            tool('t1', 50),
+            user('u1', 10),
+        ], { inFlight: true });
+        expect(segments(result, 't1')).toEqual([
+            { startId: 't1', hiddenIds: [], steps: 1, snapshotId: 't1', running: false },
+            { startId: 't2', hiddenIds: ['th'], steps: 2, snapshotId: 'th', running: true },
+        ]);
+    });
+
+    it('folds thinking the agent did after it wrote as a run of its own', () => {
+        const result = analyze([
+            thinking('th', 80),
+            agent('a1', 75),
+            tool('t2', 70),
+            agent('mid', 60),
+            tool('t1', 50),
+            user('u1', 10),
+        ], { inFlight: true });
+        expect(segments(result, 't1')?.map((s) => s.startId)).toEqual(['t1', 't2', 'th']);
     });
 
     it('marks the run a turn in flight has got to, and only that one', () => {

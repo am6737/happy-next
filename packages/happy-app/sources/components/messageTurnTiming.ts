@@ -41,7 +41,7 @@ export type TurnProcess = {
      * on, which stays to carry it, and never a row the reader still has to answer.
      */
     hiddenIds: string[];
-    /** Tool calls among the rows the fold hides, the row under the line included. */
+    /** Steps — tool calls and thinking — among the rows the fold hides, the row under the line included. */
     steps: number;
     /**
      * The newest row the fold hides, or null when it hides nothing. While the turn runs that is
@@ -59,6 +59,12 @@ export type TurnProcess = {
      * carries the line and its own content at once.
      */
     answerId: string | null;
+    /**
+     * The row under the line is part of the conclusion, so the line leaves its content standing the
+     * way it does the answer's — a settled turn that only thought before it wrote, say, opens on the
+     * report itself.
+     */
+    headerConcludes: boolean;
     /**
      * The runs of steps inside the fold's reach, each with a line of its own, oldest first. Empty when
      * the turn's whole process is one run — then the turn's line is the only line there is, and a
@@ -83,9 +89,9 @@ export type TurnSegment = {
     startId: string;
     /** The rest of the run, oldest first. */
     hiddenIds: string[];
-    /** Tool calls in the run, the first row included. */
+    /** Steps in the run — tool calls and thinking — the first row included. */
     steps: number;
-    /** The run's oldest tool call, whose icon the run's line wears. */
+    /** The run's oldest tool call, whose icon the run's line wears — its first row when it only thought. */
     firstStepId: string;
     /** The run's newest row, which is the one in flight while the run is still going. */
     snapshotId: string;
@@ -176,18 +182,29 @@ function collectTurns(visibleMessages: Message[], includeFold: boolean): Turn[] 
 }
 
 /**
- * The index of the row the fold's reach ends at: the agent's last step, or the turn's last row when
- * it never took one. A row the fold may not take is not a step either — the reach never ends on one,
- * so a turn that stops on an unanswered request keeps everything back to the step before it. A
- * request the reader has answered is a step like any other, so the reach ends on it and the fold
- * takes it.
+ * The index of the agent's last step — the edge its runs are cut at — or the turn's last row when it
+ * never took one. A row the fold may not take is not a step either — the edge never lands on one, so a
+ * turn that stops on an unanswered request keeps everything back to the step before it. A request the
+ * reader has answered is a step like any other, so the edge lands on it and the fold takes it.
  */
 function lastStepIndex(rows: Message[]): number {
+    for (let index = rows.length - 1; index >= 0; index--) {
+        if (isStepRow(rows[index])) return index;
+    }
+    return rows.length - 1;
+}
+
+/**
+ * The index of the agent's last tool call, where a settled turn's conclusion begins — or -1 when it
+ * never made one. Thinking does not move it: a thought between the report and a postscript is still
+ * working-out, but it does not make the report any less of the conclusion.
+ */
+function lastToolCallIndex(rows: Message[]): number {
     for (let index = rows.length - 1; index >= 0; index--) {
         const row = rows[index];
         if (row.kind === 'tool-call' && !foldMustKeepMessage(row)) return index;
     }
-    return rows.length - 1;
+    return -1;
 }
 
 /**
@@ -199,11 +216,12 @@ function lastStepIndex(rows: Message[]): number {
  * else, and the line carries a snapshot of the newest row so the reader can still see what is being
  * done; when it settles, the turn's conclusion unfolds beneath the line.
  *
- * That conclusion is everything the agent wrote after its last step, not merely its final block. A
- * turn ends with a report and then a postscript often enough, and the report is the part worth
+ * That conclusion is everything the agent wrote after its last tool call, not merely its final block.
+ * A turn ends with a report and then a postscript often enough, and the report is the part worth
  * reading: taking it would leave the folded turn saying nothing about what it did. Only turns that
- * end on a step fall back on the answer alone — the last thing the agent said is then a row above
- * that step, and it is kept for the same reason.
+ * end on a tool call fall back on the answer alone — the last thing the agent said is then a row
+ * above that step, and it is kept for the same reason. Thinking is a step wherever it falls, so the
+ * fold takes the thoughts among the conclusion too, and leaves the words around them.
  *
  * Rows nothing may hide are kept either way (`foldMustKeepMessage`): a question card and a tool call
  * whose permission request is still unanswered are both things the reader answers, so hiding one
@@ -215,29 +233,38 @@ function turnProcess(turn: Turn, settled: boolean): TurnProcess {
     const answerId = settled ? turn.lastTextId : null;
     const lastStep = lastStepIndex(turn.rows);
     // A turn still working has no conclusion to spare: the line stands for the whole of it.
-    const reach = settled ? lastStep : turn.rows.length - 1;
+    const reach = settled ? lastToolCallIndex(turn.rows) : turn.rows.length - 1;
 
     const hiddenIds: string[] = [];
     let steps = 0;
     let snapshotId: string | null = null;
-    // Everything past the reach is the conclusion, and the walk simply never gets there.
-    for (let index = 0; index <= reach; index++) {
+    let headerConcludes = false;
+    // Everything past the reach is the conclusion, and only its thoughts are the fold's.
+    for (let index = 0; index < turn.rows.length; index++) {
         const row = turn.rows[index];
+        if (index > reach && !isStepRow(row)) {
+            if (row.id === turn.headerId) headerConcludes = true;
+            continue;
+        }
         // The rows the fold may not swallow are the answer — the fold exists to show it — and the rows
         // the reader answers, which are no more working-out than it is. So this walk is what the fold
         // hides, and the count and the snapshot are read straight off it with the row under the line
         // included: that row's content is gone too, and the line stands in its place.
         if (foldMustKeepMessage(row) || row.id === answerId) continue;
-        if (row.kind === 'tool-call') steps++;
+        if (isStepRow(row)) steps++;
         // Collected oldest first, so the newest is the last one seen.
         snapshotId = row.id;
         // The row under the line is the one row of this set the list never drops: the line lives on it.
         if (row.id !== turn.headerId) hiddenIds.push(row.id);
     }
-    return { hiddenIds, steps, snapshotId, answerId, segments: turnSegments(turn, lastStep, !settled) };
+    return { hiddenIds, steps, snapshotId, answerId, headerConcludes, segments: turnSegments(turn, lastStep, !settled) };
 }
 
-/** A row that belongs to a run of steps: a tool call the fold may take, or the agent thinking. */
+/**
+ * A step: a tool call the fold may take, or the agent thinking. The two are one kind of row — the
+ * agent working something out rather than writing to the reader — so they fold, count and split runs
+ * alike.
+ */
 function isStepRow(row: Message): boolean {
     if (foldMustKeepMessage(row)) return false;
     return row.kind === 'tool-call' || (row.kind === 'agent-text' && row.isThinking === true);
@@ -252,8 +279,6 @@ function isStepRow(row: Message): boolean {
  * stretched over it would swallow rows the reader is looking at. It also means a turn's shape does
  * not change when it settles.
  *
- * A run with no tool call in it — the agent only thought — has no step to report and gets no line.
- *
  * A turn whose every foldable row is in one run has nothing to split, and answers with no segments:
  * that run and the turn's own fold would be the same rows under two lines.
  */
@@ -262,14 +287,13 @@ function turnSegments(turn: Turn, lastStep: number, running: boolean): TurnSegme
     let run: Message[] = [];
     let foldableRows = 0;
     const closeRun = (endIndex: number) => {
-        const toolCalls = run.filter((row) => row.kind === 'tool-call');
-        const steps = toolCalls.length;
+        const steps = run.length;
         if (steps > 0) {
             segments.push({
                 startId: run[0].id,
                 hiddenIds: run.slice(1).map((row) => row.id),
                 steps,
-                firstStepId: toolCalls[0].id,
+                firstStepId: (run.find((row) => row.kind === 'tool-call') ?? run[0]).id,
                 snapshotId: run[run.length - 1].id,
                 running: running && endIndex === turn.rows.length - 1,
             });

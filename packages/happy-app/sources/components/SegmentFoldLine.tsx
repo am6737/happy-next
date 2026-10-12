@@ -23,9 +23,9 @@ const CHEVRON_TURN_MS = 180;
  */
 export const SegmentFoldLine = React.memo((props: {
     folded: boolean;
-    /** Tool calls the run holds. */
+    /** Steps the run holds — tool calls and thinking alike. */
     steps: number;
-    /** The oldest of them, whose icon the line opens with. */
+    /** The oldest tool call among them, whose icon the line opens with; none when the run only thought. */
     tool?: ToolCall;
     /** What the run is doing right now. Only a run still going has one, and only while folded. */
     snapshot?: string;

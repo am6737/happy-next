@@ -206,6 +206,12 @@ const ANCHOR_TOP_SLACK_PX = 1;
 const FOLD_TAP_SETTLE_MS = 800;
 // Codex-style animated "scroll to bottom" (cubic ease-out).
 const SCROLL_TO_BOTTOM_ANIMATION_MS = 260;
+// The scroll-to-bottom curve: progress through SCROLL_TO_BOTTOM_ANIMATION_MS, eased cubic-out. Shared
+// by the button and the glide after an append, so the two move alike.
+function scrollToBottomProgress(elapsedMs: number): { progress: number; eased: number } {
+    const progress = Math.min(1, Math.max(0, elapsedMs / SCROLL_TO_BOTTOM_ANIMATION_MS));
+    return { progress, eased: 1 - (1 - progress) ** 3 };
+}
 // Animate scroll-to-bottom only within this many viewports of the bottom.
 // Farther away the fixed-duration animation is a meaningless whoosh (hundreds
 // of px per frame, each frame a window slide); teleport instantly instead,
@@ -497,6 +503,20 @@ type PendingJump = {
     // Internal repositions skip the shake feedback and logging.
     silent: boolean;
 };
+// How much `next` has grown below the newest row `previous` drew — the row at the bottom of the
+// screen when the reader was there. Rows appended under it count, and so do rows a fold has just
+// let out under it: the newest turn opens on its own once the agent writes, and the steps it held
+// come back between its line and the words. 0 when that row is gone or nothing grew below it.
+function grownBelowNewestPx(previous: LayoutModel, next: LayoutModel): number {
+    let index = previous.keys.length - 1;
+    // Folded rows stay in the set at zero height; the reader saw the line, not them.
+    while (index >= 0 && previous.heightsPx[index] <= 0) index--;
+    if (index < 0) return 0;
+    const nextIndex = next.indexByKey.get(previous.keys[index]);
+    if (nextIndex == null) return 0;
+    return Math.max(0, next.bottomOffsetsPx[nextIndex] - previous.bottomOffsetsPx[index]);
+}
+
 // A fold sliding where the scroll distance cannot absorb it — at or near the bottom, where taking
 // the fold out of the distance would go below 0. The model has the fold from the first frame, but
 // the rows are still being drawn at the heights the slide has reached: a canvas sized by the model
@@ -857,6 +877,9 @@ const ChatListInternal = React.memo((props: {
     // Far in the past — `performance.now()` starts near 0, so initializing to 0
     // would count the first 400ms of page life as "user is scrolling".
     const lastUserInputAtRef = useRef(-1e9);
+    // When that input was a press on the list — a click or a tap that has not moved. It still yields
+    // what is running, but it moves nothing, so it does not stand in the way of a glide.
+    const lastContentPressAtRef = useRef(-1e9);
     // A write the engine refused, waiting for the box to catch up (see `verifyPendingWrite`).
     const pendingWriteVerifyRef = useRef<PendingWriteVerify | null>(null);
     // Raw |scrollTop| target of a pending session restore; re-asserted after
@@ -1012,6 +1035,49 @@ const ChatListInternal = React.memo((props: {
             scrollAnimationFrameRef.current = null;
         }
         isAnimatingScrollRef.current = false;
+        stopBottomGlide();
+    };
+
+    // The glide to the bottom after a row is appended there (see the layout effect that starts it).
+    // Same curve and length as the scroll-to-bottom button, but it does not take the scroller away
+    // from the rest of the list: every frame shrinks whatever distance is asked for NOW by this
+    // frame's share of the curve, so a correction made mid-glide — a row measured, another row
+    // appended, a fold sliding — lands in the distance and is carried down with it rather than
+    // overwritten. Any input from the reader ends it, like the button's.
+    const bottomGlideRef = useRef<{ startedAt: number; lastEased: number; frame: number | null } | null>(null);
+    function stopBottomGlide() {
+        const glide = bottomGlideRef.current;
+        if (glide?.frame != null) window.cancelAnimationFrame(glide.frame);
+        bottomGlideRef.current = null;
+    }
+    const startBottomGlide = () => {
+        stopBottomGlide();
+        const glide: { startedAt: number; lastEased: number; frame: number | null } = { startedAt: performance.now(), lastEased: 0, frame: null };
+        bottomGlideRef.current = glide;
+        const step = (now: number) => {
+            if (bottomGlideRef.current !== glide) return;
+            glide.frame = null;
+            const scroller = scrollerElRef.current;
+            if (!scroller || scroller.clientHeight === 0) {
+                bottomGlideRef.current = null;
+                return;
+            }
+            const { progress, eased } = scrollToBottomProgress(now - glide.startedAt);
+            const nextRawPx = progress >= 1
+                ? 0
+                : getRequestedRawDistance() * (1 - eased) / (1 - glide.lastEased);
+            glide.lastEased = eased;
+            const done = progress >= 1 || nextRawPx < 0.5;
+            setRawDistance(done ? 0 : nextRawPx);
+            updateViewportRef.current(done ? 0 : nextRawPx, scroller.clientHeight);
+            syncProxyFromRealRef.current();
+            if (done) {
+                bottomGlideRef.current = null;
+            } else {
+                glide.frame = window.requestAnimationFrame(step);
+            }
+        };
+        glide.frame = window.requestAnimationFrame(step);
     };
 
     // ---- Proxy scrollbar (see proxyScrollerStyle) ----
@@ -1202,8 +1268,10 @@ const ChatListInternal = React.memo((props: {
         const rawNow = getRawDistance();
         const restoreMode = pendingRestoreRef.current != null;
         const withinGrace = performance.now() - lastUserInputAtRef.current < USER_SCROLL_GRACE_MS;
+        // A glide to the bottom is on its way there: a change below the line is carried down with it
+        // rather than snapped to.
         const pinToBottom = !restoreMode && atBottomRef.current && (!withinGrace || rawNow === 0)
-            && !foldTapOwnsViewport(batch.keys());
+            && !foldTapOwnsViewport(batch.keys()) && bottomGlideRef.current == null;
         // A pending jump is about to place the viewport itself, out of a layout built from this very
         // batch, so no measurement here is "below the viewport" in a sense the correction may act on
         // and taking one for that would move the screen twice. A restore is the same: the saved
@@ -1573,15 +1641,24 @@ const ChatListInternal = React.memo((props: {
             el.addEventListener('scroll', onScroll, { passive: true });
             el.addEventListener('scrollend', releaseCanvasHold, { passive: true });
             el.addEventListener('wheel', onWheel, { passive: true });
-            el.addEventListener('touchstart', onUserInput, { passive: true });
-            el.addEventListener('pointerdown', onUserInput, { passive: true });
+            // A press — mouse or finger — yields what is running but moves nothing yet; the
+            // scrollbar the reader drags is the proxy's, which has listeners of its own. A finger
+            // that then moves is scrolling, and counts as such from its first move.
+            const onPress = () => {
+                onUserInput();
+                lastContentPressAtRef.current = lastUserInputAtRef.current;
+            };
+            el.addEventListener('touchstart', onPress, { passive: true });
+            el.addEventListener('touchmove', onUserInput, { passive: true });
+            el.addEventListener('pointerdown', onPress, { passive: true });
             detachScrollerListenersRef.current = () => {
                 el.removeEventListener('scroll', onScroll);
                 el.removeEventListener('scrollend', releaseCanvasHold);
                 el.removeEventListener('wheel', onWheel);
                 releaseCanvasHold();
-                el.removeEventListener('touchstart', onUserInput);
-                el.removeEventListener('pointerdown', onUserInput);
+                el.removeEventListener('touchstart', onPress);
+                el.removeEventListener('touchmove', onUserInput);
+                el.removeEventListener('pointerdown', onPress);
             };
             if (typeof ResizeObserver !== 'undefined') {
                 const observer = new ResizeObserver(() => {
@@ -1753,8 +1830,8 @@ const ChatListInternal = React.memo((props: {
     }, [folding.toggle, folding.idsChangedBy, foldAnim.start]);
 
     // A fold's slide, frame by frame (see `FoldFollow`). Its first frame decides whether the canvas
-    // follows the rows at all: only when the distance cannot take the whole slide, or when a slide
-    // that was already being followed is turned around, so the canvas never has to jump back to the
+    // follows the rows at all: only when the distance cannot take the whole slide, when a glide to
+    // the bottom is under way, or when a slide that was already being followed is turned around, so the canvas never has to jump back to the
     // model mid-way. Every other fold leaves the canvas to the model, as before.
     const handleFoldFrame = (frame: FoldFrame) => {
         const canvas = canvasElRef.current;
@@ -1762,7 +1839,10 @@ const ChatListInternal = React.memo((props: {
         if (frame.phase === 'start') {
             const active = foldFollowRef.current;
             const baseRawPx = getRequestedRawDistance();
-            if (active == null && baseRawPx + frame.totalPx >= 0) return;
+            // A glide to the bottom counts too: the commit that started it held the screen for the
+            // appended rows only, so the model's share of the fold went uncompensated, and only a
+            // canvas that follows the rows keeps it off the screen.
+            if (active == null && bottomGlideRef.current == null && baseRawPx + frame.totalPx >= 0) return;
             // The rows as they stand on this first frame: the canvas the commit rendered, plus
             // whatever the rows still hang below it.
             const win = canvas.firstElementChild as HTMLElement | null;
@@ -1773,10 +1853,14 @@ const ChatListInternal = React.memo((props: {
         const follow = foldFollowRef.current;
         if (!follow) return;
         follow.canvasPx = Math.max(minimumCanvasPxRef.current, follow.baseCanvasPx + frame.deltaPx);
+        const previousRawPx = follow.rawPx;
         follow.rawPx = Math.max(0, follow.baseRawPx + frame.deltaPx);
         canvas.style.height = `${follow.canvasPx}px`;
+        // Moved by this frame's step rather than set: a glide to the bottom may be shrinking the same
+        // distance at the same time, and the two have to add up.
+        const stepPx = follow.rawPx - previousRawPx;
         const readerScrolled = lastUserInputAtRef.current > follow.startedAtMs;
-        if (!readerScrolled && getRequestedRawDistance() !== follow.rawPx) setRawDistance(follow.rawPx);
+        if (!readerScrolled && stepPx !== 0) setRawDistance(Math.max(0, getRequestedRawDistance() + stepPx));
         syncProxyFromRealRef.current();
     };
     foldFrameHandlerRef.current = handleFoldFrame;
@@ -1916,8 +2000,42 @@ const ChatListInternal = React.memo((props: {
         // A fold the canvas is following moves the distance itself, frame by frame, from the
         // heights as drawn; the model's version of the same change would count it twice.
         if (foldFollowRef.current != null && entrySetHeldStill) return;
+        const withinGrace = performance.now() - lastUserInputAtRef.current < USER_SCROLL_GRACE_MS;
+        // Rows that land below the bottom of the screen while the reader is there — their own
+        // prompt, the agent's next message, the steps the newest turn lets out when it opens on its
+        // own — arrive the way the scroll-to-bottom button moves: the screen holds for the frame they
+        // land in, with the new rows still below its edge, and then glides down to them. The row they
+        // land under keeps its line (the previous newest row's bottom edge) for that frame, which in
+        // bottom-anchored terms is what grew below it added to the distance. A glide already under
+        // way counts as the bottom: whatever lands during it joins it. A fold the reader tapped is
+        // not this: their line holds, and the bottom rule below leaves it to them. A click that has
+        // not moved the list is not in the way either — an option under the last message sends a
+        // prompt from inside the rows.
+        const scrolledJustNow = withinGrace && lastContentPressAtRef.current !== lastUserInputAtRef.current;
+        const appendedPx = previous != null && !scrolledJustNow && !(entrySetHeldStill && foldTapOwnsViewport(null))
+            ? grownBelowNewestPx(previous, next)
+            : 0;
+        if (appendedPx > 0 && (atBottomRef.current || bottomGlideRef.current != null)) {
+            const maxRawPx = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+            const heldRawPx = Math.min(raw + appendedPx, maxRawPx);
+            // Too far to read as motion (the button's own limit), or nothing to move: land at once.
+            if (heldRawPx > SCROLL_TO_BOTTOM_ANIMATE_MAX_VIEWPORTS * scroller.clientHeight || heldRawPx < 1) {
+                stopBottomGlide();
+                if (raw !== 0) setRawDistance(0);
+                return;
+            }
+            setRawDistance(heldRawPx);
+            updateViewportRef.current(heldRawPx, scroller.clientHeight);
+            startBottomGlide();
+            return;
+        }
+        // A fold mid-glide: the canvas follows its slide (see `handleFoldFrame`), which moves the
+        // distance by the same rows frame by frame — compensating for them here too would count the
+        // fold twice. The glide is above the bottom threshold for most of its length, so the bottom
+        // rule below would not catch this.
+        if (bottomGlideRef.current != null && entrySetHeldStill) return;
         if (atBottomRef.current && !(entrySetHeldStill && foldTapOwnsViewport(null))) {
-            const withinGrace = performance.now() - lastUserInputAtRef.current < USER_SCROLL_GRACE_MS;
+            if (bottomGlideRef.current != null) return;
             if (raw !== 0 && !withinGrace) setRawDistance(0);
             return;
         }
@@ -1999,6 +2117,7 @@ const ChatListInternal = React.memo((props: {
         // brings to the very height the last frame drew.
         const follow = foldFollowRef.current;
         foldFollowRef.current = null;
+        const rawBeforeSettlePx = getRequestedRawDistance();
         const batch = new Map<string, { element: HTMLElement; heightPx: number }>();
         for (const row of settledRows) {
             const el = rowElsByKeyRef.current.get(row.key);
@@ -2011,10 +2130,10 @@ const ChatListInternal = React.memo((props: {
         }
         if (batch.size > 0) applyMeasuredHeightsRef.current(batch, false);
         // The slide already took the line's own row into the distance; the measurement just took it
-        // again. The distance the last frame asked for is the one that holds.
+        // again. The distance as the last frame left it is the one that holds.
         if (follow && lastUserInputAtRef.current <= follow.startedAtMs) {
-            if (pendingOpsRef.current) pendingOpsRef.current.scrollDistancePx = follow.rawPx;
-            if (getRequestedRawDistance() !== follow.rawPx) setRawDistance(follow.rawPx);
+            if (pendingOpsRef.current) pendingOpsRef.current.scrollDistancePx = rawBeforeSettlePx;
+            if (getRequestedRawDistance() !== rawBeforeSettlePx) setRawDistance(rawBeforeSettlePx);
         }
         // The clip has done its work: the rows still mounted go back to sizing themselves — read off
         // the elements the animation kept, since the rows that stopped animating in this very commit
@@ -2029,22 +2148,25 @@ const ChatListInternal = React.memo((props: {
     // slide a tap would on them, in a commit of its own that still lands before the first paint.
     // Unlike a tap it points at no row, so it does not take the viewport: at the bottom the
     // conversation stays glued to the new prompt (the canvas follows the slide there), and anywhere
-    // else the usual compensation holds the row the reader is looking at.
+    // else the usual compensation holds the row the reader is looking at. Only rows the reader could
+    // see slide: one that arrives already hidden was never on screen.
     const committedFoldRef = useRef<{ controls: ReadonlyMap<string, TurnFoldControl>; hiddenIds: ReadonlySet<string> } | null>(null);
     let autoFold: { headerId: string; keys: Set<string> } | null = null;
     const committedFold = committedFoldRef.current;
     if (committedFold != null) {
         const tap = lastFoldTapRef.current;
         const tapIsRecent = tap != null && performance.now() - tap.at <= FOLD_TAP_SETTLE_MS;
+        const committedKeys = committedLayoutRef.current.indexByKey;
+        const wasShown = (id: string) => folding.hiddenIds.has(id) && !committedFold.hiddenIds.has(id) && committedKeys.has(id);
         for (const [headerId, control] of folding.controlByHeaderId) {
             if (!control.folded || committedFold.controls.get(headerId)?.folded !== false) continue;
             const process = turns.foldById.get(headerId);
             const header = messageById.get(headerId);
             if (!process || !header) continue;
-            const keys = new Set(process.hiddenIds.filter((id) => folding.hiddenIds.has(id) && !committedFold.hiddenIds.has(id)));
+            const keys = new Set(process.hiddenIds.filter(wasShown));
             // The row the line lands on gives its content to the slide too, unless the folded line
             // leaves it standing (the same rule the rows loop draws it by).
-            if (!foldedLineKeepsRow({ folded: true, answer: process.answerId === headerId, mustKeep: foldMustKeepMessage(header) })) {
+            if (!foldedLineKeepsRow({ folded: true, answer: process.answerId === headerId || process.headerConcludes, mustKeep: foldMustKeepMessage(header) })) {
                 keys.add(headerId);
             }
             // A tap is already sliding its own rows.
@@ -2305,8 +2427,7 @@ const ChatListInternal = React.memo((props: {
                 cancelScrollAnimation();
                 return;
             }
-            const progress = Math.min(1, (now - startedAt) / SCROLL_TO_BOTTOM_ANIMATION_MS);
-            const eased = 1 - (1 - progress) ** 3;
+            const { progress, eased } = scrollToBottomProgress(now - startedAt);
             el.scrollTop = -(start * (1 - eased));
             if (progress < 1 && Math.abs(el.scrollTop) > 1) {
                 scrollAnimationFrameRef.current = window.requestAnimationFrame(step);
@@ -2354,7 +2475,7 @@ const ChatListInternal = React.memo((props: {
         // then shows its own content below the line instead of giving way to it.
         const foldKeepsRow = foldedLineKeepsRow({
             folded: fold?.folded === true,
-            answer: process?.answerId === item.id,
+            answer: process?.answerId === item.id || process?.headerConcludes === true,
             mustKeep: foldMustKeepMessage(item),
         });
         if (fold) {

@@ -10,6 +10,7 @@ function process(hidden: number, steps = hidden, segments: TurnSegment[] = []): 
         steps,
         snapshotId: hiddenIds.length > 0 ? hiddenIds[hiddenIds.length - 1] : null,
         answerId: null,
+        headerConcludes: false,
         segments,
     };
 }
