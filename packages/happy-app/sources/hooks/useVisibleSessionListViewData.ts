@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { SessionListViewItem, useSessionListViewData, useSharedSessions, useOwnSessionsSharedByMe } from '@/sync/storage';
 import { Session } from '@/sync/storageTypes';
+import { compareSessionsByLastMessage, sessionLastMessageAt } from '@/utils/sessionLastMessageAt';
 
 // Returns only active sessions for the main "Active" tab
 export function useVisibleSessionListViewData(): SessionListViewItem[] | null {
@@ -91,7 +92,7 @@ export function useInactiveSessionListViewData(): SessionListViewItem[] | null {
             return [];
         }
 
-        inactiveSessions.sort((a, b) => b.updatedAt - a.updatedAt);
+        inactiveSessions.sort(compareSessionsByLastMessage);
 
         return groupSessionsByDate(inactiveSessions);
     }, [data]);
@@ -131,7 +132,7 @@ function groupSessionsByDate(sessions: Session[]): SessionListViewItem[] {
     };
 
     for (const session of sessions) {
-        const sessionDate = new Date(session.updatedAt);
+        const sessionDate = new Date(sessionLastMessageAt(session));
         const dateString = sessionDate.toDateString();
 
         if (currentDateString !== dateString) {
@@ -171,8 +172,8 @@ export function useSharedSessionListViewData(): SessionListViewItem[] | null {
             }
         }
 
-        activeSessions.sort((a, b) => b.updatedAt - a.updatedAt);
-        inactiveSessions.sort((a, b) => b.updatedAt - a.updatedAt);
+        activeSessions.sort(compareSessionsByLastMessage);
+        inactiveSessions.sort(compareSessionsByLastMessage);
 
         const listData: SessionListViewItem[] = [];
 
@@ -211,8 +212,8 @@ export function useSharedByMeSessionListViewData(): SessionListViewItem[] | null
             }
         }
 
-        activeSessions.sort((a, b) => b.updatedAt - a.updatedAt);
-        inactiveSessions.sort((a, b) => b.updatedAt - a.updatedAt);
+        activeSessions.sort(compareSessionsByLastMessage);
+        inactiveSessions.sort(compareSessionsByLastMessage);
 
         const listData: SessionListViewItem[] = [];
 

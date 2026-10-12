@@ -455,7 +455,7 @@ export function sessionUpdateHandler(userId: string, socket: Socket, connection:
                     const updatedSession = await tx.session.update({
                         where: { id: sid },
                         select: { seq: true },
-                        data: { seq: { increment: count } }
+                        data: { seq: { increment: count }, lastMessageAt: new Date(now) }
                     });
 
                     const endSeq = updatedSession.seq;

@@ -4,6 +4,7 @@ import type { DesktopPlatform } from '@/desktop/desktopWindowUtils';
 import { t } from '@/text';
 import { isMachineOnline } from '@/utils/machineUtils';
 import type { Command } from './types';
+import { compareSessionsByLastMessage, sessionLastMessageAt } from '@/utils/sessionLastMessageAt';
 
 type CommandPaletteCommandOptions = {
     sessions: Session[];
@@ -221,7 +222,7 @@ export function buildCommandPaletteCommands(options: CommandPaletteCommandOption
         }
     }
 
-    const sortedSessions = [...options.sessions].sort((a, b) => b.updatedAt - a.updatedAt);
+    const sortedSessions = [...options.sessions].sort(compareSessionsByLastMessage);
     sortedSessions.forEach((session, index) => {
         const hasDraft = !!options.drafts[session.id];
         commands.push({
@@ -229,7 +230,7 @@ export function buildCommandPaletteCommands(options: CommandPaletteCommandOption
             sessionId: session.id,
             title: sessionTitle(session),
             subtitle: sessionSubtitle(session),
-            timestamp: session.updatedAt,
+            timestamp: sessionLastMessageAt(session),
             icon: session.thinking || session.awaitingResponseSince ? 'sparkles-outline' : 'chatbubble-outline',
             category: t('commandPalette.categorySessions'),
             categoryOrder: CATEGORY_ORDER.sessions,

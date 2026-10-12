@@ -20,7 +20,7 @@ import { MessageView } from './MessageView';
 import { ConversationMinimapItem } from './ConversationMinimap';
 import { Metadata, Session } from '@/sync/storageTypes';
 import { ChatFooter } from './ChatFooter';
-import { AskUserQuestionMessage, isAskUserQuestionToolCall, isPreviewHtmlToolCall, Message, MinimapMessage, PreviewHtmlMessage, toAskUserQuestionMessage, toPreviewHtmlMessage, UserTextMessage } from '@/sync/typesMessage';
+import { AskUserQuestionMessage, isAskUserQuestionToolCall, isPreviewHtmlToolCall, Message, MessageJumpTarget, MinimapMessage, PreviewHtmlMessage, toAskUserQuestionMessage, toPreviewHtmlMessage, UserTextMessage } from '@/sync/typesMessage';
 import { currentLandmark, shouldHideMessageInChatList, shouldHideMessageInMinimap } from './chatListVisibility';
 import { useTurnAnalysis } from './messageTurnTiming';
 import { useTurnInFlight } from '@/hooks/useTurnInFlight';
@@ -34,7 +34,7 @@ import { t } from '@/text';
 
 // Does a loaded list message correspond to the given minimap target (whose id may come from the
 // throwaway reducer and therefore not match the store's id)?
-function messageMatchesTarget(message: Message, target: MinimapMessage): boolean {
+function messageMatchesTarget(message: Message, target: MessageJumpTarget): boolean {
     if (target.seq != null && message.seq === target.seq) return true;
     if (target.localId && (message as { localId?: string | null }).localId === target.localId) return true;
     return message.id === target.id;
@@ -55,7 +55,7 @@ export interface ForkMessageRequest {
     skipDraft: boolean;
 }
 
-export const ChatList = React.memo((props: { session: Session; onFillInput?: (text: string, allOptions?: string[]) => void; onLoadMore?: () => void | Promise<void>; onForkMessage?: (request: ForkMessageRequest) => void; forkingMessageId?: string | null; minimapCachedUserMessages?: MinimapMessage[]; onMinimapItemsChange?: (items: ConversationMinimapItem[]) => void; onActiveMessageIdChange?: (id: string | null) => void; onRegisterMinimapJump?: (jump: ((message: MinimapMessage) => void) | null) => void; headerOverlayInset?: number; keyboardChatScroll?: boolean; composerInset?: SharedValue<number>; emptyComponent?: React.ReactElement | null }) => {
+export const ChatList = React.memo((props: { session: Session; onFillInput?: (text: string, allOptions?: string[]) => void; onLoadMore?: () => void | Promise<void>; onForkMessage?: (request: ForkMessageRequest) => void; forkingMessageId?: string | null; minimapCachedUserMessages?: MinimapMessage[]; onMinimapItemsChange?: (items: ConversationMinimapItem[]) => void; onActiveMessageIdChange?: (id: string | null) => void; onRegisterMinimapJump?: (jump: ((target: MessageJumpTarget) => void) | null) => void; headerOverlayInset?: number; keyboardChatScroll?: boolean; composerInset?: SharedValue<number>; emptyComponent?: React.ReactElement | null }) => {
     const { messages, hasMore } = useSessionMessages(props.session.id);
     const profile = useProfile();
     const isSharedSession = !!(props.session.isShared || props.session.accessLevel);
@@ -240,7 +240,7 @@ const ChatListInternal = React.memo((props: {
     onMinimapItemsChange?: (items: ConversationMinimapItem[]) => void,
     /** The landmark the rail should mark as the reader's — see `currentLandmark`. */
     onActiveMessageIdChange?: (id: string | null) => void,
-    onRegisterMinimapJump?: (jump: ((message: MinimapMessage) => void) | null) => void,
+    onRegisterMinimapJump?: (jump: ((target: MessageJumpTarget) => void) | null) => void,
     /** Height of a header drawn over the list's top; see `useListTopInset`. */
     headerOverlayInset?: number,
     /** Scroll inside `KeyboardChatScrollView` (the iOS safe-area chat layout). */
@@ -500,7 +500,7 @@ const ChatListInternal = React.memo((props: {
     const landmarkRowsRef = useRef(landmarkRows);
     const activeMessageIdRef = useRef<string | null>(null);
 
-    const scrollToLoadedMessage = useCallback((target: MinimapMessage, animated = true): boolean => {
+    const scrollToLoadedMessage = useCallback((target: MessageJumpTarget, animated = true): boolean => {
         // Searched in the newest-first order every other index here means, then translated: the list
         // counts its rows from the oldest end. Among the rows in the list, not the loaded messages:
         // a folded row is not one of them (a landmark never folds, but the rows around it may).
@@ -521,7 +521,7 @@ const ChatListInternal = React.memo((props: {
     // only updates after React commits the re-render triggered by the store change, which a single tick
     // doesn't guarantee — on a slow frame a one-shot scroll misses and the jump silently fails. Retry on
     // a bounded schedule instead.
-    const scrollToTargetWithRetries = useCallback((target: MinimapMessage, animated: boolean) => {
+    const scrollToTargetWithRetries = useCallback((target: MessageJumpTarget, animated: boolean) => {
         let attempts = 0;
         const MAX_ATTEMPTS = 20; // ~1s at 50ms
         const attempt = () => {
@@ -578,10 +578,10 @@ const ChatListInternal = React.memo((props: {
     }, [props.sessionId]);
     // The target of the in-flight jump. A second minimap click updates this so the running paging
     // loop retargets instead of the click being silently dropped.
-    const activeJumpTargetRef = useRef<MinimapMessage | null>(null);
+    const activeJumpTargetRef = useRef<MessageJumpTarget | null>(null);
     // Shows a bottom-centered hint while a minimap jump pages in older history before locating.
     const [isLocating, setIsLocating] = useState(false);
-    const handleJumpToMessage = useCallback(async (target: MinimapMessage) => {
+    const handleJumpToMessage = useCallback(async (target: MessageJumpTarget) => {
         const pager = historyPagerRef.current;
         if (!pager) return;
         // The reader went somewhere: rows still measuring in at the end must not pull them back.

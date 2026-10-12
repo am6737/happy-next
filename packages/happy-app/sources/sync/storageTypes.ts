@@ -200,6 +200,8 @@ export interface Session {
     updatedAt: number,
     active: boolean,
     activeAt: number,
+    // Newest message time; null until the session has a message
+    lastMessageAt?: number | null,
     metadata: Metadata | null,
     metadataVersion: number,
     agentState: AgentState | null,

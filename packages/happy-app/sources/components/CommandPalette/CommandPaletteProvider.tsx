@@ -14,6 +14,7 @@ import { useModal } from '@/modal';
 import { buildCommandPaletteCommands } from './commandPaletteCommands';
 import { t } from '@/text';
 import { getDesktopPlatform } from '@/desktop/desktopWindowUtils';
+import { compareSessionsByLastMessage } from '@/utils/sessionLastMessageAt';
 
 const CommandPaletteContext = createContext<() => void>(() => {});
 
@@ -81,7 +82,7 @@ export function CommandPaletteProvider({ children }: { children: React.ReactNode
 
     const searchCachedMessages = useCallback((query: string) => {
         const sessionIds = [...commandState.sessions]
-            .sort((a, b) => b.updatedAt - a.updatedAt)
+            .sort(compareSessionsByLastMessage)
             .map((session) => session.id);
         return sync.searchCachedMessages(query, sessionIds);
     }, [commandState.sessions]);

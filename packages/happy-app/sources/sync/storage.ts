@@ -45,6 +45,7 @@ import {
     sortPendingQueue,
     upsertPendingMessageInQueue,
 } from "./pendingQueue";
+import { compareSessionsByLastMessage, sessionLastMessageAt } from '@/utils/sessionLastMessageAt';
 
 // Debounce timer for realtimeMode changes
 let realtimeModeDebounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -338,9 +339,9 @@ function buildSessionListViewData(
         }
     });
 
-    // Sort sessions by updated date (newest first)
-    activeSessions.sort((a, b) => b.updatedAt - a.updatedAt);
-    inactiveSessions.sort((a, b) => b.updatedAt - a.updatedAt);
+    // Sort sessions by last message time (newest first)
+    activeSessions.sort(compareSessionsByLastMessage);
+    inactiveSessions.sort(compareSessionsByLastMessage);
 
     // Build unified list view data
     const listData: SessionListViewItem[] = [];
@@ -359,7 +360,7 @@ function buildSessionListViewData(
     let currentDateString: string | null = null;
 
     for (const session of inactiveSessions) {
-        const sessionDate = new Date(session.updatedAt);
+        const sessionDate = new Date(sessionLastMessageAt(session));
         const dateString = sessionDate.toDateString();
 
         if (currentDateString !== dateString) {
@@ -418,7 +419,7 @@ function buildSessionListViewData(
     // Append shared sessions at the end
     const sharedList = Object.values(sharedSessions ?? {});
     if (sharedList.length > 0) {
-        sharedList.sort((a, b) => b.updatedAt - a.updatedAt);
+        sharedList.sort(compareSessionsByLastMessage);
         listData.push({ type: 'header', title: 'Shared with me' });
         for (const session of sharedList) {
             listData.push({ type: 'session', session });
@@ -714,6 +715,8 @@ export const storage = create<StorageState>()((set, get) => {
                     // Preserve optimistic archive state
                     active: finalActive,
                     activeAt: isPreservingArchive ? existing!.activeAt : session.activeAt,
+                    // A fetch that raced a live new-message update must not roll the time back
+                    lastMessageAt: Math.max(existing?.lastMessageAt ?? 0, session.lastMessageAt ?? 0) || null,
                     // Use existing metadata/agentState if their versions are higher
                     metadata: mergedMetadata,
                     metadataVersion: useExistingMetadata ? existing.metadataVersion : session.metadataVersion,

@@ -21,6 +21,7 @@ import { MMKV } from 'react-native-mmkv';
 import { useLocalSearchParams } from 'expo-router';
 import { SessionHistoryCard } from '@/components/SessionHistoryCard';
 import { useSessionFork } from '@/hooks/useSessionFork';
+import { compareSessionsByLastMessage, sessionLastMessageAt } from '@/utils/sessionLastMessageAt';
 
 const mmkv = new MMKV();
 const SELECTED_MACHINE_KEY = 'session-history-selected-machine';
@@ -175,16 +176,16 @@ function groupSessionsByDate(sessions: Session[]): SessionHistoryItem[] {
         });
     }
 
-    // Inactive sessions sorted and grouped by updatedAt desc
+    // Inactive sessions sorted and grouped by last message, newest first
     const sortedInactive = inactiveSessions
         .slice()
-        .sort((a, b) => b.updatedAt - a.updatedAt);
+        .sort(compareSessionsByLastMessage);
 
     let currentDateString: string | null = null;
     let currentDateGroup: Session[] = [];
 
     for (const session of sortedInactive) {
-        const dateString = new Date(session.updatedAt).toDateString();
+        const dateString = new Date(sessionLastMessageAt(session)).toDateString();
 
         if (currentDateString !== dateString) {
             if (currentDateGroup.length > 0) {

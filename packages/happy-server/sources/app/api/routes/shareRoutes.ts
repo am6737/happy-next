@@ -428,6 +428,7 @@ export function shareRoutes(app: Fastify) {
                         agentStateVersion: true,
                         active: true,
                         lastActiveAt: true,
+                        lastMessageAt: true,
                         createdAt: true,
                         updatedAt: true,
                     }
@@ -445,6 +446,7 @@ export function shareRoutes(app: Fastify) {
                 agentStateVersion: share.session.agentStateVersion,
                 active: share.session.active,
                 activeAt: share.session.lastActiveAt.getTime(),
+                lastMessageAt: share.session.lastMessageAt?.getTime() ?? null,
                 createdAt: share.session.createdAt.getTime(),
                 updatedAt: share.session.updatedAt.getTime(),
                 accessLevel: share.accessLevel,
@@ -473,6 +475,7 @@ export function shareRoutes(app: Fastify) {
                         agentStateVersion: true,
                         active: true,
                         lastActiveAt: true,
+                        lastMessageAt: true,
                         createdAt: true,
                         updatedAt: true,
                     }
@@ -492,6 +495,7 @@ export function shareRoutes(app: Fastify) {
                 agentStateVersion: share.session.agentStateVersion,
                 active: share.session.active,
                 activeAt: share.session.lastActiveAt.getTime(),
+                lastMessageAt: share.session.lastMessageAt?.getTime() ?? null,
                 createdAt: share.session.createdAt.getTime(),
                 updatedAt: share.session.updatedAt.getTime(),
                 accessLevel: share.accessLevel,

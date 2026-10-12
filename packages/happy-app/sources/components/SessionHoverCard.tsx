@@ -20,6 +20,7 @@ import { sessionHoverCard, type HoverAnchorRect } from './sessionHoverCardContro
 import { canLocateSessionProject, locateSessionProject } from './sessionProjectLocate';
 import { canArchiveSession } from '@/utils/sessionLifecycle';
 import { formatScheduleCountdown, getPendingScheduleInfo } from './pendingQueuePanelUtils';
+import { sessionLastMessageAt } from '@/utils/sessionLastMessageAt';
 
 const CARD_WIDTH = 280;
 const GAP = 8;
@@ -268,7 +269,7 @@ function SessionHoverCard({ session, anchor }: { session: Session; anchor: Hover
     rows.push({ icon: 'sparkles-outline', text: agent });
     rows.push({
         icon: 'time-outline',
-        text: `${t('sessionHoverCard.created', { time: formatLastSeen(session.createdAt) })} · ${t('sessionHoverCard.updated', { time: formatLastSeen(session.updatedAt) })}`,
+        text: `${t('sessionHoverCard.created', { time: formatLastSeen(session.createdAt) })} · ${t('sessionHoverCard.updated', { time: formatLastSeen(sessionLastMessageAt(session)) })}`,
     });
 
     // `title` is the web tooltip, for what a badge's short text leaves out.

@@ -24,6 +24,7 @@ export interface SharedSessionFromServer {
     agentStateVersion: number;
     active: boolean;
     activeAt: number;
+    lastMessageAt?: number | null;
     createdAt: number;
     updatedAt: number;
     accessLevel: 'view' | 'edit' | 'admin';
@@ -62,6 +63,7 @@ export interface SharedByMeSession {
     agentStateVersion: number;
     active: boolean;
     activeAt: number;
+    lastMessageAt?: number | null;
     createdAt: number;
     updatedAt: number;
     accessLevel: 'view' | 'edit' | 'admin';

@@ -26,7 +26,7 @@ describe("allocateSessionSeqBatch", () => {
         expect(mockSessionUpdate).toHaveBeenCalledWith({
             where: { id: "session-1" },
             select: { seq: true },
-            data: { seq: { increment: 5 } },
+            data: { seq: { increment: 5 }, lastMessageAt: expect.any(Date) },
         });
     });
 
@@ -39,7 +39,7 @@ describe("allocateSessionSeqBatch", () => {
         expect(mockSessionUpdate).toHaveBeenCalledWith({
             where: { id: "session-1" },
             select: { seq: true },
-            data: { seq: { increment: 1 } },
+            data: { seq: { increment: 1 }, lastMessageAt: expect.any(Date) },
         });
     });
 
@@ -70,7 +70,7 @@ describe("allocateSessionSeqBatch", () => {
         expect(mockTxUpdate).toHaveBeenCalledWith({
             where: { id: "session-1" },
             select: { seq: true },
-            data: { seq: { increment: 3 } },
+            data: { seq: { increment: 3 }, lastMessageAt: expect.any(Date) },
         });
         // Ensure the default db client was NOT used
         expect(mockSessionUpdate).not.toHaveBeenCalled();

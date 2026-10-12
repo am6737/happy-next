@@ -23,6 +23,7 @@ type SessionListRow = {
     dataEncryptionKey: Uint8Array | null;
     active: boolean;
     lastActiveAt: Date;
+    lastMessageAt: Date | null;
     _count: { shares: number };
     publicShare: { id: string } | null;
 };
@@ -35,6 +36,7 @@ function serializeSessionRow(v: SessionListRow) {
         updatedAt: v.updatedAt.getTime(),
         active: v.active,
         activeAt: v.lastActiveAt.getTime(),
+        lastMessageAt: v.lastMessageAt?.getTime() ?? null,
         metadata: v.metadata,
         metadataVersion: v.metadataVersion,
         agentState: v.agentState,
@@ -57,6 +59,7 @@ const sessionListSelect = {
     dataEncryptionKey: true,
     active: true,
     lastActiveAt: true,
+    lastMessageAt: true,
     _count: { select: { shares: true } },
     publicShare: { select: { id: true } },
 } satisfies Prisma.SessionSelect;
@@ -279,6 +282,7 @@ export function sessionRoutes(app: Fastify) {
                 dataEncryptionKey: true,
                 active: true,
                 lastActiveAt: true,
+                lastMessageAt: true,
             }
         });
 
@@ -290,6 +294,7 @@ export function sessionRoutes(app: Fastify) {
                 updatedAt: v.updatedAt.getTime(),
                 active: v.active,
                 activeAt: v.lastActiveAt.getTime(),
+                lastMessageAt: v.lastMessageAt?.getTime() ?? null,
                 metadata: v.metadata,
                 metadataVersion: v.metadataVersion,
                 agentState: v.agentState,
@@ -359,6 +364,7 @@ export function sessionRoutes(app: Fastify) {
                 dataEncryptionKey: true,
                 active: true,
                 lastActiveAt: true,
+                lastMessageAt: true,
             }
         });
 
@@ -381,6 +387,7 @@ export function sessionRoutes(app: Fastify) {
                 updatedAt: v.updatedAt.getTime(),
                 active: v.active,
                 activeAt: v.lastActiveAt.getTime(),
+                lastMessageAt: v.lastMessageAt?.getTime() ?? null,
                 metadata: v.metadata,
                 metadataVersion: v.metadataVersion,
                 agentState: v.agentState,
@@ -465,6 +472,7 @@ export function sessionRoutes(app: Fastify) {
                     dataEncryptionKey: session.dataEncryptionKey ? Buffer.from(session.dataEncryptionKey).toString('base64') : null,
                     active: session.active,
                     activeAt: session.lastActiveAt.getTime(),
+                    lastMessageAt: session.lastMessageAt?.getTime() ?? null,
                     createdAt: session.createdAt.getTime(),
                     updatedAt: session.updatedAt.getTime(),
                     lastMessage: null
@@ -513,6 +521,7 @@ export function sessionRoutes(app: Fastify) {
                     dataEncryptionKey: session.dataEncryptionKey ? Buffer.from(session.dataEncryptionKey).toString('base64') : null,
                     active: session.active,
                     activeAt: session.lastActiveAt.getTime(),
+                    lastMessageAt: session.lastMessageAt?.getTime() ?? null,
                     createdAt: session.createdAt.getTime(),
                     updatedAt: session.updatedAt.getTime(),
                     lastMessage: null

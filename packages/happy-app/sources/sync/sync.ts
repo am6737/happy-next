@@ -2009,6 +2009,7 @@ class Sync {
             dataEncryptionKey: string | null;
             active: boolean;
             activeAt: number;
+            lastMessageAt?: number | null;
             createdAt: number;
             updatedAt: number;
             lastMessage: ApiMessage | null;
@@ -2084,6 +2085,7 @@ class Sync {
             dataEncryptionKey: string | null;
             active: boolean;
             activeAt: number;
+            lastMessageAt?: number | null;
             createdAt: number;
             updatedAt: number;
             lastMessage: ApiMessage | null;
@@ -2192,6 +2194,7 @@ class Sync {
                 seq: ss.seq,
                 createdAt: ss.createdAt,
                 updatedAt: ss.updatedAt,
+                lastMessageAt: ss.lastMessageAt ?? null,
                 active: ss.active,
                 activeAt: ss.activeAt,
                 metadata,
@@ -2275,6 +2278,7 @@ class Sync {
         dataEncryptionKey: string | null;
         active: boolean;
         activeAt: number;
+        lastMessageAt?: number | null;
         createdAt: number;
         updatedAt: number;
         lastMessage?: ApiMessage | null;
@@ -2427,6 +2431,7 @@ class Sync {
             dataEncryptionKey: string | null;
             active: boolean;
             activeAt: number;
+            lastMessageAt?: number | null;
             createdAt: number;
             updatedAt: number;
             lastMessage: ApiMessage | null;
@@ -5163,6 +5168,7 @@ class Sync {
                         this.applySessions([{
                             ...session,
                             updatedAt: latestUpdate.createdAt,
+                            lastMessageAt: latestUpdate.createdAt,
                             seq: latestUpdate.seq,
                             ...(thinkingUpdate === false ? { thinking: false } : {}),
                             ...(thinkingUpdate === true ? { thinking: true } : {})

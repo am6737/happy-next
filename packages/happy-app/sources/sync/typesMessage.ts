@@ -130,6 +130,9 @@ export type PreviewHtmlMessage = {
  */
 export type MinimapMessage = UserTextMessage | AskUserQuestionMessage | PreviewHtmlMessage;
 
+/** What a jump in the message list needs to find its row: a minimap marker, or a search hit. */
+export type MessageJumpTarget = { id: string; seq?: number | null; localId?: string | null };
+
 export const ASK_USER_QUESTION_TOOL = 'AskUserQuestion';
 
 /** True for the `AskUserQuestion` call itself — one of the two tool calls the minimap marks. */

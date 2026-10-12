@@ -21,7 +21,8 @@ export async function allocateSessionSeq(sessionId: string) {
     const session = await db.session.update({
         where: { id: sessionId },
         select: { seq: true },
-        data: { seq: { increment: 1 } }
+        // Session seq only advances when a message is written, so this is also the last-message time
+        data: { seq: { increment: 1 }, lastMessageAt: new Date() }
     });
     const seq = session.seq;
     return seq;
@@ -46,7 +47,7 @@ export async function allocateSessionSeqBatch(sessionId: string, count: number, 
     const session = await client.session.update({
         where: { id: sessionId },
         select: { seq: true },
-        data: { seq: { increment: count } }
+        data: { seq: { increment: count }, lastMessageAt: new Date() }
     });
 
     const endSeq = session.seq;

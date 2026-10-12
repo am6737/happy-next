@@ -8,7 +8,8 @@ import { ChatHeaderTitle } from '@/components/ChatHeaderTitle';
 import { HeaderBackButton } from '@/components/navigation/Header';
 import { ChatList, type ForkMessageRequest } from '@/components/ChatList';
 import { ConversationMinimap, type ConversationMinimapEdgeTouch, type ConversationMinimapItem } from '@/components/ConversationMinimap';
-import type { MinimapMessage } from '@/sync/typesMessage';
+import type { MessageJumpTarget, MinimapMessage } from '@/sync/typesMessage';
+import { subscribeSessionMessageJump, takeSessionMessageJump } from '@/sync/sessionMessageJump';
 import { Deferred } from '@/components/Deferred';
 import { DuplicateSheet } from '@/components/DuplicateSheet';
 import { ActionMenuModal } from '@/components/ActionMenuModal';
@@ -1067,10 +1068,23 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
     const [minimapActiveMessageId, setMinimapActiveMessageId] = React.useState<string | null>(null);
     const [minimapCachedMessages, setMinimapCachedMessages] = React.useState<MinimapMessage[]>([]);
     const [contentAreaWidth, setContentAreaWidth] = React.useState(0);
-    const minimapJumpRef = React.useRef<((message: MinimapMessage) => void | Promise<void>) | null>(null);
-    const handleRegisterMinimapJump = React.useCallback((jump: ((message: MinimapMessage) => void | Promise<void>) | null) => {
+    const minimapJumpRef = React.useRef<((target: MessageJumpTarget) => void | Promise<void>) | null>(null);
+    const [isJumpReady, setIsJumpReady] = React.useState(false);
+    const handleRegisterMinimapJump = React.useCallback((jump: ((target: MessageJumpTarget) => void | Promise<void>) | null) => {
         minimapJumpRef.current = jump;
+        setIsJumpReady(jump !== null);
     }, []);
+    // A search hit opened from the command palette: scroll to it once the list can jump and the
+    // messages are in, whether the session was just opened or was already on screen.
+    React.useEffect(() => {
+        if (!isJumpReady || !isLoaded) return;
+        const consume = () => {
+            const target = takeSessionMessageJump(sessionId);
+            if (target) void minimapJumpRef.current?.(target);
+        };
+        consume();
+        return subscribeSessionMessageJump(sessionId, consume);
+    }, [isJumpReady, isLoaded, sessionId]);
     // The answer is handed back rather than dropped: a jump that has to page older messages in takes a
     // while, and the rail holds itself up until it lands.
     const handleMinimapJump = React.useCallback((message: MinimapMessage) => {
