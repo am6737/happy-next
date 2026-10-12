@@ -8,6 +8,7 @@ import { floatingComposerBottomInset } from './floatingComposer';
 import { ChatScrollView } from './ChatScrollView';
 import { ScrollToBottomButton } from './ScrollToBottomButton';
 import { useChatOverlayStyle, useChatVisibleAreaStyle } from '@/hooks/useChatOverlayStyle';
+import { useChatStickToEnd } from '@/hooks/useChatStickToEnd';
 import Animated, { type SharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useUnistyles } from 'react-native-unistyles';
@@ -236,6 +237,7 @@ const ChatListInternal = React.memo((props: {
     const safeArea = useSafeAreaInsets();
     const listRef = useRef<LegendListRef | null>(null);
     const [viewportHeight, setViewportHeight] = useState(0);
+    const stickToEnd = useChatStickToEnd(CHAT_END_THRESHOLD_PX);
     const showThinkingMessages = useSetting('showThinkingMessages');
     const visibleMessages = React.useMemo(
         () => props.messages.filter((message) => !shouldHideMessageInChatList(message, showThinkingMessages)),
@@ -521,6 +523,8 @@ const ChatListInternal = React.memo((props: {
     const handleJumpToMessage = useCallback(async (target: MinimapMessage) => {
         const pager = historyPagerRef.current;
         if (!pager) return;
+        // The reader went somewhere: rows still measuring in at the end must not pull them back.
+        stickToEnd.release();
         activeJumpTargetRef.current = target;
         // A paging jump is already running — it will pick up the new target above. Keep the hint.
         if (isJumpingRef.current) return;
@@ -650,7 +654,8 @@ const ChatListInternal = React.memo((props: {
     const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
         const shouldShow = distanceFromEnd(event.nativeEvent) > CHAT_END_THRESHOLD_PX;
         visibilityControllerRef.current?.update(shouldShow);
-    }, []);
+        stickToEnd.onScroll(event);
+    }, [stickToEnd.onScroll]);
 
     // Where the composer's padding ends above the screen's bottom, which its keyboard offset is
     // measured from: the floating composer sits lower than the safe-area layout's.
@@ -658,8 +663,24 @@ const ChatListInternal = React.memo((props: {
     const handleScrollToBottom = useCallback(() => {
         const list = listRef.current;
         if (!list) return;
+        stickToEnd.stick();
         void list.scrollToEnd(chatScrollToEndOptions(list.getState()));
-    }, []);
+    }, [stickToEnd.stick]);
+
+    // A prompt landing as the newest message — sent from here, an option tapped, or another device —
+    // follows a reader resting near the end even if their last drag let go of it, as it did when
+    // nearness alone decided. The list's own follow already ran for this data without them, so the
+    // scroll is asked for here.
+    const newestMessage = visibleMessages[0];
+    const newestPromptId = newestMessage?.kind === 'user-text' ? newestMessage.id : null;
+    const seenPromptIdRef = useRef(newestPromptId);
+    React.useLayoutEffect(() => {
+        if (newestPromptId === seenPromptIdRef.current) return;
+        seenPromptIdRef.current = newestPromptId;
+        if (newestPromptId === null || stickToEnd.stuck || !stickToEnd.stickIfNear()) return;
+        const list = listRef.current;
+        if (list) void list.scrollToEnd(chatScrollToEndOptions(list.getState()));
+    }, [newestPromptId, stickToEnd.stuck, stickToEnd.stickIfNear]);
 
     const handleListLayout = useCallback((event: LayoutChangeEvent) => {
         setViewportHeight(event.nativeEvent.layout.height);
@@ -733,7 +754,8 @@ const ChatListInternal = React.memo((props: {
                 // paging older history in above the viewport, and a new message arriving while the
                 // reader is up in the history, both leave them where they were.
                 initialScrollAtEnd
-                maintainScrollAtEnd={CHAT_MAINTAIN_SCROLL_AT_END}
+                // Followed only while the reader holds on to the end — see `useChatStickToEnd`.
+                maintainScrollAtEnd={stickToEnd.stuck ? CHAT_MAINTAIN_SCROLL_AT_END : false}
                 maintainScrollAtEndThreshold={chatEndThreshold(viewportHeight)}
                 maintainVisibleContentPosition
                 // `extraData` is the whole-list invalidation switch: it re-renders the mounted rows
@@ -751,6 +773,10 @@ const ChatListInternal = React.memo((props: {
                 onLayout={handleListLayout}
                 onReady={handleListReady}
                 onScroll={handleScroll}
+                onScrollBeginDrag={stickToEnd.onScrollBeginDrag}
+                onScrollEndDrag={stickToEnd.onScrollEndDrag}
+                onMomentumScrollBegin={stickToEnd.onMomentumScrollBegin}
+                onMomentumScrollEnd={stickToEnd.onMomentumScrollEnd}
                 scrollEventThrottle={16}
                 onStartReached={handleStartReached}
                 onStartReachedThreshold={CHAT_HISTORY_THRESHOLD}

@@ -17,8 +17,9 @@ export function chatScrollToEndOptions(metrics: {
     };
 }
 
-// This controls HOW an eligible automatic follow scrolls, not WHEN it follows. The 100px
-// maintainScrollAtEndThreshold still owns eligibility, so reading history never opts into it.
+// This controls HOW an eligible automatic follow scrolls, not WHEN it follows. When is
+// useChatStickToEnd's call (the reader's last move), with the 100px maintainScrollAtEndThreshold
+// still required on top, so reading history never opts into it.
 export const CHAT_MAINTAIN_SCROLL_AT_END = { animated: true } as const;
 
 
