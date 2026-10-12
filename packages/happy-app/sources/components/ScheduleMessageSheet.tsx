@@ -249,6 +249,8 @@ export function ScheduleMessageSheet({
                                 multiline
                                 value={text}
                                 onChangeText={setText}
+                                // The keyboard takes the room the date picker needs, so typing closes it.
+                                onFocus={closeDatePicker}
                                 placeholder={t('scheduleMessage.placeholder')}
                                 placeholderTextColor={theme.colors.textSecondary}
                                 style={styles.editor}
