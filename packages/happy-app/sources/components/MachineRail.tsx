@@ -107,6 +107,17 @@ const InfoIcon = ({ size, color }: { size: number; color: string }) => (
     </Svg>
 );
 
+const TerminalIcon = ({ size, color }: { size: number; color: string }) => (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Path
+            d="M5.25 20.25h13.5A2.25 2.25 0 0 0 21 18V6a2.25 2.25 0 0 0-2.25-2.25H5.25A2.25 2.25 0 0 0 3 6v12a2.25 2.25 0 0 0 2.25 2.25Z"
+            stroke={color}
+            {...STROKE}
+        />
+        <Path d="M6.75 8.25l3 2.25-3 2.25M11.25 12.75h3" stroke={color} {...STROKE} />
+    </Svg>
+);
+
 const DETAILS_ANIMATION_MS = 180;
 // The button plus the footer gap before it; the slot pulls the gap back with a negative margin, so
 // collapsed it takes no room at all.
@@ -166,6 +177,7 @@ export const MachineRail = React.memo(({
     sessionCount,
     settingsActive,
     onSettings,
+    onToggleTerminalPanel,
     machineDetailsActive,
     onMachineDetails,
     onNewSession,
@@ -186,6 +198,9 @@ export const MachineRail = React.memo(({
     sessionCount: number;
     settingsActive: boolean;
     onSettings: () => void;
+    // Shows and hides the terminal panel. A switch rather than a place, so its button is never
+    // marked as the one you are on.
+    onToggleTerminalPanel?: () => void;
     // Shown above settings while a machine is picked, opening that machine's page.
     machineDetailsActive: boolean;
     onMachineDetails: (machineId: string) => void;
@@ -364,6 +379,16 @@ export const MachineRail = React.memo(({
                     active={machineDetailsActive}
                     onPress={onMachineDetails}
                 />
+                {onToggleTerminalPanel && (
+                    <RailButton
+                        label={t('terminalSession.togglePanel')}
+                        active={false}
+                        plain
+                        onPress={onToggleTerminalPanel}
+                    >
+                        <TerminalIcon size={20} color={theme.colors.text} />
+                    </RailButton>
+                )}
                 <RailButton
                     label={t('tabs.settings')}
                     active={settingsActive}

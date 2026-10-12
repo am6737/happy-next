@@ -33,13 +33,14 @@ import { Avatar } from '@/components/Avatar';
 import { t } from '@/text';
 import { useMainTabBottomPadding } from '@/hooks/useMainTabBottomPadding';
 import { openExternalUrl } from '@/utils/tauri';
-import { openTerminalPopup } from '@/terminal/terminalPopupWindow';
+import { useOpenTerminal } from '@/hooks/useOpenTerminal';
 
 const machineKey = (machine: Machine) => machine.id;
 
 export const SettingsView = React.memo(function SettingsView() {
     const { theme } = useUnistyles();
     const router = useRouter();
+    const { openTerminals } = useOpenTerminal();
     const appVersion = Constants.expoConfig?.version || '1.0.0';
     const auth = useAuth();
     const [devModeEnabled, setDevModeEnabled] = useLocalSettingMutable('devModeEnabled');
@@ -479,12 +480,7 @@ export const SettingsView = React.memo(function SettingsView() {
                     title={t('settings.terminal')}
                     subtitle={t('settings.terminalSubtitle')}
                     icon={<FontAwesome6 name="terminal" size={24} color="#5856D6" />}
-                    onPress={() => {
-                        // A popup where the browser offers one; opened here, in the click, or it is blocked.
-                        if (!openTerminalPopup()?.show()) {
-                            router.push('/terminals');
-                        }
-                    }}
+                    onPress={openTerminals}
                 />
             </ItemGroup>
 

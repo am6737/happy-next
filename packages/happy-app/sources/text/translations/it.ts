@@ -1550,6 +1550,11 @@ export const it: TranslationStructure = {
         renameTerminalHint: 'Dai a questo terminale un nome suo. Lascia vuoto per tornare a quello attuale.',
         duplicateFailed: 'Impossibile duplicare il terminale',
         closeTab: ({ label }: { label: string }) => `Chiudi ${label}`,
+        togglePanel: 'Mostra o nascondi il pannello del terminale',
+        maximizePanel: 'Massimizza pannello',
+        restorePanel: 'Ripristina pannello',
+        closePanel: 'Chiudi pannello',
+        openInWindow: 'Apri in una nuova finestra',
     },
 
 

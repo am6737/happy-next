@@ -1551,6 +1551,11 @@ export const ca: TranslationStructure = {
         renameTerminalHint: 'Dona a aquest terminal un nom propi. Deixa-ho buit per tornar al que té.',
         duplicateFailed: 'No s\'ha pogut duplicar el terminal',
         closeTab: ({ label }: { label: string }) => `Tanca ${label}`,
+        togglePanel: 'Mostra o amaga el plafó del terminal',
+        maximizePanel: 'Maximitza el plafó',
+        restorePanel: 'Restaura el plafó',
+        closePanel: 'Tanca el plafó',
+        openInWindow: 'Obre en una finestra nova',
     },
 
 

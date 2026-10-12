@@ -1553,6 +1553,11 @@ export const ja: TranslationStructure = {
         renameTerminalHint: 'このターミナルに名前を付けます。空欄にすると元の名前に戻ります。',
         duplicateFailed: 'ターミナルを複製できませんでした',
         closeTab: ({ label }: { label: string }) => `${label} を閉じる`,
+        togglePanel: 'ターミナルパネルの表示/非表示',
+        maximizePanel: 'パネルを最大化',
+        restorePanel: 'パネルを元に戻す',
+        closePanel: 'パネルを閉じる',
+        openInWindow: '新しいウィンドウで開く',
     },
 
 

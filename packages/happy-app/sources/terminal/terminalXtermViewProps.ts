@@ -10,6 +10,11 @@ export interface TerminalXtermViewProps {
    */
   active: boolean;
   /**
+   * Whether showing this terminal may take the keyboard. False for a terminal that appears without
+   * anyone asking for it — a panel restored with the app — which must leave the focus where it is.
+   */
+  autoFocus?: boolean;
+  /**
    * The terminal that is drawn here, once it exists, and `null` when it goes away. The
    * stream is given this as its mirror, so what the shell writes lands on this screen.
    */

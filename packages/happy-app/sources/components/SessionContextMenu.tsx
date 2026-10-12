@@ -34,7 +34,7 @@ import { getWorkspaceRepos } from '@/utils/workspaceRepos';
 import { ActionMenuModal } from './ActionMenuModal';
 import { ActionMenuItem } from './ActionMenu';
 import { getSessionQuickActionKinds, getSessionQuickActionSections, SessionQuickActionKind } from './sessionQuickActions';
-import { openMachineTerminal } from '@/terminal/openMachineTerminal';
+import { useOpenTerminal } from '@/hooks/useOpenTerminal';
 import { SessionContextMenuPortal } from './SessionContextMenuPortal';
 import { useSessionHoverCard } from './SessionHoverCard';
 import { sessionHoverCard } from './sessionHoverCardController';
@@ -223,11 +223,10 @@ function useSessionQuickActions(session: Session) {
         router.push(query ? `/new?${query}` : '/new');
     }, [router, session.metadata?.machineId, session.metadata?.path]);
 
+    const { openSession } = useOpenTerminal();
     const handleOpenTerminal = React.useCallback(() => {
-        const machineId = session.metadata?.machineId;
-        if (!machineId) return;
-        openMachineTerminal({ machineId, sessionPath: session.metadata?.path, push: router.push });
-    }, [router, session.metadata?.machineId, session.metadata?.path]);
+        openSession(session);
+    }, [openSession, session]);
 
     const handleArchive = React.useCallback(() => {
         const workspaceRepos = getWorkspaceRepos(session.metadata);

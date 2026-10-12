@@ -41,7 +41,7 @@ import { isRunningOnMac } from '@/utils/platform';
 import { softHeaderOptions } from '@/components/navigation/softHeader';
 import { MODEL_MODE_DEFAULT } from 'happy-wire';
 import { NativeMenu } from '@/components/NativeMenu';
-import { openMachineTerminal } from '@/terminal/openMachineTerminal';
+import { useOpenTerminal } from '@/hooks/useOpenTerminal';
 import { SessionHistoryCard } from '@/components/SessionHistoryCard';
 import { MachineIcon } from '@/components/MachineAvatar';
 import { MachineAvatarPicker } from '@/components/MachineAvatarPicker';
@@ -134,6 +134,7 @@ export default function MachineDetailScreen() {
     const { theme } = useUnistyles();
     const { id: machineId } = useLocalSearchParams<{ id: string }>();
     const router = useRouter();
+    const { openMachine: openMachineTerminal } = useOpenTerminal();
     const sessions = useSessions();
     const machine = useMachine(machineId!);
     const cliUpdate = useMachineCliUpdate(machine);
@@ -930,7 +931,7 @@ export default function MachineDetailScreen() {
                             subtitle={t('machine.openTerminalSubtitle')}
                             icon={<FontAwesome6 name="terminal" size={23} color="#007AFF" />}
                             disabled={!isMachineOnline(machine)}
-                            onPress={() => openMachineTerminal({ machineId: machine.id, push: router.push })}
+                            onPress={() => openMachineTerminal(machine.id)}
                         />
                         <Item
                             title={t('machine.host')}

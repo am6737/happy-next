@@ -1553,6 +1553,11 @@ export const zhHans: TranslationStructure = {
         renameTerminalHint: '给它起一个自己的名字；留空则恢复原本的名称。',
         duplicateFailed: '无法复制终端',
         closeTab: ({ label }: { label: string }) => `关闭 ${label}`,
+        togglePanel: '显示或隐藏终端面板',
+        maximizePanel: '最大化面板',
+        restorePanel: '还原面板',
+        closePanel: '关闭面板',
+        openInWindow: '在新窗口中打开',
     },
 
 

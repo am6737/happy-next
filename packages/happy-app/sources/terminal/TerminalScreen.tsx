@@ -6,7 +6,6 @@ import {
     StyleSheet,
     Text,
     View,
-    useColorScheme,
     type LayoutChangeEvent,
 } from 'react-native';
 import { useUnistyles } from 'react-native-unistyles';
@@ -19,7 +18,7 @@ import type { TerminalViewportState } from './headlessTerminalState';
 import { TerminalStream, type TerminalStreamStatus } from './terminalStream';
 import { encodeTerminalKeyInput } from './terminalKeyInput';
 import type { NativeTerminalKey } from './terminalKeyEvents';
-import { resolveTerminalTheme } from './terminalTheme';
+import { useTerminalTheme } from '@/hooks/useTerminalTheme';
 import type { TerminalGridCellMetrics } from './terminalGridMetrics';
 import { resolveMeasuredNativeTerminalSize } from './terminalSizeMeasurement';
 import { t } from '@/text';
@@ -33,6 +32,10 @@ export interface TerminalScreenProps {
      * is shown again; a hidden one must not hold the keyboard.
      */
     active?: boolean;
+    /** Whether showing this terminal may take the keyboard; see `TerminalXtermViewProps`. */
+    autoFocus?: boolean;
+    /** False to leave out the key bar, where a physical keyboard is all there is to type with. */
+    keyBar?: boolean;
     /** Which shell this is, for the end of the key bar. */
     status?: string;
     onTitle?: (title: string | undefined) => void;
@@ -63,11 +66,9 @@ const UNMEASURED_VIEWPORT: TerminalViewportState = {
  * makes programs that redraw on SIGWINCH (anything full-screen) flash a
  * mis-wrapped frame on entry.
  */
-export const TerminalScreen = memo(({ machineId, terminalId, active = true, status, onTitle, onExit }: TerminalScreenProps) => {
-    const { rt, theme } = useUnistyles();
-    const systemScheme = useColorScheme();
-    const scheme = rt.themeName === 'light' || rt.themeName === 'dark' ? rt.themeName : systemScheme ?? 'dark';
-    const xtermTheme = useMemo(() => resolveTerminalTheme(scheme), [scheme]);
+export const TerminalScreen = memo(({ machineId, terminalId, active = true, autoFocus = true, keyBar = true, status, onTitle, onExit }: TerminalScreenProps) => {
+    const { theme } = useUnistyles();
+    const xtermTheme = useTerminalTheme();
 
     const [viewport, setViewport] = useState<TerminalViewportState | null>(null);
     const [streamStatus, setStreamStatus] = useState<TerminalStreamStatus>({
@@ -262,6 +263,7 @@ export const TerminalScreen = memo(({ machineId, terminalId, active = true, stat
                     <TerminalXtermView
                         xtermTheme={xtermTheme}
                         active={active}
+                        autoFocus={autoFocus}
                         onMirror={setXtermMirror}
                         onSize={setXtermSize}
                         onInput={handleInput}
@@ -326,13 +328,15 @@ export const TerminalScreen = memo(({ machineId, terminalId, active = true, stat
                 </View>
             ) : null}
 
-            <TerminalKeyBar
-                ctrlActive={ctrlActive}
-                onToggleCtrl={toggleCtrl}
-                onKey={handleTerminalKey}
-                onSend={handleSendRaw}
-                status={status}
-            />
+            {keyBar ? (
+                <TerminalKeyBar
+                    ctrlActive={ctrlActive}
+                    onToggleCtrl={toggleCtrl}
+                    onKey={handleTerminalKey}
+                    onSend={handleSendRaw}
+                    status={status}
+                />
+            ) : null}
         </View>
     );
 });

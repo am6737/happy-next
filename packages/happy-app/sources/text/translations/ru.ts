@@ -1561,6 +1561,11 @@ export const ru: TranslationStructure = {
         renameTerminalHint: 'Дайте этому терминалу собственное имя. Оставьте пустым, чтобы вернуть прежнее.',
         duplicateFailed: 'Не удалось дублировать терминал',
         closeTab: ({ label }: { label: string }) => `Закрыть ${label}`,
+        togglePanel: 'Показать или скрыть панель терминала',
+        maximizePanel: 'Развернуть панель',
+        restorePanel: 'Восстановить панель',
+        closePanel: 'Закрыть панель',
+        openInWindow: 'Открыть в новом окне',
     },
 
 

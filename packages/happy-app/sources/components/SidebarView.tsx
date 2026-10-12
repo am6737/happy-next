@@ -19,7 +19,8 @@ import { useInboxHasContent } from '@/hooks/useInboxHasContent';
 import { useDootaskProfile, useProfile } from '@/sync/storage';
 import { getDesktopPlatform } from '@/desktop/desktopWindowUtils';
 import { useSessionListScope } from '@/hooks/useSessionListScope';
-import { openMachineTerminal } from '@/terminal/openMachineTerminal';
+import { useOpenTerminal, useTerminalPanelAvailable } from '@/hooks/useOpenTerminal';
+import { toggleTerminalPanel } from '@/terminal/terminalPanel';
 import { mergeMachineOrder } from '@/utils/machineOrder';
 
 const stylesheet = StyleSheet.create((theme, runtime) => ({
@@ -144,6 +145,8 @@ const SidebarMachineRail = React.memo(({ header }: { header?: React.ReactNode })
     const scope = useSessionListScope();
     const router = useRouter();
     const pathname = usePathname();
+    const { openMachine: openMachineTerminal } = useOpenTerminal();
+    const terminalPanelAvailable = useTerminalPanelAvailable();
     const [hideIdleMachines, setHideIdleMachines] = useSettingMutable('hideIdleMachines');
     const [machineOrder, setMachineOrder] = useSettingMutable('machineOrder');
     // The saved order as reordering began, put back if it is cancelled.
@@ -163,7 +166,8 @@ const SidebarMachineRail = React.memo(({ header }: { header?: React.ReactNode })
             machineDetailsActive={pathname === `/machine/${scope.selection}`}
             onMachineDetails={(machineId) => router.navigate(`/machine/${machineId}`)}
             onNewSession={(machineId) => router.push({ pathname: '/new', params: { machineId } })}
-            onOpenTerminal={(machineId) => openMachineTerminal({ machineId, push: router.push })}
+            onOpenTerminal={(machineId) => openMachineTerminal(machineId)}
+            onToggleTerminalPanel={terminalPanelAvailable ? toggleTerminalPanel : undefined}
             hideIdleMachines={hideIdleMachines}
             onHideIdleMachinesChange={setHideIdleMachines}
             onReorderMachines={(machineIds) => setMachineOrder(mergeMachineOrder(machineOrder, machineIds))}

@@ -26,6 +26,9 @@ export const LocalSettingsSchema = z.object({
     terminalTabOrder: z.array(z.string()).describe('Order the terminal tabs were dragged into, by terminalTabKey'),
     terminalTabNames: z.record(z.string(), z.string()).describe('Names given to terminal tabs by hand, by terminalTabKey'),
     terminalNewTarget: z.object({ machineId: z.string(), cwd: z.string() }).nullable().describe('Machine and directory chosen the last time a terminal was started'),
+    terminalPanelOpen: z.boolean().describe('Whether the bottom terminal panel was left open (web and desktop)'),
+    terminalPanelHeight: z.number().finite().nullable().describe('Height the bottom terminal panel was dragged to, in pixels'),
+    terminalPanelListWidth: z.number().finite().nullable().describe('Width the terminal list beside the bottom panel was dragged to, in pixels'),
 });
 
 //
@@ -59,6 +62,9 @@ export const localSettingsDefaults: LocalSettings = {
     terminalTabOrder: [],
     terminalTabNames: {},
     terminalNewTarget: null,
+    terminalPanelOpen: false,
+    terminalPanelHeight: null,
+    terminalPanelListWidth: null,
 };
 Object.freeze(localSettingsDefaults);
 

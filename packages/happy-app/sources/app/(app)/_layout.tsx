@@ -15,6 +15,7 @@ import { isUsingCustomServer } from '@/sync/serverConfig';
 import { useAuth } from '@/auth/AuthContext';
 import { getDesktopPlatform } from '@/desktop/desktopWindowUtils';
 import { isDedicatedTerminalWindow } from '@/terminal/terminalPopupWindow';
+import { TerminalPanelDock } from '@/terminal/TerminalPanelDock';
 
 export const unstable_settings = {
     initialRouteName: 'index',
@@ -33,7 +34,7 @@ export default function RootLayout() {
     // app, where the header is how you get back out.
     const inTerminalWindow = isDedicatedTerminalWindow();
 
-    return (
+    const stack = (
         <Stack
             initialRouteName='index'
             screenOptions={{
@@ -786,4 +787,11 @@ export default function RootLayout() {
             />
         </Stack>
     );
+
+    // On the web and the desktop the pages share their column with the terminal panel. Decided
+    // by platform alone, so resizing a window never rebuilds the stack around the pages.
+    if (Platform.OS !== 'web') {
+        return stack;
+    }
+    return <TerminalPanelDock>{stack}</TerminalPanelDock>;
 }

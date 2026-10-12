@@ -1552,6 +1552,11 @@ export const zhHant: TranslationStructure = {
         renameTerminalHint: '給它一個自己的名字；留空則回復原本的名稱。',
         duplicateFailed: '無法複製終端',
         closeTab: ({ label }: { label: string }) => `關閉 ${label}`,
+        togglePanel: '顯示或隱藏終端面板',
+        maximizePanel: '最大化面板',
+        restorePanel: '還原面板',
+        closePanel: '關閉面板',
+        openInWindow: '在新視窗中開啟',
     },
 
 
