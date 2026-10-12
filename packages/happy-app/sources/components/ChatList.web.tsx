@@ -13,7 +13,7 @@ import { Metadata, Session } from '@/sync/storageTypes';
 import { ChatFooter } from './ChatFooter';
 import { AskUserQuestionMessage, isAskUserQuestionToolCall, isPreviewHtmlToolCall, Message, MinimapMessage, PreviewHtmlMessage, toAskUserQuestionMessage, toPreviewHtmlMessage, ToolCall, UserTextMessage } from '@/sync/typesMessage';
 import { currentLandmark, foldMustKeepMessage, railLandmarkRows, shouldHideMessageInChatList, shouldHideMessageInMinimap, type LandmarkRow } from './chatListVisibility';
-import { foldedLineKeepsRow } from './turnFold';
+import { foldedLineKeepsRow, type TurnFoldControl } from './turnFold';
 import { turnHeaderProps, useTurnAnalysis } from './messageTurnTiming';
 import { newestRowSnapshot } from './rowSnapshot';
 import { foldHidesRunningDelegatedTask, delegatedLabel } from './foldDelegated';
@@ -2022,6 +2022,50 @@ const ChatListInternal = React.memo((props: {
         foldAnim.releaseKeys(settledRows);
     }, [foldAnim.animatingIds]);
 
+    // 3b. A turn the reader did not touch has just folded on its own: sending a prompt begins a new
+    // turn, and the one before it becomes history, which folds by default. The model has the fold
+    // already, as it would for a tap; what this adds is the slide. This render keeps the turn's rows
+    // mounted at full height (see `autoFold` in the rows loop), and the effect below starts the same
+    // slide a tap would on them, in a commit of its own that still lands before the first paint.
+    // Unlike a tap it points at no row, so it does not take the viewport: at the bottom the
+    // conversation stays glued to the new prompt (the canvas follows the slide there), and anywhere
+    // else the usual compensation holds the row the reader is looking at.
+    const committedFoldRef = useRef<{ controls: ReadonlyMap<string, TurnFoldControl>; hiddenIds: ReadonlySet<string> } | null>(null);
+    let autoFold: { headerId: string; keys: Set<string> } | null = null;
+    const committedFold = committedFoldRef.current;
+    if (committedFold != null) {
+        const tap = lastFoldTapRef.current;
+        const tapIsRecent = tap != null && performance.now() - tap.at <= FOLD_TAP_SETTLE_MS;
+        for (const [headerId, control] of folding.controlByHeaderId) {
+            if (!control.folded || committedFold.controls.get(headerId)?.folded !== false) continue;
+            const process = turns.foldById.get(headerId);
+            const header = messageById.get(headerId);
+            if (!process || !header) continue;
+            const keys = new Set(process.hiddenIds.filter((id) => folding.hiddenIds.has(id) && !committedFold.hiddenIds.has(id)));
+            // The row the line lands on gives its content to the slide too, unless the folded line
+            // leaves it standing (the same rule the rows loop draws it by).
+            if (!foldedLineKeepsRow({ folded: true, answer: process.answerId === headerId, mustKeep: foldMustKeepMessage(header) })) {
+                keys.add(headerId);
+            }
+            // A tap is already sliding its own rows.
+            if (keys.size === 0 || [...keys].some((key) => foldAnim.animatingIds.has(key) || (tapIsRecent && tap.keys.has(key)))) continue;
+            autoFold = { headerId, keys };
+            break;
+        }
+    }
+    const autoFoldRef = useRef(autoFold);
+    autoFoldRef.current = autoFold;
+    React.useLayoutEffect(() => {
+        committedFoldRef.current = { controls: folding.controlByHeaderId, hiddenIds: folding.hiddenIds };
+        const pending = autoFoldRef.current;
+        if (pending == null) return;
+        foldLineRef.current = { key: pending.headerId, line: 'turn' };
+        // No slide (reduced motion): render again, so the rows held up for it drop to the fold now.
+        if (!foldAnim.start({ keys: [...pending.keys], direction: 'collapsing' })) {
+            setCanvasHoldReleases((n) => n + 1);
+        }
+    });
+
     // 4. Drain staged measurement ops right after the commit, before paint:
     // re-assert a pending restore or pin back to the bottom. Everything else
     // was already folded into the distance the commit wrote.
@@ -2287,7 +2331,7 @@ const ChatListInternal = React.memo((props: {
         if (!item) continue;
         // A row mid-fold is still the row itself, at whatever height the animation has drawn: that
         // is what the reader is watching, and it is the same element either way.
-        const foldAnimating = foldAnim.animatingIds.has(item.id);
+        const foldAnimating = foldAnim.animatingIds.has(item.id) || autoFold?.keys.has(item.id) === true;
         // Folded away: the row holds its place in the model at no height, and nothing else about it
         // is mounted — no message view to lay out, no row for the observer to measure. Its height
         // lives on in `measuredHeights`, which is where it grows back from.
@@ -2349,7 +2393,9 @@ const ChatListInternal = React.memo((props: {
         // except while it slides, when the runs are still on screen and must look as they did.
         const segment = folding.segmentControlByStartId.get(item.id);
         const segmentShown = segment !== undefined && (!segment.turnFolded || foldAnimating);
-        const foldLine = foldLineRef.current?.key === item.id ? foldLineRef.current.line : null;
+        const foldLine = autoFold?.headerId === item.id
+            ? 'turn'
+            : foldLineRef.current?.key === item.id ? foldLineRef.current.line : null;
         // Like the turn's line, a run's closing keeps its first row's content until the slide has taken
         // it away — but only when it is this run's own line that is closing; a run swept up in its
         // turn's fold slides away as the line it was.

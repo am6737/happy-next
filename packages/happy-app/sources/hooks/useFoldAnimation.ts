@@ -43,9 +43,10 @@ export type FoldAnimation = {
     releaseKeys: (rows: readonly FoldSettledRow[]) => void;
     /**
      * Begin a slide. The caller flips the fold in the same event, so one commit carries both the new
-     * layout and the clip the slide runs on.
+     * layout and the clip the slide runs on. Returns whether a slide began at all: with no keys, or
+     * under reduced motion, the fold just lands.
      */
-    start: (args: { keys: readonly string[]; direction: FoldDirection }) => void;
+    start: (args: { keys: readonly string[]; direction: FoldDirection }) => boolean;
     /**
      * The rows whose slide has just finished, once — each with the element it was drawing, since
      * this is the only moment either is still reachable: React detaches the row's ref in the very
@@ -113,13 +114,13 @@ export function useFoldAnimation(options?: { onFrame?: (frame: FoldFrame) => voi
         }
     };
 
-    const start = React.useCallback((args: { keys: readonly string[]; direction: FoldDirection }) => {
-        if (args.keys.length === 0) return;
+    const start = React.useCallback((args: { keys: readonly string[]; direction: FoldDirection }): boolean => {
+        if (args.keys.length === 0) return false;
         // Reduced motion: the fold still lands — the model carried it either way — it just lands at
         // once, rather than making someone who asked for less motion watch 200ms of it.
         if (typeof window !== 'undefined' && typeof window.matchMedia === 'function'
             && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-            return;
+            return false;
         }
         const interrupted = frameRef.current != null;
         if (interrupted) {
@@ -133,6 +134,7 @@ export function useFoldAnimation(options?: { onFrame?: (frame: FoldFrame) => voi
         settledRowsRef.current = null;
         suppressedKeysRef.current = new Set(args.keys);
         setTransition({ keys: args.keys, direction: args.direction });
+        return true;
     }, []);
 
     React.useLayoutEffect(() => {
