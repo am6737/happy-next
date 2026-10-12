@@ -173,7 +173,10 @@ export function useFoldAnimation(options?: { onFrame?: (frame: FoldFrame) => voi
         onFrameRef.current?.({ phase: 'start', deltaPx: 0, totalPx });
         const step = (now: number) => {
             frameRef.current = null;
-            const progress = Math.min(1, (now - startedAt) / FOLD_HEIGHT_MS);
+            // Clamped at 0 too: a frame's timestamp is when the frame began, which can be before the
+            // layout pass that set `startedAt`, and the curve overshoots on the far side of 0 — the
+            // first frame of a fold would draw the bodies taller than they were.
+            const progress = Math.min(1, Math.max(0, (now - startedAt) / FOLD_HEIGHT_MS));
             const eased = easeOutCubic(progress);
             let deltaPx = 0;
             for (const key of keys) {
