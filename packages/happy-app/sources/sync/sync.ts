@@ -5074,7 +5074,7 @@ class Sync {
 
                     // Check for task lifecycle events to update thinking state
                     // This ensures UI updates even if volatile activity updates are lost
-                    const rawContent = decrypted.content as { role?: string; content?: { type?: string; data?: { type?: string } } } | null;
+                    const rawContent = decrypted.content as { role?: string; content?: { type?: string; data?: { type?: string } }; meta?: { turnEnd?: boolean } } | null;
                     const contentType = rawContent?.content?.type;
                     const dataType = rawContent?.content?.data?.type;
 
@@ -5083,7 +5083,10 @@ class Sync {
                         console.log(`🔄 [Sync] Lifecycle event detected: contentType=${contentType}, dataType=${dataType}`);
                     }
 
+                    // The CLI marks the text a turn ends on, so the turn settles in the
+                    // same update that shows it rather than on a later heartbeat.
                     isTaskComplete =
+                        rawContent?.meta?.turnEnd === true ||
                         ((contentType === 'acp' || contentType === 'codex') &&
                             (dataType === 'task_complete' || dataType === 'turn_aborted'));
 

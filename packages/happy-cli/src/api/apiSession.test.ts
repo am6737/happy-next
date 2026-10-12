@@ -523,6 +523,7 @@ describe('ApiSessionClient keepAlive', () => {
     let aliveEmit: ReturnType<typeof vi.fn>;
     let client: ApiSessionClient;
     let releaseOutbox: () => void;
+    let pushOutbox: ReturnType<typeof vi.spyOn>;
 
     beforeEach(() => {
         aliveEmit = vi.fn();
@@ -544,6 +545,7 @@ describe('ApiSessionClient keepAlive', () => {
         vi.spyOn((client as any).sendSync, 'invalidateAndAwait').mockImplementation(
             () => new Promise<void>((resolve) => { releaseOutbox = resolve; }),
         );
+        pushOutbox = vi.spyOn(client as any, 'pushOutbox').mockImplementation(() => {});
     });
 
     afterEach(() => {
@@ -552,6 +554,8 @@ describe('ApiSessionClient keepAlive', () => {
     });
 
     const reported = () => aliveEmit.mock.calls.map(([, payload]) => payload.thinking);
+    const sent = () => pushOutbox.mock.calls.map(([content]: any[]) => ({ type: content.content.data.type, turnEnd: content.meta?.turnEnd }));
+    const text = (message: string) => client.sendAgentMessage('codex', { type: 'message', message });
 
     it('reports thinking at once', () => {
         client.keepAlive(true, 'remote');
@@ -562,11 +566,11 @@ describe('ApiSessionClient keepAlive', () => {
         client.keepAlive(true, 'remote');
         client.keepAlive(false, 'remote');
         client.keepAlive(false, 'remote'); // periodic heartbeat while the drain runs
-        expect(reported()).toEqual([true, true, true]);
+        expect(reported()).toEqual([true]);
         releaseOutbox();
-        await vi.waitFor(() => expect(reported()).toEqual([true, true, true, false]));
+        await vi.waitFor(() => expect(reported()).toEqual([true, false]));
         client.keepAlive(false, 'remote');
-        expect(reported()).toEqual([true, true, true, false, false]);
+        expect(reported()).toEqual([true, false, false]);
     });
 
     it('drops a pending idle when the agent goes busy again', async () => {
@@ -576,7 +580,7 @@ describe('ApiSessionClient keepAlive', () => {
         releaseOutbox();
         await Promise.resolve();
         await Promise.resolve();
-        expect(reported()).toEqual([true, true, true]);
+        expect(reported()).toEqual([true, true]);
     });
 
     it('goes idle anyway when the outbox cannot drain', async () => {
@@ -584,6 +588,45 @@ describe('ApiSessionClient keepAlive', () => {
         client.keepAlive(true, 'remote');
         client.keepAlive(false, 'remote');
         await vi.advanceTimersByTimeAsync(10_000);
-        expect(reported()).toEqual([true, true, false]);
+        expect(reported()).toEqual([true, false]);
+    });
+
+    it('sends the text a turn ends on marked, ahead of the records after it', () => {
+        client.keepAlive(true, 'remote');
+        text('first');
+        client.sendAgentMessage('codex', { type: 'tool-call', callId: 'c1', name: 'Bash', input: {}, id: 't1' });
+        text('last');
+        client.sendAgentMessage('codex', { type: 'token_count', id: 'u1' } as any);
+        client.sendAgentMessage('codex', { type: 'task_complete', id: 'd1' });
+        expect(sent()).toEqual([{ type: 'message' }, { type: 'tool-call' }]);
+        client.keepAlive(false, 'remote');
+        expect(sent()).toEqual([
+            { type: 'message' },
+            { type: 'tool-call' },
+            { type: 'message', turnEnd: true },
+            { type: 'token_count' },
+            { type: 'task_complete' },
+        ]);
+    });
+
+    it('lets a held text go unmarked once the hold runs out', async () => {
+        vi.useFakeTimers();
+        client.keepAlive(true, 'remote');
+        text('thinking out loud');
+        await vi.advanceTimersByTimeAsync(999);
+        expect(sent()).toEqual([]);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(sent()).toEqual([{ type: 'message' }]);
+        client.keepAlive(false, 'remote');
+        expect(sent()).toEqual([{ type: 'message' }]);
+    });
+
+    it('holds only agent texts, not Claude tool calls or subagent texts', () => {
+        const claude = (content: any[], extra: object = {}) => client.sendClaudeSessionMessage({ type: 'assistant', uuid: 'u', message: { role: 'assistant', content }, ...extra } as any);
+        claude([{ type: 'tool_use', id: 'x', name: 'Bash', input: {} }]);
+        claude([{ type: 'text', text: 'from a subagent' }], { isSidechain: true });
+        expect(pushOutbox).toHaveBeenCalledTimes(2);
+        claude([{ type: 'text', text: 'done' }]);
+        expect(pushOutbox).toHaveBeenCalledTimes(2);
     });
 });

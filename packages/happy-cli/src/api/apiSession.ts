@@ -35,6 +35,23 @@ const MAX_OUTBOX_BATCH_SIZE = 200;
 /** Longest an idle heartbeat waits on the outbox before going out anyway (offline, server down). */
 const IDLE_DRAIN_MAX_MS = 10_000;
 
+/** Longest an agent text waits to learn whether it is the turn's last before going out unmarked. */
+const TURN_END_HOLD_MAX_MS = 1_000;
+
+/** A reply text from the agent itself: the message a turn ends on and the app hangs its action bar from. */
+function isAgentText(content: any): boolean {
+    const { type, data } = content?.role === 'agent' ? content.content ?? {} : {};
+    if (type === 'acp' || type === 'codex') return data?.type === 'message';
+    const blocks = type === 'output' && data?.type === 'assistant' && data.isSidechain !== true ? data.message?.content : null;
+    return Array.isArray(blocks) && blocks.length > 0 && blocks.every((block: any) => block.type === 'text');
+}
+
+/** Usage and completion records sent after a turn's last text; they don't make it any less the last. */
+function isTurnBookkeeping(content: any): boolean {
+    const { type, data } = content?.content ?? {};
+    return (type === 'acp' || type === 'codex') && (data?.type === 'token_count' || data?.type === 'task_complete');
+}
+
 /**
  * ACP (Agent Communication Protocol) message data types.
  * This is the unified format for all agent messages - CLI adapts each provider's format to ACP.
@@ -163,6 +180,11 @@ export class ApiSessionClient extends EventEmitter {
     private reportedThinking = false;
     /** The outbox drain a pending idle heartbeat waits on; null when none is pending. */
     private idleDrain: Promise<unknown> | null = null;
+    /**
+     * The latest agent text, held back until we know whether the turn ends on it, with the
+     * bookkeeping records sent after it.
+     */
+    private heldText: { content: any; trailing: unknown[]; timer: NodeJS.Timeout } | null = null;
 
     constructor(token: string, session: Session) {
         super()
@@ -788,10 +810,37 @@ export class ApiSessionClient extends EventEmitter {
     }
 
     /**
-     * Encrypt and enqueue a message for reliable delivery via the v3 HTTP outbox.
-     * This is the parallel reliable path alongside the fast-path socket emit.
+     * Enqueue a message for reliable delivery via the v3 HTTP outbox.
+     *
+     * An agent text is held back until the next message shows it isn't the turn's last,
+     * the turn ends (it then goes out marked `turnEnd`, so the app settles the turn
+     * together with it instead of on a later heartbeat), or TURN_END_HOLD_MAX_MS passes.
      */
     private enqueueMessage(content: unknown) {
+        if (this.heldText && isTurnBookkeeping(content)) {
+            this.heldText.trailing.push(content);
+            return;
+        }
+        this.releaseHeldText(false);
+        if (isAgentText(content)) {
+            const timer = setTimeout(() => this.releaseHeldText(false), TURN_END_HOLD_MAX_MS).unref();
+            this.heldText = { content, trailing: [], timer };
+            return;
+        }
+        this.pushOutbox(content);
+    }
+
+    private releaseHeldText(turnEnd: boolean) {
+        const held = this.heldText;
+        if (!held) return;
+        this.heldText = null;
+        clearTimeout(held.timer);
+        this.pushOutbox(turnEnd ? { ...held.content, meta: { ...held.content.meta, turnEnd: true } } : held.content);
+        held.trailing.forEach((content) => this.pushOutbox(content));
+    }
+
+    /** Encrypt a message and put it on the v3 HTTP outbox. */
+    private pushOutbox(content: unknown) {
         const encrypted = encodeBase64(encrypt(this.encryptionKey, this.encryptionVariant, content));
         this.pendingOutbox.push({
             content: encrypted,
@@ -1006,9 +1055,10 @@ export class ApiSessionClient extends EventEmitter {
      *
      * Going idle waits for the outbox: messages travel over HTTP and the
      * heartbeat over the socket, so an idle sent right away reaches the app
-     * before the turn's last message, and the app takes the turn as ended on an
-     * earlier row. Until the drain settles the heartbeat keeps saying thinking;
-     * going busy again drops the pending idle.
+     * before the turn's last message, and the server dispatches a queued prompt
+     * ahead of it. The held text goes out first, marked as ending the turn, which
+     * the app settles on. Until the drain settles no heartbeat goes out, as a
+     * thinking one would undo that; going busy again drops the pending idle.
      */
     keepAlive(thinking: boolean, mode: 'local' | 'remote') {
         if (thinking || !this.reportedThinking) {
@@ -1017,8 +1067,8 @@ export class ApiSessionClient extends EventEmitter {
             this.emitAlive(thinking, mode);
             return;
         }
-        this.emitAlive(true, mode);
         if (this.idleDrain) return;
+        this.releaseHeldText(true);
         const drain = Promise.race([
             this.sendSync.invalidateAndAwait(),
             new Promise((resolve) => setTimeout(resolve, IDLE_DRAIN_MAX_MS).unref()),
@@ -1245,6 +1295,7 @@ export class ApiSessionClient extends EventEmitter {
      * Routes through sendSync to avoid concurrent flushOutbox() calls.
      */
     async flush(): Promise<void> {
+        this.releaseHeldText(false);
         // Drain HTTP outbox through sendSync (serialized, no concurrent splice races)
         try {
             await this.sendSync.invalidateAndAwait();
@@ -1268,6 +1319,7 @@ export class ApiSessionClient extends EventEmitter {
 
     async close() {
         logger.debug('[API] socket.close() called');
+        this.releaseHeldText(false);
         // Drain pending outbox through sendSync (serialized — avoids concurrent
         // flushOutbox() calls that could splice the wrong messages).
         try {
