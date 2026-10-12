@@ -27,8 +27,10 @@ function extractEncryptedText(content: unknown): string {
 export async function dispatchNextPendingIfPossible(params: {
     ownerId: string;
     sessionId: string;
-    // Settle time before dispatch. Turn-end dispatch keeps the default; user
-    // actions (resume, send now) pass 0 since no reply is in flight then.
+    // Settle time before dispatch. Only abort keeps the default, since it ends
+    // the turn without the CLI draining its outbox first. Turn end passes 0 (the
+    // CLI reports idle only once drained); enqueue, scheduled send, resume and
+    // send now pass 0 since no reply is in flight then.
     delayMs?: number;
 }): Promise<{ dispatched: boolean; pendingId?: string; messageId?: string }> {
     if (!canDispatch(params.sessionId)) {

@@ -302,6 +302,7 @@ describe("sessionUpdateHandler session-alive auto-dispatch", () => {
         expect(dispatchNextPendingIfPossibleMock).toHaveBeenCalledWith({
             ownerId: "user-1",
             sessionId: "session-1",
+            delayMs: 0,
         });
     });
 

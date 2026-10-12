@@ -499,6 +499,7 @@ export function v3SessionRoutes(app: Fastify) {
             await dispatchNextPendingIfPossible({
                 ownerId,
                 sessionId,
+                delayMs: 0,
             });
 
             return reply.send({

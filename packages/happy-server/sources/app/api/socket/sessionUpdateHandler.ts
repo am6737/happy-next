@@ -266,11 +266,14 @@ export function sessionUpdateHandler(userId: string, socket: Socket, connection:
                 // Acquire receiveMessageLock to ensure any in-flight 'message' event
                 // (e.g. the AI's final response) finishes before we dispatch the next
                 // pending message, preventing the queued message from arriving before
-                // the AI's last reply on the client side.
+                // the AI's last reply on the client side. No settle delay: the CLI
+                // reports idle only once its outbox has drained, so the turn's last
+                // message is already stored by now.
                 await receiveMessageLock.inLock(async () => {
                     const result = await dispatchNextPendingIfPossible({
                         ownerId: userId,
                         sessionId: sid,
+                        delayMs: 0,
                     });
                 });
             }

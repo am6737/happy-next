@@ -34,7 +34,7 @@ async function dispatchDueScheduledMessages(): Promise<void> {
         }
 
         try {
-            await dispatchNextPendingIfPossible({ ownerId: session.accountId, sessionId });
+            await dispatchNextPendingIfPossible({ ownerId: session.accountId, sessionId, delayMs: 0 });
         } catch (error) {
             warn({ module: "scheduled-message-worker", sessionId }, `Dispatch failed: ${error instanceof Error ? error.message : String(error)}`);
         }
