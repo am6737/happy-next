@@ -36,6 +36,16 @@ describe('teammateRunContextEvent', () => {
         expect(new Set(systemMessage.mock.calls.map(call => call[4]))).toEqual(new Set(['system:context_compacted:run:2']));
     });
 
+    it('posts rollover without touching the run', async () => {
+        reset();
+        await teammateRunContextEvent('run', { code: 'context_rolled', dispatchToken: 'token', provider: 'claude', reason: 'tokens', segment: 2 }, 'account');
+        expect(state.status).toBe('running');
+        expect(terminate).not.toHaveBeenCalled();
+        expect(systemMessage).toHaveBeenCalledWith('channel', 'context_rolled', {
+            teammateId: 'mate', name: 'Atlas', provider: 'claude', reason: 'tokens', segment: 2,
+        }, {}, 'system:context_rolled:run');
+    });
+
     it('posts resume_failed once without touching the run', async () => {
         reset();
         await teammateRunContextEvent('run', { code: 'context_lost', dispatchToken: 'token', provider: 'claude', reason: 'resume_failed' }, 'account');

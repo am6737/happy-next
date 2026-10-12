@@ -6,7 +6,7 @@ import { teammateRunTerminateTx } from './teammateRunFinish';
 import { TEAMMATE_ACTIVE_RUN_STATUSES } from './teammateRunStatuses';
 
 /**
- * Context signals reported by the Agent's controller session. Compaction and a failed resume only post a
+ * Context signals reported by the Agent's controller session. Compaction, rollover and a failed resume only post a
  * channel notice. An overflow fails the run (also after turn-end completed it) with the retryable
  * `context_overflow` reason, so the existing retry re-runs it on a fresh provider session; the notice is
  * posted only when that retry exists, otherwise the generic run_failed notice explains it.
@@ -19,6 +19,13 @@ export async function teammateRunContextEvent(runId: string, body: TeammateConte
         if (body.code === 'context_compacted') {
             if (!run.thread.channelId) return;
             await channelSystemMessage(run.thread.channelId, 'context_compacted', { ...base, compactions: body.compactions }, tx, `system:context_compacted:${runId}:${body.compactions}`);
+            return;
+        }
+        if (body.code === 'context_rolled') {
+            if (!run.thread.channelId) return;
+            await channelSystemMessage(run.thread.channelId, 'context_rolled', {
+                ...base, reason: body.reason, segment: body.segment,
+            }, tx, `system:context_rolled:${runId}`);
             return;
         }
         if (body.reason === 'resume_failed') {
