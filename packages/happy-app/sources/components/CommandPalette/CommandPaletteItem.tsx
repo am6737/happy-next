@@ -5,6 +5,7 @@ import { Command } from './types';
 import { Typography } from '@/constants/Typography';
 import { Ionicons } from '@expo/vector-icons';
 import { splitCommandHighlightSegments } from './highlight';
+import { formatLastSeen } from '@/utils/sessionUtils';
 
 interface CommandPaletteItemProps {
     command: Command;
@@ -67,17 +68,17 @@ export function CommandPaletteItem({ command, isSelected, onPress, onHover, isEx
                     <View style={styles.iconContainer}>
                         <Ionicons 
                             name={command.icon as any} 
-                            size={20} 
+                            size={18} 
                             color={isSelected ? theme.colors.textLink : theme.colors.textSecondary}
                         />
                     </View>
                 )}
                 <View style={styles.textContainer}>
-                    <Text style={[styles.title, command.dangerous && styles.dangerousText, Typography.default()]}>
+                    <Text numberOfLines={1} style={[styles.title, command.dangerous && styles.dangerousText, Typography.default()]}>
                         {renderHighlightedText(command.title)}
                     </Text>
                     {command.subtitle && (
-                        <Text style={[styles.subtitle, Typography.default()]}>
+                        <Text numberOfLines={2} style={[styles.subtitle, Typography.default()]}>
                             {renderHighlightedText(command.subtitle)}
                         </Text>
                     )}
@@ -100,6 +101,11 @@ export function CommandPaletteItem({ command, isSelected, onPress, onHover, isEx
                         </Text>
                     </View>
                 )}
+                {!isExecuting && command.timestamp ? (
+                    <Text style={[styles.timestamp, Typography.default()]}>
+                        {formatLastSeen(command.timestamp)}
+                    </Text>
+                ) : null}
                 {isExecuting ? (
                     <ActivityIndicator size="small" color={theme.colors.textLink} />
                 ) : command.shortcut ? (
@@ -116,18 +122,15 @@ export function CommandPaletteItem({ command, isSelected, onPress, onHover, isEx
 
 const styles = StyleSheet.create((theme) => ({
     container: {
-        paddingHorizontal: 24,
-        paddingVertical: 12,
+        paddingHorizontal: 13,
+        paddingVertical: 9,
         backgroundColor: 'transparent',
-        marginHorizontal: 8,
+        marginHorizontal: 6,
         marginVertical: 2,
         borderRadius: 8,
-        borderWidth: 2,
-        borderColor: 'transparent',
     },
     selected: {
-        backgroundColor: theme.dark ? 'rgba(10, 132, 255, 0.14)' : 'rgba(0, 122, 255, 0.08)',
-        borderColor: theme.dark ? 'rgba(10, 132, 255, 0.28)' : 'rgba(0, 122, 255, 0.13)',
+        backgroundColor: theme.dark ? 'rgba(10, 132, 255, 0.16)' : 'rgba(0, 122, 255, 0.09)',
     },
     pressed: {
         backgroundColor: theme.colors.surfacePressed,
@@ -164,14 +167,18 @@ const styles = StyleSheet.create((theme) => ({
         color: theme.colors.textSecondary,
         letterSpacing: -0.1,
     },
+    timestamp: {
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+    },
     shortcutContainer: {
-        paddingHorizontal: 10,
-        paddingVertical: 5,
+        paddingHorizontal: 8,
+        paddingVertical: 3,
         backgroundColor: theme.colors.surfaceHighest,
-        borderRadius: 6,
+        borderRadius: 5,
     },
     shortcut: {
-        fontSize: 12,
+        fontSize: 11,
         color: theme.colors.textSecondary,
         fontWeight: '500',
     },

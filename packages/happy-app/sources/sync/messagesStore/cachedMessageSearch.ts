@@ -42,8 +42,18 @@ export function cachedMessageMatchesQuery(normalizedText: string, rawQuery: stri
     return tokens.length > 0 && tokens.every((token) => normalizedText.includes(token));
 }
 
+// Drops markdown and tag syntax so a snippet reads as plain prose instead of `**`, backticks and <options> markup
+function plainSnippetText(text: string): string {
+    return text
+        .replace(/```[^\n]*\n?/g, '')
+        .replace(/<\/?[a-zA-Z][^>]*>/g, ' ')
+        .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+        .replace(/^\s*(?:#{1,6}|>|[-*+]|\d+\.)\s+/gm, '')
+        .replace(/(\*\*|__|`)/g, '');
+}
+
 export function cachedMessageSnippet(text: string, rawQuery: string, maxLength = 150): string {
-    const compact = text.replace(/\s+/g, ' ').trim();
+    const compact = plainSnippetText(text).replace(/\s+/g, ' ').trim();
     if (compact.length <= maxLength) return compact;
 
     const normalized = normalizeCachedMessageSearchText(compact);

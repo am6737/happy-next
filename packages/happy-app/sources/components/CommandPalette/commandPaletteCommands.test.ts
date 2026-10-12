@@ -123,4 +123,14 @@ describe('command palette command registry', () => {
         expect(groupCommands(commands, '').flatMap((group) => group.commands)).not.toContain(logout);
         expect(groupCommands(commands, 'sign out').flatMap((group) => group.commands)).toContain(logout);
     });
+
+    it('shows a session as folder, host and model, keeping the full path searchable', () => {
+        const commands = build({
+            sessions: [session(1, { metadata: { path: '/home/me/work/happy-next/', host: 'mac', flavor: 'claude', model: 'claude-opus-5-5' } as Session['metadata'] })],
+        });
+        const row = commands.find((command) => command.sessionId === 'session-1')!;
+        expect(row.subtitle).toBe('happy-next · mac · opus-5-5');
+        expect(row.timestamp).toBe(1);
+        expect(groupCommands(commands, 'home me work').flatMap((group) => group.commands)).toContain(row);
+    });
 });

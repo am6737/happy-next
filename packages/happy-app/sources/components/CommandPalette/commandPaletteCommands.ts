@@ -43,14 +43,17 @@ function sessionTitle(session: Session): string {
         || t('machine.untitledSession');
 }
 
+// Folder name, host and model only; the full path stays searchable through the session keywords
 function sessionSubtitle(session: Session): string {
-    const parts = [
-        session.metadata?.path,
-        session.metadata?.host,
-        session.metadata?.flavor,
-        session.metadata?.model,
-    ].filter((value): value is string => !!value);
-    return [...new Set(parts)].join(' • ');
+    const metadata = session.metadata;
+    const folder = metadata?.path?.replace(/\/+$/, '').split('/').pop();
+    const flavor = metadata?.flavor;
+    const model = metadata?.model && flavor && metadata.model.startsWith(`${flavor}-`)
+        ? metadata.model.slice(flavor.length + 1)
+        : metadata?.model;
+    const parts = [folder, metadata?.host, model || flavor]
+        .filter((value): value is string => !!value);
+    return [...new Set(parts)].join(' · ');
 }
 
 function sessionBadge(session: Session, hasDraft: boolean): Pick<Command, 'badge' | 'badgeTone'> {
@@ -60,9 +63,7 @@ function sessionBadge(session: Session, hasDraft: boolean): Pick<Command, 'badge
     if (hasDraft) {
         return { badge: t('commandPalette.statusDraft'), badgeTone: 'warning' };
     }
-    if (session.presence === 'online') {
-        return { badge: t('status.online'), badgeTone: 'success' };
-    }
+    // Online is the common case, so it gets no badge; only states that need attention are marked
     return {};
 }
 
@@ -109,6 +110,7 @@ export function buildCommandPaletteCommands(options: CommandPaletteCommandOption
             shortcut: shortcut('newSession'),
             category: quickCategory,
             categoryOrder: CATEGORY_ORDER.quick,
+            tile: true,
             priority: 1000,
             keywords: ['new chat', 'create session', 'conversation'],
             path: '/new',
@@ -121,6 +123,7 @@ export function buildCommandPaletteCommands(options: CommandPaletteCommandOption
             shortcut: shortcut('sessions'),
             category: quickCategory,
             categoryOrder: CATEGORY_ORDER.quick,
+            tile: true,
             priority: 950,
             keywords: ['home', 'conversations', 'chats'],
             path: '/',
@@ -133,6 +136,7 @@ export function buildCommandPaletteCommands(options: CommandPaletteCommandOption
             shortcut: shortcut('inbox'),
             category: quickCategory,
             categoryOrder: CATEGORY_ORDER.quick,
+            tile: true,
             priority: 900,
             keywords: ['messages', 'notifications', 'friends'],
             path: '/(app)/inbox',
@@ -149,6 +153,7 @@ export function buildCommandPaletteCommands(options: CommandPaletteCommandOption
                 shortcut: shortcut('dootask'),
                 category: quickCategory,
                 categoryOrder: CATEGORY_ORDER.quick,
+                tile: true,
                 priority: 850,
                 keywords: ['tasks', 'projects', 'todo'],
                 path: '/(app)/dootask',
@@ -159,6 +164,7 @@ export function buildCommandPaletteCommands(options: CommandPaletteCommandOption
                 icon: 'add-outline',
                 category: quickCategory,
                 categoryOrder: CATEGORY_ORDER.quick,
+                tile: true,
                 priority: 700,
                 keywords: ['create task', 'todo'],
                 path: '/dootask/add-task',
@@ -169,6 +175,7 @@ export function buildCommandPaletteCommands(options: CommandPaletteCommandOption
                 icon: 'folder-open-outline',
                 category: quickCategory,
                 categoryOrder: CATEGORY_ORDER.quick,
+                tile: true,
                 priority: 650,
                 keywords: ['create project', 'dootask'],
                 path: '/dootask/add-project',
@@ -195,6 +202,7 @@ export function buildCommandPaletteCommands(options: CommandPaletteCommandOption
             ...command,
             category,
             categoryOrder: CATEGORY_ORDER.current,
+            tile: true,
             keywords: [sessionTitle(currentSession), currentSession.metadata?.path ?? ''],
         })));
 
@@ -206,6 +214,7 @@ export function buildCommandPaletteCommands(options: CommandPaletteCommandOption
                 icon: 'desktop-outline',
                 category,
                 categoryOrder: CATEGORY_ORDER.current,
+                tile: true,
                 priority: 550,
                 path: `/machine/${encodeURIComponent(currentSession.metadata.machineId)}`,
             }));
@@ -220,6 +229,7 @@ export function buildCommandPaletteCommands(options: CommandPaletteCommandOption
             sessionId: session.id,
             title: sessionTitle(session),
             subtitle: sessionSubtitle(session),
+            timestamp: session.updatedAt,
             icon: session.thinking || session.awaitingResponseSince ? 'sparkles-outline' : 'chatbubble-outline',
             category: t('commandPalette.categorySessions'),
             categoryOrder: CATEGORY_ORDER.sessions,
@@ -285,6 +295,7 @@ export function buildCommandPaletteCommands(options: CommandPaletteCommandOption
         category: navigationCategory,
         categoryOrder: CATEGORY_ORDER.navigation,
         showWhenIdle: command.id === 'orchestrator',
+        ...(command.id === 'orchestrator' ? { tile: true, idleCategory: quickCategory } : {}),
     })));
 
     const settingsCommands: Array<Omit<Command, 'action'> & { path: string }> = [
@@ -304,6 +315,7 @@ export function buildCommandPaletteCommands(options: CommandPaletteCommandOption
         category: settingsCategory,
         categoryOrder: CATEGORY_ORDER.settings,
         showWhenIdle: command.id === 'settings',
+        ...(command.id === 'settings' ? { tile: true, idleCategory: quickCategory } : {}),
     })));
 
     if (options.developerEnabled) {

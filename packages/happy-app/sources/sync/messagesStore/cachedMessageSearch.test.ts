@@ -41,4 +41,9 @@ describe('cached message search helpers', () => {
         expect(snippet).toContain('important phrase');
         expect(snippet.length).toBeLessThanOrEqual(82);
     });
+
+    it('strips markdown and tags from the snippet', () => {
+        const text = '**Done** — `yarn typecheck` passes.\n- see [docs](https://x.y)\n<options><option>Commit</option></options>';
+        expect(cachedMessageSnippet(text, 'docs')).toBe('Done — yarn typecheck passes. see docs Commit');
+    });
 });

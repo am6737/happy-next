@@ -1,6 +1,6 @@
 import React from 'react';
-import { Text, View, Platform, useWindowDimensions } from 'react-native';
-import { StyleSheet } from 'react-native-unistyles';
+import { ActivityIndicator, Text, View, Platform, useWindowDimensions } from 'react-native';
+import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { CommandPaletteInput } from './CommandPaletteInput';
 import { CommandPaletteResults } from './CommandPaletteResults';
 import { useCommandPalette } from './useCommandPalette';
@@ -16,7 +16,10 @@ interface CommandPaletteProps {
 }
 
 export function CommandPalette({ commands, searchCachedMessages, onClose }: CommandPaletteProps) {
-    const { height } = useWindowDimensions();
+    const { width, height } = useWindowDimensions();
+    // Matches the modal's 90% / 800px width: four tiles per row when there's room, two on phones
+    const tileColumns = Math.min(width * 0.9, 800) >= 600 ? 4 : 2;
+    const { theme } = useUnistyles();
     const {
         searchQuery,
         selectedIndex,
@@ -28,7 +31,7 @@ export function CommandPalette({ commands, searchCachedMessages, onClose }: Comm
         setSelectedIndex,
         executingCommandId,
         isSearchingMessages,
-    } = useCommandPalette(commands, onClose, searchCachedMessages);
+    } = useCommandPalette(commands, onClose, searchCachedMessages, tileColumns);
 
     const resultCount = React.useMemo(
         () => filteredCategories.reduce((count, category) => count + category.commands.length, 0),
@@ -36,7 +39,7 @@ export function CommandPalette({ commands, searchCachedMessages, onClose }: Comm
     );
 
     return (
-        <View style={[styles.container, Platform.OS !== 'web' && { maxHeight: height * 0.65 }]}>
+        <View style={[styles.container, Platform.OS !== 'web' && { maxHeight: height * 0.8 }]}>
             <CommandPaletteInput
                 value={searchQuery}
                 onChangeText={handleSearchChange}
@@ -50,13 +53,17 @@ export function CommandPalette({ commands, searchCachedMessages, onClose }: Comm
                 onSelectionChange={setSelectedIndex}
                 executingCommandId={executingCommandId}
                 searchQuery={searchQuery}
+                tileColumns={tileColumns}
             />
             <View style={styles.footer}>
-                <Text style={[styles.footerText, Typography.default()]}>
-                    {isSearchingMessages
-                        ? t('commandPalette.searchingMessages')
-                        : t('commandPalette.resultCount', { count: resultCount })}
-                </Text>
+                <View style={styles.footerStatus}>
+                    {isSearchingMessages && <ActivityIndicator size="small" color={theme.colors.textSecondary} style={styles.footerSpinner} />}
+                    {!!searchQuery.trim() && <Text style={[styles.footerText, Typography.default()]}>
+                        {isSearchingMessages
+                            ? t('commandPalette.searchingMessages')
+                            : t('commandPalette.resultCount', { count: resultCount })}
+                    </Text>}
+                </View>
                 {Platform.OS === 'web' && <View style={styles.footerHints}>
                     <Text style={[styles.footerText, Typography.default()]}>{t('commandPalette.navigateHint')}</Text>
                     <Text style={[styles.footerText, Typography.default()]}>{t('commandPalette.selectHint')}</Text>
@@ -75,7 +82,7 @@ const styles = StyleSheet.create((theme) => ({
         maxWidth: 800, // Increased from 640 for wider input
         // Use viewport-based height for better layout
         ...(Platform.OS === 'web' ? {
-            maxHeight: '60vh', // Takes up to 60% of viewport height
+            maxHeight: '80vh', // Takes up to 80% of viewport height
         } as any : {
             maxHeight: 500, // Fallback for native
         }),
@@ -92,14 +99,21 @@ const styles = StyleSheet.create((theme) => ({
         borderColor: theme.colors.divider,
     },
     footer: {
-        minHeight: 38,
-        paddingHorizontal: 16,
+        minHeight: 32,
+        paddingHorizontal: 14,
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
         borderTopWidth: StyleSheet.hairlineWidth,
         borderTopColor: theme.colors.divider,
-        backgroundColor: theme.colors.surfaceHigh,
+    },
+    footerStatus: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+    },
+    footerSpinner: {
+        transform: [{ scale: 0.7 }],
     },
     footerHints: {
         flexDirection: 'row',

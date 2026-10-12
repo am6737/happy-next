@@ -3,6 +3,28 @@ import type { CachedMessageSearchMatch } from '@/sync/messagesStore/cachedMessag
 
 const SEARCH_RESULT_LIMIT = 60;
 
+// Fixed entries render as a grid only while the query is empty; search results are always a ranked list
+export function isTileCategory(category: CommandCategory, rawQuery: string): boolean {
+    return !rawQuery.trim() && category.commands.length > 0 && category.commands.every((command) => command.tile);
+}
+
+// Rows of flattened command indices, used for arrow-key movement across tiles and list rows alike
+export function buildNavigationRows(categories: CommandCategory[], rawQuery: string, columns: number): number[][] {
+    const rows: number[][] = [];
+    let index = 0;
+    for (const category of categories) {
+        const indices = category.commands.map(() => index++);
+        if (isTileCategory(category, rawQuery)) {
+            for (let start = 0; start < indices.length; start += columns) {
+                rows.push(indices.slice(start, start + columns));
+            }
+        } else {
+            rows.push(...indices.map((i) => [i]));
+        }
+    }
+    return rows;
+}
+
 export function normalizeCommandSearchText(value: string): string {
     return value
         .normalize('NFKD')
@@ -80,7 +102,7 @@ export function applyCachedMessageMatches(
         if (!match) return command;
         return {
             ...command,
-            subtitle: `“${match.snippet}”`,
+            subtitle: match.snippet,
             keywords: [...(command.keywords ?? []), query],
             priority: (command.priority ?? 0) + 200,
             badge: command.badge ?? messageBadge,
@@ -107,7 +129,7 @@ export function groupCommands(commands: Command[], rawQuery: string): CommandCat
 
     const grouped = new Map<string, { category: CommandCategory; bestScore: number }>();
     for (const { command, score } of ranked) {
-        const title = command.category || 'General';
+        const title = (query ? command.category : command.idleCategory ?? command.category) || 'General';
         const id = normalizeCommandSearchText(title).replace(/\s+/g, '-') || 'general';
         const existing = grouped.get(title);
         if (existing) {

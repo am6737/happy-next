@@ -3,6 +3,8 @@ import { View, ScrollView, Text, Platform } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
 import { Command, CommandCategory } from './types';
 import { CommandPaletteItem } from './CommandPaletteItem';
+import { CommandPaletteTile } from './CommandPaletteTile';
+import { isTileCategory } from './search';
 import { Typography } from '@/constants/Typography';
 import { t } from '@/text';
 
@@ -13,6 +15,7 @@ interface CommandPaletteResultsProps {
     onSelectionChange: (index: number) => void;
     executingCommandId: string | null;
     searchQuery: string;
+    tileColumns: number;
 }
 
 export function CommandPaletteResults({ 
@@ -22,6 +25,7 @@ export function CommandPaletteResults({
     onSelectionChange,
     executingCommandId,
     searchQuery,
+    tileColumns,
 }: CommandPaletteResultsProps) {
     const scrollViewRef = useRef<ScrollView>(null);
     const itemRefs = useRef<{ [key: number]: View | null }>({});
@@ -68,11 +72,32 @@ export function CommandPaletteResults({
                 if (category.commands.length === 0) return null;
                 
                 const categoryStartIndex = currentIndex;
+                const asTiles = isTileCategory(category, searchQuery);
                 const categoryCommands = category.commands.map((command, idx) => {
                     const commandIndex = categoryStartIndex + idx;
                     const isSelected = commandIndex === selectedIndex;
                     currentIndex++;
-                    
+
+                    if (asTiles) {
+                        return (
+                            <View
+                                key={command.id}
+                                style={[styles.tileCell, { width: `${100 / tileColumns}%` }]}
+                                ref={(ref) => {
+                                    itemRefs.current[commandIndex] = ref;
+                                }}
+                            >
+                                <CommandPaletteTile
+                                    command={command}
+                                    isSelected={isSelected}
+                                    onPress={() => onSelectCommand(command)}
+                                    onHover={() => onSelectionChange(commandIndex)}
+                                    isExecuting={executingCommandId === command.id}
+                                />
+                            </View>
+                        );
+                    }
+
                     return (
                         <View
                             key={command.id}
@@ -97,7 +122,7 @@ export function CommandPaletteResults({
                         <Text style={[styles.categoryTitle, Typography.default('semiBold')]}>
                             {category.title}
                         </Text>
-                        {categoryCommands}
+                        {asTiles ? <View style={styles.tileGrid}>{categoryCommands}</View> : categoryCommands}
                     </View>
                 );
             })}
@@ -110,25 +135,33 @@ const styles = StyleSheet.create((theme) => ({
         flexShrink: 1,
         // Use viewport-based height for better proportions
         ...(Platform.OS === 'web' ? {
-            maxHeight: '50vh', // 40% of viewport height for results
+            maxHeight: '72vh', // Leaves room for the input and footer within the 80vh container
         } as any : {
-            maxHeight: 420, // Fallback for native
+            maxHeight: 560, // Fallback for native
         }),
-        paddingVertical: 8,
+        paddingVertical: 4,
     },
     emptyContainer: {
-        padding: 48,
+        padding: 32,
         alignItems: 'center',
     },
     emptyText: {
-        fontSize: 15,
+        fontSize: 14,
         color: theme.colors.textSecondary,
         letterSpacing: -0.2,
     },
+    tileGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        paddingHorizontal: 6,
+    },
+    tileCell: {
+        paddingVertical: 2,
+    },
     categoryTitle: {
-        paddingHorizontal: 32,
+        paddingHorizontal: 20,
         paddingTop: 16,
-        paddingBottom: 8,
+        paddingBottom: 6,
         fontSize: 12,
         color: theme.colors.textSecondary,
         textTransform: 'uppercase',

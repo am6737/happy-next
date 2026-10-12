@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Command } from './types';
-import { applyCachedMessageMatches, groupCommands, normalizeCommandSearchText, scoreCommand } from './search';
+import { applyCachedMessageMatches, buildNavigationRows, groupCommands, isTileCategory, normalizeCommandSearchText, scoreCommand } from './search';
 
 const command = (overrides: Partial<Command>): Command => ({
     id: 'command',
@@ -64,8 +64,26 @@ describe('command palette search', () => {
             'Message',
         );
 
-        expect(matched.subtitle).toBe('“The deployment token lives here”');
+        expect(matched.subtitle).toBe('The deployment token lives here');
         expect(matched.badge).toBe('Message');
         expect(groupCommands([matched], 'deployment token').flatMap((group) => group.commands)).toContain(matched);
+    });
+
+    it('groups fixed entries as tiles while idle and as a list while searching', () => {
+        const quick = Array.from({ length: 5 }, (_, i) => command({ id: `quick-${i}`, title: `Quick ${i}`, category: 'Quick', categoryOrder: 0, tile: true }));
+        const settings = command({ id: 'settings', title: 'Settings', category: 'Settings', categoryOrder: 5, tile: true, idleCategory: 'Quick' });
+        const session = command({ id: 'session', title: 'Session', category: 'Sessions', categoryOrder: 2 });
+        const all = [...quick, settings, session];
+
+        const idle = groupCommands(all, '');
+        expect(idle.map((group) => group.title)).toEqual(['Quick', 'Sessions']);
+        expect(idle[0].commands.map((c) => c.id)).toContain('settings');
+        expect(isTileCategory(idle[0], '')).toBe(true);
+        expect(isTileCategory(idle[1], '')).toBe(false);
+        expect(buildNavigationRows(idle, '', 4)).toEqual([[0, 1, 2, 3], [4, 5], [6]]);
+
+        const searching = groupCommands(all, 'settings');
+        expect(searching[0].title).toBe('Settings');
+        expect(isTileCategory(searching[0], 'settings')).toBe(false);
     });
 });

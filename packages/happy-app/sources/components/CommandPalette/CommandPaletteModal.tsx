@@ -137,7 +137,7 @@ const styles = StyleSheet.create((theme) => ({
         alignItems: 'center',
         // Position at 30% from top of viewport
         ...(Platform.OS === 'web' ? {
-            paddingTop: '20vh',
+            paddingTop: '10vh',
         } as any : {
             paddingTop: 24,
             paddingBottom: 24,
