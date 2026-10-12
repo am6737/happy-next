@@ -14,6 +14,7 @@ import { useActiveSuggestions } from './autocomplete/useActiveSuggestions';
 import { AgentInputAutocomplete } from './AgentInputAutocomplete';
 import { FloatingOverlay } from './FloatingOverlay';
 import { FullWindowOverlay } from 'react-native-screens';
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { TextInputState, MultiTextInputHandle } from './MultiTextInput';
 import { applySuggestion } from './autocomplete/applySuggestion';
 import { ABORT_ESCAPE_WINDOW_MS, resolveEscapeAbort, shouldSendOnEnter } from './agentInputKeyboard';
@@ -175,6 +176,16 @@ const agentMarkArtworkSize: Record<keyof typeof agentFlavorIcons, number> = {
     qoder: 11,
 };
 
+// The settings overlay grows out of the input below it and sinks back into it when closed. These are
+// driven by shared values rather than entering/exiting layout animations: on web those pin the
+// overlay's top and height, so it would grow downward over the input when its content changes.
+const SETTINGS_OVERLAY_OPEN_TIMING = { duration: 200, easing: Easing.out(Easing.cubic) };
+const SETTINGS_OVERLAY_CLOSE_TIMING = { duration: 140, easing: Easing.in(Easing.cubic) };
+const SETTINGS_TAB_CONTENT_TIMING = { duration: 180, easing: Easing.out(Easing.cubic) };
+const SETTINGS_TAB_TIMING = { duration: 220, easing: Easing.out(Easing.cubic) };
+// Padding of the segmented tab bar, around the tabs and the sliding selection behind them.
+const SETTINGS_TAB_BAR_PADDING = 2;
+
 const stylesheet = StyleSheet.create((theme, runtime) => ({
     container: {
         alignItems: 'center',
@@ -253,6 +264,19 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
         right: 0,
         marginBottom: 8,
         zIndex: 1000,
+        transformOrigin: 'bottom',
+    },
+    settingsContent: {
+        flexShrink: 1,
+        minHeight: 0,
+    },
+    settingsTabIndicator: {
+        position: 'absolute',
+        top: SETTINGS_TAB_BAR_PADDING,
+        bottom: SETTINGS_TAB_BAR_PADDING,
+        left: SETTINGS_TAB_BAR_PADDING,
+        borderRadius: 8,
+        backgroundColor: theme.colors.floatingOverlay.segmentedSelected,
     },
     overlayBackdrop: {
         position: 'absolute',
@@ -318,12 +342,12 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
     // In the app the lines match the overlay's own hairline border; the web keeps its 1px divider.
     overlayDivider: {
         height: Platform.OS === 'web' ? 1 : StyleSheet.hairlineWidth,
-        backgroundColor: Platform.OS === 'web' ? theme.colors.divider : theme.colors.modal.border,
+        backgroundColor: theme.colors.floatingOverlay.divider,
         marginHorizontal: 16,
     },
     overlayColumnDivider: {
         width: Platform.OS === 'web' ? 1 : StyleSheet.hairlineWidth,
-        backgroundColor: Platform.OS === 'web' ? theme.colors.divider : theme.colors.modal.border,
+        backgroundColor: theme.colors.floatingOverlay.divider,
         marginVertical: 8,
     },
     // A native switch can be taller than the row; centring it in a slot keeps it level with the label.
@@ -352,7 +376,7 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
         backgroundColor: 'transparent',
     },
     selectionItemPressed: {
-        backgroundColor: theme.colors.surfacePressed,
+        backgroundColor: theme.colors.floatingOverlay.pressed,
     },
     radioButton: {
         width: 16,
@@ -1111,6 +1135,68 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
         }
     }, [showSettings]);
 
+    // The overlay stays mounted while it animates out, still showing the tab it was closed on.
+    const isSettingsOpen = showSettings !== false;
+    const [settingsOverlayMounted, setSettingsOverlayMounted] = React.useState(false);
+    const lastSettingsTabRef = React.useRef<'agent' | 'model' | 'permission'>('model');
+    if (showSettings) lastSettingsTabRef.current = showSettings;
+    const shownSettingsTab = showSettings || lastSettingsTabRef.current;
+    const settingsOverlayProgress = useSharedValue(0);
+    React.useEffect(() => {
+        if (isSettingsOpen) {
+            setSettingsOverlayMounted(true);
+            settingsOverlayProgress.value = withTiming(1, SETTINGS_OVERLAY_OPEN_TIMING);
+            return;
+        }
+        settingsOverlayProgress.value = withTiming(0, SETTINGS_OVERLAY_CLOSE_TIMING);
+        const timer = setTimeout(() => setSettingsOverlayMounted(false), SETTINGS_OVERLAY_CLOSE_TIMING.duration);
+        return () => clearTimeout(timer);
+    }, [isSettingsOpen, settingsOverlayProgress]);
+    const settingsOverlayStyle = useAnimatedStyle(() => ({
+        opacity: settingsOverlayProgress.value,
+        transform: [
+            { translateY: (1 - settingsOverlayProgress.value) * 8 },
+            { scale: 0.97 + 0.03 * settingsOverlayProgress.value },
+        ],
+    }));
+
+    // The selected tab's background slides between tabs; it is placed without animating when the overlay opens.
+    const settingsTabKeys: ('agent' | 'model' | 'permission')[] = props.onAgentChange && props.agentType
+        ? ['agent', 'model', 'permission']
+        : ['model', 'permission'];
+    const activeSettingsTabIndex = showSettings ? settingsTabKeys.indexOf(showSettings) : -1;
+    const [settingsTabBarWidth, setSettingsTabBarWidth] = React.useState(0);
+    // Height of the input panel card, which the iOS settings overlay sits on top of.
+    const [inputPanelHeight, setInputPanelHeight] = React.useState(0);
+    const settingsTabWidth = settingsTabBarWidth > 0 ? (settingsTabBarWidth - SETTINGS_TAB_BAR_PADDING * 2) / settingsTabKeys.length : 0;
+    const settingsTabIndicatorX = useSharedValue(0);
+    const settingsTabIndicatorPlacedRef = React.useRef(false);
+    React.useEffect(() => {
+        if (activeSettingsTabIndex < 0) {
+            settingsTabIndicatorPlacedRef.current = false;
+            return;
+        }
+        if (settingsTabWidth === 0) return;
+        const x = activeSettingsTabIndex * settingsTabWidth;
+        settingsTabIndicatorX.value = settingsTabIndicatorPlacedRef.current ? withTiming(x, SETTINGS_TAB_TIMING) : x;
+        settingsTabIndicatorPlacedRef.current = true;
+    }, [activeSettingsTabIndex, settingsTabWidth, settingsTabIndicatorX]);
+    const settingsTabIndicatorStyle = useAnimatedStyle(() => ({
+        transform: [{ translateX: settingsTabIndicatorX.value }],
+    }));
+
+    // The new tab's content fades in when switching tabs (a layout effect, so it never shows at full opacity first).
+    const settingsContentOpacity = useSharedValue(1);
+    const previousSettingsTabIndexRef = React.useRef(-1);
+    React.useLayoutEffect(() => {
+        const previous = previousSettingsTabIndexRef.current;
+        previousSettingsTabIndexRef.current = activeSettingsTabIndex;
+        if (previous < 0 || activeSettingsTabIndex < 0 || previous === activeSettingsTabIndex) return;
+        settingsContentOpacity.value = 0;
+        settingsContentOpacity.value = withTiming(1, SETTINGS_TAB_CONTENT_TIMING);
+    }, [activeSettingsTabIndex, settingsContentOpacity]);
+    const settingsContentStyle = useAnimatedStyle(() => ({ opacity: settingsContentOpacity.value }));
+
     // Handle settings button press (gear icon → model selection)
     const handleSettingsPress = React.useCallback(() => {
         hapticsLight();
@@ -1640,38 +1726,54 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                 )}
 
                 {/* Settings overlay */}
-                {showSettings && (
+                {(showSettings || settingsOverlayMounted) && (
                     <>
-                        <TouchableWithoutFeedback onPress={() => setShowSettings(false)}>
-                            <View style={styles.overlayBackdrop} />
-                        </TouchableWithoutFeedback>
-                        <View style={[
-                            styles.settingsOverlay,
-                            { paddingHorizontal: panelHorizontalInset }
-                        ]}>
-                            <FloatingOverlay maxHeight={settingsOverlayMaxHeight} scrollable={false} keyboardShouldPersistTaps="always">
+                        {showSettings && (
+                            <TouchableWithoutFeedback onPress={() => setShowSettings(false)}>
+                                <View style={styles.overlayBackdrop} />
+                            </TouchableWithoutFeedback>
+                        )}
+                        <Animated.View
+                            pointerEvents={showSettings ? 'auto' : 'none'}
+                            style={[
+                                styles.settingsOverlay,
+                                { paddingHorizontal: panelHorizontalInset },
+                                // On iOS the overlay's triggers live in the input card, so it opens right
+                                // above the card, covering the machine/path card rather than sitting over it.
+                                statusInPanel && { bottom: inputPanelHeight },
+                                settingsOverlayStyle,
+                            ]}
+                        >
+                            <FloatingOverlay maxHeight={settingsOverlayMaxHeight} scrollable={false} animateHeight keyboardShouldPersistTaps="always">
                                 {/* Tab bar - segmented control style */}
-                                <View style={{
-                                    flexDirection: 'row',
-                                    borderRadius: 10,
-                                    overflow: 'hidden',
-                                    padding: 2,
-                                    backgroundColor: theme.colors.surfaceHighest,
-                                    margin: 8,
-                                    marginBottom: 0,
-                                }}>
+                                <View
+                                    onLayout={(e) => setSettingsTabBarWidth(e.nativeEvent.layout.width)}
+                                    style={{
+                                        flexDirection: 'row',
+                                        borderRadius: 10,
+                                        overflow: 'hidden',
+                                        padding: SETTINGS_TAB_BAR_PADDING,
+                                        backgroundColor: theme.colors.floatingOverlay.segmentedBackground,
+                                        margin: 6,
+                                        marginBottom: 0,
+                                    }}
+                                >
+                                    {settingsTabWidth > 0 && (
+                                        <Animated.View style={[styles.settingsTabIndicator, { width: settingsTabWidth }, settingsTabIndicatorStyle]} />
+                                    )}
                                     {(() => {
                                         const permissionLabel = getPermissionModeLabel(shownPermissionMode);
                                         const currentModelSubtitle: React.ReactNode = props.fastMode
                                             ? <>{currentModelLabel} <MaterialCommunityIcons name="lightning-bolt" size={10} color={FAST_MODE_ICON_COLOR} /></>
                                             : currentModelLabel;
-                                        const tabs = [
-                                            ...(props.onAgentChange && props.agentType ? [{ key: 'agent' as const, label: t('agentInput.agent.title'), subtitle: t(`agentInput.agent.${props.agentType}`) as React.ReactNode }] : []),
-                                            { key: 'model' as const, label: t('agentInput.model.title'), subtitle: currentModelSubtitle },
-                                            { key: 'permission' as const, label: t('agentInput.permissionMode.title'), subtitle: permissionLabel },
-                                        ];
+                                        const tabInfo: Record<'agent' | 'model' | 'permission', { label: string; subtitle: React.ReactNode }> = {
+                                            agent: { label: t('agentInput.agent.title'), subtitle: props.agentType ? t(`agentInput.agent.${props.agentType}`) : null },
+                                            model: { label: t('agentInput.model.title'), subtitle: currentModelSubtitle },
+                                            permission: { label: t('agentInput.permissionMode.title'), subtitle: permissionLabel },
+                                        };
+                                        const tabs = settingsTabKeys.map((key) => ({ key, ...tabInfo[key] }));
                                         return tabs.map((tab) => {
-                                            const isActive = showSettings === tab.key;
+                                            const isActive = shownSettingsTab === tab.key;
                                             return (
                                                 <Pressable
                                                     key={tab.key}
@@ -1680,19 +1782,12 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                                         hapticsLight();
                                                         setShowSettings(tab.key);
                                                     }}
-                                                    style={[{
+                                                    style={{
                                                         flex: 1,
                                                         alignItems: 'center',
                                                         paddingVertical: 6,
                                                         borderRadius: 8,
-                                                    }, isActive && {
-                                                        backgroundColor: theme.colors.surface,
-                                                        shadowColor: '#000',
-                                                        shadowOffset: { width: 0, height: 1 },
-                                                        shadowOpacity: 0.1,
-                                                        shadowRadius: 2,
-                                                        elevation: 2,
-                                                    }]}
+                                                    }}
                                                 >
                                                     <Text style={{
                                                         fontSize: 13,
@@ -1717,319 +1812,321 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                     })()}
                                 </View>
 
-                                {/* Agent Section */}
-                                {showSettings === 'agent' && <View style={styles.overlaySection}>
-                                    {(props.availableAgents ?? []).map((agent) => {
-                                        const isSelected = props.agentType === agent;
-                                        return (
-                                            <Pressable
-                                                key={agent}
-                                                onPress={() => {
-                                                    if (isSelected) return;
-                                                    hapticsLight();
-                                                    props.onAgentChange?.(agent);
-                                                }}
-                                                style={({ pressed, hovered }: any) => ({
-                                                    flexDirection: 'row',
-                                                    alignItems: 'center',
-                                                    paddingHorizontal: 16,
-                                                    paddingVertical: 10,
-                                                    backgroundColor: pressed || hovered ? theme.colors.surfacePressed : 'transparent'
-                                                })}
-                                            >
-                                                <View style={{
-                                                    width: 16,
-                                                    height: 16,
-                                                    borderRadius: 8,
-                                                    borderWidth: 2,
-                                                    borderColor: isSelected ? theme.colors.radio.active : theme.colors.radio.inactive,
-                                                    alignItems: 'center',
-                                                    justifyContent: 'center',
-                                                    marginRight: 12
-                                                }}>
-                                                    {isSelected && (
-                                                        <View style={{
-                                                            width: 6,
-                                                            height: 6,
-                                                            borderRadius: 3,
-                                                            backgroundColor: theme.colors.radio.dot
-                                                        }} />
-                                                    )}
-                                                </View>
-                                                <Image
-                                                    source={agentFlavorIcons[agent]}
-                                                    style={{ width: 16, height: 16, marginRight: 8 }}
-                                                    contentFit="contain"
-                                                    tintColor={agent === 'codex' || agent === 'qoder' ? theme.colors.text : undefined}
-                                                />
-                                                <Text style={{
-                                                    fontSize: 14,
-                                                    color: isSelected ? theme.colors.radio.active : theme.colors.text,
-                                                    ...Typography.default()
-                                                }}>
-                                                    {t(`agentInput.agent.${agent}`)}
-                                                </Text>
-                                            </Pressable>
-                                        );
-                                    })}
-                                </View>}
-
-                                {/* Permission Mode Section */}
-                                {showSettings === 'permission' && <View style={styles.overlaySection}>
-                                    {isQoderPlanning && (
-                                        <View style={{
-                                            flexDirection: 'row',
-                                            alignItems: 'center',
-                                            paddingHorizontal: 16,
-                                            paddingVertical: 8,
-                                        }}>
-                                            <MaterialCommunityIcons name="clipboard-text-outline" size={16} color={theme.colors.permission.plan} style={{ marginRight: 12 }} />
-                                            <View style={{ flexShrink: 1 }}>
-                                                <Text style={{
-                                                    fontSize: 14,
-                                                    color: theme.colors.permission.plan,
-                                                    ...Typography.default()
-                                                }}>
-                                                    {t('agentInput.permissionMode.plan')}
-                                                </Text>
-                                                <Text style={{
-                                                    fontSize: 11,
-                                                    color: theme.colors.textSecondary,
-                                                    marginTop: 2,
-                                                    ...Typography.default()
-                                                }}>
-                                                    {t('agentInput.qoderPermissionMode.planningDescription')}
-                                                </Text>
-                                            </View>
-                                        </View>
-                                    )}
-                                    {permissionModeOptions.map((mode) => {
-                                        const config = { label: getPermissionModeLabel(mode), description: qoderPermissionModeDescriptions[mode] };
-                                        if (!config.label) return null;
-                                        const isSelected = props.permissionMode === mode;
-
-                                        return (
-                                            <Pressable
-                                                key={mode}
-                                                onPress={() => handleSettingsSelect(mode)}
-                                                style={({ pressed, hovered }: any) => ({
-                                                    flexDirection: 'row',
-                                                    alignItems: 'center',
-                                                    paddingHorizontal: 16,
-                                                    paddingVertical: 8,
-                                                    backgroundColor: pressed || hovered ? theme.colors.surfacePressed : 'transparent'
-                                                })}
-                                            >
-                                                <View style={{
-                                                    width: 16,
-                                                    height: 16,
-                                                    borderRadius: 8,
-                                                    borderWidth: 2,
-                                                    borderColor: isSelected ? theme.colors.radio.active : theme.colors.radio.inactive,
-                                                    alignItems: 'center',
-                                                    justifyContent: 'center',
-                                                    marginRight: 12
-                                                }}>
-                                                    {isSelected && (
-                                                        <View style={{
-                                                            width: 6,
-                                                            height: 6,
-                                                            borderRadius: 3,
-                                                            backgroundColor: theme.colors.radio.dot
-                                                        }} />
-                                                    )}
-                                                </View>
-                                                <View style={{ flexShrink: 1 }}>
+                                <Animated.View style={[styles.settingsContent, settingsContentStyle]}>
+                                    {/* Agent Section */}
+                                    {shownSettingsTab === 'agent' && <View style={styles.overlaySection}>
+                                        {(props.availableAgents ?? []).map((agent) => {
+                                            const isSelected = props.agentType === agent;
+                                            return (
+                                                <Pressable
+                                                    key={agent}
+                                                    onPress={() => {
+                                                        if (isSelected) return;
+                                                        hapticsLight();
+                                                        props.onAgentChange?.(agent);
+                                                    }}
+                                                    style={({ pressed, hovered }: any) => ({
+                                                        flexDirection: 'row',
+                                                        alignItems: 'center',
+                                                        paddingHorizontal: 16,
+                                                        paddingVertical: 10,
+                                                        backgroundColor: pressed || hovered ? theme.colors.floatingOverlay.pressed : 'transparent'
+                                                    })}
+                                                >
+                                                    <View style={{
+                                                        width: 16,
+                                                        height: 16,
+                                                        borderRadius: 8,
+                                                        borderWidth: 2,
+                                                        borderColor: isSelected ? theme.colors.radio.active : theme.colors.radio.inactive,
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        marginRight: 12
+                                                    }}>
+                                                        {isSelected && (
+                                                            <View style={{
+                                                                width: 6,
+                                                                height: 6,
+                                                                borderRadius: 3,
+                                                                backgroundColor: theme.colors.radio.dot
+                                                            }} />
+                                                        )}
+                                                    </View>
+                                                    <Image
+                                                        source={agentFlavorIcons[agent]}
+                                                        style={{ width: 16, height: 16, marginRight: 8 }}
+                                                        contentFit="contain"
+                                                        tintColor={agent === 'codex' || agent === 'qoder' ? theme.colors.text : undefined}
+                                                    />
                                                     <Text style={{
                                                         fontSize: 14,
                                                         color: isSelected ? theme.colors.radio.active : theme.colors.text,
                                                         ...Typography.default()
                                                     }}>
-                                                        {config.label}
+                                                        {t(`agentInput.agent.${agent}`)}
                                                     </Text>
-                                                    {config.description ? (
-                                                        <Text style={{
-                                                            fontSize: 11,
-                                                            color: theme.colors.textSecondary,
-                                                            marginTop: 2,
-                                                            ...Typography.default()
-                                                        }}>
-                                                            {config.description}
-                                                        </Text>
-                                                    ) : null}
-                                                </View>
-                                            </Pressable>
-                                        );
-                                    })}
-                                </View>}
+                                                </Pressable>
+                                            );
+                                        })}
+                                    </View>}
 
-                                {/* Model Section: wide screens scroll the model and effort columns on their own;
-                                    narrow ones scroll only the model list, with the effort as a dropdown row below it. */}
-                                {showSettings === 'model' && <View style={styles.modelSection}>
-                                    {isCodex ? (() => {
-                                        const hasEffort = codexSelection.family !== 'default';
-                                        const reasoningColumn = (
-                                            <>
-                                                <Text style={[styles.overlaySectionTitle, styles.modelColumnTitle]}>
-                                                    {t('agentInput.model.reasoningEffort')}
-                                                </Text>
-                                                {renderScrollableList(codexReasoningOptions, codexSelection.effort, handleCodexReasoningChange)}
-                                            </>
-                                        );
-                                        const fastModeRow = (
-                                            <View style={[styles.fastModeRow, { height: modelFooterRowHeight }]}>
-                                                <Text style={styles.fastModeLabel}>
-                                                    {t('agentInput.model.fastMode')}
-                                                </Text>
-                                                <View style={[styles.fastModeSwitchSlot, { height: modelFooterRowHeight }]}>
-                                                    <Switch
-                                                        value={!!props.fastMode}
-                                                        onValueChange={(value) => {
-                                                            hapticsLight();
-                                                            props.onFastModeChange?.(value);
-                                                        }}
-                                                    />
+                                    {/* Permission Mode Section */}
+                                    {shownSettingsTab === 'permission' && <View style={styles.overlaySection}>
+                                        {isQoderPlanning && (
+                                            <View style={{
+                                                flexDirection: 'row',
+                                                alignItems: 'center',
+                                                paddingHorizontal: 16,
+                                                paddingVertical: 8,
+                                            }}>
+                                                <MaterialCommunityIcons name="clipboard-text-outline" size={16} color={theme.colors.permission.plan} style={{ marginRight: 12 }} />
+                                                <View style={{ flexShrink: 1 }}>
+                                                    <Text style={{
+                                                        fontSize: 14,
+                                                        color: theme.colors.permission.plan,
+                                                        ...Typography.default()
+                                                    }}>
+                                                        {t('agentInput.permissionMode.plan')}
+                                                    </Text>
+                                                    <Text style={{
+                                                        fontSize: 11,
+                                                        color: theme.colors.textSecondary,
+                                                        marginTop: 2,
+                                                        ...Typography.default()
+                                                    }}>
+                                                        {t('agentInput.qoderPermissionMode.planningDescription')}
+                                                    </Text>
                                                 </View>
                                             </View>
-                                        );
-                                        // Wide screens: effort sits beside the model list. The list keeps its place in the tree
-                                        // whether or not the effort column exists, so it is not rebuilt (and its scroll position
-                                        // lost) when the picked model changes between having effort and not.
-                                        if (isWideModelLayout) {
+                                        )}
+                                        {permissionModeOptions.map((mode) => {
+                                            const config = { label: getPermissionModeLabel(mode), description: qoderPermissionModeDescriptions[mode] };
+                                            if (!config.label) return null;
+                                            const isSelected = props.permissionMode === mode;
+
                                             return (
-                                                <>
-                                                    <View style={styles.modelColumns}>
-                                                        <View style={styles.modelColumn}>
-                                                            {renderScrollableList(codexFamilyOptions, codexSelection.family, handleCodexFamilyChange)}
-                                                        </View>
-                                                        {hasEffort && <View style={styles.overlayColumnDivider} />}
-                                                        {hasEffort && <View style={styles.modelColumn}>{reasoningColumn}</View>}
+                                                <Pressable
+                                                    key={mode}
+                                                    onPress={() => handleSettingsSelect(mode)}
+                                                    style={({ pressed, hovered }: any) => ({
+                                                        flexDirection: 'row',
+                                                        alignItems: 'center',
+                                                        paddingHorizontal: 16,
+                                                        paddingVertical: 8,
+                                                        backgroundColor: pressed || hovered ? theme.colors.floatingOverlay.pressed : 'transparent'
+                                                    })}
+                                                >
+                                                    <View style={{
+                                                        width: 16,
+                                                        height: 16,
+                                                        borderRadius: 8,
+                                                        borderWidth: 2,
+                                                        borderColor: isSelected ? theme.colors.radio.active : theme.colors.radio.inactive,
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        marginRight: 12
+                                                    }}>
+                                                        {isSelected && (
+                                                            <View style={{
+                                                                width: 6,
+                                                                height: 6,
+                                                                borderRadius: 3,
+                                                                backgroundColor: theme.colors.radio.dot
+                                                            }} />
+                                                        )}
                                                     </View>
-                                                    {hasEffort && <View style={styles.overlayDivider} />}
-                                                    {hasEffort && fastModeRow}
+                                                    <View style={{ flexShrink: 1 }}>
+                                                        <Text style={{
+                                                            fontSize: 14,
+                                                            color: isSelected ? theme.colors.radio.active : theme.colors.text,
+                                                            ...Typography.default()
+                                                        }}>
+                                                            {config.label}
+                                                        </Text>
+                                                        {config.description ? (
+                                                            <Text style={{
+                                                                fontSize: 11,
+                                                                color: theme.colors.textSecondary,
+                                                                marginTop: 2,
+                                                                ...Typography.default()
+                                                            }}>
+                                                                {config.description}
+                                                            </Text>
+                                                        ) : null}
+                                                    </View>
+                                                </Pressable>
+                                            );
+                                        })}
+                                    </View>}
+
+                                    {/* Model Section: wide screens scroll the model and effort columns on their own;
+                                        narrow ones scroll only the model list, with the effort as a dropdown row below it. */}
+                                    {shownSettingsTab === 'model' && <View style={styles.modelSection}>
+                                        {isCodex ? (() => {
+                                            const hasEffort = codexSelection.family !== 'default';
+                                            const reasoningColumn = (
+                                                <>
+                                                    <Text style={[styles.overlaySectionTitle, styles.modelColumnTitle]}>
+                                                        {t('agentInput.model.reasoningEffort')}
+                                                    </Text>
+                                                    {renderScrollableList(codexReasoningOptions, codexSelection.effort, handleCodexReasoningChange)}
                                                 </>
                                             );
-                                        }
-                                        return (
-                                            <>
-                                                {renderScrollableList(codexFamilyOptions, codexSelection.family, handleCodexFamilyChange)}
-                                                {hasEffort && (
-                                                    <>
-                                                        <View style={styles.overlayDivider} />
-                                                        {renderEffortDropdown(codexReasoningOptions, codexSelection.effort, handleCodexReasoningChange)}
-                                                        <View style={styles.overlayDivider} />
-                                                        {fastModeRow}
-                                                    </>
-                                                )}
-                                            </>
-                                        );
-                                    })() : isClaude ? (() => {
-                                        const hasEffort = claudeSelection.family !== 'default' && claudeReasoningOptions.length > 0;
-                                        const reasoningColumn = (
-                                            <>
-                                                <Text style={[styles.overlaySectionTitle, styles.modelColumnTitle]}>
-                                                    {t('agentInput.model.reasoningEffort')}
-                                                </Text>
-                                                {renderScrollableList(claudeReasoningOptions, claudeSelection.effort, handleClaudeReasoningChange)}
-                                            </>
-                                        );
-                                        const oneMillionRow = claudeShow1MToggle ? (
-                                            <>
-                                                <View style={styles.overlayDivider} />
+                                            const fastModeRow = (
                                                 <View style={[styles.fastModeRow, { height: modelFooterRowHeight }]}>
                                                     <Text style={styles.fastModeLabel}>
-                                                        {t('agentInput.model.context1m')}
+                                                        {t('agentInput.model.fastMode')}
                                                     </Text>
                                                     <View style={[styles.fastModeSwitchSlot, { height: modelFooterRowHeight }]}>
                                                         <Switch
-                                                            value={claudeIs1M}
+                                                            value={!!props.fastMode}
                                                             onValueChange={(value) => {
                                                                 hapticsLight();
-                                                                handleClaude1MToggle(value);
+                                                                props.onFastModeChange?.(value);
                                                             }}
                                                         />
                                                     </View>
                                                 </View>
-                                            </>
-                                        ) : claudeShow1MBadge ? (
-                                            // Always-1M family (no 200K tier): informational row, no switch.
-                                            <>
-                                                <View style={styles.overlayDivider} />
-                                                <View style={[styles.fastModeRow, { height: modelFooterRowHeight }]}>
-                                                    <Text style={styles.fastModeLabel}>
-                                                        {t('agentInput.model.context1m')}
-                                                    </Text>
-                                                    <Text style={styles.fastModeLabel}>
-                                                        {t('agentInput.model.context1mAlways')}
-                                                    </Text>
-                                                </View>
-                                            </>
-                                        ) : null;
-                                        if (isWideModelLayout) {
+                                            );
+                                            // Wide screens: effort sits beside the model list. The list keeps its place in the tree
+                                            // whether or not the effort column exists, so it is not rebuilt (and its scroll position
+                                            // lost) when the picked model changes between having effort and not.
+                                            if (isWideModelLayout) {
+                                                return (
+                                                    <>
+                                                        <View style={styles.modelColumns}>
+                                                            <View style={styles.modelColumn}>
+                                                                {renderScrollableList(codexFamilyOptions, codexSelection.family, handleCodexFamilyChange)}
+                                                            </View>
+                                                            {hasEffort && <View style={styles.overlayColumnDivider} />}
+                                                            {hasEffort && <View style={styles.modelColumn}>{reasoningColumn}</View>}
+                                                        </View>
+                                                        {hasEffort && <View style={styles.overlayDivider} />}
+                                                        {hasEffort && fastModeRow}
+                                                    </>
+                                                );
+                                            }
                                             return (
                                                 <>
+                                                    {renderScrollableList(codexFamilyOptions, codexSelection.family, handleCodexFamilyChange)}
+                                                    {hasEffort && (
+                                                        <>
+                                                            <View style={styles.overlayDivider} />
+                                                            {renderEffortDropdown(codexReasoningOptions, codexSelection.effort, handleCodexReasoningChange)}
+                                                            <View style={styles.overlayDivider} />
+                                                            {fastModeRow}
+                                                        </>
+                                                    )}
+                                                </>
+                                            );
+                                        })() : isClaude ? (() => {
+                                            const hasEffort = claudeSelection.family !== 'default' && claudeReasoningOptions.length > 0;
+                                            const reasoningColumn = (
+                                                <>
+                                                    <Text style={[styles.overlaySectionTitle, styles.modelColumnTitle]}>
+                                                        {t('agentInput.model.reasoningEffort')}
+                                                    </Text>
+                                                    {renderScrollableList(claudeReasoningOptions, claudeSelection.effort, handleClaudeReasoningChange)}
+                                                </>
+                                            );
+                                            const oneMillionRow = claudeShow1MToggle ? (
+                                                <>
+                                                    <View style={styles.overlayDivider} />
+                                                    <View style={[styles.fastModeRow, { height: modelFooterRowHeight }]}>
+                                                        <Text style={styles.fastModeLabel}>
+                                                            {t('agentInput.model.context1m')}
+                                                        </Text>
+                                                        <View style={[styles.fastModeSwitchSlot, { height: modelFooterRowHeight }]}>
+                                                            <Switch
+                                                                value={claudeIs1M}
+                                                                onValueChange={(value) => {
+                                                                    hapticsLight();
+                                                                    handleClaude1MToggle(value);
+                                                                }}
+                                                            />
+                                                        </View>
+                                                    </View>
+                                                </>
+                                            ) : claudeShow1MBadge ? (
+                                                // Always-1M family (no 200K tier): informational row, no switch.
+                                                <>
+                                                    <View style={styles.overlayDivider} />
+                                                    <View style={[styles.fastModeRow, { height: modelFooterRowHeight }]}>
+                                                        <Text style={styles.fastModeLabel}>
+                                                            {t('agentInput.model.context1m')}
+                                                        </Text>
+                                                        <Text style={styles.fastModeLabel}>
+                                                            {t('agentInput.model.context1mAlways')}
+                                                        </Text>
+                                                    </View>
+                                                </>
+                                            ) : null;
+                                            if (isWideModelLayout) {
+                                                return (
+                                                    <>
+                                                        <View style={styles.modelColumns}>
+                                                            <View style={styles.modelColumn}>
+                                                                {renderScrollableList(claudeFamilyOptions, claudeBase, handleClaudeFamilyChange)}
+                                                            </View>
+                                                            {hasEffort && <View style={styles.overlayColumnDivider} />}
+                                                            {hasEffort && <View style={styles.modelColumn}>{reasoningColumn}</View>}
+                                                        </View>
+                                                        {oneMillionRow}
+                                                    </>
+                                                );
+                                            }
+                                            return (
+                                                <>
+                                                    {renderScrollableList(claudeFamilyOptions, claudeBase, handleClaudeFamilyChange)}
+                                                    {hasEffort && (
+                                                        <>
+                                                            <View style={styles.overlayDivider} />
+                                                            {renderEffortDropdown(claudeReasoningOptions, claudeSelection.effort, handleClaudeReasoningChange)}
+                                                        </>
+                                                    )}
+                                                    {oneMillionRow}
+                                                </>
+                                            );
+                                        })() : isQoder ? (() => {
+                                            const reasoningColumn = (
+                                                <>
+                                                    <Text style={[styles.overlaySectionTitle, styles.modelColumnTitle]}>
+                                                        {t('agentInput.model.reasoningEffort')}
+                                                    </Text>
+                                                    {renderScrollableList(qoderEffortOptions, qoderEffort, handleQoderEffortChange)}
+                                                </>
+                                            );
+                                            const hasEffort = qoderEffortOptions.length > 0;
+                                            if (isWideModelLayout) {
+                                                return (
                                                     <View style={styles.modelColumns}>
                                                         <View style={styles.modelColumn}>
-                                                            {renderScrollableList(claudeFamilyOptions, claudeBase, handleClaudeFamilyChange)}
+                                                            {renderScrollableList(modelOptions, qoderSelection.model, handleQoderModelChange)}
                                                         </View>
                                                         {hasEffort && <View style={styles.overlayColumnDivider} />}
                                                         {hasEffort && <View style={styles.modelColumn}>{reasoningColumn}</View>}
                                                     </View>
-                                                    {oneMillionRow}
+                                                );
+                                            }
+                                            return (
+                                                <>
+                                                    {renderScrollableList(modelOptions, qoderSelection.model, handleQoderModelChange)}
+                                                    {hasEffort && (
+                                                        <>
+                                                            <View style={styles.overlayDivider} />
+                                                            {renderEffortDropdown(qoderEffortOptions, qoderEffort, handleQoderEffortChange)}
+                                                        </>
+                                                    )}
                                                 </>
                                             );
-                                        }
-                                        return (
-                                            <>
-                                                {renderScrollableList(claudeFamilyOptions, claudeBase, handleClaudeFamilyChange)}
-                                                {hasEffort && (
-                                                    <>
-                                                        <View style={styles.overlayDivider} />
-                                                        {renderEffortDropdown(claudeReasoningOptions, claudeSelection.effort, handleClaudeReasoningChange)}
-                                                    </>
-                                                )}
-                                                {oneMillionRow}
-                                            </>
-                                        );
-                                    })() : isQoder ? (() => {
-                                        const reasoningColumn = (
-                                            <>
-                                                <Text style={[styles.overlaySectionTitle, styles.modelColumnTitle]}>
-                                                    {t('agentInput.model.reasoningEffort')}
-                                                </Text>
-                                                {renderScrollableList(qoderEffortOptions, qoderEffort, handleQoderEffortChange)}
-                                            </>
-                                        );
-                                        const hasEffort = qoderEffortOptions.length > 0;
-                                        if (isWideModelLayout) {
-                                            return (
-                                                <View style={styles.modelColumns}>
-                                                    <View style={styles.modelColumn}>
-                                                        {renderScrollableList(modelOptions, qoderSelection.model, handleQoderModelChange)}
-                                                    </View>
-                                                    {hasEffort && <View style={styles.overlayColumnDivider} />}
-                                                    {hasEffort && <View style={styles.modelColumn}>{reasoningColumn}</View>}
-                                                </View>
-                                            );
-                                        }
-                                        return (
-                                            <>
-                                                {renderScrollableList(modelOptions, qoderSelection.model, handleQoderModelChange)}
-                                                {hasEffort && (
-                                                    <>
-                                                        <View style={styles.overlayDivider} />
-                                                        {renderEffortDropdown(qoderEffortOptions, qoderEffort, handleQoderEffortChange)}
-                                                    </>
-                                                )}
-                                            </>
-                                        );
-                                    })() : (
-                                        renderScrollableList(modelOptions, selectedModelMode, (v) => props.onModelModeChange?.(v))
-                                    )}
-                                </View>}
+                                        })() : (
+                                            renderScrollableList(modelOptions, selectedModelMode, (v) => props.onModelModeChange?.(v))
+                                        )}
+                                    </View>}
 
+                                </Animated.View>
                             </FloatingOverlay>
-                        </View>
+                        </Animated.View>
                     </>
                 )}
 
@@ -2159,6 +2256,7 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                 {/* Box 2: Action Area (Input + Send) */}
                 <View
                     ref={dropZoneRef}
+                    onLayout={statusInPanel ? (e) => setInputPanelHeight(e.nativeEvent.layout.height) : undefined}
                     style={[styles.unifiedPanel, statusInPanel && styles.unifiedPanelCompact, { marginHorizontal: panelHorizontalInset }, useGlassPanel && styles.unifiedPanelGlass]}
                 >
                     {useGlassPanel && (

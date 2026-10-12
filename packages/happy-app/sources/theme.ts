@@ -55,6 +55,17 @@ export const lightTheme = {
         surfaceHighest: '#f0f0f0',
         // Desktop window chrome around the rounded content panel — a shade off the panel, not a border.
         windowChrome: '#EBEBEB',
+        // Popups floating over the composer (settings, autocomplete): set apart by a fill of their own,
+        // without border or shadow — the same fill as the composer's machine/path card (surfacePressed).
+        // Rows and dividers on it are translucent so they read on that fill.
+        floatingOverlay: {
+            background: '#f0f0f2',
+            pressed: 'rgba(0, 0, 0, 0.05)',
+            selected: 'rgba(0, 0, 0, 0.08)',
+            divider: 'rgba(0, 0, 0, 0.08)',
+            segmentedBackground: 'rgba(0, 0, 0, 0.06)',
+            segmentedSelected: '#ffffff',
+        },
         divider: Platform.select({ ios: '#eaeaea', default: '#eaeaea' }),
         shadow: {
             color: Platform.select({ default: '#000000', web: 'rgba(0, 0, 0, 0.1)' }),
@@ -328,6 +339,14 @@ export const darkTheme = {
         surfaceHigh: Platform.select({ ios: '#2C2C2E', default: '#171717' }),
         surfaceHighest: Platform.select({ ios: '#38383A', default: '#292929' }),
         windowChrome: '#161616',
+        floatingOverlay: {
+            background: '#2C2C2E',
+            pressed: 'rgba(255, 255, 255, 0.06)',
+            selected: 'rgba(255, 255, 255, 0.1)',
+            divider: 'rgba(255, 255, 255, 0.1)',
+            segmentedBackground: 'rgba(255, 255, 255, 0.07)',
+            segmentedSelected: '#545456',
+        },
         divider: Platform.select({ ios: '#38383A', default: '#292929' }),
         shadow: {
             color: Platform.select({ default: '#000000', web: 'rgba(0, 0, 0, 0.1)' }),

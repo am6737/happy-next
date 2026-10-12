@@ -1,23 +1,26 @@
 import * as React from 'react';
-import { Platform, NativeSyntheticEvent, NativeScrollEvent, LayoutChangeEvent, ScrollView } from 'react-native';
-import Animated from 'react-native-reanimated';
+import { NativeSyntheticEvent, NativeScrollEvent, LayoutChangeEvent, ScrollView } from 'react-native';
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { StyleSheet } from 'react-native-unistyles';
 import { computeScrollIntoView } from './scrollIntoView';
 
 const stylesheet = StyleSheet.create((theme, runtime) => ({
+    // Set apart from the page by its own fill alone, without border or shadow.
     container: {
         borderRadius: 12,
         overflow: 'hidden',
-        backgroundColor: theme.colors.surface,
-        borderWidth: Platform.OS === 'web' ? 0 : 0.5,
-        borderColor: theme.colors.modal.border,
-        shadowColor: theme.colors.shadow.color,
-        shadowOffset: { width: 0, height: 2 },
-        shadowRadius: 3.84,
-        shadowOpacity: theme.colors.shadow.opacity,
-        elevation: 5,
+        backgroundColor: theme.colors.floatingOverlay.background,
+    },
+    // Lays the content out at its own height (up to maxHeight) while the container animates toward it.
+    measuredContent: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
     },
 }));
+
+const HEIGHT_TIMING = { duration: 220, easing: Easing.out(Easing.cubic) };
 
 interface FloatingOverlayProps {
     children: React.ReactNode;
@@ -29,6 +32,11 @@ interface FloatingOverlayProps {
      */
     scrollable?: boolean;
     keyboardShouldPersistTaps?: boolean | 'always' | 'never' | 'handled';
+    /**
+     * Only with `scrollable={false}`: animates the overlay's height when its content grows or shrinks
+     * (switching tabs, a row appearing) instead of jumping to it.
+     */
+    animateHeight?: boolean;
     /**
      * When provided (together with `itemHeight`), the overlay keeps the item at
      * `selectedIndex` scrolled into view as it changes — used for keyboard
@@ -49,6 +57,7 @@ export const FloatingOverlay = React.memo((props: FloatingOverlayProps) => {
         keyboardShouldPersistTaps = 'handled',
         selectedIndex,
         itemHeight,
+        animateHeight = false,
     } = props;
 
     const scrollRef = React.useRef<ScrollView>(null);
@@ -70,7 +79,24 @@ export const FloatingOverlay = React.memo((props: FloatingOverlayProps) => {
         }
     }, [selectedIndex, itemHeight, maxHeight]);
 
+    // 0 until the content is first measured; the first height is taken as is, later ones animate.
+    const contentHeight = useSharedValue(0);
+    const heightStyle = useAnimatedStyle(() => (contentHeight.value > 0 ? { height: contentHeight.value } : {}));
+    const handleContentLayout = React.useCallback((e: LayoutChangeEvent) => {
+        const height = e.nativeEvent.layout.height;
+        contentHeight.value = contentHeight.value > 0 ? withTiming(height, HEIGHT_TIMING) : height;
+    }, [contentHeight]);
+
     if (!scrollable) {
+        if (animateHeight) {
+            return (
+                <Animated.View style={[styles.container, heightStyle]}>
+                    <Animated.View style={[styles.measuredContent, { maxHeight }]} onLayout={handleContentLayout}>
+                        {children}
+                    </Animated.View>
+                </Animated.View>
+            );
+        }
         return (
             <Animated.View style={[styles.container, { maxHeight }]}>
                 {children}

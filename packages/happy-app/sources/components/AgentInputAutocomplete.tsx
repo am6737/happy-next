@@ -27,9 +27,9 @@ export const AgentInputAutocomplete = React.memo((props: AgentInputAutocompleteP
                     style={({ pressed }) => ({
                         height: itemHeight,
                         backgroundColor: pressed
-                            ? theme.colors.surfacePressed
+                            ? theme.colors.floatingOverlay.pressed
                             : selectedIndex === index
-                                ? theme.colors.surfaceSelected
+                                ? theme.colors.floatingOverlay.selected
                                 : 'transparent',
                     })}
                 >
