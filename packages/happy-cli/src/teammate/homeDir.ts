@@ -1,8 +1,8 @@
 import { execFile } from 'node:child_process';
-import { appendFile, chmod, mkdir, open, readFile, rmdir, stat, writeFile } from 'node:fs/promises';
+import { appendFile, chmod, mkdir, open, readFile, rename, rmdir, stat, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
-import { TeammateRunDispatchPayloadSchema, TeammateControllerProviderSchema, type Teammate, type TeammateRunDispatchPayload, type TeammateControllerProvider } from 'happy-wire';
+import { TeammateRunDispatchPayloadSchema, TeammateControllerProviderSchema, TeammateThreadKindSchema, type Teammate, type TeammateRunDispatchPayload, type TeammateControllerProvider, type TeammateThreadKind } from 'happy-wire';
 import { configuration } from '@/configuration';
 import { encodeBase64, getRandomBytes } from '@/api/encryption';
 import { atomicFileWrite } from '@/utils/fileAtomic';
@@ -167,7 +167,46 @@ export type ThreadsState = Record<string, {
     contextWindow?: number;
     compactions?: number;
     overflowed?: boolean;
+    threadKind?: TeammateThreadKind;
+    segment?: number;
+    summarizedSeq?: number;
+    summarizedSession?: { id: string; seq: number };
+    summarizedAt?: number;
+    flushedSegment?: number;
 }>;
+
+export function threadDir(home: string, threadId: string): string {
+    validatePathId(threadId);
+    return join(home, 'state', 'threads', threadId);
+}
+
+export async function readThreadSummary(home: string, threadId: string): Promise<string | null> {
+    try {
+        const body = await readFile(join(threadDir(home, threadId), 'summary.md'), 'utf8');
+        return body.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, '').trim() || null;
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+        throw error;
+    }
+}
+
+export interface ThreadSummaryMeta { threadId: string; kind: string; segment: number; coversSeq: number; updatedAt?: Date }
+
+export async function writeThreadSummary(home: string, threadId: string, body: string, meta: ThreadSummaryMeta): Promise<void> {
+    const dir = await ensurePrivateDir(threadDir(home, threadId));
+    const updatedAt = (meta.updatedAt ?? new Date()).toISOString();
+    const frontmatter = ['---', 'version: 1', `threadId: ${meta.threadId}`, `kind: ${meta.kind}`, `segment: ${meta.segment}`, `coversSeq: ${meta.coversSeq}`, `updatedAt: ${updatedAt}`, '---', ''].join('\n');
+    await atomicFileWrite(join(dir, 'summary.md'), `${frontmatter}${body.trim()}\n`, 0o600);
+}
+
+export async function archiveThreadSummary(home: string, threadId: string, segment: number): Promise<void> {
+    const source = join(threadDir(home, threadId), 'summary.md');
+    if (!await exists(source)) return;
+    const archive = await ensurePrivateDir(join(threadDir(home, threadId), 'archive'));
+    const target = join(archive, `${segment}.md`);
+    await rename(source, target);
+    await chmod(target, 0o600);
+}
 
 export async function readThreadsState(dir: string): Promise<ThreadsState> {
     try {
@@ -181,8 +220,11 @@ export async function readThreadsState(dir: string): Promise<ThreadsState> {
                 || (value.keyPath !== undefined && typeof value.keyPath !== 'string')
                 || (value.lastDispatchAt !== undefined && typeof value.lastDispatchAt !== 'number')
                 || (value.provider !== undefined && !TeammateControllerProviderSchema.safeParse(value.provider).success)
+                || (value.threadKind !== undefined && !TeammateThreadKindSchema.safeParse(value.threadKind).success)
                 || ['lastRunId', 'lastDispatchToken', 'controlToken', 'teammateName', 'controllerConfig'].some(key => value[key] !== undefined && typeof value[key] !== 'string')
                 || ['resetAppliedAt', 'chatSendCounter', 'taskCreateCounter'].some(key => value[key] !== undefined && (!Number.isInteger(value[key]) || value[key] < 0))
+                || ['segment', 'summarizedSeq', 'summarizedAt', 'flushedSegment'].some(key => value[key] !== undefined && (!Number.isInteger(value[key]) || value[key] < 0))
+                || (value.summarizedSession !== undefined && (!value.summarizedSession || typeof value.summarizedSession !== 'object' || typeof value.summarizedSession.id !== 'string' || !Number.isInteger(value.summarizedSession.seq) || value.summarizedSession.seq < 0))
                 || (value.channel !== undefined && !TeammateRunDispatchPayloadSchema.shape.channel.safeParse(value.channel).success)
                 || (value.teammate !== undefined && !TeammateRunDispatchPayloadSchema.shape.teammate.safeParse(value.teammate).success)
                 || (value.task !== undefined && !TeammateRunDispatchPayloadSchema.shape.task.safeParse(value.task).success)

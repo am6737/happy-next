@@ -4,11 +4,12 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TEAMMATE_ENV, type ChannelMessage, type TeammateRunDispatchPayload } from 'happy-wire';
 import { teammateModelSelection, createTeammateRuntime, renderRunEventMessage, type TeammateRuntimeDependencies } from './runtime';
-import { ensureTeammateHome, mergeThreadState, readThreadsState, writeSessionKeyFile, writeThreadsState } from './homeDir';
+import { ensureTeammateHome, mergeThreadState, readThreadsState, writeSessionKeyFile, writeThreadSummary, writeThreadsState } from './homeDir';
 import { makeTeammate, makeConversationPayload, makeChannelMessage } from './testFixtures';
 import { encodeBase64, encryptWithDataKey } from '@/api/encryption';
 import { getProjectPath } from '@/claude/utils/path';
 import { createChannelCrypto } from './channelCrypto';
+import { dailyLogDate } from './dailyLogDate';
 
 const skillHooks = vi.hoisted(() => ({ list: vi.fn(() => []), sync: vi.fn(async () => ({ linked: [], missing: [] })) }));
 vi.mock('./skills', () => ({ listMachineSkills: skillHooks.list, syncTeammateSkills: skillHooks.sync }));
@@ -75,6 +76,7 @@ describe('teammate runtime', () => {
             spawnSession: vi.fn().mockResolvedValue({ type: 'success', sessionId: 'happy-1', pid: 123 }),
             trackSession: vi.fn(),
             stopSession: vi.fn().mockResolvedValue(true), isPidAlive: vi.fn(pid => pid !== 999),
+            oneShot: vi.fn().mockResolvedValue('<summary>\n## Goal and background\n## Current instruction\n## Decisions\n## In progress\n## Open commitments\n## Mistakes and corrections\n## References\n## Search hints\n</summary><durable></durable>'),
         };
         runtime = createTeammateRuntime(deps);
     });
@@ -171,6 +173,153 @@ describe('teammate runtime', () => {
         expect(state).not.toHaveProperty('compactions');
         expect(state).not.toHaveProperty('contextTokens');
         expect(state).not.toHaveProperty('contextWindow');
+    });
+
+    describe('context rollover', () => {
+        const summaryOutput = '<summary>\n## Decisions\n- Alex chose PR #42\n</summary>\n<durable>\n- Alex prefers small PRs\n</durable>';
+        const promptFile = () => readFile(join(home, 'state', 'prompts', 'thread-1.md'), 'utf8');
+        beforeEach(() => {
+            vi.mocked(deps.api.getSessionMessages).mockResolvedValue({ messages: [] });
+            vi.mocked(deps.oneShot!).mockResolvedValue(summaryOutput);
+        });
+        async function expectRolled(reason: 'tokens' | 'compacted') {
+            expect(deps.spawnSession).toHaveBeenCalledWith(expect.objectContaining({ resumeSessionId: undefined }));
+            expect(sentMessage()).toContain('condensed into a new segment');
+            await vi.waitFor(() => expect(deps.api.reportTeammateContextEvent).toHaveBeenCalledWith('run-1', {
+                code: 'context_rolled', reason, segment: 2, dispatchToken: 'token-run-1', provider: 'claude',
+            }));
+            const state = (await readThreadsState(home))['thread-1'];
+            expect(state.segment).toBe(2);
+            expect(state.flushedSegment).toBe(1);
+            for (const key of ['compactions', 'contextTokens', 'contextWindow', 'overflowed']) expect(state).not.toHaveProperty(key);
+            expect(await promptFile()).toContain('## Thread summary');
+            expect(await promptFile()).toContain('Alex chose PR #42');
+        }
+
+        it('rolls a live thread over after a compaction with a final summary', async () => {
+            await seedLive();
+            await mergeThreadState(home, 'thread-1', { compactions: 1, contextTokens: 40_000 });
+            runtime.dispatch(dmPayload('claude')); await started();
+            expect(deps.stopSession).toHaveBeenCalledWith('happy-existing');
+            expect(deps.oneShot).toHaveBeenCalledWith(expect.objectContaining({ prompt: expect.stringContaining('final: true'), timeoutMs: 60_000 }));
+            await expectRolled('compacted');
+            const log = await readFile(join(home, 'memory', `${dailyLogDate(new Date(clock))}.md`), 'utf8');
+            expect(log).toContain('[thread thread-1 seg 1');
+            expect(log).toContain('Alex prefers small PRs');
+        });
+
+        it('rolls a live thread over at the window ratio', async () => {
+            await seedLive();
+            await mergeThreadState(home, 'thread-1', { contextTokens: 120_000, contextWindow: 200_000 });
+            runtime.dispatch(dmPayload('claude')); await started();
+            expect(deps.stopSession).toHaveBeenCalledWith('happy-existing');
+            await expectRolled('tokens');
+        });
+
+        it('rolls a reaped thread over at the idle threshold instead of resuming', async () => {
+            await writeThreadsState(home, { 'thread-1': { pid: 999, provider: 'claude', providerSessionId: 'claude-old', contextTokens: 60_000 } });
+            runtime.dispatch(dmPayload('claude')); await started();
+            await expectRolled('tokens');
+            expect((await readThreadsState(home))['thread-1'].providerSessionId).toBeUndefined();
+        });
+
+        it('keeps a live thread below the thresholds without a summary', async () => {
+            await seedLive();
+            await mergeThreadState(home, 'thread-1', { contextTokens: 119_000, contextWindow: 200_000 });
+            runtime.dispatch(dmPayload('claude')); await started();
+            expect(deps.spawnSession).not.toHaveBeenCalled();
+            expect(deps.oneShot).not.toHaveBeenCalled();
+            expect(sentMessage()).not.toContain('Session continuity');
+            expect(deps.api.reportTeammateContextEvent).not.toHaveBeenCalled();
+        });
+
+        it('never rolls heartbeat threads over', async () => {
+            await seedLive();
+            await mergeThreadState(home, 'thread-1', { compactions: 1, contextTokens: 190_000, contextWindow: 200_000 });
+            runtime.dispatch(payload()); await started();
+            expect(deps.oneShot).not.toHaveBeenCalled();
+            expect(deps.api.reportTeammateContextEvent).not.toHaveBeenCalled();
+            expect((await readThreadsState(home))['thread-1']).not.toHaveProperty('segment');
+        });
+
+        it('reuses a summary the reap already finished', async () => {
+            await seedLive();
+            await writeThreadSummary(home, 'thread-1', 'Reaped summary', { threadId: 'thread-1', kind: 'dm', segment: 1, coversSeq: 0 });
+            await mergeThreadState(home, 'thread-1', { compactions: 1, summarizedSeq: 0, summarizedSession: { id: 'happy-existing', seq: 5 }, flushedSegment: 1 });
+            runtime.dispatch(dmPayload('claude')); await started();
+            expect(deps.oneShot).not.toHaveBeenCalled();
+            expect(await promptFile()).toContain('Reaped summary');
+        });
+
+        it('still starts the new segment when the summary fails', async () => {
+            await seedLive();
+            await mergeThreadState(home, 'thread-1', { compactions: 1 });
+            vi.mocked(deps.oneShot!).mockRejectedValue(new Error('timeout'));
+            runtime.dispatch(dmPayload('claude')); await started();
+            expect(deps.spawnSession).toHaveBeenCalledWith(expect.objectContaining({ resumeSessionId: undefined }));
+            expect((await readThreadsState(home))['thread-1'].segment).toBe(2);
+            expect(await promptFile()).not.toContain('## Thread summary');
+        });
+
+        it('archives the old topic on /new and points the new prompt at search', async () => {
+            await seedLive();
+            await writeThreadSummary(home, 'thread-1', 'Old topic', { threadId: 'thread-1', kind: 'dm', segment: 1, coversSeq: 0 });
+            const event = dmPayload('claude'); event.thread.resetAt = clock;
+            runtime.dispatch(event); await started();
+            expect(await readFile(join(home, 'state', 'threads', 'thread-1', 'archive', '1.md'), 'utf8')).toContain('Alex chose PR #42');
+            await expect(stat(join(home, 'state', 'threads', 'thread-1', 'summary.md'))).rejects.toThrow();
+            expect(await promptFile()).toContain('Earlier topics in this thread are archived');
+            expect(sentMessage()).not.toContain('Session continuity');
+            expect(deps.api.reportTeammateContextEvent).not.toHaveBeenCalled();
+            expect((await readThreadsState(home))['thread-1']).toMatchObject({ segment: 2, resetAppliedAt: clock });
+        });
+
+        it('reads the idle threshold from the environment', async () => {
+            vi.stubEnv('HAPPY_TEAMMATE_ROLLOVER_IDLE_TOKENS', '1000');
+            vi.resetModules();
+            const { createTeammateRuntime: create } = await import('./runtime');
+            await writeThreadsState(home, { 'thread-1': { pid: 999, provider: 'claude', providerSessionId: 'claude-old', contextTokens: 1000 } });
+            create(deps).dispatch(dmPayload('claude')); await started();
+            await expectRolled('tokens');
+        });
+
+        describe('idle reap', () => {
+            const idle = clock - 31 * 60_000;
+            async function seedIdle(threadKind: 'dm' | 'heartbeat', contextTokens: number) {
+                await writeThreadsState(home, { 'thread-1': { pid: 123, currentSessionId: 'idle', provider: 'claude', lastDispatchAt: idle, threadKind, contextTokens } });
+            }
+
+            it('writes a final summary when the next dispatch will roll over', async () => {
+                await seedIdle('dm', 60_000);
+                await runtime.reapIdle();
+                await vi.waitFor(() => expect(deps.oneShot).toHaveBeenCalledWith(expect.objectContaining({ prompt: expect.stringContaining('final: true') })));
+                await vi.waitFor(async () => expect((await readThreadsState(home))['thread-1'].flushedSegment).toBe(1));
+            });
+
+            it('skips the model below the threshold when nothing is new', async () => {
+                await seedIdle('dm', 59_000);
+                await runtime.reapIdle();
+                expect(deps.stopSession).toHaveBeenCalledWith('idle');
+                await new Promise(resolve => setTimeout(resolve, 20));
+                expect(deps.oneShot).not.toHaveBeenCalled();
+            });
+
+            it('does not summarize heartbeat threads', async () => {
+                await seedIdle('heartbeat', 190_000);
+                await runtime.reapIdle();
+                expect(deps.stopSession).toHaveBeenCalledWith('idle');
+                await new Promise(resolve => setTimeout(resolve, 20));
+                expect(deps.api.getSessionMessages).not.toHaveBeenCalled();
+                expect(deps.oneShot).not.toHaveBeenCalled();
+            });
+
+            it('does not wait for the summary', async () => {
+                await seedIdle('dm', 60_000);
+                vi.mocked(deps.oneShot!).mockReturnValue(new Promise(() => {}));
+                await runtime.reapIdle();
+                expect((await readThreadsState(home))['thread-1']).not.toHaveProperty('pid');
+            });
+        });
     });
 
     describe('chat_history query', () => {

@@ -307,6 +307,7 @@ export function query(config: {
         options: {
             allowedTools = [],
             appendSystemPrompt,
+            appendSystemPromptFile,
             customSystemPrompt,
             cwd,
             disallowedTools = [],
@@ -337,7 +338,8 @@ export function query(config: {
     const args = ['--output-format', 'stream-json', '--verbose']
 
     if (customSystemPrompt) args.push('--system-prompt', customSystemPrompt)
-    if (appendSystemPrompt) args.push('--append-system-prompt', appendSystemPrompt)
+    if (appendSystemPromptFile) args.push('--append-system-prompt-file', appendSystemPromptFile)
+    else if (appendSystemPrompt) args.push('--append-system-prompt', appendSystemPrompt)
     if (maxTurns) args.push('--max-turns', maxTurns.toString())
     if (model) args.push('--model', model)
     if (effort) args.push('--effort', effort)
@@ -392,7 +394,7 @@ export function query(config: {
 
     // Spawn Claude Code process
     // Use clean env for global claude to avoid local node_modules/.bin taking precedence
-    const spawnEnv = isCommandOnly ? getCleanEnv() : process.env
+    const spawnEnv = { ...(isCommandOnly ? getCleanEnv() : process.env), ...config.options?.env }
     logDebug(`Spawning Claude Code process: ${spawnCommand} ${spawnArgs.join(' ')} (using ${isCommandOnly ? 'clean' : 'normal'} env)`)
 
     const child = spawn(spawnCommand, spawnArgs, {

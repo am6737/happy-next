@@ -200,6 +200,7 @@ export interface QueryOptions {
     abort?: AbortSignal
     allowedTools?: string[]
     appendSystemPrompt?: string
+    appendSystemPromptFile?: string
     customSystemPrompt?: string
     cwd?: string
     disallowedTools?: string[]
@@ -219,6 +220,7 @@ export interface QueryOptions {
     canCallTool?: CanCallToolCallback
     /** Path to a settings JSON file to pass to Claude via --settings */
     settingsPath?: string
+    env?: NodeJS.ProcessEnv
 }
 
 /**

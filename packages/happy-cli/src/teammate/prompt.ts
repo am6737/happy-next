@@ -17,6 +17,8 @@ export interface TeammateSystemPromptOptions {
     threadKind: TeammateThreadKind;
     threadContext: TeammateThreadContext;
     now?: Date;
+    threadSummary?: string | null;
+    archivedTopics?: boolean;
 }
 
 const MAX_FILE_CHARS = 20_000;
@@ -24,7 +26,7 @@ const TRUNCATION_MARKER = '…[truncated]';
 
 /** Compose controller context without loading private long-term memory in groups. */
 export async function buildTeammateSystemPrompt({
-    dir, teammate, threadKind, threadContext, now = new Date(),
+    dir, teammate, threadKind, threadContext, now = new Date(), threadSummary, archivedTopics,
 }: TeammateSystemPromptOptions): Promise<string> {
     const yesterday = new Date(now);
     yesterday.setDate(yesterday.getDate() - 1);
@@ -46,6 +48,11 @@ export async function buildTeammateSystemPrompt({
             content = content.slice(0, MAX_FILE_CHARS - TRUNCATION_MARKER.length) + TRUNCATION_MARKER;
         }
         sections.push(`## ${file}\n\n${content}`);
+    }
+
+    if (threadKind === 'dm' || threadKind === 'group') {
+        if (threadSummary) sections.push(`## Thread summary\n\nWritten by the daemon from earlier segments of this conversation. It is a digest, not the record: use chat_history(query) for details.\n\n${threadSummary}`);
+        else if (archivedTopics) sections.push('## Thread summary\n\nEarlier topics in this thread are archived. Search them with chat_history(query) when the owner refers to them.');
     }
 
     const context = [`Teammate: ${teammate.name} (@${teammate.handle})`, `Kind: ${threadKind}`];

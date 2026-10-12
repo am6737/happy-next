@@ -14,6 +14,8 @@ import { PermissionResult } from "./sdk/types";
 import type { JsRuntime } from "./runClaude";
 import { formatMessageForClaude, ClaudeContent } from '@/utils/formatImageMessage';
 import { ImageContent } from '@/api/types';
+import { chmod, writeFile } from 'node:fs/promises';
+import { TEAMMATE_ENV } from 'happy-wire';
 
 export async function claudeRemote(opts: {
 
@@ -143,6 +145,13 @@ export async function claudeRemote(opts: {
 
     // Prepare SDK options
     let mode = initial.mode;
+    const appendPrompt = [initial.mode.appendSystemPrompt, systemPrompt, teammateSystemPrompt].filter(Boolean).join('\n\n');
+    const teammatePromptPath = process.env[TEAMMATE_ENV.systemPromptFile];
+    const appendSystemPromptFile = teammatePromptPath ? `${teammatePromptPath}.full.md` : undefined;
+    if (appendSystemPromptFile) {
+        await writeFile(appendSystemPromptFile, appendPrompt, { mode: 0o600 });
+        await chmod(appendSystemPromptFile, 0o600);
+    }
     const sdkOptions: QueryOptions = {
         cwd: opts.path,
         resume: startFrom ?? undefined,
@@ -153,7 +162,7 @@ export async function claudeRemote(opts: {
         effort: initial.mode.reasoningEffort,
         fallbackModel: initial.mode.fallbackModel,
         customSystemPrompt: initial.mode.customSystemPrompt ? initial.mode.customSystemPrompt + '\n\n' + systemPrompt : undefined,
-        appendSystemPrompt: [initial.mode.appendSystemPrompt, systemPrompt, teammateSystemPrompt].filter(Boolean).join('\n\n'),
+        ...(appendSystemPromptFile ? { appendSystemPromptFile } : { appendSystemPrompt: appendPrompt }),
         allowedTools: initial.mode.allowedTools ? initial.mode.allowedTools.concat(opts.allowedTools) : opts.allowedTools,
         disallowedTools: process.env.HAPPY_TEAMMATE_THREAD_ID
             ? [...new Set([...(initial.mode.disallowedTools ?? []), 'AskUserQuestion', 'ExitPlanMode',

@@ -1,4 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { mkdtemp, readFile, stat, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { claudeRemote } from './claudeRemote';
 import { AbortError, query } from '@/claude/sdk';
 import type { SDKMessage } from '@/claude/sdk';
@@ -153,6 +156,26 @@ describe('claudeRemote', () => {
         expect(query).toHaveBeenCalledWith(expect.objectContaining({
             options: expect.objectContaining({ appendSystemPrompt: 'user prompt\n\nbase prompt\n\nteammate prompt' }),
         }));
+    });
+
+    it('uses a private prompt file for teammate sessions', async () => {
+        const dir = await mkdtemp(join(tmpdir(), 'happy-claude-prompt-'));
+        const promptPath = join(dir, 'prompt.md');
+        vi.stubEnv('HAPPY_TEAMMATE_SYSTEM_PROMPT_FILE', promptPath);
+        vi.mocked(query).mockReturnValue(createMockResponse([]) as any);
+        try {
+            await claudeRemote({
+                sessionId: null, path: process.cwd(), allowedTools: [], hookSettingsPath: '/tmp/fake-settings.json',
+                nextMessage: async () => ({ message: 'run', mode: { permissionMode: 'default', appendSystemPrompt: 'user prompt' } }),
+                onReady: vi.fn(), isAborted: () => false, canCallTool: async () => ({ behavior: 'allow', updatedInput: {} }),
+                onSessionFound: vi.fn(), onMessage: vi.fn(), signal: new AbortController().signal,
+            });
+            const file = `${promptPath}.full.md`;
+            expect(vi.mocked(query).mock.calls[0][0].options).toMatchObject({ appendSystemPromptFile: file });
+            expect(vi.mocked(query).mock.calls[0][0].options).not.toHaveProperty('appendSystemPrompt');
+            expect(await readFile(file, 'utf8')).toBe('user prompt\n\nbase prompt\n\nteammate prompt');
+            expect((await stat(file)).mode & 0o777).toBe(0o600);
+        } finally { await rm(dir, { recursive: true, force: true }); }
     });
 
     it('does not auto-interrupt at tool_result boundaries', async () => {

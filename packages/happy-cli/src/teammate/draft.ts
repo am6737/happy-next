@@ -13,7 +13,7 @@ const MAX_QUESTIONS = 3;
 const MAX_SUGGESTIONS = 4;
 // Drafting is pure text generation. A print-mode run cannot prompt for permission, but read-only
 // tools need none, so every built-in is disallowed by name and user MCP servers are not loaded.
-const DISALLOWED_TOOLS = [
+export const DISALLOWED_TOOLS = [
     'Bash', 'BashOutput', 'KillShell', 'Read', 'Write', 'Edit', 'MultiEdit', 'NotebookEdit', 'Glob', 'Grep', 'LS',
     'WebFetch', 'WebSearch', 'Task', 'TodoWrite', 'ExitPlanMode', 'SlashCommand', 'Skill',
 ];
