@@ -15,6 +15,7 @@ import { AskUserQuestionMessage, isAskUserQuestionToolCall, isPreviewHtmlToolCal
 import { currentLandmark, foldMustKeepMessage, railLandmarkRows, shouldHideMessageInChatList, shouldHideMessageInMinimap, type LandmarkRow } from './chatListVisibility';
 import { foldedLineKeepsRow, type TurnFoldControl } from './turnFold';
 import { turnHeaderProps, useTurnAnalysis } from './messageTurnTiming';
+import { useTurnInFlight } from '@/hooks/useTurnInFlight';
 import { newestRowSnapshot } from './rowSnapshot';
 import { foldHidesRunningDelegatedTask, delegatedLabel } from './foldDelegated';
 import { toolTitle } from './tools/toolTitle';
@@ -616,9 +617,11 @@ const ChatListInternal = React.memo((props: {
     // reply's bar appears exactly when the composer goes idle. It includes the
     // marker set on send, which lands with the message itself, so a reply's
     // header arrives with it instead of a CLI heartbeat later.
+    // Busy can reach this client ahead of the prompt that made it so; see `useTurnInFlight`.
+    const turnInFlight = useTurnInFlight({ busy: props.busy, visibleMessages: listedMessages });
     const turns = useTurnAnalysis({
         visibleMessages: listedMessages,
-        turnInFlight: props.busy,
+        turnInFlight,
         taskCompletedAt: props.taskCompleted,
     });
 

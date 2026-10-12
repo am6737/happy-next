@@ -23,6 +23,7 @@ import { ChatFooter } from './ChatFooter';
 import { AskUserQuestionMessage, isAskUserQuestionToolCall, isPreviewHtmlToolCall, Message, MinimapMessage, PreviewHtmlMessage, toAskUserQuestionMessage, toPreviewHtmlMessage, UserTextMessage } from '@/sync/typesMessage';
 import { currentLandmark, shouldHideMessageInChatList, shouldHideMessageInMinimap } from './chatListVisibility';
 import { useTurnAnalysis } from './messageTurnTiming';
+import { useTurnInFlight } from '@/hooks/useTurnInFlight';
 import { isSessionBusy } from '@/utils/sessionUtils';
 import { layout } from './layout';
 import { createScrollButtonVisibilityController } from './scrollButtonVisibilityController';
@@ -289,9 +290,11 @@ const ChatListInternal = React.memo((props: {
     // reply's bar appears exactly when the composer goes idle. It includes the
     // marker set on send, which lands with the message itself, so a reply's
     // header arrives with it instead of a CLI heartbeat later.
+    // Busy can reach this client ahead of the prompt that made it so; see `useTurnInFlight`.
+    const turnInFlight = useTurnInFlight({ busy: props.busy, visibleMessages: visibleMessages });
     const turns = useTurnAnalysis({
         visibleMessages,
-        turnInFlight: props.busy,
+        turnInFlight,
         taskCompletedAt: props.taskCompleted,
     });
 
