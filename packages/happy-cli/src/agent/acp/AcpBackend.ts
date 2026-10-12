@@ -1349,6 +1349,11 @@ export class AcpBackend implements AgentBackend {
     return this.acpSessionId;
   }
 
+  /** Process id of the spawned agent (of cmd.exe on Windows), while it runs. */
+  getPid(): number | undefined {
+    return this.process?.pid;
+  }
+
   async cancel(sessionId: SessionId): Promise<boolean> {
     if (!this.connection || !this.acpSessionId) {
       return false;

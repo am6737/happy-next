@@ -9,7 +9,7 @@
  */
 
 import { AcpBackend, type AcpBackendOptions, type AcpPermissionHandler } from '../acp/AcpBackend';
-import type { AgentBackend, McpServerConfig, AgentFactoryOptions } from '../core';
+import type { McpServerConfig, AgentFactoryOptions } from '../core';
 import { agentRegistry } from '../core';
 import { geminiTransport } from '../transport';
 import { logger } from '@/ui/logger';
@@ -63,8 +63,8 @@ export interface GeminiBackendOptions extends AgentFactoryOptions {
  * Result of creating a Gemini backend
  */
 export interface GeminiBackendResult {
-  /** The created AgentBackend instance */
-  backend: AgentBackend;
+  /** The created ACP backend instance */
+  backend: AcpBackend;
   /** The resolved model that will be used (single source of truth) */
   model: string;
   /** Source of the model selection for logging */

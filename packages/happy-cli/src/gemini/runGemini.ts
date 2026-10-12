@@ -35,6 +35,7 @@ import { addBuiltinSlashCommands, expandBuiltinSlashCommand, syncBuiltinCommands
 
 import { createGeminiBackend } from '@/agent/factories/gemini';
 import type { AgentBackend, AgentMessage } from '@/agent';
+import type { AcpBackend } from '@/agent/acp/AcpBackend';
 import { handleConfigMetadataEvent } from '@/agent/acp/sessionUpdateHandlers';
 import { GeminiDisplay } from '@/ui/ink/GeminiDisplay';
 import { GeminiPermissionHandler } from '@/gemini/utils/permissionHandler';
@@ -60,6 +61,7 @@ import { GeminiSessionWriter } from '@/gemini/utils/sessionWriter';
 import { readGeminiSessionLog, buildResumeContextFromSessionLog } from '@/gemini/utils/sessionReader';
 import { backfillGeminiSessionHistory } from '@/gemini/utils/geminiBackfill';
 import { summarizeBashToolOutput } from '@/modules/common/loadableToolOutput';
+import { readGeminiContextUsage } from '@/gemini/contextUsage';
 
 
 /**
@@ -424,7 +426,7 @@ export async function runGemini(opts: {
   let shouldExit = false;
   let abortRequested = false;
   let abortFeedbackSent = false;
-  let geminiBackend: AgentBackend | null = null;
+  let geminiBackend: AcpBackend | null = null;
   let acpSessionId: string | null = null;
   let wasSessionCreated = false;
 
@@ -1542,6 +1544,20 @@ export async function runGemini(opts: {
             type: 'turn_aborted',
             id: randomUUID(),
           });
+        }
+
+        // Gemini CLI reports per-request token counts only in its chat recording,
+        // filed under its own session id, not the one startSession() returns
+        const geminiSessionId = geminiBackend?.getSessionId();
+        if (geminiSessionId) {
+          try {
+            const usage = await readGeminiContextUsage(geminiSessionId, process.cwd());
+            if (usage) {
+              session.sendAgentMessage('gemini', { type: 'token_count', context_used_tokens: usage.usedTokens, context_window_size: usage.windowSize, id: randomUUID() });
+            }
+          } catch (error) {
+            logger.debug('[gemini] Cannot read context usage', error);
+          }
         }
 
         // Send task_complete only for non-abort turns (abort sends turn_aborted instead)

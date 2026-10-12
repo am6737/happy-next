@@ -49,6 +49,7 @@ import { HAPPY_TOOLS_APPROVED_WITHOUT_ASKING, QoderPermissionHandler } from '@/q
 import { buildQoderBackfillMessages } from '@/qoder/utils/backfill';
 import { buildQoderFirstTurnPrompt } from '@/qoder/prompt';
 import { qoderTranscriptStore } from '@/qoder/transcripts';
+import { readQoderContextUsage } from '@/qoder/contextUsage';
 import {
   QODER_RESUME_SESSION_ID_ENV,
   isQoderAuthError,
@@ -270,6 +271,20 @@ export async function runQoder(opts: {
     // The app reads <options> from the message text itself.
     session.sendAgentMessage('qoder', { type: 'message', message: options.length > 0 ? text + rawOptionsXml : text });
     accumulatedResponse = '';
+  };
+
+  /** Tells the app how full qodercli's context window is after the latest request. */
+  const sendContextUsage = async () => {
+    const sessionId = qoderBackend?.getSessionId();
+    if (!sessionId) return;
+    try {
+      const usage = await readQoderContextUsage(sessionId, qoderBackend!.getPid());
+      if (usage) {
+        session.sendAgentMessage('qoder', { type: 'token_count', context_used_tokens: usage.usedTokens, context_window_size: usage.windowSize, id: randomUUID() });
+      }
+    } catch (error) {
+      logger.debug('[Qoder] Cannot read context usage', error);
+    }
   };
 
   const describeError = (error: unknown): string => {
@@ -502,6 +517,7 @@ export async function runQoder(opts: {
         await new Promise((resolve) => setTimeout(resolve, 200));
       }
       await session.sendBackfillBatch(buildQoderBackfillMessages(replayed), 'replace');
+      await sendContextUsage();
       messageBuffer.addMessage('Resumed previous Qoder conversation', 'status');
     } else if (resumeSessionId) {
       sendAgentText('The previous Qoder conversation could not be restored, so this session starts fresh.');
@@ -576,6 +592,7 @@ export async function runQoder(opts: {
       } finally {
         flushResponse();
         permissionHandler.reset();
+        await sendContextUsage();
         if (abortRequested) {
           sendAbortFeedback();
         } else {
