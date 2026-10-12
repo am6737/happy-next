@@ -18,6 +18,13 @@ function easeOutCubic(progress: number): number {
 /** Which way a fold's bodies are going. */
 export type FoldDirection = 'collapsing' | 'expanding';
 
+/**
+ * Where a slide is, as one number for the list around it: how far the bodies have moved so far
+ * (`deltaPx`) out of how far they will move in all (`totalPx`) — negative while closing. `start` is
+ * the slide's first frame, laid out before it is painted.
+ */
+export type FoldFrame = { phase: 'start' | 'frame'; deltaPx: number; totalPx: number };
+
 /** A row whose slide has finished, with the element that was drawing it. */
 export type FoldSettledRow = { key: string; element: HTMLElement };
 
@@ -59,7 +66,9 @@ const NO_KEYS: ReadonlySet<string> = new Set();
  * animated, so nothing here has to know how tall a folded line is: a line, a landmark and a tool
  * call all slide the same way.
  */
-export function useFoldAnimation(): FoldAnimation {
+export function useFoldAnimation(options?: { onFrame?: (frame: FoldFrame) => void }): FoldAnimation {
+    const onFrameRef = React.useRef(options?.onFrame);
+    onFrameRef.current = options?.onFrame;
     const [transition, setTransition] = React.useState<{
         keys: readonly string[];
         direction: FoldDirection;
@@ -157,10 +166,14 @@ export function useFoldAnimation(): FoldAnimation {
             setTransition(null);
             return;
         }
+        let totalPx = 0;
+        for (const key of keys) totalPx += (toPx.get(key) ?? 0) - (fromPx.get(key) ?? 0);
+        onFrameRef.current?.({ phase: 'start', deltaPx: 0, totalPx });
         const step = (now: number) => {
             frameRef.current = null;
             const progress = Math.min(1, (now - startedAt) / FOLD_HEIGHT_MS);
             const eased = easeOutCubic(progress);
+            let deltaPx = 0;
             for (const key of keys) {
                 const el = clipElsRef.current.get(key);
                 if (!el) continue;
@@ -169,7 +182,9 @@ export function useFoldAnimation(): FoldAnimation {
                 const heightPx = startPx + (endPx - startPx) * eased;
                 currentPxRef.current.set(key, heightPx);
                 el.style.height = `${heightPx}px`;
+                deltaPx += heightPx - startPx;
             }
+            onFrameRef.current?.({ phase: 'frame', deltaPx, totalPx });
             if (progress < 1) {
                 frameRef.current = window.requestAnimationFrame(step);
                 return;

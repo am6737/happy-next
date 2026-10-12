@@ -19,7 +19,7 @@ import { newestRowSnapshot } from './rowSnapshot';
 import { foldHidesRunningDelegatedTask, delegatedLabel } from './foldDelegated';
 import { toolTitle } from './tools/toolTitle';
 import { useTurnFolding } from '@/hooks/useTurnFolding';
-import { useFoldAnimation } from '@/hooks/useFoldAnimation';
+import { useFoldAnimation, type FoldFrame } from '@/hooks/useFoldAnimation';
 import { isSessionBusy } from '@/utils/sessionUtils';
 import { layout as appLayout } from './layout';
 import { createScrollButtonVisibilityController } from './scrollButtonVisibilityController';
@@ -497,6 +497,25 @@ type PendingJump = {
     // Internal repositions skip the shake feedback and logging.
     silent: boolean;
 };
+// A fold sliding where the scroll distance cannot absorb it — at or near the bottom, where taking
+// the fold out of the distance would go below 0. The model has the fold from the first frame, but
+// the rows are still being drawn at the heights the slide has reached: a canvas sized by the model
+// would clip the rows under the line at once and drop everything above it by that much, then leave a
+// gap that closes with a second drop when the slide settles. So for the slide's length the canvas is
+// the rows as drawn, and the distance follows the same frames down to 0: the line holds while there
+// is distance left, and after that the bottom holds and the content above it slides down instead.
+type FoldFollow = {
+    /** The canvas that held the rows as they stood on the slide's first frame. */
+    baseCanvasPx: number;
+    /** The distance asked for on the slide's first frame. */
+    baseRawPx: number;
+    /** What the canvas and the distance are on the frame drawn last. */
+    canvasPx: number;
+    rawPx: number;
+    /** When the first frame was drawn: input after it means the reader has taken the distance back. */
+    startedAtMs: number;
+};
+
 // A write the engine refused, kept until the box has caught up with it: the row a fold opens
 // arrives a commit after the arithmetic that accounted for it, so the range can be briefly shorter
 // than the distance we asked for. `lastScrollHeightPx` is how the wait knows the box has stopped
@@ -598,8 +617,10 @@ const ChatListInternal = React.memo((props: {
     const activeOrchestratorRunIds = useOrchestratorActiveRunIds(props.sessionId);
     const delegatedMore = (title: string, count: number) => t('message.delegatedMore', { title, count });
     // The height animation a fold plays, and the rows it is playing on. Owns no layout of its own:
-    // it writes heights onto the elements it is given and reads them back, nothing else.
-    const foldAnim = useFoldAnimation();
+    // it writes heights onto the elements it is given and reads them back, nothing else. Its frames
+    // go to `handleFoldFrame`, defined with the scroll helpers it needs further down.
+    const foldFrameHandlerRef = useRef<((frame: FoldFrame) => void) | null>(null);
+    const foldAnim = useFoldAnimation({ onFrame: (frame) => foldFrameHandlerRef.current?.(frame) });
     // Read by the measurement pipeline, which runs from observer callbacks rather than a render.
     const hiddenIdsRef = useRef(folding.hiddenIds);
     hiddenIdsRef.current = folding.hiddenIds;
@@ -787,14 +808,12 @@ const ChatListInternal = React.memo((props: {
     // Derived: the canvas is the model plus the fill a short conversation needs to sit at the bottom
     // of the viewport. Both inputs are state, so this re-derives in the same commit that resized
     // either.
-    const naturalCanvasHeightPx = Math.max(
-        layout.totalHeightPx,
-        minimumCanvasHeightPx({
-            viewportHeightPx: viewport.viewportHeightPx,
-            headerInsetPx,
-            footerHeightPx,
-        }),
-    );
+    const minimumCanvasPx = minimumCanvasHeightPx({
+        viewportHeightPx: viewport.viewportHeightPx,
+        headerInsetPx,
+        footerHeightPx,
+    });
+    const naturalCanvasHeightPx = Math.max(layout.totalHeightPx, minimumCanvasPx);
     // ...except while the scroller is moving on its own (a wheel's animation, a script's smooth
     // scroll, a drag). Chrome keeps a column-reverse smooth scroll's target in top-based
     // coordinates, so content growing above the viewport mid-animation (a page loading) moves the
@@ -805,7 +824,14 @@ const ChatListInternal = React.memo((props: {
     const [, setCanvasHoldReleases] = useState(0);
     const canvasHoldPxRef = useRef<number | null>(null);
     const canvasHoldTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const canvasHeightPx = canvasHoldPxRef.current ?? naturalCanvasHeightPx;
+    // ...and except while a fold slides at the bottom, when the canvas follows the rows as they are
+    // drawn rather than the model (see `handleFoldFrame`).
+    const foldFollowRef = useRef<FoldFollow | null>(null);
+    const canvasElRef = useRef<HTMLDivElement | null>(null);
+    const minimumCanvasPxRef = useRef(minimumCanvasPx);
+    minimumCanvasPxRef.current = minimumCanvasPx;
+    const heldCanvasHeightPx = canvasHoldPxRef.current ?? naturalCanvasHeightPx;
+    const canvasHeightPx = foldFollowRef.current?.canvasPx ?? heldCanvasHeightPx;
     const renderedCanvasHeightPxRef = useRef(canvasHeightPx);
     renderedCanvasHeightPxRef.current = canvasHeightPx;
     const releaseCanvasHold = useCallback(() => {
@@ -1726,6 +1752,35 @@ const ChatListInternal = React.memo((props: {
         // would hand every mounted row a new callback prop on every commit and defeat their memo.
     }, [folding.toggle, folding.idsChangedBy, foldAnim.start]);
 
+    // A fold's slide, frame by frame (see `FoldFollow`). Its first frame decides whether the canvas
+    // follows the rows at all: only when the distance cannot take the whole slide, or when a slide
+    // that was already being followed is turned around, so the canvas never has to jump back to the
+    // model mid-way. Every other fold leaves the canvas to the model, as before.
+    const handleFoldFrame = (frame: FoldFrame) => {
+        const canvas = canvasElRef.current;
+        if (!canvas) return;
+        if (frame.phase === 'start') {
+            const active = foldFollowRef.current;
+            const baseRawPx = getRequestedRawDistance();
+            if (active == null && baseRawPx + frame.totalPx >= 0) return;
+            // The rows as they stand on this first frame: the canvas the commit rendered, plus
+            // whatever the rows still hang below it.
+            const win = canvas.firstElementChild as HTMLElement | null;
+            const overflowPx = win ? win.getBoundingClientRect().bottom - canvas.getBoundingClientRect().bottom : 0;
+            const baseCanvasPx = canvas.getBoundingClientRect().height + overflowPx;
+            foldFollowRef.current = { baseCanvasPx, baseRawPx, canvasPx: baseCanvasPx, rawPx: baseRawPx, startedAtMs: performance.now() };
+        }
+        const follow = foldFollowRef.current;
+        if (!follow) return;
+        follow.canvasPx = Math.max(minimumCanvasPxRef.current, follow.baseCanvasPx + frame.deltaPx);
+        follow.rawPx = Math.max(0, follow.baseRawPx + frame.deltaPx);
+        canvas.style.height = `${follow.canvasPx}px`;
+        const readerScrolled = lastUserInputAtRef.current > follow.startedAtMs;
+        if (!readerScrolled && getRequestedRawDistance() !== follow.rawPx) setRawDistance(follow.rawPx);
+        syncProxyFromRealRef.current();
+    };
+    foldFrameHandlerRef.current = handleFoldFrame;
+
     // A tap on a run's line is the same thing one level down: the rest of the run takes no height, or
     // takes it back, and the run's first row — which carries the line — animates the content under it.
     const handleToggleSegment = React.useCallback((startId: string) => {
@@ -1858,6 +1913,9 @@ const ChatListInternal = React.memo((props: {
         // the bottom rule above still owns it — a new message arriving right after a tap is followed,
         // not held.
         const entrySetHeldStill = previous == null || sameKeys(previous.keys, next.keys);
+        // A fold the canvas is following moves the distance itself, frame by frame, from the
+        // heights as drawn; the model's version of the same change would count it twice.
+        if (foldFollowRef.current != null && entrySetHeldStill) return;
         if (atBottomRef.current && !(entrySetHeldStill && foldTapOwnsViewport(null))) {
             const withinGrace = performance.now() - lastUserInputAtRef.current < USER_SCROLL_GRACE_MS;
             if (raw !== 0 && !withinGrace) setRawDistance(0);
@@ -1928,7 +1986,19 @@ const ChatListInternal = React.memo((props: {
     // times they fold it.
     React.useLayoutEffect(() => {
         const settledRows = foldAnim.takeSettled();
-        if (settledRows == null) return;
+        if (settledRows == null) {
+            // A slide that found none of its rows ends without settling anything: a canvas still
+            // following an earlier slide goes back to the model all the same.
+            if (foldAnim.animatingIds.size === 0 && foldFollowRef.current != null) {
+                foldFollowRef.current = null;
+                setCanvasHoldReleases((n) => n + 1);
+            }
+            return;
+        }
+        // A followed slide ends here: the canvas goes back to the model, which this measurement
+        // brings to the very height the last frame drew.
+        const follow = foldFollowRef.current;
+        foldFollowRef.current = null;
         const batch = new Map<string, { element: HTMLElement; heightPx: number }>();
         for (const row of settledRows) {
             const el = rowElsByKeyRef.current.get(row.key);
@@ -1940,6 +2010,12 @@ const ChatListInternal = React.memo((props: {
             if (heightPx > 0) batch.set(row.key, { element: el, heightPx });
         }
         if (batch.size > 0) applyMeasuredHeightsRef.current(batch, false);
+        // The slide already took the line's own row into the distance; the measurement just took it
+        // again. The distance the last frame asked for is the one that holds.
+        if (follow && lastUserInputAtRef.current <= follow.startedAtMs) {
+            if (pendingOpsRef.current) pendingOpsRef.current.scrollDistancePx = follow.rawPx;
+            if (getRequestedRawDistance() !== follow.rawPx) setRawDistance(follow.rawPx);
+        }
         // The clip has done its work: the rows still mounted go back to sizing themselves — read off
         // the elements the animation kept, since the rows that stopped animating in this very commit
         // have already had their refs taken away.
@@ -2355,7 +2431,7 @@ const ChatListInternal = React.memo((props: {
 
     // Window position inside the canvas: the model's own top offset, shifted by whatever a held canvas
     // differs from the natural one, so every row keeps its distance from the bottom.
-    const windowMarginTopPx = (canvasHeightPx - naturalCanvasHeightPx)
+    const windowMarginTopPx = (heldCanvasHeightPx - naturalCanvasHeightPx)
         + (layout.topOffsetsPx[renderedRange.startIndex] ?? layout.totalHeightPx);
 
     return (
@@ -2393,7 +2469,7 @@ const ChatListInternal = React.memo((props: {
                         {/* The canvas: exactly the model's height (or the fill), so the scroll range
                             reaches every row. overflow:clip keeps transient window overflow out of
                             scrollHeight. */}
-                        <div style={{ height: canvasHeightPx, position: 'relative', overflow: 'clip', flexShrink: 0 }}>
+                        <div ref={canvasElRef} style={{ height: canvasHeightPx, position: 'relative', overflow: 'clip', flexShrink: 0 }}>
                             <div style={{ ...windowColumnStyle, marginTop: windowMarginTopPx }}>
                                 {rows}
                             </div>
