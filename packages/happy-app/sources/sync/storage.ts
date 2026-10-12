@@ -56,6 +56,46 @@ const REALTIME_MODE_DEBOUNCE_MS = 150;
  * will not overwrite the local `active: false` state, preventing the "disappear → reappear → disappear" flicker.
  */
 const pendingArchiveSessionIds = new Set<string>();
+// Sessions whose whole pending queue has been fetched. From then on socket updates keep the
+// local queue complete, so it can answer the schedule icon by itself, without the server.
+const fullyLoadedPendingQueues = new Set<string>();
+
+function nextScheduledAt(queue: PendingMessage[]): number | null {
+    let next: number | null = null;
+    for (const m of queue) {
+        if (m.deliverAt !== null && m.pausedAt === null && (next === null || m.deliverAt < next)) {
+            next = m.deliverAt;
+        }
+    }
+    return next;
+}
+
+function withNextScheduledAt(scheduled: Record<string, number>, sessionId: string, next: number | null): Record<string, number> {
+    if ((scheduled[sessionId] ?? null) === next) {
+        return scheduled;
+    }
+    const updated = { ...scheduled };
+    if (next !== null) {
+        updated[sessionId] = next;
+    } else {
+        delete updated[sessionId];
+    }
+    return updated;
+}
+
+// The schedule entry after a local queue change. A queue that was never fully fetched can only
+// add a schedule it sees; what it may have cleared is left to the server summary.
+function scheduledAfterQueueChange(scheduled: Record<string, number>, sessionId: string, queue: PendingMessage[]): Record<string, number> {
+    const next = nextScheduledAt(queue);
+    if (fullyLoadedPendingQueues.has(sessionId)) {
+        return withNextScheduledAt(scheduled, sessionId, next);
+    }
+    const current = scheduled[sessionId];
+    if (next !== null && (current === undefined || next < current)) {
+        return withNextScheduledAt(scheduled, sessionId, next);
+    }
+    return scheduled;
+}
 
 /**
  * Centralized session online state resolver
@@ -199,7 +239,6 @@ interface StorageState {
     upsertPendingMessage: (sessionId: string, message: PendingMessage) => void;
     removePendingMessage: (sessionId: string, pendingId: string) => void;
     applyScheduledSessions: (sessions: { sessionId: string; nextDeliverAt: number }[]) => void;
-    setSessionNextScheduledAt: (sessionId: string, nextDeliverAt: number | null) => void;
     applySettings: (settings: Settings, version: number) => void;
     applySettingsLocal: (settings: Partial<Settings>) => void;
     applySessionModeConfigFromCloud: (doc: SessionModeConfigDocument, version: number) => void;
@@ -1139,7 +1178,9 @@ export const storage = create<StorageState>()((set, get) => {
             };
         }),
         applyPendingMessages: (sessionId: string, messages: PendingMessage[]) => set((state) => {
+            fullyLoadedPendingQueues.add(sessionId);
             const sorted = sortPendingQueue(messages);
+            const scheduledSessions = withNextScheduledAt(state.scheduledSessions, sessionId, nextScheduledAt(sorted));
             const existing = state.sessionPendingMessages[sessionId] ?? [];
             const unchanged = (
                 existing.length === sorted.length &&
@@ -1150,11 +1191,12 @@ export const storage = create<StorageState>()((set, get) => {
             );
 
             if (unchanged) {
-                return state;
+                return scheduledSessions === state.scheduledSessions ? state : { ...state, scheduledSessions };
             }
 
             return {
                 ...state,
+                scheduledSessions,
                 sessionPendingMessages: {
                     ...state.sessionPendingMessages,
                     [sessionId]: sorted
@@ -1166,6 +1208,7 @@ export const storage = create<StorageState>()((set, get) => {
             const updated = upsertPendingMessageInQueue(existing, message);
             return {
                 ...state,
+                scheduledSessions: scheduledAfterQueueChange(state.scheduledSessions, sessionId, updated),
                 sessionPendingMessages: {
                     ...state.sessionPendingMessages,
                     [sessionId]: updated
@@ -1183,18 +1226,6 @@ export const storage = create<StorageState>()((set, get) => {
             }
             return { ...state, scheduledSessions: next };
         }),
-        setSessionNextScheduledAt: (sessionId: string, nextDeliverAt: number | null) => set((state) => {
-            if ((state.scheduledSessions[sessionId] ?? null) === nextDeliverAt) {
-                return state;
-            }
-            const next = { ...state.scheduledSessions };
-            if (nextDeliverAt !== null) {
-                next[sessionId] = nextDeliverAt;
-            } else {
-                delete next[sessionId];
-            }
-            return { ...state, scheduledSessions: next };
-        }),
         removePendingMessage: (sessionId: string, pendingId: string) => set((state) => {
             const existing = state.sessionPendingMessages[sessionId] ?? [];
             const updated = removePendingMessageFromQueue(existing, pendingId);
@@ -1203,6 +1234,7 @@ export const storage = create<StorageState>()((set, get) => {
             }
             return {
                 ...state,
+                scheduledSessions: scheduledAfterQueueChange(state.scheduledSessions, sessionId, updated),
                 sessionPendingMessages: {
                     ...state.sessionPendingMessages,
                     [sessionId]: updated

@@ -1023,9 +1023,6 @@ class Sync {
         const data = ApiPendingMessagesResponseSchema.parse(await response.json());
         const decrypted = await Promise.all(data.messages.map((pending) => this.decryptPendingMessage(sessionId, pending)));
         storage.getState().applyPendingMessages(sessionId, decrypted.filter((item): item is PendingMessage => item !== null));
-        // The full queue is authoritative for this session's schedule icon.
-        const scheduledTimes = data.messages.flatMap((m) => m.deliverAt !== null && m.pausedAt === null ? [m.deliverAt] : []);
-        storage.getState().setSessionNextScheduledAt(sessionId, scheduledTimes.length > 0 ? Math.min(...scheduledTimes) : null);
     }
 
     private fetchScheduledSessions = async () => {
@@ -1037,6 +1034,11 @@ class Sync {
                 'Content-Type': 'application/json'
             }
         });
+        // An older server without this endpoint: settle rather than let InvalidateSync's
+        // backoff retry forever, which would also swallow every later invalidate.
+        if (response.status === 404) {
+            return;
+        }
         if (!response.ok) {
             throw new Error(`Failed to fetch scheduled sessions: ${response.status}`);
         }
