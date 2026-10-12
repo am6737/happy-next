@@ -159,8 +159,22 @@ describe('teammate runtime', () => {
         runtime.dispatch(dmPayload('claude', env)); await started();
         expect(deps.spawnSession).toHaveBeenCalledWith(expect.objectContaining({ resumeSessionId: 'claude-ok' }));
         expect(sentMessage()).not.toContain('Session continuity');
+        expect(sentMessage()).not.toContain('Memory update:');
         expect(deps.api.reportTeammateContextEvent).not.toHaveBeenCalled();
         expect(deps.api.reportTeammateRunStarted).toHaveBeenCalledWith('run-1', expect.objectContaining({ resumed: true }));
+    });
+
+    it('attaches memory updates when a Codex controller resumes', async () => {
+        const codexHome = join(dir, 'codex-home');
+        vi.stubEnv('CODEX_HOME', codexHome);
+        await mkdir(join(codexHome, 'sessions', '2026', '01', '01'), { recursive: true });
+        await writeFile(join(codexHome, 'sessions', '2026', '01', '01', 'rollout-2026-01-01-codex-old.jsonl'), '{}\n');
+        await ensureTeammateHome(makeTeammate(), { dir: home });
+        await writeThreadsState(home, { 'thread-1': { pid: 999, provider: 'codex', providerSessionId: 'codex-old', memorySeenAt: 0 } });
+        const event = dmPayload('codex');
+        runtime.dispatch(event); await started();
+        expect(deps.spawnSession).toHaveBeenCalledWith(expect.objectContaining({ agent: 'codex' }));
+        expect(sentMessage()).toContain('Memory update:');
     });
 
     it('clears context usage state on a thread reset', async () => {
@@ -283,9 +297,74 @@ describe('teammate runtime', () => {
             await expectRolled('tokens');
         });
 
+        it('attaches a changed memory file once for a live controller', async () => {
+            await ensureTeammateHome(makeTeammate(), { dir: home });
+            runtime = createTeammateRuntime({ ...deps, now: Date.now });
+            await seedLive();
+            await mergeThreadState(home, 'thread-1', { memorySeenAt: 0 });
+            const event = dmPayload('claude');
+            runtime.dispatch(event); await started();
+            expect(sentMessage()).toContain('Memory update: these files changed since your session started.');
+            expect(sentMessage()).toContain('## MEMORY.md');
+            vi.mocked(deps.api.sendSessionMessage).mockClear();
+            const second = { ...event, runId: 'run-2', dispatchToken: 'token-run-2' };
+            runtime.dispatch(second); await started(2);
+            expect(vi.mocked(deps.api.sendSessionMessage).mock.calls[0][1]).not.toContain('Memory update:');
+        });
+
+        it('refreshes USER.md but never MEMORY.md in a group', async () => {
+            await ensureTeammateHome(makeTeammate(), { dir: home });
+            runtime = createTeammateRuntime({ ...deps, now: Date.now });
+            await seedLive();
+            await mergeThreadState(home, 'thread-1', { memorySeenAt: 0 });
+            const event = makeConversationPayload('group'); event.thread.id = 'thread-1'; event.runId = 'run-1'; event.dispatchToken = 'token-run-1';
+            event.teammate.controllerProvider = 'claude'; event.teammate.controllerEnv = null;
+            event.events = [{ type: 'manual', at: 1, data: { note: 'group memory refresh' } }];
+            runtime.dispatch(event); await started();
+            expect(sentMessage()).toContain('## USER.md');
+            expect(sentMessage()).not.toContain('## MEMORY.md');
+        });
+
+        it('rolls a task thread and starts a fresh segment with its summary', async () => {
+            const event = dmPayload('claude');
+            event.thread.kind = 'task'; event.thread.channelId = null; event.thread.taskId = 'task-1'; event.channel = null;
+            event.task = { id: 'task-1', teammateId: event.teammate.id, createdByTeammateId: null, source: 'github-issue', resourceId: 'owner/repo#1', title: 'Fix task', url: null, status: 'in_progress', summary: 'Working', prUrl: null, reviewRound: 1, createdAt: 1, updatedAt: 1 };
+            await writeThreadsState(home, { 'thread-1': { pid: 999, provider: 'claude', providerSessionId: 'old-session', contextTokens: 60_000, threadKind: 'task' } });
+            runtime.dispatch(event); await started();
+            expect(deps.spawnSession).toHaveBeenCalledWith(expect.objectContaining({ resumeSessionId: undefined }));
+            expect((await readThreadsState(home))['thread-1'].segment).toBe(2);
+            expect(sentMessage()).toContain('condensed into a new segment');
+            expect(deps.api.reportTeammateContextEvent).toHaveBeenCalledWith('run-1', expect.objectContaining({ code: 'context_rolled', reason: 'tokens', segment: 2 }));
+            expect((await readThreadsState(home))['thread-1'].memorySeenAt).toBe(clock);
+            expect(await promptFile()).toContain('Alex chose PR #42');
+            expect(deps.api.getChannelMessages).not.toHaveBeenCalled();
+        });
+
+        it('rolls a live task thread over after a compaction', async () => {
+            await seedLive();
+            await mergeThreadState(home, 'thread-1', { compactions: 1, threadKind: 'task' });
+            const event = dmPayload('claude');
+            event.thread.kind = 'task'; event.thread.channelId = null; event.thread.taskId = 'task-1'; event.channel = null;
+            runtime.dispatch(event); await started();
+            expect(deps.stopSession).toHaveBeenCalledWith('happy-existing');
+            expect(deps.oneShot).toHaveBeenCalledWith(expect.objectContaining({ prompt: expect.stringContaining('<task-state>') }));
+            expect((await readThreadsState(home))['thread-1'].segment).toBe(2);
+            expect(deps.api.reportTeammateContextEvent).toHaveBeenCalledWith('run-1', expect.objectContaining({ code: 'context_rolled', reason: 'compacted' }));
+        });
+
+        it('starts the next segment after the newest channel seq', async () => {
+            await writeThreadsState(home, { 'thread-1': { pid: 999, provider: 'claude', providerSessionId: 'claude-old', contextTokens: 60_000 } });
+            vi.mocked(deps.api.getChannelMessages).mockResolvedValueOnce([{ seq: 41, createdAt: 1, senderId: 'u', content: { t: 'system', code: 'run_failed', data: {} } }] as any);
+            const event = makeConversationPayload('dm'); event.thread.id = 'thread-1'; event.runId = 'run-1'; event.dispatchToken = 'token-run-1';
+            event.teammate.controllerProvider = 'claude'; event.teammate.controllerEnv = null;
+            event.events = [{ type: 'manual', at: 1, data: { note: 'continue' } }];
+            runtime.dispatch(event); await started();
+            expect((await readThreadsState(home))['thread-1'].segmentStartSeq).toBe(42);
+        });
+
         describe('idle reap', () => {
             const idle = clock - 31 * 60_000;
-            async function seedIdle(threadKind: 'dm' | 'heartbeat', contextTokens: number) {
+            async function seedIdle(threadKind: 'dm' | 'heartbeat' | 'task', contextTokens: number) {
                 await writeThreadsState(home, { 'thread-1': { pid: 123, currentSessionId: 'idle', provider: 'claude', lastDispatchAt: idle, threadKind, contextTokens } });
             }
 
@@ -311,6 +390,12 @@ describe('teammate runtime', () => {
                 await new Promise(resolve => setTimeout(resolve, 20));
                 expect(deps.api.getSessionMessages).not.toHaveBeenCalled();
                 expect(deps.oneShot).not.toHaveBeenCalled();
+            });
+
+            it('schedules a summary for task threads', async () => {
+                await seedIdle('task', 60_000);
+                await runtime.reapIdle();
+                await vi.waitFor(() => expect(deps.oneShot).toHaveBeenCalledWith(expect.objectContaining({ prompt: expect.stringContaining('final: true') })));
             });
 
             it('does not wait for the summary', async () => {

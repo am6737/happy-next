@@ -6,6 +6,13 @@ import { machineTestKey, makeChannelMessage, makeConversationPayload } from './t
 vi.mock('@/ui/logger', () => ({ logger: { debug: vi.fn() } }));
 
 describe('channel event rendering', () => {
+    it('puts a memory update immediately after the run header', async () => {
+        const payload = makeConversationPayload(); payload.events = [];
+        const rendered = await renderRunEventMessage(payload, undefined, undefined, undefined, undefined, undefined,
+            'Memory update: these files changed since your session started.\n## MEMORY.md\nnew fact');
+        const header = rendered.indexOf('[Happy Agent run');
+        expect(rendered.slice(header)).toMatch(/^\[Happy Agent run[^\n]+\]\nMemory update:[\s\S]*## MEMORY\.md\nnew fact/);
+    });
     it.each(['dm', 'group'] as const)('decrypts %s messages, includes at most ten earlier messages and reply instructions', async kind => {
         const api = { getChannelMessages: vi.fn().mockResolvedValueOnce(Array.from({ length: 11 }, (_, i) => makeChannelMessage(i + 1, `context ${i + 1}`)))
             .mockResolvedValueOnce([makeChannelMessage()]) };

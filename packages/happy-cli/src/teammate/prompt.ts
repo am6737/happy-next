@@ -24,14 +24,17 @@ export interface TeammateSystemPromptOptions {
 const MAX_FILE_CHARS = 20_000;
 const TRUNCATION_MARKER = '…[truncated]';
 
+export function teammateMemoryFiles(threadKind: TeammateThreadKind): string[] {
+    return threadKind === 'group' ? ['USER.md'] : ['USER.md', 'MEMORY.md'];
+}
+
 /** Compose controller context without loading private long-term memory in groups. */
 export async function buildTeammateSystemPrompt({
     dir, teammate, threadKind, threadContext, now = new Date(), threadSummary, archivedTopics,
 }: TeammateSystemPromptOptions): Promise<string> {
     const yesterday = new Date(now);
     yesterday.setDate(yesterday.getDate() - 1);
-    const files = ['AGENTS.md', 'SOUL.md', 'IDENTITY.md', 'USER.md'];
-    if (threadKind !== 'group') files.push('MEMORY.md');
+    const files = ['AGENTS.md', 'SOUL.md', 'IDENTITY.md', ...teammateMemoryFiles(threadKind)];
     if (threadKind === 'heartbeat') files.push('HEARTBEAT.md');
     files.push(`memory/${dailyLogDate(now)}.md`, `memory/${dailyLogDate(yesterday)}.md`);
 
@@ -50,9 +53,9 @@ export async function buildTeammateSystemPrompt({
         sections.push(`## ${file}\n\n${content}`);
     }
 
-    if (threadKind === 'dm' || threadKind === 'group') {
+    if (threadKind === 'dm' || threadKind === 'group' || threadKind === 'task') {
         if (threadSummary) sections.push(`## Thread summary\n\nWritten by the daemon from earlier segments of this conversation. It is a digest, not the record: use chat_history(query) for details.\n\n${threadSummary}`);
-        else if (archivedTopics) sections.push('## Thread summary\n\nEarlier topics in this thread are archived. Search them with chat_history(query) when the owner refers to them.');
+        else if (archivedTopics && (threadKind === 'dm' || threadKind === 'group')) sections.push('## Thread summary\n\nEarlier topics in this thread are archived. Search them with chat_history(query) when the owner refers to them.');
     }
 
     const context = [`Teammate: ${teammate.name}`, `Kind: ${threadKind}`];

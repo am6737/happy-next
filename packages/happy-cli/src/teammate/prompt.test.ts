@@ -3,12 +3,17 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TeammateThreadKind } from 'happy-wire';
-import { buildTeammateSystemPrompt } from './prompt';
+import { buildTeammateSystemPrompt, teammateMemoryFiles } from './prompt';
 import { makeTeammate } from './testFixtures';
 
 vi.mock('@/configuration', () => ({ configuration: {} }));
 
 describe('teammate system prompt', () => {
+    it('uses the thread kind as the source of truth for memory files', () => {
+        expect(teammateMemoryFiles('group')).toEqual(['USER.md']);
+        expect(teammateMemoryFiles('dm')).toEqual(['USER.md', 'MEMORY.md']);
+        expect(teammateMemoryFiles('task')).toEqual(['USER.md', 'MEMORY.md']);
+    });
     let dir: string;
     const now = new Date(2026, 0, 1, 12, 30);
     const files = ['AGENTS.md', 'SOUL.md', 'IDENTITY.md', 'USER.md', 'MEMORY.md', 'memory/2026-01-01.md', 'memory/2025-12-31.md'];

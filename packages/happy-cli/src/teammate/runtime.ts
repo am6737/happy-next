@@ -1,5 +1,5 @@
 import { randomUUID, randomBytes, createHash, timingSafeEqual } from 'node:crypto';
-import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
     TEAMMATE_ENV, TEAMMATE_REVIEW_MAX_ROUNDS, TeammateNotifyPayloadSchema, TeammateTaskStopPayloadSchema, TeammateTaskAgentUpdateRequestSchema, TeammateRunCancelPayloadSchema, TeammateRunDispatchPayloadSchema,
@@ -14,7 +14,7 @@ import { findCodexSessionFile } from '@/codex/utils/codexSessionReader';
 import { claudeCheckSession } from '@/claude/utils/claudeCheckSession';
 import { logger } from '@/ui/logger';
 import { ensureTeammateHome, execFileAsync, exists, isPathId, generateSessionKeyFile, mergeThreadState, readThreadsState, readTaskState, mergeTaskWorker, updateTaskState, appendDailyLog, commitTeammateHome, isHeartbeatChecklistEmpty, readThreadSummary, archiveThreadSummary, type TaskWorker } from './homeDir';
-import { buildTeammateSystemPrompt } from './prompt';
+import { buildTeammateSystemPrompt, teammateMemoryFiles } from './prompt';
 import { summarizeThread } from './threadSummary';
 import { runTeammateOneShot } from './oneShot';
 import { createChannelCrypto, decryptChannelMessage, encryptChannelMessage } from './channelCrypto';
@@ -37,6 +37,7 @@ const HISTORY_TEXT = 2000;
 const ROLLOVER_IDLE_TOKENS = Number.isFinite(Number(process.env.HAPPY_TEAMMATE_ROLLOVER_IDLE_TOKENS)) && Number(process.env.HAPPY_TEAMMATE_ROLLOVER_IDLE_TOKENS) > 0 ? Number(process.env.HAPPY_TEAMMATE_ROLLOVER_IDLE_TOKENS) : 60_000;
 const ROLLOVER_RATIO = Number.isFinite(Number(process.env.HAPPY_TEAMMATE_ROLLOVER_RATIO)) && Number(process.env.HAPPY_TEAMMATE_ROLLOVER_RATIO) > 0 && Number(process.env.HAPPY_TEAMMATE_ROLLOVER_RATIO) <= 1 ? Number(process.env.HAPPY_TEAMMATE_ROLLOVER_RATIO) : 0.6;
 const DEFAULT_CONTEXT_WINDOW = 200_000;
+const MEMORY_TRUNCATION_MARKER = '…[truncated]';
 interface HistoryEntry { seq: number; createdAt: number; sender: string; text: string }
 
 /** Resolve a catalog model mode (optionally suffixed -fast) into message meta exactly as the app does. */
@@ -93,10 +94,27 @@ function renderReviewContext(data: Record<string, unknown>): string[] {
     ];
 }
 
+async function readChangedMemory(home: string, kind: TeammateRunDispatchPayload['thread']['kind'], seenAt: number): Promise<string | null> {
+    const sections: string[] = [];
+    for (const file of teammateMemoryFiles(kind)) {
+        try {
+            const fileStat = await stat(join(home, file));
+            if (fileStat.mtimeMs <= seenAt) continue;
+            let content = await readFile(join(home, file), 'utf8');
+            if (content.length > 20_000) content = `${content.slice(0, 20_000 - MEMORY_TRUNCATION_MARKER.length)}${MEMORY_TRUNCATION_MARKER}`;
+            sections.push(`## ${file}\n${content}`);
+        } catch {
+            // A memory file can be removed while a dispatch is being prepared.
+        }
+    }
+    return sections.length ? 'Memory update: these files changed since your session started. They replace the copies in your instructions.\n' + sections.join('\n') : null;
+}
+
 export async function renderRunEventMessage(payload: TeammateRunDispatchPayload, chat?: {
     api: Pick<ApiClient, 'getChannelMessages'>; crypto: ReturnType<typeof createChannelCrypto>;
-}, home?: string, describeWorker?: (sessionId: string) => Promise<string | null>, continuity?: 'overflow' | 'resume_failed' | 'rolled', threadSummary?: string | null): Promise<string> {
+}, home?: string, describeWorker?: (sessionId: string) => Promise<string | null>, continuity?: 'overflow' | 'resume_failed' | 'rolled', threadSummary?: string | null, memoryUpdate?: string | null): Promise<string> {
     const sections = [`[Happy Agent run ${payload.runId} · trigger: ${payload.trigger} · thread: ${payload.thread.kind}]`];
+    if (memoryUpdate) sections.push(memoryUpdate);
     if (continuity === 'rolled') sections.push(`Session continuity: this thread's context was condensed into a new segment. The thread summary in your instructions and the messages below are excerpts; the full channel history is still there and is the only authoritative record. When you need earlier details, search it with chat_history(query) — the summary's "Search hints" are good keywords — instead of answering from memory. What is gone is your own unrecorded working process from the previous segment (what you tried and ruled out); re-derive it when needed. Do not announce this to the owner; mention it only if they refer to something you can no longer recall.`);
     else if (continuity) sections.push(`Session continuity: this run could not continue your previous provider session (${continuity === 'overflow' ? 'it ran out of context window' : 'it could not be restored'}). The channel history is unaffected and is the authoritative record of this conversation: before acting on anything you do not see below, read it with chat_history (use query to search). What is gone is your own unrecorded working memory from that session — what you tried, ruled out, and how far you got — so re-derive it instead of assuming it. Do not open your reply by announcing this; mention it only if the owner refers to something you can no longer see.${threadSummary ? ' The thread summary in your instructions covers the earlier conversation.' : ''}`);
     if (payload.task) sections.push(`Task: ${payload.task.title} (${payload.task.resourceId}) ${payload.task.url ?? ''} · status ${payload.task.status}`);
@@ -317,7 +335,7 @@ export function createTeammateRuntime(deps: TeammateRuntimeDependencies) {
                     chatSendCounter: entry.lastRunId === payload.runId ? entry.chatSendCounter : 0,
                     taskCreateCounter: entry.lastRunId === payload.runId ? entry.taskCreateCounter : 0,
                 });
-                const conversation = payload.thread.kind === 'dm' || payload.thread.kind === 'group';
+                const rolls = payload.thread.kind === 'dm' || payload.thread.kind === 'group' || payload.thread.kind === 'task';
                 const fresh = payload.thread.kind === 'heartbeat' || payload.thread.kind === 'dreaming';
                 const resetAt = payload.thread.resetAt ?? 0;
                 const topicReset = resetAt > (entry.resetAppliedAt ?? 0);
@@ -331,7 +349,8 @@ export function createTeammateRuntime(deps: TeammateRuntimeDependencies) {
                 let live = Boolean(!fresh && !entry.overflowed && entry.controlToken && entry.pid !== undefined && deps.isPidAlive(entry.pid) && sessionId && keyPath
                     && entry.controllerConfig === controllerConfig);
                 let rollover: 'topic' | 'overflow' | 'compacted' | 'tokens' | 'resume_failed' | undefined;
-                if (conversation) {
+                let rolloverSegmentStartSeq: number | undefined;
+                if (rolls) {
                     if (topicReset) rollover = 'topic';
                     else if (entry.overflowed) rollover = 'overflow';
                     else if ((entry.compactions ?? 0) > 0) rollover = 'compacted';
@@ -343,13 +362,13 @@ export function createTeammateRuntime(deps: TeammateRuntimeDependencies) {
                     ? findCodexSessionFile(resumable, isolation?.codexHome) ?? findCodexSessionFile(resumable) : undefined;
                 const resumeFailed = Boolean(!live && !rollover && !topicReset && resumable && (provider === 'codex' ? !resumeFile
                     : !claudeCheckSession(resumable, home, (env.environmentVariables as Record<string, string> | undefined)?.CLAUDE_CONFIG_DIR)));
-                if (conversation && resumeFailed) rollover = 'resume_failed';
+                if (rolls && resumeFailed) rollover = 'resume_failed';
                 const continuity = rollover === 'compacted' || rollover === 'tokens' ? 'rolled'
                     : rollover === 'topic' || topicReset ? undefined : entry.overflowed ? 'overflow' : resumeFailed ? 'resume_failed' : undefined;
                 if (rollover || topicReset) {
                     await stopIfAlive(sessionId, entry.pid, 'Unable to stop controller for context rollover or thread reset');
                     if (rollover) {
-                        const channel = entry.channel ?? payload.channel;
+                        const channel = payload.thread.kind === 'task' ? undefined : entry.channel ?? payload.channel;
                         const eventSeqs = payload.events.filter(event => event.type === 'channel-message').map(event => Number(event.data.seq));
                         const beforeSeq = eventSeqs.length ? Math.min(...eventSeqs) : undefined;
                         const earlier = channel ? await deps.api.getChannelMessages(channel.id, { beforeSeq, limit: 1 }).catch(error => {
@@ -357,22 +376,29 @@ export function createTeammateRuntime(deps: TeammateRuntimeDependencies) {
                             return null;
                         }) : [];
                         const newestSeq = earlier === null ? Infinity : Math.max(0, ...earlier.filter(message => beforeSeq === undefined || message.seq < beforeSeq).map(message => message.seq));
-                        const currentSummary = (entry.summarizedSeq ?? 0) >= newestSeq && entry.summarizedSession?.id === entry.currentSessionId
-                            && entry.flushedSegment === (entry.segment ?? 1);
-                        if (!currentSummary) await summarizeThread({
+                        rolloverSegmentStartSeq = Number.isFinite(newestSeq) ? newestSeq + 1 : undefined;
+                        const currentSummary = payload.thread.kind === 'task'
+                            ? entry.summarizedSession?.id === entry.currentSessionId && entry.flushedSegment === (entry.segment ?? 1)
+                            : (entry.summarizedSeq ?? 0) >= newestSeq && entry.summarizedSession?.id === entry.currentSessionId && entry.flushedSegment === (entry.segment ?? 1);
+                        let summaryStatus: 'current' | 'written' | 'failed' = currentSummary ? 'current' : 'failed';
+                        if (!currentSummary) {
+                            const summary = await summarizeThread({
                             home, threadId: payload.thread.id, entry: { ...entry, channel,
                                 ...(rollover === 'resume_failed' ? { currentSessionId: undefined, keyPath: undefined } : {}) },
                             kind: payload.thread.kind, final: true, untilCreatedAt: rollover === 'topic' ? resetAt : undefined,
                             deps: { api: deps.api, crypto, oneShot: deps.oneShot, now, provider,
                                 model: teammateModelSelection(provider, payload.teammate.controllerModel).model,
                                 env: env.environmentVariables as Record<string, string> | undefined, codexHome: isolation?.codexHome },
-                        });
+                            });
+                            summaryStatus = summary ? 'written' : 'failed';
+                        }
                         if (rollover === 'topic') await archiveThreadSummary(home, payload.thread.id, entry.segment ?? 1);
+                        logger.debug(`[TEAMMATE] Rollover ${payload.thread.id} reason=${rollover} seg=${entry.segment ?? 1}→${(entry.segment ?? 1) + 1} summary=${summaryStatus}`);
                     }
                     const reset = {
                         providerSessionId: undefined, currentSessionId: undefined, pid: undefined, keyPath: undefined, controlToken: undefined,
                         contextTokens: undefined, contextWindow: undefined, compactions: undefined, overflowed: undefined,
-                        ...(rollover ? { segment: (entry.segment ?? 1) + 1 } : {}),
+                        ...(rollover ? { segment: (entry.segment ?? 1) + 1, ...(rolloverSegmentStartSeq === undefined ? {} : { segmentStartSeq: rolloverSegmentStartSeq }) } : {}),
                         ...(topicReset ? { resetAppliedAt: resetAt } : {}),
                     };
                     entry = { ...entry, ...reset };
@@ -395,7 +421,8 @@ export function createTeammateRuntime(deps: TeammateRuntimeDependencies) {
                     const promptsDir = join(home, 'state', 'prompts');
                     await mkdir(promptsDir, { recursive: true, mode: 0o700 });
                     const promptPath = join(promptsDir, `${payload.thread.id}.md`);
-                    threadSummary = conversation ? await readThreadSummary(home, payload.thread.id) : null;
+                    threadSummary = rolls ? await readThreadSummary(home, payload.thread.id) : null;
+                    const memorySeenAt = now();
                     await writeFile(promptPath, await buildTeammateSystemPrompt({
                         dir: home, teammate: payload.teammate, threadKind: payload.thread.kind,
                         threadContext: { kind: payload.thread.kind, channelTitle: payload.channel?.title ?? undefined, taskTitle: payload.task?.title, taskUrl: payload.task?.url ?? undefined },
@@ -431,7 +458,7 @@ export function createTeammateRuntime(deps: TeammateRuntimeDependencies) {
                     sessionId = spawned.sessionId;
                     resumed = Boolean(resumable && !resumeFailed);
                     await mergeThreadState(home, payload.thread.id, {
-                        currentSessionId: sessionId, pid: spawned.pid, keyPath, lastDispatchAt: now(), provider, controllerConfig,
+                        currentSessionId: sessionId, pid: spawned.pid, keyPath, lastDispatchAt: now(), provider, controllerConfig, memorySeenAt,
                         overflowed: undefined, compactions: undefined, contextTokens: undefined, contextWindow: undefined,
                         // The provider reports its own transcript ID once it starts; another provider's ID can't be resumed.
                         ...(sameProvider && !resumeFailed ? {} : { providerSessionId: undefined }),
@@ -453,10 +480,14 @@ export function createTeammateRuntime(deps: TeammateRuntimeDependencies) {
                     const { reply, ...result } = await workerOutcome(worker, entries, token ??= githubToken());
                     return [`Final reply:\n${reply === null ? '(none)' : reply.slice(0, 8000)}`, ...(Object.keys(result).length ? [`Result: ${JSON.stringify(result)}`] : [])].join('\n');
                 } : undefined;
-                const delivery = await deps.api.sendSessionMessage(sessionId!, await renderRunEventMessage(payload, { api: deps.api, crypto }, home, describeWorker, continuity, threadSummary),
+                const memoryRefresh = !fresh && (live || (provider === 'codex' && Boolean(resumable) && !rollover && !resumeFailed));
+                const memoryReadAt = memoryRefresh ? now() : undefined;
+                const memoryUpdate = memoryRefresh ? await readChangedMemory(home, payload.thread.kind, entry.memorySeenAt ?? 0) : null;
+                const delivery = await deps.api.sendSessionMessage(sessionId!, await renderRunEventMessage(payload, { api: deps.api, crypto }, home, describeWorker, continuity, threadSummary, memoryUpdate),
                     await readSessionDataKeyFile(keyPath!), `teammate-run:${payload.runId}`, payload.teammate.controllerPermissionMode,
                     selection.model, selection.reasoningEffort);
                 if (run.cancelled) return;
+                if (memoryReadAt !== undefined) await mergeThreadState(home, payload.thread.id, { memorySeenAt: memoryReadAt });
                 await deps.api.reportTeammateRunStarted(payload.runId, {
                     dispatchToken: payload.dispatchToken, sessionId: sessionId!, resumed, delivery,
                 });
@@ -786,7 +817,7 @@ export function createTeammateRuntime(deps: TeammateRuntimeDependencies) {
                             await mergeThreadState(home, threadId, { pid: undefined });
                             // Task and heartbeat threads also carry the DM channel, so only the stored thread kind decides.
                             const kind = entry.threadKind;
-                            if (kind === 'dm' || kind === 'group') void enqueue(threadKey(home, threadId), async () => {
+                            if (kind === 'dm' || kind === 'group' || kind === 'task') void enqueue(threadKey(home, threadId), async () => {
                                 const provider = entry.teammate?.controllerProvider ?? entry.provider ?? 'claude';
                                 await summarizeThread({ home, threadId, entry, kind,
                                     final: (entry.contextTokens ?? 0) >= ROLLOVER_IDLE_TOKENS || (entry.compactions ?? 0) > 0,
