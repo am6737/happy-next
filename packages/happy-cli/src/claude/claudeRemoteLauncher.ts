@@ -624,6 +624,7 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
                         session.onSessionFound(sessionId);
                     },
                     onThinkingChange: session.onThinkingChange,
+                    flushOutgoing: () => messageQueue.flush(),
                     claudeEnvVars: session.claudeEnvVars,
                     claudeArgs: session.claudeArgs,
                     onMessage,

@@ -14,6 +14,23 @@ export type SessionState = 'disconnected' | 'syncing' | 'thinking' | 'awaiting' 
 // own, absent any real signal from the CLI.
 export const AWAITING_RESPONSE_MAX_MS = 120_000;
 
+/**
+ * Whether the agent is working on a turn: the signals behind the composer's stop
+ * button — thinking, the marker set on send, a permission request waiting on the
+ * reader. Unlike `useSessionStatus`, syncing does not count as idle: that is the
+ * app fetching, while the agent may well still be working. Offline does, since
+ * nothing more can come.
+ */
+export function isSessionBusy(
+    session: Pick<Session, 'presence' | 'thinking' | 'awaitingResponseSince' | 'agentState'>,
+    now: number = Date.now(),
+): boolean {
+    if (session.presence !== 'online') return false;
+    if (session.thinking) return true;
+    if (session.awaitingResponseSince != null && now - session.awaitingResponseSince < AWAITING_RESPONSE_MAX_MS) return true;
+    return !!session.agentState?.requests && Object.keys(session.agentState.requests).length > 0;
+}
+
 // Fun vibing messages to show when a session is thinking. Randomly pick one each time.
 const vibingMessages = [
     // Keep these compact so the thinking indicator stays readable on narrow screens.

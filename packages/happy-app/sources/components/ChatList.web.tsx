@@ -20,7 +20,7 @@ import { foldHidesRunningDelegatedTask, delegatedLabel } from './foldDelegated';
 import { toolTitle } from './tools/toolTitle';
 import { useTurnFolding } from '@/hooks/useTurnFolding';
 import { useFoldAnimation } from '@/hooks/useFoldAnimation';
-import { AWAITING_RESPONSE_MAX_MS } from '@/utils/sessionUtils';
+import { isSessionBusy } from '@/utils/sessionUtils';
 import { layout as appLayout } from './layout';
 import { createScrollButtonVisibilityController } from './scrollButtonVisibilityController';
 import { createProxyScrollIntent } from './proxyScrollIntent';
@@ -160,9 +160,8 @@ export const ChatList = React.memo((props: { session: Session; onFillInput?: (te
             isSharedSession={isSharedSession}
             currentUserId={profile.id}
             onForkMessage={props.onForkMessage}
-            thinking={props.session.thinking}
+            busy={isSessionBusy(props.session)}
             taskCompleted={props.session.agentState?.taskCompleted}
-            awaitingResponseSince={props.session.awaitingResponseSince}
             forkingMessageId={props.forkingMessageId}
             minimapCachedUserMessages={props.minimapCachedUserMessages}
             onMinimapItemsChange={props.onMinimapItemsChange}
@@ -531,11 +530,10 @@ const ChatListInternal = React.memo((props: {
     isSharedSession: boolean,
     currentUserId: string,
     onForkMessage?: (request: ForkMessageRequest) => void,
-    thinking?: boolean,
+    /** `isSessionBusy` — the newest turn is in flight while this holds. */
+    busy: boolean,
     /** `session.agentState.taskCompleted` — the CLI's stamp for the newest finished task. */
     taskCompleted?: number | null,
-    /** `session.awaitingResponseSince` — set the moment a message is sent. */
-    awaitingResponseSince?: number | null,
     forkingMessageId?: string | null,
     minimapCachedUserMessages?: MinimapMessage[],
     onMinimapItemsChange?: (items: ConversationMinimapItem[]) => void,
@@ -574,16 +572,13 @@ const ChatListInternal = React.memo((props: {
     // Which rows carry the action bar, which rows carry their turn's header, and
     // how long each turn took. See messageTurnTiming.ts for the rules.
     //
-    // In flight means the CLI says it is thinking *or* the optimistic marker set
-    // when a message is sent is still standing: the marker is written in the same
-    // store update that lands the message, so a reply's header arrives with the
-    // message instead of a CLI heartbeat later.
-    const turnInFlight = !!props.thinking
-        || (props.awaitingResponseSince != null
-            && Date.now() - props.awaitingResponseSince < AWAITING_RESPONSE_MAX_MS);
+    // In flight is the same busy state the composer's stop button shows, so a
+    // reply's bar appears exactly when the composer goes idle. It includes the
+    // marker set on send, which lands with the message itself, so a reply's
+    // header arrives with it instead of a CLI heartbeat later.
     const turns = useTurnAnalysis({
         visibleMessages: listedMessages,
-        turnInFlight,
+        turnInFlight: props.busy,
         taskCompletedAt: props.taskCompleted,
     });
 

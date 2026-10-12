@@ -518,3 +518,72 @@ describe('ApiSessionClient message receipt', () => {
         });
     });
 });
+
+describe('ApiSessionClient keepAlive', () => {
+    let aliveEmit: ReturnType<typeof vi.fn>;
+    let client: ApiSessionClient;
+    let releaseOutbox: () => void;
+
+    beforeEach(() => {
+        aliveEmit = vi.fn();
+        mockIo.mockReturnValue({
+            connect: vi.fn(), on: vi.fn(), off: vi.fn(), close: vi.fn(), disconnect: vi.fn(), emit: vi.fn(),
+            connected: true,
+            volatile: { emit: aliveEmit },
+        });
+        client = new ApiSessionClient('fake-token', {
+            id: 'test-session-id',
+            seq: 0,
+            metadata: { path: '/tmp', host: 'localhost', homeDir: '/home/user', happyHomeDir: '/home/user/.happy-next', happyLibDir: '/home/user/.happy/lib', happyToolsDir: '/home/user/.happy/tools' },
+            metadataVersion: 0,
+            agentState: null,
+            agentStateVersion: 0,
+            encryptionKey: new Uint8Array(32),
+            encryptionVariant: 'legacy',
+        } as any);
+        vi.spyOn((client as any).sendSync, 'invalidateAndAwait').mockImplementation(
+            () => new Promise<void>((resolve) => { releaseOutbox = resolve; }),
+        );
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
+        vi.restoreAllMocks();
+    });
+
+    const reported = () => aliveEmit.mock.calls.map(([, payload]) => payload.thinking);
+
+    it('reports thinking at once', () => {
+        client.keepAlive(true, 'remote');
+        expect(reported()).toEqual([true]);
+    });
+
+    it('holds idle until the outbox has drained, so the last message lands first', async () => {
+        client.keepAlive(true, 'remote');
+        client.keepAlive(false, 'remote');
+        client.keepAlive(false, 'remote'); // periodic heartbeat while the drain runs
+        expect(reported()).toEqual([true, true, true]);
+        releaseOutbox();
+        await vi.waitFor(() => expect(reported()).toEqual([true, true, true, false]));
+        client.keepAlive(false, 'remote');
+        expect(reported()).toEqual([true, true, true, false, false]);
+    });
+
+    it('drops a pending idle when the agent goes busy again', async () => {
+        client.keepAlive(true, 'remote');
+        client.keepAlive(false, 'remote');
+        client.keepAlive(true, 'remote');
+        releaseOutbox();
+        await Promise.resolve();
+        await Promise.resolve();
+        expect(reported()).toEqual([true, true, true]);
+    });
+
+    it('goes idle anyway when the outbox cannot drain', async () => {
+        vi.useFakeTimers();
+        client.keepAlive(true, 'remote');
+        client.keepAlive(false, 'remote');
+        await vi.advanceTimersByTimeAsync(10_000);
+        expect(reported()).toEqual([true, true, false]);
+    });
+});

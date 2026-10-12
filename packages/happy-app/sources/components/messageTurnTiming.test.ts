@@ -57,7 +57,6 @@ function awaitingPermission(id: string, createdAt: number, status: 'pending' | '
     return { ...call, tool: { ...call.tool, permission: { id: `perm-${id}`, status } } } as Message;
 }
 
-const NO_LATCH: ReadonlySet<string> = new Set<string>();
 const NO_ENDS: ReadonlyMap<string, number> = new Map<string, number>();
 
 function done(result: ReturnType<typeof analyzeTurns>, rowId: string) {
@@ -69,7 +68,6 @@ function analyze(
     visibleMessages: Message[],
     options: {
         inFlight?: boolean;
-        latched?: ReadonlySet<string>;
         ends?: ReadonlyMap<string, number>;
         taskCompletedAt?: number | null;
         now?: number;
@@ -78,7 +76,6 @@ function analyze(
     return analyzeTurns({
         visibleMessages,
         turnInFlight: options.inFlight ?? false,
-        previouslyCompleted: options.latched ?? NO_LATCH,
         turnEnds: options.ends ?? NO_ENDS,
         taskCompletedAt: options.taskCompletedAt,
         now: options.now ?? 1_000_000,
@@ -107,10 +104,12 @@ describe('action bar rows', () => {
         expect([...result.completedIds]).toEqual(['a1']);
     });
 
-    it('holds a latched row settled when the in-flight flag flips back on', () => {
-        const result = analyze([agent('a1', 20), user('u1', 10)], { inFlight: true, latched: new Set(['a1']) });
-        expect([...result.completedIds]).toEqual(['a1']);
-        expect(result.running).toBeNull();
+    it('takes the bar back off when the agent is busy again', () => {
+        const rows = [agent('a1', 20), user('u1', 10)];
+        expect([...analyze(rows).completedIds]).toEqual(['a1']);
+        const resumed = analyze(rows, { inFlight: true });
+        expect([...resumed.completedIds]).toEqual([]);
+        expect(resumed.running).toEqual({ lastTextId: 'a1' });
     });
 });
 
@@ -649,14 +648,14 @@ describe('runs of steps inside a folded turn', () => {
 });
 
 describe('native analysis without unused fold snapshots', () => {
-    it.each([true, false, undefined])('keeps headers, completion latches and actions identical (in flight: %s)', (turnInFlight) => {
+    it.each([true, false, undefined])('keeps headers and actions identical (in flight: %s)', (turnInFlight) => {
         const visibleMessages = [
             agent('new-reply', 90), tool('new-tool', 80), user('new-prompt', 70),
             agent('old-reply', 60), tool('old-tool', 50), user('old-prompt', 40),
             event('notice', 30), tool('partial-tool', 20), agent('partial-reply', 10),
         ];
         const params = {
-            visibleMessages, turnInFlight, previouslyCompleted: new Set<string>(),
+            visibleMessages, turnInFlight,
             turnEnds: new Map([['old-reply', 65]]), taskCompletedAt: 95, now: 100,
         };
         const full = analyzeTurns(params);

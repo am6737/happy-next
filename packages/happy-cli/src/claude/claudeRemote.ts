@@ -34,6 +34,8 @@ export async function claudeRemote(opts: {
     // Dynamic parameters
     nextMessage: () => Promise<{ message: string | { type: 'text'; text: string } | { type: 'mixed'; text: string; images: ImageContent[] }, mode: EnhancedMode } | null>,
     onReady: () => void,
+    /** Hands on messages the caller still holds back, so they leave ahead of the idle heartbeat. */
+    flushOutgoing?: () => Promise<void>,
     isAborted: (toolCallId: string) => boolean,
 
     // Callbacks
@@ -293,6 +295,9 @@ export async function claudeRemote(opts: {
 
             // Handle result messages
             if (message.type === 'result') {
+                // The turn's last messages can still sit in the caller's outgoing queue:
+                // hand them on first, or idle reaches the app ahead of them.
+                await opts.flushOutgoing?.();
                 updateThinking(false);
                 logger.debug('[claudeRemote] Result received, waiting for next user message');
 

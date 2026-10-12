@@ -101,8 +101,6 @@ export type TurnHeaderStatus =
 export type TurnAnalysis = {
     /** Rows that carry the action bar: the last text block of each settled turn. */
     completedIds: Set<string>;
-    /** The same ids, to be latched as settled on the next pass. */
-    stillCompleted: Set<string>;
     /** The turn still in flight, if any. */
     running: { lastTextId: string | null } | null;
     /** Header status per row id, for the rows that open a turn. */
@@ -311,10 +309,10 @@ function taskCompletedAsTurnEnd(
  * Which rows carry the action bar, which carry a turn header, and how long each
  * turn took.
  *
- * The newest turn counts as settled once the agent stops working (`!turnInFlight`)
- * — unless it was already shown as settled (`previouslyCompleted`), a latch that
- * keeps the bar from flickering when `turnInFlight` briefly flips back on. Older
- * turns are bounded by a newer prompt and are always settled.
+ * The newest turn counts as settled exactly when the agent is not busy
+ * (`!turnInFlight`), with no latch: the bar follows the same state as the
+ * composer's stop button. Older turns are bounded by a newer prompt and are
+ * always settled.
  *
  * A settled turn's end, best source first: the moment this client watched it
  * settle (`turnEnds`), the CLI's `taskCompleted` stamp (newest turn only — it
@@ -326,9 +324,8 @@ function taskCompletedAsTurnEnd(
  */
 export function analyzeTurns(params: {
     visibleMessages: Message[];
-    /** The CLI's thinking heartbeat, or the optimistic marker set on send. */
+    /** Whether the agent is busy — see `isSessionBusy`. */
     turnInFlight: boolean | undefined;
-    previouslyCompleted: ReadonlySet<string>;
     /** Ends latched when this client saw a turn settle, keyed by last text row. */
     turnEnds: ReadonlyMap<string, number>;
     /** `session.agentState.taskCompleted`. */
@@ -340,7 +337,6 @@ export function analyzeTurns(params: {
     const {
         visibleMessages,
         turnInFlight,
-        previouslyCompleted,
         turnEnds,
         taskCompletedAt,
         now = Date.now(),
@@ -349,7 +345,6 @@ export function analyzeTurns(params: {
 
     const turns = collectTurns(visibleMessages, includeFold);
     const completedIds = new Set<string>();
-    const stillCompleted = new Set<string>();
     const headerById = new Map<string, TurnHeaderStatus>();
     const foldById = new Map<string, TurnProcess>();
     let running: { lastTextId: string | null } | null = null;
@@ -357,9 +352,7 @@ export function analyzeTurns(params: {
     for (let index = 0; index < turns.length; index++) {
         const turn = turns[index];
         const isNewest = index === turns.length - 1;
-        const settled = !isNewest
-            || !turnInFlight
-            || (turn.lastTextId !== null && previouslyCompleted.has(turn.lastTextId));
+        const settled = !isNewest || !turnInFlight;
 
         if (!settled) {
             running = { lastTextId: turn.lastTextId };
@@ -378,19 +371,16 @@ export function analyzeTurns(params: {
             headerById.set(turn.headerId, { state: 'done', startedAt: turn.startedAt, completedAt });
             if (includeFold) foldById.set(turn.headerId, turnProcess(turn, true));
         }
-        if (turn.lastTextId !== null) {
-            completedIds.add(turn.lastTextId);
-            stillCompleted.add(turn.lastTextId);
-        }
+        if (turn.lastTextId !== null) completedIds.add(turn.lastTextId);
     }
 
     const newestHeaderId = turns.length > 0 ? turns[turns.length - 1].headerId : null;
-    return { completedIds, stillCompleted, running, headerById, foldById, newestHeaderId };
+    return { completedIds, running, headerById, foldById, newestHeaderId };
 }
 
 /**
- * The analysis for the current render, plus the latches it needs to carry across
- * renders: turn ends this client observed, and the settled rows to keep settled.
+ * The analysis for the current render, plus the turn ends this client observed,
+ * carried across renders.
  *
  * Computed during render, with the refs updated alongside it: the list
  * virtualizes on measured row heights, so a header that appeared a commit late
@@ -398,11 +388,7 @@ export function analyzeTurns(params: {
  */
 export function useTurnAnalysis(params: {
     visibleMessages: Message[];
-    /**
-     * Whether the newest turn is still in flight: the CLI's thinking heartbeat,
-     * or the marker set the moment a message is sent (which lands with the
-     * message itself, so the reply's header appears with it).
-     */
+    /** Whether the newest turn is still in flight — `isSessionBusy`. */
     turnInFlight: boolean | undefined;
     /** `session.agentState.taskCompleted`. */
     taskCompletedAt?: number | null;
@@ -410,7 +396,6 @@ export function useTurnAnalysis(params: {
     includeFold?: boolean;
 }): Pick<TurnAnalysis, 'completedIds' | 'headerById' | 'foldById' | 'newestHeaderId'> {
     const { visibleMessages, turnInFlight, taskCompletedAt, includeFold = true } = params;
-    const completedTurnsRef = React.useRef<Set<string>>(new Set());
     const turnEndsRef = React.useRef<Map<string, number>>(new Map());
     const runningRef = React.useRef<{ lastTextId: string | null } | null>(null);
 
@@ -418,14 +403,12 @@ export function useTurnAnalysis(params: {
         () => analyzeTurns({
             visibleMessages,
             turnInFlight,
-            previouslyCompleted: completedTurnsRef.current,
             turnEnds: turnEndsRef.current,
             taskCompletedAt,
             includeFold,
         }),
         [visibleMessages, turnInFlight, taskCompletedAt, includeFold],
     );
-    completedTurnsRef.current = analysis.stillCompleted;
 
     // A turn we were watching has settled: freeze the moment, so its duration is
     // the time it actually took rather than an estimate from its last row.
@@ -436,6 +419,10 @@ export function useTurnAnalysis(params: {
         && !turnEndsRef.current.has(runningLastTextId)) {
         turnEndsRef.current.set(runningLastTextId, Date.now());
     }
+    // Busy again on the same row (a permission answered, a gap in the heartbeat):
+    // the end frozen above was not the turn's end after all.
+    const resumedLastTextId = analysis.running?.lastTextId ?? null;
+    if (resumedLastTextId !== null) turnEndsRef.current.delete(resumedLastTextId);
     runningRef.current = analysis.running;
 
     return React.useMemo(() => ({

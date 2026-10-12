@@ -249,6 +249,8 @@ class Sync {
     private sessionMessageDispatchTimers = new Map<string, ReturnType<typeof setTimeout>>();
     private sessionMessageDispatchLastRunAt = new Map<string, number>();
     private sessionMessageDispatchGeneration = new Map<string, number>();
+    /** Idle heartbeats held back until the session's in-flight messages land — see `flushActivityUpdates`. */
+    private heldIdleActivity = new Map<string, ApiEphemeralActivityUpdate>();
     private sessionDataKeys = new Map<string, Uint8Array>(); // Store session data encryption keys internally
     // Monotonic token guarding persistent message-cache writes. Bumped before any operation that
     // clears/invalidates a session cache so stale fetch/websocket handlers cannot enqueue writes
@@ -5189,6 +5191,19 @@ class Sync {
                 if (shouldInvalidateGitStatusOnActivityTransition(session.active, update.active)) {
                     recoveredSessionIds.push(sessionId);
                 }
+                // Messages reach the list through decryption and a paced dispatch queue, while
+                // this heartbeat lands at once: going idle now would end the turn on a row
+                // before its last one. Hold idle until the messages ahead of it are in.
+                const holdIdle = session.thinking && !update.thinking
+                    && (this.sessionMessageDispatchRunning.has(sessionId) || this.hasQueuedSessionMessages(sessionId));
+                if (holdIdle) {
+                    const alreadyHeld = this.heldIdleActivity.has(sessionId);
+                    this.heldIdleActivity.set(sessionId, update);
+                    if (!alreadyHeld) this.releaseHeldIdleActivity(sessionId);
+                    sessions.push({ ...session, active: update.active, activeAt: update.activeAt });
+                    continue;
+                }
+                this.heldIdleActivity.delete(sessionId);
                 sessions.push({
                     ...session,
                     active: update.active,
@@ -5215,6 +5230,33 @@ class Sync {
             }
             // log.log(`🔄 Activity updates flushed - updated ${sessions.length} sessions`);
         }
+    }
+
+    /** Messages still being decrypted, or waiting in the dispatch queue. */
+    private hasQueuedSessionMessages = (sessionId: string) => {
+        return this.sessionMessageQueueRunning.has(sessionId)
+            || (this.sessionMessageUpdateQueues.get(sessionId)?.length ?? 0) > 0
+            || (this.sessionMessageDispatchQueues.get(sessionId)?.length ?? 0) > 0;
+    }
+
+    /**
+     * Applies a held idle heartbeat from the back of the dispatch queue, once nothing is queued
+     * behind it; until then it goes round again. A busy heartbeat in the meantime drops it.
+     */
+    private releaseHeldIdleActivity = (sessionId: string) => {
+        void this.enqueueSessionMessageDispatch(sessionId, 'activity:held-idle', () => {
+            const held = this.heldIdleActivity.get(sessionId);
+            const session = storage.getState().sessions[sessionId];
+            if (!held || this.hasQueuedSessionMessages(sessionId)) return;
+            this.heldIdleActivity.delete(sessionId);
+            if (session) this.applySessions([{ ...session, thinking: false, thinkingAt: held.activeAt }]);
+        }).then(() => {
+            if (this.heldIdleActivity.has(sessionId) && storage.getState().sessions[sessionId]) {
+                this.releaseHeldIdleActivity(sessionId);
+            } else {
+                this.heldIdleActivity.delete(sessionId);
+            }
+        });
     }
 
     private handleEphemeralUpdate = (update: unknown) => {

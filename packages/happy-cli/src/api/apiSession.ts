@@ -32,6 +32,9 @@ const INPUT_TRIMMABLE_TOOLS = new Set(['Edit', 'Write', 'MultiEdit']);
 /** Max messages per outbox flush — must not exceed the server's v3 messages limit (200). */
 const MAX_OUTBOX_BATCH_SIZE = 200;
 
+/** Longest an idle heartbeat waits on the outbox before going out anyway (offline, server down). */
+const IDLE_DRAIN_MAX_MS = 10_000;
+
 /**
  * ACP (Agent Communication Protocol) message data types.
  * This is the unified format for all agent messages - CLI adapts each provider's format to ACP.
@@ -156,6 +159,10 @@ export class ApiSessionClient extends EventEmitter {
     private sendSync: InvalidateSync;
     /** Whether the "first user message → title" seeding has already fired (idempotent guard). */
     private initialTitleSet = false;
+    /** Whether the app was last told the agent is thinking. */
+    private reportedThinking = false;
+    /** The outbox drain a pending idle heartbeat waits on; null when none is pending. */
+    private idleDrain: Promise<unknown> | null = null;
 
     constructor(token: string, session: Session) {
         super()
@@ -995,9 +1002,37 @@ export class ApiSessionClient extends EventEmitter {
     }
 
     /**
-     * Send a ping message to keep the connection alive
+     * Send a ping message to keep the connection alive.
+     *
+     * Going idle waits for the outbox: messages travel over HTTP and the
+     * heartbeat over the socket, so an idle sent right away reaches the app
+     * before the turn's last message, and the app takes the turn as ended on an
+     * earlier row. Until the drain settles the heartbeat keeps saying thinking;
+     * going busy again drops the pending idle.
      */
     keepAlive(thinking: boolean, mode: 'local' | 'remote') {
+        if (thinking || !this.reportedThinking) {
+            this.idleDrain = null;
+            this.reportedThinking = thinking;
+            this.emitAlive(thinking, mode);
+            return;
+        }
+        this.emitAlive(true, mode);
+        if (this.idleDrain) return;
+        const drain = Promise.race([
+            this.sendSync.invalidateAndAwait(),
+            new Promise((resolve) => setTimeout(resolve, IDLE_DRAIN_MAX_MS).unref()),
+        ]);
+        this.idleDrain = drain;
+        void drain.then(() => {
+            if (this.idleDrain !== drain) return;
+            this.idleDrain = null;
+            this.reportedThinking = false;
+            this.emitAlive(false, mode);
+        });
+    }
+
+    private emitAlive(thinking: boolean, mode: 'local' | 'remote') {
         if (isDebug()) {
             logger.debug(`[API] Sending keep alive message: ${thinking}`);
         }
