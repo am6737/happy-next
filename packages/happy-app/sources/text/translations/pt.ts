@@ -952,7 +952,7 @@ export const pt: TranslationStructure = {
         placeholder: 'Digite um comando ou pesquise...',
         noResults: 'No matching commands or sessions',
         actionFailed: 'Command failed. Please try again.',
-        searchingMessages: 'Searching local messages…',
+        searchingMessages: 'Pesquisando mensagens…',
         messageMatch: 'Message',
         categoryMessages: 'Mensagens',
         messageFromUser: 'Você',

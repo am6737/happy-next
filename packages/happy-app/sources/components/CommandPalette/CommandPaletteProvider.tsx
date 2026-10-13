@@ -13,6 +13,7 @@ import { useNavigateToSession } from '@/hooks/useNavigateToSession';
 import { OPEN_COMMAND_PALETTE_EVENT } from './events';
 import { useModal } from '@/modal';
 import { buildCommandPaletteCommands } from './commandPaletteCommands';
+import { sortMachines } from '@/utils/machineOrder';
 import type { Command, MessageSearch } from './types';
 import { t } from '@/text';
 import { getDesktopPlatform } from '@/desktop/desktopWindowUtils';
@@ -45,6 +46,7 @@ export function CommandPaletteProvider({ children }: { children: React.ReactNode
         sessions: state.sessions,
         sharedSessions: state.sharedSessions,
         machines: state.machines,
+        machineOrder: state.settings.machineOrder,
         drafts: state.drafts,
         dootaskConnected: !!state.dootaskProfile,
         experimentsEnabled: state.settings.experiments,
@@ -52,7 +54,7 @@ export function CommandPaletteProvider({ children }: { children: React.ReactNode
     })));
     const commandState = useMemo(() => ({
         sessions: Object.values({ ...commandSource.sharedSessions, ...commandSource.sessions }),
-        machines: Object.values(commandSource.machines).filter((machine) => machine.active),
+        machines: sortMachines(Object.values(commandSource.machines).filter((machine) => machine.active), commandSource.machineOrder),
         drafts: commandSource.drafts,
         dootaskConnected: commandSource.dootaskConnected,
         experimentsEnabled: commandSource.experimentsEnabled,

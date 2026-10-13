@@ -248,11 +248,8 @@ export function buildCommandPaletteCommands(options: CommandPaletteCommandOption
         });
     });
 
-    const sortedMachines = [...options.machines].sort((a, b) => {
-        const onlineDelta = Number(isMachineOnline(b)) - Number(isMachineOnline(a));
-        return onlineDelta || b.activeAt - a.activeAt;
-    });
-    sortedMachines.forEach((machine, index) => {
+    // In the order they come in (the user's machine order), online ones first
+    options.machines.forEach((machine, index) => {
         const online = isMachineOnline(machine);
         const title = machine.metadata?.displayName || machine.metadata?.host || machine.id;
         const subtitle = [machine.metadata?.host !== title ? machine.metadata?.host : null, machine.metadata?.platform]
@@ -266,7 +263,7 @@ export function buildCommandPaletteCommands(options: CommandPaletteCommandOption
             category: t('settings.machines'),
             categoryOrder: CATEGORY_ORDER.machines,
             priority: (online ? 300 : 0) + Math.max(0, 60 - index),
-            showWhenIdle: online && index < 3,
+            showWhenIdle: online,
             badge: online ? t('status.online') : t('status.offline'),
             badgeTone: online ? 'success' : 'neutral',
             keywords: [machine.id, machine.metadata?.host ?? '', machine.metadata?.platform ?? '', machine.metadata?.username ?? ''],

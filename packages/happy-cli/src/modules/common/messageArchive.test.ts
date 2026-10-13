@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { appendFileSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { configuration } from '@/configuration';
 import { MessageArchiveWriter, searchMessageArchive } from './messageArchive';
@@ -9,6 +10,11 @@ vi.mock('@/configuration', () => ({
         happyHomeDir: '/tmp/happy-cli-test-message-archive',
     },
 }));
+
+vi.mock('node:fs/promises', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('node:fs/promises')>();
+    return { ...actual, readFile: vi.fn(actual.readFile) };
+});
 
 vi.mock('@/ui/logger', () => ({
     logger: {
@@ -33,6 +39,7 @@ async function flush(writer: MessageArchiveWriter) {
 
 describe('messageArchive', () => {
     afterEach(() => {
+        vi.useRealTimers();
         rmSync(configuration.happyHomeDir, { recursive: true, force: true });
     });
 
@@ -88,5 +95,24 @@ describe('messageArchive', () => {
         writer.append([message('m1', 1, 'a b c')]);
         await flush(writer);
         expect(await searchMessageArchive({ query: 'a' })).toEqual({ hits: [] });
+    });
+
+    it('reuses parsed archives between searches and drops them after ten idle minutes', async () => {
+        const writer = writerFor('session-d');
+        writer.append([message('m1', 1, 'cached text')]);
+        await flush(writer);
+        vi.useFakeTimers();
+        const reads = vi.mocked(readFile);
+
+        await searchMessageArchive({ query: 'cached' });
+        reads.mockClear();
+        vi.advanceTimersByTime(9 * 60 * 1000);
+        await searchMessageArchive({ query: 'cached' });
+        expect(reads).not.toHaveBeenCalled();
+
+        vi.advanceTimersByTime(10 * 60 * 1000);
+        const { hits } = await searchMessageArchive({ query: 'cached' });
+        expect(reads).toHaveBeenCalledTimes(1);
+        expect(hits.map((hit) => hit.id)).toEqual(['m1']);
     });
 });

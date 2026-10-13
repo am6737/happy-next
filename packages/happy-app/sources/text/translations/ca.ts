@@ -952,7 +952,7 @@ export const ca: TranslationStructure = {
         placeholder: 'Escriu una comanda o cerca...',
         noResults: 'No matching commands or sessions',
         actionFailed: 'Command failed. Please try again.',
-        searchingMessages: 'Searching local messages…',
+        searchingMessages: 'Cercant missatges…',
         messageMatch: 'Message',
         categoryMessages: 'Missatges',
         messageFromUser: 'Tu',

@@ -961,7 +961,7 @@ export const en = {
         placeholder: 'Type a command or search...',
         noResults: 'No matching commands or sessions',
         actionFailed: 'Command failed. Please try again.',
-        searchingMessages: 'Searching local messages…',
+        searchingMessages: 'Searching messages…',
         messageMatch: 'Message',
         categoryMessages: 'Messages',
         messageFromUser: 'You',

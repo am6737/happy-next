@@ -1145,7 +1145,7 @@ export const ru: TranslationStructure = {
         placeholder: 'Введите команду или поиск...',
         noResults: 'No matching commands or sessions',
         actionFailed: 'Command failed. Please try again.',
-        searchingMessages: 'Searching local messages…',
+        searchingMessages: 'Поиск сообщений…',
         messageMatch: 'Message',
         categoryMessages: 'Сообщения',
         messageFromUser: 'Вы',

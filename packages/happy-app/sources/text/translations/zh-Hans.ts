@@ -954,7 +954,7 @@ export const zhHans: TranslationStructure = {
         placeholder: '输入命令或搜索...',
         noResults: '没有匹配的命令或会话',
         actionFailed: '命令执行失败，请重试',
-        searchingMessages: '正在搜索本地消息…',
+        searchingMessages: '正在搜索消息…',
         messageMatch: '消息',
         categoryMessages: '消息',
         messageFromUser: '我',

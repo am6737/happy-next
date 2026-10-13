@@ -963,7 +963,7 @@ export const pl: TranslationStructure = {
         placeholder: 'Wpisz polecenie lub wyszukaj...',
         noResults: 'No matching commands or sessions',
         actionFailed: 'Command failed. Please try again.',
-        searchingMessages: 'Searching local messages…',
+        searchingMessages: 'Wyszukiwanie wiadomości…',
         messageMatch: 'Message',
         categoryMessages: 'Wiadomości',
         messageFromUser: 'Ty',

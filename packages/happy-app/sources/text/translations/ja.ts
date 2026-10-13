@@ -954,7 +954,7 @@ export const ja: TranslationStructure = {
         placeholder: 'コマンドを入力または検索...',
         noResults: 'No matching commands or sessions',
         actionFailed: 'Command failed. Please try again.',
-        searchingMessages: 'Searching local messages…',
+        searchingMessages: 'メッセージを検索中…',
         messageMatch: 'Message',
         categoryMessages: 'メッセージ',
         messageFromUser: '自分',

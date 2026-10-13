@@ -953,7 +953,7 @@ export const zhHant: TranslationStructure = {
         placeholder: '輸入命令或搜尋...',
         noResults: '沒有符合的命令或工作階段',
         actionFailed: '命令執行失敗，請再試一次',
-        searchingMessages: '正在搜尋本機訊息…',
+        searchingMessages: '正在搜尋訊息…',
         messageMatch: '訊息',
         categoryMessages: '訊息',
         messageFromUser: '我',

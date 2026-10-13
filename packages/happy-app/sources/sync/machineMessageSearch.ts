@@ -2,8 +2,9 @@ import { searchMessagesResponseSchema, type SearchMessagesRequest } from 'happy-
 import { apiSocket } from './apiSocket';
 import type { CachedMessageSearchMatch } from './messagesStore/cachedMessageSearch';
 
-// A machine that hasn't answered by then is left out rather than holding the other results back
-const MACHINE_SEARCH_TIMEOUT_MS = 3000;
+// The whole round trip through the server. Hits show as each machine answers, so a slow one holds
+// nothing else back; this only bounds how long the palette keeps waiting on it.
+const MACHINE_SEARCH_TIMEOUT_MS = 15_000;
 
 /**
  * Search the message archive a machine keeps of every session it ran. Machines without the

@@ -951,7 +951,7 @@ export const it: TranslationStructure = {
         placeholder: 'Digita un comando o cerca...',
         noResults: 'No matching commands or sessions',
         actionFailed: 'Command failed. Please try again.',
-        searchingMessages: 'Searching local messages…',
+        searchingMessages: 'Ricerca nei messaggi…',
         messageMatch: 'Message',
         categoryMessages: 'Messaggi',
         messageFromUser: 'Tu',

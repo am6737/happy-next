@@ -60,8 +60,11 @@ export class MessageArchiveWriter {
 
 type IndexedEntry = MessageArchiveEntry & { normalizedText: string };
 
-// Parsed archives by file, reused until the file changes, so repeated searches only read what grew
+// Parsed archives by file, reused until the file changes, so repeated searches only read what grew.
+// They take about twice the archive's size in memory, so they are dropped once searching goes quiet.
 const parsedArchives = new Map<string, { mtimeMs: number; size: number; entries: IndexedEntry[] }>();
+const PARSED_ARCHIVES_IDLE_MS = 10 * 60 * 1000;
+let releaseTimer: NodeJS.Timeout | null = null;
 
 async function readArchiveEntries(file: string): Promise<IndexedEntry[]> {
     const { mtimeMs, size } = await stat(file);
@@ -90,6 +93,8 @@ async function readArchiveEntries(file: string): Promise<IndexedEntry[]> {
 /** Newest hits first: sessions by their newest hit, and up to `perSessionLimit` hits within each. */
 export async function searchMessageArchive(request: SearchMessagesRequest): Promise<SearchMessagesResponse> {
     if (normalizeMessageSearchText(request.query).length < 2) return { hits: [] };
+    if (releaseTimer) clearTimeout(releaseTimer);
+    releaseTimer = setTimeout(() => parsedArchives.clear(), PARSED_ARCHIVES_IDLE_MS).unref();
     const limit = request.limit ?? 50;
     const perSessionLimit = request.perSessionLimit ?? 10;
 

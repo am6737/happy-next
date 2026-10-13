@@ -17,9 +17,46 @@ interface CommandPaletteInputProps {
 
 export function CommandPaletteInput({ value, onChangeText, onKeyPress, inputRef, hasHistory = false, isHistoryOpen = false, onToggleHistory }: CommandPaletteInputProps) {
     const { theme } = useUnistyles();
+    // While an IME composes (pinyin not yet turned into characters) the input shows the raw text, and
+    // the palette only hears about it once the composition ends, so it doesn't search for the pinyin
+    const [composingText, setComposingText] = React.useState<string | null>(null);
+    const isComposingRef = React.useRef(false);
+    // Safari follows compositionend with one more input event carrying the same text
+    const committedTextRef = React.useRef<string | null>(null);
+
+    React.useEffect(() => {
+        const element = inputRef?.current as unknown as HTMLInputElement | null;
+        if (Platform.OS !== 'web' || !element?.addEventListener) return;
+        const handleStart = () => {
+            isComposingRef.current = true;
+        };
+        const handleEnd = () => {
+            isComposingRef.current = false;
+            committedTextRef.current = element.value;
+            setComposingText(null);
+            onChangeText(element.value);
+        };
+        element.addEventListener('compositionstart', handleStart);
+        element.addEventListener('compositionend', handleEnd);
+        return () => {
+            element.removeEventListener('compositionstart', handleStart);
+            element.removeEventListener('compositionend', handleEnd);
+        };
+    }, [inputRef, onChangeText]);
+
+    const handleChangeText = React.useCallback((text: string) => {
+        if (isComposingRef.current) {
+            setComposingText(text);
+            return;
+        }
+        const committedText = committedTextRef.current;
+        committedTextRef.current = null;
+        if (text !== committedText) onChangeText(text);
+    }, [onChangeText]);
 
     const handleKeyDown = React.useCallback((e: any) => {
-        if (Platform.OS === 'web' && onKeyPress) {
+        // Enter and the arrows pick candidates while composing; they aren't the palette's
+        if (Platform.OS === 'web' && onKeyPress && !e.nativeEvent.isComposing && e.nativeEvent.keyCode !== 229) {
             const key = e.nativeEvent.key;
             
             // Handle navigation keys
@@ -42,8 +79,8 @@ export function CommandPaletteInput({ value, onChangeText, onKeyPress, inputRef,
             <TextInput
                 ref={inputRef}
                 style={[styles.input, Typography.default()]}
-                value={value}
-                onChangeText={onChangeText}
+                value={composingText ?? value}
+                onChangeText={handleChangeText}
                 placeholder={t('commandPalette.placeholder')}
                 placeholderTextColor={theme.colors.textSecondary}
                 autoFocus
