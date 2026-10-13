@@ -1,9 +1,9 @@
 import { z } from 'zod';
 import {
     ChannelSchema, ChannelMessageSchema, ChannelCreateRequestSchema, ChannelMessageSendRequestSchema,
-    ChannelMemberKeyUpdateRequestSchema, ChannelMarkReadRequestSchema,
+    ChannelMemberKeyUpdateRequestSchema, ChannelMarkReadRequestSchema, ChannelUpdateRequestSchema, ChannelMembersAddRequestSchema,
     type Channel, type ChannelMessage, type ChannelCreateRequest, type ChannelMessageSendRequest,
-    type ChannelMemberKeyUpdateRequest, type ChannelMarkReadRequest,
+    type ChannelMemberKeyUpdateRequest, type ChannelMarkReadRequest, type ChannelUpdateRequest, type ChannelMembersAddRequest,
 } from 'happy-wire';
 import type { AuthCredentials } from '@/auth/tokenStorage';
 import { backoff } from '@/utils/time';
@@ -12,14 +12,14 @@ import { getServerUrl } from './serverConfig';
 export class ChannelApiError extends Error {
     constructor(public readonly status: number, public readonly code: string) { super(code); }
 }
-export async function channelRequest<T>(credentials: AuthCredentials, path: string, schema: z.ZodType<T>, body?: unknown): Promise<T> {
+export async function channelRequest<T>(credentials: AuthCredentials, path: string, schema: z.ZodType<T>, body?: unknown, method?: 'PATCH' | 'DELETE'): Promise<T> {
     const url = `${getServerUrl()}/v1/${path}`;
     let attempts = 0;
     const perform = async (): Promise<{ response: Response } | { error: unknown }> => {
         attempts++;
         try {
             const response = await fetch(url, {
-                method: body === undefined ? 'GET' : 'POST',
+                method: method ?? (body === undefined ? 'GET' : 'POST'),
                 headers: { Authorization: `Bearer ${credentials.token}`, 'Content-Type': 'application/json' },
                 ...(body === undefined ? {} : { body: JSON.stringify(body) }),
             });
@@ -67,6 +67,18 @@ export async function resetChannel(credentials: AuthCredentials, id: string): Pr
 }
 export async function updateChannelMemberKey(credentials: AuthCredentials, id: string, teammateId: string, body: ChannelMemberKeyUpdateRequest): Promise<void> {
     await channelRequest(credentials, `${pathFor(id)}/members/${encodeURIComponent(teammateId)}/key`, okResponse, ChannelMemberKeyUpdateRequestSchema.parse(body));
+}
+export async function updateChannel(credentials: AuthCredentials, id: string, body: ChannelUpdateRequest): Promise<Channel> {
+    return (await channelRequest(credentials, pathFor(id), channelResponse, ChannelUpdateRequestSchema.parse(body), 'PATCH')).channel;
+}
+export async function addChannelMembers(credentials: AuthCredentials, id: string, body: ChannelMembersAddRequest): Promise<Channel> {
+    return (await channelRequest(credentials, `${pathFor(id)}/members`, channelResponse, ChannelMembersAddRequestSchema.parse(body))).channel;
+}
+export async function removeChannelMember(credentials: AuthCredentials, id: string, teammateId: string): Promise<Channel> {
+    return (await channelRequest(credentials, `${pathFor(id)}/members/${encodeURIComponent(teammateId)}`, channelResponse, undefined, 'DELETE')).channel;
+}
+export async function deleteChannel(credentials: AuthCredentials, id: string): Promise<void> {
+    await channelRequest(credentials, pathFor(id), okResponse, undefined, 'DELETE');
 }
 export async function fetchTeammateDm(credentials: AuthCredentials, teammateId: string): Promise<Channel | null> {
     return (await channelRequest(credentials, `teammates/${encodeURIComponent(teammateId)}/dm`, z.object({ channel: ChannelSchema.nullable() }))).channel;

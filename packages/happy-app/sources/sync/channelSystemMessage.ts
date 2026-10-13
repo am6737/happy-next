@@ -6,6 +6,10 @@ export type GovernanceSystemMessage =
     | { code: 'task_self_assigned'; agent: string; title: string; taskId: string | null }
     | { code: 'run_failed'; name: string; reason: TeammateRunFailureReason; runId: string | null; taskId: null };
 
+export type ChannelSystemMessage =
+    | { code: 'member_added' | 'member_removed'; names: string[] }
+    | { code: 'title_changed'; title: string };
+
 export function governanceSystemMessage(content: ChannelMessageContent): GovernanceSystemMessage | null {
     if (content.t !== 'system') return null;
     const data = content.data;
@@ -24,6 +28,17 @@ export function governanceSystemMessage(content: ChannelMessageContent): Governa
                 runId: typeof data.runId === 'string' && data.runId ? data.runId : null, taskId: null };
         default: return null;
     }
+}
+
+/** Membership and title notices; `nameOf` resolves Agent ids, and unknown ids are dropped so callers can fall back to generic text. */
+export function channelSystemMessage(content: ChannelMessageContent, nameOf: (id: string) => string | undefined = () => undefined): ChannelSystemMessage | null {
+    if (content.t !== 'system') return null;
+    const ids = Array.isArray(content.data.teammateIds) ? content.data.teammateIds.filter((id): id is string => typeof id === 'string') : [];
+    if (content.code === 'member_added' || content.code === 'member_removed') {
+        return { code: content.code, names: ids.map(nameOf).filter((name): name is string => !!name) };
+    }
+    if (content.code === 'title_changed') return { code: content.code, title: typeof content.data.title === 'string' ? content.data.title : '' };
+    return null;
 }
 
 function money(value: unknown): string {

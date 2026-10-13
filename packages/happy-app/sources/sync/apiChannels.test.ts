@@ -14,7 +14,7 @@ const respond = (body: unknown, status = 200) => fetchMock.mockResolvedValueOnce
 beforeEach(() => { fetchMock.mockReset(); vi.stubGlobal('fetch', fetchMock); });
 afterEach(() => vi.unstubAllGlobals());
 describe('channel API', () => {
-    it('covers all nine user routes, auth, ID encoding and pagination', async () => {
+    it('covers all thirteen user routes, auth, ID encoding and pagination', async () => {
         respond({ channels: [channel] }); expect(await api.fetchChannels(credentials)).toEqual([channel]);
         respond({ channel }); expect(await api.createChannel(credentials, { kind: 'group', title: 'Team', userEncryptedDataKey: 'u', teammates: [{ teammateId: 'a', encryptedDataKey: 'a' }] })).toEqual(channel);
         respond({ channel }); expect(await api.fetchChannel(credentials, channel.id)).toEqual(channel);
@@ -69,6 +69,27 @@ describe('channel API', () => {
         expect(ApiUpdateContainerSchema.safeParse({ ...envelope, body: { t: 'new-channel-message', message } }).success).toBe(true);
         expect(ApiUpdateContainerSchema.safeParse({ ...envelope, body: { t: 'new-channel-message', message: { ...message, content: { t: 'plaintext', text: 'no' } } } }).success).toBe(false);
     });
+});
+
+it('supports group settings routes and validates their requests', async () => {
+    respond({ channel });
+    await expect(api.updateChannel(credentials, 'a/b', { title: 'Renamed' })).resolves.toEqual(channel);
+    respond({ channel });
+    await expect(api.addChannelMembers(credentials, 'a/b', { teammates: [{ teammateId: 'x/y', encryptedDataKey: 'k' }] })).resolves.toEqual(channel);
+    respond({ channel });
+    await expect(api.removeChannelMember(credentials, 'a/b', 'x/y')).resolves.toEqual(channel);
+    respond({ ok: true });
+    await expect(api.deleteChannel(credentials, 'a/b')).resolves.toBeUndefined();
+    expect(fetchMock.mock.calls.map(([url, init]) => [String(url), init.method])).toEqual([
+        ['https://happy.test/v1/channels/a%2Fb', 'PATCH'],
+        ['https://happy.test/v1/channels/a%2Fb/members', 'POST'],
+        ['https://happy.test/v1/channels/a%2Fb/members/x%2Fy', 'DELETE'],
+        ['https://happy.test/v1/channels/a%2Fb', 'DELETE'],
+    ]);
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ title: 'Renamed' });
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ teammates: [{ teammateId: 'x/y', encryptedDataKey: 'k' }] });
+    await expect(api.updateChannel(credentials, 'a', { title: '' })).rejects.toThrow();
+    await expect(api.addChannelMembers(credentials, 'a', { teammates: [] })).rejects.toThrow();
 });
 
 it('sends the taskId through the validated channel body', async () => {

@@ -277,10 +277,12 @@ export const ApiTeammateTaskUpdatedSchema = z.object({ t: z.literal('teammate-ta
 export const ApiTeammateRunUpdatedSchema = z.object({ t: z.literal('teammate-run-updated'), run: TeammateRunSchema });
 
 export const ApiChannelUpdatedSchema = z.object({ t: z.literal('channel-updated'), channel: ChannelSchema });
+export const ApiChannelDeletedSchema = z.object({ t: z.literal('channel-deleted'), channelId: z.string() });
 export const ApiNewChannelMessageSchema = z.object({ t: z.literal('new-channel-message'), message: ChannelMessageSchema });
 
 export const ApiUpdateSchema = z.discriminatedUnion('t', [
     ApiChannelUpdatedSchema,
+    ApiChannelDeletedSchema,
     ApiNewChannelMessageSchema,
     ApiTeammateUpdatedSchema,
     ApiTeammateRunUpdatedSchema,

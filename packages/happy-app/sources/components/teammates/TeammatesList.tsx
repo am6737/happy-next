@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActivityIndicator, Pressable, RefreshControl, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, RefreshControl, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -15,6 +15,7 @@ import { useMainTabBottomPadding } from '@/hooks/useMainTabBottomPadding';
 import { Typography } from '@/constants/Typography';
 import { t } from '@/text';
 import { teammateErrorMessage } from './ui';
+import { PillButton } from './kit';
 
 export function TeammatesList() {
     const router = useRouter();
@@ -71,18 +72,23 @@ export function TeammatesList() {
                     </Pressable>
                 </View>
             )) : (
-                <ItemGroup>
-                    {visible.map(teammate => (
-                        <TeammateRow key={teammate.id} teammate={teammate} />
-                    ))}
-                    {archivedCount > 0 && (
-                        <Item
-                            title={includeArchived ? t('teammates.hideArchived') : `${t('teammates.showArchived')} · ${archivedCount}`}
-                            titleStyle={styles.toggle}
-                            onPress={() => setIncludeArchived(value => !value)}
-                        />
-                    )}
-                </ItemGroup>
+                <>
+                    <View style={styles.newGroupWrap}>
+                        <PillButton kind="secondary" icon="people-outline" label={t('channels.newGroup')} onPress={() => router.push('/channels/new')} />
+                    </View>
+                    <ItemGroup>
+                        {visible.map(teammate => (
+                            <TeammateRow key={teammate.id} teammate={teammate} />
+                        ))}
+                        {archivedCount > 0 && (
+                            <Item
+                                title={includeArchived ? t('teammates.hideArchived') : `${t('teammates.showArchived')}  ${archivedCount}`}
+                                titleStyle={styles.toggle}
+                                onPress={() => setIncludeArchived(value => !value)}
+                            />
+                        )}
+                    </ItemGroup>
+                </>
             )}
         </ItemList>
     );
@@ -160,5 +166,13 @@ const styles = StyleSheet.create((theme) => ({
     toggle: {
         fontSize: 15,
         color: theme.colors.textLink,
+    },
+    newGroupWrap: {
+        width: '100%',
+        maxWidth: layout.maxWidth,
+        alignSelf: 'center',
+        paddingHorizontal: Platform.select({ ios: 16, default: 12 }),
+        marginTop: 12,
+        marginBottom: 4,
     },
 }));

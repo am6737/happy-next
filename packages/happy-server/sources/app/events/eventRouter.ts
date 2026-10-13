@@ -49,6 +49,9 @@ export type UpdateEvent = {
     type: 'channel-updated';
     channel: Channel;
 } | {
+    type: 'channel-deleted';
+    channelId: string;
+} | {
     type: 'teammate-task-updated';
     task: TeammateTask;
 } | {

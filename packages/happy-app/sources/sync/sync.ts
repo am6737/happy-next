@@ -4428,6 +4428,8 @@ class Sync {
 
         } else if (updateData.body.t === 'channel-updated') {
             storage.getState().applyChannels([updateData.body.channel]);
+        } else if (updateData.body.t === 'channel-deleted') {
+            storage.getState().removeChannel(updateData.body.channelId);
         } else if (updateData.body.t === 'new-channel-message') {
             const message = updateData.body.message;
             try { await this.channels.applyMessages(message.channelId, [message]); }

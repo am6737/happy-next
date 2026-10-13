@@ -48,17 +48,23 @@ export class ChannelSync {
         }
         return key;
     }
-    create = async (kind: 'dm' | 'group', teammates: Teammate[], title: string | null = null) => {
-        const context = this.context();
-        const key = generateChannelKey();
-        // Reuse a machine key for Agents bound to the same machine.
+    private async wrapKeysForTeammates(key: Uint8Array, teammates: Teammate[]) {
         const machines = new Map<string, Uint8Array>();
         const members = [];
         for (const teammate of teammates) {
             let machineKey = machines.get(teammate.machineId);
-            if (!machineKey) { machineKey = await this.getMachineKey(teammate.machineId); machines.set(teammate.machineId, machineKey); }
+            if (!machineKey) {
+                machineKey = await this.getMachineKey(teammate.machineId);
+                machines.set(teammate.machineId, machineKey);
+            }
             members.push({ teammateId: teammate.id, encryptedDataKey: await wrapChannelKeyForTeammate(key, machineKey) });
         }
+        return members;
+    }
+    create = async (kind: 'dm' | 'group', teammates: Teammate[], title: string | null = null) => {
+        const context = this.context();
+        const key = generateChannelKey();
+        const members = await this.wrapKeysForTeammates(key, teammates);
         context.assertValid();
         const channel = await api.createChannel(context.credentials, {
             kind, title, userEncryptedDataKey: wrapChannelKeyForAccount(key, context.encryption.contentDataKey), teammates: members,
@@ -184,6 +190,37 @@ export class ChannelSync {
         const context = this.context();
         await api.resetChannel(context.credentials, id);
         if (context.valid()) await this.load(id);
+    };
+    rename = async (id: string, title: string) => {
+        const context = this.context();
+        const channel = await api.updateChannel(context.credentials, id, { title });
+        context.assertValid();
+        storage.getState().applyChannels([channel]);
+        return channel;
+    };
+    addMembers = async (id: string, teammates: Teammate[]) => {
+        const context = this.context();
+        const channel = storage.getState().channels[id];
+        if (!channel) throw new Error('Channel unavailable');
+        const key = await this.key(channel, context.encryption);
+        const members = await this.wrapKeysForTeammates(key, teammates);
+        const updated = await api.addChannelMembers(context.credentials, id, { teammates: members });
+        context.assertValid();
+        storage.getState().applyChannels([updated]);
+        return updated;
+    };
+    removeMember = async (id: string, teammateId: string) => {
+        const context = this.context();
+        const channel = await api.removeChannelMember(context.credentials, id, teammateId);
+        context.assertValid();
+        storage.getState().applyChannels([channel]);
+        return channel;
+    };
+    delete = async (id: string) => {
+        const context = this.context();
+        await api.deleteChannel(context.credentials, id);
+        context.assertValid();
+        storage.getState().removeChannel(id);
     };
     rewrapMember = async (teammate: Teammate) => {
         const context = this.context();

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import {
     ChannelSchema, ChannelMessageSchema, ChannelCreateRequestSchema, ChannelMessageSendRequestSchema,
-    ChannelMarkReadRequestSchema, ChannelMemberKeyUpdateRequestSchema, TeammateChannelMessageSendRequestSchema,
+    ChannelMarkReadRequestSchema, ChannelMemberKeyUpdateRequestSchema, TeammateChannelMessageSendRequestSchema, ChannelUpdateRequestSchema, ChannelMembersAddRequestSchema,
 } from 'happy-wire';
 import type { Fastify } from '../types';
 import { channelCreate } from '@/app/channel/channelCreate';
@@ -13,6 +13,10 @@ import { channelReset } from '@/app/channel/channelReset';
 import { channelList, channelGet, channelMessageList, channelDmGet } from '@/app/channel/channelQueries';
 import { ChannelError } from '@/app/channel/channelError';
 import { TeammateError } from '@/app/teammate/teammateError';
+import { channelUpdate } from '@/app/channel/channelUpdate';
+import { channelMembersAdd } from '@/app/channel/channelMembersAdd';
+import { channelMemberRemove } from '@/app/channel/channelMemberRemove';
+import { channelDelete } from '@/app/channel/channelDelete';
 
 const ErrorSchema = z.object({ error: z.string() });
 const errors = { 400: ErrorSchema, 403: ErrorSchema, 404: ErrorSchema, 409: ErrorSchema };
@@ -27,7 +31,7 @@ export function channelRoutes(app: Fastify) {
         preHandler: app.authenticate,
         errorHandler: ((error, _request, reply) => {
             if (error instanceof ChannelError || error instanceof TeammateError) {
-                const status = error.code === 'not_found' ? 404 : ['archived', 'no_dm', 'task_inactive'].includes(error.code) ? 409 : error.code === 'invalid_request' ? 400 : 403;
+                const status = error.code === 'not_found' ? 404 : ['archived', 'no_dm', 'task_inactive', 'not_group', 'full', 'last_member'].includes(error.code) ? 409 : error.code === 'invalid_request' ? 400 : 403;
                 return reply.code(status).send({ error: error.code });
             }
             if (error.validation || error.statusCode === 400 || error instanceof z.ZodError) return reply.code(400).send({ error: 'invalid_request' });
@@ -47,6 +51,10 @@ export function channelRoutes(app: Fastify) {
     app.post('/v1/channels/:id/reset', { ...common, schema: { params: IdParams, response: { 200: OkResponse, ...errors } } }, async request => {
         await channelReset(request.userId, request.params.id); return { ok: true as const };
     });
+    app.patch('/v1/channels/:id', { ...common, schema: { params: IdParams, body: ChannelUpdateRequestSchema, response: { 200: ChannelResponse, ...errors } } }, async request => ({ channel: await channelUpdate(request.userId, request.params.id, request.body) }));
+    app.post('/v1/channels/:id/members', { ...common, schema: { params: IdParams, body: ChannelMembersAddRequestSchema, response: { 200: ChannelResponse, ...errors } } }, async request => ({ channel: await channelMembersAdd(request.userId, request.params.id, request.body) }));
+    app.delete('/v1/channels/:id/members/:teammateId', { ...common, schema: { params: IdParams.extend({ teammateId: z.string().min(1) }), response: { 200: ChannelResponse, ...errors } } }, async request => ({ channel: await channelMemberRemove(request.userId, request.params.id, request.params.teammateId) }));
+    app.delete('/v1/channels/:id', { ...common, schema: { params: IdParams, response: { 200: OkResponse, ...errors } } }, async request => channelDelete(request.userId, request.params.id));
     app.post('/v1/channels/:id/members/:teammateId/key', { ...common, schema: { params: IdParams.extend({ teammateId: z.string().min(1) }), body: ChannelMemberKeyUpdateRequestSchema, response: { 200: OkResponse, ...errors } } }, async request => {
         await channelMemberKeyUpdate(request.userId, request.params.id, request.params.teammateId, request.body.encryptedDataKey); return { ok: true as const };
     });

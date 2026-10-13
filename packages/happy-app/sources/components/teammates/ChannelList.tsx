@@ -1,7 +1,8 @@
 import React from 'react';
 import { Pressable, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { StyleSheet } from 'react-native-unistyles';
+import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import type { Channel, Teammate } from 'happy-wire';
 import { storage, useChannels } from '@/sync/storage';
 import { channelUnread } from '@/sync/channelReducers';
@@ -18,13 +19,14 @@ export function channelTitle(channel: Channel): string {
 }
 
 /** A DM shows its Agent; a group overlaps its first two members, like a group chat avatar. */
-function ChannelAvatar({ members }: { members: Teammate[] }) {
-    if (members.length < 2) return <TeammateAvatar teammate={members[0] ?? { avatar: null }} size={40} />;
+export function ChannelAvatar({ members, size = 40 }: { members: Teammate[]; size?: number }) {
+    if (members.length < 2) return <TeammateAvatar teammate={members[0] ?? { avatar: null }} size={size} />;
+    const small = Math.round(size * 0.7);
     return (
-        <View style={styles.groupAvatar}>
-            <TeammateAvatar teammate={members[0]} size={28} />
-            <View style={styles.groupAvatarBack}>
-                <TeammateAvatar teammate={members[1]} size={28} />
+        <View style={{ width: size, height: size }}>
+            <TeammateAvatar teammate={members[0]} size={small} />
+            <View style={[styles.groupAvatarBack, { borderRadius: small / 2 + 2 }]}>
+                <TeammateAvatar teammate={members[1]} size={small} />
             </View>
         </View>
     );
@@ -42,6 +44,23 @@ export function ChannelHeaderAvatar({ id }: { id: string }) {
     return (
         <Pressable accessibilityRole="button" accessibilityLabel={t('teammates.profile')} hitSlop={15} onPress={() => router.push(`/teammates/${teammate.id}`)}>
             <TeammateAvatar teammate={teammate} size={32} />
+        </Pressable>
+    );
+}
+/** Opens group info while preserving the Agent avatar entry for DMs. */
+export function ChannelSettingsButton({ id }: { id: string }) {
+    const router = useRouter();
+    const { theme } = useUnistyles();
+    const channel = storage(state => state.channels[id]);
+    if (!channel || channel.kind !== 'group') return <ChannelHeaderAvatar id={id} />;
+    return (
+        <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('channels.settings.title')}
+            hitSlop={15}
+            onPress={() => router.push(`/channels/${id}/settings`)}
+        >
+            <Ionicons name="ellipsis-horizontal" size={22} color={theme.colors.text} />
         </Pressable>
     );
 }
@@ -84,15 +103,10 @@ export function ChannelList({ bare = false }: { bare?: boolean }) {
 }
 
 const styles = StyleSheet.create((theme) => ({
-    groupAvatar: {
-        width: 40,
-        height: 40,
-    },
     groupAvatarBack: {
         position: 'absolute',
         right: 0,
         bottom: 0,
-        borderRadius: 16,
         borderWidth: 2,
         borderColor: theme.colors.surface,
     },

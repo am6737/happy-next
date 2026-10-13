@@ -68,3 +68,8 @@ export function reduceChannelRead(channels: Record<string, Channel>, id: string,
     return { ...channels, [id]: { ...channel, members: channel.members.map(member =>
         member.memberType === 'user' ? { ...member, lastReadSeq: Math.max(member.lastReadSeq, seq) } : member) } };
 }
+export function removeChannel(state: Pick<typeof emptyChannelState, 'channels' | 'channelMessages'>, id: string) {
+    const channels = { ...state.channels }; delete channels[id];
+    const channelMessages = { ...state.channelMessages }; delete channelMessages[id];
+    return { channels, channelMessages };
+}

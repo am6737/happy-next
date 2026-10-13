@@ -9,7 +9,7 @@ import { testChannel as channel, testChannelMessage as message } from './channel
 import * as api from './apiChannels';
 import * as crypto from './channelEncryption';
 
-vi.mock('./apiChannels', () => ({ fetchChannels: vi.fn(), createChannel: vi.fn(), fetchTeammateDm: vi.fn(), fetchChannel: vi.fn(), fetchChannelMessages: vi.fn(), sendChannelMessage: vi.fn(), markChannelRead: vi.fn(), resetChannel: vi.fn(), updateChannelMemberKey: vi.fn() }));
+vi.mock('./apiChannels', () => ({ fetchChannels: vi.fn(), createChannel: vi.fn(), fetchTeammateDm: vi.fn(), fetchChannel: vi.fn(), fetchChannelMessages: vi.fn(), sendChannelMessage: vi.fn(), markChannelRead: vi.fn(), resetChannel: vi.fn(), updateChannelMemberKey: vi.fn(), updateChannel: vi.fn(), addChannelMembers: vi.fn(), removeChannelMember: vi.fn(), deleteChannel: vi.fn() }));
 vi.mock('./channelEncryption', () => ({ generateChannelKey: vi.fn(() => new Uint8Array(32).fill(1)), wrapChannelKeyForAccount: vi.fn(() => 'candidate-key'), wrapChannelKeyForTeammate: vi.fn(async () => 'new-agent-key'), unwrapChannelKey: vi.fn(async () => new Uint8Array(32).fill(2)), encryptChannelMessage: vi.fn(async () => ({ t: 'encrypted', c: 'ciphertext' })), decryptChannelMessage: vi.fn(async () => ({ text: 'decrypted' })) }));
 vi.mock('./apiTeammates', () => ({ fetchTeammateRuns: vi.fn(async () => []), fetchTeammateTasks: vi.fn(async () => []) }));
 const harness = vi.hoisted(() => ({ state: {} as any, server: 'https://test' }));
@@ -30,10 +30,26 @@ beforeEach(() => {
         applyChannelMessages: (id: string, incoming: StoredChannelMessage[]) => {
             harness.state.channelMessages[id] = mergeChannelMessages(harness.state.channelMessages[id], incoming);
         }, markChannelReadLocal: vi.fn(), applyTeammateActivity: vi.fn(),
+        removeChannel: (id: string) => { delete harness.state.channels[id]; delete harness.state.channelMessages[id]; },
     };
     client = new ChannelSync(() => ({ credentials, encryption }), async () => machineKey);
     vi.mocked(api.fetchChannel).mockResolvedValue(channel);
     vi.mocked(api.fetchChannelMessages).mockResolvedValue([]);
+});
+
+it('supports group settings actions and wraps the existing channel key', async () => {
+    vi.mocked(api.updateChannel).mockResolvedValue(channel);
+    vi.mocked(api.addChannelMembers).mockResolvedValue(channel);
+    vi.mocked(api.removeChannelMember).mockResolvedValue(channel);
+    vi.mocked(api.deleteChannel).mockResolvedValue(undefined);
+    await client.rename(channel.id, 'New');
+    await client.addMembers(channel.id, [agent, { ...agent, id: 'agent/2' }]);
+    expect(crypto.unwrapChannelKey).toHaveBeenCalledWith(encryption, 'user-key');
+    expect(crypto.wrapChannelKeyForTeammate).toHaveBeenCalledWith(new Uint8Array(32).fill(2), machineKey);
+    expect(api.addChannelMembers).toHaveBeenCalled();
+    await client.removeMember(channel.id, agent.id);
+    await client.delete(channel.id);
+    expect(harness.state.channels[channel.id]).toBeUndefined();
 });
 describe('channel sync races and key updates', () => {
     it('uses the returned DM key when idempotent creation returns an existing channel', async () => {

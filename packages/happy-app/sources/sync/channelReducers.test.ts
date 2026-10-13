@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { channelUnread, mergeChannels, mergeChannelMessages, reduceChannelMessages, reduceChannelRead, type StoredChannelMessage } from './channelReducers';
+import { channelUnread, mergeChannels, mergeChannelMessages, reduceChannelMessages, reduceChannelRead, removeChannel, type StoredChannelMessage } from './channelReducers';
 import { testChannel as channel, testChannelMessage as message } from './channelTestFixtures';
 import { channelDecisionSelections, channelMentions } from './channelDecisions';
 const pending: StoredChannelMessage = { ...message, id: 'local', seq: 0, body: { text: 'hello' }, delivery: 'pending' };
 
 describe('channel storage reducers', () => {
+    it('removes a channel and its cached messages', () => {
+        expect(removeChannel({ channels: { [channel.id]: channel }, channelMessages: { [channel.id]: [message] } }, channel.id)).toEqual({ channels: {}, channelMessages: {} });
+    });
     it('orders confirmed messages by seq and pending messages last', () => {
         const earlier = { ...message, id: 'earlier', localId: null, seq: 1 };
         expect(mergeChannelMessages([], [pending, { ...message, localId: 'other', id: 'other' }, earlier]).map(m => m.id)).toEqual(['earlier', 'other', 'local']);

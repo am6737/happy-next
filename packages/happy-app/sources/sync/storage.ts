@@ -2,7 +2,7 @@ import type { Teammate, TeammateRun, TeammateTask, TeammateSpend } from 'happy-w
 import { emptyTeammateTaskState, reduceTeammateTask, reduceTeammateTaskDetail, reduceTeammateTaskRun } from './teammateTasks';
 import type { TeammateTaskDetail } from 'happy-wire';
 import { isSessionVisibleInList } from './sessionListFilter';
-import { emptyChannelState, mergeChannels, reduceChannelMessages, reduceChannelRead, type StoredChannelMessage } from './channelReducers';
+import { emptyChannelState, mergeChannels, reduceChannelMessages, reduceChannelRead, removeChannel as reduceRemoveChannel, type StoredChannelMessage } from './channelReducers';
 import type { Channel } from 'happy-wire';
 import { mergeTeammateRunSnapshot, upsertTeammateRun } from './teammateRuns';
 /** Account-scoped Agent and channel state, cleared whenever the account or server changes. */
@@ -152,6 +152,7 @@ interface StorageState {
     channelMessages: Record<string, StoredChannelMessage[]>;
     applyChannels: (channels: Channel[], loaded?: boolean, atRequest?: Record<string, Channel>) => void;
     applyChannelMessages: (id: string, messages: StoredChannelMessage[]) => void;
+    removeChannel: (id: string) => void;
     markChannelReadLocal: (id: string, seq: number) => void;
     teammates: Record<string, Teammate>;
     teammatesLoaded: boolean;
@@ -508,6 +509,7 @@ export const storage = create<StorageState>()((set, get) => {
             channels: mergeChannels(state.channels, channels, atRequest), channelsLoaded: state.channelsLoaded || loaded,
         })),
         applyChannelMessages: (id, messages) => set(state => reduceChannelMessages(state, id, messages)),
+        removeChannel: id => set(state => reduceRemoveChannel(state, id)),
         markChannelReadLocal: (id, seq) => set(state => ({ channels: reduceChannelRead(state.channels, id, seq) })),
         applyTeammateTask: task => set(state => reduceTeammateTask(state, task)),
         applyTeammateTaskDetail: (detail, baseline) => set(state => reduceTeammateTaskDetail(state, detail, baseline)),

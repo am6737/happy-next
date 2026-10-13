@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { governanceSystemMessage } from './channelSystemMessage';
+import { channelSystemMessage, governanceSystemMessage } from './channelSystemMessage';
 
 describe('governance system messages', () => {
+    it('resolves member names and title changes with generic fallback data', () => {
+        expect(channelSystemMessage({ t: 'system', code: 'member_added', data: { teammateIds: ['a', 'missing'] } }, id => ({ a: 'Ada' } as Record<string, string>)[id])).toEqual({ code: 'member_added', names: ['Ada'] });
+        expect(channelSystemMessage({ t: 'system', code: 'member_removed', data: { teammateIds: ['missing'] } }, () => undefined)).toEqual({ code: 'member_removed', names: [] });
+        expect(channelSystemMessage({ t: 'system', code: 'title_changed', data: { title: 'New' } })).toEqual({ code: 'title_changed', title: 'New' });
+    });
     it('formats budget warning amounts and recognizes transitions', () => {
         expect(governanceSystemMessage({ t: 'system', code: 'budget_warning', data: { spentUsd: 8.25, budgetUsd: 10 } })).toEqual({ code: 'budget_warning', spentUsd: '$8.25', budgetUsd: '$10.00', taskId: null });
         expect(governanceSystemMessage({ t: 'system', code: 'budget_paused', data: {} })).toEqual({ code: 'budget_paused', taskId: null });

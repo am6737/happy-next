@@ -19,7 +19,7 @@ const { dbMock, state } = vi.hoisted(() => {
         }
         return row[key] === value;
     }));
-    const apply = (row: any, data: any) => { for (const [key, value] of Object.entries(data) as any) row[key] = value && typeof value === 'object' && 'increment' in value ? row[key] + value.increment : value; return row; };
+    const apply = (row: any, data: any) => { for (const [key, value] of Object.entries(data) as any) if (value !== undefined) row[key] = value && typeof value === 'object' && 'increment' in value ? row[key] + value.increment : value; return row; };
     const expandedChannel = (row: any) => row ? { ...row, members: state.members.filter(m => m.channelId === row.id).map(m => ({ ...m, teammate: state.teammates.find(t => t.id === m.teammateId) })) } : null;
     const expandedRun = (row: any) => row ? { ...row, thread: state.threads.find(t => t.id === row.threadId), teammate: state.teammates.find(t => t.id === row.teammateId) } : null;
     const findMessage = vi.fn(async ({ where, orderBy }: any) => { const rows = state.messages.filter(m => matches(m, where)); if (orderBy) rows.sort((a, b) => b.seq - a.seq); return rows[0] ?? null; });
@@ -27,12 +27,14 @@ const { dbMock, state } = vi.hoisted(() => {
         channel: {
             findFirst: vi.fn(async ({ where }: any) => expandedChannel(state.channels.find(c => matches(c, where)))),
             findUnique: vi.fn(async ({ where }: any) => expandedChannel(state.channels.find(c => matches(c, where)))),
+            findUniqueOrThrow: vi.fn(async ({ where }: any) => expandedChannel(state.channels.find(c => matches(c, where)))),
             findMany: vi.fn(async ({ where }: any) => state.channels.filter(c => matches(c, where)).sort((a, b) => b.lastMessageAt.getTime() - a.lastMessageAt.getTime()).map(expandedChannel)),
             create: vi.fn(async ({ data }: any) => { const { members, ...rest } = data; const row = { id: `channel_${state.channels.length}`, seq: 0, lastMessageAt: new Date(), ...rest }; state.channels.push(row); members.create.forEach((m: any) => state.members.push({ id: `member_${state.members.length}`, channelId: row.id, accountId: null, teammateId: null, lastReadSeq: 0, ...m })); return expandedChannel(row); }),
             update: vi.fn(async ({ where, data }: any) => expandedChannel(apply(state.channels.find(c => matches(c, where)), data))),
             updateMany: vi.fn(async ({ where, data }: any) => { const rows = state.channels.filter(c => matches(c, where)); rows.forEach(c => apply(c, data)); return { count: rows.length }; }),
+            delete: vi.fn(async ({ where }: any) => { const index = state.channels.findIndex(c => matches(c, where)); const [row] = state.channels.splice(index, 1); state.members = state.members.filter(m => m.channelId !== row.id); state.messages = state.messages.filter(m => m.channelId !== row.id); state.threads.forEach(t => { if (t.channelId === row.id) t.channelId = null; }); return row; }),
         },
-        channelMember: { update: vi.fn(async ({ where, data }: any) => apply(state.members.find(m => matches(m, where)), data)) },
+        channelMember: { update: vi.fn(async ({ where, data }: any) => apply(state.members.find(m => matches(m, where)), data)), create: vi.fn(async ({ data }: any) => { const row = { id: `member_${state.members.length}`, lastReadSeq: 0, accountId: null, teammateId: null, ...data }; state.members.push(row); return row; }), delete: vi.fn(async ({ where }: any) => { const index = state.members.findIndex(m => matches(m, where)); return state.members.splice(index, 1)[0]; }) },
         channelMessage: {
             findFirst: findMessage, findUnique: findMessage,
             findMany: vi.fn(async ({ where, orderBy, take }: any) => state.messages.filter(m => matches(m, where)).sort((a, b) => orderBy.seq === 'asc' ? a.seq - b.seq : b.seq - a.seq).slice(0, take)),
@@ -46,11 +48,17 @@ const { dbMock, state } = vi.hoisted(() => {
         teammateTask: { findFirst: vi.fn(async () => null) },
         teammateThread: {
             findFirst: vi.fn(async ({ where }: any) => state.threads.find(t => matches(t, where)) ?? null),
+            findMany: vi.fn(async ({ where }: any) => state.threads.filter(t => matches(t, where))),
             create: vi.fn(async ({ data }: any) => { const row = { id: `thread_${state.threads.length}`, taskId: null, channelId: null, resetAt: null, ...data }; state.threads.push(row); return row; }),
             updateMany: vi.fn(async ({ where, data }: any) => { const rows = state.threads.filter(t => matches(t, where)); rows.forEach(t => apply(t, data)); return { count: rows.length }; }),
+            update: vi.fn(async ({ where, data }: any) => apply(state.threads.find(t => matches(t, where)), data)),
+            aggregate: vi.fn(async ({ where }: any) => ({ _max: { resetAt: state.threads.filter(t => matches(t, where)).map(t => t.resetAt).filter(Boolean).sort((a, b) => b - a)[0] ?? null } })),
         },
         teammateRun: {
             findFirst: vi.fn(async ({ where }: any) => expandedRun(state.runs.find(r => matches(r, where)))),
+            findUnique: vi.fn(async ({ where }: any) => { const row = state.runs.find(r => matches(r, where)); return expandedRun(row ? { queuedAt: new Date(), ...row } : row); }),
+            findMany: vi.fn(async ({ where }: any) => state.runs.filter(r => matches(r, where)).map(r => expandedRun({ queuedAt: new Date(), ...r }))),
+            updateMany: vi.fn(async ({ where, data }: any) => { const rows = state.runs.filter(r => matches(r, where)); rows.forEach(r => apply(r, data)); return { count: rows.length }; }),
             update: vi.fn(async ({ where, data }: any) => expandedRun(apply(state.runs.find(r => matches(r, where)), data))),
             create: vi.fn(async ({ data }: any) => { const row = { id: `run_${state.runs.length}`, sessionId: null, costUsd: null, startedAt: null, finishedAt: null, failureReason: null, queuedAt: new Date(), ...data }; state.runs.push(row); return expandedRun(row); }),
         },
@@ -62,6 +70,7 @@ const { dbMock, state } = vi.hoisted(() => {
 vi.mock('@/storage/db', () => ({ db: dbMock }));
 vi.mock('@/storage/files', () => ({ getPublicUrl: vi.fn() }));
 vi.mock('@/utils/log', () => ({ log: vi.fn() }));
+vi.mock('@/app/api/socket/rpcRegistry', () => ({ invokeUserRpc: vi.fn(async () => undefined) }));
 
 import { channelCreate } from './channelCreate';
 import { channelMessageSend } from './channelMessageSend';
@@ -72,6 +81,10 @@ import { channelSystemMessage } from './channelSystemMessage';
 import { channelMessageList, toChannelDto } from './channelQueries';
 import { eventRouter } from '@/app/events/eventRouter';
 import { channelRoutes } from '@/app/api/routes/channelRoutes';
+import { channelUpdate } from './channelUpdate';
+import { channelMembersAdd } from './channelMembersAdd';
+import { channelMemberRemove } from './channelMemberRemove';
+import { channelDelete } from './channelDelete';
 
 const now = new Date('2026-10-09T12:00:00Z');
 const createReq = { kind: 'dm' as const, userEncryptedDataKey: 'AQI=', teammates: [{ teammateId: 'mate', encryptedDataKey: 'AwQ=' }] };
@@ -92,7 +105,7 @@ async function group() {
 beforeEach(() => {
     vi.restoreAllMocks(); vi.clearAllMocks(); vi.useFakeTimers(); vi.setSystemTime(now);
     state.channels = []; state.members = []; state.messages = []; state.threads = []; state.runs = []; state.seq = 0; state.committed = false; state.failCommit = false;
-    state.teammates = [{ id: 'mate', accountId: 'account', status: 'active' }, { id: 'other', accountId: 'account', status: 'active' }];
+    state.teammates = [{ id: 'mate', accountId: 'account', status: 'active', machineId: 'machine' }, { id: 'other', accountId: 'account', status: 'active', machineId: 'machine' }];
     vi.spyOn(eventRouter, 'emitUpdate').mockImplementation(() => { expect(state.committed).toBe(true); return { total: 1, sessionScoped: 0 }; });
 });
 afterEach(() => vi.useRealTimers());
@@ -121,6 +134,125 @@ describe('channelCreate', () => {
     it('does not emit when commit fails', async () => {
         state.failCommit = true; await expect(channelCreate('account', createReq)).rejects.toThrow('commit failed'); expect(eventRouter.emitUpdate).not.toHaveBeenCalled();
     });
+});
+
+describe('group settings', () => {
+    it('renames a group and posts title_changed', async () => {
+        const channel = await group();
+        await channelUpdate('account', channel.id, { title: 'Platform' });
+        expect(state.messages.at(-1).content).toMatchObject({ t: 'system', code: 'title_changed', data: { title: 'Platform' } });
+    });
+    it('does not post when the title is unchanged', async () => {
+        const channel = await group();
+        await channelUpdate('account', channel.id, { title: 'Engineering' });
+        expect(state.messages).toHaveLength(0);
+    });
+    it('rejects DM rename and foreign rename', async () => {
+        const dm = await channelCreate('account', createReq);
+        await expect(channelUpdate('account', dm.id, { title: 'x' })).rejects.toMatchObject({ code: 'not_group' });
+        await expect(channelUpdate('other', dm.id, { title: 'x' })).rejects.toMatchObject({ code: 'not_found' });
+    });
+    it('adds members with a member_added message and latest resetAt', async () => {
+        const channel = await group();
+        await channelReset('account', channel.id);
+        state.teammates.push({ id: 'new', accountId: 'account', status: 'active' });
+        await channelMembersAdd('account', channel.id, { teammates: [{ teammateId: 'new', encryptedDataKey: 'CQo=' }] });
+        expect(state.messages.at(-1).content.code).toBe('member_added');
+        expect(state.threads.find(t => t.teammateId === 'new').resetAt).toEqual(now);
+    });
+    it('adds a member with null resetAt when no reset exists and clears old sessions', async () => {
+        const channel = await group();
+        state.teammates.push({ id: 'new', accountId: 'account', status: 'active' });
+        state.threads.push({ id: 'old-thread', teammateId: 'new', kind: 'group', channelId: channel.id, taskId: null, resetAt: null, providerSessionId: 'p', currentSessionId: 'c' });
+        await channelMembersAdd('account', channel.id, { teammates: [{ teammateId: 'new', encryptedDataKey: 'CQo=' }] });
+        expect(state.threads.find(t => t.teammateId === 'new')).toMatchObject({ resetAt: null, providerSessionId: null, currentSessionId: null });
+    });
+    describe('rejected member requests', () => {
+        const addOne = (channelId: string, teammateId = 'new', accountId = 'account') =>
+            channelMembersAdd(accountId, channelId, { teammates: [{ teammateId, encryptedDataKey: 'AQ==' }] });
+
+        /** A rejection must leave members, messages and threads untouched and emit nothing. */
+        async function expectRejected(attempt: Promise<unknown>, code: string) {
+            const before = { members: state.members.length, messages: state.messages.length, threads: state.threads.length };
+            vi.mocked(eventRouter.emitUpdate).mockClear();
+            await expect(attempt).rejects.toMatchObject({ code });
+            expect({ members: state.members.length, messages: state.messages.length, threads: state.threads.length }).toEqual(before);
+            expect(eventRouter.emitUpdate).not.toHaveBeenCalled();
+        }
+
+        it('rejects archived Agents', async () => {
+            const channel = await group();
+            state.teammates.push({ id: 'new', accountId: 'account', status: 'archived' });
+            await expectRejected(addOne(channel.id), 'archived');
+        });
+        it('rejects Agents of another account', async () => {
+            const channel = await group();
+            state.teammates.push({ id: 'new', accountId: 'other', status: 'active' });
+            await expectRejected(addOne(channel.id), 'not_found');
+        });
+        it('rejects the same Agent twice in one request', async () => {
+            const channel = await group();
+            state.teammates.push({ id: 'new', accountId: 'account', status: 'active' });
+            await expectRejected(channelMembersAdd('account', channel.id, {
+                teammates: [{ teammateId: 'new', encryptedDataKey: 'AQ==' }, { teammateId: 'new', encryptedDataKey: 'AQ==' }],
+            }), 'invalid_request');
+        });
+        it('returns the channel unchanged when every Agent is already a member, so retries are safe', async () => {
+            const channel = await group();
+            state.teammates.push({ id: 'new', accountId: 'account', status: 'active' });
+            const added = await addOne(channel.id);
+            const before = { members: state.members.length, messages: state.messages.length, threads: [...state.threads.map(t => ({ ...t }))] };
+            vi.mocked(eventRouter.emitUpdate).mockClear();
+            await expect(addOne(channel.id)).resolves.toEqual(added);
+            expect({ members: state.members.length, messages: state.messages.length, threads: state.threads }).toEqual(before);
+            expect(eventRouter.emitUpdate).not.toHaveBeenCalled();
+        });
+        it('rejects requests that only partly overlap the members', async () => {
+            const channel = await group();
+            state.teammates.push({ id: 'new', accountId: 'account', status: 'active' });
+            await expectRejected(channelMembersAdd('account', channel.id, {
+                teammates: [{ teammateId: 'mate', encryptedDataKey: 'AQ==' }, { teammateId: 'new', encryptedDataKey: 'AQ==' }],
+            }), 'invalid_request');
+        });
+        it('rejects going over 20 Agents, and accepts exactly 20', async () => {
+            const channel = await group();
+            for (let i = 0; i < 17; i++) {
+                const id = `extra${i}`;
+                state.teammates.push({ id, accountId: 'account', status: 'active' });
+                state.members.push({ id: `m${id}`, channelId: channel.id, memberType: 'teammate', accountId: null, teammateId: id, lastReadSeq: 0, encryptedDataKey: new Uint8Array([1]) });
+            }
+            state.teammates.push({ id: 'new', accountId: 'account', status: 'active' }, { id: 'last', accountId: 'account', status: 'active' });
+            await addOne(channel.id);
+            expect(state.members.filter(m => m.channelId === channel.id && m.memberType === 'teammate')).toHaveLength(20);
+            await expectRejected(addOne(channel.id, 'last'), 'full');
+        });
+        it('rejects DMs and foreign channels', async () => {
+            const dm = await channelCreate('account', createReq);
+            state.teammates.push({ id: 'new', accountId: 'account', status: 'active' });
+            await expectRejected(addOne(dm.id), 'not_group');
+            const channel = await group();
+            await expectRejected(addOne(channel.id, 'new', 'other'), 'not_found');
+        });
+    });
+    it('removes a member, posts member_removed, and cancels its queued run', async () => {
+        const channel = await group(); const thread = state.threads.find(t => t.teammateId === 'other');
+        state.runs.push({ id: 'queued', teammateId: 'other', threadId: thread.id, status: 'queued', dispatchToken: 'q', trigger: 'manual', eventPayload: {}, attempt: 1, sessionId: 'session', taskId: null, costUsd: null, queuedAt: new Date(), teammate: state.teammates[1], machineId: 'machine' });
+        await channelMemberRemove('account', channel.id, 'other');
+        expect(state.messages.at(-1).content.code).toBe('member_removed'); expect(state.runs[0].status).toBe('cancelled');
+    });
+    it('rejects removing the last teammate', async () => {
+        const channel = await channelCreate('account', { ...createReq, kind: 'group' });
+        await expect(channelMemberRemove('account', channel.id, 'mate')).rejects.toMatchObject({ code: 'last_member' });
+    });
+    it('deletes groups, cancels runs, nulls thread channels, and emits channel-deleted', async () => {
+        const channel = await group(); const thread = state.threads.find(t => t.teammateId === 'mate');
+        state.messages.push({ id: 'message', channelId: channel.id, seq: 1, content: { t: 'encrypted', c: 'x' } });
+        state.runs.push({ id: 'running', teammateId: 'mate', threadId: thread.id, status: 'running', dispatchToken: 'r', trigger: 'manual', eventPayload: {}, attempt: 1, sessionId: 'session', taskId: null, costUsd: null, queuedAt: new Date(), teammate: state.teammates[0], machineId: 'machine' });
+        await channelDelete('account', channel.id);
+        expect(state.channels).toHaveLength(0); expect(state.members).toHaveLength(0); expect(state.messages).toHaveLength(0); expect(thread.channelId).toBeNull(); expect(state.runs[0].status).toBe('cancelled');
+        expect(vi.mocked(eventRouter.emitUpdate).mock.calls.some(([e]) => e.payload.body.t === 'channel-deleted')).toBe(true);
+    });
+    it('rejects deleting a DM', async () => { const channel = await channelCreate('account', createReq); await expect(channelDelete('account', channel.id)).rejects.toMatchObject({ code: 'not_group' }); });
 });
 
 describe('channelMessageSend', () => {

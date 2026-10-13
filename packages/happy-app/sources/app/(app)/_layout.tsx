@@ -1,7 +1,7 @@
 import { TeammateEditLink } from '@/components/teammates/TeammateEditLink';
 import { storage } from '@/sync/storage';
-import { ChannelHeaderAvatar, channelTitle } from '@/components/teammates/ChannelList';
 import { TeammateTaskIssueLink } from '@/components/teammates/TeammateTaskPanel';
+import { ChannelSettingsButton, channelTitle } from '@/components/teammates/ChannelList';
 import { Stack, useRouter } from 'expo-router';
 import 'react-native-reanimated';
 import * as React from 'react';
@@ -62,12 +62,13 @@ export default function RootLayout() {
             }}
         >
             <Stack.Screen name="channels/new" options={{ ...softHeaderOptions, headerTitle: t('channels.newGroup') }} />
-            <Stack.Screen name="channels/[id]" options={({ route }) => {
+            <Stack.Screen name="channels/[id]/index" options={({ route }) => {
                 const id = (route.params as { id: string }).id;
                 const channel = channels[id];
                 return { ...softHeaderOptions, ...floatingComposerScreenOptions, headerTitle: channel ? channelTitle(channel) : t('channels.chats'),
-                    headerRight: () => <ChannelHeaderAvatar id={id} /> };
+                    headerRight: () => <ChannelSettingsButton id={id} /> };
             }} />
+            <Stack.Screen name="channels/[id]/settings" options={{ ...softHeaderOptions, headerTitle: t('channels.settings.title') }} />
             <Stack.Screen name="teammates/index" options={{ ...softHeaderOptions, headerTitle: t('tabs.teammates') }} />
             <Stack.Screen name="teammates/delegate" options={{ ...softHeaderOptions, headerTitle: t('teammateTasks.delegate') }} />
             <Stack.Screen name="teammates/tasks/[id]" options={({ route }) => ({ ...softHeaderOptions, headerTitle: t('teammateTasks.title'),

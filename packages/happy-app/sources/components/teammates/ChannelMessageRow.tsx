@@ -6,8 +6,8 @@ import { Ionicons } from '@expo/vector-icons';
 import type { ChannelMessageBody, Teammate, TeammateTask } from 'happy-wire';
 import type { StoredChannelMessage } from '@/sync/channelReducers';
 import { channelMentionLinks } from '@/sync/channelDecisions';
-import { governanceSystemMessage } from '@/sync/channelSystemMessage';
-import { useSession } from '@/sync/storage';
+import { channelSystemMessage, governanceSystemMessage } from '@/sync/channelSystemMessage';
+import { storage, useSession } from '@/sync/storage';
 import type { Session } from '@/sync/storageTypes';
 import { useGithubIssue, useGithubPull } from '@/hooks/useGithubData';
 import { getSessionName, useSessionStatus } from '@/utils/sessionUtils';
@@ -157,9 +157,13 @@ export const ChannelMessageRow = React.memo(({ message, header, sender, members,
 
     if (message.content.t === 'system') {
         const governance = governanceSystemMessage(message.content);
+        const channelSystem = channelSystemMessage(message.content, id => storage.getState().teammates[id]?.name);
         const label = governance?.code === 'budget_warning' ? t('channels.system.budget_warning', governance)
             : governance?.code === 'task_self_assigned' ? t('channels.system.task_self_assigned', { ...governance, agent: governance.agent || t('channels.unknownAgent') })
             : governance?.code === 'run_failed' ? t('channels.system.run_failed', { name: governance.name || t('channels.unknownAgent'), reason: t(`teammates.failure.${governance.reason}`) })
+            : channelSystem?.code === 'member_added' && channelSystem.names.length ? t('channels.system.memberAddedNamed', { names: channelSystem.names.join(', ') })
+            : channelSystem?.code === 'member_removed' && channelSystem.names.length ? t('channels.system.memberRemovedNamed', { names: channelSystem.names.join(', ') })
+            : channelSystem?.code === 'title_changed' ? t('channels.system.title_changed', { title: channelSystem.title })
             : t(`channels.system.${message.content.code}`);
         const taskId = governance?.code === 'task_self_assigned' ? governance.taskId : undefined;
         const runId = governance?.code === 'run_failed' ? governance.runId : null;
