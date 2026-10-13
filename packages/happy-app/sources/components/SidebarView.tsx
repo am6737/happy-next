@@ -21,7 +21,7 @@ import { getDesktopPlatform } from '@/desktop/desktopWindowUtils';
 import { useSessionListScope } from '@/hooks/useSessionListScope';
 import type { SessionMachineGroup } from './sessionListScope';
 import { useOpenTerminal, useTerminalPanelAvailable } from '@/hooks/useOpenTerminal';
-import { toggleTerminalPanel } from '@/terminal/terminalPanel';
+import { toggleTerminalPanel } from '@/terminal/terminalPanelState';
 import { mergeMachineOrder } from '@/utils/machineOrder';
 
 const stylesheet = StyleSheet.create((theme, runtime) => ({

@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import type { Session } from '@/sync/storageTypes';
 import { useIsTablet } from '@/utils/responsive';
 import { openMachineTerminal } from '@/terminal/openMachineTerminal';
-import { setTerminalPanelOpen } from '@/terminal/terminalPanel';
+import { setTerminalPanelOpen } from '@/terminal/terminalPanelState';
 import { isDedicatedTerminalWindow } from '@/terminal/terminalPopupWindow';
 
 /**

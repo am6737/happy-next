@@ -20,7 +20,7 @@ const {
     TERMINAL_PANEL_LIST_MIN_WIDTH,
     TERMINAL_PANEL_MIN_HEIGHT,
     TERMINAL_PANEL_PAGE_MIN_HEIGHT,
-} = await import('./terminalPanel');
+} = await import('./terminalPanelState');
 
 function tab(id: string, machineId: string): TerminalTab {
     const terminal: TerminalInfo = { id, cwd: '/w', size: { rows: 24, cols: 80 }, exited: false };

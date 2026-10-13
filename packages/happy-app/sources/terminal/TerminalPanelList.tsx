@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { t } from '@/text';
 import type { ActionMenuItem } from '@/components/ActionMenu';
 import { TerminalTabContextMenu } from './TerminalTabContextMenu';
-import { groupTerminalTabsByMachine, type TerminalPanelColors } from './terminalPanel';
+import { groupTerminalTabsByMachine, type TerminalPanelColors } from './terminalPanelState';
 import { terminalTabKey, type TerminalTab } from './terminalTabs';
 
 /**

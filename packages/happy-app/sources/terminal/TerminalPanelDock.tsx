@@ -2,7 +2,7 @@ import { memo, useEffect, useState, type ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useTerminalPanelAvailable } from '@/hooks/useOpenTerminal';
 import { TerminalPanel } from './TerminalPanel';
-import { toggleTerminalPanel, useTerminalPanelOpen } from './terminalPanel';
+import { toggleTerminalPanel, useTerminalPanelOpen } from './terminalPanelState';
 
 /**
  * The column the app's pages are shown in, with the terminal panel along its bottom.

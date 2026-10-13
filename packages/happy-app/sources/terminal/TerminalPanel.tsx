@@ -26,7 +26,7 @@ import {
     TERMINAL_PANEL_LIST_DEFAULT_WIDTH,
     useTerminalPanelEngaged,
     useTerminalPanelFocus,
-} from './terminalPanel';
+} from './terminalPanelState';
 
 /**
  * The terminal panel along the bottom of the app (see `terminalPanel.ts`): the shell on screen,

@@ -5,7 +5,7 @@ import { showToast } from '@/components/Toast';
 import { isTauriDesktop } from '@/utils/tauri';
 import { openDesktopTerminalWindow } from '@/desktop/desktopWindowUtils';
 import { resolveTerminalDirectory, spawnTerminal } from './openTerminal';
-import { revealTerminalInPanel, setTerminalPanelOpen } from './terminalPanel';
+import { revealTerminalInPanel, setTerminalPanelOpen } from './terminalPanelState';
 import { openTerminalPopup, supportsTerminalPopup } from './terminalPopupWindow';
 
 /**
