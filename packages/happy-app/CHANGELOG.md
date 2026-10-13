@@ -2,7 +2,7 @@
 
 ## Version 31 - 2026-10-13
 
-Happy Next v2.16.0 adds Qoder as a fourth agent, searches every machine's message history from the command palette, docks a terminal panel along the bottom on web and desktop, and lets the orchestrator run shell commands on any online machine. The new session screen gathers everything into one card, with an AI tab, `/` and `$` autocomplete, files and scheduled send. Happy CLI is updated to v0.13.0 and installs new releases by itself once a machine is idle.
+Happy Next v2.16.1 adds Qoder as a fourth agent, searches every machine's message history from the command palette, docks a terminal panel along the bottom on web and desktop, and lets the orchestrator run shell commands on any online machine. The new session screen gathers everything into one card, with an AI tab, `/` and `$` autocomplete, files and scheduled send. Happy CLI is updated to v0.13.0 and installs new releases by itself once a machine is idle.
 
 - Agents: Qoder CLI joins Claude Code, Codex and Gemini as a fourth agent (`happy qoder`), with its account's models and reasoning efforts, permission modes and plan mode, session history, resume, forks and /duplicate, image input and context usage
 - Permissions: "don't ask again" on a shell command lets you pick which programs or subcommands it covers, for all four agents, and the card lists the commands it allowed
