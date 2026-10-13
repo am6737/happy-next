@@ -115,29 +115,31 @@ Happy Next 是原版 Happy 的重大演进，以下是亮点：
 - 内置 `/preview-html` 斜杠命令——在 CLI 里生成自包含 HTML 文档并直接在 app 内预览
 - 编排运行和任务显示耗时，运行筛选简化为全部、进行中、已完成、失败、已取消；任务结果只保留 agent 的最终回复，运行中可实时跟进
 - 恢复的任务会回报给发送跟进消息的会话，该运行在两个会话中都会列出
+- `orchestrator_exec` 可在单台或所有在线机器上执行 shell 命令，长输出保存在机器上
 
 ### 待发消息队列
 - CLI 繁忙时消息在服务端排队，就绪后自动分发
 - 队列面板 UI，支持图片数量徽章和立即发送
 - 排队消息可在发送前编辑，也可暂停或保存为草稿而不分发
-- 重连同步和并发分发安全，分发时机经过调优，避免 CLI 繁忙时丢失排队消息
+- 重连同步和并发分发安全，回合结束后立即发出下一条排队消息
 - 从输入框的添加菜单定时发送消息——30 分钟后、1 小时后、用量限制重置后，或自选时间
 
-### 多 Agent 支持（Claude Code + Codex + Gemini）
-- 三个 Agent 均为一等公民，支持会话恢复、复制/分叉和历史记录
+### 多 Agent 支持（Claude Code + Codex + Gemini + Qoder）
+- 四个 Agent 均为一等公民，支持会话恢复、复制/分叉和历史记录
 - 多 Agent 历史页面，按供应商分标签页，支持设备和 Agent 类型筛选
 - 按 Agent 选择模型、费用追踪和上下文窗口显示
 - Codex 支持 ACP 和 App-Server（JSON-RPC）两种后端，内置 Codex v0.155.1 并支持 fast mode
 - Codex 归档操作同步到原生历史，保持归档状态显示一致，并可在继续工作时恢复已归档会话
 - 更可靠的 Codex 会话复制和分叉，并明确提示活动会话冲突
 - Codex 交互式问题和审批请求可直接在应用中处理，支持选项、自定义“其他”、自由文本和敏感回答掩码
-- AI 后端配置文件，内置 DeepSeek、Z.AI、OpenAI、Azure 和 Google AI 预设
 - 新增 Claude Opus 4.8 支持，过滤 4.x 模型的空 thinking 块以保证渲染干净
 - 模型目录支持 Claude Fable 5.1 和 Fable 5，提供 1M 上下文及 low / medium / high / xhigh / max 五档推理强度
 - 新增 Claude Opus 5 和 Claude Sonnet 5，支持 1M 上下文、当前推理强度预设、快速模式能力识别和更新后的费用追踪
-- 精简模型选择器：Claude 1M 上下文变体收进单个开关（模型从 12 个减到 7 个），宽屏下推理强度并排显示，Claude 默认 High 强度
+- 精简模型选择器：每个 Claude 模型只有一项并使用完整上下文窗口，宽屏下推理强度并排显示，Claude 默认 High 强度；上下文条按 Claude Code 实际使用的窗口计算
 - 模型目录支持 GPT-6 Astra，并更新 GPT-5.6 Sol、Terra、Luna 的推理强度和上下文配置
 - 刷新 Gemini 模型目录，加入 Gemini 3.8 Flash 和 Gemini 3.7 Flash，并保留现有 Gemini 模型
+- 通过 ACP 接入 Qoder CLI，支持账号模型与推理强度、权限模式与 plan 模式，Qoder 和 Gemini 会话显示上下文用量
+- 对 shell 命令选择“不再询问”时可选择覆盖哪些程序或子命令，四个 Agent 均支持
 - 模型目录由服务端下发，新模型无需更新 App 即可出现——现已加入 Claude Opus 5.5、Claude Sonnet 5.5、GPT-6.1-Sol、GPT-6-Sol 和 GPT-6-Luna
 
 ### 语音助手（Happy Voice）
@@ -304,6 +306,15 @@ Happy Next 是原版 Happy 的重大演进，以下是亮点：
 - 机器可设置预设头像，可在侧栏右键菜单中拖动排序，并可在机器栏和切换面板中隐藏空闲机器
 - 机器页面可在机器的主目录打开终端，最近会话可跳转到该机器的完整会话历史
 
+- Qoder CLI 成为第四个 Agent（`happy qoder`），支持账号模型与推理强度、权限模式与 plan 模式、会话历史、恢复、分叉和 `/duplicate`、图片输入和上下文用量
+- 命令面板可检索所有机器的消息历史，按会话归组命中结果，保留搜索历史，空闲时以磁贴显示命令
+- Web 和桌面端可在应用底部停靠终端面板，在任何页面下都能使用所有 shell
+- 新建会话页把会话类型、机器、路径和仓库收进一张卡片，从 AI 标签选择 Agent，并在会话开始前提供 `/` 命令和 `$` skill 补全、文件附件和定时发送
+- 用 ↑/↓ 调出已发送的消息，`/` 和 `$` 补全按匹配度和最近使用排序
+- 有定时消息的会话在列表中标记，悬停卡片显示倒计时；列表按最后一条消息时间排序
+- iOS 和安卓与 Web 一样折叠回合，发送时上一回合滑动收起，thinking 像工具调用一样折叠，自动压缩与手动 `/compact` 一样提示
+- 所有底部弹层外观统一，键盘收起后回到原位
+
 ### CLI
 - `happy update` 自更新、`happy --version` 显示所有 Agent 版本
 - 守护进程开机自启动（`happy daemon enable/disable`）、重启命令
@@ -334,6 +345,8 @@ Happy Next 是原版 Happy 的重大演进，以下是亮点：
 
 - Happy CLI v0.12.0 把附件交给 agent、按 agent 隔离会话配置，并修复 `sudo happy update` 误报未登录；新建的 Codex 会话使用 Codex v0.162.0
 - 新建的 Codex 会话使用 Codex v0.162.1
+
+- Happy CLI v0.13.0 新增 Qoder，机器空闲时自动安装新版本（App 可查看状态并立即更新），通过免密 sudo 升级 root 拥有的全局安装，归档每个会话的消息供检索，并把 Gemini 和 Qoder 的推理合并为一条 thinking 消息
 
 ### Bug 修复和稳定性
 - 255+ Bug 修复：消息发送可靠性、会话生命周期、Markdown 渲染、导航、语音、DooTask、共享

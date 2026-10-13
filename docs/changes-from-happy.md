@@ -11,7 +11,7 @@ This document summarizes what changed in Happy Next compared to the original Hap
 | Desktop apps | Direct-download macOS 12+ Universal and Windows x64/ARM64 clients with native windows, tray residency, notifications, shortcuts, diagnostics, and signed automatic updates |
 | Orchestrator | Multi-agent DAG task scheduling with per-task model, working directory, real-time monitoring, execution history, and linked run navigation |
 | Pending queue | Server-side message queue with auto-dispatch, queue panel UI, send-now, plus edit and pause/draft of queued messages |
-| Multi-agent | Claude Code, Codex, and Gemini are all first-class agents |
+| Multi-agent | Claude Code, Codex, Gemini, and Qoder are all first-class agents |
 | GitHub | Connected repositories, issue and pull request workflows, comments, and linked AI sessions |
 | Voice | Volcano (Doubao) real-time voice gateway with streaming speech, native iOS voice calls, selectable timbre/speech rate, E2E-encrypted settings sync, plus streaming read-aloud (TTS) of AI replies with a global playback queue and floating player |
 | Workspaces | Multi-repo worktree creation, switching, archiving, and PR flows |
@@ -27,7 +27,6 @@ This document summarizes what changed in Happy Next compared to the original Hap
 | Performance | Payload trimming, lazy-load diffs, rendering optimization, incremental session catch-up on open |
 | CLI | Daemon auto-start, Codex fast mode, receipt tracking, self-upgrade |
 | MCP tools | `preview_html`, colon-separated tool naming, dual-mode long-press copy |
-| Profiles | AI backend profiles with presets for DeepSeek, Z.AI, OpenAI, Azure, Google AI |
 | Rebrand | CLI published as `happy-next-cli`, binary remains `happy` |
 
 ---
@@ -66,12 +65,13 @@ A multi-agent orchestration system that lets you define task dependency graphs a
 - **MCP tool integration**: orchestrator tools registered as MCP tools with auto-filled working directory
 - **Tool description rewriting**: orchestrator rewrites tool descriptions for better agent comprehension
 - **Complete i18n**: all orchestrator UI fully internationalized
-- **CLI auto-install**: the Happy CLI installs the orchestrator skill and `/orchestrator` slash commands on startup, so you can fan a task out to parallel or dependency-ordered Claude / Codex / Gemini agents straight from the CLI
+- **CLI auto-install**: the Happy CLI installs the orchestrator skill and `/orchestrator` slash commands on startup, so you can fan a task out to parallel or dependency-ordered Claude / Codex / Gemini / Qoder agents straight from the CLI
 - **`/preview-html` built-in command**: a built-in CLI slash command that generates a self-contained HTML document and previews it directly in the app
 - **Run and task durations**: runs and tasks show how long they take, counting up while running
 - **Simplified run filters**: All, Active, Completed, Failed and Cancelled, which add up to All
 - **Final-message results**: a task's result is just the agent's final message, and running tasks can be followed live
 - **Follow-ups report to the sender**: a resumed task reports back to the session that sent the follow-up, and the run is listed in both sessions
+- **`orchestrator_exec`**: run shell commands on one or every online machine; long output is saved on the machine
 
 ## Pending Message Queue
 
@@ -84,16 +84,16 @@ Messages sent while the CLI is busy are now queued and delivered automatically.
 - **Send-now option**: bypass queue and send immediately
 - **Edit & pause/draft**: edit a queued message before it sends, or pause it / save it as a draft instead of dispatching
 - **Reconnect sync**: queue state syncs on WebSocket reconnection
-- **Concurrent safety**: hardened dispatch concurrency and cleanup semantics, with dispatch timing tuned (3s) to avoid dropping a queued message on a busy CLI
+- **Concurrent safety**: hardened dispatch concurrency and cleanup semantics, and the next queued message goes out as soon as the turn ends
 - **Scheduled messages**: schedule a message to send later from the composer's add menu — in 30 minutes, in an hour, after the usage limit resets, or at a time you pick
 - **Persistent message cache**: session messages are stored locally so reopening a conversation can show existing history faster
 
 ## Multi-Agent Support
 
-The original Happy only supported Claude Code. Happy Next treats Claude Code, Codex, and Gemini as equal first-class agents.
+The original Happy only supported Claude Code. Happy Next treats Claude Code, Codex, Gemini, and Qoder as equal first-class agents.
 
-- **Multi-agent history page** with per-provider tabs (Claude / Codex / Gemini)
-- **Session resume and duplicate/fork** for all three agents
+- **Multi-agent history page** with per-provider tabs (Claude / Codex / Gemini / Qoder)
+- **Session resume and duplicate/fork** for all four agents
 - **Codex archive synchronization**: archive actions update native Codex history, keep archived state consistent in the app, and support restoring archived sessions when continuing work
 - **Reliable Codex forks**: improved duplication and forking with clear active-session conflict errors
 - **`/duplicate` slash command**: opens a message picker to fork a session from any point in the conversation — including directly from an AI reply — creating a new session with history up to the selected message and reliably resolving the corresponding user-message target
@@ -103,7 +103,10 @@ The original Happy only supported Claude Code. Happy Next treats Claude Code, Co
 - **Claude Opus 5 and Claude Sonnet 5** added with 1M context, current reasoning-effort presets, fast-mode capability detection, and updated cost tracking
 - **Refreshed Gemini catalog** adds Gemini 3.8 Flash and Gemini 3.7 Flash alongside the existing Gemini models
 - **Remote model catalog**: models are served by the server, so new ones show up without an app update — now with Claude Opus 5.5, Claude Sonnet 5.5, GPT-6.1-Sol, GPT-6-Sol, and GPT-6-Luna
-- **Streamlined model picker**: Claude 1M-context variants collapse into a single toggle (7 models instead of 12); reasoning-effort presets show side by side on wide screens and Claude defaults to High effort
+- **Streamlined model picker**: one entry per Claude model at its full context window; reasoning-effort presets show side by side on wide screens and Claude defaults to High effort
+- **Claude context window**: the context bar follows the window Claude Code actually uses, and Qoder and Gemini sessions show context usage
+- **Qoder over ACP**: the account's models and reasoning efforts, Qoder's permission modes, and its plan mode shown apart from them
+- **Shell command rules**: "don't ask again" on a shell command picks which programs or subcommands it covers, for all four agents
 - **GPT-6 Astra and GPT-5.6 catalog support**: current model families include their reasoning-effort and context settings
 - **Codex v0.155.1**: bundled Codex CLI updated with current App-Server interaction support
 - **Cost tracking** with accurate token usage for Claude models (cache tokens, reasoning tokens)
@@ -206,16 +209,6 @@ Share AI coding sessions with others through direct invites or public links, wit
 - **Server-side access control** module with permission validation for messages, RPC calls, and voice
 - **Access logging** for public share views
 - **Shared-session image uploads**: recipients of a session shared with them can upload chat images
-
-## AI Backend Profiles
-
-Configure alternative LLM backends for Claude Code through environment variable profiles.
-
-- **Built-in provider presets**: Anthropic (default), DeepSeek, Z.AI, OpenAI, Azure OpenAI, Google AI
-- **Environment variable mapping**: automatically maps provider-specific env vars (e.g. `DEEPSEEK_*` → `ANTHROPIC_*`)
-- **Custom profiles**: create profiles with arbitrary environment variables and `${VAR:-default}` expansion
-- **Per-profile settings**: tmux session name, startup scripts, default permission mode, agent type compatibility
-- **Profile editor**: full-page settings UI for creating and editing profiles
 
 ## DooTask Integration
 
@@ -386,11 +379,21 @@ Extensive improvements to the chat and session management experience.
 - **Machine right-click menu and idle hiding**: right-click a machine for new session, open terminal and details, and hide idle machines from the rail and the switcher
 - **Machine page**: reordered rows with icons, a terminal in the machine's home directory, and recent sessions that link to that machine's full session history
 
+- **Qoder agent**: Qoder CLI is a fourth agent (`happy qoder`), with its account's models and reasoning efforts, permission modes and plan mode, session history, resume, forks and `/duplicate`, image input and context usage
+- **Command palette search**: search every machine's message history, with hits grouped by session, a search history, and command tiles when idle
+- **Terminal panel**: a terminal panel docks along the bottom of the app on web and desktop, holding every shell under whatever page is open
+- **New session card**: session type, machine, path and repos sit in one animated card, the agent is picked from an AI tab, and `/` command and `$` skill autocomplete, file attachments and scheduled send work before the session starts
+- **Input history**: recall sent messages with ArrowUp/ArrowDown, and `/` and `$` suggestions rank by match quality and recent use
+- **Scheduled message markers**: sessions with scheduled messages are marked in the list with a countdown in the hover card, and the list sorts by last message time
+- **Native folding**: turns fold on iOS and Android as on web, the previous turn slides shut when you send, and thinking folds like a tool call
+- **Compaction notice**: automatic compaction is announced like a manual `/compact`
+- **Bottom sheets**: every bottom sheet shares one look and returns to its place when the keyboard hides
+
 ## CLI Improvements
 
 The CLI (`happy-next-cli`) received substantial upgrades.
 
-- **Multi-agent support**: Claude Code, Codex (via App-Server backend), and Gemini as first-class agents
+- **Multi-agent support**: Claude Code, Codex (via App-Server backend), Gemini, and Qoder as first-class agents
 - **Session resume/duplicate** for all agents with proper message backfill
 - **Multi-repo worktree** workspace creation/cleanup via daemon RPC
 - **Diff processing**: per-file +N/-N statistics for all agents
@@ -442,6 +445,8 @@ The CLI (`happy-next-cli`) received substantial upgrades.
 - **Happy CLI v0.12.0 with Codex v0.162.0**: attached files are sent to the agent, session profiles stay separate per agent, and `sudo happy update` no longer misreports not-logged-in
 - **Codex v0.162.1**: new Codex sessions start on Codex v0.162.1
 
+- **Happy CLI v0.13.0**: adds Qoder, installs new releases by itself once the machine is idle (the app shows the status and can update now), upgrades a root-owned global install through passwordless sudo, archives each session's messages for search, and sends Gemini's and Qoder's reasoning as one thinking message
+
 ## Server
 
 - **v3 messages API** with batch seq allocation and cursor pagination
@@ -454,6 +459,7 @@ The CLI (`happy-next-cli`) received substantial upgrades.
 - **Public share access logging**
 - **Session pending queue API**: server-side message queue with auto-dispatch
 - **Session spawning endpoint**: HTTP endpoint for external session creation
+- **Last message time**: the server tracks each session's last message time for sorting and the command palette
 
 ## UI & Polish
 

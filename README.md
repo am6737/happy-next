@@ -113,29 +113,31 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Built-in `/preview-html` slash command — generate a self-contained HTML document from the CLI and preview it directly in the app
 - Runs and tasks show how long they take, run filters are simplified to All, Active, Completed, Failed and Cancelled, and a task's result is just the agent's final message, followed live while it runs
 - A resumed task reports back to the session that sent the follow-up, and the run is listed in both sessions
+- `orchestrator_exec` runs shell commands on one or every online machine, with long output saved on the machine
 
 ### Pending Message Queue
 - Messages sent while the CLI is busy are queued server-side and auto-dispatched
 - Queue panel UI with image count badges and send-now option
 - Edit a queued message before it sends, or pause it / save it as a draft instead of dispatching
-- Reconnect sync and concurrent dispatch safety, with dispatch timing tuned to avoid dropping a queued message on a busy CLI
+- Reconnect sync and concurrent dispatch safety, and the next queued message goes out as soon as the turn ends
 - Schedule a message to send later from the composer's add menu — in 30 minutes, in an hour, after the usage limit resets, or at a time you pick
 
-### Multi-Agent (Claude Code + Codex + Gemini)
-- All three agents are first-class citizens with session resume, duplicate/fork, and history
+### Multi-Agent (Claude Code + Codex + Gemini + Qoder)
+- All four agents are first-class citizens with session resume, duplicate/fork, and history
 - Multi-agent history page with per-provider tabs, device and agent filter dropdowns
 - Per-agent model selection, cost tracking, and context window display
 - ACP and App-Server (JSON-RPC) backends for Codex, with Codex v0.155.1 and fast mode
 - Codex archive actions synchronize with native history, show archived state consistently, and support restoring archived sessions when continuing work
 - Reliable Codex duplication and forking, with clear active-session conflict errors
 - Codex interactive questions and approval requests render in the app, including choices, custom Other values, free-form text, and masked sensitive answers
-- AI backend profiles with presets for DeepSeek, Z.AI, OpenAI, Azure, and Google AI
 - Claude Opus 4.8 support with empty thinking block filtering for clean 4.x rendering
 - Claude Fable 5.1 and Fable 5 in the Claude model catalog, with 1M context and low / medium / high / xhigh / max reasoning effort presets
 - Claude Opus 5 and Claude Sonnet 5 with 1M context, current reasoning-effort presets, fast-mode capability detection, and updated cost tracking
-- Streamlined model picker: Claude 1M-context variants collapse into a single toggle (7 models instead of 12), reasoning-effort presets show side by side on wide screens, and Claude defaults to High effort
+- Streamlined model picker: one entry per Claude model at its full context window, reasoning-effort presets side by side on wide screens, and Claude defaults to High effort; the context bar follows the window Claude Code actually uses
 - GPT-6 Astra catalog support plus GPT-5.6 Sol, Terra, and Luna with their current reasoning-effort and context settings
 - Gemini 3.8 Flash and Gemini 3.7 Flash join the refreshed Gemini catalog alongside the existing Gemini models
+- Qoder CLI over ACP, with the account's models and reasoning efforts, permission modes and plan mode, and context usage for Qoder and Gemini sessions
+- "Don't ask again" on a shell command picks which programs or subcommands it covers, for all four agents
 - The model catalog is served by the server, so new models show up without an app update — now with Claude Opus 5.5, Claude Sonnet 5.5, GPT-6.1-Sol, GPT-6-Sol, and GPT-6-Luna
 
 ### Voice Assistant (Happy Voice)
@@ -302,6 +304,15 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Machines get preset avatars, can be reordered by dragging in the sidebar from its right-click menu, and idle machines can be hidden from the rail and the switcher
 - The machine page opens a terminal in the machine's home directory, and its recent sessions link to that machine's full session history
 
+- Qoder CLI is a fourth agent (`happy qoder`), with its account's models and reasoning efforts, permission modes and plan mode, session history, resume, forks and `/duplicate`, image input and context usage
+- The command palette searches every machine's message history, groups hits by session, keeps a search history, and shows its commands as tiles when idle
+- A terminal panel docks along the bottom of the app on web and desktop, holding every shell under whatever page is open
+- The new session screen gathers session type, machine, path and repos into one card, picks the agent from an AI tab, and offers `/` command and `$` skill autocomplete, file attachments and scheduled send before the session starts
+- Recall sent messages with ArrowUp/ArrowDown, and `/` and `$` suggestions rank by match quality and recent use
+- Sessions with scheduled messages are marked in the list with a countdown in the hover card, and the list sorts by last message time
+- Turns fold on iOS and Android as on web, the previous turn slides shut when you send, thinking folds like a tool call, and automatic compaction is announced like a manual `/compact`
+- Every bottom sheet shares one look and returns to its place when the keyboard hides
+
 ### CLI
 - `happy update` self-upgrade, `happy --version` with all agent versions
 - Daemon auto-start on boot (`happy daemon enable/disable`), restart command
@@ -332,6 +343,8 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 
 - Happy CLI v0.12.0 sends attached files to the agent, keeps session profiles separate per agent, and no longer misreports not-logged-in on `sudo happy update`; new Codex sessions start on Codex v0.162.0
 - New Codex sessions start on Codex v0.162.1
+
+- Happy CLI v0.13.0 adds Qoder, installs new releases by itself once the machine is idle (the app shows the status and can update now), upgrades a root-owned global install through passwordless sudo, archives each session's messages for search, and sends Gemini's and Qoder's reasoning as one thinking message
 
 ### Bug Fixes & Stability
 - 255+ bug fixes: message sending reliability, session lifecycle, Markdown rendering, navigation, voice, DooTask, sharing
