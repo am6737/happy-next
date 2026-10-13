@@ -190,7 +190,7 @@ const useConnectionStatusSubtitle = () => {
                     text: '',
                 };
         }
-    }, [socketStatus, theme]);
+    }, [socketStatus, theme.colors.status]);
 };
 
 // Header title that opens a picker: the title with a chevron. It has to be a custom title view (a

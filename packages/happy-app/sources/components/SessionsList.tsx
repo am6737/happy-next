@@ -1054,7 +1054,7 @@ export function SessionsList() {
                 )}
             </View>
         );
-    }, [theme, selectedGroup, isDisconnected, canStartAnywhere, activeTab, router]);
+    }, [theme.colors.textSecondary, theme.colors.button.primary.tint, selectedGroup, isDisconnected, canStartAnywhere, activeTab, router]);
 
     const isEmpty = dataWithSelected?.length === 0;
     // The empty state fills exactly the visible part of the viewport, so it centers itself and the

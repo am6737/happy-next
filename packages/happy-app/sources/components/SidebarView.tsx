@@ -19,6 +19,7 @@ import { useInboxHasContent } from '@/hooks/useInboxHasContent';
 import { useDootaskProfile, useProfile } from '@/sync/storage';
 import { getDesktopPlatform } from '@/desktop/desktopWindowUtils';
 import { useSessionListScope } from '@/hooks/useSessionListScope';
+import type { SessionMachineGroup } from './sessionListScope';
 import { useOpenTerminal, useTerminalPanelAvailable } from '@/hooks/useOpenTerminal';
 import { toggleTerminalPanel } from '@/terminal/terminalPanel';
 import { mergeMachineOrder } from '@/utils/machineOrder';
@@ -151,9 +152,30 @@ const SidebarMachineRail = React.memo(({ header }: { header?: React.ReactNode })
     const [machineOrder, setMachineOrder] = useSettingMutable('machineOrder');
     // The saved order as reordering began, put back if it is cancelled.
     const orderBeforeReordering = React.useRef<string[] | null>(null);
+    const machineOrderRef = React.useRef(machineOrder);
+    machineOrderRef.current = machineOrder;
+    const groups = useStableRailGroups(scope.groups);
+    const handleSettings = React.useCallback(() => router.navigate('/settings'), [router]);
+    const handleMachineDetails = React.useCallback((machineId: string) => router.navigate(`/machine/${machineId}`), [router]);
+    const handleNewSession = React.useCallback((machineId: string) => router.push({ pathname: '/new', params: { machineId } }), [router]);
+    const handleOpenTerminal = React.useCallback((machineId: string) => openMachineTerminal(machineId), [openMachineTerminal]);
+    const handleReorderMachines = React.useCallback((machineIds: string[]) => {
+        setMachineOrder(mergeMachineOrder(machineOrderRef.current, machineIds));
+    }, [setMachineOrder]);
+    const handleReorderingChange = React.useCallback((change: 'start' | 'done' | 'cancel') => {
+        const current = machineOrderRef.current;
+        if (change === 'start') orderBeforeReordering.current = current;
+        else if (change === 'cancel') {
+            const before = orderBeforeReordering.current;
+            if (before && (before.length !== current.length || before.some((id, i) => id !== current[i]))) {
+                setMachineOrder(before);
+            }
+        }
+        if (change !== 'start') orderBeforeReordering.current = null;
+    }, [setMachineOrder]);
     return (
         <MachineRail
-            groups={scope.groups}
+            groups={groups}
             selection={scope.selection}
             onSelect={scope.setSelection}
             hasShared={scope.hasShared}
@@ -162,29 +184,40 @@ const SidebarMachineRail = React.memo(({ header }: { header?: React.ReactNode })
             sharedByMeDot={scope.sharedByMeDot}
             sessionCount={scope.activeSessions.length}
             settingsActive={pathname.startsWith('/settings')}
-            onSettings={() => router.navigate('/settings')}
+            onSettings={handleSettings}
             machineDetailsActive={pathname === `/machine/${scope.selection}`}
-            onMachineDetails={(machineId) => router.navigate(`/machine/${machineId}`)}
-            onNewSession={(machineId) => router.push({ pathname: '/new', params: { machineId } })}
-            onOpenTerminal={(machineId) => openMachineTerminal(machineId)}
+            onMachineDetails={handleMachineDetails}
+            onNewSession={handleNewSession}
+            onOpenTerminal={handleOpenTerminal}
             onToggleTerminalPanel={terminalPanelAvailable ? toggleTerminalPanel : undefined}
             hideIdleMachines={hideIdleMachines}
             onHideIdleMachinesChange={setHideIdleMachines}
-            onReorderMachines={(machineIds) => setMachineOrder(mergeMachineOrder(machineOrder, machineIds))}
-            onReorderingChange={(change) => {
-                if (change === 'start') orderBeforeReordering.current = machineOrder;
-                else if (change === 'cancel') {
-                    const before = orderBeforeReordering.current;
-                    if (before && (before.length !== machineOrder.length || before.some((id, i) => id !== machineOrder[i]))) {
-                        setMachineOrder(before);
-                    }
-                }
-                if (change !== 'start') orderBeforeReordering.current = null;
-            }}
+            onReorderMachines={handleReorderMachines}
+            onReorderingChange={handleReorderingChange}
             header={header}
         />
     );
 });
+
+/**
+ * The rail shows each machine's name, presence, dot and session count, never the sessions
+ * themselves — but every streamed message replaces a session, and with it the groups. The
+ * previous groups are kept while nothing the rail shows has changed, so it doesn't re-render.
+ */
+function useStableRailGroups(groups: SessionMachineGroup[]): SessionMachineGroup[] {
+    const previous = React.useRef(groups);
+    const same = previous.current.length === groups.length && previous.current.every((group, i) => {
+        const next = groups[i];
+        return group.id === next.id
+            && group.name === next.name
+            && group.online === next.online
+            && group.unknown === next.unknown
+            && group.dot === next.dot
+            && group.sessions.length === next.sessions.length;
+    });
+    if (!same) previous.current = groups;
+    return previous.current;
+}
 
 export const SidebarView = React.memo((props: SidebarViewProps) => {
     const styles = stylesheet;

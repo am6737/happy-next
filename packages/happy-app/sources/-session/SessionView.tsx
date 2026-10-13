@@ -181,46 +181,80 @@ export const SessionView = React.memo((props: { id: string }) => {
         };
     }, [isDataReady, session, sessionId, sessionNotFound]);
 
-    // Compute header props based on session state
-    const headerProps = useMemo(() => {
-        if (!isDataReady) {
-            // Loading state - show empty header
-            return {
-                title: '',
-                subtitle: undefined,
-                avatarId: undefined,
-                onAvatarPress: undefined,
-                isConnected: false,
-                flavor: null
-            };
-        }
+    // Compute header props based on session state. Keyed on what the header shows rather than on
+    // the session object, which every streamed message replaces: the header options below follow
+    // these, and new options re-render the whole stack navigator.
+    const headerTitle = !isDataReady
+        ? ''
+        : session
+            ? getSessionName(session)
+            : (sessionNotFound ? t('errors.sessionDeleted') : '');
+    const headerSubtitle = isDataReady && session?.metadata?.path
+        ? formatPathRelativeToHome(session.metadata.path, session.metadata?.homeDir)
+        : undefined;
+    const headerAvatarId = isDataReady && session ? getSessionAvatarId(session) : undefined;
+    const headerConnected = isDataReady && session?.presence === 'online';
+    const hasHeaderSession = isDataReady && !!session;
+    const handleAvatarPress = React.useCallback(() => {
+        router.push(`/session/${sessionId}/info`);
+    }, [router, sessionId]);
+    const headerProps = useMemo(() => ({
+        title: headerTitle,
+        subtitle: headerSubtitle,
+        avatarId: headerAvatarId,
+        onAvatarPress: hasHeaderSession ? handleAvatarPress : undefined,
+        isConnected: headerConnected,
+    }), [headerTitle, headerSubtitle, headerAvatarId, hasHeaderSession, handleAvatarPress, headerConnected]);
 
-        if (!session) {
-            // Show deleted message only if we've confirmed session doesn't exist
-            // Otherwise show empty header while waiting for data
-            return {
-                title: sessionNotFound ? t('errors.sessionDeleted') : '',
-                subtitle: undefined,
-                avatarId: undefined,
-                onAvatarPress: undefined,
-                isConnected: false,
-                flavor: null
-            };
-        }
-
-        // Normal state - show session info
-        const isConnected = session.presence === 'online';
-        return {
-            title: getSessionName(session),
-            subtitle: session.metadata?.path ? formatPathRelativeToHome(session.metadata.path, session.metadata?.homeDir) : undefined,
-            avatarId: getSessionAvatarId(session),
-            onAvatarPress: () => router.push(`/session/${sessionId}/info`),
-            isConnected: isConnected,
-            flavor: session.metadata?.flavor || null,
-            sessionIcon: session.metadata?.sessionIcon || null,
-            tintColor: isConnected ? '#000' : '#8E8E93'
-        };
-    }, [session, isDataReady, sessionId, router, sessionNotFound]);
+    const hasSession = !!session;
+    const isSharedSession = !!session?.accessLevel;
+    // Stack.Screen hands new options to the navigator, which re-renders the whole stack and its
+    // headers, so they are rebuilt only when something they show changes.
+    // `theme` from useUnistyles is a fresh proxy on every render, so the memo keys on the colors it reads.
+    const headerSubtitleColor = theme.colors.textSecondary;
+    const headerTintColor = theme.colors.header.tint;
+    const screenOptions = useMemo(() => ({
+        headerShown: !shouldHideHeader,
+        ...(shouldUseTransparentNativeHeader ? softHeaderOptions : {}),
+        ...(shouldUseTransparentNativeHeader ? floatingComposerScreenOptions : {}),
+        headerTitleAlign: (isNarrowPhone ? 'left' : 'center') as 'left' | 'center',
+        // The soft scroll-edge effect needs plain strings: a custom title view makes
+        // UIKit drop both the effect and the subtitle (iOS centers the title regardless).
+        headerTitle: shouldUseTransparentNativeHeader ? headerProps.title : () => (
+            <ChatHeaderTitle
+                title={headerProps.title}
+                subtitle={headerProps.subtitle}
+                align={isNarrowPhone ? 'left' : 'center'}
+                width={isNarrowPhone ? (Platform.OS === 'ios' ? leftAlignTitleWidth : undefined) : headerTitleWidth}
+            />
+        ),
+        headerSubtitle: shouldUseTransparentNativeHeader ? headerProps.subtitle : undefined,
+        headerSubtitleColor: shouldUseTransparentNativeHeader ? headerSubtitleColor : undefined,
+        headerLeft: Platform.OS === 'web' ? () => (
+            <HeaderBackButton
+                tintColor={headerTintColor}
+                onPress={handleBackPress}
+            />
+        ) : undefined,
+        headerRight: hasSession ? () => (
+            <ChatHeaderRight
+                avatarId={headerProps.avatarId}
+                isConnected={headerProps.isConnected}
+                onAvatarPress={headerProps.onAvatarPress}
+                hasRuns={hasRuns}
+                runningTaskCount={runningTaskCount}
+                onOpenRuns={handleOpenSessionRuns}
+                // The + opens /new pre-filled with this session's machine and path,
+                // which only works on a machine of my own — a session shared with me
+                // points at the owner's.
+                onNewSession={isSharedSession ? undefined : handleNewSession}
+            />
+        ) : undefined,
+    }), [
+        shouldHideHeader, shouldUseTransparentNativeHeader, isNarrowPhone, headerProps, leftAlignTitleWidth,
+        headerTitleWidth, headerSubtitleColor, headerTintColor, handleBackPress, hasSession, hasRuns, runningTaskCount, handleOpenSessionRuns,
+        isSharedSession, handleNewSession,
+    ]);
 
     return (
         <>
@@ -246,46 +280,7 @@ export const SessionView = React.memo((props: { id: string }) => {
             )}
 
             {/* Native header config — iOS uses system header, Android/Web go through createHeader */}
-            <Stack.Screen
-                options={{
-                    headerShown: !shouldHideHeader,
-                    ...(shouldUseTransparentNativeHeader ? softHeaderOptions : {}),
-                    ...(shouldUseTransparentNativeHeader ? floatingComposerScreenOptions : {}),
-                    headerTitleAlign: isNarrowPhone ? 'left' : 'center',
-                    // The soft scroll-edge effect needs plain strings: a custom title view makes
-                    // UIKit drop both the effect and the subtitle (iOS centers the title regardless).
-                    headerTitle: shouldUseTransparentNativeHeader ? headerProps.title : () => (
-                        <ChatHeaderTitle
-                            title={headerProps.title}
-                            subtitle={headerProps.subtitle}
-                            align={isNarrowPhone ? 'left' : 'center'}
-                            width={isNarrowPhone ? (Platform.OS === 'ios' ? leftAlignTitleWidth : undefined) : headerTitleWidth}
-                        />
-                    ),
-                    headerSubtitle: shouldUseTransparentNativeHeader ? headerProps.subtitle : undefined,
-                    headerSubtitleColor: shouldUseTransparentNativeHeader ? theme.colors.textSecondary : undefined,
-                    headerLeft: Platform.OS === 'web' ? () => (
-                        <HeaderBackButton
-                            tintColor={theme.colors.header.tint}
-                            onPress={handleBackPress}
-                        />
-                    ) : undefined,
-                    headerRight: session ? () => (
-                        <ChatHeaderRight
-                            avatarId={headerProps.avatarId}
-                            isConnected={headerProps.isConnected}
-                            onAvatarPress={headerProps.onAvatarPress}
-                            hasRuns={hasRuns}
-                            runningTaskCount={runningTaskCount}
-                            onOpenRuns={handleOpenSessionRuns}
-                            // The + opens /new pre-filled with this session's machine and path,
-                            // which only works on a machine of my own — a session shared with me
-                            // points at the owner's.
-                            onNewSession={session.accessLevel ? undefined : handleNewSession}
-                        />
-                    ) : undefined,
-                }}
-            />
+            <Stack.Screen options={screenOptions} />
 
             {/* Content based on state */}
             <View style={{ flex: 1 }}>
@@ -458,6 +453,9 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
     // stuck network falls through to "refresh failed" instead of spinning forever).
     const isListRefreshing = messagesFetching && refreshGateOpen;
 
+    // useSessionStatus builds a new object on every render; keyed on it, the composer's status would
+    // be new each time and re-render the composer with every streamed message.
+    const { statusText, statusColor, statusDotColor, isPulsing: statusPulsing, state: statusState } = sessionStatus;
     const inputConnectionStatus = React.useMemo(() => {
         if (isListRefreshing) {
             return {
@@ -485,13 +483,13 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
             };
         }
         return {
-            text: sessionStatus.statusText,
-            color: sessionStatus.statusColor,
-            dotColor: sessionStatus.statusDotColor,
-            isPulsing: sessionStatus.isPulsing,
-            ...(sessionStatus.state === 'permission_required' && { action: 'openPermission' as const }),
+            text: statusText,
+            color: statusColor,
+            dotColor: statusDotColor,
+            isPulsing: statusPulsing,
+            ...(statusState === 'permission_required' && { action: 'openPermission' as const }),
         };
-    }, [isListRefreshing, silentRefreshPhase, isRefreshingStatus, sessionStatus, theme.colors.status.connecting, theme.colors.status.error, handleRetryStatusRefresh]);
+    }, [isListRefreshing, silentRefreshPhase, isRefreshingStatus, statusText, statusColor, statusDotColor, statusPulsing, statusState, theme.colors.status.connecting, theme.colors.status.error, handleRetryStatusRefresh]);
 
     // Ref for the input component (used for web auto-focus)
     const inputRef = React.useRef<MultiTextInputHandle>(null);
@@ -1322,6 +1320,117 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
         />
     ) : null;
 
+    // The composer is memoized, and every streamed message re-renders this screen: handing it fresh
+    // callbacks and objects each time would re-render it — and re-measure its textarea — per message.
+    const handleSendRef = React.useRef<(textSnapshot?: string) => Promise<void>>(async () => {});
+    handleSendRef.current = async (textSnapshot?: string) => {
+        // Block sending during CLI upgrade
+        if (session.upgrading) {
+            Modal.alert(
+                t('sessionInfo.cliUpgradeAvailable'),
+                t('sessionInfo.cliUpgradeSendBlocked')
+            );
+            return;
+        }
+
+        const messageToSend = (textSnapshot ?? message).trim();
+        if (messageToSend || images.length > 0 || fileAttachments.files.length > 0) {
+            const socketStatus = storage.getState().socketStatus;
+            log.log(`[SEND_DEBUG][UI] tap_send sid=${sessionId} hasText=${messageToSend.length > 0} images=${images.length} isSending=${isSending} socket=${socketStatus}`);
+
+            // Handle /duplicate command locally
+            if (messageToSend.toLowerCase() === '/duplicate') {
+                setMessage('');
+                clearDraft();
+                handleOpenDuplicateSheet();
+                return;
+            }
+
+            if (filesBlockSend()) return;
+
+            // Remembered before the send resolves so a failed message can still be recalled.
+            rememberSentInput(messageToSend);
+            rememberSentSuggestions(session.metadata?.flavor ?? 'claude', messageToSend);
+
+            const imagesToSend = images.length > 0 ? [...images] : undefined;
+            const contentForRetry = messageToSend + JSON.stringify(imagesToSend || []) + JSON.stringify(attachments);
+
+            // Check if this is a retry of the same content
+            const existingLocalId = failedMessageRef.current?.content === contentForRetry
+                ? failedMessageRef.current.localId
+                : undefined;
+
+            // Set sending state
+            setIsSending(true);
+            if (imagesToSend) {
+                setIsUploadingImages(true);
+            }
+
+            try {
+                const result = await sync.sendOrQueueMessage(
+                    sessionId, messageToSend, undefined, imagesToSend, existingLocalId,
+                    // Clear input before message appears in the list
+                    () => {
+                        setMessage('');
+                        clearDraft();
+                        clearImages();
+                        clearFiles();
+                    },
+                    undefined,
+                    attachments,
+                );
+                const mode = result.success ? result.mode : 'failed';
+                const errorText = result.success ? 'none' : (result.error || 'none');
+                log.log(`[SEND_DEBUG][UI] send_result sid=${sessionId} success=${result.success} mode=${mode} localId=${result.localId} error=${errorText}`);
+
+                if (result.success) {
+                    failedMessageRef.current = null;
+                    trackMessageSent();
+                } else {
+                    failedMessageRef.current = { localId: result.localId, content: contentForRetry };
+                    log.log(`[SEND_DEBUG][UI] record_retry sid=${sessionId} localId=${result.localId} reason=${result.reason}`);
+                    Modal.alert(t('common.error'), t(sendFailureKey(result.reason)));
+                }
+            } finally {
+                setIsSending(false);
+                setIsUploadingImages(false);
+            }
+        }
+    };
+    const handleSend = React.useCallback((textSnapshot?: string) => handleSendRef.current(textSnapshot), []);
+    const handleAbort = React.useCallback(() => sessionAbort(sessionId), [sessionId]);
+    const handleFileViewerPress = React.useCallback(() => router.push(`/session/${sessionId}/files`), [router, sessionId]);
+    const usesDollarPrefix = session.metadata?.flavor === 'codex' || !!session.metadata?.codexSessionId;
+    const autocompletePrefixes = React.useMemo(() => usesDollarPrefix ? ['@', '/', '$'] : ['@', '/'], [usesDollarPrefix]);
+    const autocompleteSuggestions = React.useCallback((query: string) => getSuggestions(sessionId, query), [sessionId]);
+    const contextWindowSize = session.agentState?.contextWindowSize;
+    const latestUsage = session.latestUsage;
+    const usageData = React.useMemo(() => sessionUsage ? {
+        inputTokens: sessionUsage.inputTokens,
+        outputTokens: sessionUsage.outputTokens,
+        cacheCreation: sessionUsage.cacheCreation,
+        cacheRead: sessionUsage.cacheRead,
+        contextSize: sessionUsage.contextSize,
+        contextWindowSize: sessionUsage.contextWindowSize ?? contextWindowSize ?? undefined,
+    } : latestUsage ? {
+        inputTokens: latestUsage.inputTokens,
+        outputTokens: latestUsage.outputTokens,
+        cacheCreation: latestUsage.cacheCreation,
+        cacheRead: latestUsage.cacheRead,
+        contextSize: latestUsage.contextSize,
+        contextWindowSize: latestUsage.contextWindowSize ?? contextWindowSize ?? undefined,
+    } : undefined, [sessionUsage, latestUsage, contextWindowSize]);
+    const handleImagesChange = React.useCallback((newImages: { uri: string }[]) => {
+        // Handle image removal by finding removed index
+        // Since useImagePicker manages state, we call removeImage for each removed image
+        const currentUris = new Set(newImages.map(img => img.uri));
+        images.forEach((img, index) => {
+            if (!currentUris.has(img.uri)) {
+                removeImage(index);
+            }
+        });
+    }, [images, removeImage]);
+
     const input = canEdit ? (
         <AgentInput
             ref={inputRef}
@@ -1341,119 +1450,23 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
             metadata={session.metadata}
             agentModels={qoderModels}
             connectionStatus={inputConnectionStatus}
-            onSend={async (textSnapshot) => {
-                // Block sending during CLI upgrade
-                if (session.upgrading) {
-                    Modal.alert(
-                        t('sessionInfo.cliUpgradeAvailable'),
-                        t('sessionInfo.cliUpgradeSendBlocked')
-                    );
-                    return;
-                }
-
-                const messageToSend = (textSnapshot ?? message).trim();
-                if (messageToSend || images.length > 0 || fileAttachments.files.length > 0) {
-                    const socketStatus = storage.getState().socketStatus;
-                    log.log(`[SEND_DEBUG][UI] tap_send sid=${sessionId} hasText=${messageToSend.length > 0} images=${images.length} isSending=${isSending} socket=${socketStatus}`);
-
-                    // Handle /duplicate command locally
-                    if (messageToSend.toLowerCase() === '/duplicate') {
-                        setMessage('');
-                        clearDraft();
-                        handleOpenDuplicateSheet();
-                        return;
-                    }
-
-                    if (filesBlockSend()) return;
-
-                    // Remembered before the send resolves so a failed message can still be recalled.
-                    rememberSentInput(messageToSend);
-                    rememberSentSuggestions(session.metadata?.flavor ?? 'claude', messageToSend);
-
-                    const imagesToSend = images.length > 0 ? [...images] : undefined;
-                    const contentForRetry = messageToSend + JSON.stringify(imagesToSend || []) + JSON.stringify(attachments);
-
-                    // Check if this is a retry of the same content
-                    const existingLocalId = failedMessageRef.current?.content === contentForRetry
-                        ? failedMessageRef.current.localId
-                        : undefined;
-
-                    // Set sending state
-                    setIsSending(true);
-                    if (imagesToSend) {
-                        setIsUploadingImages(true);
-                    }
-
-                    try {
-                        const result = await sync.sendOrQueueMessage(
-                            sessionId, messageToSend, undefined, imagesToSend, existingLocalId,
-                            // Clear input before message appears in the list
-                            () => {
-                                setMessage('');
-                                clearDraft();
-                                clearImages();
-                                clearFiles();
-                            },
-                            undefined,
-                            attachments,
-                        );
-                        const mode = result.success ? result.mode : 'failed';
-                        const errorText = result.success ? 'none' : (result.error || 'none');
-                        log.log(`[SEND_DEBUG][UI] send_result sid=${sessionId} success=${result.success} mode=${mode} localId=${result.localId} error=${errorText}`);
-
-                        if (result.success) {
-                            failedMessageRef.current = null;
-                            trackMessageSent();
-                        } else {
-                            failedMessageRef.current = { localId: result.localId, content: contentForRetry };
-                            log.log(`[SEND_DEBUG][UI] record_retry sid=${sessionId} localId=${result.localId} reason=${result.reason}`);
-                            Modal.alert(t('common.error'), t(sendFailureKey(result.reason)));
-                        }
-                    } finally {
-                        setIsSending(false);
-                        setIsUploadingImages(false);
-                    }
-                }
-            }}
+            onSend={handleSend}
             isSending={isSending}
             onMicPress={micButtonState.onMicPress}
             isMicActive={micButtonState.isMicActive}
-            onAbort={() => sessionAbort(sessionId)}
+            onAbort={handleAbort}
             // A turn is in flight while it is thinking, while the send is still awaiting its
             // first signal, and while it is blocked on a permission request - all three can be
             // aborted; only the online-and-idle `waiting` state cannot.
             isBusy={sessionStatus.state === 'thinking' || sessionStatus.state === 'awaiting' || sessionStatus.state === 'permission_required'}
-            onFileViewerPress={() => router.push(`/session/${sessionId}/files`)}
+            onFileViewerPress={handleFileViewerPress}
             // Autocomplete configuration
-            autocompletePrefixes={(session.metadata?.flavor === 'codex' || session.metadata?.codexSessionId) ? ['@', '/', '$'] : ['@', '/']}
-            autocompleteSuggestions={(query) => getSuggestions(sessionId, query)}
-            usageData={sessionUsage ? {
-                inputTokens: sessionUsage.inputTokens,
-                outputTokens: sessionUsage.outputTokens,
-                cacheCreation: sessionUsage.cacheCreation,
-                cacheRead: sessionUsage.cacheRead,
-                contextSize: sessionUsage.contextSize,
-                contextWindowSize: sessionUsage.contextWindowSize ?? session.agentState?.contextWindowSize ?? undefined,
-            } : session.latestUsage ? {
-                inputTokens: session.latestUsage.inputTokens,
-                outputTokens: session.latestUsage.outputTokens,
-                cacheCreation: session.latestUsage.cacheCreation,
-                cacheRead: session.latestUsage.cacheRead,
-                contextSize: session.latestUsage.contextSize,
-                contextWindowSize: session.latestUsage.contextWindowSize ?? session.agentState?.contextWindowSize ?? undefined,
-            } : undefined}
+            autocompletePrefixes={autocompletePrefixes}
+            autocompleteSuggestions={autocompleteSuggestions}
+            usageData={usageData}
             alwaysShowContextSize={alwaysShowContextSize}
             images={images}
-            onImagesChange={(newImages) => {
-                // Handle image removal by finding removed index
-                // Since useImagePicker manages state, we call removeImage for each removed image
-                const currentUris = new Set(newImages.map(img => img.uri));
-                images.forEach((img, index) => {
-                    if (!currentUris.has(img.uri)) {
-                        removeImage(index);
-                    }
-                });
-            }}
+            onImagesChange={handleImagesChange}
             onImageButtonPress={handleImageButtonPress}
             imageMenuItems={imagePickerMenuItems}
             supportsImages={supportsImages}
