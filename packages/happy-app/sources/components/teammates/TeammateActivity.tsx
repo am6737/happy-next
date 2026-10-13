@@ -40,7 +40,7 @@ function TimelineRow({ item }: { item: TeammateTimelineItem }) {
         ? t(`teammates.failure.${run.failureReason ?? 'unknown'}`)
         : run.status === 'cancelled'
             ? t('teammates.runStatus.cancelled')
-            : [item.durationMs !== null ? formatDuration(item.durationMs) : null, run.costUsd !== null ? `$${run.costUsd.toFixed(2)}` : null].filter(Boolean).join(' · ');
+            : [item.durationMs !== null ? formatDuration(item.durationMs) : null, run.costUsd !== null ? `$${run.costUsd.toFixed(2)}` : null].filter(Boolean).join('  ');
     const open = run.sessionId ? () => navigateToSession(run.sessionId!)
         : task ? () => router.push(`/teammates/tasks/${encodeURIComponent(task.id)}`) : undefined;
     return (
@@ -77,7 +77,7 @@ function TaskRow({ task }: { task: TeammateTask }) {
             style={({ pressed }) => [styles.task, pressed && styles.pressed]}>
             <View style={styles.eventBody}>
                 <Text style={styles.eventTitle} numberOfLines={2}>{task.title}</Text>
-                <Text style={styles.eventDetail} numberOfLines={1}>{`${t(`teammates.taskStatus.${task.status}`)} · ${formatLastSeen(task.updatedAt)}`}</Text>
+                <Text style={styles.eventDetail} numberOfLines={1}>{`${t(`teammates.taskStatus.${task.status}`)}  ${formatLastSeen(task.updatedAt)}`}</Text>
             </View>
             <Ionicons name="chevron-forward" size={14} color={theme.colors.textSecondary} />
         </Pressable>

@@ -1,7 +1,7 @@
 import { TeammateEditLink } from '@/components/teammates/TeammateEditLink';
 import { storage } from '@/sync/storage';
-import { TeammateTaskIssueLink } from '@/components/teammates/TeammateTaskPanel';
 import { ChannelSettingsButton, channelTitle } from '@/components/teammates/ChannelList';
+import { TeammateTaskIssueLink } from '@/components/teammates/TeammateTask';
 import { Stack, useRouter } from 'expo-router';
 import 'react-native-reanimated';
 import * as React from 'react';

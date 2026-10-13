@@ -66,10 +66,8 @@ export default React.memo(function TeammateProfileScreen() {
     const editPath = `/teammates/${encodeURIComponent(id)}/edit` as const;
     const online = !!machine && isMachineOnline(machine);
     const workload = getTeammateWorkload(teammate, runs, tasks);
-    const statusText = [
-        online || !isActive ? t(`teammates.${workload}`) : t('teammates.offline'),
-        machine ? getMachineDisplayName(machine, machine.id, {}) : null,
-    ].filter(Boolean).join(' · ');
+    const statusText = online || !isActive ? t(`teammates.${workload}`) : t('teammates.offline');
+    const machineName = machine ? getMachineDisplayName(machine, machine.id, {}) : null;
     const statusColor = !isActive ? theme.colors.box.warning.text : online ? theme.colors.status.connected : theme.colors.textSecondary;
 
     const budget = spend ? spend.budgetUsd : teammate.monthlyBudgetUsd;
@@ -97,6 +95,7 @@ export default React.memo(function TeammateProfileScreen() {
                 <View style={styles.status}>
                     <StatusDot color={statusColor} />
                     <Text style={styles.statusText} numberOfLines={1}>{statusText}</Text>
+                    {machineName && <Text style={[styles.statusText, styles.machineName]} numberOfLines={1}>{machineName}</Text>}
                 </View>
 
                 {status === 'archived' ? (
@@ -133,9 +132,10 @@ export default React.memo(function TeammateProfileScreen() {
                         <StatusDot color={theme.colors.status.connected} size={8} />
                         <View style={styles.bannerBody}>
                             <Text style={styles.bannerTitle} numberOfLines={1}>{liveTask?.title ?? t(`teammates.trigger.${liveRun.trigger}`)}</Text>
-                            <Text style={styles.bannerDetail} numberOfLines={1}>
-                                {[t(`teammates.runStatus.${liveRun.status}`), openLive ? `${t('teammates.openSession')} ›` : null].filter(Boolean).join(' · ')}
-                            </Text>
+                            <View style={styles.bannerMeta}>
+                                <Text style={styles.bannerDetail} numberOfLines={1}>{t(`teammates.runStatus.${liveRun.status}`)}</Text>
+                                {openLive && <Text style={styles.bannerDetail} numberOfLines={1}>{`${t('teammates.openSession')} ›`}</Text>}
+                            </View>
                         </View>
                         <Text style={styles.elapsed}>{formatElapsed(now - (liveRun.startedAt ?? liveRun.queuedAt))}</Text>
                     </Pressable>
@@ -148,11 +148,9 @@ export default React.memo(function TeammateProfileScreen() {
                     </View>
                     <View style={styles.stat}>
                         <Text style={styles.statValue}>{stats.runCount}</Text>
-                        <Text style={styles.statLabel}>{t('teammates.detail.runs30')}</Text>
-                    </View>
-                    <View style={styles.stat}>
-                        <Text style={styles.statValue}>{stats.successRate !== null ? `${stats.successRate}%` : '—'}</Text>
-                        <Text style={styles.statLabel}>{t('teammates.detail.successRate')}</Text>
+                        <Text style={styles.statLabel}>
+                            {stats.failedCount ? t('teammates.detail.runs30Failed', { count: stats.failedCount }) : t('teammates.detail.runs30')}
+                        </Text>
                     </View>
                 </Card>
 
@@ -169,10 +167,7 @@ export default React.memo(function TeammateProfileScreen() {
 
                 {tab === 'activity' && (timeline.length ? <TeammateTimeline days={timeline} /> : !liveRun && (isActive ? (
                     <Pressable accessibilityRole="button" onPress={runSheet.present} style={({ pressed }) => [styles.firstTask, pressed && styles.pressed]}>
-                        <View style={styles.bannerBody}>
-                            <Text style={styles.bannerTitle}>{t('teammates.detail.firstTask')}</Text>
-                            <Text style={styles.bannerDetail}>{t('teammates.detail.firstTaskHint')}</Text>
-                        </View>
+                        <Text style={[styles.bannerTitle, styles.firstTaskTitle]}>{t('teammates.detail.firstTask')}</Text>
                         <Ionicons name="chevron-forward" size={16} color={theme.colors.textSecondary} />
                     </Pressable>
                 ) : <Text style={styles.empty}>{t('teammates.noRuns')}</Text>))}
@@ -222,6 +217,9 @@ const styles = StyleSheet.create((theme) => ({
         fontSize: 13,
         color: theme.colors.textSecondary,
     },
+    machineName: {
+        marginLeft: 6,
+    },
     archived: {
         ...Typography.default(),
         fontSize: 14,
@@ -269,6 +267,10 @@ const styles = StyleSheet.create((theme) => ({
         ...Typography.default(),
         fontSize: 15,
         color: theme.colors.text,
+    },
+    bannerMeta: {
+        flexDirection: 'row',
+        gap: 10,
     },
     bannerDetail: {
         ...Typography.default(),
@@ -332,6 +334,9 @@ const styles = StyleSheet.create((theme) => ({
         paddingVertical: 16,
         borderRadius: 18,
         backgroundColor: theme.colors.surfaceHigh,
+    },
+    firstTaskTitle: {
+        flex: 1,
     },
     empty: {
         ...Typography.default(),

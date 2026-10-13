@@ -15,7 +15,7 @@ function run(overrides: Partial<TeammateRun>): TeammateRun {
 
 describe('computeTeammateStats', () => {
     it('returns empty stats without runs', () => {
-        expect(computeTeammateStats(undefined, 7, NOW)).toEqual({ costUsd: 0, runCount: 0, successRate: null, byTrigger: [] });
+        expect(computeTeammateStats(undefined, 7, NOW)).toEqual({ costUsd: 0, runCount: 0, failedCount: 0, byTrigger: [] });
     });
 
     it('filters by range and sums cost', () => {
@@ -25,9 +25,9 @@ describe('computeTeammateStats', () => {
         expect(computeTeammateStats([run({ costUsd: 2 }), run({ queuedAt: NOW - 10 * DAY, costUsd: 5 })], 30, NOW).costUsd).toBe(7);
     });
 
-    it('computes success rate over finished runs only', () => {
-        const stats = computeTeammateStats([run({}), run({}), run({ status: 'failed' }), run({ status: 'cancelled' }), run({ status: 'running' })], 7, NOW);
-        expect(stats.successRate).toBe(67);
+    it('counts failed runs only, not cancelled or running ones', () => {
+        const stats = computeTeammateStats([run({}), run({ status: 'failed' }), run({ status: 'failed' }), run({ status: 'cancelled' }), run({ status: 'running' })], 7, NOW);
+        expect(stats.failedCount).toBe(2);
     });
 
     it('groups by trigger sorted by count', () => {

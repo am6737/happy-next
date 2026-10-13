@@ -1,4 +1,6 @@
-import { TeammateTaskPanel } from '@/components/teammates/TeammateTaskPanel';
+import { TeammateDelegateRow, TeammateTaskCard } from '@/components/teammates/TeammateTask';
+import { TEAMMATE_TASK_ACTIVE_STATUSES } from 'happy-wire';
+import { storage } from '@/sync/storage';
 import { useTeammateIssueTasks } from '@/hooks/useTeammateTask';
 import * as React from 'react';
 import { View, ScrollView, Pressable, Platform } from 'react-native';
@@ -84,8 +86,13 @@ function IssueDetailScreen() {
     const { credentials } = useAuth();
     const issueNumber = parseInt(numberStr, 10);
     const taskIds = useTeammateIssueTasks(`${owner}/${repo}#${issueNumber}`);
+    const hasOpenTask = storage(state => !!taskIds?.some(id => {
+        const status = state.teammateTaskDetails[id]?.task.status;
+        return !status || status === 'paused' || (TEAMMATE_TASK_ACTIVE_STATUSES as readonly string[]).includes(status);
+    }));
     const { data: originalIssue, loading: issueLoading, mutate: mutateIssue } = useGithubIssue(owner!, repo!, issueNumber);
     const { data: comments } = useGithubIssueComments(owner!, repo!, issueNumber);
+    const showDelegateRow = !!taskIds && !hasOpenTask && !!originalIssue && !!credentials;
     const linkedSessions = useLinkedSessions('github', `${owner}/${repo}#${issueNumber}`, 'issue');
     const navigateToSession = useNavigateToSession();
 
@@ -144,6 +151,10 @@ function IssueDetailScreen() {
         setShowHeaderSubtitle(y > 60);
     }, []);
 
+    const openDelegate = React.useCallback(() => {
+        router.push({ pathname: '/teammates/delegate', params: { owner, repo, number: String(issueNumber), title: originalIssue?.title ?? '' } });
+    }, [router, owner, repo, issueNumber, originalIssue?.title]);
+
     const menuItems: ActionMenuItem[] = React.useMemo(() => {
         const isOpen = originalIssue?.state === 'open';
         const items: ActionMenuItem[] = [
@@ -169,9 +180,7 @@ function IssueDetailScreen() {
             },
         ];
         if (originalIssue && credentials) {
-            items.push({ label: t('teammateTasks.delegate'), onPress: () => router.push({ pathname: '/teammates/delegate',
-                params: { owner, repo, number: String(issueNumber), title: originalIssue.title },
-            }) });
+            items.push({ label: t('teammateTasks.delegate'), onPress: openDelegate });
             items.push({
                 label: isOpen ? t('repository.closeIssue') : t('repository.reopenIssue'),
                 destructive: isOpen,
@@ -189,7 +198,7 @@ function IssueDetailScreen() {
             });
         }
         return items;
-    }, [owner, repo, issueNumber, originalIssue, credentials, mutateIssue, router]);
+    }, [owner, repo, issueNumber, originalIssue, credentials, mutateIssue, openDelegate]);
 
     const headerTitle = React.useCallback(() => (
         <Pressable style={{ alignItems: 'center', justifyContent: 'center', maxWidth: 220 }}>
@@ -360,7 +369,16 @@ function IssueDetailScreen() {
                     )}
                 </View>
 
-                {taskIds.map(id => <TeammateTaskPanel key={id} id={id} />)}
+                {(!!taskIds?.length || showDelegateRow) && (
+                    <>
+                        <View style={styles.sectionDivider} />
+                        <View style={[styles.section, styles.agentSection]}>
+                            <Text style={styles.sectionTitle}>{t('teammateTasks.agent')}</Text>
+                            {taskIds?.map(id => <TeammateTaskCard key={id} id={id} />)}
+                            {showDelegateRow && <TeammateDelegateRow onPress={openDelegate} />}
+                        </View>
+                    </>
+                )}
 
                 {linkedSessions.length > 0 && (
                     <>
@@ -383,7 +401,7 @@ function IssueDetailScreen() {
                                             session.metadata?.flavor || 'claude',
                                             session.metadata?.host,
                                             formatSessionAge(session.createdAt),
-                                        ].filter(Boolean).join(' · ')}
+                                        ].filter(Boolean).join('  ')}
                                     </Text>
                                 </Pressable>
                             ))}
@@ -480,6 +498,9 @@ const stylesheet = StyleSheet.create((theme) => ({
     },
     section: {
         gap: 6,
+    },
+    agentSection: {
+        gap: 10,
     },
     sectionTitle: {
         ...Typography.default('semiBold'),

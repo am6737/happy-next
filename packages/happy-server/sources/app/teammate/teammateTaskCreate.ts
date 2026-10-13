@@ -3,8 +3,6 @@ import type { Teammate } from '@prisma/client';
 import { db } from '@/storage/db';
 import { inTx } from '@/storage/inTx';
 import { getUserOctokit, GitHubNotConnectedError } from '@/app/github/githubApi';
-import { channelSystemMessage } from '@/app/channel/channelSystemMessage';
-import { channelTeammateDmWhere } from '@/app/channel/channelQueries';
 import { teammateRunAuthorize } from './teammateRunAuthorize';
 import { teammateTaskDelegate } from './teammateTaskDelegate';
 import { teammateNotify } from './teammateNotify';
@@ -72,16 +70,8 @@ export async function teammateTaskCreate(accountId: string, input: TeammateTaskC
             task = { ...task, reviewerTeammateId: reviewer.id };
         }
         if (created && !delegated && task.createdByTeammateId === creator.id) await db.teammateTask.update({ where: { id: task.id }, data: { createdIssue: true } });
-        if (task.createdByTeammateId === creator.id) {
-            await inTx(async tx => {
-                const dm = await tx.channel.findFirst({ where: channelTeammateDmWhere(accountId, assignee.id), select: { id: true } });
-                const localId = `system:task_self_assigned:${task.id}`;
-                const sent = dm ? await tx.channelMessage.findUnique({ where: { channelId_localId: { channelId: dm.id, localId } } }) : null;
-                if ((dm && !sent) || (!dm && !delegated)) {
-                    if (dm) await channelSystemMessage(dm.id, 'task_self_assigned', { taskId: task.id, title: task.title, byTeammateId: creator.id, byName: creator.name }, tx, localId);
-                    teammateNotify(tx, assignee, 'New agent task', `${creator.name} assigned ${task.title}`, { code: 'task_self_assigned', taskId: task.id });
-                }
-            });
+        if (task.createdByTeammateId === creator.id && !delegated) {
+            await inTx(async tx => { teammateNotify(tx, assignee, 'New agent task', `${creator.name} assigned ${task.title}`, { code: 'task_self_assigned', taskId: task.id }); });
         }
         return { task, issueUrl: issue.html_url, created };
     } catch (error) {

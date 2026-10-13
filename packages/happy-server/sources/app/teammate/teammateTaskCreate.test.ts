@@ -3,23 +3,19 @@ import fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import { serializerCompiler, validatorCompiler, ZodTypeProvider } from 'fastify-type-provider-zod';
 import type { Fastify } from '@/app/api/types';
 
-const { run, dbMock, authorize, octokit, delegate, message, notify, tx, GitHubNotConnectedError } = vi.hoisted(() => {
+const { run, dbMock, authorize, octokit, delegate, notify, tx, GitHubNotConnectedError } = vi.hoisted(() => {
     const run = { value: null as any };
     const dbMock = {
         teammate: { findFirst: vi.fn() },
         teammateTask: { findFirst: vi.fn(), count: vi.fn(), update: vi.fn() },
     };
-    const tx = {
-        channel: { findFirst: vi.fn() },
-        channelMessage: { findUnique: vi.fn() },
-    };
-    return { run, dbMock, authorize: vi.fn(), octokit: vi.fn(), delegate: vi.fn(), message: vi.fn(), notify: vi.fn(), tx, GitHubNotConnectedError: class GitHubNotConnectedError extends Error {} };
+    const tx = {};
+    return { run, dbMock, authorize: vi.fn(), octokit: vi.fn(), delegate: vi.fn(), notify: vi.fn(), tx, GitHubNotConnectedError: class GitHubNotConnectedError extends Error {} };
 });
 vi.mock('@/storage/db', () => ({ db: dbMock }));
 vi.mock('@/storage/files', () => ({ getPublicUrl: vi.fn() }));
 vi.mock('@/storage/inTx', () => ({ inTx: (fn: any) => fn(tx) }));
 vi.mock('@/app/github/githubApi', () => ({ getUserOctokit: octokit, GitHubNotConnectedError }));
-vi.mock('@/app/channel/channelSystemMessage', () => ({ channelSystemMessage: message }));
 vi.mock('./teammateRunAuthorize', () => ({ teammateRunAuthorize: authorize }));
 vi.mock('./teammateTaskDelegate', () => ({ teammateTaskDelegate: delegate }));
 vi.mock('./teammateNotify', () => ({ teammateNotify: notify }));
@@ -46,8 +42,6 @@ beforeEach(() => {
     dbMock.teammate.findFirst.mockResolvedValue({ ...assignee });
     dbMock.teammateTask.findFirst.mockResolvedValue(null);
     dbMock.teammateTask.count.mockResolvedValue(0);
-    tx.channel.findFirst.mockResolvedValue({ id: 'dm' });
-    tx.channelMessage.findUnique.mockResolvedValue(null);
     octokit.mockResolvedValue(api);
     api.rest.issues.get.mockResolvedValue({ data: issue });
     api.rest.issues.listForRepo.mockResolvedValue({ data: [] });
@@ -67,12 +61,12 @@ describe('agent task creation', () => {
         expect(octokit).not.toHaveBeenCalled();
     });
 
-    it('delegates an existing open issue and records its creator in the assignee DM', async () => {
+    it('delegates an existing open issue and notifies the assignee without posting to its DM', async () => {
         const result = await teammateTaskCreate('account', { ...req, assignee: 'builder' });
         expect(result).toEqual({ task, issueUrl: issue.html_url, created: false });
         expect(delegate).toHaveBeenCalledWith('account', expect.objectContaining({ teammateId: 'assignee', resourceId: 'owner/repo#4' }), 'creator', 'creator-thread');
-        expect(message).toHaveBeenCalledWith('dm', 'task_self_assigned', expect.objectContaining({ byTeammateId: 'creator', byName: 'Atlas' }), tx, 'system:task_self_assigned:task');
         expect(notify).toHaveBeenCalledTimes(1);
+        expect(notify).toHaveBeenCalledWith(tx, expect.objectContaining({ id: 'assignee' }), 'New agent task', 'Atlas assigned Fix issue', { code: 'task_self_assigned', taskId: 'task' });
     });
 
     it('rejects a closed issue, foreign delegation, missing GitHub, and the daily limit, while accepting PRs', async () => {
@@ -101,11 +95,10 @@ describe('agent task creation', () => {
         expect(api.rest.issues.create).toHaveBeenCalledWith(expect.objectContaining({ body: expect.stringContaining('<!-- happy-agent-task:tc:run:2 -->') }));
         api.rest.issues.listForRepo.mockResolvedValue({ data: [{ ...issue, body: '<!-- happy-agent-task:tc:run:2 -->' }] });
         dbMock.teammateTask.findFirst.mockResolvedValue(task);
-        tx.channelMessage.findUnique.mockResolvedValue({ id: 'message' });
         const second = await teammateTaskCreate('account', input);
         expect(second.created).toBe(false);
         expect(api.rest.issues.create).toHaveBeenCalledTimes(1);
-        expect(message).toHaveBeenCalledTimes(1);
+        expect(notify).toHaveBeenCalledTimes(1);
     });
 
     it('validates a designated reviewer and stores it on a reused task', async () => {

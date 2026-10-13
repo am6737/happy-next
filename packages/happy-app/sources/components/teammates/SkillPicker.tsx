@@ -70,7 +70,7 @@ export function SkillPicker({ state, value, onChange, hint, error }: {
                     <Pressable
                         key={`missing:${name}`}
                         accessibilityRole="button"
-                        accessibilityLabel={`${name} · ${t('teammates.skillMissing')}`}
+                        accessibilityLabel={`${name}, ${t('teammates.skillMissing')}`}
                         onPress={() => toggle(name)}
                         style={[styles.row, styles.rowMissing]}
                     >

@@ -57,7 +57,7 @@ function providerName(provider: TeammateRuntimeValue['provider']): string {
 }
 
 function runtimeLabel({ provider, model }: TeammateRuntimeValue): string {
-    return model ? `${providerName(provider)} · ${model}` : providerName(provider);
+    return model ? `${providerName(provider)}  ${model}` : providerName(provider);
 }
 
 function errorText(field: TeammateFormField, error: TeammateFormError | undefined): string | undefined {
@@ -192,7 +192,7 @@ export function TeammateForm({ teammate, seed, focus }: { teammate?: Teammate; s
         t('teammates.form.workerSummary', { provider: providerName(values.worker.provider) }),
         `${t('teammates.form.heartbeat')} ${heartbeatLabel(values.heartbeatIntervalMin)}`,
         ...budget ? [t('teammates.form.budgetSummary', { amount: budget })] : [],
-    ].join(' · ');
+    ].join('  ');
     const heartbeatOptions = [
         ...TEAMMATE_HEARTBEAT_PRESETS.map(minutes => ({ value: String(minutes), label: heartbeatLabel(minutes) })),
         { value: CUSTOM, label: t('teammates.form.custom') },

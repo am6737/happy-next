@@ -119,7 +119,6 @@ export function TeammateCreateStart() {
                 <ScrollView contentInsetAdjustmentBehavior="automatic" keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets
                     contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]}>
                     <Text style={styles.title}>{t('teammates.createFlow.title')}</Text>
-                    <Text style={styles.lead}>{t('teammates.createFlow.lead')}</Text>
 
                     <View style={styles.compose}>
                         <TextInput
@@ -299,15 +298,8 @@ const styles = StyleSheet.create((theme) => ({
         color: theme.colors.text,
         marginTop: 8,
     },
-    lead: {
-        ...Typography.default(),
-        fontSize: 15,
-        lineHeight: 22,
-        color: theme.colors.textSecondary,
-        marginTop: 8,
-    },
     compose: {
-        marginTop: 28,
+        marginTop: 20,
         padding: 18,
         borderRadius: 20,
         backgroundColor: theme.colors.surfaceHigh,

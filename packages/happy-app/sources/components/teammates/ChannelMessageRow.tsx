@@ -80,7 +80,7 @@ function GithubLinkCard({ link, reference, onPress }: { link: ChannelLink; refer
             icon={icon}
             tint={state ? color : undefined}
             title={name || `${kind} ${number}`}
-            detail={<>{stateLabel ? <Text style={[styles.linkState, { color }]}>{stateLabel}</Text> : kind} · {where}</>}
+            detail={<>{stateLabel ? <Text style={[styles.linkState, { color }]}>{stateLabel}</Text> : kind}{'  '}{where}</>}
             label={[kind, name || number, stateLabel].filter(Boolean).join(', ')}
             onPress={onPress}
         />
@@ -102,7 +102,7 @@ function SessionLinkCard({ link, session, onPress }: { link: ChannelLink; sessio
                 </>
             )}
             title={title}
-            detail={`${kind} · ${status.statusText}`}
+            detail={`${kind}  ${status.statusText}`}
             label={`${kind}: ${title}, ${status.statusText}`}
             onPress={onPress}
         />
@@ -118,7 +118,7 @@ function LinkCard({ link, onPress }: { link: ChannelLink; onPress: () => void })
     const kind = t(`channels.linkKinds.${link.kind}`);
     const { source } = channelLinkSource(link);
     const title = link.title || (link.kind === 'url' ? link.url : null) || kind;
-    const detail = [title === kind ? null : kind, source].filter(Boolean).join(' · ');
+    const detail = [title === kind ? null : kind, source].filter(Boolean).join('  ');
     return (
         <LinkCardView
             icon={<Ionicons name={LINK_ICONS[link.kind]} size={16} color={theme.colors.textSecondary} />}
@@ -204,7 +204,7 @@ export const ChannelMessageRow = React.memo(({ message, header, sender, members,
                 <Pressable accessibilityRole="link" onPress={() => onOpenTask(taskId)} style={({ pressed }) => [styles.tag, styles.taskTag, pressed && styles.pressed]} hitSlop={6}>
                     <Ionicons name="checkbox-outline" size={12} color={theme.colors.textSecondary} />
                     <Text style={[styles.tagText, styles.taskTitle]} numberOfLines={1}>{task?.title || t('teammateTasks.tag')}</Text>
-                    {task && <Text style={styles.tagText}>· {t(`teammates.taskStatus.${task.status}`)}</Text>}
+                    {task && <Text style={styles.tagText}>{t(`teammates.taskStatus.${task.status}`)}</Text>}
                     <Ionicons name="chevron-forward" size={12} color={theme.colors.textSecondary} />
                 </Pressable>
             )}

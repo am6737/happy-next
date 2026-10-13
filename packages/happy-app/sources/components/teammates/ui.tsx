@@ -3,9 +3,6 @@ import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import type { PermissionMode, Teammate } from 'happy-wire';
 import { layout } from '@/components/layout';
-import { storage, useMachine } from '@/sync/storage';
-import { isMachineOnline } from '@/utils/machineUtils';
-import { getTeammateWorkload } from '@/sync/teammateWorkload';
 import { TeammateApiError } from '@/sync/apiTeammates';
 import { t } from '@/text';
 
@@ -74,19 +71,6 @@ export function TeammateAvatar({ teammate, size = 52 }: { teammate: Pick<Teammat
             <Text style={{ fontSize: size / 2.6, fontWeight: '600', color: '#ffffff' }}>{teammateInitials(teammate.name)}</Text>
         </View>
     );
-}
-
-export function TeammateAvailability({ teammate }: { teammate: Teammate }) {
-    const { theme } = useUnistyles();
-    const machine = useMachine(teammate.machineId);
-    const runs = storage(state => state.teammateRuns[teammate.id]);
-    const tasks = storage(state => state.teammateTasks[teammate.id]);
-    const online = !!machine && isMachineOnline(machine);
-    const workload = getTeammateWorkload(teammate, runs, tasks);
-    return <View style={styles.row}>
-        <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: online ? theme.colors.status.connected : theme.colors.textSecondary }} />
-        <Text style={styles.muted}>{t(online ? 'teammates.online' : 'teammates.offline')} · {t(`teammates.${workload}`)}</Text>
-    </View>;
 }
 
 export function teammatePermissionLabel(mode: PermissionMode): string {
