@@ -5,9 +5,10 @@ const env = vi.hoisted(() => ({
     latest: '0.13.0' as string | null,
     installedAfter: '0.13.0',
     installError: null as string | null,
-    support: { supported: true, packageManager: 'npm' } as any,
+    support: { supported: true, packageManager: 'npm', sudo: false } as any,
     settings: {} as Record<string, unknown>,
     installs: 0,
+    installedWithSudo: [] as boolean[],
 }));
 
 vi.mock('@/configuration', () => ({ configuration: { currentCliVersion: '0.12.0', disableAutoUpdate: false } }));
@@ -19,8 +20,9 @@ vi.mock('@/update/cliUpdate', async (importOriginal) => ({
     checkAutoUpdateSupport: async () => env.support,
     acquireUpdateLock: async () => async () => {},
     readInstalledVersion: async () => env.installedAfter,
-    installLatest: async () => {
+    installLatest: async (_pm: string, sudo: boolean) => {
         env.installs++;
+        env.installedWithSudo.push(sudo);
         if (env.installError) throw new Error(env.installError);
     },
 }));
@@ -52,7 +54,7 @@ describe('startCliAutoUpdate', () => {
         vi.useFakeTimers();
         Object.assign(env, {
             latest: '0.13.0', installedAfter: '0.13.0', installError: null,
-            support: { supported: true, packageManager: 'npm' }, settings: {}, installs: 0,
+            support: { supported: true, packageManager: 'npm', sudo: false }, settings: {}, installs: 0, installedWithSudo: [],
         });
         activity = { sessions: 0, terminals: 0, executions: 0 };
         statuses = [];
@@ -68,6 +70,8 @@ describe('startCliAutoUpdate', () => {
         start();
         await vi.advanceTimersByTimeAsync(0);
         expect(env.installs).toBe(0);
+        // Nothing to say before the first check
+        expect(statuses).toEqual([]);
         await vi.advanceTimersByTimeAsync(6 * 60_000);
         expect(env.installs).toBe(1);
         expect(last()).toMatchObject({ state: 'installed', latestVersion: '0.13.0' });
@@ -102,6 +106,14 @@ describe('startCliAutoUpdate', () => {
         await expect(updater!.updateNow()).resolves.toMatchObject({ status: 'started' });
         await vi.advanceTimersByTimeAsync(0);
         expect(env.installs).toBe(1);
+    });
+
+    it('installs through sudo when that is how the install dir can be reached', async () => {
+        env.support = { supported: true, packageManager: 'npm', sudo: true };
+        start();
+        await vi.advanceTimersByTimeAsync(6 * 60_000);
+        expect(env.installedWithSudo).toEqual([true]);
+        expect(last()).toMatchObject({ state: 'installed' });
     });
 
     it('reports an installation it cannot upgrade', async () => {

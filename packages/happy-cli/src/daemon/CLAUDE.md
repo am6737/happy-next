@@ -53,7 +53,10 @@ The daemon detects when `npm upgrade happy-next-cli` occurs:
 The install itself is done by `autoUpdate.ts`: it checks npm for a newer version and runs the global
 upgrade once the machine is idle (no terminals or orchestrator executions; running sessions defer it for up
 to 24h), reporting progress in `daemonState.cliUpdate`. The app can trigger it right away via the `update-cli`
-RPC. Off with `HAPPY_DISABLE_AUTO_UPDATE=1` or `autoUpdateDisabled: true` in settings.json.
+RPC. Off with `HAPPY_DISABLE_AUTO_UPDATE=1` or `autoUpdateDisabled: true` in settings.json. A global npm
+install the daemon's user cannot write (e.g. `/usr/lib/node_modules`) is upgraded with `sudo -n` when sudo
+needs no password, passing the user's PATH, npm userconfig, registry and prefix through; `autoUpdateNoSudo:
+true` in settings.json turns that off (the app then shows "no permission").
 
 ### Stopping the Daemon
 

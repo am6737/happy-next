@@ -11,6 +11,9 @@
  * running). So an update waits until the machine is idle: terminals and
  * executions always hold it back, running sessions only for up to a day.
  *
+ * A global npm install the daemon's user cannot write is upgraded through
+ * `sudo -n` when that needs no password (off with `autoUpdateNoSudo`).
+ *
  * Turned off by HAPPY_DISABLE_AUTO_UPDATE or `autoUpdateDisabled` in
  * settings.json; the app can still trigger an update through `updateNow`.
  */
@@ -65,7 +68,7 @@ export function startCliAutoUpdate(options: {
     let ticking = false;
     let lastReported = '';
     // Where and how the CLI is installed does not change while the daemon runs
-    const support = checkAutoUpdateSupport();
+    const support = readSettings().then((settings) => checkAutoUpdateSupport({ allowSudo: settings.autoUpdateNoSudo !== true }));
 
     const report = (status: CliUpdateStatus) => {
         const serialized = JSON.stringify(status);
@@ -99,7 +102,7 @@ export function startCliAutoUpdate(options: {
             if (!installation.supported) {
                 throw new Error(installation.reason);
             }
-            await installLatest(installation.packageManager);
+            await installLatest(installation.packageManager, installation.sudo);
             const installedVersion = await readInstalledVersion();
             if (!installedVersion || installedVersion === currentVersion) {
                 throw new Error(`Install finished but the CLI is still on ${currentVersion}`);
@@ -131,9 +134,11 @@ export function startCliAutoUpdate(options: {
                 report({ state: 'unsupported', reason: installation.reason, latestVersion: latest, checkedAt });
                 return;
             }
-            if (!latestVersion || compareVersions(latestVersion, currentVersion) <= 0) {
+            // Not checked yet (or every check failed): saying up to date would be a guess
+            if (!latestVersion) return;
+            if (compareVersions(latestVersion, currentVersion) <= 0) {
                 pendingSince = null;
-                report({ state: autoDisabled ? 'disabled' : 'up-to-date', latestVersion: latest, checkedAt });
+                report({ state: autoDisabled ? 'disabled' : 'up-to-date', latestVersion, checkedAt });
                 return;
             }
             if (autoDisabled) {

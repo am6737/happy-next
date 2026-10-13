@@ -76,17 +76,21 @@ export function getUpgradeCommand(pm: PackageManager): string[] {
 // The registry from the user's npm config (mirrors included), looked up once per process
 let registryUrl: Promise<string> | null = null;
 
+function getRegistryUrl(): Promise<string> {
+    registryUrl ??= run('npm', ['config', 'get', 'registry'], VIEW_TIMEOUT_MS)
+        .then((url) => /^https?:\/\//.test(url) ? url : DEFAULT_REGISTRY)
+        .catch(() => DEFAULT_REGISTRY);
+    return registryUrl;
+}
+
 /**
  * Latest published version, as seen through the user's registry. Asks the
  * registry for the `latest` manifest alone (a few KB, no subprocess); falls
  * back to `npm view` for registries that need npm's auth or proxy settings.
  */
 export async function fetchLatestVersion(): Promise<string | null> {
-    registryUrl ??= run('npm', ['config', 'get', 'registry'], VIEW_TIMEOUT_MS)
-        .then((url) => /^https?:\/\//.test(url) ? url : DEFAULT_REGISTRY)
-        .catch(() => DEFAULT_REGISTRY);
     try {
-        const response = await axios.get(`${(await registryUrl).replace(/\/+$/, '')}/${PACKAGE_NAME}/latest`, { timeout: FETCH_TIMEOUT_MS });
+        const response = await axios.get(`${(await getRegistryUrl()).replace(/\/+$/, '')}/${PACKAGE_NAME}/latest`, { timeout: FETCH_TIMEOUT_MS });
         if (isVersion(response.data?.version)) return response.data.version;
     } catch {
         // Fall through to npm itself
@@ -133,15 +137,26 @@ export function compareVersions(a: string, b: string): number {
 }
 
 export type AutoUpdateSupport =
-    | { supported: true; packageManager: PackageManager }
+    | { supported: true; packageManager: PackageManager; sudo: boolean }
     | { supported: false; reason: 'not-global-install' | 'no-permission' };
+
+/** Whether the current user can write the global directory the CLI is installed in. */
+export async function canWriteInstallDir(): Promise<boolean> {
+    try {
+        await access(dirname(installedPackageDir()), constants.W_OK);
+        return true;
+    } catch {
+        return false;
+    }
+}
 
 /**
  * Whether this installation can upgrade itself without a human: it must be a
  * global install (not a source checkout, `yarn link` or npx cache) whose
- * directory the current user can write to (no sudo).
+ * directory the current user can write to, or, for npm, reach through sudo
+ * without a password (such a user can already do anything root can).
  */
-export async function checkAutoUpdateSupport(): Promise<AutoUpdateSupport> {
+export async function checkAutoUpdateSupport(options: { allowSudo: boolean }): Promise<AutoUpdateSupport> {
     const installDir = installedPackageDir();
     const normalized = installDir.replace(/\\/g, '/');
     if (basename(installDir) !== PACKAGE_NAME
@@ -163,17 +178,37 @@ export async function checkAutoUpdateSupport(): Promise<AutoUpdateSupport> {
         }
     }
 
-    try {
-        await access(dirname(installDir), constants.W_OK);
-    } catch {
-        return { supported: false, reason: 'no-permission' };
+    if (await canWriteInstallDir()) {
+        return { supported: true, packageManager, sudo: false };
     }
-    return { supported: true, packageManager };
+    const sudo = options.allowSudo && packageManager === 'npm' && process.platform !== 'win32'
+        && await run('sudo', ['-n', 'true'], VIEW_TIMEOUT_MS).then(() => true, () => false);
+    return sudo ? { supported: true, packageManager, sudo } : { supported: false, reason: 'no-permission' };
 }
 
-/** Run the global upgrade. Throws with the tail of the package manager's output on failure. */
-export async function installLatest(pm: PackageManager): Promise<void> {
-    const [command, ...args] = getUpgradeCommand(pm);
+/**
+ * The global upgrade command. With `sudo` (npm only) it runs as root, and since
+ * sudo resets PATH and HOME it carries over the user's PATH (same node and npm),
+ * npm config, registry and global prefix, so it installs over the same copy.
+ * `no-prompt` makes sudo fail instead of asking for a password.
+ */
+export async function getInstallCommand(pm: PackageManager, sudo?: 'prompt' | 'no-prompt'): Promise<string[]> {
+    const command = getUpgradeCommand(pm);
+    if (!sudo || pm !== 'npm') return command;
+    const [prefix, userconfig, registry] = await Promise.all([
+        run('npm', ['config', 'get', 'prefix'], VIEW_TIMEOUT_MS),
+        run('npm', ['config', 'get', 'userconfig'], VIEW_TIMEOUT_MS),
+        getRegistryUrl(),
+    ]);
+    return [
+        'sudo', ...(sudo === 'no-prompt' ? ['-n'] : []), 'env', `PATH=${process.env.PATH ?? ''}`,
+        ...command, '--prefix', prefix, '--userconfig', userconfig, '--registry', registry,
+    ];
+}
+
+/** Run the global upgrade unattended. Throws with the tail of the package manager's output on failure. */
+export async function installLatest(pm: PackageManager, sudo: boolean): Promise<void> {
+    const [command, ...args] = await getInstallCommand(pm, sudo ? 'no-prompt' : undefined);
     await run(command, args, INSTALL_TIMEOUT_MS);
 }
 

@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import packageJson from '../../package.json';
 import { isDaemonRunningCurrentlyInstalledHappyVersion, startDaemonDetachedAndAwaitReady } from '@/daemon/controlClient';
 import { readCredentials } from '@/persistence';
-import { acquireUpdateLock, detectPackageManager, fetchLatestVersion, getUpgradeCommand } from '@/update/cliUpdate';
+import { acquireUpdateLock, canWriteInstallDir, detectPackageManager, fetchLatestVersion, getInstallCommand } from '@/update/cliUpdate';
 
 /**
  * When run as `sudo happy update`, HOME points at /root, so credentials and
@@ -103,13 +103,15 @@ export async function handleUpdateCommand(): Promise<void> {
 
     // Detect package manager and upgrade
     const pm = detectPackageManager();
-    const command = getUpgradeCommand(pm);
+    // A root-owned global npm dir: go through sudo here rather than having the user rerun with sudo
+    const useSudo = pm === 'npm' && process.platform !== 'win32' && process.getuid?.() !== 0 && !(await canWriteInstallDir());
+    const command = await getInstallCommand(pm, useSudo ? 'prompt' : undefined);
     const releaseLock = await acquireUpdateLock();
     if (!releaseLock) {
         console.error(chalk.yellow('⚠ Another upgrade is already running (likely the daemon updating itself). Try again in a few minutes.'));
         process.exit(1);
     }
-    console.log(`Upgrading via ${chalk.bold(pm)}...`);
+    console.log(`Upgrading via ${chalk.bold(useSudo ? `sudo ${pm}` : pm)}...`);
 
     try {
         execFileSync(command[0], command.slice(1), { stdio: 'inherit' });
