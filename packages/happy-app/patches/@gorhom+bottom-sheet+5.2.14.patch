@@ -1,0 +1,388 @@
+diff --git a/node_modules/@gorhom/bottom-sheet/lib/commonjs/components/bottomSheetModal/BottomSheetModal.js b/node_modules/@gorhom/bottom-sheet/lib/commonjs/components/bottomSheetModal/BottomSheetModal.js
+index ee51e76..48ace70 100644
+--- a/node_modules/@gorhom/bottom-sheet/lib/commonjs/components/bottomSheetModal/BottomSheetModal.js
++++ b/node_modules/@gorhom/bottom-sheet/lib/commonjs/components/bottomSheetModal/BottomSheetModal.js
+@@ -168,6 +168,12 @@ function BottomSheetModalComponent(props, ref) {
+         }
+       });
+     }
++    /**
++     * a dismissal that never landed must not outlive a request to present.
++     */
++    if (statusRef.current === _constants.MODAL_STATUS.DISMISSING) {
++      statusRef.current = _constants.MODAL_STATUS.INITIAL;
++    }
+     requestAnimationFrame(() => {
+       if (mount && bottomSheetRef.current) {
+         statusRef.current = _constants.MODAL_STATUS.ANIMATING;
+@@ -195,7 +201,7 @@ function BottomSheetModalComponent(props, ref) {
+      * if the modal position is already in a closed position,
+      * then we unmount the node and early exit.
+      */
+-    if ([_constants.MODAL_STATUS.CLOSED, _constants.MODAL_STATUS.MINIMIZED].includes(statusRef.current) || statusRef.current === _constants.MODAL_STATUS.DISMISSING && currentIndexRef.current === -1) {
++    if ([_constants.MODAL_STATUS.INITIAL, _constants.MODAL_STATUS.CLOSED, _constants.MODAL_STATUS.MINIMIZED].includes(statusRef.current) || statusRef.current === _constants.MODAL_STATUS.DISMISSING && currentIndexRef.current === -1) {
+       statusRef.current = _constants.MODAL_STATUS.DISMISSED;
+       unmount();
+       return;
+diff --git a/node_modules/@gorhom/bottom-sheet/lib/commonjs/components/bottomSheetTextInput/BottomSheetTextInput.js b/node_modules/@gorhom/bottom-sheet/lib/commonjs/components/bottomSheetTextInput/BottomSheetTextInput.js
+index 55c6308..440b9c6 100644
+--- a/node_modules/@gorhom/bottom-sheet/lib/commonjs/components/bottomSheetTextInput/BottomSheetTextInput.js
++++ b/node_modules/@gorhom/bottom-sheet/lib/commonjs/components/bottomSheetTextInput/BottomSheetTextInput.js
+@@ -29,10 +29,15 @@ const BottomSheetTextInputComponent = /*#__PURE__*/(0, _react.forwardRef)(({
+ 
+   //#region callbacks
+   const handleOnFocus = (0, _react.useCallback)(args => {
+-    animatedKeyboardState.set(state => ({
+-      ...state,
+-      target: args.nativeEvent.target
+-    }));
++    const target = args.nativeEvent.target;
++    animatedKeyboardState.modify(state => {
++      'worklet';
++
++      return {
++        ...state,
++        target
++      };
++    });
+     if (onFocus) {
+       onFocus(args);
+     }
+@@ -49,10 +54,18 @@ const BottomSheetTextInputComponent = /*#__PURE__*/(0, _react.forwardRef)(({
+     const shouldRemoveCurrentTarget = keyboardState.target === args.nativeEvent.target;
+     const shouldIgnoreBlurEvent = currentFocusedInput && textInputNodesRef.current.has(currentFocusedInput);
+     if (shouldRemoveCurrentTarget && !shouldIgnoreBlurEvent) {
+-      animatedKeyboardState.set(state => ({
+-        ...state,
+-        target: undefined
+-      }));
++      const target = args.nativeEvent.target;
++      animatedKeyboardState.modify(state => {
++        'worklet';
++
++        if (state.target !== target) {
++          return state;
++        }
++        return {
++          ...state,
++          target: undefined
++        };
++      });
+     }
+     if (onBlur) {
+       onBlur(args);
+@@ -80,10 +93,17 @@ const BottomSheetTextInputComponent = /*#__PURE__*/(0, _react.forwardRef)(({
+        * to the current component.
+        */
+       if (keyboardState.target === componentNode) {
+-        animatedKeyboardState.set(state => ({
+-          ...state,
+-          target: undefined
+-        }));
++        animatedKeyboardState.modify(state => {
++          'worklet';
++
++          if (state.target !== componentNode) {
++            return state;
++          }
++          return {
++            ...state,
++            target: undefined
++          };
++        });
+       }
+       if (textInputNodesRef.current.has(componentNode)) {
+         textInputNodesRef.current.delete(componentNode);
+diff --git a/node_modules/@gorhom/bottom-sheet/lib/commonjs/hooks/useAnimatedLayout.js b/node_modules/@gorhom/bottom-sheet/lib/commonjs/hooks/useAnimatedLayout.js
+index 973d05c..56f740d 100644
+--- a/node_modules/@gorhom/bottom-sheet/lib/commonjs/hooks/useAnimatedLayout.js
++++ b/node_modules/@gorhom/bottom-sheet/lib/commonjs/hooks/useAnimatedLayout.js
+@@ -86,16 +86,17 @@ function useAnimatedLayout(containerLayoutState, topInset, bottomInset, modal, s
+     });
+   }, [state, verticalInset, modal]);
+   (0, _react.useEffect)(() => {
+-    _reactNative.Dimensions.addEventListener('change', ({
+-      window
++    const subscription = _reactNative.Dimensions.addEventListener('change', ({
++      window: windowDimensions
+     }) => {
+       state.modify(_state => {
+         'worklet';
+ 
+-        _state.window = window;
++        _state.window = windowDimensions;
+         return _state;
+       });
+     });
++    return () => subscription.remove();
+   }, [state]);
+   //#endregion
+ 
+diff --git a/node_modules/@gorhom/bottom-sheet/lib/module/components/bottomSheetModal/BottomSheetModal.js b/node_modules/@gorhom/bottom-sheet/lib/module/components/bottomSheetModal/BottomSheetModal.js
+index 94fabdb..95e1f3f 100644
+--- a/node_modules/@gorhom/bottom-sheet/lib/module/components/bottomSheetModal/BottomSheetModal.js
++++ b/node_modules/@gorhom/bottom-sheet/lib/module/components/bottomSheetModal/BottomSheetModal.js
+@@ -161,6 +161,12 @@ function BottomSheetModalComponent(props, ref) {
+         }
+       });
+     }
++    /**
++     * a dismissal that never landed must not outlive a request to present.
++     */
++    if (statusRef.current === MODAL_STATUS.DISMISSING) {
++      statusRef.current = MODAL_STATUS.INITIAL;
++    }
+     requestAnimationFrame(() => {
+       if (mount && bottomSheetRef.current) {
+         statusRef.current = MODAL_STATUS.ANIMATING;
+@@ -188,7 +194,7 @@ function BottomSheetModalComponent(props, ref) {
+      * if the modal position is already in a closed position,
+      * then we unmount the node and early exit.
+      */
+-    if ([MODAL_STATUS.CLOSED, MODAL_STATUS.MINIMIZED].includes(statusRef.current) || statusRef.current === MODAL_STATUS.DISMISSING && currentIndexRef.current === -1) {
++    if ([MODAL_STATUS.INITIAL, MODAL_STATUS.CLOSED, MODAL_STATUS.MINIMIZED].includes(statusRef.current) || statusRef.current === MODAL_STATUS.DISMISSING && currentIndexRef.current === -1) {
+       statusRef.current = MODAL_STATUS.DISMISSED;
+       unmount();
+       return;
+diff --git a/node_modules/@gorhom/bottom-sheet/lib/module/components/bottomSheetTextInput/BottomSheetTextInput.js b/node_modules/@gorhom/bottom-sheet/lib/module/components/bottomSheetTextInput/BottomSheetTextInput.js
+index 4be3599..a327915 100644
+--- a/node_modules/@gorhom/bottom-sheet/lib/module/components/bottomSheetTextInput/BottomSheetTextInput.js
++++ b/node_modules/@gorhom/bottom-sheet/lib/module/components/bottomSheetTextInput/BottomSheetTextInput.js
+@@ -24,10 +24,15 @@ const BottomSheetTextInputComponent = /*#__PURE__*/forwardRef(({
+ 
+   //#region callbacks
+   const handleOnFocus = useCallback(args => {
+-    animatedKeyboardState.set(state => ({
+-      ...state,
+-      target: args.nativeEvent.target
+-    }));
++    const target = args.nativeEvent.target;
++    animatedKeyboardState.modify(state => {
++      'worklet';
++
++      return {
++        ...state,
++        target
++      };
++    });
+     if (onFocus) {
+       onFocus(args);
+     }
+@@ -44,10 +49,18 @@ const BottomSheetTextInputComponent = /*#__PURE__*/forwardRef(({
+     const shouldRemoveCurrentTarget = keyboardState.target === args.nativeEvent.target;
+     const shouldIgnoreBlurEvent = currentFocusedInput && textInputNodesRef.current.has(currentFocusedInput);
+     if (shouldRemoveCurrentTarget && !shouldIgnoreBlurEvent) {
+-      animatedKeyboardState.set(state => ({
+-        ...state,
+-        target: undefined
+-      }));
++      const target = args.nativeEvent.target;
++      animatedKeyboardState.modify(state => {
++        'worklet';
++
++        if (state.target !== target) {
++          return state;
++        }
++        return {
++          ...state,
++          target: undefined
++        };
++      });
+     }
+     if (onBlur) {
+       onBlur(args);
+@@ -75,10 +88,17 @@ const BottomSheetTextInputComponent = /*#__PURE__*/forwardRef(({
+        * to the current component.
+        */
+       if (keyboardState.target === componentNode) {
+-        animatedKeyboardState.set(state => ({
+-          ...state,
+-          target: undefined
+-        }));
++        animatedKeyboardState.modify(state => {
++          'worklet';
++
++          if (state.target !== componentNode) {
++            return state;
++          }
++          return {
++            ...state,
++            target: undefined
++          };
++        });
+       }
+       if (textInputNodesRef.current.has(componentNode)) {
+         textInputNodesRef.current.delete(componentNode);
+diff --git a/node_modules/@gorhom/bottom-sheet/lib/module/hooks/useAnimatedLayout.js b/node_modules/@gorhom/bottom-sheet/lib/module/hooks/useAnimatedLayout.js
+index b0eec93..8922a72 100644
+--- a/node_modules/@gorhom/bottom-sheet/lib/module/hooks/useAnimatedLayout.js
++++ b/node_modules/@gorhom/bottom-sheet/lib/module/hooks/useAnimatedLayout.js
+@@ -82,16 +82,17 @@ export function useAnimatedLayout(containerLayoutState, topInset, bottomInset, m
+     });
+   }, [state, verticalInset, modal]);
+   useEffect(() => {
+-    Dimensions.addEventListener('change', ({
+-      window
++    const subscription = Dimensions.addEventListener('change', ({
++      window: windowDimensions
+     }) => {
+       state.modify(_state => {
+         'worklet';
+ 
+-        _state.window = window;
++        _state.window = windowDimensions;
+         return _state;
+       });
+     });
++    return () => subscription.remove();
+   }, [state]);
+   //#endregion
+ 
+diff --git a/node_modules/@gorhom/bottom-sheet/src/components/bottomSheetModal/BottomSheetModal.tsx b/node_modules/@gorhom/bottom-sheet/src/components/bottomSheetModal/BottomSheetModal.tsx
+index 2954b3f..1f38245 100644
+--- a/node_modules/@gorhom/bottom-sheet/src/components/bottomSheetModal/BottomSheetModal.tsx
++++ b/node_modules/@gorhom/bottom-sheet/src/components/bottomSheetModal/BottomSheetModal.tsx
+@@ -240,6 +240,34 @@ function BottomSheetModalComponent<T = never>(
+         });
+       }
+ 
++      /**
++       * a dismissal that never landed must not outlive a request to present.
++       *
++       * `DISMISSING` has exactly one exit: `handleBottomSheetOnClose`, fired
++       * when the inner sheet's close animation completes. Interrupt that
++       * animation and the status is stranded there for the life of the
++       * instance — and from there the failure is self-sustaining:
++       * `handlePortalRender` returns early on `DISMISSING`, so the inner sheet
++       * is never mounted and `bottomSheetRef` stays `null`, so the only line
++       * that clears the status — inside the callback below, behind
++       * `mount && bottomSheetRef.current` — never runs. The guard that blocks
++       * rendering is what keeps the ref `null`, and the `null` ref is what
++       * preserves the guard. `present()` is then a permanent, silent no-op.
++       *
++       * `handleForceDismiss` can escape through its
++       * `DISMISSING && currentIndexRef === -1` branch, but `handleDismiss` has
++       * no `DISMISSING` branch, and here the index never reached `-1`, so
++       * neither recovers. `statusRef` is a ref, so nothing outside the
++       * component can break the cycle either.
++       *
++       * Calling `present()` is unambiguous intent to SHOW, which supersedes a
++       * dismissal still notionally in flight. A dismissal progressing normally
++       * never reaches this line, because nothing calls `present()` during it.
++       */
++      if (statusRef.current === MODAL_STATUS.DISMISSING) {
++        statusRef.current = MODAL_STATUS.INITIAL;
++      }
++
+       requestAnimationFrame(() => {
+         if (mount && bottomSheetRef.current) {
+           statusRef.current = MODAL_STATUS.ANIMATING;
+@@ -273,13 +301,16 @@ function BottomSheetModalComponent<T = never>(
+       }
+ 
+       /**
+-       * if the modal position is already in a closed position,
+-       * then we unmount the node and early exit.
++       * if the modal has no inner sheet to animate (never presented,
++       * already closed, or minimized), then we unmount the node and
++       * early exit.
+        */
+       if (
+-        [MODAL_STATUS.CLOSED, MODAL_STATUS.MINIMIZED].includes(
+-          statusRef.current
+-        ) ||
++        [
++          MODAL_STATUS.INITIAL,
++          MODAL_STATUS.CLOSED,
++          MODAL_STATUS.MINIMIZED,
++        ].includes(statusRef.current) ||
+         (statusRef.current === MODAL_STATUS.DISMISSING &&
+           currentIndexRef.current === -1)
+       ) {
+diff --git a/node_modules/@gorhom/bottom-sheet/src/components/bottomSheetTextInput/BottomSheetTextInput.tsx b/node_modules/@gorhom/bottom-sheet/src/components/bottomSheetTextInput/BottomSheetTextInput.tsx
+index 861d276..800e790 100644
+--- a/node_modules/@gorhom/bottom-sheet/src/components/bottomSheetTextInput/BottomSheetTextInput.tsx
++++ b/node_modules/@gorhom/bottom-sheet/src/components/bottomSheetTextInput/BottomSheetTextInput.tsx
+@@ -31,10 +31,11 @@ const BottomSheetTextInputComponent = forwardRef<
+   //#region callbacks
+   const handleOnFocus = useCallback(
+     (args: NativeSyntheticEvent<TextInputFocusEventData>) => {
+-      animatedKeyboardState.set(state => ({
+-        ...state,
+-        target: args.nativeEvent.target,
+-      }));
++      const target = args.nativeEvent.target;
++      animatedKeyboardState.modify(state => {
++        'worklet';
++        return { ...state, target };
++      });
+       if (onFocus) {
+         onFocus(args);
+       }
+@@ -60,10 +61,14 @@ const BottomSheetTextInputComponent = forwardRef<
+         textInputNodesRef.current.has(currentFocusedInput);
+ 
+       if (shouldRemoveCurrentTarget && !shouldIgnoreBlurEvent) {
+-        animatedKeyboardState.set(state => ({
+-          ...state,
+-          target: undefined,
+-        }));
++        const target = args.nativeEvent.target;
++        animatedKeyboardState.modify(state => {
++          'worklet';
++          if (state.target !== target) {
++            return state;
++          }
++          return { ...state, target: undefined };
++        });
+       }
+ 
+       if (onBlur) {
+@@ -97,10 +102,13 @@ const BottomSheetTextInputComponent = forwardRef<
+        * to the current component.
+        */
+       if (keyboardState.target === componentNode) {
+-        animatedKeyboardState.set(state => ({
+-          ...state,
+-          target: undefined,
+-        }));
++        animatedKeyboardState.modify(state => {
++          'worklet';
++          if (state.target !== componentNode) {
++            return state;
++          }
++          return { ...state, target: undefined };
++        });
+       }
+ 
+       if (textInputNodesRef.current.has(componentNode)) {
+diff --git a/node_modules/@gorhom/bottom-sheet/src/hooks/useAnimatedLayout.ts b/node_modules/@gorhom/bottom-sheet/src/hooks/useAnimatedLayout.ts
+index 68c674d..0a0e429 100644
+--- a/node_modules/@gorhom/bottom-sheet/src/hooks/useAnimatedLayout.ts
++++ b/node_modules/@gorhom/bottom-sheet/src/hooks/useAnimatedLayout.ts
+@@ -106,13 +106,18 @@ export function useAnimatedLayout(
+     [state, verticalInset, modal]
+   );
+   useEffect(() => {
+-    Dimensions.addEventListener('change', ({ window }) => {
+-      state.modify(_state => {
+-        'worklet';
+-        _state.window = window;
+-        return _state;
+-      });
+-    });
++    const subscription = Dimensions.addEventListener(
++      'change',
++      ({ window: windowDimensions }) => {
++        state.modify(_state => {
++          'worklet';
++          _state.window = windowDimensions;
++          return _state;
++        });
++      }
++    );
++
++    return () => subscription.remove();
+   }, [state]);
+   //#endregion
+ 
