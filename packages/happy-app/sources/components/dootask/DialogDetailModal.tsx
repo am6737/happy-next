@@ -2,6 +2,7 @@ import * as React from 'react';
 import { View, Text, TextInput, ActivityIndicator, Platform } from 'react-native';
 import { Image } from 'expo-image';
 import { BottomSheetModal, BottomSheetFlatList, BottomSheetTextInput, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const SheetTextInput = Platform.OS === 'web' ? TextInput : BottomSheetTextInput;
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
@@ -47,6 +48,7 @@ export const DialogDetailModal = React.memo(React.forwardRef<BottomSheetModal, D
     dialogName, dialogId, groupType, ownerId, members, loading, serverUrl,
 }, ref) => {
     const { theme } = useUnistyles();
+    const safeArea = useSafeAreaInsets();
     const [search, setSearch] = React.useState('');
 
     const filtered = React.useMemo(() => {
@@ -131,6 +133,10 @@ export const DialogDetailModal = React.memo(React.forwardRef<BottomSheetModal, D
             ref={ref}
             snapPoints={['90%']}
             enableDynamicSizing={false}
+            topInset={safeArea.top}
+            keyboardBehavior="interactive"
+            keyboardBlurBehavior="restore"
+            android_keyboardInputMode="adjustResize"
             backdropComponent={renderBackdrop}
             onDismiss={handleDismiss}
             backgroundStyle={{ backgroundColor: theme.colors.surface }}

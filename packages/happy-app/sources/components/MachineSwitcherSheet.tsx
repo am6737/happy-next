@@ -145,6 +145,8 @@ export const MachineSwitcherSheet = React.memo(React.forwardRef<BottomSheetModal
             ref={ref}
             snapPoints={[searchable || hasShares ? '70%' : '42%']}
             enableDynamicSizing={false}
+            // With the keyboard up the sheet rises as far as it can; stop it below the status bar.
+            topInset={safeArea.top}
             keyboardBehavior="interactive"
             keyboardBlurBehavior="restore"
             android_keyboardInputMode="adjustResize"

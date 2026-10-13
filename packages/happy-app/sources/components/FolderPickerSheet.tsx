@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { View, Text, TextInput, ActivityIndicator, Platform, Pressable } from 'react-native';
 import { BottomSheetModal, BottomSheetFlatList, BottomSheetTextInput, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { Ionicons } from '@expo/vector-icons';
 import { Typography } from '@/constants/Typography';
@@ -54,6 +55,7 @@ export const FolderPickerSheet = React.memo(React.forwardRef<BottomSheetModal, F
 }, ref) => {
     const isFileMode = mode === 'file';
     const { theme } = useUnistyles();
+    const safeArea = useSafeAreaInsets();
 
     // ---- state ----
     // Where the sheet opens. Only the starting point moves: `~` still means the
@@ -360,6 +362,7 @@ export const FolderPickerSheet = React.memo(React.forwardRef<BottomSheetModal, F
             ref={ref}
             snapPoints={['75%']}
             enableDynamicSizing={false}
+            topInset={safeArea.top}
             keyboardBehavior="interactive"
             keyboardBlurBehavior="restore"
             android_keyboardInputMode="adjustResize"

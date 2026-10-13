@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { BottomSheetModal, BottomSheetFlatList, BottomSheetTextInput, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const SheetTextInput = Platform.OS === 'web' ? TextInput : BottomSheetTextInput;
 import { t } from '@/text';
@@ -132,6 +133,7 @@ type FilterPanelModalProps = {
 
 const FilterPanelModal = React.memo(React.forwardRef<BottomSheetModal, FilterPanelModalProps>(({ onRefreshTasks }, ref) => {
     const { theme } = useUnistyles();
+    const safeArea = useSafeAreaInsets();
     const filters = useDootaskFilters();
     const projects = useDootaskProjects();
     const profile = useDootaskProfile();
@@ -281,6 +283,7 @@ const FilterPanelModal = React.memo(React.forwardRef<BottomSheetModal, FilterPan
             ref={ref}
             snapPoints={['60%']}
             enableDynamicSizing={false}
+            topInset={safeArea.top}
             backdropComponent={renderBackdrop}
             onDismiss={handleDismiss}
             keyboardBehavior="interactive"

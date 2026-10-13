@@ -188,6 +188,7 @@ export const FriendSelector = React.memo(React.forwardRef<BottomSheetModal, Frie
             ref={ref}
             snapPoints={['75%']}
             enableDynamicSizing={false}
+            topInset={insets.top}
             keyboardBehavior="interactive"
             keyboardBlurBehavior="restore"
             android_keyboardInputMode="adjustResize"
