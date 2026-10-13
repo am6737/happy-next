@@ -1,0 +1,21 @@
+diff --git a/node_modules/expo-dev-menu/ios/DevMenuDevOptionsDelegate.swift b/node_modules/expo-dev-menu/ios/DevMenuDevOptionsDelegate.swift
+index 2edab16..7b57863 100644
+--- a/node_modules/expo-dev-menu/ios/DevMenuDevOptionsDelegate.swift
++++ b/node_modules/expo-dev-menu/ios/DevMenuDevOptionsDelegate.swift
+@@ -37,9 +37,14 @@ class DevMenuDevOptionsDelegate {
+     guard let bundleURL = bridge?.bundleURL else {
+       return
+     }
+-    let port = bundleURL.port ?? Int(RCT_METRO_PORT)
+     let host = bundleURL.host ?? "localhost"
+-    let openURL = "http://\(host):\(port)/_expo/debugger?applicationId=\(Bundle.main.bundleIdentifier ?? "")"
++    // An https dev server (e.g. a tunnel that keeps the Metro port in its
++    // hostname) has no port in the bundle URL; the scheme implies 443 there,
++    // as React Native's own open-debugger request assumes in 0.83.3+ and 0.85+.
++    let isSecure = bundleURL.scheme == "https"
++    let scheme = isSecure ? "https" : "http"
++    let port = bundleURL.port.map { ":\($0)" } ?? (isSecure ? "" : ":\(RCT_METRO_PORT)")
++    let openURL = "\(scheme)://\(host)\(port)/_expo/debugger?applicationId=\(Bundle.main.bundleIdentifier ?? "")"
+     guard let url = URL(string: openURL) else {
+       NSLog("[DevMenu] Invalid openJSInspector URL: $@", openURL)
+       return

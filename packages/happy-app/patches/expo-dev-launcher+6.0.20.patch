@@ -1,0 +1,39 @@
+diff --git a/node_modules/expo-dev-launcher/ios/DevLauncherNetworkInterceptor.swift b/node_modules/expo-dev-launcher/ios/DevLauncherNetworkInterceptor.swift
+index 5a2f8b9..a2d5e45 100644
+--- a/node_modules/expo-dev-launcher/ios/DevLauncherNetworkInterceptor.swift
++++ b/node_modules/expo-dev-launcher/ios/DevLauncherNetworkInterceptor.swift
+@@ -40,9 +40,15 @@ public final class DevLauncherNetworkInterceptor: NSObject, ExpoRequestCdpInterc
+ 
+   private static func createNetworkInspectorUrl(bundleUrl: URL) -> URL {
+     let host = bundleUrl.host ?? "localhost"
+-    let port = bundleUrl.port ?? 8081
+-    let scheme = bundleUrl.scheme == "https" ? "wss" : "ws"
+-    let urlString = "\(scheme)://\(host):\(port)/inspector/network"
++    let isSecure = bundleUrl.scheme == "https" || bundleUrl.scheme == "exps"
++    let scheme = isSecure ? "wss" : "ws"
++    // An https dev server (e.g. a tunnel that keeps the Metro port in its
++    // hostname) has no port in the bundle URL; the scheme implies 443 there,
++    // as React Native's own inspector assumes in 0.83.3+ and 0.85+. Defaulting
++    // to 8081 would leave this socket reconnecting to a closed port every two
++    // seconds.
++    let port = bundleUrl.port.map { ":\($0)" } ?? (isSecure ? "" : ":8081")
++    let urlString = "\(scheme)://\(host)\(port)/inspector/network"
+     guard let url = URL(string: urlString) else {
+       fatalError("Invalid network inspector URL: \(urlString)")
+     }
+diff --git a/node_modules/expo-dev-launcher/ios/Unsafe/RCTPackagerConnection+EXDevLauncherPackagerConnectionInterceptor.m b/node_modules/expo-dev-launcher/ios/Unsafe/RCTPackagerConnection+EXDevLauncherPackagerConnectionInterceptor.m
+index abb3258..0ca4aff 100644
+--- a/node_modules/expo-dev-launcher/ios/Unsafe/RCTPackagerConnection+EXDevLauncherPackagerConnectionInterceptor.m
++++ b/node_modules/expo-dev-launcher/ios/Unsafe/RCTPackagerConnection+EXDevLauncherPackagerConnectionInterceptor.m
+@@ -18,7 +18,10 @@ static RCTReconnectingWebSocket *createSocketForURL(NSURL * url)
+ {
+   NSURLComponents *const components = [NSURLComponents new];
+   components.host = [url host];
+-  components.scheme = @"http";
++  // Backported from expo-dev-launcher 56: keep TLS for an https dev server, so a
++  // bundle URL without a port reaches it on 443 rather than plaintext port 80.
++  NSString *scheme = [url scheme];
++  components.scheme = ([scheme isEqualToString:@"https"] || [scheme isEqualToString:@"exps"]) ? @"https" : @"http";
+   components.port =  [url port];
+   components.path = @"/message";
+   components.queryItems = @[[NSURLQueryItem queryItemWithName:@"role" value:@"ios"]];

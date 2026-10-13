@@ -1,0 +1,85 @@
+diff --git a/node_modules/react-native/React/DevSupport/RCTInspectorDevServerHelper.mm b/node_modules/react-native/React/DevSupport/RCTInspectorDevServerHelper.mm
+index a9aedca..c61df89 100644
+--- a/node_modules/react-native/React/DevSupport/RCTInspectorDevServerHelper.mm
++++ b/node_modules/react-native/React/DevSupport/RCTInspectorDevServerHelper.mm
+@@ -20,27 +20,43 @@
+ 
+ static NSString *const kDebuggerMsgDisable = @"{ \"id\":1,\"method\":\"Debugger.disable\" }";
+ 
++// Backported from React Native 0.86 (the port and scheme part also shipped in
++// 0.83.3+ and 0.85, but not in 0.84.x; the IPv6 brackets came in 0.86): a dev
++// server reached over https (e.g. a tunnel that keeps the Metro port in its
++// hostname) has no port in the bundle URL, and defaulting to 8081 there points
++// the inspector at a closed port that it reconnects to every two seconds for as
++// long as the app runs. Drop this patch once on 0.86 or later.
++static const int kDefaultMetroPort = 8081;
++
+ static NSString *getServerHost(NSURL *bundleURL)
+ {
+-  NSNumber *port = @8081;
+-  NSString *portStr = [[[NSProcessInfo processInfo] environment] objectForKey:@"RCT_METRO_PORT"];
+-  if (portStr && [portStr length] > 0) {
+-    port = [NSNumber numberWithInt:[portStr intValue]];
+-  }
+-  if ([bundleURL port]) {
+-    port = [bundleURL port];
+-  }
+   NSString *host = [bundleURL host];
+   if (!host) {
+     host = @"localhost";
+   }
++  // NSURL.host strips IPv6 brackets, but URL authority requires them.
++  if ([host containsString:@":"] && ![host hasPrefix:@"["] && ![host hasSuffix:@"]"]) {
++    host = [NSString stringWithFormat:@"[%@]", host];
++  }
++
++  // Use explicit port from URL if available
++  if ([bundleURL port]) {
++    return [NSString stringWithFormat:@"%@:%@", host, [bundleURL port]];
++  }
++
++  // Check environment variable
++  NSString *portStr = [[[NSProcessInfo processInfo] environment] objectForKey:@"RCT_METRO_PORT"];
++  if (portStr && [portStr length] > 0) {
++    return [NSString stringWithFormat:@"%@:%@", host, portStr];
++  }
++
++  // For https, omit port — the scheme implies 443
++  if ([[bundleURL scheme] isEqualToString:@"https"]) {
++    return host;
++  }
+ 
+-  // this is consistent with the Android implementation, where http:// is the
+-  // hardcoded implicit scheme for the debug server. Note, packagerURL
+-  // technically looks like it could handle schemes/protocols other than HTTP,
+-  // so rather than force HTTP, leave it be for now, in case someone is relying
+-  // on that ability when developing against iOS.
+-  return [NSString stringWithFormat:@"%@:%@", host, port];
++  // Default to 8081 for local development (Metro's default port)
++  return [NSString stringWithFormat:@"%@:%d", host, kDefaultMetroPort];
+ }
+ 
+ static NSString *getSHA256(NSString *string)
+@@ -111,8 +127,10 @@ static NSURL *getInspectorDeviceUrl(NSURL *bundleURL)
+   NSString *escapedInspectorDeviceId = [getInspectorDeviceId()
+       stringByAddingPercentEncodingWithAllowedCharacters:NSCharacterSet.URLQueryAllowedCharacterSet];
+ 
++  NSString *scheme = [bundleURL scheme] ? [bundleURL scheme] : @"http";
+   return [NSURL
+-      URLWithString:[NSString stringWithFormat:@"http://%@/inspector/device?name=%@&app=%@&device=%@&profiling=%@",
++      URLWithString:[NSString stringWithFormat:@"%@://%@/inspector/device?name=%@&app=%@&device=%@&profiling=%@",
++                                               scheme,
+                                                getServerHost(bundleURL),
+                                                escapedDeviceName,
+                                                escapedAppName,
+@@ -149,7 +167,9 @@ static void sendEventToAllConnections(NSString *event)
+   NSString *escapedInspectorDeviceId = [getInspectorDeviceId()
+       stringByAddingPercentEncodingWithAllowedCharacters:NSCharacterSet.URLQueryAllowedCharacterSet];
+ 
+-  NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"http://%@/open-debugger?device=%@",
++  NSString *scheme = [bundleURL scheme] ? [bundleURL scheme] : @"http";
++  NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"%@://%@/open-debugger?device=%@",
++                                                               scheme,
+                                                                getServerHost(bundleURL),
+                                                                escapedInspectorDeviceId]];
+   NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
