@@ -25,6 +25,8 @@ interface RepoPickerBarProps {
     onReposChange: (repos: SelectedRepo[]) => void;
     /** Called when user taps "Add directory...". Parent should prompt for a path and add the repo. */
     onAddDirectory: () => void;
+    /** Sits inside the composer's machine/path card: chips take the fills of the session type tabs above them. */
+    embedded?: boolean;
 }
 
 // --- Helpers ---
@@ -50,7 +52,7 @@ const repoBasePath = (repo: SelectedRepo['repo']): string => repo.path;
  * Tapping × on a selected chip removes it.
  */
 export const RepoPickerBar: React.FC<RepoPickerBarProps> = React.memo(
-    ({ machineId, selectedRepos, onReposChange, onAddDirectory }) => {
+    ({ machineId, selectedRepos, onReposChange, onAddDirectory, embedded = false }) => {
         const [fetchingBranches, setFetchingBranches] = useState<string | null>(null);
         const [branchMenuVisible, setBranchMenuVisible] = useState(false);
         const [branchMenuItems, setBranchMenuItems] = useState<ActionMenuItem[]>([]);
@@ -202,7 +204,8 @@ export const RepoPickerBar: React.FC<RepoPickerBarProps> = React.memo(
                                 disabled={isFetching}
                                 style={[
                                     stylesheet.chip,
-                                    isSelected && stylesheet.chipSelected,
+                                    embedded && stylesheet.chipEmbedded,
+                                    isSelected && (embedded ? stylesheet.chipSelectedEmbedded : stylesheet.chipSelected),
                                 ]}
                             >
                                 <Text
@@ -244,7 +247,7 @@ export const RepoPickerBar: React.FC<RepoPickerBarProps> = React.memo(
                                     key={key}
                                     onPress={() => handleAdHocChipPress(s)}
                                     disabled={isFetching}
-                                    style={[stylesheet.chip, stylesheet.chipSelected]}
+                                    style={[stylesheet.chip, embedded ? stylesheet.chipSelectedEmbedded : stylesheet.chipSelected]}
                                 >
                                     <Text style={[stylesheet.chipText, stylesheet.chipTextSelected]} numberOfLines={1}>
                                         {s.repo.displayName || s.repo.path}
@@ -266,7 +269,7 @@ export const RepoPickerBar: React.FC<RepoPickerBarProps> = React.memo(
                         })}
 
                     {/* Add directory action */}
-                    <Pressable onPress={onAddDirectory} style={stylesheet.addChip}>
+                    <Pressable onPress={onAddDirectory} style={[stylesheet.addChip, embedded && stylesheet.chipEmbedded]}>
                         <Ionicons
                             name="add-circle-outline"
                             size={16}
@@ -312,6 +315,14 @@ const stylesheet = StyleSheet.create((theme, _rt) => ({
     chipSelected: {
         backgroundColor: theme.colors.surface,
         borderColor: theme.colors.divider,
+    },
+    chipEmbedded: {
+        backgroundColor: theme.colors.floatingOverlay.segmentedBackground,
+        borderColor: 'transparent',
+    },
+    chipSelectedEmbedded: {
+        backgroundColor: theme.colors.floatingOverlay.segmentedSelected,
+        borderColor: 'transparent',
     },
     chipText: {
         fontSize: 13,

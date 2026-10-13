@@ -1060,6 +1060,7 @@ function NewSessionWizard() {
                             // Inset like the machine and path rows above, so the chips start under their icons.
                             <View style={{ paddingTop: 4, paddingHorizontal: 10 }}>
                                 <RepoPickerBar
+                                    embedded
                                     machineId={selectedMachineId}
                                     selectedRepos={selectedRepos}
                                     onReposChange={setSelectedRepos}
