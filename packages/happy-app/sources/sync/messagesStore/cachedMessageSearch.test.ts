@@ -4,6 +4,7 @@ import {
     cachedMessageMatchesQuery,
     cachedMessageSnippet,
     extractCachedMessageText,
+    isReasoningRecord,
     normalizeCachedMessageSearchText,
 } from './cachedMessageSearch';
 
@@ -28,6 +29,13 @@ describe('cached message search helpers', () => {
         expect(extractCachedMessageText(agent)).toBe('Visible answer');
         expect(extractCachedMessageText({ ...user, isSidechain: true })).toBeNull();
         expect(extractCachedMessageText({ ...user, meta: { isCompactSummary: true } } as NormalizedMessage)).toBeNull();
+    });
+
+    it('tells Codex and ACP reasoning apart from replies', () => {
+        expect(isReasoningRecord({ role: 'agent', content: { type: 'codex', data: { type: 'reasoning', message: 'hmm' } } })).toBe(true);
+        expect(isReasoningRecord({ role: 'agent', content: { type: 'acp', provider: 'gemini', data: { type: 'reasoning', message: 'hmm' } } })).toBe(true);
+        expect(isReasoningRecord({ role: 'agent', content: { type: 'codex', data: { type: 'message', message: 'done' } } })).toBe(false);
+        expect(isReasoningRecord({ role: 'user', content: { type: 'text', text: 'reasoning' } })).toBe(false);
     });
 
     it('normalizes text and requires every query token', () => {

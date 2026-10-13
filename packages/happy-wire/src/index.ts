@@ -10,3 +10,4 @@ export * from './fileUpload';
 export * from './toolImagePreview';
 export * from './bashPermission';
 export * from './terminal';
+export * from './messageSearch';

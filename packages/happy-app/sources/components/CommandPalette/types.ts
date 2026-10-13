@@ -1,3 +1,5 @@
+import type { CachedMessageSearchMatch } from '@/sync/messagesStore/cachedMessageSearch';
+
 export interface Command {
     id: string;
     title: string;
@@ -34,3 +36,9 @@ export interface CommandCategory {
     order: number;
     commands: Command[];
 }
+
+/**
+ * Searches messages for `query`, handing over the merged hits each time another source (the local
+ * cache, a machine) answers, and resolving once all of them have.
+ */
+export type MessageSearch = (query: string, onMatches: (matches: CachedMessageSearchMatch[]) => void) => Promise<void>;

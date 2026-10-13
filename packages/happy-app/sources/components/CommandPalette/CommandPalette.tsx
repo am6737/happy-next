@@ -5,16 +5,15 @@ import { CommandPaletteInput } from './CommandPaletteInput';
 import { CommandPaletteResults } from './CommandPaletteResults';
 import { CommandPaletteHistory } from './CommandPaletteHistory';
 import { useCommandPalette } from './useCommandPalette';
-import { Command } from './types';
+import { Command, MessageSearch } from './types';
 import { Typography } from '@/constants/Typography';
 import { t } from '@/text';
-import type { CachedMessageSearchMatch } from '@/sync/messagesStore/cachedMessageSearch';
 
 const NAVIGATION_KEYS = new Set(['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight', 'Enter', 'Home', 'End']);
 
 interface CommandPaletteProps {
     commands: Command[];
-    searchCachedMessages?: (query: string) => Promise<CachedMessageSearchMatch[]>;
+    searchMessages?: MessageSearch;
     // Hides the palette and keeps its state, for clicking outside or after running a result
     onClose: () => void;
     // Esc on an empty query; the palette starts fresh next time
@@ -24,7 +23,7 @@ interface CommandPaletteProps {
     escapeEnabled?: boolean;
 }
 
-export function CommandPalette({ commands, searchCachedMessages, onClose, onDismiss, visible = true, escapeEnabled = true }: CommandPaletteProps) {
+export function CommandPalette({ commands, searchMessages, onClose, onDismiss, visible = true, escapeEnabled = true }: CommandPaletteProps) {
     const { width, height } = useWindowDimensions();
     // Matches the modal's 90% / 800px width: four tiles per row when there's room, two on phones
     const tileColumns = Math.min(width * 0.9, 800) >= 600 ? 4 : 2;
@@ -49,7 +48,7 @@ export function CommandPalette({ commands, searchCachedMessages, onClose, onDism
         selectHistoryEntry,
         removeHistoryEntry,
         clearHistory,
-    } = useCommandPalette(commands, onClose, searchCachedMessages, tileColumns, onDismiss);
+    } = useCommandPalette(commands, onClose, searchMessages, tileColumns, onDismiss);
 
     // The palette stays mounted while hidden; typing should land in the input whenever it shows again
     React.useEffect(() => {

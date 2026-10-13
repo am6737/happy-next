@@ -103,6 +103,7 @@ import {
     cachedMessageMatchesQuery,
     cachedMessageSnippet,
     extractCachedMessageText,
+    isReasoningRecord,
     normalizeCachedMessageSearchText,
     type CachedMessageSearchEntry,
     type CachedMessageSearchMatch,
@@ -3658,7 +3659,7 @@ class Sync {
                     const normalized = normalizeRawMessage(item.id, item.localId, item.createdAt, item.content);
                     if (!normalized) continue;
                     normalized.seq = item.seq;
-                    const text = extractCachedMessageText(normalized);
+                    const text = isReasoningRecord(item.content) ? null : extractCachedMessageText(normalized);
                     if (!text) continue;
                     entries.push({
                         id: item.id,

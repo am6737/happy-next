@@ -19,6 +19,8 @@ import { appendAttachmentsToPrompt } from '../modules/common/fileUpload';
 import { registerToolImageForCall } from '../modules/common/toolImageStore';
 import { calculateCost } from '@/utils/pricing';
 import { isDebug } from '@/utils/env';
+import { MessageArchiveWriter } from '../modules/common/messageArchive';
+import { extractSearchableMessage, type MessageSearchRole } from 'happy-wire';
 
 
 function stripCapabilitiesFromMetadata(metadata: Metadata): Metadata {
@@ -172,6 +174,9 @@ export class ApiSessionClient extends EventEmitter {
     private toolIdToName = new Map<string, string>();
     /** Outbox of encrypted messages awaiting reliable HTTP delivery via v3 API */
     private pendingOutbox: Array<{ content: string; localId: string }> = [];
+    /** Searchable text of outbox messages by localId, archived once the server has given them an id and seq */
+    private pendingArchive = new Map<string, { role: MessageSearchRole; text: string }>();
+    private messageArchive: MessageArchiveWriter;
     /** Coalescing sync that flushes the HTTP outbox */
     private sendSync: InvalidateSync;
     /** Whether the "first user message → title" seeding has already fired (idempotent guard). */
@@ -210,6 +215,13 @@ export class ApiSessionClient extends EventEmitter {
 
         // Initialize HTTP outbox sync for reliable message delivery
         this.sendSync = new InvalidateSync(() => this.flushOutbox());
+        this.messageArchive = new MessageArchiveWriter(() => ({
+            sessionId: this.sessionId,
+            machineId: this.metadata?.machineId ?? null,
+            agent: this.metadata?.flavor ?? null,
+            path: this.metadata?.path ?? '',
+            host: this.metadata?.host ?? '',
+        }));
 
         //
         // Create socket
@@ -316,7 +328,15 @@ export class ApiSessionClient extends EventEmitter {
                         // incoming app message and switch from local to remote mode.
                         if (userResult.data.meta?.sentFrom === 'cli') {
                             logger.debug('[SOCKET] [UPDATE] Ignoring echo of CLI-originated user message');
-                        } else if (this.pendingMessageCallback) {
+                            return;
+                        }
+                        // Sent from the app, so it never passed through the outbox — archive it here
+                        const searchable = extractSearchableMessage(body);
+                        if (searchable) {
+                            const { id, seq, localId, createdAt } = data.body.message;
+                            this.messageArchive.append([{ type: 'message', ...searchable, id, seq, localId: localId ?? null, createdAt }]);
+                        }
+                        if (this.pendingMessageCallback) {
                             // Title seed for Codex/Gemini remote mode — their user messages don't re-echo through buildMessageContent
                             this.maybeSetInitialTitleFromUserText(typedText);
                             this.pendingMessageCallback(userResult.data);
@@ -786,7 +806,7 @@ export class ApiSessionClient extends EventEmitter {
         // an oversized backlog fail validation forever, since we only clear on
         // success — the request would retry the same rejected batch indefinitely.
         const batch = this.pendingOutbox.slice(0, MAX_OUTBOX_BATCH_SIZE);
-        await axios.post(
+        const response = await axios.post<{ messages?: Array<{ id: string; seq: number; localId: string; createdAt: number }> }>(
             `${configuration.serverUrl}/v3/sessions/${encodeURIComponent(this.sessionId)}/messages`,
             {
                 messages: batch
@@ -802,6 +822,12 @@ export class ApiSessionClient extends EventEmitter {
 
         // Only clear after successful response
         this.pendingOutbox.splice(0, batch.length);
+
+        this.messageArchive.append((response.data?.messages ?? []).flatMap(({ id, seq, localId, createdAt }) => {
+            const searchable = this.pendingArchive.get(localId);
+            return searchable ? [{ type: 'message' as const, ...searchable, id, seq, localId, createdAt }] : [];
+        }));
+        batch.forEach((item) => this.pendingArchive.delete(item.localId));
 
         // More than one batch was queued — keep draining the remainder.
         if (this.pendingOutbox.length > 0) {
@@ -842,9 +868,12 @@ export class ApiSessionClient extends EventEmitter {
     /** Encrypt a message and put it on the v3 HTTP outbox. */
     private pushOutbox(content: unknown) {
         const encrypted = encodeBase64(encrypt(this.encryptionKey, this.encryptionVariant, content));
+        const localId = randomUUID();
+        const searchable = extractSearchableMessage(content);
+        if (searchable) this.pendingArchive.set(localId, searchable);
         this.pendingOutbox.push({
             content: encrypted,
-            localId: randomUUID()
+            localId
         });
         this.sendSync.invalidate();
     }

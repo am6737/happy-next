@@ -13,10 +13,13 @@ import { useNavigateToSession } from '@/hooks/useNavigateToSession';
 import { OPEN_COMMAND_PALETTE_EVENT } from './events';
 import { useModal } from '@/modal';
 import { buildCommandPaletteCommands } from './commandPaletteCommands';
-import type { Command } from './types';
+import type { Command, MessageSearch } from './types';
 import { t } from '@/text';
 import { getDesktopPlatform } from '@/desktop/desktopWindowUtils';
 import { compareSessionsByLastMessage } from '@/utils/sessionLastMessageAt';
+import { isMachineOnline } from '@/utils/machineUtils';
+import { mergeMessageSearchMatches, searchMachineMessages } from '@/sync/machineMessageSearch';
+import type { CachedMessageSearchMatch } from '@/sync/messagesStore/cachedMessageSearch';
 
 const CommandPaletteContext = createContext<() => void>(() => {});
 
@@ -101,11 +104,23 @@ export function CommandPaletteProvider({ children }: { children: React.ReactNode
     // Stable across session updates, which are frequent: a new function would rerun the open palette's message search
     const sessionsRef = useRef(commandState.sessions);
     sessionsRef.current = commandState.sessions;
-    const searchCachedMessages = useCallback((query: string) => {
+    // The local message cache and every online machine's message archive, merged as each answers
+    const searchMessages = useCallback<MessageSearch>(async (query, onMatches) => {
         const sessionIds = [...sessionsRef.current]
             .sort(compareSessionsByLastMessage)
             .map((session) => session.id);
-        return sync.searchCachedMessages(query, sessionIds);
+        const machineIds = Object.values(storage.getState().machines)
+            .filter(isMachineOnline)
+            .map((machine) => machine.id);
+        const sources: CachedMessageSearchMatch[][] = [];
+        const publish = (matches: CachedMessageSearchMatch[]) => {
+            sources.push(matches);
+            onMatches(mergeMessageSearchMatches(sources, sessionIds));
+        };
+        await Promise.all([
+            sync.searchCachedMessages(query, sessionIds).then(publish),
+            ...machineIds.map((machineId) => searchMachineMessages(machineId, query).then(publish)),
+        ]);
     }, []);
 
     const openCommandPalette = useCallback(() => {
@@ -161,7 +176,7 @@ export function CommandPaletteProvider({ children }: { children: React.ReactNode
                         visible={palette.visible}
                         escapeEnabled={!currentModal}
                         commands={commands}
-                        searchCachedMessages={searchCachedMessages}
+                        searchMessages={searchMessages}
                         onClose={hidePalette}
                         onDismiss={dismissPalette}
                     />

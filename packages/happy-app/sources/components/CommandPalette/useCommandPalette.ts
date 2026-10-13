@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { TextInput } from 'react-native';
-import { Command } from './types';
+import { Command, MessageSearch } from './types';
 import type { NavigationAnchor } from './navigationAnchor';
 import { buildMessageCategory, buildNavigationRows, groupCommands } from './search';
 import { addSearchHistoryEntry, loadSearchHistory, saveSearchHistory } from './searchHistory';
@@ -11,7 +11,7 @@ import type { CachedMessageSearchMatch } from '@/sync/messagesStore/cachedMessag
 export function useCommandPalette(
     commands: Command[],
     onClose: () => void,
-    searchCachedMessages?: (query: string) => Promise<CachedMessageSearchMatch[]>,
+    searchMessages?: MessageSearch,
     tileColumns = 4,
     // Esc on an empty query; defaults to onClose
     onDismiss: () => void = onClose,
@@ -53,17 +53,17 @@ export function useCommandPalette(
         let cancelled = false;
         let timer: ReturnType<typeof setTimeout> | null = null;
 
-        if (!searchCachedMessages || query.length < 2) {
+        if (!searchMessages || query.length < 2) {
             setIsSearchingMessages(false);
             return () => {};
         }
 
         setIsSearchingMessages(true);
         timer = setTimeout(() => {
-            searchCachedMessages(query)
-                .then((matches) => {
-                    if (!cancelled) setCachedMessageMatches(matches);
-                })
+            // Hits show as each source answers; the spinner stays until the last one has
+            searchMessages(query, (matches) => {
+                if (!cancelled) setCachedMessageMatches(matches);
+            })
                 .catch((error) => {
                     console.warn('[CommandPalette] Cached message search failed:', error);
                 })
@@ -76,7 +76,7 @@ export function useCommandPalette(
             cancelled = true;
             if (timer) clearTimeout(timer);
         };
-    }, [searchCachedMessages, searchQuery]);
+    }, [searchMessages, searchQuery]);
 
     const expandSession = useCallback((sessionId: string) => {
         setExpandedSessionIds((current) => new Set(current).add(sessionId));

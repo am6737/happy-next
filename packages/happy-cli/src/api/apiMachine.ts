@@ -11,7 +11,8 @@ import { MachineMetadata, DaemonState, Machine, Update, UpdateMachineBody } from
 import { registerCommonHandlers, SpawnSessionOptions, SpawnSessionResult } from '../modules/common/registerCommonHandlers';
 import { registerTerminalHandlers } from '../modules/terminal/registerTerminalHandlers';
 import type { TerminalManager } from '../modules/terminal/terminalManager';
-import type { TerminalFrame } from 'happy-wire';
+import { searchMessagesRequestSchema, type TerminalFrame } from 'happy-wire';
+import { searchMessageArchive } from '../modules/common/messageArchive';
 import { listClaudeSessionsFromIndex, getClaudeSessionPreview, findClaudeProjectId, readAllClaudeSessionUserMessages, saveClaudeSessionCacheStats } from '@/claude/utils/claudeSessionIndex';
 import { forkAndTruncateSession, forkSession } from '@/claude/utils/claudeSessionFork';
 import { readGeminiSessionLog, listGeminiSessions, getGeminiSessionPreview, saveGeminiSessionCacheStats } from '@/gemini/utils/sessionReader';
@@ -515,6 +516,11 @@ export class ApiMachineClient {
 
         // Upgrade the CLI on this machine from the app
         this.rpcHandlerManager.registerHandler('update-cli', () => updateCli());
+
+        // Search the messages every session on this machine has archived, across agents
+        this.rpcHandlerManager.registerHandler('search-messages', async (params: unknown) => {
+            return searchMessageArchive(searchMessagesRequestSchema.parse(params));
+        });
 
         // Discover slash commands and skills for a directory before any session runs there
         this.rpcHandlerManager.registerHandler('discover-capabilities', async (params: any) => {
