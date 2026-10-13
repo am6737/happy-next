@@ -161,7 +161,12 @@
             "displayName": "GPT-6.1-Sol",
             "description": "Latest workhorse model for coding and everyday work.",
             "efforts": ["ultra", "max", "xhigh", "high", "medium", "low"],
-            "contextWindow": 1050000
+            "contextWindow": 1050000,
+            "pricing": { "input": 2, "output": 10, "cacheWrite": 2.5, "cacheRead": 0.1 },
+            "longContextPricing": {
+                "aboveInputTokens": 272000,
+                "pricing": { "input": 4, "output": 15, "cacheWrite": 5, "cacheRead": 0.2 }
+            }
         },
         {
             "id": "gpt-6-astra",
@@ -172,7 +177,12 @@
             "displayName": "GPT-6-Astra",
             "description": "Frontier intelligence for the most demanding work.",
             "efforts": ["ultra", "max", "xhigh", "high", "medium", "low"],
-            "contextWindow": 1050000
+            "contextWindow": 1050000,
+            "pricing": { "input": 10, "output": 50, "cacheWrite": 12.5, "cacheRead": 1 },
+            "longContextPricing": {
+                "aboveInputTokens": 272000,
+                "pricing": { "input": 20, "output": 75, "cacheWrite": 25, "cacheRead": 2 }
+            }
         },
         {
             "id": "gpt-6-sol",
@@ -183,7 +193,12 @@
             "displayName": "GPT-6-Sol",
             "description": "Previous generation workhorse model.",
             "efforts": ["ultra", "max", "xhigh", "high", "medium", "low"],
-            "contextWindow": 1050000
+            "contextWindow": 1050000,
+            "pricing": { "input": 2, "output": 10, "cacheWrite": 2.5, "cacheRead": 0.2 },
+            "longContextPricing": {
+                "aboveInputTokens": 272000,
+                "pricing": { "input": 4, "output": 15, "cacheWrite": 5, "cacheRead": 0.4 }
+            }
         },
         {
             "id": "gpt-6-luna",
@@ -199,7 +214,12 @@
                 "medium": "Balanced speed and quality",
                 "high": "Higher quality with good speed"
             },
-            "contextWindow": 1050000
+            "contextWindow": 1050000,
+            "pricing": { "input": 0.1, "output": 0.5, "cacheWrite": 0.125, "cacheRead": 0.01 },
+            "longContextPricing": {
+                "aboveInputTokens": 272000,
+                "pricing": { "input": 0.2, "output": 0.75, "cacheWrite": 0.25, "cacheRead": 0.02 }
+            }
         },
         {
             "id": "gpt-5.6-sol",
@@ -210,7 +230,12 @@
             "displayName": "GPT-5.6-Sol",
             "description": "Older generation workhorse model.",
             "efforts": ["ultra", "max", "xhigh", "high", "medium", "low"],
-            "contextWindow": 272000
+            "contextWindow": 272000,
+            "pricing": { "input": 4, "output": 20, "cacheWrite": 5, "cacheRead": 0.4 },
+            "longContextPricing": {
+                "aboveInputTokens": 272000,
+                "pricing": { "input": 8, "output": 30, "cacheWrite": 10, "cacheRead": 0.8 }
+            }
         },
         {
             "id": "gpt-5.6-terra",
@@ -221,7 +246,12 @@
             "displayName": "GPT-5.6-Terra",
             "description": "Older balanced model for straightforward work.",
             "efforts": ["ultra", "max", "xhigh", "high", "medium", "low"],
-            "contextWindow": 272000
+            "contextWindow": 272000,
+            "pricing": { "input": 2, "output": 12, "cacheWrite": 2.5, "cacheRead": 0.2 },
+            "longContextPricing": {
+                "aboveInputTokens": 272000,
+                "pricing": { "input": 4, "output": 18, "cacheWrite": 5, "cacheRead": 0.4 }
+            }
         },
         {
             "id": "gpt-5.6-luna",
@@ -237,7 +267,12 @@
                 "medium": "Balanced speed and quality",
                 "high": "Higher quality with good speed"
             },
-            "contextWindow": 272000
+            "contextWindow": 272000,
+            "pricing": { "input": 0.2, "output": 1.2, "cacheWrite": 0.25, "cacheRead": 0.02 },
+            "longContextPricing": {
+                "aboveInputTokens": 272000,
+                "pricing": { "input": 0.4, "output": 1.8, "cacheWrite": 0.5, "cacheRead": 0.04 }
+            }
         },
         {
             "id": "gpt-5.5",
@@ -251,7 +286,12 @@
             "effortDescriptions": {
                 "xhigh": "Best quality"
             },
-            "contextWindow": 272000
+            "contextWindow": 272000,
+            "pricing": { "input": 5, "output": 30, "cacheWrite": 5, "cacheRead": 0.5 },
+            "longContextPricing": {
+                "aboveInputTokens": 272000,
+                "pricing": { "input": 10, "output": 45, "cacheWrite": 10, "cacheRead": 1 }
+            }
         },
         {
             "id": "gpt-5.4",

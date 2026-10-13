@@ -301,6 +301,15 @@ export const TeammateUpdateRequestSchema = TeammateCreateRequestSchema.omit({ ha
 export type TeammateUpdateRequest = z.input<typeof TeammateUpdateRequestSchema>;
 export type TeammateUpdateRequestParsed = z.output<typeof TeammateUpdateRequestSchema>;
 
+/** Token counts in the shared breakdown: `input` is uncached input only; `output` includes reasoning. */
+export const TeammateTokenUsageSchema = z.object({
+  input: z.number().int().nonnegative(),
+  cacheRead: z.number().int().nonnegative(),
+  cacheWrite: z.number().int().nonnegative(),
+  output: z.number().int().nonnegative(),
+});
+export type TeammateTokenUsage = z.infer<typeof TeammateTokenUsageSchema>;
+
 export const TeammateRunSchema = z.object({
   id: z.string(),
   teammateId: z.string(),
@@ -313,6 +322,8 @@ export const TeammateRunSchema = z.object({
   sessionId: z.string().nullable(),
   taskId: z.string().nullable(),
   costUsd: z.number().nullable(),
+  // Controller model usage while this run was active; null on servers that predate per-run usage.
+  tokens: TeammateTokenUsageSchema.nullable().default(null),
   queuedAt: z.number(),
   startedAt: z.number().nullable(),
   finishedAt: z.number().nullable(),
@@ -480,6 +491,7 @@ export const TeammateSpendSchema = z.object({
   monthStart: z.number(),
   spentUsd: z.number(),
   budgetUsd: z.number().nullable(),
+  tokens: TeammateTokenUsageSchema.default({ input: 0, cacheRead: 0, cacheWrite: 0, output: 0 }),
 });
 export type TeammateSpend = z.infer<typeof TeammateSpendSchema>;
 

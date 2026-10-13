@@ -50,6 +50,8 @@ export const ModelCatalogEntrySchema = z.object({
     fastMode: z.boolean().optional(),
     pricing: ModelPricingSchema.optional(),
     fastPricing: ModelPricingSchema.optional(),
+    /** Rates for a call whose total input (cached included) exceeds `aboveInputTokens`, e.g. OpenAI's 272k long-context tier. */
+    longContextPricing: z.object({ aboveInputTokens: z.number().int().positive(), pricing: ModelPricingSchema }).optional(),
 });
 export type ModelCatalogEntry = z.infer<typeof ModelCatalogEntrySchema>;
 

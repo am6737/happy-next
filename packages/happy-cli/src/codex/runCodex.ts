@@ -51,7 +51,8 @@ import { handleConfigMetadataEvent } from '@/agent/acp/sessionUpdateHandlers';
 import { findCodexSessionFile } from './utils/codexSessionReader';
 import { summarizeBashToolOutput } from '@/modules/common/loadableToolOutput';
 import { cleanupStdinAfterInk } from '@/utils/terminalStdinCleanup';
-import { TEAMMATE_ENV } from 'happy-wire';
+import { getModelCatalog, TEAMMATE_ENV } from 'happy-wire';
+import { calculateCost } from '@/utils/pricing';
 
 type ReadyEventOptions = {
     pending: unknown;
@@ -928,7 +929,12 @@ export async function runCodex(opts: {
                             cache_creation: 0,
                             cache_read: cachedInputTokens,
                         },
-                        cost: { total: 0 },
+                        cost: calculateCost({
+                            input_tokens: inputTokens,
+                            output_tokens: rawOutputTokens,
+                            cache_creation_input_tokens: 0,
+                            cache_read_input_tokens: cachedInputTokens,
+                        }, currentSessionModel ?? getModelCatalog().models.find((model) => model.agent === 'codex' && model.status === 'active')?.id),
                     });
                 }
                 break;

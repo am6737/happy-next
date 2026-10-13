@@ -48,7 +48,8 @@ const createInput = { handle: 'atlas', name: 'Atlas', machineId: 'machine_1' };
 const run = {
     id: 'run_1', teammateId: 'mate_1', threadId: 'thread_1', thread: { kind: 'task' },
     trigger: 'manual', status: 'queued', attempt: 1, failureReason: null, sessionId: null,
-    taskId: 'task_1', costUsd: null, queuedAt: createdAt, startedAt: updatedAt, finishedAt: null,
+    taskId: 'task_1', costUsd: null, inputTokens: null, cacheReadTokens: null, cacheWriteTokens: null, outputTokens: null,
+    queuedAt: createdAt, startedAt: updatedAt, finishedAt: null,
     dispatchToken: 'secret', eventPayload: [],
 };
 const task = {
@@ -297,6 +298,13 @@ describe('teammate DTOs and queries', () => {
 
 });
 
+describe('run token DTO', () => {
+    it('keeps unused runs null and maps stored counters', () => {
+        expect(toTeammateRunDto({ ...run, inputTokens: null, cacheReadTokens: null, cacheWriteTokens: null, outputTokens: null } as any).tokens).toBeNull();
+        expect(toTeammateRunDto({ ...run, inputTokens: 2, cacheReadTokens: 3, cacheWriteTokens: 4, outputTokens: 5 } as any).tokens).toEqual({ input: 2, cacheRead: 3, cacheWrite: 4, output: 5 });
+    });
+});
+
 describe('teammate monthly spend', () => {
     it('sums cost.total from the inclusive UTC month boundary, excluding other sessions and accounts', async () => {
         dbMock.teammateSession.findMany.mockResolvedValue([{ sessionId: 'controller_1' }, { sessionId: 'worker_1' }]);
@@ -311,7 +319,7 @@ describe('teammate monthly spend', () => {
             r.accountId === where.accountId && where.sessionId.in.includes(r.sessionId) && r.createdAt >= where.createdAt.gte));
         // This local date is in September; its UTC date is already October.
         const spend = await teammateSpendGet('account_1', 'mate_1', new Date('2026-09-30T23:30:00-02:00'));
-        expect(spend).toEqual({ teammateId: 'mate_1', monthStart: Date.UTC(2026, 9, 1), spentUsd: 5, budgetUsd: 100 });
+        expect(spend).toEqual({ teammateId: 'mate_1', monthStart: Date.UTC(2026, 9, 1), spentUsd: 5, budgetUsd: 100, tokens: { input: 0, cacheRead: 0, cacheWrite: 0, output: 0 } });
         expect(dbMock.teammateSession.findMany).toHaveBeenCalledWith({ where: { teammateId: 'mate_1', teammate: { accountId: 'account_1' } }, select: { sessionId: true } });
         expect(dbMock.usageReport.findMany).toHaveBeenCalledWith({
             where: { accountId: 'account_1', sessionId: { in: ['controller_1', 'worker_1'] }, createdAt: { gte: new Date('2026-10-01T00:00:00Z') } },
@@ -322,7 +330,7 @@ describe('teammate monthly spend', () => {
     it('returns zero for no sessions and preserves a null budget across the year boundary', async () => {
         dbMock.teammate.findFirst.mockResolvedValueOnce({ monthlyBudgetUsd: null });
         expect(await teammateSpendGet('account_1', 'mate_1', new Date('2027-01-01T00:00:00Z'))).toEqual({
-            teammateId: 'mate_1', monthStart: Date.UTC(2027, 0, 1), spentUsd: 0, budgetUsd: null,
+            teammateId: 'mate_1', monthStart: Date.UTC(2027, 0, 1), spentUsd: 0, budgetUsd: null, tokens: { input: 0, cacheRead: 0, cacheWrite: 0, output: 0 },
         });
         expect(dbMock.usageReport.findMany).not.toHaveBeenCalled();
     });
@@ -334,6 +342,15 @@ describe('teammate monthly spend', () => {
             { data: { cost: { total: Number.NaN } } }, { data: { cost: { total: 4 } } },
         ]);
         expect((await teammateSpendGet('account_1', 'mate_1', updatedAt))?.spentUsd).toBe(4);
+    });
+
+    it('sums Claude and Codex token shapes, including reasoning output', async () => {
+        dbMock.teammateSession.findMany.mockResolvedValueOnce([{ sessionId: 'session_1' }]);
+        dbMock.usageReport.findMany.mockResolvedValueOnce([
+            { data: { cost: { total: 1 }, tokens: { input: 2, cache_read: 3, cache_creation: 4, output: 5 } } },
+            { data: { cost: { total: 2 }, tokens: { input: 7, cache_read: 11, cache_creation: 0, output: 13, reasoning: 17 } } },
+        ]);
+        expect((await teammateSpendGet('account_1', 'mate_1', updatedAt))?.tokens).toEqual({ input: 9, cacheRead: 14, cacheWrite: 4, output: 35 });
     });
 
     it('returns null for a missing or foreign teammate without reading usage reports', async () => {

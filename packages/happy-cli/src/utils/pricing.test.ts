@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { getModelCatalog, setModelCatalog } from 'happy-wire';
 import { calculateCost } from './pricing';
 
 const usage = {
@@ -9,6 +10,36 @@ const usage = {
 };
 
 describe('calculateCost', () => {
+    it.each([
+        ['gpt-5.5', { total: 0.85, input: 0.55, output: 0.3 }, { total: 2.55, input: 2.1, output: 0.45 }],
+        ['gpt-6.1-sol', { total: 0.31, input: 0.21, output: 0.1 }, { total: 0.97, input: 0.82, output: 0.15 }],
+    ])('charges Codex %s at standard and long-context rates', (model, standard, longContext) => {
+        const base = { input_tokens: 100_000, cache_read_input_tokens: 100_000, cache_creation_input_tokens: 0, output_tokens: 10_000 };
+        for (const [actual, expected] of [
+            [calculateCost(base, model), standard],
+            [calculateCost({ ...base, input_tokens: 200_000 }, model), longContext],
+        ]) {
+            expect(actual.total).toBeCloseTo(expected.total);
+            expect(actual.input).toBeCloseTo(expected.input);
+            expect(actual.output).toBeCloseTo(expected.output);
+        }
+    });
+
+    it('uses bundled Codex pricing when the active catalog has no rates', () => {
+        const original = getModelCatalog();
+        const models = original.models.map((model) => model.id === 'gpt-6.1-sol'
+            ? { ...model, pricing: undefined, longContextPricing: undefined } : model);
+        setModelCatalog({ ...original, models });
+        try {
+            expect(calculateCost({ input_tokens: 100_000, cache_read_input_tokens: 100_000, cache_creation_input_tokens: 0, output_tokens: 10_000 }, 'gpt-6.1-sol').total)
+                .toBeCloseTo(0.31);
+            expect(calculateCost({ input_tokens: 200_000, cache_read_input_tokens: 100_000, cache_creation_input_tokens: 0, output_tokens: 10_000 }, 'gpt-6.1-sol').total)
+                .toBeCloseTo(0.97);
+        } finally {
+            setModelCatalog(original);
+        }
+    });
+
     it.each([
         'claude-opus-4-5',
         'claude-opus-4-6',

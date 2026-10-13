@@ -5,6 +5,7 @@ import { buildUsageEphemeral, eventRouter } from "@/app/events/eventRouter";
 import { log } from "@/utils/log";
 import { teammateSessionLookup } from '@/app/teammate/teammateSessionCache';
 import { teammateBudgetEvaluate } from '@/app/teammate/teammateBudgetEvaluate';
+import { teammateRunUsageAdd } from '@/app/teammate/teammateRunUsageAdd';
 
 function toFiniteNumber(value: unknown): number | null {
     if (typeof value !== 'number' || !Number.isFinite(value)) {
@@ -161,7 +162,10 @@ export function usageHandler(userId: string, socket: Socket) {
                         });
                     }
                     if (sessionId) void teammateSessionLookup(sessionId).then(session => {
-                        if (session) void teammateBudgetEvaluate(session.teammateId).catch(() => {});
+                        if (session) {
+                            void teammateRunUsageAdd(session, tokens, cost).catch(() => {});
+                            void teammateBudgetEvaluate(session.teammateId).catch(() => {});
+                        }
                     }).catch(() => {});
                 } catch (error) {
                     log({ module: 'websocket', level: 'error' }, `Failed to save usage report: ${error}`);

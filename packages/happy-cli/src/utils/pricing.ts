@@ -1,4 +1,4 @@
-import { getModelCatalog, type ModelPricing as CatalogPricing } from 'happy-wire';
+import { BUNDLED_MODEL_CATALOG, getModelCatalog, type ModelCatalogEntry, type ModelPricing as CatalogPricing } from 'happy-wire';
 import { Usage } from '../api/types';
 
 /**
@@ -109,10 +109,11 @@ function toModelPricing(pricing: CatalogPricing): ModelPricing {
     };
 }
 
-type CatalogRate = { key: string; pricing: ModelPricing };
+type CatalogRate = { key: string; model: ModelCatalogEntry };
+type FastRate = { key: string; pricing: ModelPricing };
 
 /** Longest key first, so `claude-fable-5-1` wins over `claude-fable-5`. */
-function byKeyLength(a: CatalogRate, b: CatalogRate): number {
+function byKeyLength(a: { key: string }, b: { key: string }): number {
     return b.key.length - a.key.length;
 }
 
@@ -123,11 +124,12 @@ function byKeyLength(a: CatalogRate, b: CatalogRate): number {
  * the active catalog on every call, so a catalog fetched from the server applies.
  */
 function catalogRates(): CatalogRate[] {
-    return getModelCatalog().models.flatMap((model) => {
-        if (!model.pricing) return [];
-        const pricing = toModelPricing(model.pricing);
+    return getModelCatalog().models.flatMap((activeModel) => {
+        const model = activeModel.pricing ? activeModel
+            : BUNDLED_MODEL_CATALOG.models.find((bundled) => bundled.id === activeModel.id && bundled.pricing);
+        if (!model?.pricing) return [];
         const keys = new Set([model.id, model.id.replace(/^claude-/, '')]);
-        return [...keys].map((key) => ({ key, pricing }));
+        return [...keys].map((key) => ({ key, model }));
     }).sort(byKeyLength);
 }
 
@@ -143,7 +145,7 @@ const FAST_MODE_ALIASES: Record<string, string> = {
  * which ignores it) stay on standard pricing.
  * Source: https://platform.claude.com/docs/en/about-claude/pricing#fast-mode-pricing
  */
-function fastModeRates(): CatalogRate[] {
+function fastModeRates(): FastRate[] {
     const rates = getModelCatalog().models.flatMap((model) =>
         model.fastPricing ? [{ key: model.id, pricing: toModelPricing(model.fastPricing) }] : []);
     const aliasRates = Object.entries(FAST_MODE_ALIASES).flatMap(([alias, id]) => {
@@ -164,8 +166,12 @@ function resolveFastModePricing(modelId: string): ModelPricing | undefined {
 }
 
 /** Standard rates of the catalog model named in the id, or undefined. */
-function resolveCatalogPricing(modelId: string): ModelPricing | undefined {
-    return catalogRates().find((rate) => modelId.includes(rate.key))?.pricing;
+function resolveCatalogPricing(modelId: string, usage: Usage): ModelPricing | undefined {
+    const model = catalogRates().find((rate) => modelId.includes(rate.key))?.model;
+    const inputTokens = usage.input_tokens + (usage.cache_read_input_tokens || 0) + (usage.cache_creation_input_tokens || 0);
+    const pricing = model?.longContextPricing && inputTokens > model.longContextPricing.aboveInputTokens
+        ? model.longContextPricing.pricing : model?.pricing;
+    return pricing ? toModelPricing(pricing) : undefined;
 }
 
 export type ModelId = keyof typeof PRICING;
@@ -182,7 +188,7 @@ export function calculateCost(usage: Usage, modelId?: string): { total: number, 
     const id = typeof modelId === 'string' ? modelId : '';
     let pricing: ModelPricing | undefined = resolveFastModePricing(id)
         ?? PRICING[id as ModelId]
-        ?? resolveCatalogPricing(id);
+        ?? resolveCatalogPricing(id, usage);
 
     // Fallback if model not found
     if (!pricing) {

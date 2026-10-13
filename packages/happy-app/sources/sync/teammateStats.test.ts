@@ -8,7 +8,7 @@ const DAY = 24 * 60 * 60 * 1000;
 function run(overrides: Partial<TeammateRun>): TeammateRun {
     return {
         id: 'r', teammateId: 't', threadId: 'th', threadKind: 'dm', trigger: 'manual', status: 'completed',
-        attempt: 1, failureReason: null, sessionId: null, taskId: null, costUsd: 1, queuedAt: NOW - DAY, startedAt: null, finishedAt: null,
+        attempt: 1, failureReason: null, sessionId: null, taskId: null, costUsd: 1, tokens: null, queuedAt: NOW - DAY, startedAt: null, finishedAt: null,
         ...overrides,
     };
 }

@@ -126,7 +126,7 @@ describe('teammate API', () => {
         respond({ tasks: [] });
         expect(await fetchTeammateTasks(credentials, profile.id, 'active')).toEqual([]);
         expect(fetchMock.mock.calls[6][0]).toContain('/tasks?status=active');
-        const spend = { teammateId: profile.id, monthStart: 0, spentUsd: 12, budgetUsd: null };
+        const spend = { teammateId: profile.id, monthStart: 0, spentUsd: 12, budgetUsd: null, tokens: { input: 1, cacheRead: 2, cacheWrite: 3, output: 4 } };
         respond({ spend });
         expect(await fetchTeammateSpend(credentials, profile.id)).toEqual(spend);
     });

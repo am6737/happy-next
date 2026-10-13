@@ -609,7 +609,7 @@ describe('teammate contract', () => {
       trigger: 'heartbeat', status: 'completed', attempt: 1, failureReason: null,
       sessionId: null, taskId: null, costUsd: null, queuedAt: 1, startedAt: null, finishedAt: 2,
     };
-    expect(TeammateScheduledRunResponseSchema.parse({ run })).toEqual({ run });
+    expect(TeammateScheduledRunResponseSchema.parse({ run })).toEqual({ run: { ...run, tokens: null } });
   });
 
   it('parses a task dispatch with a profile snapshot and coalesced events', () => {

@@ -12,7 +12,7 @@ import { getServerUrl } from './serverConfig';
 export class ChannelApiError extends Error {
     constructor(public readonly status: number, public readonly code: string) { super(code); }
 }
-export async function channelRequest<T>(credentials: AuthCredentials, path: string, schema: z.ZodType<T>, body?: unknown, method?: 'PATCH' | 'DELETE'): Promise<T> {
+export async function channelRequest<T>(credentials: AuthCredentials, path: string, schema: z.ZodType<T, z.ZodTypeDef, unknown>, body?: unknown, method?: 'PATCH' | 'DELETE'): Promise<T> {
     const url = `${getServerUrl()}/v1/${path}`;
     let attempts = 0;
     const perform = async (): Promise<{ response: Response } | { error: unknown }> => {

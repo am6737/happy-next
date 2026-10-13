@@ -4,7 +4,7 @@ import { mergeTeammateRunSnapshot, upsertTeammateRun } from './teammateRuns';
 
 const queued: TeammateRun = {
     id: 'run', teammateId: 'agent', threadId: 'thread', threadKind: 'heartbeat', trigger: 'manual', status: 'queued',
-    attempt: 1, failureReason: null, sessionId: null, taskId: null, costUsd: null,
+    attempt: 1, failureReason: null, sessionId: null, taskId: null, costUsd: null, tokens: null,
     queuedAt: 10, startedAt: null, finishedAt: null,
 };
 const running: TeammateRun = { ...queued, status: 'running', startedAt: 20, sessionId: 'session' };

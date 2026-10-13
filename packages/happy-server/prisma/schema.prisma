@@ -717,6 +717,14 @@ model TeammateRun {
   taskId        String?
   task          TeammateTask?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
   costUsd       Float?
+  /// Uncached input tokens attributed to this controller run.
+  inputTokens   Int?
+  /// Cached input tokens read during this controller run.
+  cacheReadTokens Int?
+  /// Cached input tokens written during this controller run.
+  cacheWriteTokens Int?
+  /// Output tokens including reasoning attributed to this controller run.
+  outputTokens  Int?
   queuedAt      DateTime         @default(now())
   startedAt     DateTime?
   finishedAt    DateTime?

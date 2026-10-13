@@ -31,6 +31,12 @@ export function toTeammateRunDto(row: RunRow & { thread: Pick<TeammateThread, 'k
         queuedAt: row.queuedAt.getTime(),
         startedAt: row.startedAt?.getTime() ?? null,
         finishedAt: row.finishedAt?.getTime() ?? null,
+        tokens: row.inputTokens == null ? null : {
+            input: row.inputTokens,
+            cacheRead: row.cacheReadTokens ?? 0,
+            cacheWrite: row.cacheWriteTokens ?? 0,
+            output: row.outputTokens ?? 0,
+        },
     });
 }
 
