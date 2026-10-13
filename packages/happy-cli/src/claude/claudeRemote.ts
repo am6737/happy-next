@@ -135,6 +135,8 @@ export async function claudeRemote(opts: {
     // "Not enough messages to compact"), so success/failure must be read from the
     // dedicated system/status message instead — see the message loop below.
     let compactFailed = false;
+    // Whether the engine is compacting right now, manual or auto.
+    let compacting = false;
     if (specialCommand.type === 'compact') {
         logger.debug('[claudeRemote] /compact command detected - will process as normal but with compaction behavior');
         isCompactCommand = true;
@@ -285,12 +287,27 @@ export async function claudeRemote(opts: {
                 }
             }
 
-            // Capture compaction outcome. It arrives as a system/status message
-            // carrying `compact_result`; the later `result` message is 'success'
-            // regardless, so this is the only reliable signal of a refusal.
-            if (message.type === 'system' && (message as { subtype?: string }).subtype === 'status'
-                && (message as { compact_result?: string }).compact_result === 'failed') {
-                compactFailed = true;
+            // Compaction reports itself through system/status messages: `status: 'compacting'`
+            // when it starts (repeated every ~30s with progress), then one carrying
+            // `compact_result` when it ends. The later `result` message is 'success'
+            // regardless, so `compact_result` is the only reliable signal of a refusal.
+            if (message.type === 'system' && (message as { subtype?: string }).subtype === 'status') {
+                const status = message as { status?: string | null, compact_result?: string };
+                // Auto-compaction has no command to announce it, so the first progress
+                // message does — mirroring the started/ended pair a manual /compact gets.
+                // Flush first so the notice lands after the messages that led up to it.
+                if (status.status === 'compacting' && !compacting && !isCompactCommand) {
+                    await opts.flushOutgoing?.();
+                    opts.onCompletionEvent?.('Compaction started');
+                }
+                compacting = status.status === 'compacting';
+                if (status.compact_result === 'failed') {
+                    compactFailed = true;
+                }
+                if (status.compact_result !== undefined && !isCompactCommand) {
+                    opts.onCompletionEvent?.(compactFailed ? 'Compaction failed' : 'Compaction completed');
+                    compactFailed = false;
+                }
             }
 
             // Handle result messages

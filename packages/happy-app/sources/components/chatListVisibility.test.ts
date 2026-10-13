@@ -51,7 +51,7 @@ function userText(text: string, overrides: Partial<UserTextMessage> = {}): UserT
 
 /** A notice the CLI wrote into the conversation: a mode switch, a usage limit, a compaction. */
 function agentEvent(): Message {
-    return { kind: 'agent-event', id: 'event-1', createdAt: 0, event: { type: 'message', message: 'Compaction completed' } };
+    return { kind: 'agent-event', id: 'event-1', createdAt: 0, event: { type: 'message', message: 'Compaction started' } };
 }
 
 /** The notice a `change_title` call turns into. */
@@ -91,6 +91,13 @@ describe('shouldHideMessageInChatList', () => {
         const marker = '<local-command-stdout>compacted</local-command-stdout>';
         expect(shouldHideMessageInChatList(userText('visible prompt', { displayText: marker }), true)).toBe(true);
         expect(shouldHideMessageInChatList(userText(marker, { displayText: 'visible prompt' }), true)).toBe(false);
+    });
+
+    it('drops the compaction-completed notice and keeps the others', () => {
+        const notice = (message: string): Message => ({ kind: 'agent-event', id: 'event-1', createdAt: 0, event: { type: 'message', message } });
+        expect(shouldHideMessageInChatList(notice('Compaction completed'), true)).toBe(true);
+        expect(shouldHideMessageInChatList(notice('Compaction started'), true)).toBe(false);
+        expect(shouldHideMessageInChatList(notice('Compaction failed'), true)).toBe(false);
     });
 
     it('keeps ordinary user rows', () => {

@@ -23,6 +23,11 @@ export function shouldHideMessageInChatList(message: Message, showThinkingMessag
     if (message.kind === 'agent-text' && message.isThinking && !showThinkingMessages) {
         return true;
     }
+    // The summary row right above it already says the context was compacted. The event still
+    // arrives because the reducer resets context usage on it.
+    if (message.kind === 'agent-event' && message.event.type === 'message' && message.event.message === 'Compaction completed') {
+        return true;
+    }
     if (message.kind !== 'user-text') {
         return false;
     }

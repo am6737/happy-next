@@ -202,4 +202,77 @@ describe('claudeRemote', () => {
             })
         ).resolves.toBeUndefined();
     });
+
+    describe('compaction notices', () => {
+        const status = (fields: Record<string, unknown>) => ({ message: { type: 'system', subtype: 'status', ...fields } as SDKMessage });
+        const result = { message: { type: 'result', subtype: 'success', num_turns: 1, total_cost_usd: 0, duration_ms: 1, duration_api_ms: 1, is_error: false, session_id: 'session-1' } as SDKMessage };
+
+        async function run(text: string, messages: Array<{ message: SDKMessage }>): Promise<string[]> {
+            vi.mocked(query).mockReturnValue(createMockResponse(messages) as any);
+            const events: string[] = [];
+            let calls = 0;
+            await claudeRemote({
+                sessionId: null,
+                path: process.cwd(),
+                allowedTools: [],
+                hookSettingsPath: '/tmp/fake-settings.json',
+                nextMessage: async () => (calls++ === 0 ? { message: text, mode: { permissionMode: 'default' } } : null),
+                onReady: vi.fn(),
+                isAborted: () => false,
+                canCallTool: async () => ({ behavior: 'allow', updatedInput: {} }),
+                onSessionFound: vi.fn(),
+                onMessage: vi.fn(),
+                onCompletionEvent: (message) => events.push(message),
+                signal: new AbortController().signal,
+            });
+            return events;
+        }
+
+        it('announces an auto-compaction once, however many progress updates arrive', async () => {
+            const events = await run('hello', [
+                status({ status: 'compacting', compact_output_chars: 0 }),
+                status({ status: 'compacting', compact_output_chars: 6381 }),
+                status({ status: null, compact_result: 'success' }),
+                result,
+            ]);
+            expect(events).toEqual(['Compaction started', 'Compaction completed']);
+        });
+
+        it('reports a failed auto-compaction', async () => {
+            const events = await run('hello', [
+                status({ status: 'compacting', compact_output_chars: 0 }),
+                status({ status: null, compact_result: 'failed', compact_error: 'Compaction interrupted' }),
+                result,
+            ]);
+            expect(events).toEqual(['Compaction started', 'Compaction failed']);
+        });
+
+        it('announces a second auto-compaction in the same query', async () => {
+            const events = await run('hello', [
+                status({ status: 'compacting', compact_output_chars: 0 }),
+                status({ status: null, compact_result: 'success' }),
+                status({ status: 'compacting', compact_output_chars: 0 }),
+                status({ status: null, compact_result: 'success' }),
+                result,
+            ]);
+            expect(events).toEqual(['Compaction started', 'Compaction completed', 'Compaction started', 'Compaction completed']);
+        });
+
+        it('keeps a manual /compact to the single started/ended pair', async () => {
+            const events = await run('/compact', [
+                status({ status: 'compacting', compact_output_chars: 0 }),
+                status({ status: null, compact_result: 'success' }),
+                result,
+            ]);
+            expect(events).toEqual(['Compaction started', 'Compaction completed']);
+        });
+
+        it('reports a refused manual /compact as failed', async () => {
+            const events = await run('/compact', [
+                status({ status: null, compact_result: 'failed', compact_error: 'Not enough messages to compact.' }),
+                result,
+            ]);
+            expect(events).toEqual(['Compaction started', 'Compaction failed']);
+        });
+    });
 });
