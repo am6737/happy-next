@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { View, Pressable, TextInput, Platform, type LayoutChangeEvent } from 'react-native';
-import { BottomSheetModal, BottomSheetScrollView, BottomSheetTextInput, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
+import { BottomSheetModal, BottomSheetScrollView, BottomSheetTextInput } from '@gorhom/bottom-sheet';
+import { AppBottomSheet } from '@/components/AppBottomSheet';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
@@ -128,10 +129,6 @@ export const MachineSwitcherSheet = React.memo(React.forwardRef<BottomSheetModal
         initialOffsetY.value = 0;
     }, [initialOffsetY]);
 
-    const renderBackdrop = React.useCallback(
-        (props: any) => <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} pressBehavior="close" />,
-        [],
-    );
 
     const sessionsMeta = (count: number) => t('sessionScope.sessionCount', { count });
     const summary = !machines.length
@@ -141,19 +138,11 @@ export const MachineSwitcherSheet = React.memo(React.forwardRef<BottomSheetModal
             : t('sessionScope.machineSummary', { total: machines.length, online: onlineCount });
 
     return (
-        <BottomSheetModal
+        <AppBottomSheet
             ref={ref}
             snapPoints={[searchable || hasShares ? '70%' : '42%']}
             enableDynamicSizing={false}
-            // With the keyboard up the sheet rises as far as it can; stop it below the status bar.
-            topInset={safeArea.top}
-            keyboardBehavior="interactive"
-            keyboardBlurBehavior="restore"
-            android_keyboardInputMode="adjustResize"
-            backdropComponent={renderBackdrop}
             onDismiss={handleDismiss}
-            backgroundStyle={{ backgroundColor: theme.colors.groupped.background }}
-            handleIndicatorStyle={{ backgroundColor: theme.colors.textSecondary }}
         >
             <View style={styles.container}>
                 <View style={styles.heading}>
@@ -284,7 +273,7 @@ export const MachineSwitcherSheet = React.memo(React.forwardRef<BottomSheetModal
                     </Pressable>
                 </View>
             </View>
-        </BottomSheetModal>
+        </AppBottomSheet>
     );
 }));
 

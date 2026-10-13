@@ -1,8 +1,8 @@
 import * as React from 'react';
 import { View, Text, TextInput, ActivityIndicator, Platform } from 'react-native';
 import { Image } from 'expo-image';
-import { BottomSheetModal, BottomSheetFlatList, BottomSheetTextInput, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BottomSheetModal, BottomSheetFlatList, BottomSheetTextInput } from '@gorhom/bottom-sheet';
+import { AppBottomSheet } from '@/components/AppBottomSheet';
 
 const SheetTextInput = Platform.OS === 'web' ? TextInput : BottomSheetTextInput;
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
@@ -48,7 +48,6 @@ export const DialogDetailModal = React.memo(React.forwardRef<BottomSheetModal, D
     dialogName, dialogId, groupType, ownerId, members, loading, serverUrl,
 }, ref) => {
     const { theme } = useUnistyles();
-    const safeArea = useSafeAreaInsets();
     const [search, setSearch] = React.useState('');
 
     const filtered = React.useMemo(() => {
@@ -62,10 +61,6 @@ export const DialogDetailModal = React.memo(React.forwardRef<BottomSheetModal, D
         setSearch('');
     }, []);
 
-    const renderBackdrop = React.useCallback(
-        (props: any) => <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} pressBehavior="close" />,
-        [],
-    );
 
     const renderMember = React.useCallback(({ item }: { item: DooTaskDialogUser }) => {
         const avatarUrl = resolveAvatarUrl(item.userimg, serverUrl);
@@ -79,7 +74,7 @@ export const DialogDetailModal = React.memo(React.forwardRef<BottomSheetModal, D
                             style={{ width: AVATAR_SIZE, height: AVATAR_SIZE, borderRadius: AVATAR_SIZE / 2, opacity: isDisabled ? 0.4 : 1 }}
                         />
                     ) : (
-                        <View style={[memberStyles.avatarPlaceholder, { backgroundColor: theme.colors.surfaceHighest, opacity: isDisabled ? 0.4 : 1 }]}>
+                        <View style={[memberStyles.avatarPlaceholder, { backgroundColor: theme.colors.surface, opacity: isDisabled ? 0.4 : 1 }]}>
                             <Text style={{ color: theme.colors.text, fontSize: 16, fontWeight: '600' }}>
                                 {(item.nickname || '?')[0].toUpperCase()}
                             </Text>
@@ -115,7 +110,7 @@ export const DialogDetailModal = React.memo(React.forwardRef<BottomSheetModal, D
             </View>
 
             {/* Search */}
-            <View style={[sheetStyles.searchContainer, { backgroundColor: theme.colors.surfaceHigh, borderColor: theme.colors.divider }]}>
+            <View style={[sheetStyles.searchContainer, { backgroundColor: theme.colors.surface, borderColor: theme.colors.divider }]}>
                 <Ionicons name="search" size={18} color={theme.colors.textSecondary} />
                 <SheetTextInput
                     style={[sheetStyles.searchInput, { color: theme.colors.text }, Platform.OS === 'web' && { outlineStyle: 'none', outline: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
@@ -129,18 +124,11 @@ export const DialogDetailModal = React.memo(React.forwardRef<BottomSheetModal, D
     ), [theme, dialogName, dialogId, groupTypeLabel, search, setSearch]);
 
     return (
-        <BottomSheetModal
+        <AppBottomSheet
             ref={ref}
             snapPoints={['90%']}
             enableDynamicSizing={false}
-            topInset={safeArea.top}
-            keyboardBehavior="interactive"
-            keyboardBlurBehavior="restore"
-            android_keyboardInputMode="adjustResize"
-            backdropComponent={renderBackdrop}
             onDismiss={handleDismiss}
-            backgroundStyle={{ backgroundColor: theme.colors.surface }}
-            handleIndicatorStyle={{ backgroundColor: theme.colors.textSecondary }}
         >
             {loading && members.length === 0 ? (
                 <View style={{ flex: 1, alignItems: 'center', paddingTop: 40 }}>
@@ -156,7 +144,7 @@ export const DialogDetailModal = React.memo(React.forwardRef<BottomSheetModal, D
                     keyboardShouldPersistTaps="handled"
                 />
             )}
-        </BottomSheetModal>
+        </AppBottomSheet>
     );
 }));
 

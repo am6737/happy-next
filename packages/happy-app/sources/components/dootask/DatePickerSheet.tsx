@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { View, Text, Pressable } from 'react-native';
-import { BottomSheetModal, BottomSheetBackdrop, BottomSheetView } from '@gorhom/bottom-sheet';
+import { BottomSheetModal, BottomSheetView } from '@gorhom/bottom-sheet';
+import { AppBottomSheet } from '@/components/AppBottomSheet';
 import { useUnistyles } from 'react-native-unistyles';
 import { Typography } from '@/constants/Typography';
 import { t } from '@/text';
@@ -48,26 +49,12 @@ export const DatePickerSheet = React.memo(React.forwardRef<BottomSheetModal, Dat
             innerRef.current?.dismiss();
         }, [draft, onChange]);
 
-        const renderBackdrop = React.useCallback(
-            (props: any) => (
-                <BottomSheetBackdrop
-                    {...props}
-                    appearsOnIndex={0}
-                    disappearsOnIndex={-1}
-                    pressBehavior="close"
-                />
-            ),
-            [],
-        );
 
         return (
-            <BottomSheetModal
+            <AppBottomSheet
                 ref={innerRef}
                 snapPoints={['60%']}
                 enableDynamicSizing={false}
-                backdropComponent={renderBackdrop}
-                backgroundStyle={{ backgroundColor: theme.colors.surface }}
-                handleIndicatorStyle={{ backgroundColor: theme.colors.textSecondary }}
             >
                 <BottomSheetView style={{ paddingHorizontal: 20 }}>
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
@@ -89,7 +76,7 @@ export const DatePickerSheet = React.memo(React.forwardRef<BottomSheetModal, Dat
                         timePicker={timePicker}
                     />
                 </BottomSheetView>
-            </BottomSheetModal>
+            </AppBottomSheet>
         );
     },
 ));

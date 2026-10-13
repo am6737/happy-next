@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { Pressable, View } from 'react-native';
-import { BottomSheetBackdrop, BottomSheetModal, BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import { BottomSheetModal, BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import { AppBottomSheet } from '@/components/AppBottomSheet';
 import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { Text } from '@/components/StyledText';
@@ -36,22 +37,13 @@ export const NewTerminalSheet = React.memo(
     React.forwardRef<BottomSheetModal, NewTerminalSheetProps>(({ machines, names, lastUsedMachineId, onSelect, onDismiss }, ref) => {
         const { theme } = useUnistyles();
 
-        const renderBackdrop = React.useCallback(
-            (props: any) => (
-                <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} pressBehavior="close" />
-            ),
-            [],
-        );
 
         return (
-            <BottomSheetModal
+            <AppBottomSheet
                 ref={ref}
                 snapPoints={['70%']}
                 enableDynamicSizing={false}
-                backdropComponent={renderBackdrop}
                 onDismiss={onDismiss}
-                backgroundStyle={{ backgroundColor: theme.colors.surface }}
-                handleIndicatorStyle={{ backgroundColor: theme.colors.textSecondary }}
             >
                 <View style={styles.header}>
                     <Text style={[styles.title, { color: theme.colors.text }]}>
@@ -72,7 +64,7 @@ export const NewTerminalSheet = React.memo(
                                 onPress={() => onSelect(machine.id)}
                                 style={({ pressed }) => [
                                     styles.row,
-                                    pressed && { backgroundColor: theme.colors.surfacePressed },
+                                    pressed && { backgroundColor: theme.colors.surface },
                                 ]}
                             >
                                 <View style={styles.rowMain}>
@@ -111,7 +103,7 @@ export const NewTerminalSheet = React.memo(
                         </Text>
                     ) : null}
                 </BottomSheetScrollView>
-            </BottomSheetModal>
+            </AppBottomSheet>
         );
     }),
 );

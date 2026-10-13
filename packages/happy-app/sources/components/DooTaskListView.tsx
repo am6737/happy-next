@@ -4,8 +4,8 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
-import { BottomSheetModal, BottomSheetFlatList, BottomSheetTextInput, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BottomSheetModal, BottomSheetFlatList, BottomSheetTextInput } from '@gorhom/bottom-sheet';
+import { AppBottomSheet } from '@/components/AppBottomSheet';
 
 const SheetTextInput = Platform.OS === 'web' ? TextInput : BottomSheetTextInput;
 import { t } from '@/text';
@@ -133,7 +133,6 @@ type FilterPanelModalProps = {
 
 const FilterPanelModal = React.memo(React.forwardRef<BottomSheetModal, FilterPanelModalProps>(({ onRefreshTasks }, ref) => {
     const { theme } = useUnistyles();
-    const safeArea = useSafeAreaInsets();
     const filters = useDootaskFilters();
     const projects = useDootaskProjects();
     const profile = useDootaskProfile();
@@ -200,7 +199,7 @@ const FilterPanelModal = React.memo(React.forwardRef<BottomSheetModal, FilterPan
             <Pressable
                 style={({ pressed }) => [
                     styles.pickerItem,
-                    pressed && !isSelected && { backgroundColor: theme.colors.surfacePressed },
+                    pressed && !isSelected && { backgroundColor: theme.colors.surface },
                 ]}
                 onPress={() => !isSelected && selectProject(isAll ? undefined : item!.id)}
             >
@@ -221,10 +220,6 @@ const FilterPanelModal = React.memo(React.forwardRef<BottomSheetModal, FilterPan
         setSearchedProjects(null);
     }, []);
 
-    const renderBackdrop = React.useCallback(
-        (props: any) => <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} pressBehavior="close" />,
-        [],
-    );
 
     const ListHeaderComponent = React.useMemo(() => (
         <>
@@ -240,7 +235,7 @@ const FilterPanelModal = React.memo(React.forwardRef<BottomSheetModal, FilterPan
                         key={opt.key}
                         style={[
                             styles.chip,
-                            { backgroundColor: currentRole === opt.key ? theme.colors.button.primary.background : theme.colors.groupped.background },
+                            { backgroundColor: currentRole === opt.key ? theme.colors.button.primary.background : theme.colors.surface },
                         ]}
                         onPress={() => selectRole(opt.key)}
                     >
@@ -265,7 +260,7 @@ const FilterPanelModal = React.memo(React.forwardRef<BottomSheetModal, FilterPan
                     <SheetTextInput
                         style={[styles.pickerSearchInput, {
                             color: theme.colors.text,
-                            backgroundColor: theme.colors.groupped.background,
+                            backgroundColor: theme.colors.surface,
                         }, Platform.OS === 'web' && { outlineStyle: 'none', outline: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
                         placeholder={t('dootask.searchProjects')}
                         placeholderTextColor={theme.colors.textSecondary}
@@ -279,18 +274,11 @@ const FilterPanelModal = React.memo(React.forwardRef<BottomSheetModal, FilterPan
     ), [theme, currentRole, searchQuery, showSearch, handleSearchChange, selectRole]);
 
     return (
-        <BottomSheetModal
+        <AppBottomSheet
             ref={ref}
             snapPoints={['60%']}
             enableDynamicSizing={false}
-            topInset={safeArea.top}
-            backdropComponent={renderBackdrop}
             onDismiss={handleDismiss}
-            keyboardBehavior="interactive"
-            keyboardBlurBehavior="restore"
-            android_keyboardInputMode="adjustResize"
-            backgroundStyle={{ backgroundColor: theme.colors.surface }}
-            handleIndicatorStyle={{ backgroundColor: theme.colors.textSecondary }}
         >
             <View style={[styles.pickerTitle, { borderBottomColor: theme.colors.divider }]}>
                 <Text style={[styles.pickerTitleText, { color: theme.colors.textSecondary }]}>
@@ -304,7 +292,7 @@ const FilterPanelModal = React.memo(React.forwardRef<BottomSheetModal, FilterPan
                 ListHeaderComponent={ListHeaderComponent}
                 keyboardShouldPersistTaps="handled"
             />
-        </BottomSheetModal>
+        </AppBottomSheet>
     );
 }));
 

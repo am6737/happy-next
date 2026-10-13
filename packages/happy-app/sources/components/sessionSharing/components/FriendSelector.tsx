@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { View, TextInput, Platform, Pressable } from 'react-native';
-import { BottomSheetModal, BottomSheetBackdrop, BottomSheetFlatList, BottomSheetTextInput } from '@gorhom/bottom-sheet';
+import { BottomSheetModal, BottomSheetFlatList, BottomSheetTextInput } from '@gorhom/bottom-sheet';
+import { AppBottomSheet } from '@/components/AppBottomSheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { UserProfile, getDisplayName, getUsernameLabel } from '@/sync/friendTypes';
@@ -61,10 +62,6 @@ export const FriendSelector = React.memo(React.forwardRef<BottomSheetModal, Frie
         }
     }, []);
 
-    const renderBackdrop = React.useCallback(
-        (props: any) => <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} pressBehavior="close" />,
-        [],
-    );
 
     const renderItem = React.useCallback(({ item, index }: { item: UserProfile, index: number }) => {
         const hasKeys = !!item.contentPublicKey && !!item.contentPublicKeySig;
@@ -184,18 +181,11 @@ export const FriendSelector = React.memo(React.forwardRef<BottomSheetModal, Frie
     ), [searchQuery, theme]);
 
     return (
-        <BottomSheetModal
+        <AppBottomSheet
             ref={ref}
             snapPoints={['75%']}
             enableDynamicSizing={false}
-            topInset={insets.top}
-            keyboardBehavior="interactive"
-            keyboardBlurBehavior="restore"
-            android_keyboardInputMode="adjustResize"
-            backdropComponent={renderBackdrop}
             onAnimate={handleAnimate}
-            backgroundStyle={{ backgroundColor: theme.colors.groupped.background }}
-            handleIndicatorStyle={{ backgroundColor: theme.colors.textSecondary }}
         >
             <View style={{ flex: 1 }}>
                 <Text style={[styles.title, { color: theme.colors.text }]}>
@@ -212,7 +202,7 @@ export const FriendSelector = React.memo(React.forwardRef<BottomSheetModal, Frie
                     keyboardShouldPersistTaps="handled"
                 />
             </View>
-        </BottomSheetModal>
+        </AppBottomSheet>
     );
 }));
 

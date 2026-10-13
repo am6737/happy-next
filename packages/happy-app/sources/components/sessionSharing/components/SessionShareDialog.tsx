@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { View } from 'react-native';
-import { BottomSheetModal, BottomSheetBackdrop, BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import { BottomSheetModal, BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import { AppBottomSheet } from '@/components/AppBottomSheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { Ionicons } from '@expo/vector-icons';
@@ -55,18 +56,11 @@ export const SessionShareDialog = React.memo(React.forwardRef<BottomSheetModal, 
         onAddShare();
     }, [onAddShare, ref]);
 
-    const renderBackdrop = React.useCallback(
-        (props: any) => <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} pressBehavior="close" />,
-        [],
-    );
 
     return (
-        <BottomSheetModal
+        <AppBottomSheet
             ref={ref}
             enableDynamicSizing={true}
-            backdropComponent={renderBackdrop}
-            backgroundStyle={{ backgroundColor: theme.colors.groupped.background }}
-            handleIndicatorStyle={{ backgroundColor: theme.colors.textSecondary }}
         >
             <BottomSheetScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 16 }}>
                 <Text style={[styles.title, { color: theme.colors.text }]}>
@@ -107,7 +101,7 @@ export const SessionShareDialog = React.memo(React.forwardRef<BottomSheetModal, 
                     </View>
                 )}
             </BottomSheetScrollView>
-        </BottomSheetModal>
+        </AppBottomSheet>
     );
 }));
 

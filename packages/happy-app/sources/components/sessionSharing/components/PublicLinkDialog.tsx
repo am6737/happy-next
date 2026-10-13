@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { View, Switch, Pressable } from 'react-native';
-import { BottomSheetModal, BottomSheetBackdrop, BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import { BottomSheetModal, BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import { AppBottomSheet } from '@/components/AppBottomSheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useUnistyles } from 'react-native-unistyles';
 import { StyleSheet } from 'react-native-unistyles';
@@ -61,20 +62,13 @@ export const PublicLinkDialog = React.memo(React.forwardRef<BottomSheetModal, Pu
         }
     }, [publicShareUrl]);
 
-    const renderBackdrop = React.useCallback(
-        (props: any) => <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} pressBehavior="close" />,
-        [],
-    );
 
     const formatDate = (timestamp: number) => new Date(timestamp).toLocaleDateString();
 
     return (
-        <BottomSheetModal
+        <AppBottomSheet
             ref={ref}
             enableDynamicSizing={true}
-            backdropComponent={renderBackdrop}
-            backgroundStyle={{ backgroundColor: theme.colors.groupped.background }}
-            handleIndicatorStyle={{ backgroundColor: theme.colors.textSecondary }}
         >
             <BottomSheetScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 16 }}>
                 <Text style={[styles.title, { color: theme.colors.text }]}>
@@ -236,7 +230,7 @@ export const PublicLinkDialog = React.memo(React.forwardRef<BottomSheetModal, Pu
                     </>
                 )}
             </BottomSheetScrollView>
-        </BottomSheetModal>
+        </AppBottomSheet>
     );
 }));
 

@@ -12,7 +12,8 @@ import { Modal } from '@/modal';
 import { useGithubRepo } from '@/hooks/useGithubData';
 import { createGithubPull } from '@/sync/apiGithubData';
 import { useAuth } from '@/auth/AuthContext';
-import { BottomSheetModal, BottomSheetFlatList, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
+import { BottomSheetModal, BottomSheetFlatList } from '@gorhom/bottom-sheet';
+import { AppBottomSheet } from '@/components/AppBottomSheet';
 import { t } from '@/text';
 
 const stylesheet = StyleSheet.create((theme) => ({
@@ -190,13 +191,10 @@ export default function NewPullRequestScreen() {
     }, [title, body, headBranch, baseBranch, owner, repoName, credentials, router]);
 
     const renderBranchSheet = (sheetRef: React.RefObject<BottomSheetModal | null>, selected: string, onSelect: (b: string) => void) => (
-        <BottomSheetModal
+        <AppBottomSheet
             ref={sheetRef}
             snapPoints={['50%']}
             enableDynamicSizing={false}
-            backdropComponent={(props) => <BottomSheetBackdrop {...props} opacity={0.4} appearsOnIndex={0} disappearsOnIndex={-1} />}
-            backgroundStyle={{ backgroundColor: theme.colors.surface }}
-            handleIndicatorStyle={{ backgroundColor: theme.colors.divider }}
         >
             <BottomSheetFlatList
                 data={branches}
@@ -212,7 +210,7 @@ export default function NewPullRequestScreen() {
                     </Pressable>
                 )}
             />
-        </BottomSheetModal>
+        </AppBottomSheet>
     );
 
     return (

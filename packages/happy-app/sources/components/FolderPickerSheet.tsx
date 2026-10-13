@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { View, Text, TextInput, ActivityIndicator, Platform, Pressable } from 'react-native';
-import { BottomSheetModal, BottomSheetFlatList, BottomSheetTextInput, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BottomSheetModal, BottomSheetFlatList, BottomSheetTextInput } from '@gorhom/bottom-sheet';
+import { AppBottomSheet } from '@/components/AppBottomSheet';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { Ionicons } from '@expo/vector-icons';
 import { Typography } from '@/constants/Typography';
@@ -55,7 +55,6 @@ export const FolderPickerSheet = React.memo(React.forwardRef<BottomSheetModal, F
 }, ref) => {
     const isFileMode = mode === 'file';
     const { theme } = useUnistyles();
-    const safeArea = useSafeAreaInsets();
 
     // ---- state ----
     // Where the sheet opens. Only the starting point moves: `~` still means the
@@ -270,10 +269,6 @@ export const FolderPickerSheet = React.memo(React.forwardRef<BottomSheetModal, F
 
     // ---- rendering ----
 
-    const renderBackdrop = React.useCallback(
-        (props: any) => <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} pressBehavior="close" />,
-        [],
-    );
 
     // Format path for display: substitute homeDir with ~, then truncate if needed
     const displayPath = React.useMemo(() => {
@@ -309,7 +304,7 @@ export const FolderPickerSheet = React.memo(React.forwardRef<BottomSheetModal, F
             <Pressable
                 style={({ pressed }) => [
                     itemStyles.row,
-                    pressed && { backgroundColor: theme.colors.surfacePressed },
+                    pressed && { backgroundColor: theme.colors.surface },
                 ]}
                 onPress={() => handleEntryPress(item)}
             >
@@ -337,7 +332,7 @@ export const FolderPickerSheet = React.memo(React.forwardRef<BottomSheetModal, F
             <Pressable
                 style={({ pressed }) => [
                     itemStyles.row,
-                    pressed && { backgroundColor: theme.colors.surfacePressed },
+                    pressed && { backgroundColor: theme.colors.surface },
                 ]}
                 onPress={goUp}
             >
@@ -358,19 +353,12 @@ export const FolderPickerSheet = React.memo(React.forwardRef<BottomSheetModal, F
     }, [loading, error, theme]);
 
     return (
-        <BottomSheetModal
+        <AppBottomSheet
             ref={ref}
             snapPoints={['75%']}
             enableDynamicSizing={false}
-            topInset={safeArea.top}
-            keyboardBehavior="interactive"
-            keyboardBlurBehavior="restore"
-            android_keyboardInputMode="adjustResize"
-            backdropComponent={renderBackdrop}
             onAnimate={handleAnimate}
             onDismiss={handleDismiss}
-            backgroundStyle={{ backgroundColor: theme.colors.surface }}
-            handleIndicatorStyle={{ backgroundColor: theme.colors.textSecondary }}
         >
             <View style={{ flex: 1 }}>
                 {/* Title */}
@@ -426,7 +414,7 @@ export const FolderPickerSheet = React.memo(React.forwardRef<BottomSheetModal, F
                 </View>
 
                 {/* Pinned search / path input */}
-                <View style={[headerStyles.searchContainer, { backgroundColor: theme.colors.surfaceHigh, borderColor: theme.colors.divider }]}>
+                <View style={[headerStyles.searchContainer, { backgroundColor: theme.colors.surface, borderColor: theme.colors.divider }]}>
                     <Ionicons name="search" size={18} color={theme.colors.textSecondary} />
                     <SheetTextInput
                         style={[
@@ -460,7 +448,7 @@ export const FolderPickerSheet = React.memo(React.forwardRef<BottomSheetModal, F
                     keyboardShouldPersistTaps="handled"
                 />
             </View>
-        </BottomSheetModal>
+        </AppBottomSheet>
     );
 }));
 

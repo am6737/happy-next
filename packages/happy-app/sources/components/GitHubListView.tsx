@@ -5,8 +5,8 @@ import { Text } from '@/components/StyledText';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
-import { BottomSheetModal, BottomSheetFlatList, BottomSheetTextInput, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BottomSheetModal, BottomSheetFlatList, BottomSheetTextInput } from '@gorhom/bottom-sheet';
+import { AppBottomSheet } from '@/components/AppBottomSheet';
 import { t } from '@/text';
 import { Typography } from '@/constants/Typography';
 import { useGithubRepos, useGithubIssues, useGithubPulls, useGithubWorkIssues, useGithubWorkPulls, clearGithubCache } from '@/hooks/useGithubData';
@@ -189,7 +189,6 @@ interface GitHubListViewProps {
 
 export const GitHubListView = React.memo(({ onRepoChange, repoPickerTriggerRef }: GitHubListViewProps) => {
     const { theme } = useUnistyles();
-    const safeArea = useSafeAreaInsets();
     const router = useRouter();
     const auth = useAuth();
     const tabBottomPadding = useMainTabBottomPadding();
@@ -406,10 +405,6 @@ export const GitHubListView = React.memo(({ onRepoChange, repoPickerTriggerRef }
         onPress: () => setFilter(f.key),
     }));
 
-    const renderBackdrop = React.useCallback(
-        (props: any) => <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} />,
-        []
-    );
 
     const emptyText = activeTab === 'issues' ? t('github.noIssues') : t('github.noPullRequests');
     const activeResult = activeTab === 'issues' ? issueResult : pullResult;
@@ -659,17 +654,10 @@ export const GitHubListView = React.memo(({ onRepoChange, repoPickerTriggerRef }
                 />
             )}
 
-            <BottomSheetModal
+            <AppBottomSheet
                 ref={repoPickerRef}
                 snapPoints={['50%', '80%']}
                 enableDynamicSizing={false}
-                topInset={safeArea.top}
-                keyboardBehavior="interactive"
-                keyboardBlurBehavior="restore"
-                android_keyboardInputMode="adjustResize"
-                backdropComponent={renderBackdrop}
-                backgroundStyle={{ backgroundColor: theme.colors.groupped.background }}
-                handleIndicatorStyle={{ backgroundColor: theme.colors.textSecondary }}
             >
                 <View style={styles.sheetHeader}>
                     <Text style={[styles.sheetTitle, { color: theme.colors.text }]}>{t('github.switchRepo')}</Text>
@@ -735,7 +723,7 @@ export const GitHubListView = React.memo(({ onRepoChange, repoPickerTriggerRef }
                         </View>
                     }
                 />
-            </BottomSheetModal>
+            </AppBottomSheet>
         </View>
     );
 });
