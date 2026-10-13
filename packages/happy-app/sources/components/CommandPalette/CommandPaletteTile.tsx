@@ -9,7 +9,7 @@ interface CommandPaletteTileProps {
     command: Command;
     isSelected: boolean;
     onPress: () => void;
-    onHover?: () => void;
+    onHover?: (hovered: boolean) => void;
     isExecuting?: boolean;
 }
 
@@ -35,9 +35,12 @@ export function CommandPaletteTile({ command, isSelected, onPress, onHover, isEx
     if (Platform.OS === 'web') {
         pressableProps.onMouseEnter = () => {
             setIsHovered(true);
-            onHover?.();
+            onHover?.(true);
         };
-        pressableProps.onMouseLeave = () => setIsHovered(false);
+        pressableProps.onMouseLeave = () => {
+            setIsHovered(false);
+            onHover?.(false);
+        };
     }
 
     return (

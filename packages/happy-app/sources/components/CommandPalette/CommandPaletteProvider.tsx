@@ -1,8 +1,9 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 import { usePathname, useRouter } from 'expo-router';
 import { Modal } from '@/modal';
 import { CommandPalette } from './CommandPalette';
+import { CommandPaletteModal } from './CommandPaletteModal';
 import { useGlobalKeyboard } from '@/hooks/useGlobalKeyboard';
 import { useAuth } from '@/auth/AuthContext';
 import { storage } from '@/sync/storage';
@@ -12,6 +13,7 @@ import { useNavigateToSession } from '@/hooks/useNavigateToSession';
 import { OPEN_COMMAND_PALETTE_EVENT } from './events';
 import { useModal } from '@/modal';
 import { buildCommandPaletteCommands } from './commandPaletteCommands';
+import type { Command } from './types';
 import { t } from '@/text';
 import { getDesktopPlatform } from '@/desktop/desktopWindowUtils';
 import { compareSessionsByLastMessage } from '@/utils/sessionLastMessageAt';
@@ -56,51 +58,67 @@ export function CommandPaletteProvider({ children }: { children: React.ReactNode
     const navigateToSession = useNavigateToSession();
     const { state: modalState, hideModal } = useModal();
     const currentModal = modalState.modals[modalState.modals.length - 1];
-    const isCommandPaletteOpen = currentModal?.type === 'custom' && currentModal.component === CommandPalette;
+    // Mounted on first open and then only hidden, so reopening shows the palette as it was left.
+    // Esc on an empty query remounts it (new key) so the next open starts fresh
+    const [palette, setPalette] = useState<{ visible: boolean; key: number } | null>(null);
 
-    const commands = useMemo(() => buildCommandPaletteCommands({
-        ...commandState,
-        desktopPlatform: getDesktopPlatform(),
-        currentSessionId: sessionIdFromPath(pathname),
-        navigate: (path) => router.push(path as any),
-        navigateToSession,
-        logout: async () => {
-            const confirmed = await Modal.confirm(
-                t('settingsAccount.logout'),
-                t('settingsAccount.logoutConfirm'),
-                { confirmText: t('common.logout'), destructive: true },
-            );
-            if (confirmed) {
-                try {
-                    await logout();
-                } catch {
-                    Modal.alert(t('common.error'), t('errors.networkError'));
+    const isPaletteVisible = !!palette?.visible;
+
+    // Read through a ref so the commands don't depend on these: navigateToSession is new on every render,
+    // which rebuilt every command — and re-rendered every palette row — each time this provider rendered
+    const actionsRef = useRef({ router, navigateToSession, logout });
+    actionsRef.current = { router, navigateToSession, logout };
+
+    // Frozen while the palette is hidden: sessions update every few seconds, and a hidden palette
+    // re-rendering all its rows for each update stalls the whole app. It catches up when shown again
+    const lastCommandsRef = useRef<Command[] | null>(null);
+    const commands = useMemo(() => {
+        if (!isPaletteVisible && lastCommandsRef.current) return lastCommandsRef.current;
+        return buildCommandPaletteCommands({
+            ...commandState,
+            desktopPlatform: getDesktopPlatform(),
+            currentSessionId: sessionIdFromPath(pathname),
+            navigate: (path) => actionsRef.current.router.push(path as any),
+            navigateToSession: (sessionId) => actionsRef.current.navigateToSession(sessionId),
+            logout: async () => {
+                const confirmed = await Modal.confirm(
+                    t('settingsAccount.logout'),
+                    t('settingsAccount.logoutConfirm'),
+                    { confirmText: t('common.logout'), destructive: true },
+                );
+                if (confirmed) {
+                    try {
+                        await actionsRef.current.logout();
+                    } catch {
+                        Modal.alert(t('common.error'), t('errors.networkError'));
+                    }
                 }
-            }
-        },
-    }), [commandState, logout, navigateToSession, pathname, router]);
+            },
+        });
+    }, [commandState, isPaletteVisible, pathname]);
+    lastCommandsRef.current = commands;
 
+    // Stable across session updates, which are frequent: a new function would rerun the open palette's message search
+    const sessionsRef = useRef(commandState.sessions);
+    sessionsRef.current = commandState.sessions;
     const searchCachedMessages = useCallback((query: string) => {
-        const sessionIds = [...commandState.sessions]
+        const sessionIds = [...sessionsRef.current]
             .sort(compareSessionsByLastMessage)
             .map((session) => session.id);
         return sync.searchCachedMessages(query, sessionIds);
-    }, [commandState.sessions]);
+    }, []);
 
     const openCommandPalette = useCallback(() => {
-        if (isCommandPaletteOpen) {
-            hideModal(currentModal.id);
-            return;
-        }
+        setPalette((current) => ({ visible: !current?.visible, key: current?.key ?? 0 }));
+    }, []);
 
-        Modal.show({
-            component: CommandPalette,
-            props: {
-                commands,
-                searchCachedMessages,
-            }
-        } as any);
-    }, [commands, currentModal, hideModal, isCommandPaletteOpen, searchCachedMessages]);
+    const hidePalette = useCallback(() => {
+        setPalette((current) => current && { ...current, visible: false });
+    }, []);
+
+    const dismissPalette = useCallback(() => {
+        setPalette((current) => current && { visible: false, key: current.key + 1 });
+    }, []);
 
     useEffect(() => {
         if (Platform.OS !== 'web') return;
@@ -128,10 +146,27 @@ export function CommandPaletteProvider({ children }: { children: React.ReactNode
         onDootask: () => router.navigate('/(app)/dootask'),
         onBack: () => window.history.back(),
         onForward: () => window.history.forward(),
-        onEscape: currentModal && !isCommandPaletteOpen ? closeTopModal : undefined,
-    }), [currentModal, closeTopModal, isAuthenticated, isCommandPaletteOpen, openCommandPalette, router]);
+        onEscape: currentModal ? closeTopModal : undefined,
+    }), [currentModal, closeTopModal, isAuthenticated, openCommandPalette, router]);
 
     useGlobalKeyboard(shortcutHandlers);
 
-    return <CommandPaletteContext.Provider value={openCommandPalette}>{children}</CommandPaletteContext.Provider>;
+    return (
+        <CommandPaletteContext.Provider value={openCommandPalette}>
+            {children}
+            {palette && isAuthenticated && (
+                <CommandPaletteModal visible={palette.visible} onHide={hidePalette}>
+                    <CommandPalette
+                        key={palette.key}
+                        visible={palette.visible}
+                        escapeEnabled={!currentModal}
+                        commands={commands}
+                        searchCachedMessages={searchCachedMessages}
+                        onClose={hidePalette}
+                        onDismiss={dismissPalette}
+                    />
+                </CommandPaletteModal>
+            )}
+        </CommandPaletteContext.Provider>
+    );
 }

@@ -11,7 +11,7 @@ interface CommandPaletteItemProps {
     command: Command;
     isSelected: boolean;
     onPress: () => void;
-    onHover?: () => void;
+    onHover?: (hovered: boolean) => void;
     isExecuting?: boolean;
     searchQuery?: string;
 }
@@ -23,15 +23,16 @@ export function CommandPaletteItem({ command, isSelected, onPress, onHover, isEx
     const handleMouseEnter = React.useCallback(() => {
         if (Platform.OS === 'web') {
             setIsHovered(true);
-            onHover?.();
+            onHover?.(true);
         }
     }, [onHover]);
     
     const handleMouseLeave = React.useCallback(() => {
         if (Platform.OS === 'web') {
             setIsHovered(false);
+            onHover?.(false);
         }
-    }, []);
+    }, [onHover]);
     
     const pressableProps: any = {
         style: ({ pressed }: any) => [

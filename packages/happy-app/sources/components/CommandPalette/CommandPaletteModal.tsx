@@ -1,37 +1,57 @@
 import React, { useEffect, useRef } from 'react';
 import {
     View,
-    Modal,
     TouchableWithoutFeedback,
     Animated,
     KeyboardAvoidingView,
+    BackHandler,
     Platform
 } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
 
+const isWeb = Platform.OS === 'web';
+const OPEN_MS = 200;
+const CLOSE_MS = 150;
+
 interface CommandPaletteModalProps {
     visible: boolean;
-    onClose?: () => void;
+    onHide: () => void;
     children: React.ReactNode;
 }
 
+// An overlay rather than a Modal: a Modal unmounts its content when hidden, but the palette must stay mounted
+// so that reopening it shows exactly what was left — query, results, history list, scroll position
 export function CommandPaletteModal({
     visible,
-    onClose,
+    onHide,
     children
 }: CommandPaletteModalProps) {
     const fadeAnim = useRef(new Animated.Value(0)).current;
     const scaleAnim = useRef(new Animated.Value(0.95)).current;
-    const [isModalVisible, setIsModalVisible] = React.useState(true);
+    // Stays false through the closing animation, so the palette fades out before it is hidden
+    const [isClosed, setIsClosed] = React.useState(!visible);
+    // Web only: the target of the CSS transition. Animated has no native driver on web, so it would recompute
+    // the whole palette's style on the JS thread every frame; a CSS opacity/transform transition runs on the compositor
+    const [isShown, setIsShown] = React.useState(false);
 
     useEffect(() => {
+        if (isWeb) {
+            if (visible) {
+                setIsClosed(false);
+                // One frame at the hidden values first, so the transition has a starting point
+                const frame = requestAnimationFrame(() => setIsShown(true));
+                return () => cancelAnimationFrame(frame);
+            }
+            setIsShown(false);
+            const timer = setTimeout(() => setIsClosed(true), CLOSE_MS);
+            return () => clearTimeout(timer);
+        }
         if (visible) {
-            setIsModalVisible(true);
-            // Opening animation
+            setIsClosed(false);
             Animated.parallel([
                 Animated.timing(fadeAnim, {
                     toValue: 1,
-                    duration: 200,
+                    duration: OPEN_MS,
                     useNativeDriver: true
                 }),
                 Animated.spring(scaleAnim, {
@@ -45,92 +65,86 @@ export function CommandPaletteModal({
             Animated.parallel([
                 Animated.timing(fadeAnim, {
                     toValue: 0,
-                    duration: 150,
+                    duration: CLOSE_MS,
                     useNativeDriver: true
                 }),
                 Animated.timing(scaleAnim, {
                     toValue: 0.95,
-                    duration: 150,
+                    duration: CLOSE_MS,
                     useNativeDriver: true
                 })
-            ]).start(() => setIsModalVisible(false));
+            ]).start(({ finished }) => {
+                if (finished) setIsClosed(true);
+            });
         }
+        return undefined;
     }, [visible, fadeAnim, scaleAnim]);
 
-    const handleClose = React.useCallback(() => {
-        // Closing animation
-        Animated.parallel([
-            Animated.timing(fadeAnim, {
-                toValue: 0,
-                duration: 150,
-                useNativeDriver: true
-            }),
-            Animated.timing(scaleAnim, {
-                toValue: 0.95,
-                duration: 150,
-                useNativeDriver: true
-            })
-        ]).start(() => {
-            setIsModalVisible(false);
-            // Small delay to ensure modal is hidden before calling onClose
-            setTimeout(() => {
-                if (onClose) {
-                    onClose();
-                }
-            }, 50);
+    const webTransition = isShown ? styles.webTransitionIn : styles.webTransitionOut;
+    const backdropMotion = isWeb
+        ? [webTransition, { opacity: isShown ? 0.7 : 0 }]
+        : { opacity: fadeAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 0.7] }) };
+    const contentMotion = isWeb
+        ? [webTransition, { opacity: isShown ? 1 : 0, transform: [{ scale: isShown ? 1 : 0.95 }] }]
+        : { opacity: fadeAnim, transform: [{ scale: scaleAnim }] };
+
+    useEffect(() => {
+        if (Platform.OS !== 'android' || !visible) return;
+        const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+            onHide();
+            return true;
         });
-    }, [fadeAnim, scaleAnim, onClose]);
-
-    const handleBackdropPress = () => {
-        handleClose();
-    };
-
-    if (!isModalVisible) {
-        return null;
-    }
+        return () => subscription.remove();
+    }, [visible, onHide]);
 
     return (
-        <Modal
-            visible={isModalVisible}
-            transparent={true}
-            animationType="none"
-            onRequestClose={handleClose}
+        <View
+            style={[styles.overlay, !visible && isClosed && styles.hidden]}
+            pointerEvents={visible ? 'auto' : 'none'}
         >
-            <KeyboardAvoidingView 
+            <KeyboardAvoidingView
                 style={styles.container}
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             >
-                <TouchableWithoutFeedback onPress={handleBackdropPress}>
-                    <Animated.View 
-                        style={[
-                            styles.backdrop,
-                            {
-                                opacity: fadeAnim.interpolate({
-                                    inputRange: [0, 1],
-                                    outputRange: [0, 0.7]
-                                })
-                            }
-                        ]}
-                    />
+                <TouchableWithoutFeedback onPress={onHide}>
+                    <Animated.View style={[styles.backdrop, backdropMotion]} />
                 </TouchableWithoutFeedback>
-                
-                <Animated.View
-                    style={[
-                        styles.content,
-                        {
-                            opacity: fadeAnim,
-                            transform: [{ scale: scaleAnim }]
-                        }
-                    ]}
-                >
+
+                <Animated.View style={[styles.content, contentMotion]}>
                     {children}
                 </Animated.View>
             </KeyboardAvoidingView>
-        </Modal>
+        </View>
     );
 }
 
 const styles = StyleSheet.create((theme) => ({
+    overlay: {
+        ...StyleSheet.absoluteFillObject,
+        zIndex: 1000,
+        elevation: 1000,
+        ...(Platform.OS === 'web' ? {
+            position: 'fixed',
+        } as any : {}),
+    },
+    // On web the hidden palette keeps its layout, so showing it again needs no relayout of the results
+    hidden: Platform.OS === 'web' ? {
+        visibility: 'hidden',
+    } as any : {
+        display: 'none',
+    },
+    webTransitionIn: {
+        transitionProperty: 'opacity, transform',
+        transitionDuration: `${OPEN_MS}ms`,
+        transitionTimingFunction: 'cubic-bezier(0.16, 1, 0.3, 1)',
+        willChange: 'opacity, transform',
+    } as any,
+    webTransitionOut: {
+        transitionProperty: 'opacity, transform',
+        transitionDuration: `${CLOSE_MS}ms`,
+        transitionTimingFunction: 'ease-in',
+        willChange: 'opacity, transform',
+    } as any,
     container: {
         flex: 1,
         justifyContent: 'flex-start',
