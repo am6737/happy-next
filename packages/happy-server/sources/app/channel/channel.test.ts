@@ -147,6 +147,19 @@ describe('group settings', () => {
         await channelUpdate('account', channel.id, { title: 'Engineering' });
         expect(state.messages).toHaveLength(0);
     });
+    it('stores a group brief at creation but never on a DM', async () => {
+        expect((await channelCreate('account', { ...createReq, kind: 'group', title: 'Ops', brief: 'c2VjcmV0' })).brief).toBe('c2VjcmV0');
+        expect((await channelCreate('account', { ...createReq, brief: 'c2VjcmV0' })).brief).toBeNull();
+    });
+    it('replaces and clears the brief with brief_changed, leaving the title alone', async () => {
+        const channel = await group();
+        expect(await channelUpdate('account', channel.id, { brief: 'YnJpZWY=' })).toMatchObject({ title: 'Engineering', brief: 'YnJpZWY=' });
+        expect(state.messages.at(-1).content).toEqual({ t: 'system', code: 'brief_changed', data: { cleared: false } });
+        await channelUpdate('account', channel.id, { brief: 'YnJpZWY=' });
+        expect(state.messages).toHaveLength(1);
+        expect((await channelUpdate('account', channel.id, { brief: null })).brief).toBeNull();
+        expect(state.messages.at(-1).content).toEqual({ t: 'system', code: 'brief_changed', data: { cleared: true } });
+    });
     it('rejects DM rename and foreign rename', async () => {
         const dm = await channelCreate('account', createReq);
         await expect(channelUpdate('account', dm.id, { title: 'x' })).rejects.toMatchObject({ code: 'not_group' });
@@ -353,7 +366,7 @@ describe('channel reset, read, key and DTOs', () => {
     });
     it('keeps CUID creation time stable as last activity changes', () => {
         const id = `c${now.getTime().toString(36)}0000000000000000`;
-        const dto = toChannelDto({ id, kind: 'dm', title: null, seq: 1, accountId: 'account', members: [], lastMessageAt: new Date(now.getTime() + 10_000) });
+        const dto = toChannelDto({ id, kind: 'dm', title: null, brief: null, seq: 1, accountId: 'account', members: [], lastMessageAt: new Date(now.getTime() + 10_000) });
         expect(dto.createdAt).toBe(now.getTime()); expect(dto.lastMessageAt).toBe(now.getTime() + 10_000);
     });
 });

@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TEAMMATE_ENV, type ChannelMessage, type TeammateRunDispatchPayload } from 'happy-wire';
 import { teammateModelSelection, createTeammateRuntime, contextRolloverLimit, renderRunEventMessage, type TeammateRuntimeDependencies } from './runtime';
 import { ensureTeammateHome, mergeThreadState, readThreadsState, writeSessionKeyFile, writeThreadSummary, writeThreadsState } from './homeDir';
-import { makeTeammate, makeConversationPayload, makeChannelMessage } from './testFixtures';
+import { makeTeammate, makeConversationPayload, makeChannelMessage, channelTestKey } from './testFixtures';
 import { encodeBase64, encryptWithDataKey } from '@/api/encryption';
 import { getProjectPath } from '@/claude/utils/path';
 import { createChannelCrypto } from './channelCrypto';
@@ -366,6 +366,28 @@ describe('teammate runtime', () => {
             runtime.dispatch(event); await started();
             expect(sentMessage()).toContain('## USER.md');
             expect(sentMessage()).not.toContain('## MEMORY.md');
+        });
+
+        it('tells a live group controller once when the brief changes or is removed', async () => {
+            await ensureTeammateHome(makeTeammate(), { dir: home });
+            runtime = createTeammateRuntime({ ...deps, now: Date.now });
+            await seedLive();
+            const groupRun = (runId: string, brief: string | null) => {
+                const event = makeConversationPayload('group'); event.thread.id = 'thread-1'; event.runId = runId; event.dispatchToken = `token-${runId}`;
+                event.teammate.controllerProvider = 'claude'; event.teammate.controllerEnv = null;
+                event.channel!.brief = brief === null ? null : encodeBase64(encryptWithDataKey({ text: brief }, channelTestKey));
+                event.events = [{ type: 'manual', at: 1, data: { note: 'brief check' } }];
+                return event;
+            };
+            const sent = (call: number) => vi.mocked(deps.api.sendSessionMessage).mock.calls[call][1];
+            const first = groupRun('run-1', 'Builder implements, reviewer reviews.');
+            runtime.dispatch(first); await started();
+            expect(sent(0)).toContain("Group brief update: the owner changed this group's brief.");
+            expect(sent(0)).toContain('Builder implements, reviewer reviews.');
+            runtime.dispatch({ ...first, runId: 'run-2', dispatchToken: 'token-run-2' }); await started(2);
+            expect(sent(1)).not.toContain('Group brief update');
+            runtime.dispatch(groupRun('run-3', null)); await started(3);
+            expect(sent(2)).toContain("the owner removed this group's brief");
         });
 
         it('rolls a task thread and starts a fresh segment with its summary', async () => {

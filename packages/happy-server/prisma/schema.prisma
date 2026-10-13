@@ -781,6 +781,8 @@ model Channel {
   account       Account          @relation(fields: [accountId], references: [id], onDelete: Cascade)
   kind          String
   title         String?
+  /// Group brief encrypted with the channel key (base64); agents read it before every reply.
+  brief         String?
   seq           Int              @default(0)
   lastMessageAt DateTime         @default(now())
   members       ChannelMember[]

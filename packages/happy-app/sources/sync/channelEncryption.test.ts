@@ -5,7 +5,7 @@ const sodium = createRequire(import.meta.url)('libsodium-wrappers');
 import { decodeBase64, encodeBase64 } from '@/encryption/base64';
 import { Encryption } from './encryption/encryption';
 import { AES256Encryption } from './encryption/encryptor';
-import { decryptChannelMessage, encryptChannelMessage, generateChannelKey, unwrapChannelKey, wrapChannelKeyForAccount, wrapChannelKeyForTeammate } from './channelEncryption';
+import { decryptChannelBrief, decryptChannelMessage, encryptChannelBrief, encryptChannelMessage, generateChannelKey, unwrapChannelKey, wrapChannelKeyForAccount, wrapChannelKeyForTeammate } from './channelEncryption';
 
 // Use the real web AES adapter used by rn-encryption, rather than mocking encryption.
 vi.mock('rn-encryption', async () => await import('web-secure-encryption'));
@@ -79,5 +79,15 @@ describe('channel encryption', () => {
     it('rejects invalid account and machine keys', async () => {
         await expect(unwrapChannelKey({ decryptEncryptionKey: async () => null }, 'bad')).rejects.toThrow();
         await expect(wrapChannelKeyForTeammate(generateChannelKey(), new Uint8Array(16))).rejects.toThrow();
+    });
+});
+
+describe('channel brief', () => {
+    it('round-trips with the CLI format and rejects a wrong key', async () => {
+        const key = generateChannelKey();
+        const encrypted = await encryptChannelBrief(key, 'Builder implements.');
+        expect(cliDecrypt(decodeBase64(encrypted), key)).toEqual({ text: 'Builder implements.' });
+        expect(await decryptChannelBrief(key, encodeBase64(cliEncryptFixture({ text: 'From CLI' }, key)))).toBe('From CLI');
+        expect(await decryptChannelBrief(generateChannelKey(), encrypted)).toBeNull();
     });
 });

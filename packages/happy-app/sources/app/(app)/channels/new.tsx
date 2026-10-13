@@ -8,6 +8,7 @@ import { sync } from '@/sync/sync';
 import { useTeammates } from '@/sync/storage';
 import { layout } from '@/components/layout';
 import { MemberRow } from '@/components/teammates/MemberRow';
+import { ChannelBriefField } from '@/components/teammates/ChannelBriefField';
 import { Card, FieldError, InputRow, KIT_PAGE_PADDING, PillButton, SectionLabel } from '@/components/teammates/kit';
 import { Typography } from '@/constants/Typography';
 import { t } from '@/text';
@@ -20,6 +21,7 @@ export default React.memo(function NewChannelScreen() {
     const insets = useSafeAreaInsets();
     const teammates = useTeammates().filter(m => m.status !== 'archived');
     const [title, setTitle] = React.useState('');
+    const [brief, setBrief] = React.useState('');
     const [selected, setSelected] = React.useState<string[]>([]);
     const [busy, setBusy] = React.useState(false);
     const [error, setError] = React.useState<string | null>(null);
@@ -33,7 +35,7 @@ export default React.memo(function NewChannelScreen() {
         setBusy(true);
         setError(null);
         try {
-            const channel = await sync.channels.create('group', teammates.filter(m => selected.includes(m.id)), title.trim());
+            const channel = await sync.channels.create('group', teammates.filter(m => selected.includes(m.id)), title.trim(), brief);
             router.replace(`/channels/${channel.id}`);
         } catch {
             setError(t('channels.createError'));
@@ -60,6 +62,7 @@ export default React.memo(function NewChannelScreen() {
                     }) : <Text style={styles.empty}>{t('teammates.emptyHint')}</Text>}
                 </Card>
                 {!!teammates.length && <Text style={styles.hint}>{t('channels.pickAgents')}</Text>}
+                <ChannelBriefField value={brief} optional onSave={async text => { setBrief(text); return true; }} />
                 <View style={styles.footer}>
                     <FieldError message={error} />
                     <PillButton grow label={t('channels.createGroup')} loading={busy}

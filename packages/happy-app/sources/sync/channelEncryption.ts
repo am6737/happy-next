@@ -1,5 +1,5 @@
 import { getRandomBytes } from 'expo-crypto';
-import { ChannelMessageBodySchema, type ChannelMessageBody } from 'happy-wire';
+import { ChannelBriefBodySchema, ChannelMessageBodySchema, type ChannelMessageBody } from 'happy-wire';
 import { encodeBase64, decodeBase64 } from '@/encryption/base64';
 import { encryptDataKeyForRecipientV0 } from './directShareEncryption';
 import { AES256Encryption } from './encryption/encryptor';
@@ -29,5 +29,16 @@ export async function decryptChannelMessage(key: Uint8Array, content: { t: 'encr
         const [body] = await new AES256Encryption(requireKey(key)).decrypt([decodeBase64(content.c)]);
         const parsed = ChannelMessageBodySchema.safeParse(body);
         return parsed.success ? parsed.data : null;
+    } catch { return null; }
+}
+export async function encryptChannelBrief(key: Uint8Array, text: string): Promise<string> {
+    const [encrypted] = await new AES256Encryption(requireKey(key)).encrypt([ChannelBriefBodySchema.parse({ text })]);
+    return encodeBase64(encrypted);
+}
+export async function decryptChannelBrief(key: Uint8Array, content: string): Promise<string | null> {
+    try {
+        const [body] = await new AES256Encryption(requireKey(key)).decrypt([decodeBase64(content)]);
+        const parsed = ChannelBriefBodySchema.safeParse(body);
+        return parsed.success ? parsed.data.text : null;
     } catch { return null; }
 }

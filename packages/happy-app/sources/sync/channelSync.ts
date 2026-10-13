@@ -4,7 +4,7 @@ import type { Encryption } from './encryption/encryption';
 import { storage } from './storage';
 import { getServerUrl } from './serverConfig';
 import * as api from './apiChannels';
-import { decryptChannelMessage, encryptChannelMessage, generateChannelKey, unwrapChannelKey, wrapChannelKeyForAccount, wrapChannelKeyForTeammate } from './channelEncryption';
+import { decryptChannelBrief, decryptChannelMessage, encryptChannelBrief, encryptChannelMessage, generateChannelKey, unwrapChannelKey, wrapChannelKeyForAccount, wrapChannelKeyForTeammate } from './channelEncryption';
 import { fetchTeammateRuns, fetchTeammateTasks } from './apiTeammates';
 import type { StoredChannelMessage } from './channelReducers';
 
@@ -61,13 +61,14 @@ export class ChannelSync {
         }
         return members;
     }
-    create = async (kind: 'dm' | 'group', teammates: Teammate[], title: string | null = null) => {
+    create = async (kind: 'dm' | 'group', teammates: Teammate[], title: string | null = null, brief = '') => {
         const context = this.context();
         const key = generateChannelKey();
         const members = await this.wrapKeysForTeammates(key, teammates);
+        const encryptedBrief = brief.trim() ? await encryptChannelBrief(key, brief.trim()) : null;
         context.assertValid();
         const channel = await api.createChannel(context.credentials, {
-            kind, title, userEncryptedDataKey: wrapChannelKeyForAccount(key, context.encryption.contentDataKey), teammates: members,
+            kind, title, brief: encryptedBrief, userEncryptedDataKey: wrapChannelKeyForAccount(key, context.encryption.contentDataKey), teammates: members,
         });
         // DM creation is idempotent: always use the returned member key, never cache the candidate K.
         context.assertValid();
@@ -197,6 +198,24 @@ export class ChannelSync {
         context.assertValid();
         storage.getState().applyChannels([channel]);
         return channel;
+    };
+    /** Replace a group's brief; blank text clears it. */
+    setBrief = async (id: string, text: string) => {
+        const context = this.context();
+        const channel = storage.getState().channels[id];
+        if (!channel) throw new Error('Channel unavailable');
+        const brief = text.trim() ? await encryptChannelBrief(await this.key(channel, context.encryption), text.trim()) : null;
+        context.assertValid();
+        const updated = await api.updateChannel(context.credentials, id, { brief });
+        context.assertValid();
+        storage.getState().applyChannels([updated]);
+        return updated;
+    };
+    /** Plain text of a group's brief; null when there is none or this account cannot open it. */
+    readBrief = async (channel: Channel): Promise<string | null> => {
+        if (!channel.brief) return null;
+        const key = await this.key(channel, this.context().encryption).catch(() => null);
+        return key ? decryptChannelBrief(key, channel.brief) : null;
     };
     addMembers = async (id: string, teammates: Teammate[]) => {
         const context = this.context();

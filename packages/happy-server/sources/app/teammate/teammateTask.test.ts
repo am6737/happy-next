@@ -132,7 +132,7 @@ function setupTask(status = 'in_progress') {
     return task;
 }
 function setupDm() {
-    state.channel = { id: 'dm', accountId: 'account', kind: 'dm', title: null, seq: 0, lastMessageAt: now, members: [
+    state.channel = { id: 'dm', accountId: 'account', kind: 'dm', title: null, brief: null, seq: 0, lastMessageAt: now, members: [
         { memberType: 'user', accountId: 'account', teammateId: null, lastReadSeq: 0, encryptedDataKey: new Uint8Array([1, 2]), account: { firstName: 'Ada' } },
         { memberType: 'teammate', teammateId: 'mate', accountId: null, lastReadSeq: 0, encryptedDataKey: new Uint8Array([3, 4]), teammate: state.teammates[0] },
     ] };

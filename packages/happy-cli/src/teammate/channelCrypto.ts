@@ -1,4 +1,4 @@
-import { ChannelMessageBodySchema, type ChannelMessageBody } from 'happy-wire';
+import { ChannelBriefBodySchema, ChannelMessageBodySchema, type ChannelMessageBody } from 'happy-wire';
 import { decodeBase64, encodeBase64, encryptWithDataKey, decryptWithDataKey } from '@/api/encryption';
 
 /** Cache is scoped to a daemon runtime, and refreshes when the wrapped key changes. */
@@ -29,4 +29,11 @@ export function decryptChannelMessage(content: string, key: Uint8Array): Channel
     const result = ChannelMessageBodySchema.safeParse(decryptWithDataKey(decodeBase64(content), key));
     if (!result.success) throw new Error('Unable to decrypt channel message with this channel key');
     return result.data;
+}
+
+/** Plain text of a group's encrypted brief. */
+export function decryptChannelBrief(content: string, key: Uint8Array): string {
+    const result = ChannelBriefBodySchema.safeParse(decryptWithDataKey(decodeBase64(content), key));
+    if (!result.success) throw new Error('Unable to decrypt channel brief with this channel key');
+    return result.data.text;
 }

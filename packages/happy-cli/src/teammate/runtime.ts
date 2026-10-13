@@ -18,7 +18,7 @@ import { PROVIDER_CACHE_TTL_MS } from './contextSignals';
 import { buildTeammateSystemPrompt, teammateMemoryFiles } from './prompt';
 import { summarizeThread } from './threadSummary';
 import { runTeammateOneShot } from './oneShot';
-import { createChannelCrypto, decryptChannelMessage, encryptChannelMessage } from './channelCrypto';
+import { createChannelCrypto, decryptChannelBrief, decryptChannelMessage, encryptChannelMessage } from './channelCrypto';
 import { createWorkspaceManager, githubGitEnv, type WorkspaceDependencies } from './workspace';
 import { codexSandboxWorks, prepareTeammateIsolation } from './isolation';
 import { TeammateToolSchemas, type TeammateToolPath } from './toolSchemas';
@@ -43,6 +43,7 @@ const CAPACITY_RESERVE_TOKENS = 20_000;
 const CAPACITY_RESERVE_MAX_RATIO = 0.2;
 const DEFAULT_CONTEXT_WINDOW = 200_000;
 const MEMORY_TRUNCATION_MARKER = '…[truncated]';
+const EMPTY_BRIEF_SEEN = createHash('sha256').update('').digest('hex');
 interface HistoryEntry { seq: number; createdAt: number; sender: string; text: string }
 
 export function contextRolloverLimit(entry: ThreadsState[string], provider: keyof typeof PROVIDER_CACHE_TTL_MS, at: number, options: { budget?: number | null; auto?: boolean; forceCold?: boolean } = {}): { limit: number; cold: boolean; grown: boolean; roll: boolean; ttl: number; budget: number; auto: boolean } {
@@ -127,6 +128,26 @@ async function readChangedMemory(home: string, kind: TeammateRunDispatchPayload[
         }
     }
     return sections.length ? 'Memory update: these files changed since your session started. They replace the copies in your instructions.\n' + sections.join('\n') : null;
+}
+
+/** A group thread's brief and the hash that tells a live controller it changed; text is null when absent or unreadable. */
+function readGroupBrief(payload: TeammateRunDispatchPayload, crypto: ReturnType<typeof createChannelCrypto>) {
+    const channel = payload.thread.kind === 'group' ? payload.channel : null;
+    const brief = { text: null as string | null, present: Boolean(channel?.brief), seen: createHash('sha256').update(channel?.brief ?? '').digest('hex') };
+    if (!channel?.brief) return brief;
+    try {
+        return { ...brief, text: decryptChannelBrief(channel.brief, crypto.unwrap(channel.id, channel.teammateEncryptedDataKey)) };
+    } catch (error) {
+        logger.debug('[TEAMMATE] Could not read group brief', error);
+        return brief;
+    }
+}
+
+/** Tell a controller that kept its session about a brief edited since its instructions were written. */
+function groupBriefUpdate(brief: ReturnType<typeof readGroupBrief>, seen: string | undefined): string | null {
+    if ((seen ?? EMPTY_BRIEF_SEEN) === brief.seen) return null;
+    if (brief.text) return `Group brief update: the owner changed this group's brief. It replaces the copy in your instructions.\n## Group brief\n${brief.text}`;
+    return brief.present ? null : 'Group brief update: the owner removed this group\'s brief. Ignore the copy in your instructions.';
 }
 
 export async function renderRunEventMessage(payload: TeammateRunDispatchPayload, chat?: {
@@ -431,6 +452,7 @@ export function createTeammateRuntime(deps: TeammateRuntimeDependencies) {
                 }
                 let resumed = true;
                 let threadSummary: string | null = null;
+                const brief = readGroupBrief(payload, crypto);
                 if (!live) {
                     // Upgrade M2 controllers without a token by replacing the live process.
                     await stopIfAlive(sessionId, entry.pid, 'Unable to replace controller');
@@ -445,7 +467,7 @@ export function createTeammateRuntime(deps: TeammateRuntimeDependencies) {
                     const memorySeenAt = now();
                     await writeFile(promptPath, await buildTeammateSystemPrompt({
                         dir: home, teammate: payload.teammate, threadKind: payload.thread.kind,
-                        threadContext: { kind: payload.thread.kind, channelTitle: payload.channel?.title ?? undefined, taskTitle: payload.task?.title, taskUrl: payload.task?.url ?? undefined },
+                        threadContext: { kind: payload.thread.kind, channelTitle: payload.channel?.title ?? undefined, channelBrief: brief.text ?? undefined, taskTitle: payload.task?.title, taskUrl: payload.task?.url ?? undefined },
                         now: new Date(now()), threadSummary, archivedTopics: (entry.resetAppliedAt ?? 0) > 0,
                     }), { mode: 0o600 });
                     if (run.cancelled) return;
@@ -478,7 +500,7 @@ export function createTeammateRuntime(deps: TeammateRuntimeDependencies) {
                     sessionId = spawned.sessionId;
                     resumed = Boolean(resumable && !resumeFailed);
                     await mergeThreadState(home, payload.thread.id, {
-                        currentSessionId: sessionId, pid: spawned.pid, keyPath, lastDispatchAt: now(), provider, controllerConfig, memorySeenAt,
+                        currentSessionId: sessionId, pid: spawned.pid, keyPath, lastDispatchAt: now(), provider, controllerConfig, memorySeenAt, briefSeen: brief.seen,
                         overflowed: undefined, compactions: undefined, contextTokens: undefined, contextWindow: undefined,
                         // The provider reports its own transcript ID once it starts; another provider's ID can't be resumed.
                         ...(sameProvider && !resumeFailed ? {} : { providerSessionId: undefined }),
@@ -502,12 +524,14 @@ export function createTeammateRuntime(deps: TeammateRuntimeDependencies) {
                 } : undefined;
                 const memoryRefresh = !fresh && (live || (provider === 'codex' && Boolean(resumable) && !rollover && !resumeFailed));
                 const memoryReadAt = memoryRefresh ? now() : undefined;
-                const memoryUpdate = memoryRefresh ? await readChangedMemory(home, payload.thread.kind, entry.memorySeenAt ?? 0) : null;
+                const memoryUpdate = memoryRefresh
+                    ? [await readChangedMemory(home, payload.thread.kind, entry.memorySeenAt ?? 0), groupBriefUpdate(brief, entry.briefSeen)].filter(Boolean).join('\n\n') || null
+                    : null;
                 const delivery = await deps.api.sendSessionMessage(sessionId!, await renderRunEventMessage(payload, { api: deps.api, crypto }, home, describeWorker, continuity, threadSummary, memoryUpdate),
                     await readSessionDataKeyFile(keyPath!), `teammate-run:${payload.runId}`, payload.teammate.controllerPermissionMode,
                     selection.model, selection.reasoningEffort);
                 if (run.cancelled) return;
-                if (memoryReadAt !== undefined) await mergeThreadState(home, payload.thread.id, { memorySeenAt: memoryReadAt });
+                if (memoryReadAt !== undefined) await mergeThreadState(home, payload.thread.id, { memorySeenAt: memoryReadAt, briefSeen: brief.seen });
                 await deps.api.reportTeammateRunStarted(payload.runId, {
                     dispatchToken: payload.dispatchToken, sessionId: sessionId!, resumed, delivery,
                 });

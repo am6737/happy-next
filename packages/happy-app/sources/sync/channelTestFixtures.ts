@@ -1,6 +1,6 @@
 import { ChannelSchema, ChannelMessageSchema } from 'happy-wire';
 
-export const testChannel = ChannelSchema.parse({ id: 'chat/with space', kind: 'group', title: 'Team', seq: 2, lastMessageAt: 20, createdAt: 0,
+export const testChannel = ChannelSchema.parse({ id: 'chat/with space', kind: 'group', title: 'Team', brief: null, seq: 2, lastMessageAt: 20, createdAt: 0,
     members: [{ memberType: 'user', accountId: 'owner', teammateId: null, encryptedDataKey: 'user-key', lastReadSeq: 0 },
         { memberType: 'teammate', accountId: null, teammateId: 'agent/1', encryptedDataKey: 'agent-key', lastReadSeq: 0 }] });
 export const testChannelMessage = ChannelMessageSchema.parse({ id: 'message', channelId: testChannel.id, seq: 2, localId: 'local',

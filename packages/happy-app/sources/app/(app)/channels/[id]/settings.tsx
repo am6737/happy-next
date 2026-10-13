@@ -7,10 +7,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { storage } from '@/sync/storage';
 import { useChannelActions } from '@/hooks/useChannelActions';
+import { useChannelBrief } from '@/hooks/useChannelBrief';
 import { ChannelAddMembersSheet } from '@/components/teammates/ChannelAddMembersSheet';
 import { TeammateSheet, useTeammateSheet } from '@/components/teammates/TeammateSheet';
 import { TeammateAvatar } from '@/components/teammates/ui';
 import { ChannelAvatar } from '@/components/teammates/ChannelList';
+import { ChannelBriefField } from '@/components/teammates/ChannelBriefField';
 import { Card, FieldError, KIT_PAGE_PADDING, PillButton, Row, SectionLabel, SheetTextInput } from '@/components/teammates/kit';
 import { layout } from '@/components/layout';
 import { Typography } from '@/constants/Typography';
@@ -56,6 +58,7 @@ export default React.memo(function ChannelSettingsScreen() {
     const channel = storage(state => state.channels[id]);
     const teammates = storage(state => state.teammates);
     const actions = useChannelActions(id);
+    const brief = useChannelBrief(channel);
     const addSheet = useTeammateSheet();
     const renameSheet = useTeammateSheet();
     const [editing, setEditing] = React.useState(false);
@@ -115,6 +118,7 @@ export default React.memo(function ChannelSettingsScreen() {
                     />
                 </Card>
 
+                <ChannelBriefField value={brief} busy={actions.busy} error={actions.error} onSave={actions.updateBrief} />
 
                 <Card style={styles.card}>
                     <Row label={t('channels.settings.groupName')} value={channel.title || t('channels.group')} onPress={openRename} disabled={actions.busy} />

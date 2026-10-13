@@ -163,13 +163,13 @@ describe('scheduler pick and dispatch', () => {
     });
     it.each(['dm', 'group'])('dispatches %s channel keys, member names and reset time', async kind => {
         Object.assign(state.threads[0], { kind, channelId: 'channel', resetAt: now });
-        state.channel = { id: 'channel', kind, title: kind === 'group' ? 'Engineering' : null, members: [
+        state.channel = { id: 'channel', kind, title: kind === 'group' ? 'Engineering' : null, brief: kind === 'group' ? 'YnJpZWY=' : null, members: [
             { memberType: 'user', accountId: 'account', account: { firstName: 'Ada', username: 'ada' } },
             { memberType: 'teammate', teammateId: 'mate', encryptedDataKey: new Uint8Array([1, 2]), teammate: profile },
         ] };
         const row = addRun(); const action = await teammateRunPick(row.id, now);
         expect(action!.payload.thread.resetAt).toBe(now.getTime());
-        expect(action!.payload.channel).toEqual({ id: 'channel', kind, title: state.channel.title, teammateEncryptedDataKey: 'AQI=', members: [
+        expect(action!.payload.channel).toEqual({ id: 'channel', kind, title: state.channel.title, brief: state.channel.brief, teammateEncryptedDataKey: 'AQI=', members: [
             { memberType: 'user', id: 'account', name: 'Ada', handle: null },
             { memberType: 'teammate', id: 'mate', name: 'Atlas', handle: 'atlas' },
         ] });
@@ -177,7 +177,7 @@ describe('scheduler pick and dispatch', () => {
     });
     it.each([['', 'ada', 'ada'], [null, null, 'You']])('derives user name from firstName, username and You fallback', async (firstName, username, name) => {
         Object.assign(state.threads[0], { kind: 'dm', channelId: 'channel' });
-        state.channel = { id: 'channel', kind: 'dm', title: null, members: [
+        state.channel = { id: 'channel', kind: 'dm', title: null, brief: null, members: [
             { memberType: 'user', accountId: 'account', account: { firstName, username } },
             { memberType: 'teammate', teammateId: 'mate', encryptedDataKey: new Uint8Array([1]), teammate: profile },
         ] };

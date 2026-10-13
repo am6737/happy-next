@@ -164,6 +164,7 @@ export const ChannelMessageRow = React.memo(({ message, header, sender, members,
             : channelSystem?.code === 'member_added' && channelSystem.names.length ? t('channels.system.memberAddedNamed', { names: channelSystem.names.join(', ') })
             : channelSystem?.code === 'member_removed' && channelSystem.names.length ? t('channels.system.memberRemovedNamed', { names: channelSystem.names.join(', ') })
             : channelSystem?.code === 'title_changed' ? t('channels.system.title_changed', { title: channelSystem.title })
+            : channelSystem?.code === 'brief_changed' && channelSystem.cleared ? t('channels.system.briefCleared')
             : t(`channels.system.${message.content.code}`);
         const taskId = governance?.code === 'task_self_assigned' ? governance.taskId : undefined;
         const runId = governance?.code === 'run_failed' ? governance.runId : null;

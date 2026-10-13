@@ -16,7 +16,7 @@ function channelErrorMessage(failure: unknown): string {
 }
 
 /**
- * Group settings actions: rename, add or remove Agents, start a new context and delete the group. One action runs
+ * Group settings actions: rename, edit the brief, add or remove Agents, start a new context and delete the group. One action runs
  * at a time (`busy`); destructive ones ask first. Each resolves to whether it succeeded so sheets can close only
  * then, and failures are kept in `error` for the page to show inline.
  */
@@ -42,6 +42,7 @@ export function useChannelActions(id: string) {
 
     const rename = (title: string) => run(() => sync.channels.rename(id, title).then(() => undefined));
 
+    const updateBrief = (text: string) => run(() => sync.channels.setBrief(id, text).then(() => undefined));
 
     const addMembers = (teammates: Teammate[]) => run(() => sync.channels.addMembers(id, teammates).then(() => undefined));
 
@@ -69,5 +70,5 @@ export function useChannelActions(id: string) {
         });
     };
 
-    return { busy, error, rename, addMembers, removeMember, reset, remove };
+    return { busy, error, rename, updateBrief, addMembers, removeMember, reset, remove };
 }

@@ -628,7 +628,7 @@ describe('teammate contract', () => {
       channel: {
         id: 'channel-1',
         kind,
-        title: kind === 'group' ? 'Engineering' : null,
+        title: kind === 'group' ? 'Engineering' : null, brief: null,
         teammateEncryptedDataKey: 'teammate-key',
         members: [
           { memberType: 'user', id: 'account-1', name: 'You', handle: null },

@@ -8,7 +8,8 @@ export type GovernanceSystemMessage =
 
 export type ChannelSystemMessage =
     | { code: 'member_added' | 'member_removed'; names: string[] }
-    | { code: 'title_changed'; title: string };
+    | { code: 'title_changed'; title: string }
+    | { code: 'brief_changed'; cleared: boolean };
 
 export function governanceSystemMessage(content: ChannelMessageContent): GovernanceSystemMessage | null {
     if (content.t !== 'system') return null;
@@ -30,7 +31,7 @@ export function governanceSystemMessage(content: ChannelMessageContent): Governa
     }
 }
 
-/** Membership and title notices; `nameOf` resolves Agent ids, and unknown ids are dropped so callers can fall back to generic text. */
+/** Membership, title and brief notices; `nameOf` resolves Agent ids, and unknown ids are dropped so callers can fall back to generic text. */
 export function channelSystemMessage(content: ChannelMessageContent, nameOf: (id: string) => string | undefined = () => undefined): ChannelSystemMessage | null {
     if (content.t !== 'system') return null;
     const ids = Array.isArray(content.data.teammateIds) ? content.data.teammateIds.filter((id): id is string => typeof id === 'string') : [];
@@ -38,6 +39,7 @@ export function channelSystemMessage(content: ChannelMessageContent, nameOf: (id
         return { code: content.code, names: ids.map(nameOf).filter((name): name is string => !!name) };
     }
     if (content.code === 'title_changed') return { code: content.code, title: typeof content.data.title === 'string' ? content.data.title : '' };
+    if (content.code === 'brief_changed') return { code: content.code, cleared: content.data.cleared === true };
     return null;
 }
 

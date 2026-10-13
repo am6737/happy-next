@@ -6,6 +6,8 @@ describe('governance system messages', () => {
         expect(channelSystemMessage({ t: 'system', code: 'member_added', data: { teammateIds: ['a', 'missing'] } }, id => ({ a: 'Ada' } as Record<string, string>)[id])).toEqual({ code: 'member_added', names: ['Ada'] });
         expect(channelSystemMessage({ t: 'system', code: 'member_removed', data: { teammateIds: ['missing'] } }, () => undefined)).toEqual({ code: 'member_removed', names: [] });
         expect(channelSystemMessage({ t: 'system', code: 'title_changed', data: { title: 'New' } })).toEqual({ code: 'title_changed', title: 'New' });
+        expect(channelSystemMessage({ t: 'system', code: 'brief_changed', data: { cleared: true } })).toEqual({ code: 'brief_changed', cleared: true });
+        expect(channelSystemMessage({ t: 'system', code: 'brief_changed', data: {} })).toEqual({ code: 'brief_changed', cleared: false });
     });
     it('formats budget warning amounts and recognizes transitions', () => {
         expect(governanceSystemMessage({ t: 'system', code: 'budget_warning', data: { spentUsd: 8.25, budgetUsd: 10 } })).toEqual({ code: 'budget_warning', spentUsd: '$8.25', budgetUsd: '$10.00', taskId: null });

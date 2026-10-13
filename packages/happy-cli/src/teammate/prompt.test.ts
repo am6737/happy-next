@@ -64,6 +64,14 @@ describe('teammate system prompt', () => {
         expect((await build()).split('## SOUL.md')[0]).not.toContain('…[truncated]');
     });
 
+    it('puts a group brief before the current thread', async () => {
+        await writeFile(join(dir, 'SOUL.md'), 'Persona only');
+        const prompt = await buildTeammateSystemPrompt({ dir, teammate: makeTeammate(), threadKind: 'group', now,
+            threadContext: { kind: 'group', channelTitle: 'Engineering', channelBrief: 'Only reply when mentioned.' } });
+        expect(prompt.match(/^## .+$/gm)).toEqual(['## SOUL.md', '## Group brief', '## Current thread']);
+        expect(prompt).toContain('Only reply when mentioned.');
+    });
+
     it('skips missing files and still renders current thread context', async () => {
         await writeFile(join(dir, 'SOUL.md'), 'Persona only');
         const prompt = await build();

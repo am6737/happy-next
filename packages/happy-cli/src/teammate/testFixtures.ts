@@ -47,7 +47,7 @@ export function makeConversationPayload(kind: 'dm' | 'group' = 'dm'): TeammateRu
         runId: 'run-chat', dispatchToken: 'dispatch-chat', attempt: 1, teammate: makeTeammate(),
         thread: { id: 'thread-chat', kind, channelId: 'channel-1', taskId: null, providerSessionId: null, currentSessionId: null, resetAt: null },
         channel: {
-            id: 'channel-1', kind, title: kind === 'group' ? 'Engineering' : null,
+            id: 'channel-1', kind, title: kind === 'group' ? 'Engineering' : null, brief: null,
             teammateEncryptedDataKey: encodeBase64(encryptWithDataKey({ k: encodeBase64(channelTestKey) }, machineTestKey)),
             members: [
                 { memberType: 'user', id: 'owner', name: 'Alex', handle: null },

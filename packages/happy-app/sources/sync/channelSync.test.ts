@@ -10,7 +10,7 @@ import * as api from './apiChannels';
 import * as crypto from './channelEncryption';
 
 vi.mock('./apiChannels', () => ({ fetchChannels: vi.fn(), createChannel: vi.fn(), fetchTeammateDm: vi.fn(), fetchChannel: vi.fn(), fetchChannelMessages: vi.fn(), sendChannelMessage: vi.fn(), markChannelRead: vi.fn(), resetChannel: vi.fn(), updateChannelMemberKey: vi.fn(), updateChannel: vi.fn(), addChannelMembers: vi.fn(), removeChannelMember: vi.fn(), deleteChannel: vi.fn() }));
-vi.mock('./channelEncryption', () => ({ generateChannelKey: vi.fn(() => new Uint8Array(32).fill(1)), wrapChannelKeyForAccount: vi.fn(() => 'candidate-key'), wrapChannelKeyForTeammate: vi.fn(async () => 'new-agent-key'), unwrapChannelKey: vi.fn(async () => new Uint8Array(32).fill(2)), encryptChannelMessage: vi.fn(async () => ({ t: 'encrypted', c: 'ciphertext' })), decryptChannelMessage: vi.fn(async () => ({ text: 'decrypted' })) }));
+vi.mock('./channelEncryption', () => ({ generateChannelKey: vi.fn(() => new Uint8Array(32).fill(1)), wrapChannelKeyForAccount: vi.fn(() => 'candidate-key'), wrapChannelKeyForTeammate: vi.fn(async () => 'new-agent-key'), unwrapChannelKey: vi.fn(async () => new Uint8Array(32).fill(2)), encryptChannelMessage: vi.fn(async () => ({ t: 'encrypted', c: 'ciphertext' })), decryptChannelMessage: vi.fn(async () => ({ text: 'decrypted' })), encryptChannelBrief: vi.fn(async () => 'brief-ciphertext'), decryptChannelBrief: vi.fn(async () => 'Brief text') }));
 vi.mock('./apiTeammates', () => ({ fetchTeammateRuns: vi.fn(async () => []), fetchTeammateTasks: vi.fn(async () => []) }));
 const harness = vi.hoisted(() => ({ state: {} as any, server: 'https://test' }));
 vi.mock('./serverConfig', () => ({ getServerUrl: () => harness.server }));
@@ -35,6 +35,17 @@ beforeEach(() => {
     client = new ChannelSync(() => ({ credentials, encryption }), async () => machineKey);
     vi.mocked(api.fetchChannel).mockResolvedValue(channel);
     vi.mocked(api.fetchChannelMessages).mockResolvedValue([]);
+});
+
+it('encrypts a group brief with the channel key, clears blank text and reads it back', async () => {
+    vi.mocked(api.updateChannel).mockResolvedValue({ ...channel, brief: 'brief-ciphertext' });
+    await client.setBrief(channel.id, '  Builder implements.  ');
+    expect(crypto.encryptChannelBrief).toHaveBeenCalledWith(new Uint8Array(32).fill(2), 'Builder implements.');
+    expect(api.updateChannel).toHaveBeenLastCalledWith(credentials, channel.id, { brief: 'brief-ciphertext' });
+    expect(await client.readBrief(harness.state.channels[channel.id])).toBe('Brief text');
+    await client.setBrief(channel.id, '   ');
+    expect(api.updateChannel).toHaveBeenLastCalledWith(credentials, channel.id, { brief: null });
+    expect(await client.readBrief(channel)).toBeNull();
 });
 
 it('supports group settings actions and wraps the existing channel key', async () => {

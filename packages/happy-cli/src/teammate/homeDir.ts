@@ -179,6 +179,8 @@ export type ThreadsState = Record<string, {
     flushedSegment?: number;
     segmentStartSeq?: number;
     memorySeenAt?: number;
+    /** Hash of the group brief ciphertext the controller last saw (empty brief hashes ''). */
+    briefSeen?: string;
 }>;
 
 export function threadDir(home: string, threadId: string): string {
@@ -227,7 +229,7 @@ export async function readThreadsState(dir: string): Promise<ThreadsState> {
                 || (value.lastDispatchAt !== undefined && typeof value.lastDispatchAt !== 'number')
                 || (value.provider !== undefined && !TeammateControllerProviderSchema.safeParse(value.provider).success)
                 || (value.threadKind !== undefined && !TeammateThreadKindSchema.safeParse(value.threadKind).success)
-                || ['lastRunId', 'lastDispatchToken', 'controlToken', 'teammateName', 'controllerConfig'].some(key => value[key] !== undefined && typeof value[key] !== 'string')
+                || ['lastRunId', 'lastDispatchToken', 'controlToken', 'teammateName', 'controllerConfig', 'briefSeen'].some(key => value[key] !== undefined && typeof value[key] !== 'string')
                 || ['resetAppliedAt', 'chatSendCounter', 'taskCreateCounter'].some(key => value[key] !== undefined && (!Number.isInteger(value[key]) || value[key] < 0))
                 || ['segment', 'summarizedSeq', 'summarizedAt', 'flushedSegment', 'segmentStartSeq'].some(key => value[key] !== undefined && (!Number.isInteger(value[key]) || value[key] < 0))
                 || (value.memorySeenAt !== undefined && (typeof value.memorySeenAt !== 'number' || !Number.isFinite(value.memorySeenAt) || value.memorySeenAt < 0))

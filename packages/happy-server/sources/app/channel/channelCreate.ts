@@ -21,7 +21,7 @@ export async function channelCreate(accountId: string, input: ChannelCreateReque
             if (existing) return toChannelDto(existing);
         }
         const row = await tx.channel.create({ data: {
-            accountId, kind: req.kind, title: req.kind === 'group' ? req.title ?? null : null,
+            accountId, kind: req.kind, title: req.kind === 'group' ? req.title ?? null : null, brief: req.kind === 'group' ? req.brief ?? null : null,
             members: { create: [
                 { memberType: 'user', accountId, encryptedDataKey: privacyKit.decodeBase64(req.userEncryptedDataKey) },
                 ...req.teammates.map(member => ({ memberType: 'teammate', teammateId: member.teammateId, encryptedDataKey: privacyKit.decodeBase64(member.encryptedDataKey) })),

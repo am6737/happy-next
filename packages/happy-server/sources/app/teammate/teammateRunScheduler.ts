@@ -57,7 +57,7 @@ export async function teammateRunPick(runId: string, now = new Date()): Promise<
                 return null;
             }
             if (stored && member) channel = {
-                id: stored.id, kind: stored.kind as 'dm' | 'group', title: stored.title,
+                id: stored.id, kind: stored.kind as 'dm' | 'group', title: stored.title, brief: stored.brief,
                 teammateEncryptedDataKey: privacyKit.encodeBase64(member.encryptedDataKey),
                 members: stored.members.map(m => ({ memberType: m.memberType as 'user' | 'teammate', id: (m.memberType === 'user' ? m.accountId : m.teammateId)!,
                     name: m.memberType === 'user' ? m.account?.firstName || m.account?.username || 'You' : m.teammate!.name,

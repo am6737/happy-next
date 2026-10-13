@@ -6,6 +6,7 @@ import { dailyLogDate } from './dailyLogDate';
 export interface TeammateThreadContext {
     kind: TeammateThreadKind;
     channelTitle?: string;
+    channelBrief?: string;
     taskTitle?: string;
     taskUrl?: string;
     extra?: unknown;
@@ -22,6 +23,7 @@ export interface TeammateSystemPromptOptions {
 }
 
 const MAX_FILE_CHARS = 20_000;
+export const GROUP_BRIEF_PREAMBLE = 'Written by the owner for everyone in this group: what it is for, who does what, and its conventions. Follow it when you reply here.';
 const TRUNCATION_MARKER = '…[truncated]';
 
 export function teammateMemoryFiles(threadKind: TeammateThreadKind): string[] {
@@ -52,6 +54,8 @@ export async function buildTeammateSystemPrompt({
         }
         sections.push(`## ${file}\n\n${content}`);
     }
+
+    if (threadContext.channelBrief) sections.push(`## Group brief\n\n${GROUP_BRIEF_PREAMBLE}\n\n${threadContext.channelBrief}`);
 
     if (threadKind === 'dm' || threadKind === 'group' || threadKind === 'task') {
         if (threadSummary) sections.push(`## Thread summary\n\nWritten by the daemon from earlier segments of this conversation. It is a digest, not the record: use chat_history(query) for details.\n\n${threadSummary}`);
