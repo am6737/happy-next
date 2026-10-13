@@ -34,7 +34,11 @@ export function CommandPalette({ commands, searchCachedMessages, onClose }: Comm
     } = useCommandPalette(commands, onClose, searchCachedMessages, tileColumns);
 
     const resultCount = React.useMemo(
-        () => filteredCategories.reduce((count, category) => count + category.commands.length, 0),
+        // A message group's heading and "N more" row are not results of their own
+        () => filteredCategories.reduce(
+            (count, category) => count + category.commands.filter((command) => command.layout !== 'messageGroup' && command.layout !== 'messageMore').length,
+            0,
+        ),
         [filteredCategories],
     );
 

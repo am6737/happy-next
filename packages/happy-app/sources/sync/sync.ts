@@ -3661,7 +3661,10 @@ class Sync {
                     const text = extractCachedMessageText(normalized);
                     if (!text) continue;
                     entries.push({
+                        id: item.id,
+                        role: normalized.role === 'user' ? 'user' : 'agent',
                         text,
+                        createdAt: item.createdAt,
                         normalizedText: normalizeCachedMessageSearchText(text),
                         seq: item.seq ?? 0,
                     });
@@ -3684,7 +3687,8 @@ class Sync {
     searchCachedMessages = async (
         rawQuery: string,
         sessionIds: string[],
-        limit = 30,
+        limit = 50,
+        perSessionLimit = 10,
     ): Promise<CachedMessageSearchMatch[]> => {
         const query = normalizeCachedMessageSearchText(rawQuery);
         if (query.length < 2 || sessionIds.length === 0) return [];
@@ -3695,13 +3699,23 @@ class Sync {
             const batch = sessionIds.slice(offset, offset + CONCURRENCY);
             const batchMatches = await Promise.all(batch.map(async (sessionId) => {
                 const entries = await this.getCachedMessageSearchEntries(sessionId);
-                const entry = entries.find((candidate) => cachedMessageMatchesQuery(candidate.normalizedText, query));
-                return entry
-                    ? { sessionId, snippet: cachedMessageSnippet(entry.text, query) }
-                    : null;
+                const hits: CachedMessageSearchMatch[] = [];
+                for (const entry of entries) {
+                    if (!cachedMessageMatchesQuery(entry.normalizedText, query)) continue;
+                    hits.push({
+                        sessionId,
+                        snippet: cachedMessageSnippet(entry.text, query),
+                        messageId: entry.id,
+                        role: entry.role,
+                        seq: entry.seq,
+                        createdAt: entry.createdAt,
+                    });
+                    if (hits.length >= perSessionLimit) break;
+                }
+                return hits;
             }));
-            for (const match of batchMatches) {
-                if (match) matches.push(match);
+            for (const hits of batchMatches) {
+                matches.push(...hits.slice(0, limit - matches.length));
                 if (matches.length >= limit) break;
             }
         }

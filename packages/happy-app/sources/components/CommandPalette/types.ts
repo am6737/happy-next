@@ -19,6 +19,12 @@ export interface Command {
     badgeTone?: 'neutral' | 'success' | 'warning' | 'accent';
     dangerous?: boolean;
     sessionId?: string;
+    // Rows of a session's message hits: the session heading, one hit beneath it, or the "N more" expander
+    layout?: 'messageGroup' | 'messageHit' | 'messageMore';
+    // Who wrote a `messageHit` row's message, shown ahead of its snippet
+    author?: string;
+    // Runs without closing the palette (expanding a group in place)
+    keepOpen?: boolean;
     action: () => void | Promise<void>;
 }
 

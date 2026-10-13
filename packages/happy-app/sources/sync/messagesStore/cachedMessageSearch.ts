@@ -1,7 +1,10 @@
 import type { NormalizedMessage } from '../typesRaw';
 
 export type CachedMessageSearchEntry = {
+    id: string;
+    role: 'user' | 'agent';
     text: string;
+    createdAt: number;
     normalizedText: string;
     seq: number;
 };
@@ -9,6 +12,11 @@ export type CachedMessageSearchEntry = {
 export type CachedMessageSearchMatch = {
     sessionId: string;
     snippet: string;
+    // The matched message, so opening the hit can scroll to it
+    messageId: string;
+    role: 'user' | 'agent';
+    seq: number;
+    createdAt: number;
 };
 
 export function normalizeCachedMessageSearchText(value: string): string {
@@ -24,15 +32,13 @@ export function extractCachedMessageText(message: NormalizedMessage): string | n
     if (message.isSidechain) return null;
 
     if (message.role === 'user') {
+        // A post-compaction summary repeats the whole conversation, so it would match nearly every query
+        if (message.meta?.isCompactSummary) return null;
         return message.content.text.trim() || null;
     }
     if (message.role !== 'agent') return null;
 
-    const parts = message.content.flatMap((item) => {
-        if (item.type === 'text') return [item.text];
-        if (item.type === 'summary') return [item.summary];
-        return [];
-    });
+    const parts = message.content.flatMap((item) => item.type === 'text' ? [item.text] : []);
     const text = parts.join('\n').trim();
     return text || null;
 }

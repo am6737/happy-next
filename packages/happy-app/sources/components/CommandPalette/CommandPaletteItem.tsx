@@ -38,7 +38,9 @@ export function CommandPaletteItem({ command, isSelected, onPress, onHover, isEx
             styles.container,
             isSelected && styles.selected,
             isHovered && !isSelected && styles.hovered,
-            pressed && Platform.OS === 'web' && styles.pressed
+            pressed && Platform.OS === 'web' && styles.pressed,
+            command.layout === 'messageHit' && styles.hitContainer,
+            command.layout === 'messageMore' && styles.moreContainer,
         ],
         onPress,
         disabled: isExecuting,
@@ -61,6 +63,36 @@ export function CommandPaletteItem({ command, isSelected, onPress, onHover, isEx
         ));
     };
     
+    if (command.layout === 'messageMore') {
+        return (
+            <Pressable {...pressableProps}>
+                <Text style={[styles.moreText, Typography.default()]}>{command.title}</Text>
+            </Pressable>
+        );
+    }
+
+    // One hit under its session heading: indented past the session icon, a guide line running down
+    // from that icon, the author ahead of the snippet
+    if (command.layout === 'messageHit') {
+        return (
+            <Pressable {...pressableProps}>
+                <View style={styles.treeLine} />
+                <View style={styles.content}>
+                    <Text style={[styles.author, Typography.default()]}>{command.author}</Text>
+                    <Text numberOfLines={2} style={[styles.hitText, Typography.default()]}>
+                        {renderHighlightedText(command.title)}
+                    </Text>
+                    {!isExecuting && command.timestamp ? (
+                        <Text style={[styles.timestamp, Typography.default()]}>
+                            {formatLastSeen(command.timestamp)}
+                        </Text>
+                    ) : null}
+                    {isExecuting && <ActivityIndicator size="small" color={theme.colors.textLink} />}
+                </View>
+            </Pressable>
+        );
+    }
+
     return (
         <Pressable {...pressableProps}>
             <View style={styles.content}>
@@ -212,6 +244,44 @@ const styles = StyleSheet.create((theme) => ({
         color: theme.dark ? '#FF9F0A' : '#C56500',
     },
     badgeTextAccent: {
+        color: theme.colors.textLink,
+    },
+    // Hit rows sit flush with each other so the guide line runs unbroken; their text starts where the
+    // session title does (icon 32 + gap 12)
+    hitContainer: {
+        marginVertical: 0,
+        paddingVertical: 7,
+        paddingLeft: 13 + 44,
+    },
+    treeLine: {
+        position: 'absolute',
+        left: 13 + 15,
+        top: 0,
+        bottom: 0,
+        width: 2,
+        borderRadius: 1,
+        backgroundColor: theme.colors.divider,
+    },
+    author: {
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+        marginRight: 8,
+        alignSelf: 'flex-start',
+        paddingTop: 1,
+    },
+    hitText: {
+        flex: 1,
+        fontSize: 13,
+        color: theme.colors.text,
+        marginRight: 12,
+        letterSpacing: -0.1,
+    },
+    moreContainer: {
+        paddingVertical: 6,
+        paddingLeft: 13 + 44,
+    },
+    moreText: {
+        fontSize: 13,
         color: theme.colors.textLink,
     },
     highlight: {

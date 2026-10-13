@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { TextInput } from 'react-native';
 import { Command } from './types';
-import { applyCachedMessageMatches, buildNavigationRows, groupCommands } from './search';
+import { buildMessageCategory, buildNavigationRows, groupCommands } from './search';
 import { showToast } from '@/components/Toast';
 import { t } from '@/text';
 import type { CachedMessageSearchMatch } from '@/sync/messagesStore/cachedMessageSearch';
@@ -17,6 +17,8 @@ export function useCommandPalette(
     const [executingCommandId, setExecutingCommandId] = useState<string | null>(null);
     const [cachedMessageMatches, setCachedMessageMatches] = useState<CachedMessageSearchMatch[]>([]);
     const [isSearchingMessages, setIsSearchingMessages] = useState(false);
+    // Sessions whose folded message hits were expanded; a new query folds them all again
+    const [expandedSessionIds, setExpandedSessionIds] = useState<ReadonlySet<string>>(new Set());
     const inputRef = useRef<TextInput>(null);
 
     // Filter commands based on search query
@@ -26,6 +28,7 @@ export function useCommandPalette(
         let timer: ReturnType<typeof setTimeout> | null = null;
 
         setCachedMessageMatches([]);
+        setExpandedSessionIds(new Set());
         if (!searchCachedMessages || query.length < 2) {
             setIsSearchingMessages(false);
             return () => {};
@@ -51,18 +54,27 @@ export function useCommandPalette(
         };
     }, [searchCachedMessages, searchQuery]);
 
-    const searchableCommands = useMemo(() => {
-        return applyCachedMessageMatches(
-            commands,
-            cachedMessageMatches,
-            searchQuery,
-            t('commandPalette.messageMatch'),
-        );
-    }, [cachedMessageMatches, commands, searchQuery]);
+    const expandSession = useCallback((sessionId: string) => {
+        setExpandedSessionIds((current) => new Set(current).add(sessionId));
+    }, []);
+
+    const messageCategory = useMemo(() => buildMessageCategory(
+        commands,
+        cachedMessageMatches,
+        {
+            category: t('commandPalette.categoryMessages'),
+            badge: t('commandPalette.messageMatch'),
+            user: t('commandPalette.messageFromUser'),
+            agent: t('commandPalette.messageFromAgent'),
+            more: (count) => t('commandPalette.moreMessageMatches', { count }),
+        },
+        expandedSessionIds,
+        expandSession,
+    ), [cachedMessageMatches, commands, expandedSessionIds, expandSession]);
 
     const filteredCategories = useMemo(
-        () => groupCommands(searchableCommands, searchQuery),
-        [searchableCommands, searchQuery],
+        () => groupCommands(commands, searchQuery, messageCategory),
+        [commands, searchQuery, messageCategory],
     );
 
     // Reset selection when search changes
@@ -72,6 +84,10 @@ export function useCommandPalette(
 
     const handleSelectCommand = useCallback(async (command: Command) => {
         if (executingCommandId) return;
+        if (command.keepOpen) {
+            await command.action();
+            return;
+        }
         setExecutingCommandId(command.id);
         try {
             await command.action();

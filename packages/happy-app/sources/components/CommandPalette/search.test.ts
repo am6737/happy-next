@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { takeSessionMessageJump } from '@/sync/sessionMessageJump';
 import type { Command } from './types';
-import { applyCachedMessageMatches, buildNavigationRows, groupCommands, isTileCategory, normalizeCommandSearchText, scoreCommand } from './search';
+import { buildMessageCategory, buildNavigationRows, groupCommands, isTileCategory, normalizeCommandSearchText, scoreCommand } from './search';
 
 const command = (overrides: Partial<Command>): Command => ({
     id: 'command',
@@ -55,18 +56,72 @@ describe('command palette search', () => {
             .toEqual(['Late', 'Early']);
     });
 
-    it('turns cached message hits into searchable session commands with snippets', () => {
-        const session = command({ id: 'session-abc', sessionId: 'abc', title: 'Unrelated session', keywords: [] });
-        const [matched] = applyCachedMessageMatches(
-            [session],
-            [{ sessionId: 'abc', snippet: 'The deployment token lives here' }],
-            'deployment token',
-            'Message',
-        );
+    const labels = { category: 'Messages', badge: 'Message', user: 'You', agent: 'AI', more: (n: number) => `+${n}` };
+    const hit = (sessionId: string, n: number, role: 'user' | 'agent' = 'user') =>
+        ({ sessionId, snippet: `hit ${n}`, messageId: `${sessionId}-${n}`, role, seq: n, createdAt: n });
 
-        expect(matched.subtitle).toBe('The deployment token lives here');
-        expect(matched.badge).toBe('Message');
-        expect(groupCommands([matched], 'deployment token').flatMap((group) => group.commands)).toContain(matched);
+    it('merges a lone hit into its session row and nests several under a heading', () => {
+        const sessions = [
+            command({ id: 'session-a', sessionId: 'a', title: 'A' }),
+            command({ id: 'session-b', sessionId: 'b', title: 'B' }),
+        ];
+        const category = buildMessageCategory(
+            sessions,
+            [hit('a', 5), hit('a', 4, 'agent'), hit('a', 3), hit('a', 2), hit('b', 1, 'agent')],
+            labels,
+            new Set(),
+            () => {},
+        )!;
+
+        expect(category.commands.map((c) => [c.layout ?? 'single', c.title, c.subtitle ?? null])).toEqual([
+            ['messageGroup', 'A', null],
+            ['messageHit', 'hit 5', null],
+            ['messageHit', 'hit 4', null],
+            ['messageHit', 'hit 3', null],
+            ['messageMore', '+1', null],
+            ['single', 'B', 'AI: hit 1'],
+        ]);
+        expect(category.commands[0].badge).toBe('4');
+        expect(category.commands[2].author).toBe('AI');
+    });
+
+    it('shows every hit once a session is expanded', () => {
+        const onExpand = vi.fn();
+        const sessions = [command({ id: 'session-a', sessionId: 'a', title: 'A' })];
+        const matches = [hit('a', 4), hit('a', 3), hit('a', 2), hit('a', 1)];
+        const folded = buildMessageCategory(sessions, matches, labels, new Set(), onExpand)!;
+        const more = folded.commands.find((c) => c.layout === 'messageMore')!;
+        expect(more.keepOpen).toBe(true);
+        more.action();
+        expect(onExpand).toHaveBeenCalledWith('a');
+
+        const expanded = buildMessageCategory(sessions, matches, labels, new Set(['a']), onExpand)!;
+        expect(expanded.commands.filter((c) => c.layout === 'messageHit')).toHaveLength(4);
+        expect(expanded.commands.some((c) => c.layout === 'messageMore')).toBe(false);
+    });
+
+    it('opens a hit at its message and a heading at the session end', () => {
+        const open = vi.fn();
+        const sessions = [command({ id: 'session-a', sessionId: 'a', action: open })];
+        const [heading, first] = buildMessageCategory(sessions, [hit('a', 2), hit('a', 1)], labels, new Set(), () => {})!.commands;
+
+        heading.action();
+        expect(takeSessionMessageJump('a')).toBeNull();
+        first.action();
+        expect(open).toHaveBeenCalledTimes(2);
+        expect(takeSessionMessageJump('a')).toEqual({ id: 'a-2', seq: 2 });
+    });
+
+    it('replaces the rows of sessions with message hits and ranks the hits as a category', () => {
+        const sessions = [
+            command({ id: 'session-a', sessionId: 'a', title: 'Deploy notes', category: 'Sessions' }),
+            command({ id: 'session-b', sessionId: 'b', title: 'Deploy pipeline', category: 'Sessions' }),
+        ];
+        const messages = buildMessageCategory(sessions, [hit('a', 1)], labels, new Set(), () => {});
+        const groups = groupCommands(sessions, 'deploy', messages);
+
+        expect(groups.map((g) => g.title)).toEqual(['Messages', 'Sessions']);
+        expect(groups[1].commands.map((c) => c.id)).toEqual(['session-b']);
     });
 
     it('groups fixed entries as tiles while idle and as a list while searching', () => {

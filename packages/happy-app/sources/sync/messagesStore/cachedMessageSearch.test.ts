@@ -25,8 +25,9 @@ describe('cached message search helpers', () => {
         } as NormalizedMessage;
 
         expect(extractCachedMessageText(user)).toBe('Search this prompt');
-        expect(extractCachedMessageText(agent)).toBe('Visible answer\nUseful summary');
+        expect(extractCachedMessageText(agent)).toBe('Visible answer');
         expect(extractCachedMessageText({ ...user, isSidechain: true })).toBeNull();
+        expect(extractCachedMessageText({ ...user, meta: { isCompactSummary: true } } as NormalizedMessage)).toBeNull();
     });
 
     it('normalizes text and requires every query token', () => {

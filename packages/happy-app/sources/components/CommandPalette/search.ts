@@ -1,5 +1,6 @@
 import type { Command, CommandCategory } from './types';
 import type { CachedMessageSearchMatch } from '@/sync/messagesStore/cachedMessageSearch';
+import { requestSessionMessageJump } from '@/sync/sessionMessageJump';
 
 const SEARCH_RESULT_LIMIT = 60;
 
@@ -88,31 +89,102 @@ export function scoreCommand(command: Command, rawQuery: string): number {
     return total + (command.priority ?? 0);
 }
 
-export function applyCachedMessageMatches(
+// Hits a session shows before the rest fold into a "N more" row
+const COLLAPSED_HIT_COUNT = 3;
+
+export type MessageCategoryLabels = {
+    category: string;
+    badge: string;
+    user: string;
+    agent: string;
+    more: (count: number) => string;
+};
+
+// Cached message hits grouped by session: a lone hit merges with its session into one row, while
+// several sit under a session heading, the extras folded behind a row that expands them in place
+export function buildMessageCategory(
     commands: Command[],
     matches: CachedMessageSearchMatch[],
-    query: string,
-    messageBadge: string,
-): Command[] {
-    if (matches.length === 0) return commands;
-    const bySessionId = new Map(matches.map((match) => [match.sessionId, match]));
-    return commands.map((command) => {
-        if (!command.sessionId) return command;
-        const match = bySessionId.get(command.sessionId);
-        if (!match) return command;
-        return {
-            ...command,
-            subtitle: match.snippet,
-            keywords: [...(command.keywords ?? []), query],
-            priority: (command.priority ?? 0) + 200,
-            badge: command.badge ?? messageBadge,
-            badgeTone: command.badgeTone ?? 'accent',
-        };
-    });
+    labels: MessageCategoryLabels,
+    expandedSessionIds: ReadonlySet<string>,
+    onExpand: (sessionId: string) => void,
+): CommandCategory | null {
+    const sessionCommands = new Map(
+        commands.filter((command) => command.sessionId).map((command) => [command.sessionId!, command]),
+    );
+    const bySession = new Map<string, CachedMessageSearchMatch[]>();
+    for (const match of matches) {
+        if (!sessionCommands.has(match.sessionId)) continue;
+        bySession.set(match.sessionId, [...(bySession.get(match.sessionId) ?? []), match]);
+    }
+
+    const openAt = (session: Command, match: CachedMessageSearchMatch) => () => {
+        requestSessionMessageJump(match.sessionId, { id: match.messageId, seq: match.seq });
+        return session.action();
+    };
+    const author = (match: CachedMessageSearchMatch) => match.role === 'user' ? labels.user : labels.agent;
+
+    const rows: Command[] = [];
+    for (const [sessionId, hits] of bySession) {
+        const session = sessionCommands.get(sessionId)!;
+        if (hits.length === 1) {
+            const [match] = hits;
+            rows.push({
+                ...session,
+                id: `message-${sessionId}-${match.messageId}`,
+                subtitle: `${author(match)}: ${match.snippet}`,
+                timestamp: match.createdAt,
+                badge: labels.badge,
+                badgeTone: 'accent',
+                action: openAt(session, match),
+            });
+            continue;
+        }
+
+        rows.push({
+            ...session,
+            id: `message-group-${sessionId}`,
+            subtitle: undefined,
+            timestamp: undefined,
+            badge: String(hits.length),
+            badgeTone: 'accent',
+            layout: 'messageGroup',
+        });
+        const visible = expandedSessionIds.has(sessionId) ? hits : hits.slice(0, COLLAPSED_HIT_COUNT);
+        for (const match of visible) {
+            rows.push({
+                id: `message-${sessionId}-${match.messageId}`,
+                sessionId,
+                title: match.snippet,
+                author: author(match),
+                timestamp: match.createdAt,
+                layout: 'messageHit',
+                action: openAt(session, match),
+            });
+        }
+        if (visible.length < hits.length) {
+            rows.push({
+                id: `message-more-${sessionId}`,
+                sessionId,
+                title: labels.more(hits.length - visible.length),
+                layout: 'messageMore',
+                keepOpen: true,
+                action: () => onExpand(sessionId),
+            });
+        }
+    }
+
+    return rows.length > 0 ? { id: 'messages', title: labels.category, order: 0, commands: rows } : null;
 }
 
-export function groupCommands(commands: Command[], rawQuery: string): CommandCategory[] {
+// `messageCategory` holds the cached message hits; their sessions' own rows give way to it, and it
+// ranks as a keyword hit on every query token would, so a strong title match can still lead
+export function groupCommands(commands: Command[], rawQuery: string, messageCategory?: CommandCategory | null): CommandCategory[] {
     const query = normalizeCommandSearchText(rawQuery);
+    if (query && messageCategory) {
+        const hitSessionIds = new Set(messageCategory.commands.map((command) => command.sessionId));
+        commands = commands.filter((command) => !command.sessionId || !hitSessionIds.has(command.sessionId));
+    }
     const ranked = commands
         .filter((command) => query ? true : command.showWhenIdle !== false)
         .map((command) => ({ command, score: scoreCommand(command, query) }))
@@ -148,7 +220,11 @@ export function groupCommands(commands: Command[], rawQuery: string): CommandCat
         }
     }
 
-    return [...grouped.values()]
+    const groups = [...grouped.values()];
+    if (query && messageCategory) {
+        groups.push({ category: messageCategory, bestScore: query.split(' ').filter(Boolean).length * 800 + 200 });
+    }
+    return groups
         .sort((a, b) => query ? b.bestScore - a.bestScore : a.category.order - b.category.order)
         .map(({ category }) => category);
 }
