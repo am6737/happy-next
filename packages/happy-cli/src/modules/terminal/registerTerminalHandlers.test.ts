@@ -165,6 +165,11 @@ describe('registerTerminalHandlers', () => {
         const id = await spawn(harness, 'rev-1');
         await harness.call('terminal-input', { terminalId: id, data: 'echo one\n' });
         await waitForBody(harness, id, (body) => body.type === 'output' && body.data.includes('one'));
+        // A second command, sent only once the first one's output has landed,
+        // guarantees a later frame — the coalescer may fold the prompt and the
+        // first echo into a single frame on a slow runner.
+        await harness.call('terminal-input', { terminalId: id, data: 'echo two\n' });
+        await waitForBody(harness, id, (body) => body.type === 'output' && body.data.includes('two'));
 
         const revisions = harness.framesFor(id).map((frame) => frame.revision);
         expect(revisions.length).toBeGreaterThan(1);
