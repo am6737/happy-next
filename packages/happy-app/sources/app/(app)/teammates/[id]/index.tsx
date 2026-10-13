@@ -24,6 +24,7 @@ import type { ActionMenuItem } from '@/components/ActionMenu';
 import { Typography } from '@/constants/Typography';
 import { layout } from '@/components/layout';
 import { t } from '@/text';
+import { formatTeammateMoney, formatTeammateTokens, totalTeammateTokens } from '@/utils/teammateUsageFormat';
 
 type Tab = 'activity' | 'tasks';
 
@@ -33,8 +34,6 @@ function formatElapsed(ms: number): string {
     const clock = `${String(Math.floor(total / 60) % 60).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
     return hours ? `${hours}:${clock}` : clock;
 }
-
-const money = (amount: number) => `$${amount.toFixed(2)}`;
 
 /**
  * Agent profile as a workspace: who it is and how to reach it, what it is doing right now, how this month is
@@ -74,6 +73,13 @@ export default React.memo(function TeammateProfileScreen() {
     const spent = spend?.spentUsd ?? null;
     const remaining = budget !== null && spent !== null ? Math.max(0, budget - spent) : null;
     const stats = computeTeammateStats(runs, 30, now);
+    const tokens = spend?.tokens;
+    const tokenBreakdown = tokens ? [
+        t('teammates.detail.uncachedInput', { count: formatTeammateTokens(tokens.input) }),
+        t('teammates.detail.cacheRead', { count: formatTeammateTokens(tokens.cacheRead) }),
+        ...(tokens.cacheWrite > 0 ? [t('teammates.detail.cacheWrite', { count: formatTeammateTokens(tokens.cacheWrite) })] : []),
+        t('teammates.detail.output', { count: formatTeammateTokens(tokens.output) }),
+    ].join('  ') : null;
 
     const liveTask = liveRun?.taskId ? tasks?.find(task => task.id === liveRun.taskId) : undefined;
     const openLive = liveRun?.sessionId ? () => navigateToSession(liveRun.sessionId!)
@@ -143,8 +149,10 @@ export default React.memo(function TeammateProfileScreen() {
 
                 <Card style={styles.stats}>
                     <View style={styles.stat}>
-                        <Text style={styles.statValue}>{spent !== null ? money(spent) : '—'}</Text>
-                        <Text style={styles.statLabel}>{budget !== null ? t('teammates.detail.monthOf', { budget: money(budget) }) : t('teammates.detail.thisMonth')}</Text>
+                        <Text style={styles.statValue}>{tokens ? t('teammates.detail.tokenCount', { count: formatTeammateTokens(totalTeammateTokens(tokens)) }) : '—'}</Text>
+                        <Text style={styles.statLabel}>{budget !== null ? t('teammates.detail.monthOf', { budget: formatTeammateMoney(budget) }) : t('teammates.detail.thisMonth')}</Text>
+                        {spent !== null && <Text style={styles.statLabel}>{t('teammates.detail.estimatedCost', { amount: formatTeammateMoney(spent) })}</Text>}
+                        {tokenBreakdown && <Text style={styles.statLabel}>{tokenBreakdown}</Text>}
                     </View>
                     <View style={styles.stat}>
                         <Text style={styles.statValue}>{stats.runCount}</Text>

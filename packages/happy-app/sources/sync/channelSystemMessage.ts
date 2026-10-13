@@ -1,4 +1,5 @@
 import { TEAMMATE_RUN_FAILURE_REASONS, type ChannelMessageContent, type TeammateRunFailureReason } from 'happy-wire';
+import { formatTeammateMoney } from '@/utils/teammateUsageFormat';
 
 export type GovernanceSystemMessage =
     | { code: 'budget_warning'; spentUsd: string; budgetUsd: string; taskId: null }
@@ -16,7 +17,7 @@ export function governanceSystemMessage(content: ChannelMessageContent): Governa
     const data = content.data;
     switch (content.code) {
         case 'budget_warning':
-            return { code: content.code, spentUsd: money(data.spentUsd), budgetUsd: money(data.budgetUsd), taskId: null };
+            return { code: content.code, spentUsd: formatTeammateMoney(typeof data.spentUsd === 'number' && Number.isFinite(data.spentUsd) ? data.spentUsd : 0), budgetUsd: formatTeammateMoney(typeof data.budgetUsd === 'number' && Number.isFinite(data.budgetUsd) ? data.budgetUsd : 0), taskId: null };
         case 'budget_paused':
         case 'budget_resumed':
             return { code: content.code, taskId: null };
@@ -41,8 +42,4 @@ export function channelSystemMessage(content: ChannelMessageContent, nameOf: (id
     if (content.code === 'title_changed') return { code: content.code, title: typeof content.data.title === 'string' ? content.data.title : '' };
     if (content.code === 'brief_changed') return { code: content.code, cleared: content.data.cleared === true };
     return null;
-}
-
-function money(value: unknown): string {
-    return typeof value === 'number' && Number.isFinite(value) ? `$${value.toFixed(2)}` : '$0.00';
 }

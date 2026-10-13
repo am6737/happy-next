@@ -21,8 +21,7 @@ import { formatLastSeen, getSessionAvatarId, getSessionName, useSessionStatus } 
 import { Typography } from '@/constants/Typography';
 import { layout } from '@/components/layout';
 import { t } from '@/text';
-
-const money = (amount: number) => `$${amount.toFixed(2)}`;
+import { formatTeammateMoney, formatTeammateTokens, totalTeammateTokens } from '@/utils/teammateUsageFormat';
 
 function RunRow({ run, now, onOpen }: { run: TeammateRun; now: number; onOpen: (sessionId: string) => void }) {
     const { theme } = useUnistyles();
@@ -39,7 +38,8 @@ function RunRow({ run, now, onOpen }: { run: TeammateRun; now: number; onOpen: (
                 </View>
                 <View style={styles.meta}>
                     <Text style={styles.rowDetail}>{formatLastSeen(run.queuedAt)}</Text>
-                    {run.costUsd !== null && <Text style={styles.rowDetail}>{money(run.costUsd)}</Text>}
+                    {run.tokens !== null && <Text style={styles.rowDetail}>{t('teammates.detail.tokenCount', { count: formatTeammateTokens(totalTeammateTokens(run.tokens)) })}</Text>}
+                    {run.costUsd !== null && <Text style={styles.rowDetail}>{formatTeammateMoney(run.costUsd)}</Text>}
                 </View>
                 {run.failureReason && <Text style={styles.failure}>{t(`teammates.failure.${run.failureReason}`)}</Text>}
             </View>
@@ -157,7 +157,7 @@ export default React.memo(function TeammateTaskScreen() {
                     </Pressable>
                 </Card>
 
-                <SectionLabel title={t('teammateTasks.log')} detail={runs.length ? t('teammateTasks.runSummary', { count: runs.length, cost: money(cost) }) : undefined} />
+                <SectionLabel title={t('teammateTasks.log')} detail={runs.length ? t('teammateTasks.runSummary', { count: runs.length, cost: formatTeammateMoney(cost) }) : undefined} />
                 {runs.length ? (
                     <Card>
                         {runs.map(run => <RunRow key={run.id} run={run} now={now} onOpen={openSession} />)}

@@ -12,6 +12,7 @@ import {
 } from '@/sync/teammateFormModel';
 import { teammateErrorMessage } from '@/components/teammates/ui';
 import { t } from '@/text';
+import { teammateCurrencyRate } from '@/utils/teammateUsageFormat';
 
 export type TeammateSubmitResult =
     | { ok: true; teammate: Teammate }
@@ -25,8 +26,9 @@ export type TeammateSubmitResult =
  */
 export function useTeammateFormState({ teammate, seed }: { teammate?: Teammate; seed?: TeammateSeed }) {
     const { credentials } = useAuth();
+    const currencyRate = teammateCurrencyRate();
     const [initial, setInitial] = React.useState(() => initialTeammateFormValues({
-        teammate, seed, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC',
+        teammate, seed, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC', currencyRate,
     }));
     const [values, setValues] = React.useState(initial);
     const [errors, setErrors] = React.useState<TeammateFormErrors>({});
@@ -58,7 +60,7 @@ export function useTeammateFormState({ teammate, seed }: { teammate?: Teammate; 
 
     const submit = async (): Promise<TeammateSubmitResult> => {
         if (!credentials || saving) return { ok: false, section: null };
-        const result = buildTeammateFormRequest(values, teammate);
+        const result = buildTeammateFormRequest(values, teammate, currencyRate);
         setError(null);
         if (!result.ok) {
             setErrors(result.errors);

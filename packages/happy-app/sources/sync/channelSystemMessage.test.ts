@@ -1,5 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { channelSystemMessage, governanceSystemMessage } from './channelSystemMessage';
+
+vi.mock('@/text', () => ({ getCurrentLanguage: () => 'en' }));
 
 describe('governance system messages', () => {
     it('resolves member names and title changes with generic fallback data', () => {

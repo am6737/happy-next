@@ -90,8 +90,8 @@ export function firstErrorSection(errors: TeammateFormErrors): TeammateFormSecti
 }
 
 /** Form values for editing `teammate`, or for a new Agent prefilled from an AI `seed`. */
-export function initialTeammateFormValues({ teammate, seed, machineId = '', timezone }: {
-    teammate?: Teammate; seed?: TeammateSeed; machineId?: string; timezone: string;
+export function initialTeammateFormValues({ teammate, seed, machineId = '', timezone, currencyRate = 1 }: {
+    teammate?: Teammate; seed?: TeammateSeed; machineId?: string; timezone: string; currencyRate?: number;
 }): TeammateFormValues {
     const draft = seed?.draft;
     return {
@@ -116,7 +116,7 @@ export function initialTeammateFormValues({ teammate, seed, machineId = '', time
         canSelfAssign: teammate?.canSelfAssign ?? false,
         contextAutoRollover: teammate?.contextAutoRollover ?? true,
         contextBudgetTokens: teammate?.contextBudgetTokens?.toString() ?? '',
-        monthlyBudgetUsd: teammate?.monthlyBudgetUsd?.toString() ?? '',
+        monthlyBudgetUsd: teammate?.monthlyBudgetUsd == null ? '' : (Math.round(teammate.monthlyBudgetUsd * currencyRate * 100) / 100).toString(),
         heartbeatIntervalMin: teammate?.heartbeatIntervalMin ?? null,
         activeHoursEnabled: !!teammate?.activeHours,
         activeHoursStart: teammate?.activeHours?.start ?? '09:00',
@@ -149,7 +149,7 @@ export type TeammateFormResult =
  * Validates the form and builds the create request; editing drops the handle hint from it before sending.
  * `avatar` keeps any non-color avatar fields of the Agent being edited.
  */
-export function buildTeammateFormRequest(values: TeammateFormValues, teammate?: Teammate): TeammateFormResult {
+export function buildTeammateFormRequest(values: TeammateFormValues, teammate?: Teammate, currencyRate = 1): TeammateFormResult {
     const errors: TeammateFormErrors = {};
     if (!values.name.trim()) errors.name = 'required';
     if (!values.machineId) errors.machineId = 'required';
@@ -170,7 +170,7 @@ export function buildTeammateFormRequest(values: TeammateFormValues, teammate?: 
         contextAutoRollover: values.contextAutoRollover,
         // Hidden while auto segment is off: omit it so the stored budget is kept and a stale draft can't block saving.
         contextBudgetTokens: !values.contextAutoRollover ? undefined : values.contextBudgetTokens.trim() ? Number(values.contextBudgetTokens) : null,
-        monthlyBudgetUsd: values.monthlyBudgetUsd.trim() ? Number(values.monthlyBudgetUsd) : null,
+        monthlyBudgetUsd: values.monthlyBudgetUsd.trim() ? Number(values.monthlyBudgetUsd) / currencyRate : null,
         heartbeatIntervalMin: values.heartbeatIntervalMin,
         ...buildTeammateSchedulePayload(values.timezone, values.activeHoursEnabled, values.activeHoursStart, values.activeHoursEnd,
             allDays ? undefined : [...values.activeDays].sort()),

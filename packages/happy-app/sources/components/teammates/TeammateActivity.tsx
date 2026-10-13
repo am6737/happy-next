@@ -9,6 +9,7 @@ import { startOfLocalDay, type TeammateTimelineDay, type TeammateTimelineItem } 
 import { formatLastSeen } from '@/utils/sessionUtils';
 import { Typography } from '@/constants/Typography';
 import { getCurrentLanguage, t } from '@/text';
+import { formatTeammateMoney, formatTeammateTokens, totalTeammateTokens } from '@/utils/teammateUsageFormat';
 import { Card, SectionLabel, StatusDot } from './kit';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -36,11 +37,11 @@ function TimelineRow({ item }: { item: TeammateTimelineItem }) {
     const navigateToSession = useNavigateToSession();
     const { run, task } = item;
     const color = item.tone === 'success' ? theme.colors.status.connected : item.tone === 'failure' ? theme.colors.textDestructive : theme.colors.textSecondary;
-    const detail = run.status === 'failed'
-        ? t(`teammates.failure.${run.failureReason ?? 'unknown'}`)
-        : run.status === 'cancelled'
-            ? t('teammates.runStatus.cancelled')
-            : [item.durationMs !== null ? formatDuration(item.durationMs) : null, run.costUsd !== null ? `$${run.costUsd.toFixed(2)}` : null].filter(Boolean).join('  ');
+    const detail = [
+        run.status === 'failed' ? t(`teammates.failure.${run.failureReason ?? 'unknown'}`) : run.status === 'cancelled' ? t('teammates.runStatus.cancelled') : item.durationMs !== null ? formatDuration(item.durationMs) : null,
+        run.tokens !== null ? t('teammates.detail.tokenCount', { count: formatTeammateTokens(totalTeammateTokens(run.tokens)) }) : null,
+        run.costUsd !== null ? formatTeammateMoney(run.costUsd) : null,
+    ].filter(Boolean).join('  ');
     const open = run.sessionId ? () => navigateToSession(run.sessionId!)
         : task ? () => router.push(`/teammates/tasks/${encodeURIComponent(task.id)}`) : undefined;
     return (

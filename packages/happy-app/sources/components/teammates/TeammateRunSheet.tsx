@@ -7,6 +7,7 @@ import { storage } from '@/sync/storage';
 import { startTeammateRun, triggerDreaming, triggerHeartbeat } from '@/sync/apiTeammates';
 import { Typography } from '@/constants/Typography';
 import { t } from '@/text';
+import { formatTeammateMoney } from '@/utils/teammateUsageFormat';
 import { FieldError, OptionPills, PillButton, SheetTextInput } from './kit';
 import { TeammateSheet } from './TeammateSheet';
 import { teammateErrorMessage } from './ui';
@@ -47,7 +48,7 @@ export const TeammateRunSheet = React.forwardRef<BottomSheetModal, { teammateId:
 
         return (
             <TeammateSheet ref={ref} title={t('teammates.detail.runTitle')} onDismiss={() => setError(null)}>
-                {remainingUsd !== null && <Text style={styles.subtitle}>{t('teammates.detail.budgetLeft', { amount: remainingUsd.toFixed(2) })}</Text>}
+                {remainingUsd !== null && <Text style={styles.subtitle}>{t('teammates.detail.budgetLeft', { amount: formatTeammateMoney(remainingUsd) })}</Text>}
                 <OptionPills<RunKind> value={kind} onChange={setKind} options={[
                     { value: 'work', label: t('teammates.detail.runWork') },
                     { value: 'heartbeat', label: t('teammates.trigger.heartbeat') },

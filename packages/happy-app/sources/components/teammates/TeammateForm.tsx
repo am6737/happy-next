@@ -20,6 +20,7 @@ import { layout } from '@/components/layout';
 import { Modal } from '@/modal';
 import { Typography } from '@/constants/Typography';
 import { getCurrentLanguage, t } from '@/text';
+import { teammateCurrencySymbol } from '@/utils/teammateUsageFormat';
 import { TeammateAvatar } from './ui';
 import { SkillPicker } from './SkillPicker';
 import { TeammateRuntimeFields } from './TeammateRuntimeFields';
@@ -191,7 +192,7 @@ export function TeammateForm({ teammate, seed, focus }: { teammate?: Teammate; s
         t('teammates.form.plannerSummary', { provider: providerName(values.controller.provider) }),
         t('teammates.form.workerSummary', { provider: providerName(values.worker.provider) }),
         `${t('teammates.form.heartbeat')} ${heartbeatLabel(values.heartbeatIntervalMin)}`,
-        ...budget ? [t('teammates.form.budgetSummary', { amount: budget })] : [],
+        ...budget ? [t('teammates.form.budgetSummary', { amount: `${teammateCurrencySymbol()}${budget}` })] : [],
     ].join('  ');
     const heartbeatOptions = [
         ...TEAMMATE_HEARTBEAT_PRESETS.map(minutes => ({ value: String(minutes), label: heartbeatLabel(minutes) })),
@@ -290,7 +291,7 @@ export function TeammateForm({ teammate, seed, focus }: { teammate?: Teammate; s
                         <InputRow label={t('teammates.dreaming')} numeric value={values.dreamingHour?.toString() ?? ''} placeholder={t('teammates.form.off')}
                             onChange={text => set('dreamingHour', text.trim() ? Number(text) : null)}
                             changed={changed.has('dreamingHour')} error={errorText('dreamingHour', errors.dreamingHour)} />
-                        <InputRow label={t('teammates.form.monthlyBudget')} prefix="$" numeric value={values.monthlyBudgetUsd} placeholder={t('teammates.form.noLimit')}
+                        <InputRow label={t('teammates.form.monthlyBudget')} prefix={teammateCurrencySymbol()} numeric value={values.monthlyBudgetUsd} placeholder={t('teammates.form.noLimit')}
                             onChange={value => set('monthlyBudgetUsd', value)} changed={changed.has('monthlyBudgetUsd')} error={errorText('monthlyBudgetUsd', errors.monthlyBudgetUsd)} />
                     </CollapsibleCard>
                 </View>

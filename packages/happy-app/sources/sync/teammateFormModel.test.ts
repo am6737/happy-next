@@ -40,6 +40,12 @@ describe('initialTeammateFormValues', () => {
             worker: { provider: 'codex', model: 'gpt-5', permissionMode: 'default', profileId: '' },
         });
     });
+    it('converts a yuan budget without losing its displayed value on save', () => {
+        const values = initialTeammateFormValues({ teammate: teammate({ monthlyBudgetUsd: 100 / 7.2 }), timezone: 'UTC', currencyRate: 7.2 });
+        expect(values.monthlyBudgetUsd).toBe('100');
+        const saved = buildTeammateFormRequest(values, teammate(), 7.2);
+        expect(saved.ok && saved.request.monthlyBudgetUsd).toBeCloseTo(100 / 7.2);
+    });
 });
 
 describe('changedTeammateFields', () => {
