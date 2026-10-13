@@ -3,7 +3,12 @@ import type { ApiClient } from '@/api/api';
 import { mergeThreadState, readThreadsState } from './homeDir';
 
 let usageTimer: ReturnType<typeof setTimeout> | undefined;
-let latestUsage: { contextTokens: number; contextWindow?: number } | undefined;
+type ContextUsage = { contextTokens: number; contextWindow?: number; cachedTokens?: number; provider: TeammateControllerProvider; at: number };
+let pendingUsage: ContextUsage[] = [];
+let previousCallAt: number | undefined;
+let previousCallKey: string | undefined;
+
+export const PROVIDER_CACHE_TTL_MS: Record<TeammateControllerProvider | 'gemini', number> = { claude: 5 * 60_000, codex: 30 * 60_000, gemini: 5 * 60_000 };
 
 function context(): { home: string; threadId: string } | undefined {
     if (process.env[TEAMMATE_ENV.sessionRole] !== 'controller') return undefined;
@@ -12,16 +17,40 @@ function context(): { home: string; threadId: string } | undefined {
     return home && threadId ? { home, threadId } : undefined;
 }
 
-export function recordTeammateContextUsage(usage: { contextTokens: number; contextWindow?: number }): void {
+export function recordTeammateContextUsage(usage: { contextTokens: number; contextWindow?: number; cachedTokens?: number; provider: TeammateControllerProvider }): void {
     const current = context();
     if (!current) return;
-    latestUsage = usage;
+    const key = `${current.home}:${current.threadId}`;
+    if (previousCallKey !== key) { previousCallAt = undefined; previousCallKey = key; }
+    pendingUsage.push({ ...usage, at: Date.now() });
     if (usageTimer) clearTimeout(usageTimer);
     usageTimer = setTimeout(() => {
-        const value = latestUsage;
-        latestUsage = undefined;
+        const values = pendingUsage;
+        pendingUsage = [];
         usageTimer = undefined;
-        if (value) void mergeThreadState(current.home, current.threadId, value).catch(() => {});
+        if (values.length) void (async () => {
+            const entry = (await readThreadsState(current.home))[current.threadId] ?? {};
+            let previous = previousCallAt ?? entry.contextAt;
+            let ttl = entry.cacheTtlMs;
+            let observed = false;
+            for (const value of values) {
+                const gap = previous === undefined ? undefined : value.at - previous;
+                if (gap !== undefined && gap >= 60_000) {
+                    const baseline = ttl ?? PROVIDER_CACHE_TTL_MS[value.provider];
+                    ttl = Math.max(60_000, Math.min(3_600_000, (value.cachedTokens ?? 0) >= 0.5 * value.contextTokens ? Math.max(baseline, gap) : Math.min(baseline, gap)));
+                    observed = true;
+                }
+                previous = value.at;
+            }
+            previousCallAt = previous;
+            const latest = values[values.length - 1];
+            await mergeThreadState(current.home, current.threadId, {
+                contextTokens: latest.contextTokens, contextWindow: latest.contextWindow ?? entry.contextWindow,
+                cachedTokens: latest.cachedTokens ?? 0, contextAt: latest.at,
+                segmentStartTokens: entry.segmentStartTokens ?? values[0].contextTokens,
+                ...(observed ? { cacheTtlMs: ttl } : {}),
+            });
+        })().catch(() => {});
     }, 2000);
     usageTimer.unref?.();
 }

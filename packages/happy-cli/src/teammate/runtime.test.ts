@@ -3,13 +3,43 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TEAMMATE_ENV, type ChannelMessage, type TeammateRunDispatchPayload } from 'happy-wire';
-import { teammateModelSelection, createTeammateRuntime, renderRunEventMessage, type TeammateRuntimeDependencies } from './runtime';
+import { teammateModelSelection, createTeammateRuntime, contextRolloverLimit, renderRunEventMessage, type TeammateRuntimeDependencies } from './runtime';
 import { ensureTeammateHome, mergeThreadState, readThreadsState, writeSessionKeyFile, writeThreadSummary, writeThreadsState } from './homeDir';
 import { makeTeammate, makeConversationPayload, makeChannelMessage } from './testFixtures';
 import { encodeBase64, encryptWithDataKey } from '@/api/encryption';
 import { getProjectPath } from '@/claude/utils/path';
 import { createChannelCrypto } from './channelCrypto';
 import { dailyLogDate } from './dailyLogDate';
+
+describe('context rollover limit', () => {
+    const at = 1_000_000;
+    it('uses cache temperature and model capacity', () => {
+        expect(contextRolloverLimit({ contextTokens: 70_000, contextAt: at }, 'claude', at)).toMatchObject({ limit: 120_000, cold: false, roll: false });
+        expect(contextRolloverLimit({ contextTokens: 70_000, contextAt: at - 6 * 60_000 }, 'claude', at)).toMatchObject({ limit: 60_000, cold: true, roll: true });
+        expect(contextRolloverLimit({ contextWindow: 1_000_000, contextAt: at }, 'claude', at).limit).toBe(600_000);
+        expect(contextRolloverLimit({ contextWindow: 258_000, contextAt: at }, 'codex', at).limit).toBe(154_800);
+    });
+
+    it('applies teammate budget, growth guard, and dispatch fallback', () => {
+        expect(contextRolloverLimit({ contextTokens: 21_000, segmentStartTokens: 20_000, contextAt: at, teammate: makeTeammate({ contextBudgetTokens: 1_500 }) }, 'claude', at)).toMatchObject({ limit: 15_000, grown: false, roll: false });
+        expect(contextRolloverLimit({ contextTokens: 30_000, segmentStartTokens: 20_000, contextAt: at, teammate: makeTeammate({ contextBudgetTokens: 1_500 }) }, 'claude', at)).toMatchObject({ grown: true, roll: true });
+        expect(contextRolloverLimit({ lastDispatchAt: at, contextTokens: 70_000 }, 'claude', at).cold).toBe(false);
+    });
+
+    it('uses the same capacity limit regardless of cache temperature when auto rollover is off', () => {
+        const warm = { contextTokens: 180_000, contextAt: at, teammate: makeTeammate({ contextAutoRollover: false, contextBudgetTokens: 10_000 }) };
+        expect(contextRolloverLimit(warm, 'claude', at)).toMatchObject({ limit: 180_000, cold: false, auto: false, roll: true });
+        expect(contextRolloverLimit({ ...warm, contextAt: at - 6 * 60_000 }, 'claude', at)).toMatchObject({ limit: 180_000, cold: true, roll: true });
+        expect(contextRolloverLimit({ contextWindow: 1_000_000 }, 'claude', at, { auto: false }).limit).toBe(980_000);
+        expect(contextRolloverLimit({ contextWindow: 32_000 }, 'claude', at, { auto: false }).limit).toBe(25_600);
+    });
+
+    it('keeps the growth guard when auto rollover is off', () => {
+        const entry = { contextWindow: 32_000, contextTokens: 26_000, segmentStartTokens: 20_000 };
+        expect(contextRolloverLimit(entry, 'claude', at, { auto: false })).toMatchObject({ grown: false, roll: false });
+        expect(contextRolloverLimit({ ...entry, contextTokens: 33_000 }, 'claude', at, { auto: false })).toMatchObject({ grown: true, roll: true });
+    });
+});
 
 const skillHooks = vi.hoisted(() => ({ list: vi.fn(() => []), sync: vi.fn(async () => ({ linked: [], missing: [] })) }));
 vi.mock('./skills', () => ({ listMachineSkills: skillHooks.list, syncTeammateSkills: skillHooks.sync }));
@@ -205,7 +235,7 @@ describe('teammate runtime', () => {
             const state = (await readThreadsState(home))['thread-1'];
             expect(state.segment).toBe(2);
             expect(state.flushedSegment).toBe(1);
-            for (const key of ['compactions', 'contextTokens', 'contextWindow', 'overflowed']) expect(state).not.toHaveProperty(key);
+            for (const key of ['compactions', 'contextTokens', 'contextWindow', 'contextAt', 'cachedTokens', 'segmentStartTokens', 'overflowed']) expect(state).not.toHaveProperty(key);
             expect(await promptFile()).toContain('## Thread summary');
             expect(await promptFile()).toContain('Alex chose PR #42');
         }
@@ -230,6 +260,19 @@ describe('teammate runtime', () => {
             await expectRolled('tokens');
         });
 
+        it('keeps a warm 70k thread and rolls it after its cache expires', async () => {
+            await seedLive();
+            await mergeThreadState(home, 'thread-1', { contextTokens: 70_000, contextAt: clock, cachedTokens: 65_000, segmentStartTokens: 10_000 });
+            runtime.dispatch(dmPayload('claude')); await started();
+            expect(deps.oneShot).not.toHaveBeenCalled();
+            await mergeThreadState(home, 'thread-1', { contextAt: clock - 6 * 60_000 });
+            const event = dmPayload('claude'); event.runId = 'run-2'; event.dispatchToken = 'token-run-2';
+            runtime.dispatch(event); await started(2);
+            expect((await readThreadsState(home))['thread-1']).not.toHaveProperty('segmentStartTokens');
+            expect((await readThreadsState(home))['thread-1']).not.toHaveProperty('contextAt');
+            expect((await readThreadsState(home))['thread-1']).not.toHaveProperty('cachedTokens');
+        });
+
         it('rolls a reaped thread over at the idle threshold instead of resuming', async () => {
             await writeThreadsState(home, { 'thread-1': { pid: 999, provider: 'claude', providerSessionId: 'claude-old', contextTokens: 60_000 } });
             runtime.dispatch(dmPayload('claude')); await started();
@@ -239,7 +282,7 @@ describe('teammate runtime', () => {
 
         it('keeps a live thread below the thresholds without a summary', async () => {
             await seedLive();
-            await mergeThreadState(home, 'thread-1', { contextTokens: 119_000, contextWindow: 200_000 });
+            await mergeThreadState(home, 'thread-1', { contextTokens: 119_000, contextWindow: 200_000, contextAt: clock });
             runtime.dispatch(dmPayload('claude')); await started();
             expect(deps.spawnSession).not.toHaveBeenCalled();
             expect(deps.oneShot).not.toHaveBeenCalled();
@@ -373,6 +416,20 @@ describe('teammate runtime', () => {
                 await runtime.reapIdle();
                 await vi.waitFor(() => expect(deps.oneShot).toHaveBeenCalledWith(expect.objectContaining({ prompt: expect.stringContaining('final: true') })));
                 await vi.waitFor(async () => expect((await readThreadsState(home))['thread-1'].flushedSegment).toBe(1));
+            });
+
+            it('uses the capacity limit for final summaries when auto rollover is off', async () => {
+                await seedIdle('dm', 180_000);
+                await mergeThreadState(home, 'thread-1', { teammate: makeTeammate({ contextAutoRollover: false }) });
+                await runtime.reapIdle();
+                await vi.waitFor(() => expect(deps.oneShot).toHaveBeenCalledWith(expect.objectContaining({ prompt: expect.stringContaining('final: true') })));
+            });
+
+            it('keeps compactions final when auto rollover is off and capacity is available', async () => {
+                await seedIdle('dm', 60_000);
+                await mergeThreadState(home, 'thread-1', { teammate: makeTeammate({ contextAutoRollover: false }), compactions: 1 });
+                await runtime.reapIdle();
+                await vi.waitFor(() => expect(deps.oneShot).toHaveBeenCalledWith(expect.objectContaining({ prompt: expect.stringContaining('final: true') })));
             });
 
             it('skips the model below the threshold when nothing is new', async () => {

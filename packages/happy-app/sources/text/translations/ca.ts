@@ -250,6 +250,12 @@ export const ca: TranslationStructure = {
             workerSummary: ({ provider }: { provider: string }) => `Feina: ${provider}`,
             budgetSummary: ({ amount }: { amount: string }) => `\$${amount}/mes`,
             required: "Obligatori.",
+            contextBudget: "Pressupost de context",
+            contextBudgetHint: "Cost màxim d'una crida al model en tokens sense memòria cau. Si se supera, l'Agent resumeix la conversa i continua en un segment nou. Un pressupost més alt conserva més historial original, però costa més. Deixa-ho en blanc per utilitzar el valor predeterminat.",
+            contextBudgetRange: ({ min, max }: { min: string; max: string }) => `Introdueix entre ${min} i ${max} tokens.`,
+            contextAutoRollover: "Segmentació automàtica",
+            contextAutoRolloverOnHint: "Quan una crida al model superaria el pressupost, l'Agent resumeix la conversa i continua en un segment nou per reduir el cost.",
+            contextAutoRolloverOffHint: "L'Agent conserva tota la conversa i només la resumeix quan la finestra de context del model és gairebé plena.",
         },
         wizard: {
             instructionsTitle: "Instruccions",

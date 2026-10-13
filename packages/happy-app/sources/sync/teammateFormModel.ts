@@ -28,6 +28,9 @@ export type TeammateFormValues = {
     worker: TeammateRuntimeValue;
     maxConcurrentRuns: number;
     canSelfAssign: boolean;
+    contextAutoRollover: boolean;
+    /** Free text so a half-typed amount survives; '' uses the daemon default. */
+    contextBudgetTokens: string;
     /** Free text so a half-typed amount survives; '' means no budget. */
     monthlyBudgetUsd: string;
     heartbeatIntervalMin: number | null;
@@ -57,7 +60,7 @@ const HOUR_REGEX = /^([01]\d|2[0-3]):[0-5]\d$/;
 const SECTIONS: Record<TeammateFormField, TeammateFormSection> = {
     name: 'basic', handle: 'basic', color: 'basic', role: 'basic', skills: 'basic', repos: 'basic', machineId: 'basic',
     instructions: 'instructions',
-    controller: 'runtime', worker: 'runtime', maxConcurrentRuns: 'runtime', canSelfAssign: 'runtime',
+    controller: 'runtime', worker: 'runtime', maxConcurrentRuns: 'runtime', canSelfAssign: 'runtime', contextAutoRollover: 'runtime', contextBudgetTokens: 'runtime',
     monthlyBudgetUsd: 'schedule', heartbeatIntervalMin: 'schedule', activeHoursEnabled: 'schedule', activeHoursStart: 'schedule',
     activeHoursEnd: 'schedule', activeDays: 'schedule', timezone: 'schedule', dreamingHour: 'schedule',
 };
@@ -111,6 +114,8 @@ export function initialTeammateFormValues({ teammate, seed, machineId = '', time
         },
         maxConcurrentRuns: teammate?.maxConcurrentRuns ?? 3,
         canSelfAssign: teammate?.canSelfAssign ?? false,
+        contextAutoRollover: teammate?.contextAutoRollover ?? true,
+        contextBudgetTokens: teammate?.contextBudgetTokens?.toString() ?? '',
         monthlyBudgetUsd: teammate?.monthlyBudgetUsd?.toString() ?? '',
         heartbeatIntervalMin: teammate?.heartbeatIntervalMin ?? null,
         activeHoursEnabled: !!teammate?.activeHours,
@@ -162,6 +167,9 @@ export function buildTeammateFormRequest(values: TeammateFormValues, teammate?: 
         workerProvider: values.worker.provider, model: values.worker.model || null,
         workerPermissionMode: values.worker.permissionMode, workerProfileId: values.worker.profileId || null,
         maxConcurrentRuns: values.maxConcurrentRuns, canSelfAssign: values.canSelfAssign,
+        contextAutoRollover: values.contextAutoRollover,
+        // Hidden while auto segment is off: omit it so the stored budget is kept and a stale draft can't block saving.
+        contextBudgetTokens: !values.contextAutoRollover ? undefined : values.contextBudgetTokens.trim() ? Number(values.contextBudgetTokens) : null,
         monthlyBudgetUsd: values.monthlyBudgetUsd.trim() ? Number(values.monthlyBudgetUsd) : null,
         heartbeatIntervalMin: values.heartbeatIntervalMin,
         ...buildTeammateSchedulePayload(values.timezone, values.activeHoursEnabled, values.activeHoursStart, values.activeHoursEnd,

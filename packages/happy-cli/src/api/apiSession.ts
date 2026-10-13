@@ -771,6 +771,7 @@ export class ApiSessionClient extends EventEmitter {
                 this.sendUsageData(body.message.usage, isSidechain ? undefined : body.message.model);
                 if (!isSidechain) recordTeammateContextUsage({
                     contextTokens: body.message.usage.input_tokens + (body.message.usage.cache_creation_input_tokens || 0) + (body.message.usage.cache_read_input_tokens || 0),
+                    cachedTokens: body.message.usage.cache_read_input_tokens || 0, provider: 'claude',
                 });
             } catch (error) {
                 logger.debug('[SOCKET] Failed to send usage data:', error);

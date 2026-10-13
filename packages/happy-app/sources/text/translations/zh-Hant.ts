@@ -252,6 +252,12 @@ export const zhHant: TranslationStructure = {
             workerSummary: ({ provider }: { provider: string }) => `工作 ${provider}`,
             budgetSummary: ({ amount }: { amount: string }) => `\$${amount}/月`,
             required: "必填。",
+            contextBudget: "上下文預算",
+            contextBudgetHint: "單次模型呼叫的最大未快取 token 等價成本。超過預算時，Agent 會摘要對話並在新片段中繼續。預算越大，保留的原始歷史越多，但費用也越高。留空則使用預設值。",
+            contextBudgetRange: ({ min, max }: { min: string; max: string }) => `請輸入 ${min}–${max} 個 token。`,
+            contextAutoRollover: "自動分段",
+            contextAutoRolloverOnHint: "單次模型呼叫將超過預算時，Agent 會摘要對話並在新片段中繼續，以降低費用。",
+            contextAutoRolloverOffHint: "Agent 會保留完整對話，僅在模型的上下文視窗接近滿載時進行摘要。",
         },
         wizard: {
             instructionsTitle: "工作指令",

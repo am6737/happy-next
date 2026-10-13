@@ -165,6 +165,10 @@ export type ThreadsState = Record<string, {
     taskCreateCounter?: number;
     contextTokens?: number;
     contextWindow?: number;
+    contextAt?: number;
+    cachedTokens?: number;
+    cacheTtlMs?: number;
+    segmentStartTokens?: number;
     compactions?: number;
     overflowed?: boolean;
     threadKind?: TeammateThreadKind;
@@ -227,6 +231,7 @@ export async function readThreadsState(dir: string): Promise<ThreadsState> {
                 || ['resetAppliedAt', 'chatSendCounter', 'taskCreateCounter'].some(key => value[key] !== undefined && (!Number.isInteger(value[key]) || value[key] < 0))
                 || ['segment', 'summarizedSeq', 'summarizedAt', 'flushedSegment', 'segmentStartSeq'].some(key => value[key] !== undefined && (!Number.isInteger(value[key]) || value[key] < 0))
                 || (value.memorySeenAt !== undefined && (typeof value.memorySeenAt !== 'number' || !Number.isFinite(value.memorySeenAt) || value.memorySeenAt < 0))
+                || ['contextAt', 'cachedTokens', 'cacheTtlMs', 'segmentStartTokens'].some(key => value[key] !== undefined && (typeof value[key] !== 'number' || !Number.isFinite(value[key]) || value[key] < 0))
                 || (value.summarizedSession !== undefined && (!value.summarizedSession || typeof value.summarizedSession !== 'object' || typeof value.summarizedSession.id !== 'string' || !Number.isInteger(value.summarizedSession.seq) || value.summarizedSession.seq < 0))
                 || (value.channel !== undefined && !TeammateRunDispatchPayloadSchema.shape.channel.safeParse(value.channel).success)
                 || (value.teammate !== undefined && !TeammateRunDispatchPayloadSchema.shape.teammate.safeParse(value.teammate).success)

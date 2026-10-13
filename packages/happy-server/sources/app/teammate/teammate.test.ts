@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Prisma, type Teammate as TeammateRow } from '@prisma/client';
 import fastify, { type FastifyRequest, type FastifyReply } from 'fastify';
 import { serializerCompiler, validatorCompiler, ZodTypeProvider } from 'fastify-type-provider-zod';
-import { TeammateCreateRequestSchema } from 'happy-wire';
+import { TEAMMATE_CONTEXT_BUDGET_MIN, TeammateCreateRequestSchema } from 'happy-wire';
 import type { Fastify } from '@/app/api/types';
 
 const { dbMock, state } = vi.hoisted(() => {
@@ -42,7 +42,7 @@ const profile: TeammateRow = {
     role: 'Backend engineer', skills: ['typescript'], repos: ['owner/repo'], instructions: 'Ship small changes',
     machineId: 'machine_1', controllerProvider: 'claude', controllerModel: null, controllerPermissionMode: 'default', controllerProfileId: null, controllerEnv: null, workerProvider: 'claude', model: null, workerPermissionMode: 'default', workerProfileId: null, workerEnv: null,
     maxConcurrentRuns: 3, monthlyBudgetUsd: 100, heartbeatIntervalMin: null, activeHours: null, timezone: null,
-    dreamingHour: null, canSelfAssign: false, status: 'active', createdAt, updatedAt,
+    dreamingHour: null, canSelfAssign: false, contextBudgetTokens: null, contextAutoRollover: true, status: 'active', createdAt, updatedAt,
 };
 const createInput = { handle: 'atlas', name: 'Atlas', machineId: 'machine_1' };
 const run = {
@@ -89,6 +89,7 @@ describe('teammate create', () => {
     it('creates only a profile with wire defaults and emits an account update after commit', async () => {
         const teammate = await teammateCreate('account_1', createInput);
         expect(teammate.id).toBe('mate_1');
+        expect(teammate.contextAutoRollover).toBe(true);
         expect(dbMock.machine.findFirst).toHaveBeenCalledWith({ where: { id: 'machine_1', accountId: 'account_1' }, select: { id: true } });
         expect(dbMock.teammate.create).toHaveBeenCalledWith({ data: {
             ...TeammateCreateRequestSchema.parse(createInput), handle: 'atlas-2', accountId: 'account_1',
@@ -99,6 +100,41 @@ describe('teammate create', () => {
             userId: 'account_1', recipientFilter: { type: 'user-scoped-only' },
             payload: expect.objectContaining({ seq: 42, body: { t: 'teammate-updated', teammate } }),
         });
+    });
+
+    it('creates, updates, and clears a context budget while rejecting values below the minimum', async () => {
+        const budget = TEAMMATE_CONTEXT_BUDGET_MIN;
+        dbMock.teammate.create.mockResolvedValueOnce({ ...profile, contextBudgetTokens: budget });
+        const created = await teammateCreate('account_1', { ...createInput, contextBudgetTokens: budget });
+        expect(dbMock.teammate.create).toHaveBeenCalledWith({ data: expect.objectContaining({ contextBudgetTokens: budget }) });
+        expect(created.contextBudgetTokens).toBe(budget);
+
+        const updated = await teammateUpdate('account_1', 'mate_1', { contextBudgetTokens: budget + 1000 });
+        expect(dbMock.teammate.update).toHaveBeenLastCalledWith({
+            where: { id: 'mate_1', accountId: 'account_1' }, data: { contextBudgetTokens: budget + 1000 },
+        });
+        expect(updated.contextBudgetTokens).toBe(budget + 1000);
+
+        const cleared = await teammateUpdate('account_1', 'mate_1', { contextBudgetTokens: null });
+        expect(dbMock.teammate.update).toHaveBeenLastCalledWith({
+            where: { id: 'mate_1', accountId: 'account_1' }, data: { contextBudgetTokens: null },
+        });
+        expect(cleared.contextBudgetTokens).toBeNull();
+        expect(TeammateCreateRequestSchema.safeParse({ ...createInput, contextBudgetTokens: budget - 1 }).success).toBe(false);
+    });
+
+    it('updates automatic context rollover off and back on', async () => {
+        const disabled = await teammateUpdate('account_1', 'mate_1', { contextAutoRollover: false });
+        expect(dbMock.teammate.update).toHaveBeenLastCalledWith({
+            where: { id: 'mate_1', accountId: 'account_1' }, data: { contextAutoRollover: false },
+        });
+        expect(disabled.contextAutoRollover).toBe(false);
+
+        const enabled = await teammateUpdate('account_1', 'mate_1', { contextAutoRollover: true });
+        expect(dbMock.teammate.update).toHaveBeenLastCalledWith({
+            where: { id: 'mate_1', accountId: 'account_1' }, data: { contextAutoRollover: true },
+        });
+        expect(enabled.contextAutoRollover).toBe(true);
     });
 
     it('rejects a name another active Agent already uses, ignoring case', async () => {

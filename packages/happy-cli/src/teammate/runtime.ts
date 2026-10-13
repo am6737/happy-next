@@ -2,7 +2,7 @@ import { randomUUID, randomBytes, createHash, timingSafeEqual } from 'node:crypt
 import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
-    TEAMMATE_ENV, TEAMMATE_REVIEW_MAX_ROUNDS, TeammateNotifyPayloadSchema, TeammateTaskStopPayloadSchema, TeammateTaskAgentUpdateRequestSchema, TeammateRunCancelPayloadSchema, TeammateRunDispatchPayloadSchema,
+    TEAMMATE_ENV, TEAMMATE_REVIEW_MAX_ROUNDS, TEAMMATE_CONTEXT_BUDGET_DEFAULT, TeammateNotifyPayloadSchema, TeammateTaskStopPayloadSchema, TeammateTaskAgentUpdateRequestSchema, TeammateRunCancelPayloadSchema, TeammateRunDispatchPayloadSchema,
     TeammateRuntimeEnvSchema, MODEL_MODE_DEFAULT, FAST_MODE_SUFFIX, splitFastModeSuffix, resolveModelSelectionForFlavor, mentionIds,
     type TeammateWorkerProvider, type TeammateRunDispatchPayload, type TeammateRpcResult, type ChannelMessage,
 } from 'happy-wire';
@@ -13,7 +13,8 @@ import { decodeBase64, decryptWithDataKey } from '@/api/encryption';
 import { findCodexSessionFile } from '@/codex/utils/codexSessionReader';
 import { claudeCheckSession } from '@/claude/utils/claudeCheckSession';
 import { logger } from '@/ui/logger';
-import { ensureTeammateHome, execFileAsync, exists, isPathId, generateSessionKeyFile, mergeThreadState, readThreadsState, readTaskState, mergeTaskWorker, updateTaskState, appendDailyLog, commitTeammateHome, isHeartbeatChecklistEmpty, readThreadSummary, archiveThreadSummary, type TaskWorker } from './homeDir';
+import { ensureTeammateHome, execFileAsync, exists, isPathId, generateSessionKeyFile, mergeThreadState, readThreadsState, readTaskState, mergeTaskWorker, updateTaskState, appendDailyLog, commitTeammateHome, isHeartbeatChecklistEmpty, readThreadSummary, archiveThreadSummary, type TaskWorker, type ThreadsState } from './homeDir';
+import { PROVIDER_CACHE_TTL_MS } from './contextSignals';
 import { buildTeammateSystemPrompt, teammateMemoryFiles } from './prompt';
 import { summarizeThread } from './threadSummary';
 import { runTeammateOneShot } from './oneShot';
@@ -34,11 +35,29 @@ const HISTORY_SCAN = 2000;
 const HISTORY_MATCHES = 20;
 const HISTORY_CACHE = 5000;
 const HISTORY_TEXT = 2000;
-const ROLLOVER_IDLE_TOKENS = Number.isFinite(Number(process.env.HAPPY_TEAMMATE_ROLLOVER_IDLE_TOKENS)) && Number(process.env.HAPPY_TEAMMATE_ROLLOVER_IDLE_TOKENS) > 0 ? Number(process.env.HAPPY_TEAMMATE_ROLLOVER_IDLE_TOKENS) : 60_000;
+const configuredBudget = process.env.HAPPY_TEAMMATE_CONTEXT_BUDGET_TOKENS ?? process.env.HAPPY_TEAMMATE_ROLLOVER_IDLE_TOKENS;
+const ROLLOVER_BUDGET = Number.isFinite(Number(configuredBudget)) && Number(configuredBudget) > 0 ? Number(configuredBudget) : TEAMMATE_CONTEXT_BUDGET_DEFAULT;
 const ROLLOVER_RATIO = Number.isFinite(Number(process.env.HAPPY_TEAMMATE_ROLLOVER_RATIO)) && Number(process.env.HAPPY_TEAMMATE_ROLLOVER_RATIO) > 0 && Number(process.env.HAPPY_TEAMMATE_ROLLOVER_RATIO) <= 1 ? Number(process.env.HAPPY_TEAMMATE_ROLLOVER_RATIO) : 0.6;
+const CACHE_READ_RATIO = 0.1;
+const CAPACITY_RESERVE_TOKENS = 20_000;
+const CAPACITY_RESERVE_MAX_RATIO = 0.2;
 const DEFAULT_CONTEXT_WINDOW = 200_000;
 const MEMORY_TRUNCATION_MARKER = '…[truncated]';
 interface HistoryEntry { seq: number; createdAt: number; sender: string; text: string }
+
+export function contextRolloverLimit(entry: ThreadsState[string], provider: keyof typeof PROVIDER_CACHE_TTL_MS, at: number, options: { budget?: number | null; auto?: boolean; forceCold?: boolean } = {}): { limit: number; cold: boolean; grown: boolean; roll: boolean; ttl: number; budget: number; auto: boolean } {
+    const budget = options.budget ?? entry.teammate?.contextBudgetTokens ?? ROLLOVER_BUDGET;
+    const auto = options.auto ?? entry.teammate?.contextAutoRollover ?? true;
+    const ttl = entry.cacheTtlMs ?? PROVIDER_CACHE_TTL_MS[entry.provider ?? provider];
+    const lastCall = entry.contextAt ?? entry.lastDispatchAt;
+    const cold = options.forceCold || lastCall === undefined || at - lastCall > ttl;
+    const window = entry.contextWindow ?? DEFAULT_CONTEXT_WINDOW;
+    const limit = auto ? Math.min(window * ROLLOVER_RATIO, budget / (cold ? 1 : CACHE_READ_RATIO))
+        : window - Math.min(CAPACITY_RESERVE_TOKENS, window * CAPACITY_RESERVE_MAX_RATIO);
+    const tokens = entry.contextTokens ?? 0;
+    const grown = tokens - (entry.segmentStartTokens ?? 0) >= limit * 0.5;
+    return { limit, cold, grown, roll: tokens >= limit && grown, ttl, budget, auto };
+}
 
 /** Resolve a catalog model mode (optionally suffixed -fast) into message meta exactly as the app does. */
 export function teammateModelSelection(provider: TeammateWorkerProvider, modelMode: string | null): { model: string | null; reasoningEffort: string | null } {
@@ -350,12 +369,13 @@ export function createTeammateRuntime(deps: TeammateRuntimeDependencies) {
                     && entry.controllerConfig === controllerConfig);
                 let rollover: 'topic' | 'overflow' | 'compacted' | 'tokens' | 'resume_failed' | undefined;
                 let rolloverSegmentStartSeq: number | undefined;
+                const check = rolls ? contextRolloverLimit(entry, provider, now(), { budget: payload.teammate.contextBudgetTokens, auto: payload.teammate.contextAutoRollover }) : undefined;
+                if (check) logger.debug(`[TEAMMATE] Rollover check ${payload.thread.id} tokens=${entry.contextTokens ?? 0} start=${entry.segmentStartTokens ?? 0} limit=${check.limit} cold=${check.cold} ttl=${check.ttl} budget=${check.budget} auto=${check.auto} roll=${check.roll && Boolean(live || resumable)}`);
                 if (rolls) {
                     if (topicReset) rollover = 'topic';
                     else if (entry.overflowed) rollover = 'overflow';
                     else if ((entry.compactions ?? 0) > 0) rollover = 'compacted';
-                    else if ((entry.contextTokens ?? 0) >= (live ? (entry.contextWindow ?? DEFAULT_CONTEXT_WINDOW) * ROLLOVER_RATIO : ROLLOVER_IDLE_TOKENS)
-                        && (live || resumable)) rollover = 'tokens';
+                    else if (check?.roll && (live || resumable)) rollover = 'tokens';
                 }
                 const isolation = !live || rollover || topicReset ? await prepareTeammateIsolation(home, provider) : undefined;
                 let resumeFile = !live && !rollover && !topicReset && resumable && provider === 'codex'
@@ -397,7 +417,7 @@ export function createTeammateRuntime(deps: TeammateRuntimeDependencies) {
                     }
                     const reset = {
                         providerSessionId: undefined, currentSessionId: undefined, pid: undefined, keyPath: undefined, controlToken: undefined,
-                        contextTokens: undefined, contextWindow: undefined, compactions: undefined, overflowed: undefined,
+                        contextTokens: undefined, contextWindow: undefined, contextAt: undefined, cachedTokens: undefined, segmentStartTokens: undefined, compactions: undefined, overflowed: undefined,
                         ...(rollover ? { segment: (entry.segment ?? 1) + 1, ...(rolloverSegmentStartSeq === undefined ? {} : { segmentStartSeq: rolloverSegmentStartSeq }) } : {}),
                         ...(topicReset ? { resetAppliedAt: resetAt } : {}),
                     };
@@ -820,7 +840,7 @@ export function createTeammateRuntime(deps: TeammateRuntimeDependencies) {
                             if (kind === 'dm' || kind === 'group' || kind === 'task') void enqueue(threadKey(home, threadId), async () => {
                                 const provider = entry.teammate?.controllerProvider ?? entry.provider ?? 'claude';
                                 await summarizeThread({ home, threadId, entry, kind,
-                                    final: (entry.contextTokens ?? 0) >= ROLLOVER_IDLE_TOKENS || (entry.compactions ?? 0) > 0,
+                                    final: contextRolloverLimit(entry, provider, now(), { forceCold: true }).roll || (entry.compactions ?? 0) > 0,
                                     deps: { api: deps.api, crypto, oneShot: deps.oneShot, now, provider,
                                         model: teammateModelSelection(provider, entry.teammate?.controllerModel ?? null).model,
                                         env: profileEnv(entry.teammate?.controllerEnv ?? null).environmentVariables as Record<string, string> | undefined,

@@ -261,6 +261,12 @@ export const ru: TranslationStructure = {
             workerSummary: ({ provider }: { provider: string }) => `Рабочие: ${provider}`,
             budgetSummary: ({ amount }: { amount: string }) => `\$${amount}/мес.`,
             required: "Обязательное поле.",
+            contextBudget: "Бюджет контекста",
+            contextBudgetHint: "Максимальная стоимость одного вызова модели в токенах без учёта кеша. При превышении Agent кратко излагает беседу и продолжает в новом сегменте. Больший бюджет сохраняет больше исходной истории, но обходится дороже. Оставьте поле пустым для значения по умолчанию.",
+            contextBudgetRange: ({ min, max }: { min: string; max: string }) => `Введите от ${min} до ${max} токенов.`,
+            contextAutoRollover: "Автоматическая сегментация",
+            contextAutoRolloverOnHint: "Если один вызов модели превысил бы бюджет, Agent подводит итог беседы и продолжает в новом сегменте, снижая затраты.",
+            contextAutoRolloverOffHint: "Agent сохраняет всю беседу и подводит итог только тогда, когда окно контекста модели почти заполнено.",
         },
         wizard: {
             instructionsTitle: "Инструкции",

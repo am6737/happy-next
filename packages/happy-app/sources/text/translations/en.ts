@@ -265,6 +265,12 @@ export const en: TranslationStructure = {
             workerSummary: ({ provider }: { provider: string }) => `Work: ${provider}`,
             budgetSummary: ({ amount }: { amount: string }) => `\$${amount}/month`,
             required: "Required.",
+            contextBudget: "Context budget",
+            contextBudgetHint: "Maximum uncached-token cost of one model call. Above this budget, the Agent summarizes the conversation and continues in a new segment. A larger budget keeps more raw history but costs more. Leave blank to use the default.",
+            contextBudgetRange: ({ min, max }: { min: string; max: string }) => `Enter ${min}–${max} tokens.`,
+            contextAutoRollover: "Auto segment",
+            contextAutoRolloverOnHint: "When one model call would exceed the budget, the Agent summarizes the conversation and continues in a new segment to save cost.",
+            contextAutoRolloverOffHint: "The Agent keeps the full conversation and only summarizes when the model's context window is nearly full.",
         },
         wizard: {
             instructionsTitle: "Instructions",

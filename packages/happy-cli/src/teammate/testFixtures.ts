@@ -30,6 +30,8 @@ export function makeTeammate(overrides: Partial<Teammate> = {}): Teammate {
         timezone: null,
         dreamingHour: null,
         canSelfAssign: false,
+        contextBudgetTokens: null,
+        contextAutoRollover: true,
         status: 'active',
         createdAt: 1,
         updatedAt: 1,

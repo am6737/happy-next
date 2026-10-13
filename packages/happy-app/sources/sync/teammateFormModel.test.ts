@@ -22,7 +22,7 @@ function create(fields: Partial<TeammateFormValues> = {}): TeammateFormValues {
 describe('initialTeammateFormValues', () => {
     it('starts a blank Agent on the given machine with heartbeat and dreaming off', () => {
         const values = initialTeammateFormValues({ machineId: 'm1', timezone: 'Europe/Rome' });
-        expect(values).toMatchObject({ name: '', machineId: 'm1', timezone: 'Europe/Rome', heartbeatIntervalMin: null, dreamingHour: null, activeHoursEnabled: false, maxConcurrentRuns: 3 });
+        expect(values).toMatchObject({ name: '', machineId: 'm1', timezone: 'Europe/Rome', heartbeatIntervalMin: null, dreamingHour: null, activeHoursEnabled: false, maxConcurrentRuns: 3, contextAutoRollover: true, contextBudgetTokens: '' });
         expect(values.activeDays).toEqual([0, 1, 2, 3, 4, 5, 6]);
     });
     it('prefills from an AI seed but never carries drafted skills', () => {
@@ -33,9 +33,9 @@ describe('initialTeammateFormValues', () => {
         expect(values).toMatchObject({ name: 'Scout', handle: 'scout', role: 'Triage', instructions: 'Label issues.', color: '#EC4899', machineId: 'm2', skills: [] });
     });
     it('mirrors an existing Agent', () => {
-        const values = initialTeammateFormValues({ teammate: teammate({ activeHours: { start: '10:00', end: '19:00', timezone: 'Asia/Shanghai', days: [1, 2] } }), timezone: 'UTC' });
+        const values = initialTeammateFormValues({ teammate: teammate({ contextAutoRollover: false, contextBudgetTokens: 90000, activeHours: { start: '10:00', end: '19:00', timezone: 'Asia/Shanghai', days: [1, 2] } }), timezone: 'UTC' });
         expect(values).toMatchObject({
-            handle: 'reviewer', color: '#22C55E', monthlyBudgetUsd: '20', heartbeatIntervalMin: 60, dreamingHour: 3, timezone: 'Asia/Shanghai',
+            handle: 'reviewer', color: '#22C55E', monthlyBudgetUsd: '20', contextAutoRollover: false, contextBudgetTokens: '90000', heartbeatIntervalMin: 60, dreamingHour: 3, timezone: 'Asia/Shanghai',
             activeHoursEnabled: true, activeHoursStart: '10:00', activeHoursEnd: '19:00', activeDays: [1, 2],
             worker: { provider: 'codex', model: 'gpt-5', permissionMode: 'default', profileId: '' },
         });
@@ -47,6 +47,8 @@ describe('changedTeammateFields', () => {
         const initial = initialTeammateFormValues({ teammate: teammate(), timezone: 'UTC' });
         expect(changedTeammateFields(initial, { ...initial, skills: ['review'], worker: { ...initial.worker } })).toEqual([]);
         expect(changedTeammateFields(initial, { ...initial, monthlyBudgetUsd: '30', worker: { ...initial.worker, model: '' } })).toEqual(['worker', 'monthlyBudgetUsd']);
+        expect(changedTeammateFields(initial, { ...initial, contextBudgetTokens: '90000' })).toEqual(['contextBudgetTokens']);
+        expect(changedTeammateFields(initial, { ...initial, contextAutoRollover: false })).toEqual(['contextAutoRollover']);
     });
 });
 
@@ -54,6 +56,8 @@ describe('sections', () => {
     it('groups runtime and schedule fields as advanced', () => {
         expect(teammateFormSection('machineId')).toBe('basic');
         expect(teammateFormSection('controller')).toBe('runtime');
+        expect(teammateFormSection('contextAutoRollover')).toBe('runtime');
+        expect(teammateFormSection('contextBudgetTokens')).toBe('runtime');
         expect(teammateFormSection('dreamingHour')).toBe('schedule');
         expect(isAdvancedSection('runtime')).toBe(true);
         expect(isAdvancedSection('instructions')).toBe(false);
@@ -72,7 +76,7 @@ describe('buildTeammateFormRequest', () => {
         if (!result.ok) return;
         expect(result.request).toMatchObject({
             name: 'Atlas', handle: 'atlas', role: 'Builder', avatar: { color: '#5B6EF5' }, machineId: 'machine',
-            controllerModel: null, model: null, controllerProfileId: null, monthlyBudgetUsd: null, heartbeatIntervalMin: null, dreamingHour: null,
+            controllerModel: null, model: null, controllerProfileId: null, contextAutoRollover: true, contextBudgetTokens: null, monthlyBudgetUsd: null, heartbeatIntervalMin: null, dreamingHour: null,
             timezone: 'UTC', activeHours: null,
         });
     });
@@ -80,6 +84,26 @@ describe('buildTeammateFormRequest', () => {
         const existing = teammate();
         const result = buildTeammateFormRequest({ ...initialTeammateFormValues({ teammate: existing, timezone: 'UTC' }), color: '#0EA5E9' }, existing);
         expect(result.ok && result.request.avatar).toEqual({ emoji: '🔍', color: '#0EA5E9' });
+    });
+    it('sends a numeric context budget and maps out-of-range values to the runtime field', () => {
+        const valid = buildTeammateFormRequest(create({ contextBudgetTokens: ' 90000 ' }));
+        expect(valid.ok && valid.request.contextBudgetTokens).toBe(90000);
+        for (const contextBudgetTokens of ['9999', '1000001']) {
+            const invalid = buildTeammateFormRequest(create({ contextBudgetTokens }));
+            expect(invalid.ok).toBe(false);
+            if (invalid.ok) continue;
+            expect(invalid.errors.contextBudgetTokens).toBe('invalid');
+            expect(firstErrorSection(invalid.errors)).toBe('runtime');
+        }
+    });
+    it('omits the hidden context budget when automatic segmentation is off so the stored value is kept', () => {
+        for (const contextBudgetTokens of ['90000', '9999']) {
+            const result = buildTeammateFormRequest(create({ contextAutoRollover: false, contextBudgetTokens }));
+            expect(result.ok).toBe(true);
+            if (!result.ok) return;
+            expect(result.request.contextAutoRollover).toBe(false);
+            expect(result.request.contextBudgetTokens).toBeUndefined();
+        }
     });
     it('omits days when every day is selected and sorts a partial selection', () => {
         const all = buildTeammateFormRequest(create({ activeHoursEnabled: true }));

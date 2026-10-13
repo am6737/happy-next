@@ -17,7 +17,7 @@ export class TeammateApiError extends Error {
     }
 }
 
-async function request<T>(credentials: AuthCredentials, path: string, schema: z.ZodType<T>, body?: unknown, resource = 'teammates'): Promise<T> {
+async function request<S extends z.ZodTypeAny>(credentials: AuthCredentials, path: string, schema: S, body?: unknown, resource = 'teammates'): Promise<z.output<S>> {
     const url = `${getServerUrl()}/v1/${resource}${path}`;
     let attempts = 0;
     // Writes are never retried: a lost response may already have created a colleague.

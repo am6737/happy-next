@@ -261,6 +261,12 @@ export const pl: TranslationStructure = {
             workerSummary: ({ provider }: { provider: string }) => `Robocze: ${provider}`,
             budgetSummary: ({ amount }: { amount: string }) => `\$${amount}/mies.`,
             required: "Wymagane.",
+            contextBudget: "Budżet kontekstu",
+            contextBudgetHint: "Maksymalny koszt jednego wywołania modelu w tokenach bez pamięci podręcznej. Po przekroczeniu budżetu Agent podsumowuje rozmowę i kontynuuje w nowym segmencie. Wyższy budżet zachowuje więcej oryginalnej historii, ale kosztuje więcej. Puste pole oznacza wartość domyślną.",
+            contextBudgetRange: ({ min, max }: { min: string; max: string }) => `Wpisz od ${min} do ${max} tokenów.`,
+            contextAutoRollover: "Automatyczna segmentacja",
+            contextAutoRolloverOnHint: "Gdy jedno wywołanie modelu przekroczyłoby budżet, Agent podsumowuje rozmowę i kontynuuje w nowym segmencie, aby obniżyć koszt.",
+            contextAutoRolloverOffHint: "Agent zachowuje całą rozmowę i podsumowuje ją dopiero wtedy, gdy okno kontekstowe modelu jest prawie pełne.",
         },
         wizard: {
             instructionsTitle: "Instrukcje",

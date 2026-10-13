@@ -37,12 +37,39 @@ describe('teammate context signals', () => {
     it('writes only the latest usage once the debounce elapses', async () => {
         const { entry } = await controller();
         vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-        recordTeammateContextUsage({ contextTokens: 12 });
-        recordTeammateContextUsage({ contextTokens: 24, contextWindow: 200_000 });
+        recordTeammateContextUsage({ contextTokens: 12, provider: 'claude' });
+        recordTeammateContextUsage({ contextTokens: 24, contextWindow: 200_000, provider: 'claude' });
         vi.advanceTimersByTime(1999);
         expect(await entry()).not.toHaveProperty('contextTokens');
         vi.advanceTimersByTime(1);
         await vi.waitFor(async () => expect(await entry()).toMatchObject({ contextTokens: 24, contextWindow: 200_000 }));
+        expect((await entry()).segmentStartTokens).toBe(12);
+    });
+
+    it('learns cache TTL from spaced hits and misses and keeps the first segment size', async () => {
+        const { entry } = await controller();
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+        vi.setSystemTime(1_000_000);
+        recordTeammateContextUsage({ contextTokens: 100, cachedTokens: 0, provider: 'claude' });
+        await vi.advanceTimersByTimeAsync(2000);
+        await vi.waitFor(async () => expect((await entry()).contextTokens).toBe(100));
+        vi.setSystemTime(1_700_000);
+        recordTeammateContextUsage({ contextTokens: 120, cachedTokens: 100, provider: 'claude' });
+        await vi.advanceTimersByTimeAsync(2000);
+        await vi.waitFor(async () => expect(await entry()).toMatchObject({ segmentStartTokens: 100, cacheTtlMs: 700_000, cachedTokens: 100, contextAt: 1_700_000 }));
+        vi.setSystemTime(1_730_000);
+        recordTeammateContextUsage({ contextTokens: 130, cachedTokens: 0, provider: 'claude' });
+        await vi.advanceTimersByTimeAsync(2000);
+        await vi.waitFor(async () => expect((await entry()).contextTokens).toBe(130));
+        expect((await entry()).cacheTtlMs).toBe(700_000);
+        vi.setSystemTime(1_790_000);
+        recordTeammateContextUsage({ contextTokens: 140, cachedTokens: 0, provider: 'claude' });
+        await vi.advanceTimersByTimeAsync(2000);
+        await vi.waitFor(async () => expect((await entry()).cacheTtlMs).toBe(60_000));
+        vi.setSystemTime(6_790_000);
+        recordTeammateContextUsage({ contextTokens: 150, cachedTokens: 150, provider: 'claude' });
+        await vi.advanceTimersByTimeAsync(2000);
+        await vi.waitFor(async () => expect((await entry()).cacheTtlMs).toBe(3_600_000));
     });
 
     it('increments compactions and reports each one', async () => {

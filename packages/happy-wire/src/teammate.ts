@@ -192,6 +192,10 @@ export const TeammateSchema = z.object({
   role: z.string(),
   skills: z.array(z.string()),
   repos: z.array(z.string()),
+export const TEAMMATE_CONTEXT_BUDGET_DEFAULT = 60_000;
+export const TEAMMATE_CONTEXT_BUDGET_MIN = 10_000;
+export const TEAMMATE_CONTEXT_BUDGET_MAX = 1_000_000;
+
   instructions: z.string(),
   machineId: z.string(),
   controllerProvider: TeammateControllerProviderSchema,
@@ -220,6 +224,10 @@ export type Teammate = z.infer<typeof TeammateSchema>;
 
 /**
  * Profile environment for one runtime role, encrypted by the app with the bound machine's key
+  // Per-model-call context cost budget in uncached-token equivalents; null uses the daemon default. Defaults keep older servers parseable.
+  contextBudgetTokens: z.number().int().nullable().default(null),
+  // Cost-driven segment rollover; when false the daemon only rolls over when the context window is nearly full.
+  contextAutoRollover: z.boolean().default(true),
  * (same wrapping as channel keys) so only that daemon can read profile secrets.
  */
 export const TeammateRuntimeEnvSchema = z.object({
@@ -267,6 +275,8 @@ export type TeammateCreateRequestParsed = z.output<typeof TeammateCreateRequestS
 export const TeammateUpdateRequestSchema = TeammateCreateRequestSchema.omit({ handle: true }).partial().extend({
   status: z.enum(['active', 'paused']).optional(),
 });
+  contextBudgetTokens: z.number().int().min(TEAMMATE_CONTEXT_BUDGET_MIN).max(TEAMMATE_CONTEXT_BUDGET_MAX).nullable().optional(),
+  contextAutoRollover: z.boolean().optional(),
 export type TeammateUpdateRequest = z.input<typeof TeammateUpdateRequestSchema>;
 export type TeammateUpdateRequestParsed = z.output<typeof TeammateUpdateRequestSchema>;
 

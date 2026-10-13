@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
-import { TEAMMATE_CONTROLLER_PROVIDERS, TEAMMATE_WORKER_PROVIDERS, type Teammate } from 'happy-wire';
+import { TEAMMATE_CONTEXT_BUDGET_DEFAULT, TEAMMATE_CONTEXT_BUDGET_MIN, TEAMMATE_CONTEXT_BUDGET_MAX, TEAMMATE_CONTROLLER_PROVIDERS, TEAMMATE_WORKER_PROVIDERS, type Teammate } from 'happy-wire';
 import { useAuth } from '@/auth/AuthContext';
 import { useAllMachines } from '@/sync/storage';
 import type { TeammateSeed } from '@/sync/teammateDraft';
@@ -69,6 +69,10 @@ function errorText(field: TeammateFormField, error: TeammateFormError | undefine
         case 'hours': return t('teammates.hoursHint');
         case 'days': return t('teammates.form.pickDay');
         case 'invalid':
+            if (field === 'contextBudgetTokens') return t('teammates.form.contextBudgetRange', {
+                min: new Intl.NumberFormat(getCurrentLanguage()).format(TEAMMATE_CONTEXT_BUDGET_MIN),
+                max: new Intl.NumberFormat(getCurrentLanguage()).format(TEAMMATE_CONTEXT_BUDGET_MAX),
+            });
             if (field === 'monthlyBudgetUsd') return t('teammates.budgetHint');
             if (field === 'heartbeatIntervalMin') return t('teammates.form.heartbeatRange');
             if (field === 'dreamingHour') return t('teammates.form.dreamingRange');
@@ -252,6 +256,18 @@ export function TeammateForm({ teammate, seed, focus }: { teammate?: Teammate; s
                                 min={1} max={10} changed={changed.has('maxConcurrentRuns')} />
                         )} />
                         <ToggleRow label={t('teammates.selfAssign')} value={values.canSelfAssign} onChange={value => set('canSelfAssign', value)} changed={changed.has('canSelfAssign')} />
+                        <ToggleRow label={t('teammates.form.contextAutoRollover')} value={values.contextAutoRollover}
+                            onChange={value => set('contextAutoRollover', value)} changed={changed.has('contextAutoRollover')} />
+                        <Text style={styles.sheetHint}>{t(values.contextAutoRollover ? 'teammates.form.contextAutoRolloverOnHint' : 'teammates.form.contextAutoRolloverOffHint')}</Text>
+                        {values.contextAutoRollover && (
+                            <>
+                                <InputRow label={t('teammates.form.contextBudget')} numeric value={values.contextBudgetTokens}
+                                    placeholder={new Intl.NumberFormat(getCurrentLanguage()).format(TEAMMATE_CONTEXT_BUDGET_DEFAULT)}
+                                    onChange={value => set('contextBudgetTokens', value)} changed={changed.has('contextBudgetTokens')}
+                                    error={errorText('contextBudgetTokens', errors.contextBudgetTokens)} />
+                                <Text style={styles.sheetHint}>{t('teammates.form.contextBudgetHint')}</Text>
+                            </>
+                        )}
 
                         <CardHeading title={t('teammates.form.scheduleAndBudget')} />
                         <OptionPills label={t('teammates.form.heartbeat')} options={heartbeatOptions}

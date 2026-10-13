@@ -250,6 +250,12 @@ export const pt: TranslationStructure = {
             workerSummary: ({ provider }: { provider: string }) => `Trabalho: ${provider}`,
             budgetSummary: ({ amount }: { amount: string }) => `\$${amount}/mês`,
             required: "Obrigatório.",
+            contextBudget: "Orçamento de contexto",
+            contextBudgetHint: "Custo máximo de uma chamada ao modelo em tokens sem cache. Acima desse limite, o Agent resume a conversa e continua em um novo segmento. Um orçamento maior preserva mais histórico original, mas custa mais. Deixe em branco para usar o padrão.",
+            contextBudgetRange: ({ min, max }: { min: string; max: string }) => `Insira entre ${min} e ${max} tokens.`,
+            contextAutoRollover: "Segmentação automática",
+            contextAutoRolloverOnHint: "Quando uma chamada ao modelo ultrapassaria o orçamento, o Agent resume a conversa e continua em um novo segmento para reduzir custos.",
+            contextAutoRolloverOffHint: "O Agent mantém a conversa completa e só a resume quando a janela de contexto do modelo está quase cheia.",
         },
         wizard: {
             instructionsTitle: "Instruções",

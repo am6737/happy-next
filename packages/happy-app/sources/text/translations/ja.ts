@@ -253,6 +253,12 @@ export const ja: TranslationStructure = {
             workerSummary: ({ provider }: { provider: string }) => `作業 ${provider}`,
             budgetSummary: ({ amount }: { amount: string }) => `\$${amount}/月`,
             required: "必須項目です。",
+            contextBudget: "コンテキスト予算",
+            contextBudgetHint: "1 回のモデル呼び出しで使えるキャッシュなしトークン換算の上限です。超えると Agent は会話を要約し、新しいセグメントで続行します。上限を増やすと元の履歴を多く保持できますが、費用も増えます。空欄なら既定値を使います。",
+            contextBudgetRange: ({ min, max }: { min: string; max: string }) => `${min}～${max} トークンを入力してください。`,
+            contextAutoRollover: "自動セグメント化",
+            contextAutoRolloverOnHint: "1 回のモデル呼び出しが予算を超える場合、Agent は会話を要約して新しいセグメントで続行し、費用を抑えます。",
+            contextAutoRolloverOffHint: "Agent は会話全体を保持し、モデルのコンテキストウィンドウがほぼ満杯になったときだけ要約します。",
         },
         wizard: {
             instructionsTitle: "作業指示",

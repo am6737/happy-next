@@ -547,6 +547,8 @@ describe('teammate contract', () => {
       activeHours: { start: '09:00', end: '18:00', timezone: 'Asia/Shanghai', days: [1, 2, 3, 4, 5] },
       dreamingHour: 22,
       canSelfAssign: false,
+      contextBudgetTokens: null,
+      contextAutoRollover: true,
       status: 'active',
       createdAt: 1791417600000,
       updatedAt: 1791417660000,

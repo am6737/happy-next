@@ -664,6 +664,10 @@ model Teammate {
   timezone                 String?
   dreamingHour             Int?
   canSelfAssign            Boolean           @default(false)
+  /// Per-model-call context cost budget in uncached-token equivalents; null uses the daemon default.
+  contextBudgetTokens      Int?
+  /// Cost-driven segment rollover; false only rolls over when the context window is nearly full.
+  contextAutoRollover      Boolean           @default(true)
   status                   String            @default("active")
   createdAt                DateTime          @default(now())
   updatedAt                DateTime          @updatedAt

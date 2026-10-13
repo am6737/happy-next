@@ -873,7 +873,7 @@ export async function runCodex(opts: {
             case 'token-count': {
                 const { type: _type, ...tokenData } = msg as any;
                 const lastUsage = tokenData.last_token_usage;
-                if (lastUsage) recordTeammateContextUsage({ contextTokens: lastUsage.input_tokens, contextWindow: tokenData.model_context_window });
+                if (lastUsage) recordTeammateContextUsage({ contextTokens: lastUsage.input_tokens, contextWindow: tokenData.model_context_window, cachedTokens: lastUsage.cached_input_tokens, provider: 'codex' });
                 session.sendAgentMessage('codex', {
                     type: 'token_count',
                     ...tokenData,
