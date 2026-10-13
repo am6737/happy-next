@@ -76,7 +76,8 @@ function defaultCustomDate(): Date {
     return next;
 }
 
-export function ScheduleMessageSheet({
+// Memoized: it stays mounted while closed, under a session view that re-renders on every keystroke.
+export const ScheduleMessageSheet = React.memo(function ScheduleMessageSheet({
     visible,
     mode,
     initialText = '',
@@ -346,7 +347,7 @@ export function ScheduleMessageSheet({
             {content}
         </Modal>
     );
-}
+});
 
 const styles = StyleSheet.create((theme) => ({
     container: {

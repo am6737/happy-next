@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { ApiEphemeralActivityUpdate } from '../apiTypes';
-import { ActivityUpdateAccumulator } from './activityUpdateAccumulator';
+import { ActivityUpdateAccumulator, isMinorActivityHeartbeat, ACTIVITY_TIMESTAMP_REFRESH_MS } from './activityUpdateAccumulator';
 
 describe('ActivityUpdateAccumulator Smart Debounce', () => {
     let mockFlushHandler: ReturnType<typeof vi.fn>;
@@ -488,5 +488,25 @@ describe('ActivityUpdateAccumulator Smart Debounce', () => {
                 new Map([['session1', update3]])
             );
         });
+    });
+});
+describe('isMinorActivityHeartbeat', () => {
+    const session = { active: true, activeAt: 10_000, thinking: false };
+    const heartbeat = (patch: Partial<ApiEphemeralActivityUpdate>): ApiEphemeralActivityUpdate => ({
+        type: 'activity', id: 'session1', active: true, activeAt: 12_000, thinking: false, ...patch,
+    });
+
+    it('skips a heartbeat that only moves activeAt a little', () => {
+        expect(isMinorActivityHeartbeat(session, heartbeat({}))).toBe(true);
+    });
+
+    it('applies a heartbeat once activeAt is a refresh interval stale', () => {
+        expect(isMinorActivityHeartbeat(session, heartbeat({ activeAt: 10_000 + ACTIVITY_TIMESTAMP_REFRESH_MS }))).toBe(false);
+    });
+
+    it('applies a change of active or thinking', () => {
+        expect(isMinorActivityHeartbeat(session, heartbeat({ active: false }))).toBe(false);
+        expect(isMinorActivityHeartbeat(session, heartbeat({ thinking: true }))).toBe(false);
+        expect(isMinorActivityHeartbeat({ ...session, thinking: true }, heartbeat({}))).toBe(false);
     });
 });

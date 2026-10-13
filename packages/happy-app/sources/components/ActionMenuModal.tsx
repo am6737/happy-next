@@ -222,10 +222,11 @@ function NativeActionMenuModal({ visible, items, onClose, deferItemPress, title,
     );
 }
 
-export function ActionMenuModal(props: ActionMenuModalProps) {
+// Memoized: it stays mounted while closed, under screens that re-render often.
+export const ActionMenuModal = React.memo(function ActionMenuModal(props: ActionMenuModalProps) {
     if (Platform.OS === 'ios') {
         return <IOSActionMenuOverlay {...props} />;
     }
 
     return <NativeActionMenuModal {...props} />;
-}
+});

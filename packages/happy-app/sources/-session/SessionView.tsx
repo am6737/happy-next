@@ -347,6 +347,9 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
     const isIpad = Platform.OS === 'ios' && Platform.isPad;
     const shouldUseCompactLandscapeSessionLayout = isLandscape && !isIpad && deviceType === 'phone';
     const [message, setMessage] = React.useState('');
+    // Read by callbacks handed to the message list, which would otherwise change on every keystroke.
+    const messageRef = React.useRef(message);
+    messageRef.current = message;
     const { inputHistory, rememberSentInput } = useInputHistory();
     const realtimeStatus = useRealtimeStatus();
     const { messages, isLoaded, fetchVersion } = useSessionMessages(sessionId);
@@ -495,7 +498,7 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
 
     // Handler for filling the input from option selection
     const handleFillInput = React.useCallback(async (text: string, allOptions?: string[]) => {
-        const currentMessage = message.trim();
+        const currentMessage = messageRef.current.trim();
         if (currentMessage) {
             // Skip confirmation if current input is one of the available options
             const isCurrentInputAnOption = allOptions?.includes(currentMessage);
@@ -513,7 +516,7 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
         if (Platform.OS === 'web') {
             inputRef.current?.focus();
         }
-    }, [message]);
+    }, []);
 
     // Image picker hook for handling image attachments
     const {
@@ -1022,6 +1025,10 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
     // Files write to the owner's machine, which a shared session's guests may not do.
     const pickFiles = fileAttachments.pickFiles;
     const canAttachFiles = !session.accessLevel;
+    const handleCloseImagePickerSheet = React.useCallback(() => setImagePickerSheetVisible(false), []);
+    const handleCloseScheduleSheet = React.useCallback(() => setScheduleSheet((current) => ({ ...current, visible: false })), []);
+    const handleCloseRescheduleSheet = React.useCallback(() => setReschedulePendingId(null), []);
+
     const imagePickerMenuItems: ActionMenuItem[] = React.useMemo(() => [
         ...(Platform.OS === 'web' ? [] : [{ label: t('session.takePhoto'), onPress: pickFromCamera, disabled: !supportsImages }]),
         {
@@ -1176,11 +1183,11 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
     // The empty state (loading, or a session with no messages) is the list's own, so the list and
     // the scroll view under the header and the floating composer stay the same from the first
     // frame: a composer over a separate, shorter empty-state view had no soft edge under it.
-    const emptyComponent = isLoaded ? (
+    const emptyComponent = React.useMemo(() => isLoaded ? (
         <EmptyMessages session={session} />
     ) : (
         <ActivityIndicator size="small" color={theme.colors.textSecondary} />
-    );
+    ), [isLoaded, session, theme.colors.textSecondary]);
 
     let content = (
         <>
@@ -1610,26 +1617,27 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
                 visible={imagePickerSheetVisible}
                 items={imagePickerMenuItems}
                 title={t('session.addMenuTitle')}
-                onClose={() => setImagePickerSheetVisible(false)}
+                onClose={handleCloseImagePickerSheet}
                 deferItemPress
             />
 
             <ScheduleMessageSheet
                 visible={scheduleSheet.visible}
                 mode="create"
-                initialText={message}
+                // Read when the sheet opens; while it is closed the composer's text would only re-render it.
+                initialText={scheduleSheet.visible ? message : ''}
                 imageCount={images.length}
                 fileCount={fileAttachments.files.length}
                 limitEndsAt={scheduleSheet.limitEndsAt}
                 autoFocus={scheduleSheet.autoFocus}
-                onClose={() => setScheduleSheet((current) => ({ ...current, visible: false }))}
+                onClose={handleCloseScheduleSheet}
                 onSubmit={handleScheduleSubmit}
             />
             <ScheduleMessageSheet
                 visible={rescheduleTarget !== null}
                 mode="reschedule"
                 initialDeliverAt={rescheduleTarget?.deliverAt}
-                onClose={() => setReschedulePendingId(null)}
+                onClose={handleCloseRescheduleSheet}
                 onSubmit={handleRescheduleSubmit}
             />
 

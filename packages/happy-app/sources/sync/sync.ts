@@ -18,7 +18,7 @@ import {
 import type { ApiEphemeralActivityUpdate, ApiUpdateContainer } from './apiTypes';
 import { Session, Machine, PendingMessage, SessionCapabilitiesSchema } from './storageTypes';
 import { InvalidateSync } from '@/utils/sync';
-import { ActivityUpdateAccumulator } from './reducer/activityUpdateAccumulator';
+import { ActivityUpdateAccumulator, isMinorActivityHeartbeat } from './reducer/activityUpdateAccumulator';
 import { randomUUID, getRandomBytes } from 'expo-crypto';
 import * as Notifications from 'expo-notifications';
 import { deletePushToken, registerPushToken } from './apiPush';
@@ -5243,6 +5243,10 @@ class Sync {
         for (const [sessionId, update] of updates) {
             const session = state.sessions[sessionId];
             if (session) {
+                // A held idle heartbeat is dropped by the next busy one below, so that one still applies.
+                if (isMinorActivityHeartbeat(session, update) && !this.heldIdleActivity.has(sessionId)) {
+                    continue;
+                }
                 if (shouldInvalidateGitStatusOnActivityTransition(session.active, update.active)) {
                     recoveredSessionIds.push(sessionId);
                 }

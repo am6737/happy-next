@@ -1,5 +1,23 @@
 import type { ApiEphemeralActivityUpdate } from '../apiTypes';
 
+/** How stale a live session's `activeAt` may grow before a heartbeat that changes nothing else refreshes it. */
+export const ACTIVITY_TIMESTAMP_REFRESH_MS = 60_000;
+
+/**
+ * A heartbeat that only moves `activeAt` forward, by less than the refresh interval. Applying it
+ * would give the session a new object every couple of seconds, re-rendering every list and screen
+ * that shows it for a time nothing displays while the session is online; going offline is a change
+ * of state, and carries its own time.
+ */
+export function isMinorActivityHeartbeat(
+    session: { active: boolean; activeAt: number; thinking: boolean },
+    update: ApiEphemeralActivityUpdate,
+): boolean {
+    return session.active === update.active
+        && session.thinking === (update.thinking ?? false)
+        && update.activeAt - session.activeAt < ACTIVITY_TIMESTAMP_REFRESH_MS;
+}
+
 export class ActivityUpdateAccumulator {
     private pendingUpdates = new Map<string, ApiEphemeralActivityUpdate>();
     private lastEmittedStates = new Map<string, { active: boolean; thinking: boolean; activeAt: number }>();

@@ -59,13 +59,14 @@ export type ConversationMinimapProps = {
 const HIT_WIDTH = 44;
 const MIN_CONTENT_WIDTH = 840;
 
-export function ConversationMinimap(props: ConversationMinimapProps) {
+// Memoized: the session view around it re-renders on every keystroke in the composer.
+export const ConversationMinimap = React.memo(function ConversationMinimap(props: ConversationMinimapProps) {
     // A phone has no hover, so touch gets a rail that is swiped in from the right edge instead.
     if (Platform.OS !== 'web') {
         return <ConversationMinimapTouch {...props} />;
     }
     return <WebMinimap {...props} />;
-}
+});
 
 /**
  * Right-edge rail: the pointer is the scrubber, the preview follows the hovered mark. It sits just
