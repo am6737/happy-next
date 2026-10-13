@@ -92,7 +92,8 @@ function formatRelativeTime(timestamp?: string): string {
     return t('sessionHistory.daysAgo', { count: diffDays });
 }
 
-export function DuplicateSheet({
+// Memoized: it stays mounted while closed, under a session view that re-renders on every update.
+export const DuplicateSheet = React.memo(function DuplicateSheet({
     visible,
     messages,
     loading,
@@ -670,7 +671,7 @@ export function DuplicateSheet({
             {content}
         </Modal>
     );
-}
+});
 
 const styles = StyleSheet.create((theme) => ({
     container: {

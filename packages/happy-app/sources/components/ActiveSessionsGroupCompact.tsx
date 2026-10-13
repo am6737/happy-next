@@ -368,9 +368,12 @@ function ProjectSectionHeader({
 
 export function ActiveSessionsGroupCompact({ sessions, selectedSessionId, registerSessionRowRef, shared, pinned }: ActiveSessionsGroupProps) {
     const styles = stylesheet;
-    const router = useRouter();
     const projectGroups = useSessionProjectGroups(sessions);
     const { collapsedGroups, toggleGroup } = useCollapsedSessionProjectGroups(projectGroups, selectedSessionId);
+    // Stable, so folding one project does not re-render the others.
+    const toggleGroupRef = React.useRef(toggleGroup);
+    toggleGroupRef.current = toggleGroup;
+    const handleToggleGroup = React.useCallback((collapseKey: string) => toggleGroupRef.current(collapseKey), []);
 
     if (pinned) {
         return (
@@ -395,91 +398,150 @@ export function ActiveSessionsGroupCompact({ sessions, selectedSessionId, regist
 
     return (
         <View style={styles.container}>
-            {projectGroups.map((projectGroup) => {
-                const projectPath = projectGroup.path;
-                const collapseKey = projectGroup.collapseKey;
-                const machineEntries = Array.from(projectGroup.machines.entries());
-                // The card is one rounded box spanning every machine in the project, so the rows
-                // the card rounds are its first and last overall — see `cardRowFirst`.
-                const cardMachines = [...machineEntries]
-                    .sort(([, machineA], [, machineB]) => machineA.machineName.localeCompare(machineB.machineName));
-                const firstSession = machineEntries[0]?.[1]?.sessions[0];
-                const avatarId = firstSession ? getSessionAvatarId(firstSession) : undefined;
-                const singleMachineEntry = machineEntries.length === 1 ? machineEntries[0] : null;
-                const singleMachineId = singleMachineEntry?.[0];
-                const newSessionSource = projectGroup.sessions[0];
-                const newSessionMetadata = newSessionSource?.metadata;
-                // The + opens /new pre-filled with this directory, which only works on a machine of
-                // my own — a session shared with me points at the owner's machine and directory —
-                // and only while that machine is online to start it.
-                const newSessionMachineOnline = !!newSessionMetadata?.machineId
-                    && !!projectGroup.machines.get(newSessionMetadata.machineId)?.machine;
-                const handleNewSession = newSessionMetadata?.path && newSessionSource && !newSessionSource.accessLevel && newSessionMachineOnline ? () => {
-                    const params = new URLSearchParams();
-                    if (newSessionMetadata.machineId) params.set('machineId', newSessionMetadata.machineId);
-                    params.set('path', newSessionMetadata.path);
-                    router.push(`/new?${params.toString()}`);
-                } : undefined;
-
-                return (
-                    <View key={projectPath}>
-                        {/* Section header on grouped background */}
-                        <ProjectSectionHeader
-                            projectGroup={projectGroup}
-                            collapsed={!!collapsedGroups[collapseKey]}
-                            onToggle={() => toggleGroup(collapseKey)}
-                            onNewSession={handleNewSession}
-                            avatar={shared ? (
-                                <View style={styles.sectionHeaderSharedIcon}>
-                                    <Ionicons name="people-outline" size={18} color={styles.sectionHeaderPath.color} />
-                                </View>
-                            ) : avatarId && firstSession ? (
-                                // No flavor badge here: the header marks a directory, and the vendor of
-                                // whichever session happens to sort first is not the directory's identity.
-                                <Avatar id={avatarId} size={24} hideFlavorBadge sessionIcon={firstSession.metadata?.sessionIcon} />
-                            ) : null}
-                            rightContent={(
-                                <>
-                                    {singleMachineId && firstSession?.metadata?.path ? (
-                                        <ProjectGitStatus
-                                            machineId={singleMachineId}
-                                            path={firstSession.metadata.path}
-                                            sessionId={firstSession.id}
-                                        />
-                                    ) : null}
-                                    {!singleMachineEntry && (
-                                        <Text style={styles.sectionHeaderMachine} numberOfLines={1}>
-                                            {t('sessionScope.machineCount', { count: projectGroup.machines.size })}
-                                        </Text>
-                                    )}
-                                </>
-                            )}
-                        />
-
-                        {/* Card with just the sessions */}
-                        {!collapsedGroups[collapseKey] && <View style={styles.projectCard}>
-                            {/* Sessions grouped by machine within the card */}
-                            {cardMachines.map(([machineId, machineGroup], machineIndex) => (
-                                <View key={`${projectPath}-${machineId}`}>
-                                    {machineGroup.sessions.map((session, index) => (
-                                        <CompactSessionRow
-                                            key={session.id}
-                                            session={session}
-                                            selected={selectedSessionId === session.id}
-                                            registerSessionRowRef={registerSessionRowRef}
-                                            isCardFirst={machineIndex === 0 && index === 0}
-                                            isCardLast={machineIndex === cardMachines.length - 1
-                                                && index === machineGroup.sessions.length - 1}
-                                        />
-                                    ))}
-                                </View>
-                            ))}
-                        </View>}
-                    </View>
-                );
-            })}
+            {projectGroups.map((projectGroup) => (
+                <ProjectSection
+                    key={projectGroup.path}
+                    projectGroup={projectGroup}
+                    collapsed={!!collapsedGroups[projectGroup.collapseKey]}
+                    onToggle={handleToggleGroup}
+                    selectedSessionId={selectedSessionId}
+                    registerSessionRowRef={registerSessionRowRef}
+                    shared={shared}
+                />
+            ))}
         </View>
     );
+}
+
+type ProjectSectionProps = {
+    projectGroup: SessionProjectGroup;
+    collapsed: boolean;
+    onToggle: (collapseKey: string) => void;
+    selectedSessionId?: string;
+    registerSessionRowRef?: ActiveSessionsGroupProps['registerSessionRowRef'];
+    shared?: boolean;
+};
+
+// One project's header and card. The groups are rebuilt whenever any listed session changes, so
+// a project re-renders only when its own sessions, machines or label do — see `sameProjectSection`.
+const ProjectSection = React.memo(function ProjectSection({ projectGroup, collapsed, onToggle, selectedSessionId, registerSessionRowRef, shared }: ProjectSectionProps) {
+    const styles = stylesheet;
+    const router = useRouter();
+    const collapseKey = projectGroup.collapseKey;
+    const handleToggle = React.useCallback(() => onToggle(collapseKey), [onToggle, collapseKey]);
+    const projectPath = projectGroup.path;
+    const machineEntries = Array.from(projectGroup.machines.entries());
+    // The card is one rounded box spanning every machine in the project, so the rows
+    // the card rounds are its first and last overall — see `cardRowFirst`.
+    const cardMachines = [...machineEntries]
+        .sort(([, machineA], [, machineB]) => machineA.machineName.localeCompare(machineB.machineName));
+    const firstSession = machineEntries[0]?.[1]?.sessions[0];
+    const avatarId = firstSession ? getSessionAvatarId(firstSession) : undefined;
+    const singleMachineEntry = machineEntries.length === 1 ? machineEntries[0] : null;
+    const singleMachineId = singleMachineEntry?.[0];
+    const newSessionSource = projectGroup.sessions[0];
+    const newSessionMetadata = newSessionSource?.metadata;
+    // The + opens /new pre-filled with this directory, which only works on a machine of
+    // my own — a session shared with me points at the owner's machine and directory —
+    // and only while that machine is online to start it.
+    const newSessionMachineOnline = !!newSessionMetadata?.machineId
+        && !!projectGroup.machines.get(newSessionMetadata.machineId)?.machine;
+    const handleNewSession = newSessionMetadata?.path && newSessionSource && !newSessionSource.accessLevel && newSessionMachineOnline ? () => {
+        const params = new URLSearchParams();
+        if (newSessionMetadata.machineId) params.set('machineId', newSessionMetadata.machineId);
+        params.set('path', newSessionMetadata.path);
+        router.push(`/new?${params.toString()}`);
+    } : undefined;
+
+    return (
+        <View>
+            {/* Section header on grouped background */}
+            <ProjectSectionHeader
+                projectGroup={projectGroup}
+                collapsed={collapsed}
+                onToggle={handleToggle}
+                onNewSession={handleNewSession}
+                avatar={shared ? (
+                    <View style={styles.sectionHeaderSharedIcon}>
+                        <Ionicons name="people-outline" size={18} color={styles.sectionHeaderPath.color} />
+                    </View>
+                ) : avatarId && firstSession ? (
+                    // No flavor badge here: the header marks a directory, and the vendor of
+                    // whichever session happens to sort first is not the directory's identity.
+                    <Avatar id={avatarId} size={24} hideFlavorBadge sessionIcon={firstSession.metadata?.sessionIcon} />
+                ) : null}
+                rightContent={(
+                    <>
+                        {singleMachineId && firstSession?.metadata?.path ? (
+                            <ProjectGitStatus
+                                machineId={singleMachineId}
+                                path={firstSession.metadata.path}
+                                sessionId={firstSession.id}
+                            />
+                        ) : null}
+                        {!singleMachineEntry && (
+                            <Text style={styles.sectionHeaderMachine} numberOfLines={1}>
+                                {t('sessionScope.machineCount', { count: projectGroup.machines.size })}
+                            </Text>
+                        )}
+                    </>
+                )}
+            />
+
+            {/* Card with just the sessions */}
+            {!collapsed && <View style={styles.projectCard}>
+                {/* Sessions grouped by machine within the card */}
+                {cardMachines.map(([machineId, machineGroup], machineIndex) => (
+                    <View key={`${projectPath}-${machineId}`}>
+                        {machineGroup.sessions.map((session, index) => (
+                            <CompactSessionRow
+                                key={session.id}
+                                session={session}
+                                selected={selectedSessionId === session.id}
+                                registerSessionRowRef={registerSessionRowRef}
+                                isCardFirst={machineIndex === 0 && index === 0}
+                                isCardLast={machineIndex === cardMachines.length - 1
+                                    && index === machineGroup.sessions.length - 1}
+                            />
+                        ))}
+                    </View>
+                ))}
+            </View>}
+        </View>
+    );
+}, sameProjectSection);
+
+function sameSessions(a: Session[], b: Session[]): boolean {
+    return a.length === b.length && a.every((session, index) => session === b[index]);
+}
+
+function sameProjectGroup(a: SessionProjectGroup, b: SessionProjectGroup): boolean {
+    if (a === b) return true;
+    if (a.path !== b.path || a.collapseKey !== b.collapseKey
+        || a.label.name !== b.label.name || a.label.detail !== b.label.detail
+        || !sameSessions(a.sessions, b.sessions) || a.machines.size !== b.machines.size) {
+        return false;
+    }
+    for (const [machineId, machineGroup] of a.machines) {
+        const other = b.machines.get(machineId);
+        if (!other || other.machine !== machineGroup.machine || other.machineName !== machineGroup.machineName
+            || !sameSessions(other.sessions, machineGroup.sessions)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+function sameProjectSection(prev: ProjectSectionProps, next: ProjectSectionProps): boolean {
+    // The selection only matters to the projects it leaves or enters.
+    const selectionMoved = prev.selectedSessionId !== next.selectedSessionId
+        && [prev.selectedSessionId, next.selectedSessionId].some(id => id && next.projectGroup.sessions.some(session => session.id === id));
+    return !selectionMoved
+        && prev.collapsed === next.collapsed
+        && prev.onToggle === next.onToggle
+        && prev.registerSessionRowRef === next.registerSessionRowRef
+        && prev.shared === next.shared
+        && sameProjectGroup(prev.projectGroup, next.projectGroup);
 }
 
 // Compact session row component with status line

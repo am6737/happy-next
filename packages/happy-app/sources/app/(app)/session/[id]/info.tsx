@@ -1,5 +1,5 @@
 import React, { useCallback } from 'react';
-import { View, Text, Animated, Pressable, Platform, ActivityIndicator } from 'react-native';
+import { View, Text, Pressable, Platform, ActivityIndicator } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
 import { Ionicons, AntDesign, MaterialCommunityIcons, FontAwesome6 } from '@expo/vector-icons';
@@ -37,45 +37,7 @@ import { useMachineCliUpdate } from '@/hooks/useMachineCliUpdate';
 import { HappyError } from '@/utils/errors';
 import { formatModelDisplay, resolveLocalModelDisplay, isModelFast, FAST_MODE_ICON_COLOR } from 'happy-wire';
 import { NativeMenu } from '@/components/NativeMenu';
-
-// Animated status dot component
-function StatusDot({ color, isPulsing, size = 8 }: { color: string; isPulsing?: boolean; size?: number }) {
-    const pulseAnim = React.useRef(new Animated.Value(1)).current;
-
-    React.useEffect(() => {
-        if (isPulsing) {
-            Animated.loop(
-                Animated.sequence([
-                    Animated.timing(pulseAnim, {
-                        toValue: 0.3,
-                        duration: 1000,
-                        useNativeDriver: true,
-                    }),
-                    Animated.timing(pulseAnim, {
-                        toValue: 1,
-                        duration: 1000,
-                        useNativeDriver: true,
-                    }),
-                ])
-            ).start();
-        } else {
-            pulseAnim.setValue(1);
-        }
-    }, [isPulsing, pulseAnim]);
-
-    return (
-        <Animated.View
-            style={{
-                width: size,
-                height: size,
-                borderRadius: size / 2,
-                backgroundColor: color,
-                opacity: pulseAnim,
-                marginRight: 4,
-            }}
-        />
-    );
-}
+import { StatusDot } from '@/components/StatusDot';
 
 function SessionInfoContent({ session, leavingRef }: { session: Session; leavingRef: React.MutableRefObject<boolean> }) {
     const { theme } = useUnistyles();
@@ -901,7 +863,7 @@ function SessionInfoContent({ session, leavingRef }: { session: Session; leaving
                             </Text>
                         </Pressable>
                         <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
-                            <StatusDot color={sessionStatus.statusDotColor} isPulsing={sessionStatus.isPulsing} size={10} />
+                            <StatusDot color={sessionStatus.statusDotColor} isPulsing={sessionStatus.isPulsing} size={10} style={{ marginRight: 4 }} />
                             <Text style={{
                                 fontSize: 15,
                                 color: sessionStatus.statusColor,

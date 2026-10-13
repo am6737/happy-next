@@ -1058,11 +1058,15 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
         // (set by handleTextChange first). When a stale callback fires, latestTextRef
         // still has the current text, so we can detect the stale case.
         setInputState(prev => {
+            const sameSelection = prev.selection.start === newState.selection.start
+                && prev.selection.end === newState.selection.end;
             if (!newState.text && prev.text && latestTextRef.current) {
                 // Stale callback — only update selection, keep the correct text
-                return { ...prev, selection: newState.selection };
+                return sameSelection ? prev : { ...prev, selection: newState.selection };
             }
-            return newState;
+            // The web textarea reports its selection on every keyup and selectionchange, mostly
+            // unchanged; a fresh object for those would re-render the whole composer each time.
+            return sameSelection && prev.text === newState.text ? prev : newState;
         });
     }, []);
 
