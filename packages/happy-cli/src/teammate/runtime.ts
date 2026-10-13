@@ -395,7 +395,8 @@ export function createTeammateRuntime(deps: TeammateRuntimeDependencies) {
                 if (rolls) {
                     if (topicReset) rollover = 'topic';
                     else if (entry.overflowed) rollover = 'overflow';
-                    else if ((entry.compactions ?? 0) > 0) rollover = 'compacted';
+                    // A compaction recorded while auto rollover was off rolls only if the owner turns it back on.
+                    else if (payload.teammate.contextAutoRollover && (entry.compactions ?? 0) > 0) rollover = 'compacted';
                     else if (check?.roll && (live || resumable)) rollover = 'tokens';
                 }
                 const isolation = !live || rollover || topicReset ? await prepareTeammateIsolation(home, provider) : undefined;
@@ -864,7 +865,8 @@ export function createTeammateRuntime(deps: TeammateRuntimeDependencies) {
                             if (kind === 'dm' || kind === 'group' || kind === 'task') void enqueue(threadKey(home, threadId), async () => {
                                 const provider = entry.teammate?.controllerProvider ?? entry.provider ?? 'claude';
                                 await summarizeThread({ home, threadId, entry, kind,
-                                    final: contextRolloverLimit(entry, provider, now(), { forceCold: true }).roll || (entry.compactions ?? 0) > 0,
+                                    final: contextRolloverLimit(entry, provider, now(), { forceCold: true }).roll
+                                        || (entry.teammate?.contextAutoRollover ?? true) && (entry.compactions ?? 0) > 0,
                                     deps: { api: deps.api, crypto, oneShot: deps.oneShot, now, provider,
                                         model: teammateModelSelection(provider, entry.teammate?.controllerModel ?? null).model,
                                         env: profileEnv(entry.teammate?.controllerEnv ?? null).environmentVariables as Record<string, string> | undefined,

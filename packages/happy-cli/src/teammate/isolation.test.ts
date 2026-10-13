@@ -19,6 +19,7 @@ describe('teammate isolation', () => {
 
     it('blocks owner-only gh commands and passes everything else to the next gh on PATH', async () => {
         const { env } = await prepareTeammateIsolation(join(dir, 'agent'), 'claude');
+        expect(env).toMatchObject({ DISABLE_AUTO_COMPACT: '', DISABLE_COMPACT: '' });
         const realBin = join(dir, 'real');
         await mkdir(realBin);
         await writeFile(join(realBin, 'gh'), '#!/bin/sh\necho "real gh $*"\n');
@@ -61,8 +62,8 @@ describe('teammate isolation', () => {
         await mkdir(userHome);
         await writeFile(join(userHome, 'auth.json'), '{}');
         await writeFile(join(userHome, 'config.toml'), [
-            'model_provider = "api"', 'allow_login_shell = true', '',
-            '[model_providers.api]', 'base_url = "https://example.test/v1"', '',
+            'model_provider = "api"', 'model_auto_compact_token_limit = 1000', 'model_auto_compact_token_limit_scope = "global"', 'allow_login_shell = true', '',
+            '[model_providers.api]', 'base_url = "https://example.test/v1"', 'model_auto_compact_token_limit = 2000', 'model_auto_compact_token_limit_scope = "model"', '',
             '[projects."/home/owner/secret"]', 'trust_level = "trusted"', '',
             '[mcp_servers.docs]', 'url = "https://example.test/mcp"', '',
             '[tui.model_availability_nux]', 'seen = true', '',

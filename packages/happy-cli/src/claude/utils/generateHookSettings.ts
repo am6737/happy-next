@@ -10,6 +10,7 @@ import { writeFileSync, mkdirSync, unlinkSync, existsSync } from 'node:fs';
 import { configuration } from '@/configuration';
 import { logger } from '@/ui/logger';
 import { projectPath } from '@/projectPath';
+import { TEAMMATE_ENV } from 'happy-wire';
 
 /**
  * Generate a temporary settings file with SessionStart hook configuration
@@ -30,6 +31,7 @@ export function generateHookSettingsFile(port: number): string {
     const hookCommand = `node "${forwarderScript}" ${port}`;
 
     const settings = {
+        ...(process.env[TEAMMATE_ENV.teammateId] ? { autoCompactEnabled: true } : {}),
         hooks: {
             SessionStart: [
                 {

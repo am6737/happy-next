@@ -72,7 +72,7 @@ export async function prepareTeammateIsolation(home: string, provider: string, u
     await Promise.all([atomicFileWrite(join(binDir, 'gh'), GH_SHIM, 0o700),
         ...GIT_HOOKS.map(hook => atomicFileWrite(join(hooksPath, hook), GIT_HOOK, 0o700))]);
     const env: Record<string, string> = { PATH: [binDir, process.env.PATH].filter(Boolean).join(delimiter) };
-    if (provider !== 'codex') return { env, hooksPath };
+    if (provider !== 'codex') return { env: provider === 'claude' ? { ...env, DISABLE_AUTO_COMPACT: '', DISABLE_COMPACT: '' } : env, hooksPath };
 
     const codexHome = join(state, 'codex');
     await mkdir(join(codexHome, 'rules'), { recursive: true, mode: 0o700 });
@@ -85,7 +85,8 @@ export async function prepareTeammateIsolation(home: string, provider: string, u
     const kept = userConfig.split('\n').filter(line => {
         const header = line.match(/^\s*\[\[?\s*([^\]]+?)\s*\]\]?\s*(#.*)?$/);
         if (header) table = header[1];
-        return table ? !PRIVATE_CODEX_TABLES.test(table) : !/^\s*allow_login_shell\s*=/.test(line);
+        return !/^\s*(model_auto_compact_token_limit|model_auto_compact_token_limit_scope)\s*=/.test(line)
+            && (table ? !PRIVATE_CODEX_TABLES.test(table) : !/^\s*allow_login_shell\s*=/.test(line));
     });
     // A login shell re-reads the profile, which can put another gh ahead of the shim.
     await atomicFileWrite(join(codexHome, 'config.toml'), ['allow_login_shell = false', ...kept].join('\n'), 0o600);

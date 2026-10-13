@@ -252,6 +252,26 @@ describe('teammate runtime', () => {
             expect(log).toContain('Alex prefers small PRs');
         });
 
+        it('keeps a compacted live session when auto rollover is off', async () => {
+            await seedLive();
+            await mergeThreadState(home, 'thread-1', { compactions: 1, contextTokens: 40_000 });
+            const event = dmPayload('claude');
+            event.teammate.contextAutoRollover = false;
+            runtime.dispatch(event); await started();
+            expect(deps.stopSession).not.toHaveBeenCalled();
+            expect(deps.spawnSession).not.toHaveBeenCalled();
+            expect(deps.api.sendSessionMessage).toHaveBeenCalledWith('happy-existing', expect.any(String), expect.any(Uint8Array), 'teammate-run:run-1', 'default', null, null);
+            expect(deps.api.reportTeammateContextEvent).not.toHaveBeenCalled();
+            expect((await readThreadsState(home))['thread-1']).toMatchObject({ compactions: 1 });
+        });
+
+        it('rolls a previously compacted session when auto rollover is enabled again', async () => {
+            await seedLive();
+            await mergeThreadState(home, 'thread-1', { compactions: 1, contextTokens: 40_000, teammate: makeTeammate({ contextAutoRollover: false }) });
+            runtime.dispatch(dmPayload('claude')); await started();
+            await expectRolled('compacted');
+        });
+
         it('rolls a live thread over at the window ratio', async () => {
             await seedLive();
             await mergeThreadState(home, 'thread-1', { contextTokens: 120_000, contextWindow: 200_000 });
@@ -447,9 +467,18 @@ describe('teammate runtime', () => {
                 await vi.waitFor(() => expect(deps.oneShot).toHaveBeenCalledWith(expect.objectContaining({ prompt: expect.stringContaining('final: true') })));
             });
 
-            it('keeps compactions final when auto rollover is off and capacity is available', async () => {
+            it('does not make compactions trigger a final summary when auto rollover is off', async () => {
                 await seedIdle('dm', 60_000);
                 await mergeThreadState(home, 'thread-1', { teammate: makeTeammate({ contextAutoRollover: false }), compactions: 1 });
+                await runtime.reapIdle();
+                expect(deps.stopSession).toHaveBeenCalledWith('idle');
+                await new Promise(resolve => setTimeout(resolve, 20));
+                expect(deps.oneShot).not.toHaveBeenCalled();
+            });
+
+            it('makes compaction summaries final when auto rollover is on', async () => {
+                await seedIdle('dm', 60_000);
+                await mergeThreadState(home, 'thread-1', { teammate: makeTeammate({ contextAutoRollover: true }), compactions: 1 });
                 await runtime.reapIdle();
                 await vi.waitFor(() => expect(deps.oneShot).toHaveBeenCalledWith(expect.objectContaining({ prompt: expect.stringContaining('final: true') })));
             });
@@ -618,7 +647,7 @@ describe('teammate runtime', () => {
         const options = vi.mocked(deps.spawnSession).mock.calls[0][0];
         expect(options).toMatchObject({ directory: home, agent: 'claude', sessionTitle: 'Atlas · heartbeat' });
         const env = options.extraEnv!;
-        expect(Object.keys(env).sort()).toEqual([...Object.entries(TEAMMATE_ENV).filter(([key]) => !['workerId', 'externalContext', 'readOnly'].includes(key)).map(([, value]) => value), 'CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT', 'PATH'].sort());
+        expect(Object.keys(env).sort()).toEqual([...Object.entries(TEAMMATE_ENV).filter(([key]) => !['workerId', 'externalContext', 'readOnly'].includes(key)).map(([, value]) => value), 'CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT', 'DISABLE_AUTO_COMPACT', 'DISABLE_COMPACT', 'PATH'].sort());
         expect(env).toMatchObject({ CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT: String(20 * 60_000),
             [TEAMMATE_ENV.teammateId]: event.teammate.id, [TEAMMATE_ENV.threadId]: event.thread.id,
             [TEAMMATE_ENV.sessionRole]: 'controller', [TEAMMATE_ENV.home]: home, [TEAMMATE_ENV.taskId]: 'task-1',
