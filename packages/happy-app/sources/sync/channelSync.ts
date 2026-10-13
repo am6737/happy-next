@@ -86,8 +86,6 @@ export class ChannelSync {
     applyMessages = async (channelId: string, messages: ChannelMessage[]) => {
         const context = this.context();
         if (!context.valid()) return;
-        // Retain ciphertext and advance unread state even if a member key cannot be opened.
-        storage.getState().applyChannelMessages(channelId, messages);
         let channel = storage.getState().channels[channelId];
         if (!channel) {
             channel = await api.fetchChannel(context.credentials, channelId);
@@ -107,6 +105,8 @@ export class ChannelSync {
             const body = previous ?? (message.content.t !== 'encrypted' ? undefined : key ? await decryptChannelMessage(key, message.content) : null);
             decrypted.push({ ...message, body });
         }
+        // Messages are stored once opened, so a first visit never lists rows still waiting for the key.
+        // An unopenable key still retains the ciphertext (body null) and advances unread state.
         if (context.valid()) storage.getState().applyChannelMessages(channelId, decrypted);
     };
     load = async (id: string) => {

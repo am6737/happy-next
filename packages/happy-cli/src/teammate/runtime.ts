@@ -150,6 +150,19 @@ function groupBriefUpdate(brief: ReturnType<typeof readGroupBrief>, seen: string
     return brief.present ? null : 'Group brief update: the owner removed this group\'s brief. Ignore the copy in your instructions.';
 }
 
+/** The owner's wall clock for a run, e.g. "2026-10-13 15:02 (Asia/Shanghai)"; falls back to UTC when no valid timezone is set. */
+export function formatOwnerLocalTime(at: number, teammate: Pick<TeammateRunDispatchPayload['teammate'], 'timezone' | 'activeHours'>): string {
+    for (const timeZone of [teammate.activeHours?.timezone, teammate.timezone, 'UTC']) {
+        if (!timeZone) continue;
+        try {
+            const parts = new Intl.DateTimeFormat('en-CA', { timeZone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).formatToParts(new Date(at));
+            const part = (type: string) => parts.find(item => item.type === type)?.value ?? '';
+            return `${part('year')}-${part('month')}-${part('day')} ${part('hour')}:${part('minute')} (${timeZone})`;
+        } catch { /* invalid timezone: try the next one */ }
+    }
+    return new Date(at).toISOString();
+}
+
 export async function renderRunEventMessage(payload: TeammateRunDispatchPayload, chat?: {
     api: Pick<ApiClient, 'getChannelMessages'>; crypto: ReturnType<typeof createChannelCrypto>;
 }, home?: string, describeWorker?: (sessionId: string) => Promise<string | null>, continuity?: 'overflow' | 'resume_failed' | 'rolled', threadSummary?: string | null, memoryUpdate?: string | null): Promise<string> {
@@ -182,7 +195,8 @@ export async function renderRunEventMessage(payload: TeammateRunDispatchPayload,
     const heartbeat = payload.events.filter(event => event.type === 'heartbeat');
     if (heartbeat.length && payload.thread.kind === 'heartbeat') {
         const checklist = home ? await readFile(join(home, 'HEARTBEAT.md'), 'utf8').catch(() => '') : '';
-        sections.push('Heartbeat: follow HEARTBEAT.md. Use chat_send only when the owner needs attention; otherwise end with exactly NO_REPLY.',
+        sections.push(`Current time for the owner: ${formatOwnerLocalTime(Math.max(...heartbeat.map(event => event.at)), payload.teammate)}. Times in HEARTBEAT.md such as 9:00 mean this local time, not UTC.`,
+            'Heartbeat: follow HEARTBEAT.md. Use chat_send only when the owner needs attention; otherwise end with exactly NO_REPLY.',
             ...(checklist && !isHeartbeatChecklistEmpty(checklist) ? [`HEARTBEAT.md:\n${checklist}`] : []));
     }
     for (const event of payload.thread.kind === 'task' ? heartbeat : []) {

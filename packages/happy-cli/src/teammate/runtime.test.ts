@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TEAMMATE_ENV, type ChannelMessage, type TeammateRunDispatchPayload } from 'happy-wire';
-import { teammateModelSelection, createTeammateRuntime, contextRolloverLimit, renderRunEventMessage, type TeammateRuntimeDependencies } from './runtime';
+import { teammateModelSelection, createTeammateRuntime, contextRolloverLimit, renderRunEventMessage, formatOwnerLocalTime, type TeammateRuntimeDependencies } from './runtime';
 import { ensureTeammateHome, mergeThreadState, readThreadsState, writeSessionKeyFile, writeThreadSummary, writeThreadsState } from './homeDir';
 import { makeTeammate, makeConversationPayload, makeChannelMessage, channelTestKey } from './testFixtures';
 import { encodeBase64, encryptWithDataKey } from '@/api/encryption';
@@ -928,4 +928,15 @@ it.each([
     ['claude', 'custom-model', { model: 'custom-model', reasoningEffort: null }],
 ] as const)('resolves %s model mode %s like the app', (provider, mode, expected) => {
     expect(teammateModelSelection(provider, mode)).toEqual(expected);
+});
+
+describe('formatOwnerLocalTime', () => {
+    const at = Date.UTC(2026, 9, 13, 7, 2);
+    it('uses the active-hours timezone', () => {
+        expect(formatOwnerLocalTime(at, { timezone: null, activeHours: { start: '09:00', end: '22:00', timezone: 'Asia/Shanghai' } })).toBe('2026-10-13 15:02 (Asia/Shanghai)');
+    });
+    it('falls back to the teammate timezone, then UTC', () => {
+        expect(formatOwnerLocalTime(at, { timezone: 'Asia/Tokyo', activeHours: null })).toBe('2026-10-13 16:02 (Asia/Tokyo)');
+        expect(formatOwnerLocalTime(at, { timezone: 'Not/AZone', activeHours: null })).toBe('2026-10-13 07:02 (UTC)');
+    });
 });

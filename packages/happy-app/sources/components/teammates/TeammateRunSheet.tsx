@@ -81,7 +81,6 @@ const styles = StyleSheet.create((theme) => ({
         ...Typography.default(),
         fontSize: 13,
         color: theme.colors.textSecondary,
-        marginTop: -8,
     },
     note: {
         ...Typography.default(),

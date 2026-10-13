@@ -11,6 +11,7 @@ import { ActionMenuModal } from '@/components/ActionMenuModal';
 import type { ActionMenuItem } from '@/components/ActionMenu';
 import { Typography } from '@/constants/Typography';
 import { t } from '@/text';
+import { MENTION_ALL } from '@/sync/channelDecisions';
 import { TeammateAvatar } from './ui';
 
 // An @mention being typed right before the cursor, not part of an email or another ASCII word. Names may be CJK, so
@@ -42,7 +43,9 @@ export const ChannelComposer = React.memo(({ kind, members, replyTitle, onDismis
     const [menuVisible, setMenuVisible] = React.useState(false);
 
     const query = kind === 'group' ? draft.slice(0, cursor).match(MENTION_QUERY) : null;
-    const suggestions = query ? members.filter(member => member.name.toLowerCase().includes(query[1].toLowerCase())) : [];
+    const search = query?.[1].toLowerCase() ?? '';
+    const suggestions = query ? members.filter(member => member.name.toLowerCase().includes(search)) : [];
+    const suggestAll = !!query && members.length > 1 && [MENTION_ALL, 'everyone', t('channels.mentionAll')].some(name => name.toLowerCase().includes(search));
     const canSend = !disabled && draft.trim().length > 0;
 
     const handleSelectionChange = React.useCallback((selection: { start: number; end: number }) => setCursor(selection.end), []);
@@ -51,9 +54,9 @@ export const ChannelComposer = React.memo(({ kind, members, replyTitle, onDismis
         const text = draft;
         onSend(text, () => setDraft(current => current === text ? '' : current));
     };
-    const insertMention = (member: Teammate) => {
+    const insertMention = (name: string) => {
         const start = cursor - (query?.[1].length ?? 0) - 1;
-        const prefix = `${draft.slice(0, start)}@${member.name} `;
+        const prefix = `${draft.slice(0, start)}@${name} `;
         inputRef.current?.setTextAndSelection(prefix + draft.slice(cursor), { start: prefix.length, end: prefix.length });
     };
     const menuItems: ActionMenuItem[] = React.useMemo(() => [
@@ -62,10 +65,19 @@ export const ChannelComposer = React.memo(({ kind, members, replyTitle, onDismis
 
     return (
         <View style={[styles.container, glass && styles.containerFloating, { paddingBottom: Platform.OS === 'ios' ? 0 : Math.max(insets.bottom, 12) }]}>
-            {suggestions.length > 0 && (
+            {(suggestAll || suggestions.length > 0) && (
                 <GlassSurface glass={glass} color={theme.colors.surfaceHigh} style={styles.suggestions}>
+                    {suggestAll && (
+                        <Pressable accessibilityRole="button" onPress={() => insertMention(MENTION_ALL)} style={styles.suggestion}>
+                            <View style={styles.allIcon}>
+                                <Ionicons name="people" size={14} color={theme.colors.textSecondary} />
+                            </View>
+                            <Text style={styles.suggestionName} numberOfLines={1}>{t('channels.mentionAll')}</Text>
+                            <Text style={styles.suggestionRole} numberOfLines={1}>@{MENTION_ALL}</Text>
+                        </Pressable>
+                    )}
                     {suggestions.map(member => (
-                        <Pressable key={member.id} accessibilityRole="button" onPress={() => insertMention(member)} style={styles.suggestion}>
+                        <Pressable key={member.id} accessibilityRole="button" onPress={() => insertMention(member.name)} style={styles.suggestion}>
                             <TeammateAvatar teammate={member} size={24} />
                             <Text style={styles.suggestionName} numberOfLines={1}>{member.name}</Text>
                             {!!member.role && <Text style={styles.suggestionRole} numberOfLines={1}>{member.role}</Text>}
@@ -136,6 +148,14 @@ const styles = StyleSheet.create((theme) => ({
         gap: theme.margins.sm,
         paddingHorizontal: theme.margins.md,
         paddingVertical: theme.margins.sm,
+    },
+    allIcon: {
+        width: 24,
+        height: 24,
+        borderRadius: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: theme.colors.surfaceHighest,
     },
     suggestionName: {
         ...Typography.default('semiBold'),

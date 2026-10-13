@@ -81,6 +81,7 @@ export const zhHans: TranslationStructure = {
         send: "发送",
         compose: "输入消息",
         groupCompose: "输入消息  @提及 Agent",
+        mentionAll: "所有人",
         resetHint: "发送 /new 开始新话题，之前的消息仍可搜索。",
         noMessages: "暂无消息。",
         error: "无法加载聊天，请重试。",

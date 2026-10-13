@@ -50,6 +50,13 @@ export default React.memo(function TeammateProfileScreen() {
     const spend = storage(state => state.teammateSpend[id]);
     const machine = useMachine(teammate?.machineId ?? '');
     const { loading, error, refresh } = useTeammateProfile(id);
+    // Focus refreshes synchronize in the background; only a pull gesture shows the refresh indicator.
+    const [refreshing, setRefreshing] = React.useState(false);
+    const handlePullRefresh = React.useCallback(async () => {
+        setRefreshing(true);
+        try { await refresh(); }
+        finally { setRefreshing(false); }
+    }, [refresh]);
     const actions = useTeammateActions(teammate);
     const runSheet = useTeammateSheet();
     const [tab, setTab] = React.useState<Tab>('activity');
@@ -74,12 +81,8 @@ export default React.memo(function TeammateProfileScreen() {
     const remaining = budget !== null && spent !== null ? Math.max(0, budget - spent) : null;
     const stats = computeTeammateStats(runs, 30, now);
     const tokens = spend?.tokens;
-    const tokenBreakdown = tokens ? [
-        t('teammates.detail.uncachedInput', { count: formatTeammateTokens(tokens.input) }),
-        t('teammates.detail.cacheRead', { count: formatTeammateTokens(tokens.cacheRead) }),
-        ...(tokens.cacheWrite > 0 ? [t('teammates.detail.cacheWrite', { count: formatTeammateTokens(tokens.cacheWrite) })] : []),
-        t('teammates.detail.output', { count: formatTeammateTokens(tokens.output) }),
-    ].join('  ') : null;
+    const costLine = spent === null ? t('teammates.detail.thisMonth')
+        : budget !== null ? `${formatTeammateMoney(spent)} / ${formatTeammateMoney(budget)}` : formatTeammateMoney(spent);
 
     const liveTask = liveRun?.taskId ? tasks?.find(task => task.id === liveRun.taskId) : undefined;
     const openLive = liveRun?.sessionId ? () => navigateToSession(liveRun.sessionId!)
@@ -94,14 +97,18 @@ export default React.memo(function TeammateProfileScreen() {
     return (
         <View style={styles.page}>
             <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content}
-                refreshControl={<RefreshControl refreshing={loading} onRefresh={refresh} />}>
-                <TeammateAvatar teammate={teammate} size={56} />
-                <Text style={styles.name} numberOfLines={2}>{teammate.name}</Text>
-                <Text style={styles.meta} numberOfLines={1}>{teammate.role.split(/[：:]/)[0].trim()}</Text>
-                <View style={styles.status}>
-                    <StatusDot color={statusColor} />
-                    <Text style={styles.statusText} numberOfLines={1}>{statusText}</Text>
-                    {machineName && <Text style={[styles.statusText, styles.machineName]} numberOfLines={1}>{machineName}</Text>}
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handlePullRefresh} />}>
+                <View style={styles.identity}>
+                    <TeammateAvatar teammate={teammate} size={64} />
+                    <View style={styles.identityText}>
+                        <Text style={styles.name} numberOfLines={2}>{teammate.name}</Text>
+                        <Text style={styles.meta} numberOfLines={1}>{teammate.role.split(/[：:]/)[0].trim()}</Text>
+                        <View style={styles.status}>
+                            <StatusDot color={statusColor} />
+                            <Text style={styles.statusText} numberOfLines={1}>{statusText}</Text>
+                            {machineName && <Text style={[styles.statusText, styles.machineName]} numberOfLines={1}>{machineName}</Text>}
+                        </View>
+                    </View>
                 </View>
 
                 {status === 'archived' ? (
@@ -150,9 +157,7 @@ export default React.memo(function TeammateProfileScreen() {
                 <Card style={styles.stats}>
                     <View style={styles.stat}>
                         <Text style={styles.statValue}>{tokens ? t('teammates.detail.tokenCount', { count: formatTeammateTokens(totalTeammateTokens(tokens)) }) : '—'}</Text>
-                        <Text style={styles.statLabel}>{budget !== null ? t('teammates.detail.monthOf', { budget: formatTeammateMoney(budget) }) : t('teammates.detail.thisMonth')}</Text>
-                        {spent !== null && <Text style={styles.statLabel}>{t('teammates.detail.estimatedCost', { amount: formatTeammateMoney(spent) })}</Text>}
-                        {tokenBreakdown && <Text style={styles.statLabel}>{tokenBreakdown}</Text>}
+                        <Text style={styles.statLabel}>{costLine}</Text>
                     </View>
                     <View style={styles.stat}>
                         <Text style={styles.statValue}>{stats.runCount}</Text>
@@ -201,11 +206,19 @@ const styles = StyleSheet.create((theme) => ({
         paddingTop: 12,
         paddingBottom: 48,
     },
+    identity: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 16,
+    },
+    identityText: {
+        flex: 1,
+        minWidth: 0,
+    },
     name: {
         ...Typography.default('semiBold'),
-        fontSize: 24,
+        fontSize: 22,
         color: theme.colors.text,
-        marginTop: 16,
     },
     meta: {
         ...Typography.default(),
@@ -217,7 +230,7 @@ const styles = StyleSheet.create((theme) => ({
         flexDirection: 'row',
         alignItems: 'center',
         gap: 6,
-        marginTop: 12,
+        marginTop: 8,
     },
     statusText: {
         ...Typography.default(),

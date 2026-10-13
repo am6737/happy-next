@@ -79,6 +79,7 @@ export const ca: TranslationStructure = {
         send: "Envia",
         compose: "Missatge",
         groupCompose: "Missatge  menciona un Agent amb @",
+        mentionAll: "Tothom",
         resetHint: "Envia /new per iniciar un tema nou; els missatges anteriors continuen disponibles.",
         noMessages: "Encara no hi ha missatges.",
         error: "No s’ha pogut carregar el xat. Torna-ho a provar.",

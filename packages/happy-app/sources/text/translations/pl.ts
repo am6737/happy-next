@@ -90,6 +90,7 @@ export const pl: TranslationStructure = {
         send: "Wyślij",
         compose: "Wiadomość",
         groupCompose: "Wiadomość  wspomnij Agenta przez @",
+        mentionAll: "Wszyscy",
         resetHint: "Wyślij /new, aby rozpocząć nowy temat; wcześniejsze wiadomości są nadal dostępne.",
         noMessages: "Nie ma jeszcze wiadomości.",
         error: "Nie udało się wczytać czatu. Spróbuj ponownie.",

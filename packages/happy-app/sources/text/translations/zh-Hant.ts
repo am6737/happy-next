@@ -81,6 +81,7 @@ export const zhHant: TranslationStructure = {
         send: "傳送",
         compose: "輸入訊息",
         groupCompose: "輸入訊息  @提及 Agent",
+        mentionAll: "所有人",
         resetHint: "傳送 /new 開始新話題；之前的訊息仍可搜尋。",
         noMessages: "尚無訊息。",
         error: "無法載入聊天，請重試。",

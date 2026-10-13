@@ -79,6 +79,7 @@ export const es: TranslationStructure = {
         send: "Enviar",
         compose: "Mensaje",
         groupCompose: "Mensaje  menciona a un Agente con @",
+        mentionAll: "Todos",
         resetHint: "Envía /new para iniciar un tema nuevo; los mensajes anteriores siguen disponibles.",
         noMessages: "Aún no hay mensajes.",
         error: "No se pudo cargar el chat. Inténtalo de nuevo.",

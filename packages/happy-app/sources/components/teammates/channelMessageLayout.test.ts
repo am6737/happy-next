@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { StoredChannelMessage } from '@/sync/channelReducers';
 import { channelGithubReference, channelLinkSource, channelRowLayouts, channelTime, githubLinkState } from './channelMessageLayout';
 
-const at = (year: number, month: number, day: number, hour = 9) => new Date(year, month - 1, day, hour).getTime();
+const at = (year: number, month: number, day: number, hour = 9, minute = 0) => new Date(year, month - 1, day, hour, minute).getTime();
 
 function message(id: string, sender: string, createdAt: number, system = false): StoredChannelMessage {
     return {
@@ -27,7 +27,7 @@ describe('channelRowLayouts', () => {
     it('shows a header only where a sender run starts', () => {
         const layouts = channelRowLayouts([
             message('a', 'atlas', at(2026, 10, 9, 9)),
-            message('b', 'atlas', at(2026, 10, 9, 10)),
+            message('b', 'atlas', at(2026, 10, 9, 9, 5)),
             message('c', 'me', at(2026, 10, 9, 10)),
             message('d', 'nova', at(2026, 10, 9, 11)),
         ], now);
@@ -42,6 +42,15 @@ describe('channelRowLayouts', () => {
             message('d', 'atlas', at(2026, 10, 9)),
         ], now);
         expect(layouts.map(layout => [layout.header, layout.continued])).toEqual([[true, false], [true, false], [false, false], [true, false]]);
+    });
+
+    it('breaks a run when the same sender writes again more than five minutes later', () => {
+        const layouts = channelRowLayouts([
+            message('a', 'lead', at(2026, 10, 9, 2, 35)),
+            message('b', 'lead', at(2026, 10, 9, 2, 40)),
+            message('c', 'lead', at(2026, 10, 9, 15, 58)),
+        ], now);
+        expect(layouts.map(layout => [layout.header, layout.continued])).toEqual([[true, false], [false, true], [true, false]]);
     });
 });
 

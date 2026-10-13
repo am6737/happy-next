@@ -6,7 +6,10 @@ import { ChannelError } from './channelError';
 import { channelMessageSend } from './channelMessageSend';
 import { channelTeammateDmWhere } from './channelQueries';
 
-/** Authorize the run; task controllers report to their Agent DM with a server-owned task association. */
+/**
+ * Authorize the run; task controllers report to their Agent DM with a server-owned task association, and
+ * heartbeat controllers (daily reports, check-ins) report to the same DM without one.
+ */
 export async function channelTeammateMessageSend(accountId: string, input: TeammateChannelMessageSendRequest) {
     const req = TeammateChannelMessageSendRequestSchema.parse(input);
     const run = await teammateRunAuthorize(accountId, req.runId, req.dispatchToken);
@@ -16,6 +19,10 @@ export async function channelTeammateMessageSend(accountId: string, input: Teamm
         if (!dm) throw new TeammateError('no_dm');
         channelId = dm.id;
         req.taskId = run.thread.taskId;
+    } else if (run.thread.kind === 'heartbeat') {
+        const dm = await db.channel.findFirst({ where: channelTeammateDmWhere(accountId, run.teammateId) });
+        if (!dm) throw new TeammateError('no_dm');
+        channelId = dm.id;
     } else if (!channelId || !['dm', 'group'].includes(run.thread.kind)) throw new ChannelError('invalid_sender');
     return channelMessageSend({ accountId, channelId: channelId!, sender: { type: 'teammate', teammateId: run.teammateId, runId: run.id }, req });
 }

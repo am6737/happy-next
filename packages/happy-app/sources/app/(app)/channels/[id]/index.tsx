@@ -44,6 +44,9 @@ export default React.memo(function ChannelScreen() {
     const loaded = useChannelChat(id, messages);
     // Written by AgentContentView as the floating composer lays out, read by the list on the UI thread.
     const composerHeight = useSharedValue(0);
+    const handleOpenProfile = React.useCallback((teammateId: string) => {
+        router.push(`/teammates/${encodeURIComponent(teammateId)}`);
+    }, [router]);
 
     const members = React.useMemo(() => channel?.members.flatMap(m => m.teammateId && teammates[m.teammateId] ? [teammates[m.teammateId]] : []) ?? [], [channel?.members, teammates]);
     const tasks = React.useMemo(() => {
@@ -137,8 +140,9 @@ export default React.memo(function ChannelScreen() {
             onRetryRun={handleRetryRun}
             onOpenTask={handleOpenTask}
             onOpenLink={handleOpenLink}
+            onOpenProfile={handleOpenProfile}
         />
-    ), [teammates, channel?.kind, allTeammates, taskOf, choices, sending, retryingRun, handleDecide, handleRetry, handleRetryRun, handleOpenTask, handleOpenLink]);
+    ), [teammates, channel?.kind, allTeammates, taskOf, choices, sending, retryingRun, handleDecide, handleRetry, handleRetryRun, handleOpenTask, handleOpenLink, handleOpenProfile]);
     const extraData = React.useMemo(() => ({ teammates, allTeammates, taskOf, choices, sending, retryingRun }), [teammates, allTeammates, taskOf, choices, sending, retryingRun]);
 
     const placeholder = (
@@ -164,7 +168,7 @@ export default React.memo(function ChannelScreen() {
             dataKey={id}
             emptyComponent={<KeyboardCenteredEmpty composerInset={floatingComposerAvailable ? composerHeight : undefined}>{placeholder}</KeyboardCenteredEmpty>}
             composerInset={floatingComposerAvailable ? composerHeight : undefined}
-            footer={working.length > 0 ? <View>{working.map(member => <ChannelWorkingRow key={member.id} teammate={member} />)}</View> : null}
+            footer={working.length > 0 ? <View>{working.map(member => <ChannelWorkingRow key={member.id} teammate={member} onOpenProfile={handleOpenProfile} />)}</View> : null}
         />
     );
     const input = (

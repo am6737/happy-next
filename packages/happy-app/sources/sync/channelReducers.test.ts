@@ -68,4 +68,12 @@ describe('channel decisions and mentions', () => {
         expect(channelMentions('@atlas, (@Atlas Dev) @atlas @outsider email@atlas @atlas-extra @atlasx', members)).toEqual(['a', 'b']);
         expect(channelMentions('@atlas dev', members)).toEqual(['b']);
     });
+    it('expands @all and its aliases to every member, unless an Agent is named that', () => {
+        const members = [{ id: 'a', name: 'Atlas' }, { id: 'b', name: 'Orion' }];
+        expect(channelMentions('@all 看一下', members)).toEqual(['a', 'b']);
+        expect(channelMentions('请@所有人确认', members)).toEqual(['a', 'b']);
+        expect(channelMentions('@Everyone, hi', members)).toEqual(['a', 'b']);
+        expect(channelMentions('@allison mail@all', members)).toEqual([]);
+        expect(channelMentions('@all', [...members, { id: 'c', name: 'all' }])).toEqual(['c']);
+    });
 });

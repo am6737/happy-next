@@ -2,7 +2,7 @@ import * as React from 'react';
 import { ActivityIndicator, Platform, Text, View, type ScrollViewProps } from 'react-native';
 import { LegendList } from '@legendapp/list/react-native';
 import type { LegendListRef } from '@legendapp/list/react-native';
-import Animated, { type SharedValue } from 'react-native-reanimated';
+import Animated, { FadeOut, type SharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet } from 'react-native-unistyles';
 import type { StoredChannelMessage } from '@/sync/channelReducers';
@@ -53,6 +53,11 @@ export const ChannelMessageList = React.memo(({
     const softHeaderInset = useSoftHeaderInset();
     const insets = useSafeAreaInsets();
     const layouts = React.useMemo(() => channelRowLayouts(messages), [messages]);
+
+    // The list lays out and scrolls to the end after its data arrives: a cover keeps that from showing as a blank page.
+    const [readyKey, setReadyKey] = React.useState<string | undefined>(undefined);
+    const covered = messages.length > 0 && readyKey !== dataKey;
+    const handleReady = React.useCallback(() => setReadyKey(dataKey), [dataKey]);
 
     const [showScrollButton, setShowScrollButton] = React.useState(false);
     // The newest message when the button appeared: anything after it counts as unread.
@@ -140,6 +145,7 @@ export const ChannelMessageList = React.memo(({
                 maintainScrollAtEndThreshold={0.2}
                 maintainVisibleContentPosition
                 extraData={listExtraData}
+                onReady={handleReady}
                 onScroll={handleScroll}
                 scrollEventThrottle={16}
                 onStartReached={handleStartReached}
@@ -150,10 +156,17 @@ export const ChannelMessageList = React.memo(({
                 renderScrollComponent={renderScrollComponent}
                 contentContainerStyle={[styles.contentContainer, messages.length === 0 && styles.contentContainerEmpty]}
                 keyboardShouldPersistTaps="handled"
+                // Taps near the header would otherwise send iOS's scroll-to-top to this list, which jumps it back through the history.
+                scrollsToTop={false}
                 // An empty chat only shows its centered placeholder; the composer's inset would
                 // otherwise leave it a little room to scroll.
                 scrollEnabled={messages.length > 0}
             />
+            {covered && (
+                <Animated.View exiting={FadeOut.duration(150)} style={styles.cover}>
+                    <ActivityIndicator size="small" />
+                </Animated.View>
+            )}
             <Animated.View pointerEvents="box-none" style={[styles.overlay, overlayStyle]}>
                 {showScrollButton && (
                     <View pointerEvents="box-none" style={styles.scrollButton}>
@@ -207,6 +220,16 @@ const styles = StyleSheet.create((theme) => ({
         left: 0,
         right: 0,
         bottom: 0,
+    },
+    cover: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: theme.colors.surface,
     },
     scrollButton: {
         position: 'absolute',

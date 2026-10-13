@@ -79,6 +79,7 @@ export const en = {
         send: "Send",
         compose: "Message",
         groupCompose: "Message  @mention an Agent",
+        mentionAll: "Everyone",
         resetHint: "Send /new to start a new topic; earlier messages stay searchable.",
         noMessages: "No messages yet.",
         error: "Could not load the chat. Please retry.",

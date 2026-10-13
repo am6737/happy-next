@@ -18,9 +18,18 @@ export function channelDecisionSelections(messages: StoredChannelMessage[]): Rec
     }
     return selections;
 }
-/** The Agents a message mentions by "@Name"; these ids are what the server wakes, the text is only display. */
+/** What the composer inserts for "@everyone"; the other aliases are accepted when typed. */
+export const MENTION_ALL = 'all';
+const MENTION_ALL_ID = '*';
+const MENTION_ALL_ALIASES = [MENTION_ALL, 'everyone', '所有人'].map(name => ({ id: MENTION_ALL_ID, name }));
+
+/**
+ * The Agents a message mentions by "@Name"; these ids are what the server wakes, the text is only display.
+ * "@all" wakes every member. Real members come first, so an Agent actually named "all" still wins the tie.
+ */
 export function channelMentions(text: string, members: MentionCandidate[]): string[] {
-    return mentionIds(text, members);
+    const ids = mentionIds(text, [...members, ...MENTION_ALL_ALIASES]);
+    return ids.includes(MENTION_ALL_ID) ? members.map(member => member.id) : ids;
 }
 
 /**

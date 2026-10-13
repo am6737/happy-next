@@ -463,7 +463,6 @@ const styles = StyleSheet.create((theme) => ({
     },
     instructionsInput: {
         ...Typography.default(),
-        flexGrow: 1,
         minHeight: 320,
         padding: 16,
         borderRadius: 18,

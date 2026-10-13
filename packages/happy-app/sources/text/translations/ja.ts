@@ -82,6 +82,7 @@ export const ja: TranslationStructure = {
         send: "送信",
         compose: "メッセージ",
         groupCompose: "メッセージ  @エージェント",
+        mentionAll: "全員",
         resetHint: "/new を送信すると新しいトピックが始まり、以前のメッセージも検索できます。",
         noMessages: "メッセージはまだありません。",
         error: "チャットを読み込めませんでした。再試行してください。",

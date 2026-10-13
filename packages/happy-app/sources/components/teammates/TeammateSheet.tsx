@@ -51,7 +51,7 @@ export const TeammateSheet = React.forwardRef<BottomSheetModal, {
                     <Text style={styles.done}>{t('common.done')}</Text>
                 </Pressable>
             </View>
-            <BottomSheetScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 24 }, large && styles.grow]}>
+            <BottomSheetScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 24 }]}>
                 {children}
             </BottomSheetScrollView>
         </BottomSheetModal>
@@ -82,8 +82,5 @@ const styles = StyleSheet.create((theme) => ({
     content: {
         paddingHorizontal: KIT_PAGE_PADDING,
         gap: 12,
-    },
-    grow: {
-        flexGrow: 1,
     },
 }));

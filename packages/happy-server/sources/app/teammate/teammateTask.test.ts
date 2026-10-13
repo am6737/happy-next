@@ -437,6 +437,13 @@ describe('DM task routing', () => {
         expect(message).toMatchObject({ channelId: 'dm', taskId: 'task', runId: 'run_1', kind: 'decision' }); expect(task.status).toBe('awaiting_input');
         await daemonMessage({ kind: 'decision', taskId: 'foreign' }); expect(dbMock.teammateTask.update).toHaveBeenCalledTimes(1); expect(state.messages).toHaveLength(1);
     });
+    it('heartbeat reports go to the Agent DM without a task, and fail with no_dm when there is none', async () => {
+        Object.assign(state.threads[0], { kind: 'heartbeat', taskId: null, channelId: null }); addRun({ status: 'running' });
+        await expect(daemonMessage({ kind: 'report' })).rejects.toMatchObject({ code: 'no_dm' });
+        setupDm();
+        const sent = await daemonMessage({ kind: 'report' });
+        expect(sent).toMatchObject({ channelId: 'dm', kind: 'report', taskId: null });
+    });
     it('task reports with missing DM return no_dm', async () => {
         setupTask(); addRun({ status: 'running' }); await expect(daemonMessage()).rejects.toMatchObject({ code: 'no_dm' });
     });

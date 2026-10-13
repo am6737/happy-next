@@ -24,9 +24,12 @@ export function channelTime(time: number): string {
     return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+/** Messages further apart than this start a new run, so each one shows its own time. */
+const RUN_GAP_MS = 5 * 60_000;
+
 /**
  * Mirrors the DooTask chat list: a date pill per day (MM-DD this year, YYYY-MM-DD before), and a
- * header only where a sender's run starts. System notices never carry a header and break runs.
+ * header only where a sender's run starts. System notices and gaps over five minutes break runs.
  */
 export function channelRowLayouts(messages: StoredChannelMessage[], now = Date.now()): ChannelRowLayout[] {
     const year = `${new Date(now).getFullYear()}-`;
@@ -36,7 +39,8 @@ export function channelRowLayouts(messages: StoredChannelMessage[], now = Date.n
         const date = !previous || localDay(previous.createdAt) !== day ? (day.startsWith(year) ? day.slice(5) : day) : null;
         const system = message.content.t === 'system';
         const continued = !!previous && !date && !system && previous.content.t !== 'system'
-            && previous.senderType === message.senderType && previous.senderId === message.senderId;
+            && previous.senderType === message.senderType && previous.senderId === message.senderId
+            && message.createdAt - previous.createdAt <= RUN_GAP_MS;
         return { date, header: !system && !continued, continued };
     });
 }

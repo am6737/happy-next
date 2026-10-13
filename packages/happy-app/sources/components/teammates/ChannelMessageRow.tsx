@@ -134,7 +134,7 @@ function LinkCard({ link, onPress }: { link: ChannelLink; onPress: () => void })
  * One channel message, laid out like a DooTask chat bubble: Agents get a Slack-style flat row with
  * the avatar and a colored name on the first row of a run, the user's own messages a right-aligned band.
  */
-export const ChannelMessageRow = React.memo(({ message, header, sender, members, showReport, task, choice, busy, onDecide, onRetry, onRetryRun, onOpenTask, onOpenLink }: {
+export const ChannelMessageRow = React.memo(({ message, header, sender, members, showReport, task, choice, busy, onDecide, onRetry, onRetryRun, onOpenTask, onOpenLink, onOpenProfile }: {
     message: StoredChannelMessage;
     header: boolean;
     sender?: Teammate;
@@ -152,6 +152,7 @@ export const ChannelMessageRow = React.memo(({ message, header, sender, members,
     onRetryRun: (runId: string) => void;
     onOpenTask: (taskId: string) => void;
     onOpenLink: (link: ChannelLink) => void;
+    onOpenProfile: (teammateId: string) => void;
 }) => {
     const { theme } = useUnistyles();
 
@@ -212,6 +213,8 @@ export const ChannelMessageRow = React.memo(({ message, header, sender, members,
     ) : null;
     const body = message.body
         ? <View style={styles.body}><MarkdownView markdown={members ? channelMentionLinks(message.body.text, members) : message.body.text} hideOptions /></View>
+        // `undefined` on an encrypted message means it is not opened yet (the ciphertext is stored first); only `null` is a failure.
+        : message.body === undefined && message.content.t === 'encrypted' ? <View style={styles.body} />
         : <Text style={styles.error}>{t('channels.decryptError')}</Text>;
 
     if (message.senderType === 'user') {
@@ -246,7 +249,13 @@ export const ChannelMessageRow = React.memo(({ message, header, sender, members,
     return (
         <View style={styles.otherRow}>
             <View style={styles.avatarColumn}>
-                {header && <TeammateAvatar teammate={sender ?? { avatar: null }} size={AVATAR_SIZE} />}
+                {header && (
+                    <Pressable accessibilityRole="button" accessibilityLabel={`${t('teammates.profile')}: ${sender?.name || t('channels.unknownAgent')}`}
+                        accessibilityState={{ disabled: !sender }} disabled={!sender} hitSlop={4}
+                        onPress={() => sender && onOpenProfile(sender.id)} style={({ pressed }) => pressed && styles.pressed}>
+                        <TeammateAvatar teammate={sender ?? { avatar: null }} size={AVATAR_SIZE} />
+                    </Pressable>
+                )}
             </View>
             <View style={styles.otherContent}>
                 {header && (
@@ -301,12 +310,15 @@ function TypingDot({ delay }: { delay: number }) {
 }
 
 /** An Agent that is answering right now, shown at the end of the chat as its own message: avatar, name and bouncing dots. */
-export const ChannelWorkingRow = React.memo(({ teammate }: { teammate: Teammate }) => {
+export const ChannelWorkingRow = React.memo(({ teammate, onOpenProfile }: { teammate: Teammate; onOpenProfile: (teammateId: string) => void }) => {
     const { theme } = useUnistyles();
     return (
         <View accessibilityLabel={t('teammates.working')} style={[styles.otherRow, styles.workingRow]}>
             <View style={styles.avatarColumn}>
-                <TeammateAvatar teammate={teammate} size={AVATAR_SIZE} />
+                <Pressable accessibilityRole="button" accessibilityLabel={`${t('teammates.profile')}: ${teammate.name}`} hitSlop={4}
+                    onPress={() => onOpenProfile(teammate.id)} style={({ pressed }) => pressed && styles.pressed}>
+                    <TeammateAvatar teammate={teammate} size={AVATAR_SIZE} />
+                </Pressable>
             </View>
             <View style={styles.otherContent}>
                 <View style={styles.headerRow}>
