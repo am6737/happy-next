@@ -11,6 +11,63 @@ index 40725c0..dee6c9e 100644
      }
  
      /**
+diff --git a/node_modules/@gorhom/bottom-sheet/lib/commonjs/hooks/useAnimatedKeyboard.js b/node_modules/@gorhom/bottom-sheet/lib/commonjs/hooks/useAnimatedKeyboard.js
+index 6f1a188..de769ae 100644
+--- a/node_modules/@gorhom/bottom-sheet/lib/commonjs/hooks/useAnimatedKeyboard.js
++++ b/node_modules/@gorhom/bottom-sheet/lib/commonjs/hooks/useAnimatedKeyboard.js
+@@ -20,6 +20,13 @@ const KEYBOARD_EVENT_MAPPER = {
+     default: ''
+   })
+ };
++
++/**
++ * iOS third-party keyboards announce `keyboardWillShow` several times with
++ * different heights while they load; the sheet waits this long for the last
++ * one instead of following each.
++ */
++const IOS_KEYBOARD_SHOW_SETTLE_MS = 100;
+ const INITIAL_STATE = {
+   status: _constants.KEYBOARD_STATUS.UNDETERMINED,
+   height: 0,
+@@ -85,10 +92,26 @@ const useAnimatedKeyboard = () => {
+ 
+   //#region effects
+   (0, _react.useEffect)(() => {
+-    const handleOnKeyboardShow = event => {
+-      (0, _reactNativeReanimated.runOnUI)(handleKeyboardEvent)(_constants.KEYBOARD_STATUS.SHOWN, event.endCoordinates.height, event.duration, event.easing, _constants.SCREEN_HEIGHT - event.endCoordinates.height - event.endCoordinates.screenY);
++    let pendingShow;
++    const handleOnKeyboardShow = (event) => {
++      if (_reactNative.Platform.OS !== 'ios') {
++        (0, _reactNativeReanimated.runOnUI)(handleKeyboardEvent)(_constants.KEYBOARD_STATUS.SHOWN, event.endCoordinates.height, event.duration, event.easing, _constants.SCREEN_HEIGHT - event.endCoordinates.height - event.endCoordinates.screenY);
++        return;
++      }
++      if (pendingShow) {
++        clearTimeout(pendingShow);
++      }
++      // starts late by the settle time, so it finishes as early by as much
++      pendingShow = setTimeout(() => {
++        pendingShow = undefined;
++        (0, _reactNativeReanimated.runOnUI)(handleKeyboardEvent)(_constants.KEYBOARD_STATUS.SHOWN, event.endCoordinates.height, event.duration > IOS_KEYBOARD_SHOW_SETTLE_MS ? event.duration - IOS_KEYBOARD_SHOW_SETTLE_MS : event.duration, event.easing, _constants.SCREEN_HEIGHT - event.endCoordinates.height - event.endCoordinates.screenY);
++      }, IOS_KEYBOARD_SHOW_SETTLE_MS);
+     };
+     const handleOnKeyboardHide = event => {
++      if (pendingShow) {
++        clearTimeout(pendingShow);
++        pendingShow = undefined;
++      }
+       (0, _reactNativeReanimated.runOnUI)(handleKeyboardEvent)(_constants.KEYBOARD_STATUS.HIDDEN, event.endCoordinates.height, event.duration, event.easing);
+     };
+     const showSubscription = _reactNative.Keyboard.addListener(KEYBOARD_EVENT_MAPPER.KEYBOARD_SHOW, handleOnKeyboardShow);
+@@ -96,6 +119,9 @@ const useAnimatedKeyboard = () => {
+     return () => {
+       showSubscription.remove();
+       hideSubscription.remove();
++      if (pendingShow) {
++        clearTimeout(pendingShow);
++      }
+     };
+   }, [handleKeyboardEvent]);
+ 
 diff --git a/node_modules/@gorhom/bottom-sheet/lib/module/components/bottomSheet/BottomSheet.js b/node_modules/@gorhom/bottom-sheet/lib/module/components/bottomSheet/BottomSheet.js
 index 561ad52..a3fac9c 100644
 --- a/node_modules/@gorhom/bottom-sheet/lib/module/components/bottomSheet/BottomSheet.js
@@ -24,6 +81,63 @@ index 561ad52..a3fac9c 100644
      }
  
      /**
+diff --git a/node_modules/@gorhom/bottom-sheet/lib/module/hooks/useAnimatedKeyboard.js b/node_modules/@gorhom/bottom-sheet/lib/module/hooks/useAnimatedKeyboard.js
+index 0bdd216..3f44230 100644
+--- a/node_modules/@gorhom/bottom-sheet/lib/module/hooks/useAnimatedKeyboard.js
++++ b/node_modules/@gorhom/bottom-sheet/lib/module/hooks/useAnimatedKeyboard.js
+@@ -16,6 +16,13 @@ const KEYBOARD_EVENT_MAPPER = {
+     default: ''
+   })
+ };
++
++/**
++ * iOS third-party keyboards announce `keyboardWillShow` several times with
++ * different heights while they load; the sheet waits this long for the last
++ * one instead of following each.
++ */
++const IOS_KEYBOARD_SHOW_SETTLE_MS = 100;
+ const INITIAL_STATE = {
+   status: KEYBOARD_STATUS.UNDETERMINED,
+   height: 0,
+@@ -81,10 +88,26 @@ export const useAnimatedKeyboard = () => {
+ 
+   //#region effects
+   useEffect(() => {
+-    const handleOnKeyboardShow = event => {
+-      runOnUI(handleKeyboardEvent)(KEYBOARD_STATUS.SHOWN, event.endCoordinates.height, event.duration, event.easing, SCREEN_HEIGHT - event.endCoordinates.height - event.endCoordinates.screenY);
++    let pendingShow;
++    const handleOnKeyboardShow = (event) => {
++      if (Platform.OS !== 'ios') {
++        runOnUI(handleKeyboardEvent)(KEYBOARD_STATUS.SHOWN, event.endCoordinates.height, event.duration, event.easing, SCREEN_HEIGHT - event.endCoordinates.height - event.endCoordinates.screenY);
++        return;
++      }
++      if (pendingShow) {
++        clearTimeout(pendingShow);
++      }
++      // starts late by the settle time, so it finishes as early by as much
++      pendingShow = setTimeout(() => {
++        pendingShow = undefined;
++        runOnUI(handleKeyboardEvent)(KEYBOARD_STATUS.SHOWN, event.endCoordinates.height, event.duration > IOS_KEYBOARD_SHOW_SETTLE_MS ? event.duration - IOS_KEYBOARD_SHOW_SETTLE_MS : event.duration, event.easing, SCREEN_HEIGHT - event.endCoordinates.height - event.endCoordinates.screenY);
++      }, IOS_KEYBOARD_SHOW_SETTLE_MS);
+     };
+     const handleOnKeyboardHide = event => {
++      if (pendingShow) {
++        clearTimeout(pendingShow);
++        pendingShow = undefined;
++      }
+       runOnUI(handleKeyboardEvent)(KEYBOARD_STATUS.HIDDEN, event.endCoordinates.height, event.duration, event.easing);
+     };
+     const showSubscription = Keyboard.addListener(KEYBOARD_EVENT_MAPPER.KEYBOARD_SHOW, handleOnKeyboardShow);
+@@ -92,6 +115,9 @@ export const useAnimatedKeyboard = () => {
+     return () => {
+       showSubscription.remove();
+       hideSubscription.remove();
++      if (pendingShow) {
++        clearTimeout(pendingShow);
++      }
+     };
+   }, [handleKeyboardEvent]);
+ 
 diff --git a/node_modules/@gorhom/bottom-sheet/src/components/bottomSheet/BottomSheet.tsx b/node_modules/@gorhom/bottom-sheet/src/components/bottomSheet/BottomSheet.tsx
 index 6748c93..3d3879c 100644
 --- a/node_modules/@gorhom/bottom-sheet/src/components/bottomSheet/BottomSheet.tsx
@@ -37,3 +151,83 @@ index 6748c93..3d3879c 100644
          }
  
          /**
+diff --git a/node_modules/@gorhom/bottom-sheet/src/hooks/useAnimatedKeyboard.ts b/node_modules/@gorhom/bottom-sheet/src/hooks/useAnimatedKeyboard.ts
+index 24cdee0..555b7ac 100644
+--- a/node_modules/@gorhom/bottom-sheet/src/hooks/useAnimatedKeyboard.ts
++++ b/node_modules/@gorhom/bottom-sheet/src/hooks/useAnimatedKeyboard.ts
+@@ -27,6 +27,13 @@ const KEYBOARD_EVENT_MAPPER = {
+   }) as KeyboardEventName,
+ };
+ 
++/**
++ * iOS third-party keyboards announce `keyboardWillShow` several times with
++ * different heights while they load; the sheet waits this long for the last
++ * one instead of following each.
++ */
++const IOS_KEYBOARD_SHOW_SETTLE_MS = 100;
++
+ const INITIAL_STATE: KeyboardState = {
+   status: KEYBOARD_STATUS.UNDETERMINED,
+   height: 0,
+@@ -106,18 +113,42 @@ export const useAnimatedKeyboard = () => {
+ 
+   //#region effects
+   useEffect(() => {
++    let pendingShow: ReturnType<typeof setTimeout> | undefined;
+     const handleOnKeyboardShow = (event: KeyboardEvent) => {
+-      runOnUI(handleKeyboardEvent)(
+-        KEYBOARD_STATUS.SHOWN,
+-        event.endCoordinates.height,
+-        event.duration,
+-        event.easing,
+-        SCREEN_HEIGHT -
+-          event.endCoordinates.height -
+-          event.endCoordinates.screenY
+-      );
++      if (Platform.OS !== 'ios') {
++        runOnUI(handleKeyboardEvent)(
++          KEYBOARD_STATUS.SHOWN,
++          event.endCoordinates.height,
++          event.duration,
++          event.easing,
++          SCREEN_HEIGHT -
++            event.endCoordinates.height -
++            event.endCoordinates.screenY
++        );
++        return;
++      }
++      if (pendingShow) {
++        clearTimeout(pendingShow);
++      }
++      // starts late by the settle time, so it finishes as early by as much
++      pendingShow = setTimeout(() => {
++        pendingShow = undefined;
++        runOnUI(handleKeyboardEvent)(
++          KEYBOARD_STATUS.SHOWN,
++          event.endCoordinates.height,
++          event.duration > IOS_KEYBOARD_SHOW_SETTLE_MS ? event.duration - IOS_KEYBOARD_SHOW_SETTLE_MS : event.duration,
++          event.easing,
++          SCREEN_HEIGHT -
++            event.endCoordinates.height -
++            event.endCoordinates.screenY
++        );
++      }, IOS_KEYBOARD_SHOW_SETTLE_MS);
+     };
+     const handleOnKeyboardHide = (event: KeyboardEvent) => {
++      if (pendingShow) {
++        clearTimeout(pendingShow);
++        pendingShow = undefined;
++      }
+       runOnUI(handleKeyboardEvent)(
+         KEYBOARD_STATUS.HIDDEN,
+         event.endCoordinates.height,
+@@ -139,6 +170,9 @@ export const useAnimatedKeyboard = () => {
+     return () => {
+       showSubscription.remove();
+       hideSubscription.remove();
++      if (pendingShow) {
++        clearTimeout(pendingShow);
++      }
+     };
+   }, [handleKeyboardEvent]);
+ 
