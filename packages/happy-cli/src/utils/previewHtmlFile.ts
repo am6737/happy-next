@@ -56,6 +56,17 @@ export function readPreviewHtmlFile(filePath: string): PreviewHtmlFileResult {
     }
 }
 
+/** The file a `preview_html` call asks to have inlined, or null when there is nothing to read. */
+export function previewHtmlFilePath(
+    toolName: unknown,
+    args: Record<string, unknown> | undefined,
+): string | null {
+    if (!args || !isPreviewHtmlToolName(toolName)) return null;
+    if (typeof args.html === 'string' && args.html.length > 0) return null;
+    const filePath = args.filePath;
+    return typeof filePath === 'string' && filePath.length > 0 ? filePath : null;
+}
+
 /**
  * Returns the tool call arguments the client should receive.
  *
@@ -68,11 +79,8 @@ export function inlinePreviewHtmlFileArgs(
     toolName: unknown,
     args: Record<string, unknown> | undefined,
 ): Record<string, unknown> | undefined {
-    if (!args || !isPreviewHtmlToolName(toolName)) return args;
-    if (typeof args.html === 'string' && args.html.length > 0) return args;
-
-    const filePath = args.filePath;
-    if (typeof filePath !== 'string' || filePath.length === 0) return args;
+    const filePath = previewHtmlFilePath(toolName, args);
+    if (!args || filePath === null) return args;
 
     const result = readPreviewHtmlFile(filePath);
     if (!result.ok) {

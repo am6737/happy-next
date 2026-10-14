@@ -31,23 +31,25 @@ export class OutgoingMessageQueue {
      */
     enqueue(logMessage: any, options?: {
         delay?: number,
-        toolCallIds?: string[]
+        toolCallIds?: string[],
+        hold?: boolean                 // Wait for releaseToolCall (or flush) with no timeout
     }) {
         this.lock.inLock(async () => {
+            const delayed = !!options?.delay || !!options?.hold;
             const item: QueueItem = {
                 id: this.nextId++,
                 logMessage,
-                delayed: !!options?.delay,
+                delayed,
                 delayMs: options?.delay || 0,
                 toolCallIds: options?.toolCallIds,
-                released: !options?.delay,  // Not delayed = already released
+                released: !delayed,  // Not delayed = already released
                 sent: false
             };
             
             this.queue.push(item);
             
             // If delayed, set timer to release it
-            if (item.delayed) {
+            if (item.delayed && !options?.hold) {
                 const timer = setTimeout(() => {
                     this.releaseItem(item.id);
                 }, item.delayMs);

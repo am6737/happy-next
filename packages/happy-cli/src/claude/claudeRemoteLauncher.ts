@@ -22,7 +22,7 @@ import type { PermissionMode } from "@/api/types";
 import type { QueueMessageContent } from "./runClaude";
 import { buildClaudeSlashCommandMetadata } from "./utils/slashCommandMetadata";
 import { enhancedModeRestartHash } from "./utils/enhancedModeHash";
-import { inlinePreviewHtmlFileArgs } from "@/utils/previewHtmlFile";
+import { inlinePreviewHtmlFileArgs, previewHtmlFilePath } from "@/utils/previewHtmlFile";
 
 interface PermissionsField {
     date: number;
@@ -199,6 +199,9 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
     // Handle messages
     let planModeToolCalls = new Set<string>();
     let ongoingToolCalls = new Map<string, { parentToolCallId: string | null }>();
+    // preview_html calls that name a file, keyed by tool call id. The file is read once the call
+    // has run: a Write in the same turn may not have created (or rewritten) it when the call streams in.
+    const pendingPreviewFiles = new Map<string, { name?: string, input?: unknown }>();
     // Tracks whether the current turn produced any assistant message. Reset when a
     // new user prompt (not a tool_result) arrives — NOT on result, because the SDK
     // can keep emitting late-arriving assistant messages after `result` which would
@@ -342,6 +345,9 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
                     if (c.type === 'tool_use') {
                         logger.debug('[remote]: detected tool use ' + c.id! + ' parent: ' + umessage.parent_tool_use_id);
                         ongoingToolCalls.set(c.id!, { parentToolCallId: umessage.parent_tool_use_id ?? null });
+                        if (previewHtmlFilePath(c.name, c.input as Record<string, unknown> | undefined) !== null) {
+                            pendingPreviewFiles.set(c.id!, c);
+                        }
                     }
                 }
             }
@@ -359,6 +365,14 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
                     if (c.type === 'tool_result' && c.tool_use_id) {
                         hasToolResult = true;
                         ongoingToolCalls.delete(c.tool_use_id);
+
+                        // The held tool call shares this block with its queued log message, so
+                        // inlining here fills in the document before the call is released.
+                        const preview = pendingPreviewFiles.get(c.tool_use_id);
+                        if (preview) {
+                            pendingPreviewFiles.delete(c.tool_use_id);
+                            preview.input = inlinePreviewHtmlFileArgs(preview.name, preview.input as Record<string, unknown> | undefined);
+                        }
 
                         // When tool result received, release any delayed messages for this tool call
                         messageQueue.releaseToolCall(c.tool_use_id);
@@ -403,25 +417,6 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
                             return c;
                         })
                     }
-                }
-            }
-        }
-
-        // Inline preview_html documents that were passed as a file path, so the client receives
-        // the document itself instead of a path it has no way to read.
-        if (msg.type === 'assistant') {
-            const amessage = msg as SDKAssistantMessage;
-            if (Array.isArray(amessage.message.content)) {
-                let inlined = false;
-                const content = amessage.message.content.map((c) => {
-                    if (c.type !== 'tool_use') return c;
-                    const input = inlinePreviewHtmlFileArgs(c.name, c.input as Record<string, unknown> | undefined);
-                    if (input === c.input) return c;
-                    inlined = true;
-                    return { ...c, input };
-                });
-                if (inlined) {
-                    msg = { ...amessage, message: { ...amessage.message, content } };
                 }
             }
         }
@@ -482,7 +477,14 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
                 if (toolCallIds.length > 0) {
                     // Check if this is a sidechain tool call (has parent_tool_use_id)
                     const isSidechain = assistantMsg.parent_tool_use_id !== undefined;
+                    // A preview_html call naming a file waits for its result, which inlines the
+                    // document — so the client receives the document instead of a path it cannot read.
+                    const hold = toolCallIds.some((id) => pendingPreviewFiles.has(id));
 
+                    if (hold) {
+                        messageQueue.enqueue(logMessage, { toolCallIds, hold });
+                        return; // Don't queue again below
+                    }
                     if (!isSidechain) {
                         // Top-level tool call - queue with delay
                         messageQueue.enqueue(logMessage, {
@@ -694,6 +696,7 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
                     }
                 }
                 ongoingToolCalls.clear();
+                pendingPreviewFiles.clear();
 
                 // Flush any remaining messages in the queue
                 logger.debug('[remote]: flushing message queue');

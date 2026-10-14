@@ -19,6 +19,7 @@ import {
     MAX_PREVIEW_HTML_FILE_BYTES,
     inlinePreviewHtmlFileArgs,
     isPreviewHtmlToolName,
+    previewHtmlFilePath,
     readPreviewHtmlFile,
 } from './previewHtmlFile';
 
@@ -81,6 +82,19 @@ describe('readPreviewHtmlFile', () => {
     it('reports a missing file instead of throwing', () => {
         const result = readPreviewHtmlFile(join(workDir, 'nope.html'));
         expect(result.ok).toBe(false);
+    });
+});
+
+describe('previewHtmlFilePath', () => {
+    it('returns the path of a preview_html call that has no inline html', () => {
+        expect(previewHtmlFilePath('mcp__happy__preview_html', { filePath: '/tmp/a.html' })).toBe('/tmp/a.html');
+    });
+
+    it('returns null when there is nothing to read', () => {
+        expect(previewHtmlFilePath('mcp__happy__preview_html', { html: '<p>x</p>', filePath: '/tmp/a.html' })).toBeNull();
+        expect(previewHtmlFilePath('mcp__happy__preview_html', { filePath: '' })).toBeNull();
+        expect(previewHtmlFilePath('Write', { filePath: '/tmp/a.html' })).toBeNull();
+        expect(previewHtmlFilePath('preview_html', undefined)).toBeNull();
     });
 });
 
