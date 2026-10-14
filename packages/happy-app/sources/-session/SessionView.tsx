@@ -1169,10 +1169,10 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
     // the scroll view under the header and the floating composer stay the same from the first
     // frame: a composer over a separate, shorter empty-state view had no soft edge under it.
     const emptyComponent = React.useMemo(() => isLoaded ? (
-        <EmptyMessages session={session} />
+        <EmptyMessages sessionId={sessionId} />
     ) : (
         <ActivityIndicator size="small" color={theme.colors.textSecondary} />
-    ), [isLoaded, session, theme.colors.textSecondary]);
+    ), [isLoaded, sessionId, theme.colors.textSecondary]);
 
     let content = (
         <>

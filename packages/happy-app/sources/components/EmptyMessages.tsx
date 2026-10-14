@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Typography } from '@/constants/Typography';
 import { Session } from '@/sync/storageTypes';
 import { useSessionStatus, formatPathRelativeToHome } from '@/utils/sessionUtils';
-import { useMachine } from '@/sync/storage';
+import { useMachine, useSession } from '@/sync/storage';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { t } from '@/text';
 
@@ -49,7 +49,7 @@ const stylesheet = StyleSheet.create((theme) => ({
 }));
 
 interface EmptyMessagesProps {
-    session: Session;
+    sessionId: string;
 }
 
 const COMPACT_HEIGHT_THRESHOLD = 480;
@@ -86,7 +86,14 @@ function formatRelativeTime(timestamp: number): string {
     }
 }
 
-export function EmptyMessages({ session }: EmptyMessagesProps) {
+// Takes the id and subscribes itself, so the element the chat list holds stays the same while the
+// session updates: a new element would re-render the whole list on every session change.
+export function EmptyMessages({ sessionId }: EmptyMessagesProps) {
+    const session = useSession(sessionId);
+    return session ? <EmptyMessagesContent session={session} /> : null;
+}
+
+function EmptyMessagesContent({ session }: { session: Session }) {
     const { theme } = useUnistyles();
     const { height: windowHeight } = useWindowDimensions();
     const styles = stylesheet;

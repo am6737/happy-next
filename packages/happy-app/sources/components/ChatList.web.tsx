@@ -151,9 +151,18 @@ export const ChatList = React.memo((props: { session: Session; onFillInput?: (te
     const { messages, hasMore } = useSessionMessages(props.session.id);
     const profile = useProfile();
     const isSharedSession = !!(props.session.isShared || props.session.accessLevel);
+    // Rows read only the path, home directory and flavor from metadata (tool titles, shortened paths),
+    // while metadata itself is rewritten several times a turn (summary, the completion dot, ...). Keep
+    // handing them the same object until one of those changes, so such a write re-renders no row.
+    const metadata = props.session.metadata;
+    const rowMetadata = React.useMemo(
+        () => metadata,
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [metadata == null, metadata?.path, metadata?.homeDir, metadata?.flavor],
+    );
     return (
         <ChatListInternal
-            metadata={props.session.metadata}
+            metadata={rowMetadata}
             sessionId={props.session.id}
             messages={messages}
             hasMore={hasMore}
@@ -214,9 +223,10 @@ function scrollToBottomProgress(elapsedMs: number): { progress: number; eased: n
     const progress = Math.min(1, Math.max(0, elapsedMs / SCROLL_TO_BOTTOM_ANIMATION_MS));
     return { progress, eased: 1 - (1 - progress) ** 3 };
 }
-// The most a single frame advances the glide after an append. A frame the main thread held up (a
-// render, a burst of socket updates) would otherwise spend its whole delay on the curve at once and
-// jump; capped, the glide pauses with the frame and resumes where it was.
+// The most a single frame advances the glide after an append, or the scroll-to-bottom button's. A
+// frame the main thread held up (a render, a burst of socket updates) would otherwise spend its whole
+// delay on the curve at once and jump; capped, the animation pauses with the frame and resumes where
+// it was.
 const BOTTOM_GLIDE_MAX_FRAME_MS = 32;
 // Animate scroll-to-bottom only within this many viewports of the bottom.
 // Farther away the fixed-duration animation is a meaningless whoosh (hundreds
@@ -392,6 +402,7 @@ const rowInnerStyle = {
 // One message row. Memoized so a streaming update re-renders only the rows
 // whose props actually changed, not every mounted row on each token.
 //
+
 // While a row is mounted but not yet measured, the OUTER wrapper is
 // constrained to the model's height (overflow hidden) so the mount itself
 // cannot move anything; the INNER element renders at natural size and is what
@@ -2447,14 +2458,18 @@ const ChatListInternal = React.memo((props: {
             return;
         }
         isAnimatingScrollRef.current = true;
-        const startedAt = performance.now();
+        // Frame-clocked like the glide after an append (see BOTTOM_GLIDE_MAX_FRAME_MS).
+        let lastFrameAt = performance.now();
+        let elapsedMs = 0;
         const step = (now: number) => {
             const el = scrollerElRef.current;
             if (!el) {
                 cancelScrollAnimation();
                 return;
             }
-            const { progress, eased } = scrollToBottomProgress(now - startedAt);
+            elapsedMs += Math.min(BOTTOM_GLIDE_MAX_FRAME_MS, Math.max(0, now - lastFrameAt));
+            lastFrameAt = now;
+            const { progress, eased } = scrollToBottomProgress(elapsedMs);
             el.scrollTop = -(start * (1 - eased));
             if (progress < 1 && Math.abs(el.scrollTop) > 1) {
                 scrollAnimationFrameRef.current = window.requestAnimationFrame(step);
