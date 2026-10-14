@@ -557,6 +557,7 @@ function parseOrchestratorContextCandidate(value: unknown): ParsedOrchestratorCo
                 active: asBoolean(item.active),
                 online: asBoolean(item.online),
                 dispatchReady: asBoolean(item.dispatchReady),
+                shellReady: asBoolean(item.shellReady),
                 lastActiveAt: asString(item.lastActiveAt),
             }];
         })

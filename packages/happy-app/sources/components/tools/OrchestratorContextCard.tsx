@@ -9,6 +9,7 @@ import { formatLastSeen } from '@/utils/sessionUtils';
 import { formatCompactDuration } from '@/utils/messageTime';
 import {
     getContextDefaultEntries,
+    getContextMachineCapabilities,
     groupModelModes,
     resolveContextMachineStatus,
     type ContextDefaultEntry,
@@ -24,7 +25,9 @@ export function OrchestratorContextCard({ context }: { context: ParsedOrchestrat
     const { theme } = useUnistyles();
     const defaults = getContextDefaultEntries(context.defaults);
     const modelProviders = Object.entries(context.modelModes).filter(([, modes]) => modes.length > 0);
-    const currentMachineListed = context.machines.some((machine) => machine.machineId === context.machineId);
+    const currentMachine = context.machines.find((machine) => machine.machineId === context.machineId);
+    const currentMachineListed = !!currentMachine;
+    const providers = getContextMachineCapabilities({ providers: context.providers, shellReady: currentMachine?.shellReady });
 
     return (
         <View style={styles.card}>
@@ -40,11 +43,11 @@ export function OrchestratorContextCard({ context }: { context: ParsedOrchestrat
                 {context.workingDirectory ? (
                     <InfoRow label={t('settings.orchestratorLabelWorkingDir')} value={context.workingDirectory} mono />
                 ) : null}
-                {context.providers.length > 0 ? (
+                {providers.length > 0 ? (
                     <View style={styles.infoRow}>
                         <Text style={styles.infoLabel}>{t('settings.orchestratorContextProviders')}</Text>
                         <View style={[styles.chipRow, styles.infoChips]}>
-                            {context.providers.map((provider) => (
+                            {providers.map((provider) => (
                                 <Chip key={provider} text={provider} />
                             ))}
                         </View>
@@ -160,6 +163,7 @@ function MachineRow({ machine, isCurrent, separatorColor }: {
     const status = resolveContextMachineStatus(machine);
     const color = status === 'ready' ? theme.colors.success : status === 'notReady' ? NOT_READY_COLOR : theme.colors.textSecondary;
     const lastActiveAt = machine.lastActiveAt ? Date.parse(machine.lastActiveAt) : NaN;
+    const capabilities = getContextMachineCapabilities(machine);
 
     const statusText = status === 'ready'
         ? t('settings.orchestratorContextReady')
@@ -184,9 +188,9 @@ function MachineRow({ machine, isCurrent, separatorColor }: {
             </View>
             <Text style={[styles.machineStatus, { color }]}>{statusText}</Text>
             {machine.machineId ? <Text style={[styles.machineId, styles.mono]}>{machine.machineId}</Text> : null}
-            {machine.providers && machine.providers.length > 0 ? (
+            {capabilities.length > 0 ? (
                 <View style={styles.chipRow}>
-                    {machine.providers.map((provider) => (
+                    {capabilities.map((provider) => (
                         <Chip key={provider} text={provider} />
                     ))}
                 </View>

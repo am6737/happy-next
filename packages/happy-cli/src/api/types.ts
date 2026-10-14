@@ -150,9 +150,10 @@ export interface ClientToServerEvents {
   'ping': (callback: () => void) => void
   'rpc-register': (data: { method: string }) => void
   'rpc-unregister': (data: { method: string }) => void
-  'rpc-call': (data: { method: string, params: string }, callback: (response: {
+  // A daemon answers plaintext params in plaintext, which is how another machine's RPC is called
+  'rpc-call': (data: { method: string, params: string | Record<string, unknown> }, callback: (response: {
     ok: boolean
-    result?: string
+    result?: unknown
     error?: string
   }) => void) => void
   'usage-report': (data: {

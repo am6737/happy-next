@@ -33,6 +33,7 @@ import { encodeBase64, decodeBase64, encrypt, decrypt } from './encryption';
 import { backoff } from '@/utils/time';
 import { RpcHandlerManager } from './rpc/RpcHandlerManager';
 import { execSync, execFileSync } from 'node:child_process';
+import { homedir } from 'node:os';
 import { readdirSync, rmdirSync } from 'node:fs';
 import { paginateSessionUserMessages, resolveSessionUserMessage, type SessionUserMessage } from '@/utils/sessionUserMessages';
 
@@ -808,8 +809,9 @@ export class ApiMachineClient {
         });
 
         // Models the signed-in Qoder account offers, with their efforts, for the app's model picker
+        // The orchestrator server knows no directory on this machine, so it leaves it out and gets the home directory
         this.rpcHandlerManager.registerHandler('qoder-list-models', async (params: any) => {
-            const { directory } = params || {};
+            const { directory = homedir() } = params || {};
             if (!directory || typeof directory !== 'string') {
                 throw new Error('directory is required');
             }

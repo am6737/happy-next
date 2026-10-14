@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getContextDefaultEntries, groupModelModes, resolveContextMachineStatus } from './orchestratorContextDisplay';
+import { getContextDefaultEntries, getContextMachineCapabilities, groupModelModes, resolveContextMachineStatus } from './orchestratorContextDisplay';
 
 describe('groupModelModes', () => {
     it('folds effort variants of a model into one entry, in the listed order', () => {
@@ -27,6 +27,14 @@ describe('groupModelModes', () => {
 
     it('does not repeat an effort', () => {
         expect(groupModelModes(['gpt-5.5-high', 'gpt-5.5-high'])).toEqual([{ model: 'gpt-5.5', efforts: ['high'] }]);
+    });
+
+    it('folds Qoder efforts written after a colon', () => {
+        expect(groupModelModes(['default', 'auto', 'performance', 'performance:low', 'performance:high'])).toEqual([
+            { model: 'default', efforts: [] },
+            { model: 'auto', efforts: [] },
+            { model: 'performance', efforts: ['low', 'high'] },
+        ]);
     });
 
     it('returns nothing for an empty list', () => {
@@ -60,5 +68,17 @@ describe('resolveContextMachineStatus', () => {
         expect(resolveContextMachineStatus({ online: true, dispatchReady: false })).toBe('notReady');
         expect(resolveContextMachineStatus({ online: false, dispatchReady: false })).toBe('offline');
         expect(resolveContextMachineStatus({})).toBe('offline');
+    });
+});
+
+describe('getContextMachineCapabilities', () => {
+    it('adds shell after the providers of a machine that takes shell commands', () => {
+        expect(getContextMachineCapabilities({ providers: ['claude', 'qoder'], shellReady: true })).toEqual(['claude', 'qoder', 'shell']);
+        expect(getContextMachineCapabilities({ providers: [], shellReady: true })).toEqual(['shell']);
+    });
+
+    it('lists only the providers otherwise', () => {
+        expect(getContextMachineCapabilities({ providers: ['codex'], shellReady: false })).toEqual(['codex']);
+        expect(getContextMachineCapabilities({})).toEqual([]);
     });
 });

@@ -500,6 +500,15 @@ export class ApiSessionClient extends EventEmitter {
         return response.data;
     }
 
+    /** Call an RPC method another machine's daemon registered (`<machineId>:<method>`), in plaintext. */
+    async callMachineRpc(method: string, params: Record<string, unknown>, timeoutMs: number): Promise<unknown> {
+        const response = await this.socket.timeout(timeoutMs).emitWithAck('rpc-call', { method, params });
+        if (!response?.ok) {
+            throw new Error(response?.error || `RPC call failed: ${method}`);
+        }
+        return response.result;
+    }
+
     async orchestratorGetRun(runId: string, includeTasks: boolean = true): Promise<any> {
         const response = await axios.get(
             `${configuration.serverUrl}/v1/orchestrator/runs/${encodeURIComponent(runId)}`,

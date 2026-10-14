@@ -19,6 +19,8 @@ export type ParsedOrchestratorContext = {
         active?: boolean;
         online?: boolean;
         dispatchReady?: boolean;
+        /** Takes shell commands from orchestrator_exec */
+        shellReady?: boolean;
         lastActiveAt?: string;
     }>;
 };
@@ -30,6 +32,8 @@ export type ModelModeGroup = {
 };
 
 const EFFORT_SUFFIX = /^(.+)-(low|medium|high|xhigh|max|ultra)$/;
+/** Qoder modes put any effort the account offers after a colon (`performance:high`). */
+const QODER_EFFORT_SUFFIX = /^([^:]+):(.+)$/;
 
 /**
  * Fold the flat mode list the server sends (`gpt-5.5-low`, `gpt-5.5-high`, `default`, …) into
@@ -39,7 +43,7 @@ const EFFORT_SUFFIX = /^(.+)-(low|medium|high|xhigh|max|ultra)$/;
 export function groupModelModes(modes: readonly string[]): ModelModeGroup[] {
     const groups = new Map<string, string[]>();
     for (const mode of modes) {
-        const match = EFFORT_SUFFIX.exec(mode);
+        const match = QODER_EFFORT_SUFFIX.exec(mode) ?? EFFORT_SUFFIX.exec(mode);
         const model = match ? match[1] : mode;
         const efforts = groups.get(model) ?? [];
         if (match && !efforts.includes(match[2])) {
@@ -73,6 +77,11 @@ export function getContextDefaultEntries(defaults: ParsedOrchestratorContext['de
         typeof defaults.retryBackoffMs === 'number' ? { key: 'retryBackoff', kind: 'duration', value: defaults.retryBackoffMs } : null,
     ];
     return entries.filter((entry): entry is ContextDefaultEntry => entry !== null);
+}
+
+/** The machine's AI providers, then `shell` when it takes shell commands. */
+export function getContextMachineCapabilities(machine: Pick<ParsedOrchestratorContext['machines'][number], 'providers' | 'shellReady'>): string[] {
+    return machine.shellReady ? [...(machine.providers ?? []), 'shell'] : [...(machine.providers ?? [])];
 }
 
 export type ContextMachineStatus = 'ready' | 'notReady' | 'offline';
