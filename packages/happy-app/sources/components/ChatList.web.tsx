@@ -214,6 +214,10 @@ function scrollToBottomProgress(elapsedMs: number): { progress: number; eased: n
     const progress = Math.min(1, Math.max(0, elapsedMs / SCROLL_TO_BOTTOM_ANIMATION_MS));
     return { progress, eased: 1 - (1 - progress) ** 3 };
 }
+// The most a single frame advances the glide after an append. A frame the main thread held up (a
+// render, a burst of socket updates) would otherwise spend its whole delay on the curve at once and
+// jump; capped, the glide pauses with the frame and resumes where it was.
+const BOTTOM_GLIDE_MAX_FRAME_MS = 32;
 // Animate scroll-to-bottom only within this many viewports of the bottom.
 // Farther away the fixed-duration animation is a meaningless whoosh (hundreds
 // of px per frame, each frame a window slide); teleport instantly instead,
@@ -1053,7 +1057,14 @@ const ChatListInternal = React.memo((props: {
     // frame's share of the curve, so a correction made mid-glide — a row measured, another row
     // appended, a fold sliding — lands in the distance and is carried down with it rather than
     // overwritten. Any input from the reader ends it, like the button's.
-    const bottomGlideRef = useRef<{ startedAt: number; lastEased: number; frame: number | null } | null>(null);
+    //
+    // Its clock is the frames it has drawn, not the wall: it starts on its own first frame, which
+    // only holds the screen (the one the appended rows land in — scheduled from a layout effect, that
+    // frame is the commit's own, so the hold is painted), and each frame adds at most
+    // BOTTOM_GLIDE_MAX_FRAME_MS. Time the commit after it, or any long task mid-way, spent is not
+    // counted, so the glide pauses with the main thread rather than jumping ahead to catch up.
+    type BottomGlide = { lastFrameAt: number | null; elapsedMs: number; lastEased: number; frame: number | null };
+    const bottomGlideRef = useRef<BottomGlide | null>(null);
     function stopBottomGlide() {
         const glide = bottomGlideRef.current;
         if (glide?.frame != null) window.cancelAnimationFrame(glide.frame);
@@ -1061,7 +1072,7 @@ const ChatListInternal = React.memo((props: {
     }
     const startBottomGlide = () => {
         stopBottomGlide();
-        const glide: { startedAt: number; lastEased: number; frame: number | null } = { startedAt: performance.now(), lastEased: 0, frame: null };
+        const glide: BottomGlide = { lastFrameAt: null, elapsedMs: 0, lastEased: 0, frame: null };
         bottomGlideRef.current = glide;
         const step = (now: number) => {
             if (bottomGlideRef.current !== glide) return;
@@ -1071,7 +1082,14 @@ const ChatListInternal = React.memo((props: {
                 bottomGlideRef.current = null;
                 return;
             }
-            const { progress, eased } = scrollToBottomProgress(now - glide.startedAt);
+            if (glide.lastFrameAt == null) {
+                glide.lastFrameAt = now;
+                glide.frame = window.requestAnimationFrame(step);
+                return;
+            }
+            glide.elapsedMs += Math.min(BOTTOM_GLIDE_MAX_FRAME_MS, Math.max(0, now - glide.lastFrameAt));
+            glide.lastFrameAt = now;
+            const { progress, eased } = scrollToBottomProgress(glide.elapsedMs);
             const nextRawPx = progress >= 1
                 ? 0
                 : getRequestedRawDistance() * (1 - eased) / (1 - glide.lastEased);
