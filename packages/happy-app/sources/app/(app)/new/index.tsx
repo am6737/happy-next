@@ -1,7 +1,8 @@
 import React from 'react';
 import { View, Text, Platform, useWindowDimensions } from 'react-native';
 import { Typography } from '@/constants/Typography';
-import { useAllMachines, storage, useLocalSetting, useSessionModeLastUsed, useSetting, useSessions } from '@/sync/storage';
+import { useShallow } from 'zustand/react/shallow';
+import { useAllMachines, storage, useLocalSetting, useSessionModeLastUsed, useSetting } from '@/sync/storage';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useIsFocused } from '@react-navigation/native';
@@ -133,15 +134,15 @@ function NewSessionWizard() {
     const sessionListSelectedTab = useLocalSetting('sessionListSelectedTab');
 
     const machines = useAllMachines();
-    const sessions = useSessions();
     const dooTaskProjectId = React.useMemo(() => getDooTaskProjectId(tempSessionData), [tempSessionData]);
-    const dooTaskProjectRecentConfig = React.useMemo(() => {
-        return getRecentDooTaskProjectConfig(
-            dooTaskProjectId,
-            sessions,
-            new Set(machines.map(machine => machine.id)),
-        );
-    }, [dooTaskProjectId, sessions, machines]);
+    const machineIds = React.useMemo(() => new Set(machines.map(machine => machine.id)), [machines]);
+    // Subscribes to the derived machine and path only: holding the session list itself re-rendered this
+    // page, and the input under it, on every update of any session.
+    const dooTaskProjectRecentConfig = storage(useShallow((state) => getRecentDooTaskProjectConfig(
+        dooTaskProjectId,
+        state.isDataReady ? state.sessionsData : null,
+        machineIds,
+    )));
 
     const [agentType, setAgentType] = React.useState<'claude' | 'codex' | 'gemini' | 'qoder'>(() => {
         // Check if agent type was provided in temp data
@@ -1043,6 +1044,34 @@ function NewSessionWizard() {
     ) : null;
 
     const showRepoPicker = sessionType === 'worktree' && !!selectedMachineId;
+    // Stable, so a re-render of this page doesn't re-render the input and its settings overlay.
+    const agentInputContextHeader = React.useMemo(() => (
+        <SessionTypeSelector
+            embedded
+            value={sessionType}
+            onChange={setSessionType}
+        />
+    ), [sessionType]);
+    const agentInputContextFooter = React.useMemo(() => showRepoPicker ? (
+        // Inset like the machine and path rows above, so the chips start under their icons.
+        <View style={{ paddingTop: 4, paddingHorizontal: 10 }}>
+            <RepoPickerBar
+                embedded
+                machineId={selectedMachineId}
+                selectedRepos={selectedRepos}
+                onReposChange={setSelectedRepos}
+                onAddDirectory={handleAddDirectory}
+            />
+        </View>
+    ) : null, [showRepoPicker, selectedMachineId, selectedRepos, handleAddDirectory]);
+    const handleImagesChange = React.useCallback((newImages: typeof images) => {
+        const currentUris = new Set(newImages.map(img => img.uri));
+        images.forEach((img, index) => {
+            if (!currentUris.has(img.uri)) {
+                removeImage(index);
+            }
+        });
+    }, [images, removeImage]);
     return (
         <View ref={dropZoneRef} style={[styles.container, { position: 'relative' }, Platform.OS !== 'web' && { paddingTop: 40 + softHeaderInset }]}>
             {fileDropOverlay}
@@ -1061,25 +1090,8 @@ function NewSessionWizard() {
                 <View style={{ paddingBottom: safeArea.bottom + (Platform.OS === 'web' ? 8 : 0) }}>
                     <AgentInput
                         panelSideMargin
-                        contextHeader={(
-                            <SessionTypeSelector
-                                embedded
-                                value={sessionType}
-                                onChange={setSessionType}
-                            />
-                        )}
-                        contextFooter={showRepoPicker ? (
-                            // Inset like the machine and path rows above, so the chips start under their icons.
-                            <View style={{ paddingTop: 4, paddingHorizontal: 10 }}>
-                                <RepoPickerBar
-                                    embedded
-                                    machineId={selectedMachineId}
-                                    selectedRepos={selectedRepos}
-                                    onReposChange={setSelectedRepos}
-                                    onAddDirectory={handleAddDirectory}
-                                />
-                            </View>
-                        ) : null}
+                        contextHeader={agentInputContextHeader}
+                        contextFooter={agentInputContextFooter}
                         value={sessionPrompt}
                         onChangeText={setSessionPrompt}
                         inputHistory={inputHistory}
@@ -1107,14 +1119,7 @@ function NewSessionWizard() {
                         currentPath={!selectedMachine ? undefined : sessionType === 'worktree' && selectedRepos.length > 0 ? t('machine.worktreeAutoPath') : formatPathRelativeToHome(selectedPath, selectedMachine.metadata?.homeDir)}
                         onPathClick={sessionType === 'worktree' && selectedRepos.length > 0 ? undefined : handlePathClick}
                         images={images}
-                        onImagesChange={(newImages) => {
-                            const currentUris = new Set(newImages.map(img => img.uri));
-                            images.forEach((img, index) => {
-                                if (!currentUris.has(img.uri)) {
-                                    removeImage(index);
-                                }
-                            });
-                        }}
+                        onImagesChange={handleImagesChange}
                         onImageButtonPress={handleImageButtonPress}
                         imageMenuItems={imagePickerMenuItems}
                         supportsImages={supportsImages}
