@@ -1064,7 +1064,7 @@ export default function MachineDetailScreen() {
                                 style={highlightCli ? styles.cliItemHighlight : undefined}
                                 rightElement={cliUpdate.update.state === 'installing' ? (
                                     <View style={styles.cliStatus}>
-                                        <ActivityIndicator size="small" color={theme.colors.textSecondary} />
+                                        <ActivityIndicator size={Platform.OS === 'ios' ? "small" : 16 as any} color={theme.colors.textSecondary} />
                                         <Text style={styles.cliStatusText}>{t('cliUpdate.installing')}</Text>
                                     </View>
                                 ) : cliUpdate.update.state === 'failed' ? (
@@ -1079,7 +1079,7 @@ export default function MachineDetailScreen() {
                                 ) : isMachineOnline(machine) ? (
                                     <Pressable style={styles.cliButton} onPress={cliUpdate.checkNow} disabled={cliUpdate.checking} hitSlop={6}>
                                         {cliUpdate.checking ? (
-                                            <ActivityIndicator size="small" color={theme.colors.textSecondary} />
+                                            <ActivityIndicator size={Platform.OS === 'ios' ? "small" : 16 as any} color={theme.colors.textSecondary} />
                                         ) : (
                                             <Text style={styles.cliButtonText}>{t('cliUpdate.check')}</Text>
                                         )}

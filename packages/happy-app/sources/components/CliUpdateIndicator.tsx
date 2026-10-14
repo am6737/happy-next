@@ -31,7 +31,7 @@ export const CliUpdateIcon = React.memo(({ update, size }: { update: MachineCliU
         case 'available':
             return <Ionicons name="arrow-up-circle-outline" size={size} color={color} />;
         case 'installing':
-            return <ActivityIndicator size="small" color={color} />;
+            return <ActivityIndicator size={Platform.OS === 'ios' ? "small" : 16 as any} color={color} />;
         case 'failed':
             return <Ionicons name="alert-circle-outline" size={size} color={color} />;
         default:
