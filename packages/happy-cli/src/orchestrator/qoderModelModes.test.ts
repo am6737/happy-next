@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { clearQoderModelModesCache, fillQoderModelModes, qoderModelModesFromListing } from './qoderModelModes';
+import { describe, expect, it, vi } from 'vitest';
+import { fillQoderModelModes, qoderModelModesFromListing } from './qoderModelModes';
 
 const listing = {
     success: true,
@@ -21,9 +21,7 @@ describe('qoderModelModesFromListing', () => {
 });
 
 describe('fillQoderModelModes', () => {
-    beforeEach(() => clearQoderModelModesCache());
-
-    it('asks only online machines with Qoder, and caches the answer', async () => {
+    it('asks only online machines with Qoder', async () => {
         const call = vi.fn().mockResolvedValue(listing);
         const machines = [
             { machineId: 'a', online: true, providers: ['claude', 'qoder'], modelModes: { claude: ['default'], qoder: ['default'] } },
@@ -38,9 +36,6 @@ describe('fillQoderModelModes', () => {
         expect(filled[0].modelModes).toEqual({ claude: ['default'], qoder: ['default', 'auto', 'performance', 'performance:low', 'performance:high'] });
         expect(filled[1]).toBe(machines[1]);
         expect(filled[2]).toBe(machines[2]);
-
-        await fillQoderModelModes(machines, call);
-        expect(call).toHaveBeenCalledTimes(1);
     });
 
     it('keeps what the server sent when the daemon does not answer', async () => {
@@ -48,7 +43,5 @@ describe('fillQoderModelModes', () => {
         const machine = { machineId: 'a', online: true, providers: ['qoder'], modelModes: { qoder: ['default'] } };
 
         expect(await fillQoderModelModes([machine], call)).toEqual([machine]);
-        await fillQoderModelModes([machine], call);
-        expect(call).toHaveBeenCalledTimes(2);
     });
 });

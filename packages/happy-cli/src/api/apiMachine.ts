@@ -17,7 +17,8 @@ import { listClaudeSessionsFromIndex, getClaudeSessionPreview, findClaudeProject
 import { forkAndTruncateSession, forkSession } from '@/claude/utils/claudeSessionFork';
 import { readGeminiSessionLog, listGeminiSessions, getGeminiSessionPreview, saveGeminiSessionCacheStats } from '@/gemini/utils/sessionReader';
 import { forkGeminiSession, forkAndTruncateGeminiSession } from '@/gemini/utils/sessionFork';
-import { forkQoderSession, listQoderModels } from '@/qoder/sessions';
+import { forkQoderSession } from '@/qoder/sessions';
+import { listQoderModels } from '@/qoder/models';
 import { duplicateQoderSession, qoderTranscriptStore, readAllQoderSessionUserMessages } from '@/qoder/transcripts';
 import { fetchLatestQoderModelDescriptions, readCachedQoderModelDescriptions } from '@/qoder/modelTexts';
 import { readAllCodexSessionUserMessages, listCodexSessions, getCodexSessionPreview, saveCodexSessionCacheStats } from '@/codex/utils/codexSessionReader';
@@ -33,7 +34,6 @@ import { encodeBase64, decodeBase64, encrypt, decrypt } from './encryption';
 import { backoff } from '@/utils/time';
 import { RpcHandlerManager } from './rpc/RpcHandlerManager';
 import { execSync, execFileSync } from 'node:child_process';
-import { homedir } from 'node:os';
 import { readdirSync, rmdirSync } from 'node:fs';
 import { paginateSessionUserMessages, resolveSessionUserMessage, type SessionUserMessage } from '@/utils/sessionUserMessages';
 
@@ -808,15 +808,11 @@ export class ApiMachineClient {
             return { message: messages.find((message) => message.uuid === uuid) ?? null };
         });
 
-        // Models the signed-in Qoder account offers, with their efforts, for the app's model picker
-        // The orchestrator server knows no directory on this machine, so it leaves it out and gets the home directory
-        this.rpcHandlerManager.registerHandler('qoder-list-models', async (params: any) => {
-            const { directory = homedir() } = params || {};
-            if (!directory || typeof directory !== 'string') {
-                throw new Error('directory is required');
-            }
+        // Models the signed-in Qoder account offers, with their efforts, for the app's model picker and
+        // orchestrator_get_context. They are per account, so the `directory` older apps send is not needed.
+        this.rpcHandlerManager.registerHandler('qoder-list-models', async () => {
             try {
-                return { success: true, models: await listQoderModels(directory) };
+                return { success: true, models: await listQoderModels() };
             } catch (error) {
                 return { success: false, errorMessage: error instanceof Error ? error.message : String(error) };
             }

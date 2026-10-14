@@ -1,7 +1,7 @@
 import { MODEL_MODE_DEFAULT, buildQoderModelMode } from 'happy-wire';
 
-const QODER_MODELS_TIMEOUT_MS = 15_000;
-const QODER_MODELS_CACHE_TTL_MS = 10 * 60_000;
+// The daemon keeps the list and spends at most 15s asking qodercli for a new one
+const QODER_MODELS_TIMEOUT_MS = 20_000;
 
 /** Calls an RPC method another machine's daemon registered, e.g. `<machineId>:qoder-list-models`. */
 export type MachineRpcCall = (method: string, params: Record<string, unknown>, timeoutMs: number) => Promise<unknown>;
@@ -17,8 +17,6 @@ type ContextMachine = {
     providers?: unknown;
     modelModes?: Record<string, unknown>;
 };
-
-const cache = new Map<string, { modes: string[]; expiresAt: number }>();
 
 /** `default`, then every model code the listing has and each `code:effort`. */
 export function qoderModelModesFromListing(response: unknown): string[] | null {
@@ -40,17 +38,8 @@ export function qoderModelModesFromListing(response: unknown): string[] | null {
 }
 
 async function loadQoderModelModes(machineId: string, call: MachineRpcCall): Promise<string[] | null> {
-    const cached = cache.get(machineId);
-    if (cached && cached.expiresAt > Date.now()) {
-        return cached.modes;
-    }
     try {
-        // No directory: the daemon lists from its home directory, as this machine knows none of its paths
-        const modes = qoderModelModesFromListing(await call(`${machineId}:qoder-list-models`, {}, QODER_MODELS_TIMEOUT_MS));
-        if (modes) {
-            cache.set(machineId, { modes, expiresAt: Date.now() + QODER_MODELS_CACHE_TTL_MS });
-        }
-        return modes;
+        return qoderModelModesFromListing(await call(`${machineId}:qoder-list-models`, {}, QODER_MODELS_TIMEOUT_MS));
     } catch {
         return null;
     }
@@ -73,9 +62,4 @@ export async function fillQoderModelModes<T extends ContextMachine>(machines: T[
         const modes = await loadQoderModelModes(machine.machineId, call);
         return modes ? { ...machine, modelModes: { ...machine.modelModes, qoder: modes } } : machine;
     }));
-}
-
-/** Test hook */
-export function clearQoderModelModesCache(): void {
-    cache.clear();
 }

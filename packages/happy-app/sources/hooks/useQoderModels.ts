@@ -24,9 +24,9 @@ const latestDescriptionsAsked = new Set<string>();
 /**
  * Models a Qoder session on `machineId` can use, with their efforts and descriptions.
  *
- * Qoder lists models (and each model's efforts) per account and only over ACP, so
- * they are asked from the machine (a throwaway ACP session that qodercli does not
- * save) once Qoder is selected, once per launch. Until that answer arrives the list
+ * Qoder lists models (and each model's efforts) per account and only through
+ * qodercli, so they are asked from the machine, whose daemon keeps the list and
+ * refreshes it from qodercli, once Qoder is selected, once per launch. Until that answer arrives the list
  * the machine gave last time is used; failing that, or if the machine can't answer,
  * the models the most recently updated Qoder session reported are, with `pending`
  * set so callers don't judge a saved choice against those stand-ins.
