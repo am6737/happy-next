@@ -20,6 +20,24 @@ const FALLBACK_MANUAL_COMMAND = 'happy update';
 // Machines whose update dialog is open: it shows the outcome itself, so no toast then
 const openDialogs = new Set<string>();
 
+// Each machine's last preflight. The dialog opens on it while it asks again, instead of opening on
+// a spinner and growing once the answer comes in.
+const preflights = new Map<string, CliUpdatePreflight | null>();
+
+function loadPreflight(machineId: string): Promise<CliUpdatePreflight | null> {
+    return machineCliUpdatePreflight(machineId)
+        .catch(() => null)
+        .then((result) => {
+            preflights.set(machineId, result);
+            return result;
+        });
+}
+
+/** Ask a machine for its preflight ahead of the dialog, e.g. when the page offering an update shows. */
+export function prefetchCliUpdatePreflight(machineId: string) {
+    void loadPreflight(machineId);
+}
+
 /**
  * The CLI update dialog for a machine: what an update interrupts (from the daemon's preflight),
  * then the install's progress and outcome. It can be closed at any point; an install started
@@ -35,7 +53,7 @@ function CliUpdateModalContent({ machineId, onClose }: { machineId: string; onCl
     const update = getMachineCliUpdate(machine);
     const running = machine?.metadata?.happyCliVersion ?? '';
     // undefined while loading; null for daemons before 0.13 (or when it could not be loaded)
-    const [preflight, setPreflight] = React.useState<CliUpdatePreflight | null | undefined>(undefined);
+    const [preflight, setPreflight] = React.useState<CliUpdatePreflight | null | undefined>(() => preflights.get(machineId));
     const [startedVersion, setStartedVersion] = React.useState<string | null>(null);
     const [unsupportedReason, setUnsupportedReason] = React.useState<string | null>(null);
     const [notice, setNotice] = React.useState<string | null>(null);
@@ -49,9 +67,7 @@ function CliUpdateModalContent({ machineId, onClose }: { machineId: string; onCl
 
     React.useEffect(() => {
         let cancelled = false;
-        machineCliUpdatePreflight(machineId)
-            .then((result) => !cancelled && setPreflight(result))
-            .catch(() => !cancelled && setPreflight(null));
+        loadPreflight(machineId).then((result) => !cancelled && setPreflight(result));
         return () => {
             cancelled = true;
         };
@@ -162,9 +178,8 @@ function CliUpdateModalContent({ machineId, onClose }: { machineId: string; onCl
                 );
                 break;
             }
-            body = preflight === undefined ? (
-                <ActivityIndicator style={styles.loading} size="small" color={theme.colors.textSecondary} />
-            ) : (
+            // Still loading, the update button spins in its place
+            body = (
                 <View style={styles.impacts}>
                     {!!activity?.executions && (
                         <View style={styles.impactRow}>
@@ -221,7 +236,7 @@ function CliUpdateModalContent({ machineId, onClose }: { machineId: string; onCl
                         onPress={startUpdate}
                         disabled={!canUpdate || starting}
                     >
-                        {starting ? (
+                        {starting || (view === 'available' && preflight === undefined) ? (
                             <ActivityIndicator size="small" color={theme.colors.button.primary.tint} />
                         ) : (
                             <Text style={styles.buttonPrimaryText}>{primaryLabel}</Text>
@@ -266,9 +281,6 @@ const styles = StyleSheet.create((theme) => ({
     body: {
         marginTop: 16,
         gap: 10,
-    },
-    loading: {
-        paddingVertical: 8,
     },
     impacts: {
         gap: 10,
@@ -357,6 +369,8 @@ const styles = StyleSheet.create((theme) => ({
     },
     button: {
         flex: 1,
+        // The spinner a button shows while busy is taller than its label
+        minHeight: 44,
         paddingVertical: 12,
         borderRadius: 10,
         alignItems: 'center',

@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { Modal } from '@/modal';
 import { showToast } from '@/components/Toast';
-import { showCliUpdateModal } from '@/components/CliUpdateModal';
+import { prefetchCliUpdatePreflight, showCliUpdateModal } from '@/components/CliUpdateModal';
 import { useHappyAction } from '@/hooks/useHappyAction';
 import { machineCheckCliUpdate } from '@/sync/ops';
 import { storage } from '@/sync/storage';
@@ -18,6 +18,13 @@ import { t } from '@/text';
 export function useMachineCliUpdate(machine: Machine | null | undefined) {
     const update = React.useMemo(() => getMachineCliUpdate(machine), [machine]);
     const machineId = machine?.id;
+    const online = !!machine?.active;
+
+    // With an update to offer, the dialog's preflight is asked for now so the dialog opens complete
+    const offered = update.state === 'available' || update.state === 'failed';
+    React.useEffect(() => {
+        if (machineId && online && offered) prefetchCliUpdatePreflight(machineId);
+    }, [machineId, online, offered]);
 
     const [checking, checkNow] = useHappyAction(React.useCallback(async () => {
         if (!machineId) return;

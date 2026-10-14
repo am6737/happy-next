@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
     View,
     Modal,
@@ -24,6 +24,8 @@ interface BaseModalProps {
     animationType?: 'fade' | 'slide' | 'none';
     transparent?: boolean;
     closeOnBackdrop?: boolean;
+    /** Runs once the modal has faded out after `visible` turned false. */
+    onExited?: () => void;
 }
 
 export function BaseModal({
@@ -32,12 +34,18 @@ export function BaseModal({
     children,
     animationType = 'fade',
     transparent = true,
-    closeOnBackdrop = true
+    closeOnBackdrop = true,
+    onExited
 }: BaseModalProps) {
     const fadeAnim = useRef(new Animated.Value(0)).current;
+    // Stays mounted while it fades out, so closing is animated like opening
+    const [mounted, setMounted] = useState(visible);
+    const onExitedRef = useRef(onExited);
+    onExitedRef.current = onExited;
 
     useEffect(() => {
         if (visible) {
+            setMounted(true);
             Animated.timing(fadeAnim, {
                 toValue: 1,
                 duration: 200,
@@ -48,7 +56,11 @@ export function BaseModal({
                 toValue: 0,
                 duration: 200,
                 useNativeDriver: true
-            }).start();
+            }).start(({ finished }) => {
+                if (!finished) return;
+                setMounted(false);
+                onExitedRef.current?.();
+            });
         }
     }, [visible, fadeAnim]);
 
@@ -60,7 +72,8 @@ export function BaseModal({
 
     const content = (
         <KeyboardAvoidingView
-            style={styles.container}
+            // Fading out, it no longer takes touches
+            style={[styles.container, !visible && styles.exiting]}
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             {...webEventHandlers}
         >
@@ -98,7 +111,7 @@ export function BaseModal({
     );
 
     if (Platform.OS === 'ios' && transparent) {
-        if (!visible) {
+        if (!mounted) {
             return null;
         }
 
@@ -111,7 +124,7 @@ export function BaseModal({
 
     return (
         <Modal
-            visible={visible}
+            visible={mounted}
             transparent={transparent}
             animationType={animationType}
             onRequestClose={onClose}
@@ -132,6 +145,9 @@ const styles = StyleSheet.create({
         backgroundColor: 'transparent',
         // On web, ensure modal can receive pointer events when body has pointer-events: none
         ...Platform.select({ web: { pointerEvents: 'auto' as const } })
+    },
+    exiting: {
+        pointerEvents: 'none'
     },
     backdrop: {
         ...StyleSheet.absoluteFillObject,
