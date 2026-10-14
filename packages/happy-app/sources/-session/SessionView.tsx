@@ -1141,6 +1141,7 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
     useFocusEffect(
         React.useCallback(() => {
             sync.onSessionVisible(sessionId, true);
+            sync.onSessionChatFocused(sessionId);
             startSilentRefreshTracking();
             // Keep the message-list refreshing indicator suppressed for the first 3s, matching
             // the existing silent-refresh behavior, then let it reflect the real fetch state.
@@ -1149,7 +1150,11 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
             void sync.refreshSessions().catch(() => {
                 // Silent refresh indicator handles delayed feedback if status stays stale.
             });
-            return () => clearTimeout(gateTimer);
+            return () => {
+                clearTimeout(gateTimer);
+                // Its files, info and other pages stack on top of it and do not read it.
+                sync.onSessionChatBlurred(sessionId);
+            };
         }, [sessionId, startSilentRefreshTracking])
     );
 

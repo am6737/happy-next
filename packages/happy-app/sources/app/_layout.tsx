@@ -66,7 +66,8 @@ function shouldHideForegroundNotification(notification: Notifications.Notificati
     }
 
     const notificationSessionId = getNotificationSessionId(notification.request?.content?.data);
-    return !!notificationSessionId && notificationSessionId === currentSessionId;
+    // Only the chat itself makes it redundant; the session's files, info and other pages do not.
+    return !!notificationSessionId && sync.isReadingSession(notificationSessionId);
 }
 
 // Mute all notification sounds while a voice conversation is active

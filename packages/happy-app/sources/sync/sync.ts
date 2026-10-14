@@ -300,6 +300,9 @@ class Sync {
 
     // Track which session the user is currently viewing
     private viewingSessionId: string | null = null;
+    // The session whose chat is the focused screen. Narrower than `viewingSessionId`, which stays set
+    // on the session's other pages (files, info, …): only this one counts as reading it.
+    private readingSessionId: string | null = null;
 
     private getMessageAccountKey(): string | null {
         if (!this.serverID) {
@@ -403,9 +406,9 @@ class Sync {
         // Web/desktop: an open session left unread while the window was unfocused or idle is read
         // the moment they are back at it.
         userAttention.onPresent(() => {
-            if (this.viewingSessionId) {
-                markSessionViewed(this.viewingSessionId);
-                this.rerenderSessionRow(this.viewingSessionId);
+            if (this.readingSessionId) {
+                markSessionViewed(this.readingSessionId);
+                this.rerenderSessionRow(this.readingSessionId);
             }
         });
 
@@ -414,8 +417,8 @@ class Sync {
             if (nextAppState === 'active') {
                 log.log('📱 App became active');
                 // Refresh lastViewedAt so blue dot won't flash for the session user is viewing
-                if (this.viewingSessionId && userAttention.isPresent()) {
-                    markSessionViewed(this.viewingSessionId);
+                if (this.readingSessionId && userAttention.isPresent()) {
+                    markSessionViewed(this.readingSessionId);
                 }
                 this.profileSync.invalidate();
                 this.machinesSync.invalidate();
@@ -820,23 +823,40 @@ class Sync {
                 voiceHooks.onSessionFocus(sessionId, session.metadata || undefined);
             }
         }
+    }
 
+    /**
+     * The session's chat became the focused screen. Its other pages (files, info, a message's
+     * details, …) keep the session open but do not read it, so only the chat calls this.
+     */
+    onSessionChatFocused = (sessionId: string) => {
+        this.readingSessionId = sessionId;
         // Record view time for blue dot (taskCompleted) comparison. Opening it in an unfocused or
         // idle window is not reading it; `userAttention.onPresent` catches up once they are back.
-        if (userInitiated && userAttention.isPresent()) {
+        if (userAttention.isPresent()) {
             markSessionViewed(sessionId);
             // Trigger re-render so blue dot disappears on tablet sidebar
             this.rerenderSessionRow(sessionId);
         }
     }
 
+    onSessionChatBlurred = (sessionId: string) => {
+        if (this.readingSessionId === sessionId) {
+            this.readingSessionId = null;
+        }
+    }
+
     onSessionHidden = () => {
         this.viewingSessionId = null;
+        this.readingSessionId = null;
         voiceHooks.onSessionBlur();
     }
 
     /** Whether the session screen is open on this session. See `markSessionUnread`. */
     isViewingSession = (sessionId: string): boolean => this.viewingSessionId === sessionId;
+
+    /** Whether this session's chat is the focused screen — where its notifications are redundant. */
+    isReadingSession = (sessionId: string): boolean => this.readingSessionId === sessionId;
 
     /** Reading is exactly what opening the session already writes. */
     markSessionRead = (sessionId: string) => {
@@ -4538,7 +4558,7 @@ class Sync {
 
                 // If user is viewing this session, keep lastViewedAt fresh
                 // so incoming taskCompleted doesn't show a blue dot
-                if (this.viewingSessionId === updateData.body.id && userAttention.isPresent()) {
+                if (this.readingSessionId === updateData.body.id && userAttention.isPresent()) {
                     markSessionViewed(updateData.body.id);
                 }
 

@@ -2,7 +2,7 @@ import * as React from 'react';
 import { addPluginListener, invoke, type PluginListener } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { usePathname, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 
 import { storage, useLocalSetting } from '@/sync/storage';
 import { Modal } from '@/modal';
@@ -17,9 +17,8 @@ import {
     isReadyEvent,
     notificationId,
     otherUserMessagePreview,
-    sessionIdFromPath,
 } from './desktopNotificationUtils';
-import { sessionLastViewedAt } from '@/sync/sync';
+import { sessionLastViewedAt, sync } from '@/sync/sync';
 import { truncateMessagePreviewText } from '@/utils/messagePreviewText';
 import {
     clearDesktopNotificationRoutes,
@@ -39,16 +38,12 @@ const IS_WINDOWS_DESKTOP = typeof navigator !== 'undefined' && /Windows/.test(na
 
 export function DesktopBridge() {
     const router = useRouter();
-    const pathname = usePathname();
     const closeToTray = useLocalSetting('desktopCloseToTray');
     const notificationsEnabled = useLocalSetting('desktopNotificationsEnabled');
     const autostartEnabled = useLocalSetting('desktopAutostartEnabled');
     const globalShortcutEnabled = useLocalSetting('desktopGlobalShortcutEnabled');
     const hideNotificationsWhenActive = useLocalSetting('hideNotificationsWhenActive');
     const hideSessionNotificationsWhenActive = useLocalSetting('hideSessionNotificationsWhenActive');
-    const currentSessionId = React.useMemo(() => sessionIdFromPath(pathname), [pathname]);
-
-    const currentSessionIdRef = React.useRef(currentSessionId);
     const windowFocusedRef = React.useRef(true);
     const desktopAttentionCountRef = React.useRef(-1);
     const seenMessageIdsRef = React.useRef(new Set<string>());
@@ -152,10 +147,6 @@ export function DesktopBridge() {
             void invoke('set_desktop_unread_count', { count: 0 });
         });
     }, []);
-
-    React.useEffect(() => {
-        currentSessionIdRef.current = currentSessionId;
-    }, [currentSessionId]);
 
     React.useEffect(() => {
         if (!isTauriDesktop()) {
@@ -281,7 +272,6 @@ export function DesktopBridge() {
             notificationPayloadRef.current.delete(sessionId);
             notificationSessionsRef.current.delete(notificationId(sessionId));
 
-            currentSessionIdRef.current = sessionId;
             void invoke('show_desktop_window')
                 .catch((error) => console.warn('Failed to show desktop window from notification:', error));
             router.replace(`/session/${encodeURIComponent(sessionId)}`);
@@ -429,11 +419,11 @@ export function DesktopBridge() {
                 }
             }
 
-            const isCurrentAndFocused = windowFocusedRef.current && currentSessionIdRef.current === sessionId;
+            const isCurrentAndFocused = windowFocusedRef.current && sync.isReadingSession(sessionId);
             const shouldNotify = notificationsEnabled
                 && !isCurrentAndFocused
                 && !(windowFocusedRef.current && hideNotificationsWhenActive)
-                && !(windowFocusedRef.current && hideSessionNotificationsWhenActive && currentSessionIdRef.current === sessionId);
+                && !(windowFocusedRef.current && hideSessionNotificationsWhenActive && sync.isReadingSession(sessionId));
             if (!notificationBody || !shouldNotify) {
                 return;
             }
@@ -485,11 +475,11 @@ export function DesktopBridge() {
                 seenPermissionRequestIdsRef.current.add(requestId);
             }
 
-            const isCurrentAndFocused = windowFocusedRef.current && currentSessionIdRef.current === sessionId;
+            const isCurrentAndFocused = windowFocusedRef.current && sync.isReadingSession(sessionId);
             const shouldNotify = notificationsEnabled
                 && !isCurrentAndFocused
                 && !(windowFocusedRef.current && hideNotificationsWhenActive)
-                && !(windowFocusedRef.current && hideSessionNotificationsWhenActive && currentSessionIdRef.current === sessionId);
+                && !(windowFocusedRef.current && hideSessionNotificationsWhenActive && sync.isReadingSession(sessionId));
             if (!shouldNotify) {
                 return;
             }
