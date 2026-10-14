@@ -19,9 +19,9 @@ import { PendingQueuePanel } from '@/components/PendingQueuePanel';
 import { ScheduleMessageSheet } from '@/components/ScheduleMessageSheet';
 import { VoiceAssistantStatusBar } from '@/components/VoiceAssistantStatusBar';
 import { useDraft } from '@/hooks/useDraft';
-import { useImagePicker } from '@/hooks/useImagePicker';
+import { DEFAULT_ALLOWED_TYPES, useImagePicker } from '@/hooks/useImagePicker';
 import { useFileAttachments } from '@/hooks/useFileAttachments';
-import { useWebImageDrop } from '@/hooks/useWebImageDrop';
+import { useWebFileDrop } from '@/hooks/useWebFileDrop';
 import { Modal } from '@/modal';
 import { voiceHooks } from '@/realtime/hooks/voiceHooks';
 import { startRealtimeSession, stopRealtimeSession } from '@/realtime/RealtimeSession';
@@ -35,7 +35,8 @@ import { Session } from '@/sync/storageTypes';
 import { sync } from '@/sync/sync';
 import { t } from '@/text';
 import { tracking, trackMessageSent } from '@/track';
-import { handleImagePasteEvent } from '@/utils/imagePaste';
+import { handleFilePasteEvent } from '@/utils/filePaste';
+import { splitComposerFiles } from '@/utils/fileDrop';
 import { isRunningOnMac } from '@/utils/platform';
 import { softHeaderOptions } from '@/components/navigation/softHeader';
 import { floatingComposerAvailable, floatingComposerScreenOptions } from '@/components/floatingComposer';
@@ -523,7 +524,6 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
         removeImage,
         clearImages,
         initImages,
-        canAddMore,
     } = useImagePicker({ maxImages: 4 });
 
     // Use draft hook for auto-saving message drafts
@@ -1036,23 +1036,34 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
         event.target.value = '';
     }, [addImagesFromFiles]);
 
-    // Handle paste event for images (both web and native through input)
-    const handlePaste = React.useCallback(async (event: ClipboardEvent) => {
-        await handleImagePasteEvent(event, {
-            isScreenFocused: isFocused,
-            canAddMore,
-            supportsImages,
-            onImageFile: async (file) => addImagesFromFiles([file]),
-        });
-    }, [isFocused, canAddMore, supportsImages, addImagesFromFiles]);
+    // Files dropped or pasted into the composer (web): images the AI can see go as images, the
+    // rest upload to the machine as files.
+    const addFiles = fileAttachments.addFiles;
+    const splitIncomingFiles = React.useCallback((files: File[]) => splitComposerFiles(files, {
+        imageTypes: DEFAULT_ALLOWED_TYPES,
+        supportsImages,
+        canAttachFiles,
+    }), [supportsImages, canAttachFiles]);
+    const addIncomingFiles = React.useCallback(async (files: File[]) => {
+        const split = splitIncomingFiles(files);
+        if (split.files.length > 0) addFiles(split.files);
+        if (split.images.length > 0) await addImagesFromFiles(split.images);
+    }, [splitIncomingFiles, addFiles, addImagesFromFiles]);
 
-    const handleImageDrop = React.useCallback(async (files: File[]) => {
-        if (!supportsImages) return;
-        await addImagesFromFiles(files);
-    }, [supportsImages, addImagesFromFiles]);
-    const { dropZoneRef, isDragging: isDraggingImage } = useWebImageDrop({
-        enabled: isFocused && supportsImages,
-        onImageDrop: handleImageDrop,
+    const handlePaste = React.useCallback(async (event: ClipboardEvent) => {
+        await handleFilePasteEvent(event, {
+            isScreenFocused: isFocused,
+            accept: (files) => {
+                const split = splitIncomingFiles(files);
+                return [...split.images, ...split.files];
+            },
+            onFiles: addIncomingFiles,
+        });
+    }, [isFocused, splitIncomingFiles, addIncomingFiles]);
+
+    const { dropZoneRef, isDragging: isDraggingFile } = useWebFileDrop({
+        enabled: isFocused && (supportsImages || canAttachFiles),
+        onFileDrop: addIncomingFiles,
     });
 
     // Handle loading more older messages when scrolling to top
@@ -1158,7 +1169,7 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
         }, [sessionId, startSilentRefreshTracking])
     );
 
-    // Add paste event listener for images (web only)
+    // Add paste event listener for images and files (web only)
     React.useEffect(() => {
         if (Platform.OS !== 'web') return;
 
@@ -1502,7 +1513,7 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
                     input={input}
                     betweenContentAndInput={pendingQueuePanel}
                 />
-                {isDraggingImage && (
+                {isDraggingFile && (
                     <View
                         pointerEvents="none"
                         style={{
@@ -1521,7 +1532,7 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
                             backgroundColor: theme.dark ? 'rgba(0, 122, 255, 0.14)' : 'rgba(0, 122, 255, 0.08)',
                         }}
                     >
-                        <Ionicons name="images-outline" size={42} color="#007AFF" />
+                        <Ionicons name="cloud-upload-outline" size={42} color="#007AFF" />
                     </View>
                 )}
             </View >

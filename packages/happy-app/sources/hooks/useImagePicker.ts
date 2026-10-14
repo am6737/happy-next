@@ -10,7 +10,7 @@ const MAX_DIMENSION = 1568;
 const MAX_SIZE_BYTES = 1.5 * 1024 * 1024;
 const JPEG_QUALITY = 0.8;
 const DEFAULT_MAX_IMAGES = 4;
-const DEFAULT_ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+export const DEFAULT_ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 
 function shouldPassthrough(mimeType: string, width: number, height: number, fileSize?: number): boolean {
     if (mimeType !== 'image/jpeg' && mimeType !== 'image/png') return false;

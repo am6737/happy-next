@@ -34,7 +34,7 @@ import { ComposerFiles } from '@/components/FileAttachments';
 import type { ComposerFile } from '@/hooks/useFileAttachments';
 import { Switch } from '@/components/Switch';
 import { Modal } from '@/modal';
-import { useWebImageDrop } from '@/hooks/useWebImageDrop';
+import { useWebFileDrop } from '@/hooks/useWebFileDrop';
 import { useModelCatalog } from '@/hooks/useModelCatalog';
 import { GlassView, isLiquidGlassAvailable } from 'expo-glass-effect';
 import { isRunningOnMac } from '@/utils/platform';
@@ -156,7 +156,7 @@ interface AgentInputProps {
     files?: ComposerFile[];
     onRemoveFile?: (id: string) => void;
     onRetryFile?: (id: string) => void;
-    onImageDrop?: (files: File[]) => void;
+    onFileDrop?: (files: File[]) => void;
 }
 
 const agentFlavorIcons = {
@@ -991,9 +991,9 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
 
     const inputRef = React.useRef<MultiTextInputHandle>(null);
 
-    const { dropZoneRef, isDragging } = useWebImageDrop({
-        enabled: !!props.supportsImages && !!props.onImageDrop,
-        onImageDrop: props.onImageDrop,
+    const { dropZoneRef, isDragging } = useWebFileDrop({
+        enabled: !!props.onFileDrop,
+        onFileDrop: props.onFileDrop,
     });
 
     // Forward ref to the MultiTextInput

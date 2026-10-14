@@ -1,13 +1,13 @@
 import * as React from 'react';
 import { Platform, View } from 'react-native';
-import { getDroppedImageFiles, isFileDrag } from '@/utils/imageDrop';
+import { getDroppedFiles, isFileDrag } from '@/utils/fileDrop';
 
-interface UseWebImageDropOptions {
+interface UseWebFileDropOptions {
     enabled: boolean;
-    onImageDrop?: (files: File[]) => void | Promise<void>;
+    onFileDrop?: (files: File[]) => void | Promise<void>;
 }
 
-export function useWebImageDrop(options: UseWebImageDropOptions) {
+export function useWebFileDrop(options: UseWebFileDropOptions) {
     const [isDragging, setIsDragging] = React.useState(false);
     const dragCounterRef = React.useRef(0);
     const dropZoneRef = React.useRef<View>(null);
@@ -52,8 +52,8 @@ export function useWebImageDrop(options: UseWebImageDropOptions) {
             event.stopPropagation();
             resetDragState();
 
-            const files = getDroppedImageFiles(event.dataTransfer);
-            if (files.length > 0) void options.onImageDrop?.(files);
+            const files = getDroppedFiles(event.dataTransfer);
+            if (files.length > 0) void options.onFileDrop?.(files);
         };
 
         element.addEventListener('dragenter', handleDragEnter);
@@ -73,7 +73,7 @@ export function useWebImageDrop(options: UseWebImageDropOptions) {
             window.removeEventListener('dragend', resetDragState);
             window.removeEventListener('drop', resetDragState);
         };
-    }, [options.enabled, options.onImageDrop]);
+    }, [options.enabled, options.onFileDrop]);
 
     return { dropZoneRef, isDragging };
 }

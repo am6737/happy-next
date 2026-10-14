@@ -116,9 +116,37 @@ export function useFileAttachments(sessionId: string | null) {
         return run;
     }, [update]);
 
-    const pickFiles = React.useCallback(async () => {
+    /** Adds files to the composer and starts uploading them, within the count and size limits. */
+    const addPicked = React.useCallback((assets: Picked[]) => {
         const room = MAX_FILE_ATTACHMENTS - filesRef.current.length;
-        if (room <= 0) {
+        const added: ComposerFile[] = [];
+        const tooLarge: string[] = [];
+        for (const asset of assets) {
+            if (asset.size > FILE_UPLOAD_LIMIT) {
+                tooLarge.push(asset.name);
+                discardCopy(asset);
+                continue;
+            }
+            if (added.length >= room) {
+                discardCopy(asset);
+                continue;
+            }
+            const id = randomUUID();
+            picked.current.set(id, asset);
+            added.push({ id, name: asset.name, size: asset.size, status: sessionId ? 'uploading' : 'staged', sent: 0 });
+        }
+        if (tooLarge.length) {
+            Modal.alert(t('common.error'), t('session.files.tooLarge', { names: tooLarge.join(', '), limit: FILE_UPLOAD_LIMIT / 1024 / 1024 }));
+        } else if (added.length < assets.length) {
+            Modal.alert(t('common.error'), t('session.files.limitReached', { count: MAX_FILE_ATTACHMENTS }));
+        }
+        if (!added.length) return;
+        setFiles((current) => [...current, ...added]);
+        if (sessionId) for (const file of added) void enqueue(file.id, sessionId);
+    }, [enqueue, sessionId]);
+
+    const pickFiles = React.useCallback(async () => {
+        if (filesRef.current.length >= MAX_FILE_ATTACHMENTS) {
             Modal.alert(t('common.error'), t('session.files.limitReached', { count: MAX_FILE_ATTACHMENTS }));
             return;
         }
@@ -132,35 +160,25 @@ export function useFileAttachments(sessionId: string | null) {
         }
         if (result.canceled) return;
 
-        const added: ComposerFile[] = [];
-        const tooLarge: string[] = [];
+        const assets: Picked[] = [];
         for (const asset of result.assets) {
             const size = asset.file?.size ?? asset.size ?? (() => {
                 try { return new FsFile(asset.uri).size; } catch { return null; }
             })();
             if (size === null || size === undefined) continue;
-            if (size > FILE_UPLOAD_LIMIT) {
-                tooLarge.push(asset.name);
-                discardCopy(asset);
-                continue;
-            }
-            if (added.length >= room) {
-                discardCopy(asset);
-                continue;
-            }
-            const id = randomUUID();
-            picked.current.set(id, { name: asset.name, size, mimeType: asset.mimeType, uri: asset.uri, file: asset.file });
-            added.push({ id, name: asset.name, size, status: sessionId ? 'uploading' : 'staged', sent: 0 });
+            assets.push({ name: asset.name, size, mimeType: asset.mimeType, uri: asset.uri, file: asset.file });
         }
-        if (tooLarge.length) {
-            Modal.alert(t('common.error'), t('session.files.tooLarge', { names: tooLarge.join(', '), limit: FILE_UPLOAD_LIMIT / 1024 / 1024 }));
-        } else if (added.length < result.assets.length) {
+        addPicked(assets);
+    }, [addPicked]);
+
+    /** Adds files dropped or pasted into the composer (web). */
+    const addFiles = React.useCallback((files: File[]) => {
+        if (filesRef.current.length >= MAX_FILE_ATTACHMENTS) {
             Modal.alert(t('common.error'), t('session.files.limitReached', { count: MAX_FILE_ATTACHMENTS }));
+            return;
         }
-        if (!added.length) return;
-        setFiles((current) => [...current, ...added]);
-        if (sessionId) for (const file of added) void enqueue(file.id, sessionId);
-    }, [enqueue, sessionId]);
+        addPicked(files.map((file) => ({ name: file.name, size: file.size, mimeType: file.type || undefined, uri: '', file })));
+    }, [addPicked]);
 
     const retryFile = React.useCallback((id: string) => {
         if (!picked.current.has(id)) return;
@@ -211,6 +229,7 @@ export function useFileAttachments(sessionId: string | null) {
         isUploading: files.some((file) => file.status === 'uploading'),
         hasFailed: files.some((file) => file.status === 'failed'),
         pickFiles,
+        addFiles,
         uploadStaged,
         retryFile,
         removeFile,

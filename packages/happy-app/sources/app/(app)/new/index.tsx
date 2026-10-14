@@ -34,18 +34,19 @@ import { useNewSessionAutocomplete } from '@/hooks/useNewSessionAutocomplete';
 import { formatPathRelativeToHome } from '@/utils/sessionUtils';
 import { isMachineOnline } from '@/utils/machineUtils';
 import { clearNewSessionDraft, loadNewSessionDraft, saveNewSessionDraft } from '@/sync/persistence';
-import { useImagePicker } from '@/hooks/useImagePicker';
+import { DEFAULT_ALLOWED_TYPES, useImagePicker } from '@/hooks/useImagePicker';
 import { useFileAttachments } from '@/hooks/useFileAttachments';
 import { ScheduleMessageSheet } from '@/components/ScheduleMessageSheet';
 import { useInputHistory } from '@/hooks/useInputHistory';
 import { rememberSentSuggestions } from '@/sync/recentSuggestions';
-import { useWebImageDrop } from '@/hooks/useWebImageDrop';
+import { useWebFileDrop } from '@/hooks/useWebFileDrop';
 import { ActionMenuModal } from '@/components/ActionMenuModal';
 import type { ActionMenuItem } from '@/components/ActionMenu';
 import { MODEL_MODE_DEFAULT, isModelModeForAgent, parseQoderModelMode, type MessageAttachment } from 'happy-wire';
 import { FolderPickerSheet } from '@/components/FolderPickerSheet';
 import { BottomSheetModal } from '@gorhom/bottom-sheet';
-import { handleImagePasteEvent } from '@/utils/imagePaste';
+import { handleFilePasteEvent } from '@/utils/filePaste';
+import { splitComposerFiles } from '@/utils/fileDrop';
 import { getDooTaskProjectId, getRecentDooTaskProjectConfig } from '@/utils/dootaskSessionDefaults';
 
 // Simple temporary state for passing selections back from picker screens
@@ -366,7 +367,6 @@ function NewSessionWizard() {
         removeImage,
         clearImages,
         initImages,
-        canAddMore,
     } = useImagePicker({ maxImages: 4 });
 
     // Files are only staged here; they upload to the new session's machine once it exists
@@ -411,16 +411,32 @@ function NewSessionWizard() {
         event.target.value = '';
     }, [addImagesFromFiles]);
 
-    const handlePaste = React.useCallback(async (event: ClipboardEvent) => {
-        await handleImagePasteEvent(event, {
-            isScreenFocused: isFocused,
-            canAddMore,
-            supportsImages,
-            onImageFile: async (file) => addImagesFromFiles([file]),
-        });
-    }, [isFocused, canAddMore, supportsImages, addImagesFromFiles]);
+    // Files dropped or pasted into the composer (web): images the AI can see go as images, the
+    // rest upload to the machine as files.
+    const addFiles = fileAttachments.addFiles;
+    const splitIncomingFiles = React.useCallback((files: File[]) => splitComposerFiles(files, {
+        imageTypes: DEFAULT_ALLOWED_TYPES,
+        supportsImages,
+        canAttachFiles: true,
+    }), [supportsImages]);
+    const addIncomingFiles = React.useCallback(async (files: File[]) => {
+        const split = splitIncomingFiles(files);
+        if (split.files.length > 0) addFiles(split.files);
+        if (split.images.length > 0) await addImagesFromFiles(split.images);
+    }, [splitIncomingFiles, addFiles, addImagesFromFiles]);
 
-    // Add paste event listener for images (web only)
+    const handlePaste = React.useCallback(async (event: ClipboardEvent) => {
+        await handleFilePasteEvent(event, {
+            isScreenFocused: isFocused,
+            accept: (files) => {
+                const split = splitIncomingFiles(files);
+                return [...split.images, ...split.files];
+            },
+            onFiles: addIncomingFiles,
+        });
+    }, [isFocused, splitIncomingFiles, addIncomingFiles]);
+
+    // Add paste event listener for images and files (web only)
     React.useEffect(() => {
         if (Platform.OS !== 'web') return;
 
@@ -432,13 +448,9 @@ function NewSessionWizard() {
         };
     }, [handlePaste]);
 
-    const handleImageDrop = React.useCallback(async (files: File[]) => {
-        if (!supportsImages) return;
-        await addImagesFromFiles(files);
-    }, [supportsImages, addImagesFromFiles]);
-    const { dropZoneRef, isDragging: isDraggingImage } = useWebImageDrop({
-        enabled: isFocused && supportsImages,
-        onImageDrop: handleImageDrop,
+    const { dropZoneRef, isDragging: isDraggingFile } = useWebFileDrop({
+        enabled: isFocused,
+        onFileDrop: addIncomingFiles,
     });
 
     // Handle machineId route param from picker screens (main's navigation pattern)
@@ -1007,7 +1019,7 @@ function NewSessionWizard() {
         </View>
     ) : null;
 
-    const imageDropOverlay = isDraggingImage ? (
+    const fileDropOverlay = isDraggingFile ? (
         <View
             pointerEvents="none"
             style={{
@@ -1026,14 +1038,14 @@ function NewSessionWizard() {
                 backgroundColor: theme.dark ? 'rgba(0, 122, 255, 0.14)' : 'rgba(0, 122, 255, 0.08)',
             }}
         >
-            <Ionicons name="images-outline" size={42} color="#007AFF" />
+            <Ionicons name="cloud-upload-outline" size={42} color="#007AFF" />
         </View>
     ) : null;
 
     const showRepoPicker = sessionType === 'worktree' && !!selectedMachineId;
     return (
         <View ref={dropZoneRef} style={[styles.container, { position: 'relative' }, Platform.OS !== 'web' && { paddingTop: 40 + softHeaderInset }]}>
-            {imageDropOverlay}
+            {fileDropOverlay}
             <View style={{ flex: 1, justifyContent: 'flex-end' }}>
                 <Animated.View style={animatedInputStyle}>
                 {/* External context banner */}
