@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { Message, UserTextMessage } from '@/sync/typesMessage';
-import { foldMustKeepMessage } from './chatListVisibility';
+import { foldMustKeepMessage, isAgentEventRow } from './chatListVisibility';
 
 /**
  * One assistant turn: everything between a user prompt and the next one.
@@ -184,8 +184,10 @@ function collectTurns(visibleMessages: Message[], includeFold: boolean): Turn[] 
         stampedTurn = msg.meta?.turn ?? stampedTurn;
         if (includeFold) current.rows.push(msg);
         // The turn's header sits above its first real agent row. Mode switches and
-        // other notices don't open a turn's reply, so they don't take the slot.
-        if (current.headerId === null && msg.kind !== 'agent-event') current.headerId = msg.id;
+        // other notices don't open a turn's reply, so they don't take the slot. A title
+        // change does: it is a step like any tool call, and a run of steps it opens draws
+        // its line on it — which must not sit above the turn's own line.
+        if (current.headerId === null && !isAgentEventRow(msg)) current.headerId = msg.id;
         if (msg.kind === 'agent-text' && !msg.isThinking) current.lastTextId = msg.id;
         current.lastRowAt = msg.createdAt;
     }

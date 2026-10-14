@@ -138,6 +138,11 @@ describe('turn headers', () => {
         expect([...result.headerById.keys()]).toEqual(['a1']);
     });
 
+    it('opens the turn on a title change when that is what came first', () => {
+        const result = analyze([agent('a1', 30), titleChange('title', 20), user('u1', 10)]);
+        expect([...result.headerById.keys()]).toEqual(['title']);
+    });
+
     it('gives each turn its own header', () => {
         const result = analyze([agent('a2', 40), user('u2', 30), agent('a1', 20), user('u1', 10)]);
         expect([...result.headerById.keys()]).toEqual(['a1', 'a2']);
@@ -681,6 +686,18 @@ describe('runs of steps inside a folded turn', () => {
             { startId: 't1', hiddenIds: ['title', 't3'], steps: 3, snapshotId: 't3', running: false },
         ]);
         expect(result.foldById.get('t0')).toMatchObject({ hiddenIds: ['mid', 't1', 'title', 't3'], steps: 4 });
+    });
+
+    it('draws the line of a run a title change opens on the row the turn line is on, not above it', () => {
+        const result = analyze([
+            agent('a1', 90),
+            tool('t1', 70),
+            agent('mid', 50),
+            titleChange('title', 40),
+            user('u1', 10),
+        ]);
+        expect(result.newestHeaderId).toBe('title');
+        expect(segments(result, 'title')?.map((s) => s.startId)).toEqual(['title', 't1']);
     });
 
     it('stops at the last step, thinking included, leaving what follows to the conclusion', () => {
