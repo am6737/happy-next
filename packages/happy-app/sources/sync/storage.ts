@@ -128,6 +128,8 @@ interface SessionMessages {
     reducerState: ReducerState;
     isLoaded: boolean;
     oldestSeq: number | null;
+    // False until a fetch reports older history: a prompt sent into a new session lands before its
+    // first fetch, and a load-older spinner shown meanwhile would vanish under it a moment later.
     hasMore: boolean;
     fetchVersion: number; // Monotonically increasing counter bumped on every fetch completion
 }
@@ -924,7 +926,7 @@ export const storage = create<StorageState>()((set, get) => {
                     reducerState: createReducer(),
                     isLoaded: false,
                     oldestSeq: null,
-                    hasMore: true,
+                    hasMore: false,
                     fetchVersion: 0,
                 };
 
@@ -1060,7 +1062,7 @@ export const storage = create<StorageState>()((set, get) => {
                             messagesMap,
                             isLoaded: true,
                             oldestSeq: null,
-                            hasMore: true,
+                            hasMore: false,
                             fetchVersion: 1,
                         } satisfies SessionMessages
                     }
@@ -2493,7 +2495,7 @@ export function useSessionMessages(sessionId: string): { messages: Message[], is
         return {
             messages: session?.messages ?? emptyArray,
             isLoaded: session?.isLoaded ?? false,
-            hasMore: session?.hasMore ?? true,
+            hasMore: session?.hasMore ?? false,
             fetchVersion: session?.fetchVersion ?? 0,
         };
     }));

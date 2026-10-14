@@ -741,8 +741,9 @@ const ChatListInternal = React.memo((props: {
     // spinner while there is history left to page in. It is the list's HEADER now — the top of the
     // content is the oldest message once the list is not inverted.
     const isEmpty = listRows.length === 0;
-    // An empty chat has no older history to page in (a session still loading reports `hasMore`
-    // too), and only its centered empty state below the header.
+    // An empty chat has no older history to page in, only its centered empty state below the header.
+    // `hasMore` stays false until a fetch reports older history, so a new session's first prompt never
+    // shows a spinner that would vanish — and pull the prompt up — a moment later.
     const showLoadOlder = props.hasMore && !isEmpty;
     // LegendList keeps the rows hidden until it has measured them and landed on the newest one, but
     // not its header — so until then the spinner would sit alone at the top of a blank list. Its

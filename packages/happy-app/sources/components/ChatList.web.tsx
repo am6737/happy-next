@@ -1714,6 +1714,13 @@ const ChatListInternal = React.memo((props: {
                 observer.observe(el);
                 scrollerResizeObserverRef.current = observer;
             }
+            // The first frame must already lay out against the real viewport: the observer's first
+            // callback can commit after paint, and a canvas filled to the 800px guess in a taller
+            // scroller paints a short conversation bottom-packed, mid-screen, before it jumps up.
+            // A ref callback runs in the commit, so this update lands before that paint.
+            if (el.clientHeight > 0) {
+                updateViewportRef.current(Math.abs(el.scrollTop), el.clientHeight);
+            }
         }
         if (intersectionObserverRef.current) {
             intersectionObserverRef.current.disconnect();
