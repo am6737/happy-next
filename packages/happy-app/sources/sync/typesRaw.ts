@@ -1,6 +1,7 @@
 import * as z from 'zod';
 import { isCuid } from '@paralleldrive/cuid2';
 import { MessageMetaSchema, MessageMeta } from './typesMessageMeta';
+import { limitNoticeTimeStart, rejectedLimitResetsAt } from './usageLimitNotice';
 
 //
 // Raw types
@@ -34,6 +35,11 @@ const agentEventSchema = z.discriminatedUnion('type', [z.object({
     message: z.string(),
 }), z.object({
     type: z.literal('limit-reached'),
+    endsAt: z.number(),
+}), z.object({
+    // A Claude `rate_limit_event` that turned a request away; the reducer pairs it with the
+    // usage-limit notice that follows and never shows it on its own.
+    type: z.literal('limit-resets'),
     endsAt: z.number(),
 }), z.object({
     type: z.literal('ready'),
@@ -505,6 +511,8 @@ type NormalizedAgentContent =
         text: string;
         uuid: string;
         parentUUID: string | null;
+        /** Claude Code's synthetic usage-limit notice; see usageLimitNotice.ts. */
+        limitNotice?: true;
     } | {
         type: 'thinking';
         thinking: string;
@@ -900,19 +908,37 @@ export function normalizeRawMessage(id: string, localId: string | null, createdA
                 return null;
             }
 
+            // A rejected rate_limit_event carries the reset time of the usage-limit notice after it
+            if (raw.content.data.type === 'rate_limit_event') {
+                const endsAt = rejectedLimitResetsAt((raw.content.data as { rate_limit_info?: unknown }).rate_limit_info);
+                if (endsAt === null) {
+                    return null;
+                }
+                return {
+                    id,
+                    localId,
+                    createdAt,
+                    role: 'event',
+                    content: { type: 'limit-resets', endsAt },
+                    isSidechain: false,
+                };
+            }
+
             // Handle Assistant messages (including sidechains)
             if (raw.content.data.type === 'assistant') {
                 if (!raw.content.data.uuid) {
                     return null;
                 }
                 let content: NormalizedAgentContent[] = [];
+                const synthetic = raw.content.data.message.model === '<synthetic>';
                 // content may be undefined for API error messages
                 for (let c of raw.content.data.message.content ?? []) {
                     if (c.type === 'text') {
                         content.push({
                             ...c,  // WOLOG: Preserve all fields including unknown ones
                             uuid: raw.content.data.uuid,
-                            parentUUID: raw.content.data.parentUuid ?? null
+                            parentUUID: raw.content.data.parentUuid ?? null,
+                            ...(synthetic && limitNoticeTimeStart(c.text) !== null && { limitNotice: true }),
                         } as NormalizedAgentContent);
                     } else if (c.type === 'thinking') {
                         // Claude 4.x extended thinking may return a signed block with empty summary text

@@ -17,6 +17,7 @@ import type { ActionMenuItem } from '@/components/ActionMenu';
 import { EmptyMessages } from '@/components/EmptyMessages';
 import { PendingQueuePanel } from '@/components/PendingQueuePanel';
 import { ScheduleMessageSheet } from '@/components/ScheduleMessageSheet';
+import { subscribeScheduleAtLimit } from '@/sync/usageLimitNotice';
 import { VoiceAssistantStatusBar } from '@/components/VoiceAssistantStatusBar';
 import { useDraft } from '@/hooks/useDraft';
 import { DEFAULT_ALLOWED_TYPES, useImagePicker } from '@/hooks/useImagePicker';
@@ -985,14 +986,19 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
         setImagePickerSheetVisible(true);
     }, []);
 
-    // Open the schedule sheet, offering "when the limit resets" if the newest
-    // usage-limit notice in the chat is still in the future.
-    const handleOpenScheduleSheet = React.useCallback(() => {
+    // Open the schedule sheet, offering "when the limit resets" for the given reset time, or else
+    // for the newest usage-limit notice in the chat that is still in the future.
+    const handleOpenScheduleSheet = React.useCallback((atLimitEndsAt?: number) => {
         const nowSeconds = Math.floor(Date.now() / 1000);
-        let limitEndsAt: number | null = null;
-        for (const item of messagesRef.current) {
-            if (item.kind === 'agent-event' && item.event.type === 'limit-reached' && item.event.endsAt > nowSeconds) {
-                limitEndsAt = Math.max(limitEndsAt ?? 0, item.event.endsAt);
+        let limitEndsAt: number | null = atLimitEndsAt ?? null;
+        if (limitEndsAt === null) {
+            for (const item of messagesRef.current) {
+                const endsAt = item.kind === 'agent-event' && item.event.type === 'limit-reached'
+                    ? item.event.endsAt
+                    : item.kind === 'agent-text' ? item.limitEndsAt : undefined;
+                if (endsAt !== undefined && endsAt > nowSeconds) {
+                    limitEndsAt = Math.max(limitEndsAt ?? 0, endsAt);
+                }
             }
         }
         // On native the schedule editor only takes the cursor if the composer had it: the native
@@ -1004,6 +1010,13 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
         composerFocusedOnAddRef.current = false;
         setScheduleSheet({ visible: true, limitEndsAt, autoFocus });
     }, []);
+
+    // A usage-limit notice's reset time was pressed in this session's chat.
+    React.useEffect(() => subscribeScheduleAtLimit((pressedSessionId, endsAt) => {
+        if (pressedSessionId === sessionId) {
+            handleOpenScheduleSheet(endsAt);
+        }
+    }), [sessionId, handleOpenScheduleSheet]);
 
     // Add (+) menu items. Image rows are disabled (not hidden) when the AI has no image support, so
     // scheduling stays reachable. Web has no camera and opens the file picker for the library.
@@ -1022,7 +1035,7 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
             disabled: !supportsImages,
         },
         ...(canAttachFiles ? [{ label: t('session.files.menu'), onPress: () => void pickFiles() }] : []),
-        { label: t('session.scheduleMessage'), onPress: handleOpenScheduleSheet },
+        { label: t('session.scheduleMessage'), onPress: () => handleOpenScheduleSheet() },
     ], [pickFromCamera, pickFromGallery, supportsImages, canAttachFiles, pickFiles, handleOpenScheduleSheet]);
 
     // Handle file input change (web only)

@@ -56,6 +56,8 @@ export type AgentTextMessage = {
     seq?: number | null;
     text: string;
     isThinking?: boolean;
+    /** Set on a usage-limit notice: when the limit resets, epoch seconds. */
+    limitEndsAt?: number;
     meta?: MessageMeta;
 }
 

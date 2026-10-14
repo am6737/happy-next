@@ -116,6 +116,7 @@ import { createTracer, traceMessages, TracerState } from "./reducerTracer";
 import { AgentState } from "../storageTypes";
 import { MessageMeta } from "../typesMessageMeta";
 import { parseMessageAsEvent, shouldSuppressPermission } from "./messageToEvent";
+import { LIMIT_EVENT_PAIRING_MS, parseLimitNoticeResetsAt } from "../usageLimitNotice";
 
 type ReducerMessage = {
     id: string;
@@ -126,6 +127,9 @@ type ReducerMessage = {
     role: 'user' | 'agent';
     text: string | null;
     isThinking?: boolean;
+    /** A usage-limit notice, and when its limit resets (epoch seconds) if that is known. */
+    limitNotice?: true;
+    limitEndsAt?: number | null;
     event: AgentEvent | null;
     tool: ToolCall | null;
     images?: ImageContent[];
@@ -161,6 +165,7 @@ export type ReducerState = {
     messages: Map<string, ReducerMessage>;
     sidechains: Map<string, ReducerMessage[]>;
     tracerState: TracerState; // Tracer state for sidechain processing
+    limitResets: { createdAt: number; endsAt: number }[]; // Rejected rate_limit_events, paired with usage-limit notices
     latestUsage?: {
         inputTokens: number;
         outputTokens: number;
@@ -181,7 +186,8 @@ export function createReducer(): ReducerState {
         localIds: new Map(),
         messageIds: new Map(),
         sidechains: new Map(),
-        tracerState: createTracer()
+        tracerState: createTracer(),
+        limitResets: [],
     }
 };
 
@@ -248,6 +254,20 @@ export function reducer(state: ReducerState, messages: NormalizedMessage[], agen
             // Mark as processed to prevent duplication but don't add to messages
             state.messageIds.set(msg.id, msg.id);
             hasReadyEvent = true;
+            continue;
+        }
+
+        // A rejected rate_limit_event only gives its reset time to the usage-limit notice next to
+        // it, which may already be here when an older page loads after a newer one
+        if (msg.role === 'event' && msg.content.type === 'limit-resets') {
+            state.messageIds.set(msg.id, msg.id);
+            state.limitResets.push({ createdAt: msg.createdAt, endsAt: msg.content.endsAt });
+            for (const [mid, existing] of state.messages) {
+                if (existing.limitNotice && Math.abs(existing.createdAt - msg.createdAt) <= LIMIT_EVENT_PAIRING_MS) {
+                    existing.limitEndsAt = msg.content.endsAt;
+                    changed.add(mid);
+                }
+            }
             continue;
         }
 
@@ -623,6 +643,10 @@ export function reducer(state: ReducerState, messages: NormalizedMessage[], agen
                         seq: msg.seq,
                         text: isThinking ? `*${c.thinking}*` : c.text,
                         isThinking,
+                        ...(c.type === 'text' && c.limitNotice && {
+                            limitNotice: true,
+                            limitEndsAt: pairedLimitResetsAt(state, msg.createdAt) ?? parseLimitNoticeResetsAt(c.text, msg.createdAt),
+                        }),
                         tool: null,
                         event: null,
                         meta: msg.meta,
@@ -1107,6 +1131,18 @@ export function reducer(state: ReducerState, messages: NormalizedMessage[], agen
 // Helpers
 //
 
+/** The reset time of the rejected rate_limit_event closest to a usage-limit notice, if one is near. */
+function pairedLimitResetsAt(state: ReducerState, createdAt: number): number | null {
+    let best: { distance: number; endsAt: number } | null = null;
+    for (const entry of state.limitResets) {
+        const distance = Math.abs(entry.createdAt - createdAt);
+        if (distance <= LIMIT_EVENT_PAIRING_MS && (!best || distance < best.distance)) {
+            best = { distance, endsAt: entry.endsAt };
+        }
+    }
+    return best?.endsAt ?? null;
+}
+
 function allocateId() {
     return Math.random().toString(36).substring(2, 15);
 }
@@ -1152,6 +1188,7 @@ function convertReducerMessageToMessage(reducerMsg: ReducerMessage, state: Reduc
             kind: 'agent-text',
             text: reducerMsg.text,
             ...(reducerMsg.isThinking && { isThinking: true }),
+            ...(reducerMsg.limitEndsAt != null && { limitEndsAt: reducerMsg.limitEndsAt }),
             meta: reducerMsg.meta
         };
     } else if (reducerMsg.role === 'agent' && reducerMsg.tool !== null) {

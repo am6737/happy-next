@@ -15,6 +15,8 @@ import { Metadata } from "@/sync/storageTypes";
 import { layout } from "./layout";
 import { ToolView } from "./tools/ToolView";
 import { AgentEvent } from "@/sync/typesRaw";
+import { limitNoticeTimeStart, requestScheduleAtLimit } from "@/sync/usageLimitNotice";
+import { Typography } from '@/constants/Typography';
 import stripAnsi from 'strip-ansi';
 import { Option } from './markdown/MarkdownView';
 import { OptionItem as OptionItemData } from './markdown/parseMarkdown';
@@ -637,6 +639,12 @@ function AgentTextBlock(props: {
   }, [resolveText]);
   const { state: ttsState, toggle: handleSpeak } = useMessageTts(props.message.id, props.sessionId, resolveText);
 
+  // A usage-limit notice whose limit has not reset yet: its reset time opens the schedule sheet.
+  const limitEndsAt = props.message.limitEndsAt;
+  const limitTimeStart = limitEndsAt && !props.readOnly && limitEndsAt * 1000 > Date.now()
+    ? limitNoticeTimeStart(messageText)
+    : null;
+
   // Hide thinking messages if setting is disabled. Must run AFTER all hooks so
   // the hook count stays constant across renders (Rules of Hooks).
   if (props.message.isThinking && !showThinkingMessages) {
@@ -655,7 +663,15 @@ function AgentTextBlock(props: {
       ]}
       {...hoverHandlers}
     >
-      <MarkdownView
+      {limitTimeStart !== null ? (
+        <LimitNoticeText
+          sessionId={props.sessionId}
+          lead={messageText.slice(0, limitTimeStart)}
+          time={messageText.slice(limitTimeStart)}
+          endsAt={limitEndsAt!}
+          resolveText={resolveText}
+        />
+      ) : <MarkdownView
         markdown={props.message.text}
         sessionId={props.sessionId}
         sessionWorkingDirectory={props.sessionWorkingDirectory}
@@ -665,7 +681,7 @@ function AgentTextBlock(props: {
         optionsLoadingState={props.readOnly ? undefined : optionsLoadingState}
         hideOptions={props.readOnly}
         getSelectionMarkdown={resolveText}
-      />
+      />}
       {props.showActionBar !== false && !props.message.isThinking && (
         <MessageActionBar
           side="left"
@@ -680,6 +696,40 @@ function AgentTextBlock(props: {
         />
       )}
     </View>
+  );
+}
+
+// A usage-limit notice as Claude Code wrote it; pressing its reset time opens the schedule sheet,
+// which shows that time in the reader's own time zone.
+function LimitNoticeText(props: {
+  sessionId: string;
+  lead: string;
+  time: string;
+  endsAt: number;
+  resolveText: () => string;
+}) {
+  const { sessionId, endsAt, resolveText } = props;
+  const handleSchedule = React.useCallback(() => {
+    hapticsLight();
+    requestScheduleAtLimit(sessionId, endsAt);
+  }, [sessionId, endsAt]);
+  // Long press opens the text selection screen on native, as MarkdownView does for other texts.
+  const router = useRouter();
+  const handleLongPress = React.useCallback(() => {
+    const textId = storeTempText(resolveText());
+    router.push({ pathname: '/text-selection', params: { textId, format: 'markdown' } });
+  }, [resolveText, router]);
+  return (
+    <Text
+      style={styles.limitNoticeText}
+      selectable={Platform.OS === 'web'}
+      onLongPress={Platform.OS === 'web' ? undefined : handleLongPress}
+    >
+      {props.lead}
+      <Text style={styles.limitNoticeTime} onPress={handleSchedule}>
+        {props.time}
+      </Text>
+    </Text>
   );
 }
 
@@ -839,6 +889,19 @@ const styles = StyleSheet.create((theme) => ({
   },
   agentMessageContainerStretch: {
     alignSelf: 'stretch',
+  },
+  // Matches MarkdownView's plain text, which the notice is otherwise shown with.
+  limitNoticeText: {
+    ...Typography.default(),
+    fontSize: 16,
+    lineHeight: 24,
+    marginTop: 8,
+    marginBottom: 8,
+    color: theme.colors.text,
+    fontWeight: '400',
+  },
+  limitNoticeTime: {
+    textDecorationLine: 'underline',
   },
   agentEventContainer: {
     marginHorizontal: 16,
