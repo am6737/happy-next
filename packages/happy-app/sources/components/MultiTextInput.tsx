@@ -1,7 +1,9 @@
 import * as React from 'react';
-import { TextInput, Platform, View, NativeSyntheticEvent, TextInputKeyPressEventData, TextInputSelectionChangeEventData, type StyleProp, type ViewStyle } from 'react-native';
+import { TextInput, Platform, StyleSheet, View, NativeSyntheticEvent, TextInputKeyPressEventData, TextInputSelectionChangeEventData, type StyleProp, type ViewStyle } from 'react-native';
 import { useUnistyles } from 'react-native-unistyles';
+import Animated from 'react-native-reanimated';
 import { Typography } from '@/constants/Typography';
+import { useAnimatedInputHeight } from '@/hooks/useAnimatedInputHeight';
 
 export type SupportedKey = 'Enter' | 'Escape' | 'ArrowUp' | 'ArrowDown' | 'ArrowLeft' | 'ArrowRight' | 'Tab';
 
@@ -45,6 +47,8 @@ interface MultiTextInputProps {
     onStateChange?: (state: TextInputState) => void;
     autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
     autoCorrect?: boolean;
+    /** Animate height changes (a line added, the text cleared) when inside a floating composer. */
+    animateHeight?: boolean;
 }
 
 export const MultiTextInput = React.forwardRef<MultiTextInputHandle, MultiTextInputProps>((props, ref) => {
@@ -59,6 +63,7 @@ export const MultiTextInput = React.forwardRef<MultiTextInputHandle, MultiTextIn
     } = props;
 
     const { theme } = useUnistyles();
+    const animatedHeight = useAnimatedInputHeight(props.animateHeight ?? false);
     // Track latest selection in a ref
     const selectionRef = React.useRef({ start: 0, end: 0 });
     const inputRef = React.useRef<TextInput>(null);
@@ -191,41 +196,56 @@ export const MultiTextInput = React.forwardRef<MultiTextInputHandle, MultiTextIn
 
     return (
         <View style={[{ width: '100%' }, props.style]}>
-            <TextInput
-                ref={inputRef}
-                style={{
-                    width: '100%',
-                    fontSize: 16,
-                    lineHeight: props.lineHeight ?? 22,
-                    maxHeight,
-                    color: theme.colors.input.text,
-                    textAlignVertical: 'top',
-                    padding: 0,
-                    paddingTop: props.paddingTop,
-                    paddingBottom: props.paddingBottom,
-                    paddingLeft: props.paddingLeft,
-                    paddingRight: props.paddingRight,
-                    ...Typography.default(),
-                }}
-                placeholder={placeholder}
-                placeholderTextColor={theme.colors.input.placeholder}
-                value={value}
-                onChangeText={handleTextChange}
-                onKeyPress={handleKeyPress}
-                onFocus={props.onFocus}
-                onBlur={props.onBlur}
-                onSelectionChange={handleSelectionChange}
-                multiline={true}
-                autoCapitalize={props.autoCapitalize ?? 'sentences'}
-                autoCorrect={props.autoCorrect ?? true}
-                keyboardType="default"
-                returnKeyType="default"
-                autoComplete="off"
-                textContentType="none"
-                submitBehavior="newline"
-            />
+            <Animated.View
+                style={[{ width: '100%' }, animatedHeight.style && styles.clip, animatedHeight.style]}
+                onLayout={animatedHeight.onWrapperLayout}
+            >
+                <TextInput
+                    ref={inputRef}
+                    onLayout={animatedHeight.onInputLayout}
+                    style={{
+                        width: '100%',
+                        fontSize: 16,
+                        lineHeight: props.lineHeight ?? 22,
+                        maxHeight,
+                        color: theme.colors.input.text,
+                        textAlignVertical: 'top',
+                        padding: 0,
+                        paddingTop: props.paddingTop,
+                        paddingBottom: props.paddingBottom,
+                        paddingLeft: props.paddingLeft,
+                        paddingRight: props.paddingRight,
+                        ...Typography.default(),
+                    }}
+                    placeholder={placeholder}
+                    placeholderTextColor={theme.colors.input.placeholder}
+                    value={value}
+                    onChangeText={handleTextChange}
+                    onKeyPress={handleKeyPress}
+                    onFocus={props.onFocus}
+                    onBlur={props.onBlur}
+                    onSelectionChange={handleSelectionChange}
+                    multiline={true}
+                    autoCapitalize={props.autoCapitalize ?? 'sentences'}
+                    autoCorrect={props.autoCorrect ?? true}
+                    keyboardType="default"
+                    returnKeyType="default"
+                    autoComplete="off"
+                    textContentType="none"
+                    submitBehavior="newline"
+                />
+            </Animated.View>
         </View>
     );
 });
 
 MultiTextInput.displayName = 'MultiTextInput';
+
+const styles = StyleSheet.create({
+    // Not 'hidden': Yoga measures a column's children at most as tall as the column under
+    // 'hidden', so the input could never grow past the wrapper's animated height to set the
+    // next one. Under 'scroll' they are measured freely, and the native view clips all the same.
+    clip: {
+        overflow: 'scroll',
+    },
+});

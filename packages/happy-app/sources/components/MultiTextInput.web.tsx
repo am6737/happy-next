@@ -46,6 +46,8 @@ interface MultiTextInputProps {
     onStateChange?: (state: TextInputState) => void;
     autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
     autoCorrect?: boolean;
+    /** Native only: the field's height is not animated on web. */
+    animateHeight?: boolean;
 }
 
 export const MultiTextInput = React.forwardRef<MultiTextInputHandle, MultiTextInputProps>((props, ref) => {

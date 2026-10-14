@@ -1168,7 +1168,10 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
     const activeSettingsTabIndex = showSettings ? settingsTabKeys.indexOf(showSettings) : -1;
     const [settingsTabBarWidth, setSettingsTabBarWidth] = React.useState(0);
     // Height of the input panel with its status row, which the settings overlay sits on top of.
-    const [inputPanelHeight, setInputPanelHeight] = React.useState(0);
+    // A shared value, not state: the panel's height changes every frame while its text field
+    // animates, and state would re-render this whole component on each of them.
+    const inputPanelHeight = useSharedValue(0);
+    const settingsOverlayBottomStyle = useAnimatedStyle(() => ({ bottom: inputPanelHeight.value }));
     const settingsTabWidth = settingsTabBarWidth > 0 ? (settingsTabBarWidth - SETTINGS_TAB_BAR_PADDING * 2) / settingsTabKeys.length : 0;
     const settingsTabIndicatorX = useSharedValue(0);
     const settingsTabIndicatorPlacedRef = React.useRef(false);
@@ -1746,7 +1749,7 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                 // The overlay's triggers sit right above or in the input card, so it opens
                                 // there, covering the machine/path card rather than sitting over it.
                                 // Its bottom lines up with the machine/path card's when there is one.
-                                { bottom: inputPanelHeight },
+                                settingsOverlayBottomStyle,
                                 hasContextCard && { marginBottom: contextCardMarginBottom },
                                 settingsOverlayStyle,
                             ]}
@@ -2232,7 +2235,7 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                 )}
 
                 {/* The status row sits right above the input card, as close to it as on iOS, where it is in the card. */}
-                <View onLayout={(e) => setInputPanelHeight(e.nativeEvent.layout.height)}>
+                <View onLayout={(e) => { inputPanelHeight.value = e.nativeEvent.layout.height; }}>
                 {!statusInPanel && statusBar}
 
                 {/* Box 2: Action Area (Input + Send) */}
@@ -2276,6 +2279,7 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                             onKeyPress={handleKeyPress}
                             onStateChange={handleInputStateChange}
                             maxHeight={120}
+                            animateHeight
                         />
                     </View>
 

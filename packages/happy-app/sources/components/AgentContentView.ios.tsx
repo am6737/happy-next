@@ -1,11 +1,12 @@
 import * as React from 'react';
 import { View, StyleSheet, type LayoutChangeEvent } from 'react-native';
 import { KeyboardStickyView, useReanimatedKeyboardAnimation } from 'react-native-keyboard-controller';
-import Animated, { useAnimatedStyle, type SharedValue } from 'react-native-reanimated';
+import Animated, { useAnimatedReaction, useAnimatedStyle, useSharedValue, type SharedValue } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardDock } from './KeyboardDock';
 import { COMPOSER_MARGIN, floatingComposerBottomInset } from './floatingComposer';
 import { ComposerKeyboardOffsetContext } from './composerKeyboardOffset';
+import { ComposerInputHeightContext, type ComposerInputHeight } from './composerInputHeight';
 
 
 interface AgentContentViewProps {
@@ -35,14 +36,46 @@ export const AgentContentView: React.FC<AgentContentViewProps> = React.memo(({ i
         bottom: Math.max(0, -height.value) + (floatingInput ? composerHeight?.value ?? 0 : 0),
     }), [floatingInput, composerHeight]);
 
+    // The composer's height is its laid-out height with its text field's share swapped for the
+    // height the field is drawn at, so the list follows the field frame by frame as it grows (see
+    // `ComposerInputHeightContext`). A shrinking field hands the list its final height at once:
+    // it shrinks on send, just as the sent prompt lands and the list animates to the end, and
+    // the list moved along with the field too would fight that scroll frame by frame. Until the
+    // field has been measured (drawn height 0) its laid-out share stands.
+    const laidOut = React.useRef({ composer: 0, input: 0 });
+    const composerBaseHeight = useSharedValue(0);
+    const inputLaidOutHeight = useSharedValue(0);
+    const inputHeight = useSharedValue(0);
+    const inputTargetHeight = useSharedValue(0);
+    const composerInputHeight = React.useMemo<ComposerInputHeight>(() => ({
+        height: inputHeight,
+        target: inputTargetHeight,
+        onLayout: (height) => {
+            laidOut.current.input = height;
+            composerBaseHeight.value = laidOut.current.composer - height;
+            inputLaidOutHeight.value = height;
+        },
+    }), [composerBaseHeight, inputLaidOutHeight, inputHeight, inputTargetHeight]);
+    useAnimatedReaction(
+        () => composerBaseHeight.value + (inputHeight.value > 0
+            ? Math.min(inputHeight.value, inputTargetHeight.value)
+            : inputLaidOutHeight.value),
+        (height) => {
+            if (composerHeight) {
+                composerHeight.value = height;
+            }
+        },
+        [composerHeight],
+    );
+
     if (floatingInput) {
         const bottomInset = floatingComposerBottomInset(safeArea.bottom);
         const onComposerLayout = (event: LayoutChangeEvent) => {
-            if (composerHeight) {
-                composerHeight.value = event.nativeEvent.layout.height;
-            }
+            laidOut.current.composer = event.nativeEvent.layout.height;
+            composerBaseHeight.value = laidOut.current.composer - laidOut.current.input;
         };
         return (
+            <ComposerInputHeightContext.Provider value={composerInputHeight}>
             <ComposerKeyboardOffsetContext.Provider value={KeyboardDock ? Math.max(0, bottomInset - COMPOSER_MARGIN) : bottomInset - COMPOSER_MARGIN}>
             <View style={styles.root}>
                 {content && (
@@ -80,6 +113,7 @@ export const AgentContentView: React.FC<AgentContentViewProps> = React.memo(({ i
                 )}
             </View>
             </ComposerKeyboardOffsetContext.Provider>
+            </ComposerInputHeightContext.Provider>
         );
     }
 

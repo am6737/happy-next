@@ -343,6 +343,7 @@ export default React.memo(function IssueCommentsPage() {
                         onChangeText={setDraft}
                         placeholder={uploading ? t('issueComments.uploadingImage') : editingComment ? t('issueComments.editing') : t('issueComments.placeholder')}
                         maxHeight={120}
+                        animateHeight
                         paddingTop={6}
                         paddingBottom={6}
                         lineHeight={20}

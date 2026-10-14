@@ -154,6 +154,7 @@ export const ChatInput = React.memo(({ onSendText, onSendImage, onSendFile, repl
                         onChangeText={handleTextChange}
                         placeholder={t('dootask.typeMessage')}
                         maxHeight={120}
+                        animateHeight
                         paddingTop={6}
                         paddingBottom={6}
                         lineHeight={20}
