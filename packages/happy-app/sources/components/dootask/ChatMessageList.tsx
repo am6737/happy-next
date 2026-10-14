@@ -262,7 +262,7 @@ export const ChatMessageList = React.memo(({
     );
     // The list's frame does not shrink for the keyboard (or end at a floating composer), so the
     // scroll-to-bottom button is moved above both.
-    const overlayStyle = useChatOverlayStyle(Platform.OS === 'ios', composerInset);
+    const overlayStyle = useChatOverlayStyle(Platform.OS !== 'web', composerInset);
 
     return (
         <View style={styles.wrapper}>

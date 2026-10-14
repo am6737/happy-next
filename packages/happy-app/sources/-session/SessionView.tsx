@@ -336,9 +336,9 @@ export const SessionView = React.memo((props: { id: string }) => {
  */
 function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }: { sessionId: string, session: Session, headerInset: number, listUnderHeader: boolean }) {
     const { theme } = useUnistyles();
-    // iOS (not Catalyst) uses the safe-area chat layout: the composer sits a margin above the
-    // home indicator and rides the keyboard, and the list lifts its content natively to follow.
-    const useNativeChatLayout = Platform.OS === 'ios' && !isRunningOnMac();
+    // iOS (not Catalyst) and Android use the safe-area chat layout: the composer rides the keyboard
+    // (a margin above the home indicator on iOS), and the list lifts its content natively to follow.
+    const useNativeChatLayout = (Platform.OS === 'ios' && !isRunningOnMac()) || Platform.OS === 'android';
     const useFloatingComposer = useNativeChatLayout && floatingComposerAvailable;
     // Written by AgentContentView as the floating composer lays out, read by the list on the UI thread.
     const composerHeight = useSharedValue(0);
