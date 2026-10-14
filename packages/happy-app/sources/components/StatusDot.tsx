@@ -1,5 +1,6 @@
 import * as React from 'react';
-import { Animated, Easing, ViewStyle } from 'react-native';
+import { Animated, Easing, Platform, ViewStyle } from 'react-native';
+import { steppedPulse } from './steppedPulse';
 
 export interface StatusDotProps {
     color: string;
@@ -13,6 +14,8 @@ const PULSE_MIN_OPACITY = 0.3;
 const PULSE_HALF_MS = 1000;
 /** How long a dot takes to settle back to full when the pulse stops. */
 const SETTLE_MS = 200;
+/** Held opacity levels each way on Android, where a smooth pulse redraws the window every frame. */
+const ANDROID_PULSE_STEPS = 8;
 
 /**
  * A dot that can pulse forever. The pulse is deliberately driven by `Animated`
@@ -20,6 +23,10 @@ const SETTLE_MS = 200;
  * `IOS_SYNCHRONOUSLY_UPDATE_UI_PROPS` off, so a Reanimated style update is not a
  * write to the view but a synchronous clone of the whole shadow tree followed by
  * a full Yoga layout. A dot that only fades must not cost that once per frame.
+ *
+ * On Android even the native driver redraws the whole window every frame, and a running session's
+ * dot pulses for as long as the session runs, so there the pulse steps through a few held levels
+ * instead (see steppedPulse).
  */
 export const StatusDot = React.memo(({ color, isPulsing, size = 6, style }: StatusDotProps) => {
     const opacity = React.useRef(new Animated.Value(1)).current;
@@ -34,8 +41,9 @@ export const StatusDot = React.memo(({ color, isPulsing, size = 6, style }: Stat
             return;
         }
 
-        const pulse = Animated.loop(
-            Animated.sequence([
+        const pulse = Platform.OS === 'android'
+            ? steppedPulse(opacity, 1, PULSE_MIN_OPACITY, PULSE_HALF_MS, ANDROID_PULSE_STEPS)
+            : Animated.loop(Animated.sequence([
                 Animated.timing(opacity, {
                     toValue: PULSE_MIN_OPACITY,
                     duration: PULSE_HALF_MS,
@@ -48,8 +56,7 @@ export const StatusDot = React.memo(({ color, isPulsing, size = 6, style }: Stat
                     easing: Easing.inOut(Easing.quad),
                     useNativeDriver: true,
                 }),
-            ])
-        );
+            ]));
         pulse.start();
 
         return () => pulse.stop();
