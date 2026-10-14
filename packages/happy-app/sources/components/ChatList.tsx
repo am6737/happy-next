@@ -3,7 +3,6 @@ import { useSession, useSessionMessages, useProfile, useSetting, storage, useOrc
 import { ActivityIndicator, Platform, StyleSheet, Text, View, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type ScrollViewProps } from 'react-native';
 import { useCallback, useRef, useState } from 'react';
 import { LegendList, LegendListRef, LegendListRenderItemProps } from '@legendapp/list/react-native';
-import { useHeaderHeight } from '@/utils/responsive';
 import { floatingComposerBottomInset } from './floatingComposer';
 import { ChatScrollView } from './ChatScrollView';
 import { GlassSurface, liquidGlassAvailable } from './GlassSurface';
@@ -56,7 +55,7 @@ export interface ForkMessageRequest {
     skipDraft: boolean;
 }
 
-export const ChatList = React.memo((props: { session: Session; onFillInput?: (text: string, allOptions?: string[]) => void; onLoadMore?: () => void | Promise<void>; onForkMessage?: (request: ForkMessageRequest) => void; forkingMessageId?: string | null; minimapCachedUserMessages?: MinimapMessage[]; onMinimapItemsChange?: (items: ConversationMinimapItem[]) => void; onActiveMessageIdChange?: (id: string | null) => void; onRegisterMinimapJump?: (jump: ((target: MessageJumpTarget) => void) | null) => void; headerOverlayInset?: number; keyboardChatScroll?: boolean; composerInset?: SharedValue<number>; emptyComponent?: React.ReactElement | null }) => {
+export const ChatList = React.memo((props: { session: Session; onFillInput?: (text: string, allOptions?: string[]) => void; onLoadMore?: () => void | Promise<void>; onForkMessage?: (request: ForkMessageRequest) => void; forkingMessageId?: string | null; minimapCachedUserMessages?: MinimapMessage[]; onMinimapItemsChange?: (items: ConversationMinimapItem[]) => void; onActiveMessageIdChange?: (id: string | null) => void; onRegisterMinimapJump?: (jump: ((target: MessageJumpTarget) => void) | null) => void; headerOverlayInset: number; keyboardChatScroll?: boolean; composerInset?: SharedValue<number>; emptyComponent?: React.ReactElement | null }) => {
     const { messages, hasMore } = useSessionMessages(props.session.id);
     const profile = useProfile();
     const isSharedSession = !!(props.session.isShared || props.session.accessLevel);
@@ -92,20 +91,8 @@ const LIST_TOP_GAP = 32;
 /** The load-older row's padding (16 × 2) plus its small spinner, for the header size hint below. */
 const LOAD_OLDER_ROW_HEIGHT = 52;
 
-/**
- * How much of the list's top the header covers. A page that knows the real overlay height (the iOS
- * chat, whose list runs under a transparent native header) passes it in; otherwise this falls back
- * to the estimated header plus status bar.
- */
-function useListTopInset(headerOverlayInset: number | undefined): number {
-    const headerHeight = useHeaderHeight();
-    const safeArea = useSafeAreaInsets();
-    return headerOverlayInset ?? headerHeight + safeArea.top;
-}
-
-const ListHeader = React.memo((props: { headerOverlayInset?: number }) => {
-    const topInset = useListTopInset(props.headerOverlayInset);
-    return <View style={{ flexDirection: 'row', alignItems: 'center', height: topInset + LIST_TOP_GAP }} />;
+const ListHeader = React.memo((props: { headerOverlayInset: number }) => {
+    return <View style={{ flexDirection: 'row', alignItems: 'center', height: props.headerOverlayInset + LIST_TOP_GAP }} />;
 });
 
 
@@ -242,8 +229,11 @@ const ChatListInternal = React.memo((props: {
     /** The landmark the rail should mark as the reader's — see `currentLandmark`. */
     onActiveMessageIdChange?: (id: string | null) => void,
     onRegisterMinimapJump?: (jump: ((target: MessageJumpTarget) => void) | null) => void,
-    /** Height of a header drawn over the list's top; see `useListTopInset`. */
-    headerOverlayInset?: number,
+    /**
+     * How much of the list's top a header drawn over it covers (the iOS chat runs under a
+     * transparent native header); 0 where the header sits above the list.
+     */
+    headerOverlayInset: number,
     /** Scroll inside `KeyboardChatScrollView` (the iOS safe-area chat layout). */
     keyboardChatScroll?: boolean,
     /** Height of a composer floating over the list's bottom (see `AgentContentView`'s `floatingInput`). */
@@ -256,7 +246,7 @@ const ChatListInternal = React.memo((props: {
     emptyComponent?: React.ReactElement | null,
 }) => {
     const { theme } = useUnistyles();
-    const listTopInset = useListTopInset(props.headerOverlayInset);
+    const listTopInset = props.headerOverlayInset;
     const safeArea = useSafeAreaInsets();
     const listRef = useRef<LegendListRef | null>(null);
     const [viewportHeight, setViewportHeight] = useState(0);

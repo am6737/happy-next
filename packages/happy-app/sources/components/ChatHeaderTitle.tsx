@@ -7,9 +7,12 @@ export const ChatHeaderTitle = React.memo((props: { title: string; subtitle?: st
     const { theme } = useUnistyles();
     const isLeft = (props.align ?? 'center') === 'left';
     const hasFixedWidth = props.width !== undefined;
-    const textAlignStyle = isLeft
-        ? { width: '100%' as const, textAlign: 'left' as const }
-        : (hasFixedWidth ? { width: '100%' as const, textAlign: 'center' as const } : null);
+    // Without a fixed width the container is as wide as its text, so a 100% width there would be
+    // circular: Android then lays the text out wider than the header leaves it and clips the line,
+    // ellipsis included. The text is measured against the room it has instead.
+    const textAlignStyle = hasFixedWidth
+        ? { width: '100%' as const, textAlign: isLeft ? 'left' as const : 'center' as const }
+        : (isLeft ? { textAlign: 'left' as const } : null);
     return (
         <View style={{
             width: props.width,

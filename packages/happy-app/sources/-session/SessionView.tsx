@@ -1216,7 +1216,7 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
                     onMinimapItemsChange={setMinimapItems}
                     onActiveMessageIdChange={setMinimapActiveMessageId}
                     onRegisterMinimapJump={handleRegisterMinimapJump}
-                    headerOverlayInset={headerInset > 0 ? (listUnderHeader ? headerInset : 0) : undefined}
+                    headerOverlayInset={listUnderHeader ? headerInset : 0}
                     keyboardChatScroll={useNativeChatLayout}
                     composerInset={useFloatingComposer ? composerHeight : undefined}
                     emptyComponent={emptyComponent}
