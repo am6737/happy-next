@@ -7,6 +7,8 @@ import { useTurnInFlight } from './useTurnInFlight';
 
 const prompt = (id: string) => ({ kind: 'user-text', id }) as unknown as Message;
 const reply = (id: string) => ({ kind: 'agent-text', id }) as unknown as Message;
+/** A row the CLI stamped with the Claude turn it went out under. */
+const stamped = (id: string, turn: string) => ({ kind: 'tool-call', id, meta: { turn } }) as unknown as Message;
 
 let inFlight: boolean | undefined;
 let renderer: ReturnType<typeof create> | null = null;
@@ -51,6 +53,35 @@ describe('useTurnInFlight', () => {
     it('runs at once a turn that turns busy together with its prompt', () => {
         render(false, settled);
         expect(render(true, [prompt('p2'), ...settled])).toBe(true);
+    });
+
+    describe('when the CLI stamps the turn', () => {
+        const stampedSettled = [stamped('r1', 'A'), prompt('p1')];
+
+        it('holds a settled turn past the wait, until Claude\'s new turn lands its first row', () => {
+            render(false, stampedSettled);
+            expect(render(true, stampedSettled)).toBe(false);
+            act(() => { vi.advanceTimersByTime(10_000); });
+            expect(inFlight).toBe(false);
+            expect(render(true, [stamped('r2', 'B'), ...stampedSettled])).toBe(true);
+        });
+
+        it('runs the turn again when the row that lands is its own', () => {
+            render(false, stampedSettled);
+            render(true, stampedSettled);
+            expect(render(true, [stamped('r2', 'A'), ...stampedSettled])).toBe(true);
+        });
+
+        it('runs at once when the row lands together with busy', () => {
+            render(false, stampedSettled);
+            expect(render(true, [stamped('r2', 'B'), ...stampedSettled])).toBe(true);
+        });
+
+        it('still runs a prompt that lands after busy', () => {
+            render(false, stampedSettled);
+            render(true, stampedSettled);
+            expect(render(true, [prompt('p2'), ...stampedSettled])).toBe(true);
+        });
     });
 
     it('is busy for a chat that opens busy', () => {

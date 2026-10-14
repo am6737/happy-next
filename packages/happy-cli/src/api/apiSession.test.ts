@@ -629,4 +629,21 @@ describe('ApiSessionClient keepAlive', () => {
         claude([{ type: 'text', text: 'done' }]);
         expect(pushOutbox).toHaveBeenCalledTimes(2);
     });
+
+    it('stamps Claude messages with their turn, and draws a new one after the turn ends', () => {
+        const claude = (content: any[]) => client.sendClaudeSessionMessage({ type: 'assistant', uuid: 'u', message: { role: 'assistant', content } } as any);
+        const turns = () => pushOutbox.mock.calls.map(([content]: any[]) => content.meta?.turn);
+        claude([{ type: 'tool_use', id: 'a', name: 'Bash', input: {} }]);
+        claude([{ type: 'tool_use', id: 'b', name: 'Bash', input: {} }]);
+        client.endTurn();
+        // A background task reporting in: Claude starts again with no prompt.
+        claude([{ type: 'tool_use', id: 'c', name: 'Bash', input: {} }]);
+        client.sendClaudeSessionMessage({ type: 'user', uuid: 'p', message: { role: 'user', content: 'a prompt' } } as any);
+        const [first, second, resumed, prompt] = turns();
+        expect(first).toEqual(expect.any(String));
+        expect(second).toBe(first);
+        expect(resumed).toEqual(expect.any(String));
+        expect(resumed).not.toBe(first);
+        expect(prompt).toBeUndefined();
+    });
 });

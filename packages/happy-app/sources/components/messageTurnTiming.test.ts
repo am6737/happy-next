@@ -211,6 +211,36 @@ describe('turns above the loaded window', () => {
     });
 });
 
+describe('turns Claude resumes on its own', () => {
+    /** A row as the CLI stamps it with the Claude turn it went out under. */
+    function inTurn<T extends Message>(message: T, turn: string): T {
+        return { ...message, meta: { ...message.meta, turn } };
+    }
+
+    it('opens a turn of its own when a background task brings Claude back, leaving the settled one its answer', () => {
+        const result = analyze(
+            [inTurn(tool('t2', 70), 'B'), inTurn(agent('a1', 40), 'A'), inTurn(tool('t1', 30), 'A'), user('u1', 10)],
+            { inFlight: true },
+        );
+        expect(done(result, 't1')).toEqual({ startedAt: 10, completedAt: 40 });
+        expect(result.headerById.get('t2')).toEqual({ state: 'running', startedAt: 70 });
+        expect([...result.completedIds]).toEqual(['a1']);
+        expect(result.foldById.get('t1')?.answerId).toBe('a1');
+        expect(result.foldById.get('t2')?.hiddenIds).toEqual([]);
+        expect(result.newestHeaderId).toBe('t2');
+    });
+
+    it('keeps one turn across the notices between its stamped rows', () => {
+        const result = analyze([inTurn(agent('a1', 40), 'A'), event('e1', 35), inTurn(tool('t1', 30), 'A'), user('u1', 10)]);
+        expect([...result.headerById.keys()]).toEqual(['t1']);
+    });
+
+    it('opens no second turn where a prompt already opened one', () => {
+        const result = analyze([inTurn(tool('t2', 60), 'B'), user('u2', 50), inTurn(agent('a1', 40), 'A'), user('u1', 10)]);
+        expect([...result.headerById.keys()]).toEqual(['a1', 't2']);
+    });
+});
+
 describe('folded turns', () => {
     // What the whole turn takes; the runs inside it have their own describe below.
     function fold(result: ReturnType<typeof analyzeTurns>, headerId: string) {

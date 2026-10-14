@@ -151,14 +151,25 @@ export function turnHeaderProps(status: TurnHeaderStatus | undefined): {
  * A turn runs from its user prompt up to (not including) the next one; rows above
  * the oldest loaded prompt belong to a turn that started before what we have, and
  * are grouped as a single leading turn.
+ *
+ * Claude can also start a turn with no prompt — a background task reporting in once
+ * the turn that launched it has ended. The CLI stamps each of Claude's rows with the
+ * turn it went out under (`meta.turn`), and a row stamped with a turn other than the
+ * one before it opens a turn of its own, with no prompt. Otherwise its work would
+ * join the settled turn above, and that turn's fold would take its answer.
  */
 function collectTurns(visibleMessages: Message[], includeFold: boolean): Turn[] {
     const turns: Turn[] = [];
     let current: Turn | null = null;
+    // The CLI's turn of the newest stamped row so far in `current`; rows without one (the
+    // CLI's notices, other agents, older CLIs) leave it as it is.
+    let stampedTurn: string | undefined;
 
     for (let i = visibleMessages.length - 1; i >= 0; i--) {
         const msg = visibleMessages[i];
-        if (current === null || msg.kind === 'user-text') {
+        const resumed = msg.meta?.turn !== undefined && stampedTurn !== undefined && msg.meta.turn !== stampedTurn;
+        if (current === null || msg.kind === 'user-text' || resumed) {
+            stampedTurn = undefined;
             current = {
                 prompt: msg.kind === 'user-text' ? msg : null,
                 startedAt: msg.createdAt,
@@ -170,6 +181,7 @@ function collectTurns(visibleMessages: Message[], includeFold: boolean): Turn[] 
             turns.push(current);
             if (msg.kind === 'user-text') continue;
         }
+        stampedTurn = msg.meta?.turn ?? stampedTurn;
         if (includeFold) current.rows.push(msg);
         // The turn's header sits above its first real agent row. Mode switches and
         // other notices don't open a turn's reply, so they don't take the slot.

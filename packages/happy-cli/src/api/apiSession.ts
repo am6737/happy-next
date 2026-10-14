@@ -190,6 +190,12 @@ export class ApiSessionClient extends EventEmitter {
      * bookkeeping records sent after it.
      */
     private heldText: { content: any; trailing: unknown[]; timer: NodeJS.Timeout } | null = null;
+    /**
+     * The turn Claude's messages go out under, stamped on each as `meta.turn` so the app can tell a
+     * turn Claude starts on its own — a background task reporting in, with no prompt to open it —
+     * from the one before it. Drawn by the first message after `endTurn`.
+     */
+    private turn: string | null = null;
 
     constructor(token: string, session: Session) {
         super()
@@ -943,6 +949,10 @@ export class ApiSessionClient extends EventEmitter {
      */
     sendClaudeSessionMessage(body: RawJSONLines) {
         const content = this.buildMessageContent(body);
+        if (content.role === 'agent') {
+            this.turn ??= randomUUID();
+            content.meta = { ...content.meta, turn: this.turn };
+        }
 
         logger.debugLargeJson('[SOCKET] Sending message through socket:', content)
 
@@ -950,6 +960,11 @@ export class ApiSessionClient extends EventEmitter {
         this.enqueueMessage(content);
 
         this.postSendProcessing(body);
+    }
+
+    /** Claude has ended its turn (its SDK's `result`): the next message it sends opens a new one. */
+    endTurn() {
+        this.turn = null;
     }
 
     async sendClaudeSessionMessageBatch(messages: { message: RawJSONLines, localId?: string }[], mode: 'replace' | 'append' = 'append') {

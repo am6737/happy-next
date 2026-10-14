@@ -36,6 +36,8 @@ export async function claudeRemote(opts: {
     onReady: () => void,
     /** Hands on messages the caller still holds back, so they leave ahead of the idle heartbeat. */
     flushOutgoing?: () => Promise<void>,
+    /** Claude has ended a turn and its messages have been handed on; whatever it sends next is a new one. */
+    onTurnEnd?: () => void,
     isAborted: (toolCallId: string) => boolean,
 
     // Callbacks
@@ -315,6 +317,7 @@ export async function claudeRemote(opts: {
                 // The turn's last messages can still sit in the caller's outgoing queue:
                 // hand them on first, or idle reaches the app ahead of them.
                 await opts.flushOutgoing?.();
+                opts.onTurnEnd?.();
                 updateThinking(false);
                 logger.debug('[claudeRemote] Result received, waiting for next user message');
 
