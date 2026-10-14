@@ -20,6 +20,7 @@ import { t } from '@/text';
 import { hapticsLight } from '@/components/haptics';
 import { showCopiedToast } from '@/components/Toast';
 import { headerMenuOptions } from '@/components/navigation/headerMenu';
+import { useCopySelectable } from '@/components/LongPressCopy';
 
 interface CommitDetail {
     hash: string;
@@ -88,6 +89,7 @@ export default function CommitScreen() {
     const searchParams = useLocalSearchParams();
     const hash = searchParams.hash as string;
     const { theme } = useUnistyles();
+    const selectable = useCopySelectable();
 
     const session = getSession(sessionId);
     const sessionPath = session?.metadata?.path || '';
@@ -222,7 +224,7 @@ export default function CommitScreen() {
                 {/* Commit message */}
                 <ItemGroup>
                     <View style={{ paddingHorizontal: 16, paddingVertical: 14 }}>
-                        <Text style={{
+                        <Text selectable={selectable} style={{
                             fontSize: 17,
                             fontWeight: '600',
                             color: theme.colors.text,
@@ -232,7 +234,7 @@ export default function CommitScreen() {
                             {commitDetail.title}
                         </Text>
                         {commitDetail.body ? (
-                            <Text style={{
+                            <Text selectable={selectable} style={{
                                 fontSize: 14,
                                 color: theme.colors.textSecondary,
                                 marginBottom: 8,
@@ -243,13 +245,13 @@ export default function CommitScreen() {
                             </Text>
                         ) : null}
                         <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
-                            <Text style={{ fontSize: 13, color: theme.colors.textSecondary, ...Typography.mono() }}>
+                            <Text selectable={selectable} style={{ fontSize: 13, color: theme.colors.textSecondary, ...Typography.mono() }}>
                                 {commitDetail.shortHash}
                             </Text>
                             <Text style={{ fontSize: 13, color: theme.colors.textSecondary, marginHorizontal: 6, ...Typography.default() }}>
                                 ·
                             </Text>
-                            <Text style={{ fontSize: 13, color: theme.colors.textSecondary, ...Typography.default() }}>
+                            <Text selectable={selectable} style={{ fontSize: 13, color: theme.colors.textSecondary, ...Typography.default() }}>
                                 {commitDetail.author} · {formatRelativeTime(commitDetail.date)}
                             </Text>
                         </View>
