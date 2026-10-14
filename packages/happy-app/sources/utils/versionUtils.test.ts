@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { compareVersions, isVersionSupported, parseVersion, fetchLatestCliVersion } from './versionUtils';
+import { describe, it, expect } from 'vitest';
+import { compareVersions, isVersionSupported, parseVersion } from './versionUtils';
 
 describe('versionUtils', () => {
     describe('compareVersions', () => {
@@ -48,25 +48,6 @@ describe('versionUtils', () => {
             expect(parseVersion('invalid')).toBe(null);
             expect(parseVersion('')).toBe(null);
             expect(parseVersion('1.a.3')).toBe(null);
-        });
-    });
-
-    describe('fetchLatestCliVersion', () => {
-        beforeEach(() => {
-            vi.restoreAllMocks();
-        });
-
-        it('should fetch and return the latest version', async () => {
-            vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-                ok: true,
-                json: () => Promise.resolve({ version: '1.2.3' }),
-            }));
-
-            // Need to re-import to reset module-level cache
-            const mod = await import('./versionUtils');
-            // fetchLatestCliVersion is cached at module level, so we test the function contract
-            const result = await mod.fetchLatestCliVersion();
-            expect(typeof result === 'string' || result === null).toBe(true);
         });
     });
 });

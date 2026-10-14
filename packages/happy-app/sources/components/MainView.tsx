@@ -36,6 +36,11 @@ import { SessionScopeDot } from './SessionScopeDot';
 import { requestSessionListJump } from './sessionListJump';
 import { useAddMachine } from '@/hooks/useAddMachine';
 import { useSessionsCreateItems } from '@/hooks/useSessionsCreateItems';
+import { useSelectedMachineCliUpdate } from '@/hooks/useSelectedMachineCliUpdate';
+import { CliUpdateDot, CliUpdateIcon, cliUpdateLabel, useCliUpdateColor, webTitle } from './CliUpdateIndicator';
+import { NativeMenu } from './NativeMenu';
+import type { ActionMenuItem } from './ActionMenu';
+import type { MachineCliUpdate } from '@/utils/cliUpdate';
 
 interface MainViewProps {
     variant: 'phone' | 'sidebar';
@@ -124,6 +129,25 @@ const styles = StyleSheet.create((theme) => ({
         position: 'absolute',
         top: -4,
         right: -8,
+    },
+    // The sessions tab's CLI update and "+", sized and spaced like the chat header's buttons
+    headerButtons: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    capsuleButton: {
+        width: 38,
+        height: 38,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    capsuleLeadingButton: {
+        marginRight: 4,
+    },
+    addDot: {
+        position: 'absolute',
+        top: Platform.OS === 'web' ? 0 : 1,
+        right: Platform.OS === 'web' ? -2 : -1,
     },
     headerButton: {
         width: 32,
@@ -252,22 +276,59 @@ const SessionsHeaderTitle = React.memo(({ scope, onPress }: { scope: SessionList
     );
 });
 
+// Android and the phone-sized web show the picked machine's CLI update as a dot on the sessions
+// tab's "+", whose menu then has a row for it; iOS puts its icon beside the "+", the two laid out
+// like the chat header's buttons in one glass capsule.
+const CLI_UPDATE_AS_DOT = Platform.OS !== 'ios';
+
 // Header right button - varies by tab
-const HeaderRight = React.memo(({ activeTab, onDootaskCreate, onSessionsCreate }: { activeTab: ActiveTabType; onDootaskCreate?: () => void; onSessionsCreate?: () => void }) => {
+const HeaderRight = React.memo(({ activeTab, onDootaskCreate, onSessionsCreate, sessionsCreateItems, cliUpdate, onCliUpdatePress }: {
+    activeTab: ActiveTabType;
+    onDootaskCreate?: () => void;
+    onSessionsCreate?: () => void;
+    sessionsCreateItems?: ActionMenuItem[];
+    cliUpdate?: MachineCliUpdate;
+    onCliUpdatePress?: () => void;
+}) => {
     const router = useRouter();
     const { theme } = useUnistyles();
     const isCustomServer = isUsingCustomServer();
 
     if (activeTab === 'sessions') {
+        const addLabel = t('sessionScope.addMenu');
+        if (CLI_UPDATE_AS_DOT || !cliUpdate || cliUpdate.state === 'none') {
+            return (
+                <Pressable
+                    ref={webTitle(addLabel)}
+                    onPress={onSessionsCreate}
+                    hitSlop={15}
+                    style={styles.headerButton}
+                    accessibilityLabel={addLabel}
+                >
+                    <Ionicons name="add-outline" size={28} color={theme.colors.header.tint} />
+                    {cliUpdate && <CliUpdateDot update={cliUpdate} size={6} style={styles.addDot} />}
+                </Pressable>
+            );
+        }
+        const cliLabel = cliUpdateLabel(cliUpdate);
         return (
-            <Pressable
-                onPress={onSessionsCreate}
-                hitSlop={15}
-                style={styles.headerButton}
-                accessibilityLabel={t('sessionScope.addMenu')}
-            >
-                <Ionicons name="add-outline" size={28} color={theme.colors.header.tint} />
-            </Pressable>
+            <View style={styles.headerButtons}>
+                <Pressable
+                    onPress={onCliUpdatePress}
+                    hitSlop={15}
+                    style={[styles.capsuleButton, styles.capsuleLeadingButton]}
+                    accessibilityRole="button"
+                    accessibilityLabel={cliLabel}
+                >
+                    <CliUpdateIcon update={cliUpdate} size={24} />
+                </Pressable>
+                {/* The native iOS menu of the header's own "+", here opened from a custom button */}
+                <NativeMenu items={sessionsCreateItems ?? []} onFallbackOpen={onSessionsCreate ?? (() => {})}>
+                    <View style={styles.capsuleButton} accessibilityLabel={addLabel}>
+                        <Ionicons name="add" size={26} color={theme.colors.header.tint} />
+                    </View>
+                </NativeMenu>
+            </View>
         );
     }
 
@@ -408,6 +469,14 @@ export const MainView = React.memo(({ variant }: MainViewProps) => {
     const handleSessionsCreatePress = React.useCallback(() => setSessionsMenuVisible(true), []);
     const handleSessionsMenuClose = React.useCallback(() => setSessionsMenuVisible(false), []);
     const sessionsCreateItems = useSessionsCreateItems(sessionScope, addMachine);
+    const cliUpdate = useSelectedMachineCliUpdate(sessionScope.selection);
+    const cliUpdateColor = useCliUpdateColor(cliUpdate.update);
+    // With the update as a dot on the "+", its menu has a row that opens it
+    const sessionsMenuItems = React.useMemo(() => CLI_UPDATE_AS_DOT && cliUpdate.update.state !== 'none'
+        ? [...sessionsCreateItems, { label: cliUpdateLabel(cliUpdate.update), color: cliUpdateColor, onPress: cliUpdate.open }]
+        : sessionsCreateItems, [sessionsCreateItems, cliUpdate.update, cliUpdate.open, cliUpdateColor]);
+    // On iOS a CLI update takes the "+" out of the native header items, into a custom view beside it
+    const sessionsHeaderMenu = cliUpdate.update.state === 'none' ? sessionsCreateItems : null;
 
     // Web fallback content swap
     const renderTabContent = React.useCallback(() => {
@@ -554,10 +623,19 @@ export const MainView = React.memo(({ variant }: MainViewProps) => {
                 headerSubtitleColor: connectionStatus.color,
                 headerLeft: () => <HeaderLogo />,
                 headerRight: shouldProvideMainHeaderRight(activeTab) && !(activeTab === 'settings' && !isCustomServer)
-                    ? () => <HeaderRight activeTab={activeTab as ActiveTabType} onDootaskCreate={handleCreatePress} onSessionsCreate={handleSessionsCreatePress} />
+                    ? () => (
+                        <HeaderRight
+                            activeTab={activeTab as ActiveTabType}
+                            onDootaskCreate={handleCreatePress}
+                            onSessionsCreate={handleSessionsCreatePress}
+                            sessionsCreateItems={sessionsCreateItems}
+                            cliUpdate={cliUpdate.update}
+                            onCliUpdatePress={cliUpdate.open}
+                        />
+                    )
                     : undefined,
                 ...headerMenuOptions(
-                    activeTab === 'dootask' ? dootaskCreateItems : activeTab === 'sessions' ? sessionsCreateItems : null,
+                    activeTab === 'dootask' ? dootaskCreateItems : activeTab === 'sessions' ? sessionsHeaderMenu : null,
                     { icon: 'plus', label: activeTab === 'sessions' ? t('sessionScope.addMenu') : t('common.create') },
                 ),
             }}
@@ -578,7 +656,7 @@ export const MainView = React.memo(({ variant }: MainViewProps) => {
             <MachineSwitcherSheet ref={machineSwitcherRef} onAddMachine={addMachine} />
             <ActionMenuModal
                 visible={sessionsMenuVisible}
-                items={sessionsCreateItems}
+                items={sessionsMenuItems}
                 onClose={handleSessionsMenuClose}
                 deferItemPress
             />

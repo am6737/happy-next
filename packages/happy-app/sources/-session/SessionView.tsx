@@ -27,7 +27,7 @@ import { voiceHooks } from '@/realtime/hooks/voiceHooks';
 import { startRealtimeSession, stopRealtimeSession } from '@/realtime/RealtimeSession';
 import { sessionAbort, machineGetClaudeSessionUserMessages, machineDuplicateClaudeSession, machineForkClaudeSession, machineSpawnNewSession, machineGetGeminiSessionUserMessages, machineDuplicateGeminiSession, machineForkGeminiSession, machineGetCodexSessionUserMessages, machineDuplicateCodexSession, machineForkCodexSession, machineResolveClaudeForkTarget, machineResolveGeminiForkTarget, machineResolveCodexForkTarget, machineGetClaudeSessionUserMessage, machineGetGeminiSessionUserMessage, machineGetCodexSessionUserMessage, machineGetQoderSessionUserMessages, machineGetQoderSessionUserMessage, machineResolveQoderForkTarget, machineDuplicateQoderSession, machineForkQoderSession, type UserMessageWithUuid, type UserMessagePage, type ResolvedForkTarget } from '@/sync/ops';
 import { storage, useIsDataReady, useLocalSetting, useOrchestratorRunningTaskCount, useOrchestratorHasRuns, useRealtimeStatus, useSessionMessages, useSessionMessagesFetching, useSessionPendingMessages, useSessionUsage, useSetting } from '@/sync/storage';
-import { useSession } from '@/sync/storage';
+import { useMachine, useSession } from '@/sync/storage';
 import { useInputHistory } from '@/hooks/useInputHistory';
 import { rememberSentSuggestions } from '@/sync/recentSuggestions';
 import { useQoderModels } from '@/hooks/useQoderModels';
@@ -48,7 +48,8 @@ import { formatPathRelativeToHome, generateCopyTitle, getSessionAvatarId, getSes
 import { canEditSession, canForkSession } from '@/utils/sessionLifecycle';
 import { sendFailureKey } from '@/utils/sendFailure';
 import { getNativeHeaderTitleWidth } from '@/utils/nativeHeaderTitleWidth';
-import { isVersionSupported, useLatestCliVersion } from '@/utils/versionUtils';
+import { getSessionCliUpgrade } from '@/utils/cliUpdate';
+import { FloatingPill } from '@/components/CliUpdateBanner';
 import { log } from '@/log';
 import { Ionicons } from '@expo/vector-icons';
 import { useHeaderHeight as useNavigationHeaderHeight } from '@react-navigation/elements';
@@ -352,15 +353,14 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
     const pendingMessages = useSessionPendingMessages(sessionId);
     const acknowledgedCliVersions = useLocalSetting('acknowledgedCliVersions');
 
-    // Check if CLI version is outdated and not already acknowledged
-    const cliVersion = session.metadata?.version;
+    // The machine's daemon runs a newer CLI than this session: offer restarting the session on it
+    // (from the session info page), until dismissed for that version
     const machineId = session.metadata?.machineId;
     const { models: qoderModels } = useQoderModels(machineId, session.metadata?.path ?? '', session.metadata?.flavor === 'qoder');
-    const latestCliVersion = useLatestCliVersion();
-    const isCliOutdated = cliVersion && latestCliVersion && !isVersionSupported(cliVersion, latestCliVersion);
-    const isAcknowledged = machineId && acknowledgedCliVersions[machineId] === cliVersion;
+    const machine = useMachine(machineId ?? '');
+    const sessionCliUpgrade = getSessionCliUpgrade(session.metadata?.version, machine);
     const isSessionOnline = session.presence === 'online';
-    const shouldShowCliWarning = isSessionOnline && isCliOutdated && !isAcknowledged;
+    const shouldShowCliUpgrade = isSessionOnline && !!sessionCliUpgrade && acknowledgedCliVersions[sessionId] !== sessionCliUpgrade;
     // Get permission mode from session object, default to 'default'
     const permissionMode = session.permissionMode || 'default';
     // Get model mode from session object. "default" means use CLI/profile configured model.
@@ -585,17 +585,18 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
         return flavor === 'claude' || flavor === 'gemini' || flavor === 'codex' || flavor === 'qoder';
     }, [session?.metadata?.flavor]);
 
-    // Handle dismissing CLI version warning
-    const handleDismissCliWarning = React.useCallback(() => {
-        if (machineId && cliVersion) {
-            storage.getState().applyLocalSettings({
-                acknowledgedCliVersions: {
-                    ...acknowledgedCliVersions,
-                    [machineId]: cliVersion
-                }
-            });
-        }
-    }, [machineId, cliVersion, acknowledgedCliVersions]);
+    const handleOpenCliUpgrade = React.useCallback(() => {
+        router.push(`/session/${sessionId}/info`);
+    }, [router, sessionId]);
+
+    // Dismissed per session and version; only the most recent sessions are remembered
+    const handleDismissCliUpgrade = React.useCallback(() => {
+        if (!sessionCliUpgrade) return;
+        const kept = Object.entries(acknowledgedCliVersions).filter(([id]) => id !== sessionId).slice(-49);
+        storage.getState().applyLocalSettings({
+            acknowledgedCliVersions: { ...Object.fromEntries(kept), [sessionId]: sessionCliUpgrade },
+        });
+    }, [sessionId, sessionCliUpgrade, acknowledgedCliVersions]);
 
     // Function to update permission mode
     const updatePermissionMode = React.useCallback((mode: 'default' | 'acceptEdits' | 'auto' | 'bypassPermissions' | 'plan' | 'read-only' | 'on-failure' | 'full-auto' | 'auto_edit' | 'yolo') => {
@@ -1493,38 +1494,16 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
             )}
 
 
-            {/* CLI Version Warning Overlay - Subtle centered pill */}
-            {shouldShowCliWarning && !shouldUseCompactLandscapeSessionLayout && (
-                <Pressable
-                    onPress={handleDismissCliWarning}
-                    style={{
-                        position: 'absolute',
-                        top: 8 + headerInset, // Top of the content area, below a header drawn over it
-                        alignSelf: 'center',
-                        backgroundColor: '#FFF3CD',
-                        borderRadius: 100, // Fully rounded pill
-                        paddingHorizontal: 14,
-                        paddingVertical: 7,
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        zIndex: 998, // Below voice bar but above content
-                        shadowColor: '#000',
-                        shadowOffset: { width: 0, height: 2 },
-                        shadowOpacity: 0.15,
-                        shadowRadius: 4,
-                        elevation: 4,
-                    }}
-                >
-                    <Ionicons name="warning-outline" size={14} color="#FF9500" style={{ marginRight: 6 }} />
-                    <Text style={{
-                        fontSize: 12,
-                        color: '#856404',
-                        fontWeight: '600'
-                    }}>
-                        {t('sessionInfo.cliVersionOutdated')}
-                    </Text>
-                    <Ionicons name="close" size={14} color="#856404" style={{ marginLeft: 8 }} />
-                </Pressable>
+            {/* The session can restart on the newer CLI its machine now runs */}
+            {shouldShowCliUpgrade && sessionCliUpgrade && !shouldUseCompactLandscapeSessionLayout && (
+                <FloatingPill
+                    top={8 + headerInset} // Top of the content area, below a header drawn over it
+                    tone="warning"
+                    icon="arrow-up-circle-outline"
+                    text={t('sessionInfo.sessionUpgradeBanner', { version: sessionCliUpgrade })}
+                    onPress={handleOpenCliUpgrade}
+                    onDismiss={handleDismissCliUpgrade}
+                />
             )}
 
             {/* Main content area - no padding since header is overlay */}

@@ -1,5 +1,5 @@
 /**
- * Shared CLI upgrade primitives, used by `happy update` and the daemon's auto-update.
+ * Shared CLI upgrade primitives, used by `happy update` and the daemon's CLI updater.
  */
 
 import { execFile } from 'node:child_process';
@@ -22,6 +22,17 @@ const INSTALL_TIMEOUT_MS = 10 * 60_000;
 // A lock older than this belongs to an install that died without cleaning up
 const STALE_LOCK_MS = 15 * 60_000;
 
+// The end of a command's output, from the start of a line: where the package manager says what went
+// wrong, short enough to report in the daemon state
+const MAX_ERROR_LENGTH = 4000;
+
+function tail(output: string): string {
+    if (output.length <= MAX_ERROR_LENGTH) return output;
+    const end = output.slice(-MAX_ERROR_LENGTH);
+    const lineStart = end.indexOf('\n');
+    return lineStart === -1 ? end : end.slice(lineStart + 1);
+}
+
 function run(command: string, args: string[], timeout: number): Promise<string> {
     return new Promise((resolve, reject) => {
         execFile(command, args, {
@@ -34,7 +45,7 @@ function run(command: string, args: string[], timeout: number): Promise<string> 
         }, (error, stdout, stderr) => {
             if (error) {
                 const output = `${stderr || ''}${stdout || ''}`.trim();
-                reject(new Error(output ? output.slice(-500) : error.message));
+                reject(new Error(output ? tail(output) : error.message));
                 return;
             }
             resolve(stdout.trim());

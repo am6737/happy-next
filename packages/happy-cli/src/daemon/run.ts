@@ -16,7 +16,7 @@ import { startCaffeinate, stopCaffeinate } from '@/utils/caffeinate';
 import packageJson from '../../package.json';
 import { getEnvironmentInfo } from '@/ui/doctor';
 import { spawnHappyCLI } from '@/utils/spawnHappyCLI';
-import { startCliAutoUpdate } from './autoUpdate';
+import { startCliUpdater } from './cliUpdater';
 import { isDebug } from '@/utils/env';
 import { writeDaemonState, DaemonLocallyPersistedState, readDaemonState, acquireDaemonLock, releaseDaemonLock, readSettings } from '@/persistence';
 
@@ -1053,11 +1053,41 @@ export async function startDaemon(): Promise<void> {
     // Create realtime machine session
     const apiMachine = api.machineSyncClient(machine);
 
-    // Install new CLI releases once the machine is idle; the heartbeat below then restarts us on them
-    const cliAutoUpdate = startCliAutoUpdate({
+    // Restart on the CLI version now on disk: the new daemon takes over from us.
+    // Used by the heartbeat (installs done elsewhere) and right after an install asked for from the app.
+    let handingOver = false;
+    const handOverToInstalledVersion = async () => {
+      if (handingOver) return;
+      handingOver = true;
+      clearInterval(restartOnStaleVersionAndHeartbeat);
+
+      // Spawn new daemon through the CLI
+      // We do not need to clean ourselves up - we will be killed by
+      // the CLI start command.
+      // 1. It will first check if daemon is running (yes in this case)
+      // 2. If the version is stale (it will read daemon.state.json file and check startedWithCliVersion) & compare it to its own version
+      // 3. Next it will start a new daemon with the latest version with daemon-sync :D
+      // Done!
+      try {
+        spawnHappyCLI(['daemon', 'start'], {
+          detached: true,
+          stdio: 'ignore'
+        });
+      } catch (error) {
+        logger.debug('[DAEMON RUN] Failed to spawn new daemon, this is quite likely to happen during integration tests as we are cleaning out dist/ directory', error);
+      }
+
+      // So we can just hang forever
+      logger.debug('[DAEMON RUN] Hanging for a bit - waiting for CLI to kill us because we are running outdated version of the code');
+      await new Promise(resolve => setTimeout(resolve, 10_000));
+      process.exit(0);
+    };
+
+    // Check for new CLI releases; installs happen when asked for from the app
+    const cliUpdater = startCliUpdater({
       getActivity: () => ({
         sessions: pidToTrackedSession.size,
-        terminals: apiMachine.openTerminalCount,
+        terminals: apiMachine.terminalsLostOnRestart,
         executions: executionIdToManagedExecution.size + (shellExecutor?.liveExecutionIds().length ?? 0),
       }),
       reportStatus: (cliUpdate) => {
@@ -1065,6 +1095,7 @@ export async function startDaemon(): Promise<void> {
           logger.debug('[DAEMON RUN] Failed to report CLI update status', error);
         });
       },
+      onInstalled: () => void handOverToInstalledVersion(),
     });
 
     // Set RPC handlers
@@ -1080,7 +1111,9 @@ export async function startDaemon(): Promise<void> {
         liveExecutionIds: [...executionIdToManagedExecution.keys(), ...(shellExecutor?.liveExecutionIds() ?? [])],
         daemonStartedAt,
       }), Date.now() + ORCHESTRATOR_RECONCILE_DEADLINE_MS),
-      updateCli: cliAutoUpdate.updateNow,
+      updateCli: cliUpdater.updateNow,
+      checkCliUpdate: cliUpdater.check,
+      cliUpdatePreflight: cliUpdater.preflight,
     });
 
     // Connect to server
@@ -1141,29 +1174,7 @@ export async function startDaemon(): Promise<void> {
       }
       if (projectVersion !== configuration.currentCliVersion) {
         logger.debug('[DAEMON RUN] Daemon is outdated, triggering self-restart with latest version, clearing heartbeat interval');
-
-        clearInterval(restartOnStaleVersionAndHeartbeat);
-
-        // Spawn new daemon through the CLI
-        // We do not need to clean ourselves up - we will be killed by
-        // the CLI start command.
-        // 1. It will first check if daemon is running (yes in this case)
-        // 2. If the version is stale (it will read daemon.state.json file and check startedWithCliVersion) & compare it to its own version
-        // 3. Next it will start a new daemon with the latest version with daemon-sync :D
-        // Done!
-        try {
-          spawnHappyCLI(['daemon', 'start'], {
-            detached: true,
-            stdio: 'ignore'
-          });
-        } catch (error) {
-          logger.debug('[DAEMON RUN] Failed to spawn new daemon, this is quite likely to happen during integration tests as we are cleaning out dist/ directory', error);
-        }
-
-        // So we can just hang forever
-        logger.debug('[DAEMON RUN] Hanging for a bit - waiting for CLI to kill us because we are running outdated version of the code');
-        await new Promise(resolve => setTimeout(resolve, 10_000));
-        process.exit(0);
+        await handOverToInstalledVersion();
       }
 
       // Before wrecklessly overriting the daemon state file, we should check if we are the ones who own it
@@ -1199,7 +1210,7 @@ export async function startDaemon(): Promise<void> {
     const cleanupAndShutdown = async (source: 'happy-app' | 'happy-cli' | 'os-signal' | 'exception', errorMessage?: string) => {
       logger.debug(`[DAEMON RUN] Starting proper cleanup (source: ${source}, errorMessage: ${errorMessage})...`);
 
-      cliAutoUpdate.stop();
+      cliUpdater.stop();
 
       // Clear health check interval
       if (restartOnStaleVersionAndHeartbeat) {

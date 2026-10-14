@@ -1,5 +1,5 @@
 import React, { useCallback } from 'react';
-import { View, Text, Pressable, Platform, ActivityIndicator } from 'react-native';
+import { View, Text, Pressable, Platform } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
 import { Ionicons, AntDesign, MaterialCommunityIcons, FontAwesome6 } from '@expo/vector-icons';
@@ -29,11 +29,10 @@ import { useOpenTerminal } from '@/hooks/useOpenTerminal';
 import { useUnistyles } from 'react-native-unistyles';
 import { layout } from '@/components/layout';
 import { t } from '@/text';
-import { isVersionSupported, useLatestCliVersion } from '@/utils/versionUtils';
 import { CodeView } from '@/components/CodeView';
 import { Session } from '@/sync/storageTypes';
 import { useHappyAction } from '@/hooks/useHappyAction';
-import { useMachineCliUpdate } from '@/hooks/useMachineCliUpdate';
+import { getSessionCliUpgrade } from '@/utils/cliUpdate';
 import { HappyError } from '@/utils/errors';
 import { formatModelDisplay, resolveLocalModelDisplay, isModelFast, FAST_MODE_ICON_COLOR } from 'happy-wire';
 import { NativeMenu } from '@/components/NativeMenu';
@@ -71,20 +70,10 @@ function SessionInfoContent({ session, leavingRef }: { session: Session; leaving
     }, [localModelDisplay.model, localModelDisplay.reasoningEffort, session.metadata?.model, session.metadata?.reasoningEffort, session.metadata?.models, session.fastMode]);
     const geminiSessionId = session.metadata?.flavor === 'gemini' ? session.id : undefined;
     
-    // Check if CLI version is outdated
-    const latestCliVersion = useLatestCliVersion();
-    const isCliOutdated = session.metadata?.version && latestCliVersion && !isVersionSupported(session.metadata.version, latestCliVersion);
-
-    // Check if machine daemon has a newer CLI version than this session
+    // The machine's daemon runs a newer CLI than this session: the session can restart on it
     const machineId = session.metadata?.machineId;
     const machine = useMachine(machineId ?? '');
-    const machineCliUpdate = useMachineCliUpdate(machine);
-    const machineDaemonVersion = machine?.metadata?.happyCliVersion;
-    const sessionVersion = session.metadata?.version;
-    const isUpgradeAvailable = sessionVersion && machineDaemonVersion
-        && !machineDaemonVersion.startsWith('0.14.0-dev.') // Skip legacy dev versions
-        && !isVersionSupported(sessionVersion, machineDaemonVersion)
-        && machineDaemonVersion !== sessionVersion;
+    const isUpgradeAvailable = !!getSessionCliUpgrade(session.metadata?.version, machine);
 
     const copyValue = useCallback(async (value: string) => {
         await Clipboard.setStringAsync(value);
@@ -439,25 +428,6 @@ function SessionInfoContent({ session, leavingRef }: { session: Session; leaving
     }, []);
 
     const handleRenameSession = useCallback(() => promptRenameSession(session), [session]);
-
-    const handleCopyUpdateCommand = useCallback(() => {
-        Modal.alert(
-            t('sessionInfo.cliVersionOutdated'),
-            t('sessionInfo.updateCliInstructions'),
-            [
-                { text: t('common.cancel'), style: 'cancel' },
-                {
-                    text: t('common.copy'),
-                    onPress: async () => {
-                        const updateCommand = 'happy update';
-                        await Clipboard.setStringAsync(updateCommand);
-                        hapticsLight();
-                        showCopiedToast();
-                    }
-                }
-            ]
-        );
-    }, []);
 
     const [isUpgrading, setIsUpgrading] = React.useState(false);
     const handleUpgradeSession = useCallback(async () => {
@@ -876,24 +846,6 @@ function SessionInfoContent({ session, leavingRef }: { session: Session; leaving
                     </View>
                 </View>
 
-                {/* CLI Version Warning - only show install instructions when machine hasn't updated yet */}
-                {isCliOutdated && !isUpgradeAvailable && session.active && (
-                    <ItemGroup>
-                        {/* Daemons with auto-update install it from here; older ones need `happy update` run by hand */}
-                        <Item
-                            title={t('sessionInfo.cliVersionOutdated')}
-                            subtitle={machineCliUpdate.subtitle ?? t('sessionInfo.updateCliInstructions')}
-                            subtitleLines={0}
-                            icon={<Ionicons name="warning-outline" size={29} color="#FF9500" />}
-                            showChevron={false}
-                            onPress={machineCliUpdate.canUpdate ? machineCliUpdate.update : machineCliUpdate.status ? undefined : handleCopyUpdateCommand}
-                            rightElement={machineCliUpdate.updating || machineCliUpdate.status?.state === 'installing'
-                                ? <ActivityIndicator size="small" color={theme.colors.textSecondary} />
-                                : undefined}
-                        />
-                    </ItemGroup>
-                )}
-
                 {/* CLI Upgrade Available - shown when machine has newer CLI than session */}
                 {isUpgradeAvailable && (session.active || isUpgrading) && (
                     <ItemGroup>
@@ -1199,8 +1151,7 @@ function SessionInfoContent({ session, leavingRef }: { session: Session; leaving
                             <Item
                                 title={t('sessionInfo.cliVersion')}
                                 subtitle={session.metadata.version}
-                                detail={isCliOutdated && session.active ? '⚠️' : undefined}
-                                icon={<Ionicons name="git-branch-outline" size={29} color={isCliOutdated && session.active ? "#FF9500" : "#5856D6"} />}
+                                icon={<Ionicons name="git-branch-outline" size={29} color="#5856D6" />}
                                 showChevron={false}
                                 onPress={() => session.metadata?.version && copyValue(session.metadata.version)}
                             />

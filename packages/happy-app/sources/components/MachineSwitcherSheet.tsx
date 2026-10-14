@@ -13,7 +13,9 @@ import { useSessionListScope } from '@/hooks/useSessionListScope';
 import { createInitialScrollHandlersHook } from '@/hooks/bottomSheetInitialScroll';
 import { SessionScopeDot } from './SessionScopeDot';
 import { MACHINE_AVATAR_COLORS, MACHINE_AVATAR_ICONS, resolveMachineAvatar } from './MachineAvatar';
-import { useSetting } from '@/sync/storage';
+import { useMachine, useSetting } from '@/sync/storage';
+import { getMachineCliUpdate } from '@/utils/cliUpdate';
+import { CliUpdateIcon } from './CliUpdateIndicator';
 import { filterMachineGroups, type SessionListSelection, type SessionScopeDot as Dot } from './sessionListScope';
 
 const SheetTextInput = Platform.OS === 'web' ? TextInput : BottomSheetTextInput;
@@ -27,11 +29,13 @@ type SwitcherItemProps = {
     selected: boolean;
     online?: boolean;
     dot?: Dot;
+    // A machine's row shows its CLI update, as the header does once it is picked
+    machineId?: string;
     onPress: () => void;
     onLayout?: (event: LayoutChangeEvent) => void;
 };
 
-const SwitcherItem = React.memo(({ icon, tint, name, meta, selected, online, dot = 'none', onPress, onLayout }: SwitcherItemProps) => {
+const SwitcherItem = React.memo(({ icon, tint, name, meta, selected, online, dot = 'none', machineId, onPress, onLayout }: SwitcherItemProps) => {
     const styles = stylesheet;
     const { theme } = useUnistyles();
     return (
@@ -56,11 +60,17 @@ const SwitcherItem = React.memo(({ icon, tint, name, meta, selected, online, dot
                 </View>
                 <Text style={styles.itemMeta} numberOfLines={1}>{meta}</Text>
             </View>
+            {machineId && <MachineCliUpdateIcon machineId={machineId} />}
             <View style={styles.itemCheck}>
                 {selected && <Ionicons name="checkmark" size={18} color={theme.colors.status.connected} />}
             </View>
         </Pressable>
     );
+});
+
+const MachineCliUpdateIcon = React.memo(({ machineId }: { machineId: string }) => {
+    const update = getMachineCliUpdate(useMachine(machineId));
+    return <CliUpdateIcon update={update} size={20} />;
 });
 
 /**
@@ -213,6 +223,7 @@ export const MachineSwitcherSheet = React.memo(React.forwardRef<BottomSheetModal
                                 meta={`${group.online ? t('status.online') : t('status.offline')} · ${sessionsMeta(group.sessions.length)}`}
                                 online={group.online}
                                 dot={group.dot}
+                                machineId={group.id}
                                 // With a single machine there is nothing to switch to; it is the whole list.
                                 selected={scope.switchable ? scope.selection === group.id : true}
                                 onPress={() => select(scope.switchable ? group.id : 'all')}

@@ -1,102 +1,44 @@
-import { useCallback } from 'react';
+import * as React from 'react';
 import { Modal } from '@/modal';
 import { showToast } from '@/components/Toast';
+import { showCliUpdateModal } from '@/components/CliUpdateModal';
 import { useHappyAction } from '@/hooks/useHappyAction';
-import { machineUpdateCli } from '@/sync/ops';
-import type { CliUpdateStatus, Machine } from '@/sync/storageTypes';
-import { isMachineOnline } from '@/utils/machineUtils';
+import { machineCheckCliUpdate } from '@/sync/ops';
+import { storage } from '@/sync/storage';
+import type { Machine } from '@/sync/storageTypes';
+import { getMachineCliUpdate } from '@/utils/cliUpdate';
+import { compareVersions } from '@/utils/versionUtils';
 import { t } from '@/text';
 
-// States in which the daemon has a newer version it has not installed yet
-const UPDATABLE_STATES = ['available', 'failed', 'disabled'];
-
-// The deadline is at most a day away: the clock time, plus the date when it is not today
-function formatInstallBy(installBy: number): string {
-    const date = new Date(installBy);
-    const time: Intl.DateTimeFormatOptions = { hour: '2-digit', minute: '2-digit' };
-    if (date.toDateString() === new Date().toDateString()) {
-        return date.toLocaleTimeString([], time);
-    }
-    return date.toLocaleString([], { ...time, month: 'numeric', day: 'numeric' });
-}
-
-function describeCliUpdate(status: CliUpdateStatus): string | null {
-    const version = status.latestVersion ?? '';
-    switch (status.state) {
-        case 'up-to-date':
-            return t('cliUpdate.statusUpToDate');
-        case 'installing':
-            return t('cliUpdate.statusInstalling', { version });
-        case 'installed':
-            return t('cliUpdate.statusInstalled', { version });
-        case 'failed':
-            return t('cliUpdate.statusFailed', { version, error: status.error ?? '' });
-        case 'disabled':
-            return status.latestVersion ? t('cliUpdate.statusDisabled', { version }) : null;
-        case 'unsupported':
-            return status.reason === 'no-permission' ? t('cliUpdate.statusNoPermission') : t('cliUpdate.statusNotGlobal');
-        case 'available':
-            if (status.waitingFor === 'sessions' && status.installBy) {
-                return t('cliUpdate.statusWaitingSessions', { version, time: formatInstallBy(status.installBy) });
-            }
-            if (status.waitingFor === 'executions' || status.waitingFor === 'terminals') {
-                return t('cliUpdate.statusWaitingBusy', { version });
-            }
-            return t('cliUpdate.statusAvailable', { version });
-        default:
-            return null;
-    }
-}
-
 /**
- * The CLI auto-update a machine's daemon reports, and an action to install
- * the latest version on it right away. `status` is undefined for daemons
- * that predate auto-update (they do not answer `update-cli` either).
+ * A machine's CLI update as the app shows it (see utils/cliUpdate.ts), with its actions: the
+ * "check" button, which has the daemon look the latest version up right now (the answer lands
+ * in the machine's daemon state, which then offers the update), and opening the update dialog.
  */
 export function useMachineCliUpdate(machine: Machine | null | undefined) {
-    const status = machine?.daemonState?.cliUpdate;
-    const online = !!machine && isMachineOnline(machine);
+    const update = React.useMemo(() => getMachineCliUpdate(machine), [machine]);
     const machineId = machine?.id;
-    const latestVersion = status?.latestVersion ?? '';
 
-    const [updating, install] = useHappyAction(useCallback(async () => {
+    const [checking, checkNow] = useHappyAction(React.useCallback(async () => {
         if (!machineId) return;
-        const result = await machineUpdateCli(machineId);
-        const version = result.latestVersion ?? latestVersion;
-        switch (result.status) {
-            case 'started':
-                showToast(t('cliUpdate.started', { version }));
-                break;
-            case 'up-to-date':
-                showToast(t('cliUpdate.upToDate'));
-                break;
-            case 'busy':
-                showToast(t('cliUpdate.busy'));
-                break;
-            case 'unsupported':
-                Modal.alert(t('common.error'), result.reason === 'no-permission' ? t('cliUpdate.statusNoPermission') : t('cliUpdate.statusNotGlobal'));
-                break;
-            default:
-                Modal.alert(t('common.error'), t('cliUpdate.checkFailed'));
+        const result = await machineCheckCliUpdate(machineId, 0);
+        if (!result) {
+            showToast(t('cliUpdate.checkUnsupported'), { icon: null });
+            return;
         }
-    }, [machineId, latestVersion]));
+        if (!result.latestVersion) {
+            Modal.alert(t('common.error'), t('cliUpdate.checkFailed'));
+            return;
+        }
+        const running = storage.getState().machines[machineId]?.metadata?.happyCliVersion;
+        if (running && compareVersions(result.latestVersion, running) <= 0) {
+            showToast(t('cliUpdate.upToDate'));
+        }
+    }, [machineId]));
 
-    const update = useCallback(() => {
-        Modal.alert(
-            t('cliUpdate.confirmTitle'),
-            t('cliUpdate.confirmMessage', { version: latestVersion }),
-            [
-                { text: t('common.cancel'), style: 'cancel' },
-                { text: t('cliUpdate.updateNow'), onPress: install },
-            ]
-        );
-    }, [latestVersion, install]);
+    const openDetails = React.useCallback(() => {
+        if (machineId) showCliUpdateModal(machineId);
+    }, [machineId]);
 
-    return {
-        status,
-        subtitle: online && status ? describeCliUpdate(status) : null,
-        canUpdate: online && !!status?.latestVersion && UPDATABLE_STATES.includes(status.state) && !updating,
-        updating,
-        update,
-    };
+    return { update, checking, checkNow, openDetails };
 }

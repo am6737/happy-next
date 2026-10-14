@@ -339,8 +339,46 @@ export type MachineUpdateCliResult = {
  * Install the latest CLI on a machine; its daemon restarts on it by itself
  */
 export async function machineUpdateCli(machineId: string): Promise<MachineUpdateCliResult> {
-    // The daemon runs `npm view` before answering, which can be slow on poor networks
+    // The daemon looks up the latest version before answering, which can be slow on poor networks
     return await apiSocket.machineRPC<MachineUpdateCliResult, {}>(machineId, 'update-cli', {}, 60000);
+}
+
+/**
+ * Have a machine's daemon look up the latest CLI unless its last lookup is at most `maxAgeMs` old.
+ * The result lands in `daemonState.cliUpdate`. Daemons before 0.13 check by themselves only.
+ */
+export async function machineCheckCliUpdate(machineId: string, maxAgeMs: number): Promise<{ latestVersion: string | null; checkedAt?: number } | null> {
+    try {
+        return await apiSocket.machineRPC<{ latestVersion: string | null; checkedAt?: number }, { maxAgeMs: number }>(machineId, 'check-cli-update', { maxAgeMs }, 60000);
+    } catch (error) {
+        if (error instanceof Error && /RPC method not available/i.test(error.message)) return null;
+        throw error;
+    }
+}
+
+export type CliUpdatePreflight = {
+    currentVersion: string;
+    latestVersion: string | null;
+    checkedAt?: number;
+    installing: boolean;
+    support: { supported: true; packageManager: 'npm' | 'pnpm' | 'yarn'; sudo: boolean } | { supported: false; reason: string };
+    // What to run on the machine when the daemon cannot install by itself
+    manualCommand: string;
+    // What restarting the daemon interrupts; `terminals` leaves out those kept alive by tmux
+    activity: { sessions: number; terminals: number; executions: number };
+};
+
+/**
+ * What installing the latest CLI on a machine involves. Null for daemons before 0.13, which can
+ * still install through `machineUpdateCli` but cannot tell what a restart interrupts.
+ */
+export async function machineCliUpdatePreflight(machineId: string): Promise<CliUpdatePreflight | null> {
+    try {
+        return await apiSocket.machineRPC<CliUpdatePreflight, {}>(machineId, 'cli-update-preflight', {}, 60000);
+    } catch (error) {
+        if (error instanceof Error && /RPC method not available/i.test(error.message)) return null;
+        throw error;
+    }
 }
 
 /**

@@ -28,8 +28,6 @@ class Configuration {
   public readonly disableCaffeinate: boolean
   // Stop the daemon from running shell commands sent from other machines (also `remoteShellDisabled` in settings.json)
   public readonly disableRemoteShell: boolean
-  // Stop the daemon from upgrading the CLI by itself (also `autoUpdateDisabled` in settings.json)
-  public readonly disableAutoUpdate: boolean
 
   constructor() {
     // Server configuration - priority: parameter > environment > default
@@ -58,7 +56,6 @@ class Configuration {
     this.isExperimentalEnabled = ['true', '1', 'yes'].includes(process.env.HAPPY_EXPERIMENTAL?.toLowerCase() || '');
     this.disableCaffeinate = ['true', '1', 'yes'].includes(process.env.HAPPY_DISABLE_CAFFEINATE?.toLowerCase() || '');
     this.disableRemoteShell = ['true', '1', 'yes'].includes(process.env.HAPPY_DISABLE_REMOTE_SHELL?.toLowerCase() || '');
-    this.disableAutoUpdate = ['true', '1', 'yes'].includes(process.env.HAPPY_DISABLE_AUTO_UPDATE?.toLowerCase() || '');
 
     this.currentCliVersion = packageJson.version
 

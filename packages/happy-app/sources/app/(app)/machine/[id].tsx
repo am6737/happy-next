@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useRef, useEffect, type ComponentProps } from 'react';
-import { View, Text, ActivityIndicator, RefreshControl, Platform, Pressable, TextInput, useWindowDimensions } from 'react-native';
+import { View, Text, ActivityIndicator, RefreshControl, Platform, Pressable, ScrollView, TextInput, useWindowDimensions } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { Item } from '@/components/Item';
 import { ItemGroup } from '@/components/ItemGroup';
@@ -47,6 +47,7 @@ import { MachineIcon } from '@/components/MachineAvatar';
 import { MachineAvatarPicker } from '@/components/MachineAvatarPicker';
 import { useSessionFork } from '@/hooks/useSessionFork';
 import { useMachineCliUpdate } from '@/hooks/useMachineCliUpdate';
+import { requestCliUpdateCheck } from '@/utils/cliUpdate';
 import { SessionProjectLabelsContext, useSessionProjectLabels } from '@/hooks/useSessionProjectLabel';
 
 type AgentType = 'claude' | 'codex' | 'gemini' | 'qoder';
@@ -76,6 +77,42 @@ function platformIcon(platform: string): ComponentProps<typeof Ionicons>['name']
 }
 
 const styles = StyleSheet.create((theme) => ({
+    cliItemHighlight: {
+        backgroundColor: theme.colors.box.warning.background,
+    },
+    cliStatus: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+    },
+    cliStatusText: {
+        fontSize: 14,
+        color: theme.colors.textSecondary,
+        ...Typography.default(),
+    },
+    cliStatusFailed: {
+        color: theme.colors.textDestructive,
+    },
+    cliButton: {
+        minWidth: 64,
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 14,
+        backgroundColor: theme.colors.surfaceHighest,
+    },
+    cliButtonPrimary: {
+        backgroundColor: theme.colors.button.primary.background,
+    },
+    cliButtonText: {
+        fontSize: 13,
+        color: theme.colors.text,
+        ...Typography.default('semiBold'),
+    },
+    cliButtonPrimaryText: {
+        color: theme.colors.button.primary.tint,
+    },
     pathInputContainer: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -132,12 +169,26 @@ const styles = StyleSheet.create((theme) => ({
 
 export default function MachineDetailScreen() {
     const { theme } = useUnistyles();
-    const { id: machineId } = useLocalSearchParams<{ id: string }>();
+    const { id: machineId, focus } = useLocalSearchParams<{ id: string; focus?: string }>();
     const router = useRouter();
     const { openMachine: openMachineTerminal } = useOpenTerminal();
     const sessions = useSessions();
     const machine = useMachine(machineId!);
     const cliUpdate = useMachineCliUpdate(machine);
+    const listRef = useRef<ScrollView>(null);
+    // Opened from the session list's CLI banner: scroll to the CLI item and highlight it while the page
+    // fills in. It sits near the top of the daemon group, the last one, so scrolling to the end shows
+    // it with the rest of the group below it.
+    const focusCliUntil = useRef(focus === 'cli' ? Date.now() + 1500 : 0);
+    const [highlightCli, setHighlightCli] = useState(focus === 'cli');
+    const handleListContentSizeChange = useCallback(() => {
+        if (Date.now() < focusCliUntil.current) listRef.current?.scrollToEnd({ animated: true });
+    }, []);
+    useEffect(() => {
+        if (!highlightCli) return;
+        const timer = setTimeout(() => setHighlightCli(false), 2000);
+        return () => clearTimeout(timer);
+    }, [highlightCli]);
     const navigateToSession = useNavigateToSession();
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [isStoppingDaemon, setIsStoppingDaemon] = useState(false);
@@ -158,6 +209,12 @@ export default function MachineDetailScreen() {
     const registeredRepos = storage(useShallow((state) => state.registeredRepos[machineId!] || [])) as RegisteredRepo[];
     const cliAvailability = useCLIDetection(machineId ?? null);
     const [agentMenu, setAgentMenu] = useState<{ visible: boolean; items: ActionMenuItem[] }>({ visible: false, items: [] });
+
+    // Have the daemon look for a new CLI if it has not in the last 10 minutes
+    const machineOnline = !!machine?.active;
+    useEffect(() => {
+        if (machineId && machineOnline) requestCliUpdateCheck(machineId);
+    }, [machineId, machineOnline]);
 
     // Load registered repos from server KV store on mount
     useEffect(() => {
@@ -747,6 +804,8 @@ export default function MachineDetailScreen() {
                 }}
             />
             <ItemList
+                ref={listRef}
+                onContentSizeChange={handleListContentSizeChange}
                 automaticallyAdjustKeyboardInsets={useNativeSoftHeader}
                 refreshControl={
                     <RefreshControl
@@ -995,25 +1054,39 @@ export default function MachineDetailScreen() {
                             }}
                             showChevron={false}
                         />
-                        <Item
-                            title={t('machine.stopDaemon')}
-                            titleStyle={{
-                                color: daemonStatus === 'stopped' ? '#999' : '#FF9500'
-                            }}
-                            onPress={daemonStatus === 'stopped' ? undefined : handleStopDaemon}
-                            disabled={isStoppingDaemon || daemonStatus === 'stopped'}
-                            rightElement={
-                                isStoppingDaemon ? (
-                                    <ActivityIndicator size="small" color={theme.colors.textSecondary} />
-                                ) : (
-                                    <Ionicons
-                                        name="stop-circle"
-                                        size={20}
-                                        color={daemonStatus === 'stopped' ? '#999' : '#FF9500'}
-                                    />
-                                )
-                            }
-                        />
+                        {/* The daemon refreshes happyCliVersion in machine metadata on every start */}
+                        {machine.metadata?.happyCliVersion && (
+                            <Item
+                                title={t('machine.cliVersion')}
+                                subtitle={machine.metadata.happyCliVersion}
+                                onPress={cliUpdate.update.state === 'none' ? undefined : cliUpdate.openDetails}
+                                showChevron={false}
+                                style={highlightCli ? styles.cliItemHighlight : undefined}
+                                rightElement={cliUpdate.update.state === 'installing' ? (
+                                    <View style={styles.cliStatus}>
+                                        <ActivityIndicator size="small" color={theme.colors.textSecondary} />
+                                        <Text style={styles.cliStatusText}>{t('cliUpdate.installing')}</Text>
+                                    </View>
+                                ) : cliUpdate.update.state === 'failed' ? (
+                                    <View style={styles.cliStatus}>
+                                        <Ionicons name="alert-circle" size={18} color={theme.colors.textDestructive} />
+                                        <Text style={[styles.cliStatusText, styles.cliStatusFailed]}>{t('cliUpdate.failed')}</Text>
+                                    </View>
+                                ) : cliUpdate.update.state === 'available' ? (
+                                    <Pressable style={[styles.cliButton, styles.cliButtonPrimary]} onPress={cliUpdate.openDetails} hitSlop={6}>
+                                        <Text style={[styles.cliButtonText, styles.cliButtonPrimaryText]}>{t('cliUpdate.itemUpdate')}</Text>
+                                    </Pressable>
+                                ) : isMachineOnline(machine) ? (
+                                    <Pressable style={styles.cliButton} onPress={cliUpdate.checkNow} disabled={cliUpdate.checking} hitSlop={6}>
+                                        {cliUpdate.checking ? (
+                                            <ActivityIndicator size="small" color={theme.colors.textSecondary} />
+                                        ) : (
+                                            <Text style={styles.cliButtonText}>{t('cliUpdate.check')}</Text>
+                                        )}
+                                    </Pressable>
+                                ) : undefined}
+                            />
+                        )}
                         {machine.daemonState && (
                             <>
                                 {machine.daemonState.pid && (
@@ -1038,24 +1111,28 @@ export default function MachineDetailScreen() {
                                 )}
                             </>
                         )}
-                        {/* The daemon refreshes happyCliVersion in machine metadata on every start */}
-                        {machine.metadata?.happyCliVersion && (
-                            <Item
-                                title={t('machine.cliVersion')}
-                                subtitle={cliUpdate.subtitle ? `${machine.metadata.happyCliVersion}\n${cliUpdate.subtitle}` : machine.metadata.happyCliVersion}
-                                subtitleLines={0}
-                                onPress={cliUpdate.canUpdate ? cliUpdate.update : undefined}
-                                showChevron={false}
-                                rightElement={cliUpdate.updating || cliUpdate.status?.state === 'installing' ? (
-                                    <ActivityIndicator size="small" color={theme.colors.textSecondary} />
-                                ) : cliUpdate.canUpdate ? (
-                                    <Ionicons name="arrow-up-circle" size={20} color="#34C759" />
-                                ) : undefined}
-                            />
-                        )}
                         <Item
                             title={t('machine.daemonStateVersion')}
                             subtitle={String(machine.daemonStateVersion)}
+                        />
+                        <Item
+                            title={t('machine.stopDaemon')}
+                            titleStyle={{
+                                color: daemonStatus === 'stopped' ? '#999' : '#FF9500'
+                            }}
+                            onPress={daemonStatus === 'stopped' ? undefined : handleStopDaemon}
+                            disabled={isStoppingDaemon || daemonStatus === 'stopped'}
+                            rightElement={
+                                isStoppingDaemon ? (
+                                    <ActivityIndicator size="small" color={theme.colors.textSecondary} />
+                                ) : (
+                                    <Ionicons
+                                        name="stop-circle"
+                                        size={20}
+                                        color={daemonStatus === 'stopped' ? '#999' : '#FF9500'}
+                                    />
+                                )
+                            }
                         />
                 </ItemGroup>
             </ItemList>

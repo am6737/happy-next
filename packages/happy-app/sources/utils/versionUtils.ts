@@ -2,42 +2,6 @@
  * Utility functions for version comparison and validation
  */
 
-import { useState, useEffect } from 'react';
-
-const NPM_REGISTRY_URL = 'https://registry.npmjs.org/happy-next-cli/latest';
-
-let latestVersionPromise: Promise<string | null> | null = null;
-
-/**
- * Fetch the latest CLI version from npm registry.
- * Result is cached in memory — only one request per app lifecycle.
- */
-export function fetchLatestCliVersion(): Promise<string | null> {
-    if (!latestVersionPromise) {
-        latestVersionPromise = fetch(NPM_REGISTRY_URL, {
-            headers: { 'Accept': 'application/json' },
-        })
-            .then(res => {
-                if (!res.ok) return null;
-                return res.json();
-            })
-            .then(data => (data && typeof data.version === 'string') ? data.version : null)
-            .catch(() => null);
-    }
-    return latestVersionPromise;
-}
-
-/**
- * React hook that returns the latest CLI version from npm, or null while loading / on failure.
- */
-export function useLatestCliVersion(): string | null {
-    const [version, setVersion] = useState<string | null>(null);
-    useEffect(() => {
-        fetchLatestCliVersion().then(v => setVersion(v));
-    }, []);
-    return version;
-}
-
 /**
  * Compare two semantic version strings
  * @param version1 First version to compare

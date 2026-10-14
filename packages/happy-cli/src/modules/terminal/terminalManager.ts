@@ -619,11 +619,12 @@ export class TerminalManager {
         return [...this.terminals.values()].map((record) => record.info);
     }
 
-    /** Shuts the worker down. Call on daemon exit. */
-    get openTerminalCount(): number {
-        return this.terminals.size;
+    /** Terminals a daemon restart would close: none when they live in tmux. */
+    get terminalsLostOnRestart(): number {
+        return this.tmux ? 0 : this.terminals.size;
     }
 
+    /** Shuts the worker down. Call on daemon exit. */
     stop(): void {
         this.stopping = true;
 

@@ -302,15 +302,14 @@ export const DaemonStateSchema = z.object({
     startedAt: z.number().optional(),
     shutdownRequestedAt: z.number().optional(),
     shutdownSource: z.string().optional(),
-    // The daemon's CLI auto-update (see happy-cli/src/daemon/autoUpdate.ts); absent on older CLIs
+    // The daemon's CLI update check and install (see happy-cli/src/daemon/cliUpdater.ts); absent on older CLIs.
+    // State is idle / installing / failed; 0.12 daemons report available, up-to-date and others instead.
     cliUpdate: z.object({
         state: z.string(),
-        waitingFor: z.string().optional(),
-        reason: z.string().optional(),
         latestVersion: z.string().optional(),
-        error: z.string().optional(),
         checkedAt: z.number().optional(),
-        installBy: z.number().optional(),
+        targetVersion: z.string().optional(),
+        error: z.string().optional(),
     }).optional()
 });
 

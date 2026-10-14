@@ -16,7 +16,7 @@ export const LocalSettingsSchema = z.object({
     desktopAutostartEnabled: z.boolean().describe('Launch the desktop app when the user signs in'),
     desktopGlobalShortcutEnabled: z.boolean().describe('Enable the global show/hide desktop shortcut'),
     // CLI version acknowledgments - keyed by machineId
-    acknowledgedCliVersions: z.record(z.string(), z.string()).describe('Acknowledged CLI versions per machine'),
+    acknowledgedCliVersions: z.record(z.string(), z.string()).describe('CLI version each session\'s upgrade banner was dismissed for, by session id'),
     // Session list UI state (device-specific)
     sessionListSelectedTab: z.string().nullable().describe('Persisted selected tab in the session list ("all" / "shared" / "sharedByMe" / a machineId)'),
     machineNameCache: z.record(z.string(), z.string()).describe('Cached machineId -> display name, so machine tabs keep their names before machines sync on restart'),

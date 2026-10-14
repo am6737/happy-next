@@ -30,8 +30,7 @@ interface Settings {
   codexResumeCwd?: 'session' | 'current' // CLI-only resume directory preference
   chromeMode?: boolean  // Default Chrome mode setting for Claude
   remoteShellDisabled?: boolean  // Refuse shell commands sent to this machine's daemon from other machines
-  autoUpdateDisabled?: boolean  // Keep the daemon from upgrading the CLI by itself when a new version is published
-  autoUpdateNoSudo?: boolean  // Keep the daemon's auto-update from using passwordless sudo for a root-owned global install
+  autoUpdateNoSudo?: boolean  // Keep the daemon's CLI update (asked for from the app) from using passwordless sudo for a root-owned global install
 }
 
 const defaultSettings: Settings = {

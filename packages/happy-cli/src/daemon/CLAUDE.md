@@ -50,13 +50,17 @@ The daemon detects when `npm upgrade happy-next-cli` occurs:
 5. New daemon calls `stopDaemon()` which tries HTTP `/stop`, falls back to SIGKILL
 6. New daemon takes over
 
-The install itself is done by `autoUpdate.ts`: it checks npm for a newer version and runs the global
-upgrade once the machine is idle (no terminals or orchestrator executions; running sessions defer it for up
-to 24h), reporting progress in `daemonState.cliUpdate`. The app can trigger it right away via the `update-cli`
-RPC. Off with `HAPPY_DISABLE_AUTO_UPDATE=1` or `autoUpdateDisabled: true` in settings.json. A global npm
-install the daemon's user cannot write (e.g. `/usr/lib/node_modules`) is upgraded with `sudo -n` when sudo
-needs no password, passing the user's PATH, npm userconfig, registry and prefix through; `autoUpdateNoSudo:
-true` in settings.json turns that off (the app then shows "no permission").
+New releases are found by `cliUpdater.ts`: it checks the machine's npm registry 1–3 min after start and about
+hourly after that, and on the `check-cli-update` RPC (`maxAgeMs`: the app asks with 10 min when the machine
+page opens or the machine is selected, 0 from the "check" button). It never installs by itself. The app shows
+what a restart interrupts via the `cli-update-preflight` RPC (orchestrator executions, terminals that are not
+in tmux, running sessions) and installs via `update-cli`; progress is reported in `daemonState.cliUpdate`
+(`idle` / `installing` / `failed`, plus `latestVersion`). After a successful install the daemon hands over
+to the new version immediately instead of waiting for the heartbeat, and the new daemon resets the state to
+`idle`. A global npm install the daemon's user cannot write (e.g. `/usr/lib/node_modules`) is upgraded with
+`sudo -n` when sudo needs no password, passing the user's PATH, npm userconfig, registry and prefix through;
+`autoUpdateNoSudo: true` in settings.json turns that off (the app then shows "no permission" and the manual
+`happy update` command).
 
 ### Stopping the Daemon
 

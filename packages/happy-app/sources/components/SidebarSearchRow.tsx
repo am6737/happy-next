@@ -11,6 +11,8 @@ import { useAddMachine } from '@/hooks/useAddMachine';
 import { useSessionsCreateItems } from '@/hooks/useSessionsCreateItems';
 import { useOpenCommandPalette } from './CommandPalette/CommandPaletteProvider';
 import { DropdownMenu } from './DropdownMenu';
+import { CliUpdateIcon, cliUpdateLabel, webTitle } from './CliUpdateIndicator';
+import { useSelectedMachineCliUpdate } from '@/hooks/useSelectedMachineCliUpdate';
 
 // The command palette's shortcut, shown in the search field where a keyboard is expected.
 function getSearchShortcutLabel(): string | null {
@@ -21,7 +23,8 @@ function getSearchShortcutLabel(): string | null {
 }
 
 // Top of the sidebar's list column: a search field that opens the command palette, and a "+" with
-// the session list's create choices (new session, add machine).
+// the session list's create choices (new session, add machine). While the picked machine has a CLI
+// update, its icon joins the "+" in one capsule and opens the CLI item on the machine page.
 export const SidebarSearchRow = React.memo(() => {
     const styles = stylesheet;
     const { theme } = useUnistyles();
@@ -32,6 +35,8 @@ export const SidebarSearchRow = React.memo(() => {
     const newSession = createItems[0];
     const shortcut = React.useMemo(getSearchShortcutLabel, []);
     const openCommandPalette = useOpenCommandPalette();
+    const cliUpdate = useSelectedMachineCliUpdate(scope.selection);
+    const cliLabel = cliUpdateLabel(cliUpdate.update);
 
     return (
         <View style={styles.row}>
@@ -45,17 +50,33 @@ export const SidebarSearchRow = React.memo(() => {
                 <Text style={styles.placeholder} numberOfLines={1}>{t('sessionScope.search')}</Text>
                 {shortcut && <Text style={styles.shortcut}>{shortcut}</Text>}
             </Pressable>
-            <DropdownMenu
-                openOnHover
-                placement="right"
-                items={createItems}
-                onPress={() => { if (!newSession.disabled) newSession.onPress(); }}
-                accessibilityLabel={t('sessionScope.addMenu')}
-                style={styles.addButton}
-                hoveredStyle={styles.fieldHovered}
-            >
-                <Ionicons name="add" size={20} color={theme.colors.text} />
-            </DropdownMenu>
+            <View style={styles.capsule}>
+                {cliLabel !== '' && (
+                    <>
+                        <Pressable
+                            ref={webTitle(cliLabel)}
+                            accessibilityRole="button"
+                            accessibilityLabel={cliLabel}
+                            onPress={cliUpdate.open}
+                            style={({ hovered, pressed }: any) => [styles.capsuleButton, (hovered || pressed) && styles.fieldHovered]}
+                        >
+                            <CliUpdateIcon update={cliUpdate.update} size={18} />
+                        </Pressable>
+                        <View style={styles.capsuleDivider} />
+                    </>
+                )}
+                <DropdownMenu
+                    openOnHover
+                    placement="right"
+                    items={createItems}
+                    onPress={() => { if (!newSession.disabled) newSession.onPress(); }}
+                    accessibilityLabel={t('sessionScope.addMenu')}
+                    style={styles.capsuleButton}
+                    hoveredStyle={styles.fieldHovered}
+                >
+                    <Ionicons name="add" size={20} color={theme.colors.text} />
+                </DropdownMenu>
+            </View>
         </View>
     );
 });
@@ -97,12 +118,25 @@ const stylesheet = StyleSheet.create((theme) => ({
         opacity: 0.8,
         ...Typography.default(),
     },
-    addButton: {
+    capsule: {
+        height: FIELD_HEIGHT,
+        flexDirection: 'row',
+        alignItems: 'center',
+        borderRadius: 8,
+        overflow: 'hidden',
+        backgroundColor: theme.dark ? theme.colors.surfaceHighest : theme.colors.surface,
+    },
+    capsuleButton: {
         width: FIELD_HEIGHT,
         height: FIELD_HEIGHT,
-        borderRadius: 8,
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: theme.dark ? theme.colors.surfaceHighest : theme.colors.surface,
+    },
+    // The theme's divider is the capsule's own color in the dark sidebar, so the line takes the
+    // overlay divider, a faint step lighter (darker in light mode)
+    capsuleDivider: {
+        width: 1,
+        height: 16,
+        backgroundColor: theme.colors.floatingOverlay.divider,
     },
 }));

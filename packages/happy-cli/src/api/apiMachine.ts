@@ -23,7 +23,7 @@ import { fetchLatestQoderModelDescriptions, readCachedQoderModelDescriptions } f
 import { readAllCodexSessionUserMessages, listCodexSessions, getCodexSessionPreview, saveCodexSessionCacheStats } from '@/codex/utils/codexSessionReader';
 import { forkCodexSession, forkAndTruncateCodexSession } from '@/codex/utils/codexSessionFork';
 import { executeSessionArchive } from '@/daemon/executeSessionArchive';
-import type { UpdateNowResult } from '@/daemon/autoUpdate';
+import type { CheckResult, CliUpdatePreflight, UpdateNowResult } from '@/daemon/cliUpdater';
 import { discoverCapabilities, type DiscoverCapabilitiesAgent } from '@/daemon/discoverCapabilities';
 import { remoteShell } from '@/daemon/orchestratorShell';
 import type { OrchestratorShellDispatchPayload } from '@/orchestrator/common';
@@ -176,6 +176,10 @@ type MachineRpcHandlers = {
     orchestratorReconcile: () => Promise<void>;
     /** Install the latest CLI now (the daemon then restarts on it by itself) */
     updateCli: () => Promise<UpdateNowResult>;
+    /** Look up the latest CLI unless the last lookup is at most `maxAgeMs` old */
+    checkCliUpdate: (maxAgeMs: number) => Promise<CheckResult>;
+    /** What installing the latest CLI involves, shown before the app asks for it */
+    cliUpdatePreflight: () => Promise<CliUpdatePreflight>;
 }
 
 export class ApiMachineClient {
@@ -266,6 +270,8 @@ export class ApiMachineClient {
         orchestratorShellDispatch,
         orchestratorReconcile,
         updateCli,
+        checkCliUpdate,
+        cliUpdatePreflight,
     }: MachineRpcHandlers) {
         this.orchestratorReconcile = orchestratorReconcile;
 
@@ -516,6 +522,11 @@ export class ApiMachineClient {
 
         // Upgrade the CLI on this machine from the app
         this.rpcHandlerManager.registerHandler('update-cli', () => updateCli());
+        this.rpcHandlerManager.registerHandler('check-cli-update', (params: { maxAgeMs?: unknown } | undefined) => {
+            const maxAgeMs = Number(params?.maxAgeMs);
+            return checkCliUpdate(Number.isFinite(maxAgeMs) && maxAgeMs >= 0 ? maxAgeMs : 0);
+        });
+        this.rpcHandlerManager.registerHandler('cli-update-preflight', () => cliUpdatePreflight());
 
         // Search the messages every session on this machine has archived, across agents
         this.rpcHandlerManager.registerHandler('search-messages', async (params: unknown) => {
@@ -1103,9 +1114,8 @@ export class ApiMachineClient {
         }
     }
 
-    /** Terminals open on this machine: a daemon restart closes them */
-    get openTerminalCount(): number {
-        return this.terminalManager.openTerminalCount;
+    get terminalsLostOnRestart(): number {
+        return this.terminalManager.terminalsLostOnRestart;
     }
 
     shutdown() {

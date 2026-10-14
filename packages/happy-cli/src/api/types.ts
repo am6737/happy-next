@@ -217,18 +217,15 @@ export const DaemonStateSchema = z.object({
     ]).optional(),
   cliUpdate: z.object({
     state: z.union([
-      z.enum(['up-to-date', 'available', 'installing', 'installed', 'failed', 'disabled', 'unsupported']),
+      z.enum(['idle', 'installing', 'failed']),
       z.string() // Forward compatibility
     ]),
-    // Set while an update is available but waiting: what it waits for
-    waitingFor: z.string().optional(),
-    // Set when unsupported: why this installation cannot upgrade itself
-    reason: z.string().optional(),
+    // Latest published version, from the last successful check
     latestVersion: z.string().optional(),
-    error: z.string().optional(),
     checkedAt: z.number().optional(),
-    // When a waiting update installs even with sessions still running
-    installBy: z.number().optional(),
+    // The version being installed, or whose install failed
+    targetVersion: z.string().optional(),
+    error: z.string().optional(),
   }).optional()
 })
 
