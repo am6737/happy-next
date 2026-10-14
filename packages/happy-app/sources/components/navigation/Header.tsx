@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { View, Text, Platform, Pressable } from 'react-native';
+import { View, Text, Platform, Pressable, type LayoutChangeEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackHeaderProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -57,6 +57,15 @@ export const Header = React.memo((props: HeaderProps) => {
 
     const leftAligned = headerTitleAlign === 'left';
 
+    // The side containers share the free space equally to keep the title centered, so a title wider
+    // than the bar squeezes them to nothing and the back / action buttons end up under it. Measure
+    // the buttons and keep room for the wider side on both.
+    const [leftWidth, setLeftWidth] = React.useState(0);
+    const [rightWidth, setRightWidth] = React.useState(0);
+    const sideMinWidth = Math.max(leftWidth, rightWidth);
+    const handleLeftLayout = React.useCallback((e: LayoutChangeEvent) => setLeftWidth(Math.ceil(e.nativeEvent.layout.width)), []);
+    const handleRightLayout = React.useCallback((e: LayoutChangeEvent) => setRightWidth(Math.ceil(e.nativeEvent.layout.width)), []);
+
     const insets = useSafeAreaInsets();
     const paddingTop = safeAreaEnabled ? insets.top : 0;
     const headerHeight = useHeaderHeight();
@@ -85,8 +94,11 @@ export const Header = React.memo((props: HeaderProps) => {
                         styles.leftContainer,
                         leftAligned && styles.sideContainerHug,
                         needsMacOSWindowControlsInset && styles.macOSWindowControlsInset,
+                        !leftAligned && { minWidth: sideMinWidth },
                     ]}>
-                        {headerLeft && headerLeft()}
+                        <View style={styles.sideContent} onLayout={handleLeftLayout}>
+                            {headerLeft && headerLeft()}
+                        </View>
                     </View>
 
                     <View style={[styles.centerContainer, leftAligned && styles.centerContainerLeft]}>
@@ -104,8 +116,10 @@ export const Header = React.memo((props: HeaderProps) => {
                         </View>
                     </View>
 
-                    <View style={[styles.rightContainer, leftAligned && styles.sideContainerHug]}>
-                        {headerRight && headerRight()}
+                    <View style={[styles.rightContainer, leftAligned && styles.sideContainerHug, !leftAligned && { minWidth: sideMinWidth }]}>
+                        <View style={styles.sideContent} onLayout={handleRightLayout}>
+                            {headerRight && headerRight()}
+                        </View>
                     </View>
                 </View>
             </View>
@@ -172,7 +186,7 @@ const NavigationHeaderComponent: React.FC<NativeStackHeaderProps> = React.memo((
     if (options.headerTitle) {
         if (typeof options.headerTitle === 'string') {
             title = (
-                <Text style={[
+                <Text numberOfLines={1} style={[
                     { fontSize: 17, fontWeight: '600', textAlign: Platform.OS === 'ios' ? 'center' : 'left', color: options.headerTintColor || '#000' },
                     Typography.default('semiBold'),
                     options.headerTitleStyle
@@ -186,7 +200,7 @@ const NavigationHeaderComponent: React.FC<NativeStackHeaderProps> = React.memo((
         }
     } else if (typeof options.title === 'string') {
         title = (
-            <Text style={[
+            <Text numberOfLines={1} style={[
                 { fontSize: 17, fontWeight: '600', textAlign: Platform.OS === 'ios' ? 'center' : 'left', color: options.headerTintColor || '#000' },
                 Typography.default('semiBold'),
                 options.headerTitleStyle
@@ -267,9 +281,15 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
     leftContainer: {
         flexGrow: 1,
         flexBasis: 0,
+        flexShrink: 0,
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'flex-start',
+    },
+    sideContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flexShrink: 0,
     },
     macOSWindowControlsInset: {
         transform: [{ translateX: 74 }],
@@ -277,6 +297,7 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
     sideContainerHug: {
         flexGrow: 0,
         flexBasis: 'auto',
+        minWidth: 0,
     },
     centerContainerLeft: {
         flexGrow: 1,
@@ -287,6 +308,7 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
     centerContainer: {
         flexGrow: 0,
         flexShrink: 1,
+        minWidth: 0,
         alignSelf: 'stretch',
         flexDirection: 'column',
         alignItems: 'center',
@@ -307,6 +329,7 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
     rightContainer: {
         flexGrow: 1,
         flexBasis: 0,
+        flexShrink: 0,
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'flex-end',
