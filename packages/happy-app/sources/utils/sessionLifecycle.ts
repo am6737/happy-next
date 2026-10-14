@@ -1,7 +1,16 @@
 import type { Session } from '@/sync/storageTypes';
 
+/**
+ * Whether the session can be forked (or resumed) on its machine: it needs the agent's own session ID,
+ * and a shared session points at the owner's machine, which the viewer cannot fork on. Archiving does
+ * not matter — Claude, Gemini and Qoder history stays in place, and the CLI unarchives native Codex
+ * history only for the fork (`borrowArchived`) and archives it again.
+ */
 export function canForkSession(session: Session | undefined): boolean {
-    return !!session && session.metadata?.lifecycleState !== 'archived';
+    const metadata = session?.metadata;
+    return !!session && !session.accessLevel && !!metadata?.machineId && !!metadata.path && !!(
+        metadata.claudeSessionId || metadata.flavor === 'gemini' || metadata.codexSessionId || metadata.qoderSessionId
+    );
 }
 
 export function canEditSession(session: Session): boolean {

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ getState: vi.fn(), sessionRPC: vi.fn(), machineRPC: vi.fn(), request: vi.fn(),
     emitWithAck: vi.fn(), encryptRaw: vi.fn(), decryptRaw: vi.fn(), getSessionEncryption: vi.fn() }));
@@ -7,7 +7,7 @@ vi.mock('./sync', () => ({ sync: { encryption: { getSessionEncryption: mocks.get
 vi.mock('./storage', () => ({ storage: { getState: mocks.getState } }));
 import { sessionArchive, sessionKill, machineForkCodexSession, machineDuplicateCodexSession } from './ops';
 import { getSessionQuickActionKinds } from '@/components/sessionQuickActions';
-import { canArchiveSession, canEditSession, canForkSession } from '@/utils/sessionLifecycle';
+import { canArchiveSession, canEditSession } from '@/utils/sessionLifecycle';
 import type { Session } from './storageTypes';
 
 describe('stop-based archive with Codex native synchronization', () => {
@@ -20,6 +20,11 @@ describe('stop-based archive with Codex native synchronization', () => {
         mocks.encryptRaw.mockImplementation(async value => JSON.stringify(value));
         mocks.decryptRaw.mockImplementation(async value => JSON.parse(value));
         mocks.emitWithAck.mockResolvedValue({ result: 'success', version: 5 });
+        vi.useFakeTimers({ now: 1_000, toFake: ['Date'] });
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
     });
 
     it('stops first, then archives through the machine without a server archive endpoint', async () => {
@@ -30,10 +35,24 @@ describe('stop-based archive with Codex native synchronization', () => {
         expect(mocks.request).not.toHaveBeenCalled();
     });
 
-    it.each(['claude', 'gemini'])('keeps the existing %s archive behavior', async flavor => {
-        mocks.getState.mockReturnValue({ sessions: { s1: { metadata: { flavor } } } });
+    it.each(['claude', 'gemini', 'qoder'])('stops a %s session and persists the archive itself', async flavor => {
+        mocks.getState.mockReturnValue({ sessions: { s1: { metadataVersion: 2, metadata: { flavor } } } });
         expect(await sessionArchive('s1')).toEqual({ success: true });
         expect(mocks.machineRPC).not.toHaveBeenCalled();
+        expect(mocks.emitWithAck).toHaveBeenCalledWith('update-metadata', {
+            sid: 's1', expectedVersion: 2,
+            metadata: JSON.stringify({ flavor, lifecycleState: 'archived', lifecycleStateSince: 1_000 }),
+        });
+    });
+
+    it('keeps a successful non-Codex stop when persisting the archive fails, and skips it after a failed stop', async () => {
+        mocks.getState.mockReturnValue({ sessions: { s1: { metadataVersion: 2, metadata: { flavor: 'claude' } } } });
+        mocks.emitWithAck.mockRejectedValue(new Error('Disconnected'));
+        expect(await sessionArchive('s1')).toEqual({ success: true });
+        mocks.emitWithAck.mockClear();
+        mocks.sessionRPC.mockResolvedValue({ success: false, message: 'offline' });
+        expect(await sessionArchive('s1')).toEqual({ success: false, message: 'offline' });
+        expect(mocks.emitWithAck).not.toHaveBeenCalled();
     });
 
     it('does not add native side effects to ordinary stop operations', async () => {
@@ -48,13 +67,12 @@ describe('stop-based archive with Codex native synchronization', () => {
         const current = mocks.getState().sessions.s1 as Session;
         expect(mocks.emitWithAck).toHaveBeenCalledWith('update-metadata', {
             sid: 's1', expectedVersion: 4,
-            metadata: JSON.stringify({ ...current.metadata, lifecycleState: 'archived' }),
+            metadata: JSON.stringify({ ...current.metadata, lifecycleState: 'archived', lifecycleStateSince: 1_000 }),
         });
         expect(mocks.machineRPC.mock.invocationCallOrder[0]).toBeLessThan(mocks.emitWithAck.mock.invocationCallOrder[0]);
         // Apply the persisted metadata as received through session synchronization.
         current.metadata = await mocks.decryptRaw(mocks.emitWithAck.mock.calls[0][1].metadata);
         expect(canEditSession(current)).toBe(false);
-        expect(canForkSession(current)).toBe(false);
     });
 
     it('retries lifecycle persistence without overwriting concurrent metadata changes', async () => {
@@ -62,7 +80,7 @@ describe('stop-based archive with Codex native synchronization', () => {
         mocks.emitWithAck.mockResolvedValueOnce({ result: 'version-mismatch', version: 6, metadata: JSON.stringify(latest) });
         expect(await sessionArchive('s1')).toEqual({ success: true });
         expect(mocks.emitWithAck).toHaveBeenLastCalledWith('update-metadata', {
-            sid: 's1', expectedVersion: 6, metadata: JSON.stringify({ ...latest, lifecycleState: 'archived' }),
+            sid: 's1', expectedVersion: 6, metadata: JSON.stringify({ ...latest, lifecycleState: 'archived', lifecycleStateSince: 1_000 }),
         });
     });
 

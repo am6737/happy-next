@@ -858,6 +858,11 @@ export const pl: TranslationStructure = {
         initialMessage: 'Nad czym chciałbyś pracować?',
         locatingMessage: 'Lokalizowanie wiadomości…',
         minimapNavigator: 'Nawigator wiadomości',
+        archived: {
+            title: 'Ta sesja jest zarchiwizowana',
+            archivedAgo: ({ time }: { time: string }) => `Zarchiwizowano ${time}`,
+            resume: 'Wznów',
+        },
         takePhoto: 'Aparat',
         chooseFromLibrary: 'Zdjęcia',
         files: {

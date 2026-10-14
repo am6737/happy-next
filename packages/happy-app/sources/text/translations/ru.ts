@@ -1037,6 +1037,11 @@ export const ru: TranslationStructure = {
         initialMessage: 'Над чем вы хотите поработать?',
         locatingMessage: 'Поиск сообщения…',
         minimapNavigator: 'Навигатор по сообщениям',
+        archived: {
+            title: 'Эта сессия в архиве',
+            archivedAgo: ({ time }: { time: string }) => `В архиве с ${time}`,
+            resume: 'Возобновить',
+        },
         takePhoto: 'Камера',
         chooseFromLibrary: 'Фото',
         files: {

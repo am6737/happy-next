@@ -46,6 +46,7 @@ import { useSharedValue } from 'react-native-reanimated';
 import { useDeviceType, useIsLandscape, useIsTablet } from '@/utils/responsive';
 import { formatPathRelativeToHome, generateCopyTitle, getSessionAvatarId, getSessionName, useSessionStatus, copySessionMetadata, copySessionModeSettings } from '@/utils/sessionUtils';
 import { canEditSession, canForkSession } from '@/utils/sessionLifecycle';
+import { ArchivedSessionBanner } from '@/components/ArchivedSessionBanner';
 import { sendFailureKey } from '@/utils/sendFailure';
 import { getNativeHeaderTitleWidth } from '@/utils/nativeHeaderTitleWidth';
 import { getSessionCliUpgrade } from '@/utils/cliUpdate';
@@ -735,9 +736,10 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
                 resumeSessionId = duplicateResult.newSessionId;
                 agent = 'gemini';
             } else if (flavor === 'codex' && codexSessionId) {
+                // A copy leaves the source as it was, so archived native history goes back to the archive.
                 const duplicateResult = uuid
-                    ? await machineDuplicateCodexSession(machineId, codexSessionId, uuid)
-                    : await machineForkCodexSession(machineId, codexSessionId);
+                    ? await machineDuplicateCodexSession(machineId, codexSessionId, uuid, { borrowArchived: true })
+                    : await machineForkCodexSession(machineId, codexSessionId, { borrowArchived: true });
                 if (!duplicateResult.success || !duplicateResult.newFilePath) {
                     setDuplicateConfirming(false);
                     Modal.alert(t('common.error'), duplicateResult.errorMessage || t('duplicate.failed'));
@@ -1476,6 +1478,8 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
             onRemoveFile={fileAttachments.removeFile}
             onRetryFile={fileAttachments.retryFile}
         />
+    ) : session.metadata?.lifecycleState === 'archived' ? (
+        <ArchivedSessionBanner session={session} glass={useFloatingComposer} />
     ) : null;
 
 
@@ -1593,7 +1597,7 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
 
             {/* Duplicate Sheet */}
             <DuplicateSheet
-                visible={canForkSession(session) && duplicateSheetVisible}
+                visible={duplicateSheetVisible}
                 messages={duplicateMessages}
                 loading={duplicateLoading}
                 loadingMore={duplicateLoadingMore}

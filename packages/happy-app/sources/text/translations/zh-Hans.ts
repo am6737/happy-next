@@ -849,6 +849,11 @@ export const zhHans: TranslationStructure = {
         initialMessage: '想做点什么？',
         locatingMessage: '正在定位消息…',
         minimapNavigator: '消息导航条',
+        archived: {
+            title: '此会话已归档',
+            archivedAgo: ({ time }: { time: string }) => `${time}归档`,
+            resume: '恢复会话',
+        },
         takePhoto: '相机',
         chooseFromLibrary: '照片',
         files: {

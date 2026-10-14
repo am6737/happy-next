@@ -849,6 +849,11 @@ export const ja: TranslationStructure = {
         initialMessage: '何をしましょう？',
         locatingMessage: 'メッセージを移動中…',
         minimapNavigator: 'メッセージナビゲーター',
+        archived: {
+            title: 'このセッションはアーカイブ済みです',
+            archivedAgo: ({ time }: { time: string }) => `${time}にアーカイブ`,
+            resume: '再開',
+        },
         takePhoto: 'カメラ',
         chooseFromLibrary: '写真',
         files: {

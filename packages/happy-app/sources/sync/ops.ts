@@ -1019,11 +1019,25 @@ export async function sessionKill(sessionId: string): Promise<SessionKillRespons
     }
 }
 
+/**
+ * Mark a stopped session archived. The CLI writes this too as it exits, but without waiting for the
+ * server, so a version conflict on the way out loses it — and with it the archived, read-only screen.
+ */
+async function persistArchivedLifecycle(sessionId: string): Promise<void> {
+    const session = storage.getState().sessions[sessionId];
+    if (!session?.metadata) throw new Error('session-metadata-unavailable');
+    await sessionUpdateMetadataFields(sessionId, session.metadata, { lifecycleState: 'archived', lifecycleStateSince: Date.now() }, session.metadataVersion);
+}
+
 /** Keep Happy's stop-based archive behavior, then synchronize Codex's native history. */
 export async function sessionArchive(sessionId: string): Promise<{ success: boolean; message?: string; nativeArchiveError?: string }> {
     const metadata = storage.getState().sessions[sessionId]?.metadata;
     const stopped = await sessionKill(sessionId);
-    if (metadata?.flavor !== 'codex') return stopped;
+    if (metadata?.flavor !== 'codex') {
+        // The stop already succeeded; a lost write only leaves the session looking stopped, not archived.
+        if (stopped.success) await persistArchivedLifecycle(sessionId).catch(error => console.warn('Failed to persist archived lifecycle', error));
+        return stopped;
+    }
     if (!stopped.success && !/RPC method not available/i.test(stopped.message ?? '')) return stopped;
 
     // Native failures must not roll back Happy's stop or be mistaken for a missing session RPC.
@@ -1044,9 +1058,7 @@ export async function sessionArchive(sessionId: string): Promise<{ success: bool
         }
         if (!result?.success) return { success: true, nativeArchiveError: result?.error ?? 'native-archive-failed' };
         try {
-            const session = storage.getState().sessions[sessionId];
-            if (!session?.metadata) throw new Error('session-metadata-unavailable');
-            await sessionUpdateMetadataFields(sessionId, session.metadata, { lifecycleState: 'archived' }, session.metadataVersion);
+            await persistArchivedLifecycle(sessionId);
         } catch (error) {
             // Native history has moved and the stop is confirmed; do not restore active state.
             const message = error instanceof Error ? error.message : 'unknown-error';
@@ -1424,15 +1436,15 @@ export async function machineDuplicateCodexSession(
     machineId: string,
     codexSessionId: string,
     truncateBeforeUuid: string,
-    options?: { timeoutMs?: number }
+    options?: { timeoutMs?: number; borrowArchived?: boolean }
 ): Promise<{ success: boolean; newFilePath?: string; errorMessage?: string }> {
     const timeoutMs = options?.timeoutMs ?? 120000;
 
     try {
-        const result = await apiSocket.machineRPC<any, { codexSessionId: string; truncateBeforeUuid: string }>(
+        const result = await apiSocket.machineRPC<any, { codexSessionId: string; truncateBeforeUuid: string; borrowArchived?: boolean }>(
             machineId,
             'codex-duplicate-session',
-            { codexSessionId, truncateBeforeUuid },
+            { codexSessionId, truncateBeforeUuid, borrowArchived: options?.borrowArchived },
             timeoutMs
         );
 
@@ -1461,15 +1473,19 @@ export async function machineDuplicateCodexSession(
 export async function machineForkCodexSession(
     machineId: string,
     codexSessionId: string,
-    options?: { timeoutMs?: number; restoreArchived?: boolean }
+    /**
+     * For natively archived history: `restoreArchived` unarchives it for good (resuming the entry),
+     * `borrowArchived` only for the fork, archiving it again afterwards (copying it).
+     */
+    options?: { timeoutMs?: number; restoreArchived?: boolean; borrowArchived?: boolean }
 ): Promise<{ success: boolean; newFilePath?: string; errorMessage?: string }> {
     const timeoutMs = options?.timeoutMs ?? 120000;
 
     try {
-        const result = await apiSocket.machineRPC<any, { codexSessionId: string; restoreArchived?: boolean }>(
+        const result = await apiSocket.machineRPC<any, { codexSessionId: string; restoreArchived?: boolean; borrowArchived?: boolean }>(
             machineId,
             'codex-fork-session',
-            { codexSessionId, restoreArchived: options?.restoreArchived },
+            { codexSessionId, restoreArchived: options?.restoreArchived, borrowArchived: options?.borrowArchived },
             timeoutMs
         );
 

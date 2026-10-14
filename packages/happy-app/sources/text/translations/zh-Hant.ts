@@ -848,6 +848,11 @@ export const zhHant: TranslationStructure = {
         initialMessage: '想做些什麼？',
         locatingMessage: '正在定位訊息…',
         minimapNavigator: '訊息導覽列',
+        archived: {
+            title: '此會話已封存',
+            archivedAgo: ({ time }: { time: string }) => `${time}封存`,
+            resume: '恢復會話',
+        },
         takePhoto: '相機',
         chooseFromLibrary: '照片',
         files: {

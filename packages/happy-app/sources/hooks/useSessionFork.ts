@@ -69,7 +69,7 @@ const forkSession = React.useCallback(async (session: Session, mode: SessionFork
             resumeSessionId = forkResult.newSessionId;
             agent = 'gemini';
         } else if (flavor === 'codex' && codexSessionId) {
-            const forkResult = await machineForkCodexSession(machineId, codexSessionId, { restoreArchived: mode !== 'copy' });
+            const forkResult = await machineForkCodexSession(machineId, codexSessionId, mode === 'copy' ? { borrowArchived: true } : { restoreArchived: true });
             if (!forkResult.success || !forkResult.newFilePath) {
                 Modal.alert(t('common.error'), forkResult.errorMessage || t('claudeHistory.resumeFailed'));
                 return;

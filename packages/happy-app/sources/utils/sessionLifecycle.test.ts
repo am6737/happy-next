@@ -10,20 +10,29 @@ function session(flavor: string, lifecycleState?: string): Session {
 }
 
 describe('session lifecycle permissions', () => {
-    it.each(['claude', 'codex', 'gemini'])('allows offline %s forks but rejects explicit archives', flavor => {
+    const agentIds = { claude: { claudeSessionId: 'c1' }, codex: { codexSessionId: 'x1' }, gemini: {}, qoder: { qoderSessionId: 'q1' } };
+    function forkable(flavor: keyof typeof agentIds, lifecycleState?: string): Session {
+        const current = session(flavor, lifecycleState);
+        current.metadata = { ...current.metadata!, ...agentIds[flavor] };
+        return current;
+    }
+
+    it.each(Object.keys(agentIds) as (keyof typeof agentIds)[])('allows %s forks whether offline or archived', flavor => {
         for (const active of [true, false]) {
-            for (const state of [undefined, 'running']) {
-                expect(canForkSession({ ...session(flavor, state), active })).toBe(true);
+            for (const state of [undefined, 'running', 'archived']) {
+                expect(canForkSession({ ...forkable(flavor, state), active })).toBe(true);
             }
-            expect(canForkSession({ ...session(flavor, 'archived'), active })).toBe(false);
         }
     });
 
-    it('checks the latest lifecycle at confirmation and rejects a removed session', () => {
-        const current = session('codex');
-        expect(canForkSession(current)).toBe(true);
-        current.metadata!.lifecycleState = 'archived';
-        expect(canForkSession(current)).toBe(false);
+    it.each(['claude', 'codex', 'qoder'] as const)('rejects a %s session without the agent session ID', flavor => {
+        expect(canForkSession(session(flavor, 'archived'))).toBe(false);
+    });
+
+    it('rejects shared sessions, sessions without a machine or path, and removed sessions', () => {
+        expect(canForkSession({ ...forkable('claude'), accessLevel: 'edit' })).toBe(false);
+        expect(canForkSession({ ...forkable('claude'), metadata: { ...forkable('claude').metadata!, machineId: undefined } })).toBe(false);
+        expect(canForkSession({ ...forkable('claude'), metadata: { ...forkable('claude').metadata!, path: '' } })).toBe(false);
         expect(canForkSession(undefined)).toBe(false);
     });
     it.each(['claude', 'codex', 'gemini'])('keeps offline %s input and queue management available', flavor => {

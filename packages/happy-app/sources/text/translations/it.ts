@@ -846,6 +846,11 @@ export const it: TranslationStructure = {
         initialMessage: 'Su cosa vorresti lavorare?',
         locatingMessage: 'Individuazione del messaggio…',
         minimapNavigator: 'Navigatore messaggi',
+        archived: {
+            title: 'Questa sessione è archiviata',
+            archivedAgo: ({ time }: { time: string }) => `Archiviata ${time}`,
+            resume: 'Riprendi',
+        },
         takePhoto: 'Fotocamera',
         chooseFromLibrary: 'Foto',
         files: {

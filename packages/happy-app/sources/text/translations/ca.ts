@@ -847,6 +847,11 @@ export const ca: TranslationStructure = {
         initialMessage: 'En què t\'agradaria treballar?',
         locatingMessage: 'Localitzant el missatge…',
         minimapNavigator: 'Navegador de missatges',
+        archived: {
+            title: 'Aquesta sessió està arxivada',
+            archivedAgo: ({ time }: { time: string }) => `Arxivada ${time}`,
+            resume: 'Reprèn',
+        },
         takePhoto: 'Càmera',
         chooseFromLibrary: 'Fotos',
         files: {
