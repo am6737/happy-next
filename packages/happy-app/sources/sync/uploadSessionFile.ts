@@ -41,6 +41,30 @@ export function sessionFileUploadRpc(sessionId: string): FileUploadRpc {
     };
 }
 
+// What a session answers before its CLI has connected and registered its handlers
+const STARTING_SESSION_ERROR = /RPC method not available|Session encryption not found/i;
+
+/**
+ * For a session that was just spawned: the daemon reports it before its CLI has connected, so
+ * opening an upload is retried until the CLI answers, for up to `timeoutMs`.
+ */
+export function waitForStartingSession(rpc: FileUploadRpc, timeoutMs = 20_000, intervalMs = 500): FileUploadRpc {
+    return {
+        ...rpc,
+        open: async (request) => {
+            const deadline = Date.now() + timeoutMs;
+            for (;;) {
+                try {
+                    return await rpc.open(request);
+                } catch (error) {
+                    if (!(error instanceof Error) || !STARTING_SESSION_ERROR.test(error.message) || Date.now() >= deadline) throw error;
+                    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+                }
+            }
+        },
+    };
+}
+
 // A CLI without the handler answers with a bare `{ error }` instead of a typed response
 function isMissingHandler(response: unknown): boolean {
     return typeof response === 'object' && response !== null && !('success' in response) && 'error' in response;

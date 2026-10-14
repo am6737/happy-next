@@ -3,7 +3,7 @@ import { FILE_UPLOAD_CHUNK_SIZE, FILE_UPLOAD_LIMIT } from 'happy-wire';
 
 vi.mock('./ops', () => ({}));
 
-import { FileUploadError, uploadSessionFile, type FileUploadRpc, type FileUploadSource } from './uploadSessionFile';
+import { FileUploadError, uploadSessionFile, waitForStartingSession, type FileUploadRpc, type FileUploadSource } from './uploadSessionFile';
 
 const TOKEN = '00000000-0000-4000-8000-000000000000';
 
@@ -65,5 +65,32 @@ describe('uploadSessionFile', () => {
             if (sent > 0) controller.abort();
         })).rejects.toThrow('Aborted');
         expect(aborted.calls.close).toHaveBeenCalledWith(TOKEN, false);
+    });
+});
+
+describe('waitForStartingSession', () => {
+    const request = { name: 'a.bin', size: 1 };
+
+    it('retries opening until the new session has registered its handlers', async () => {
+        const open = vi.fn<FileUploadRpc['open']>(async () => ({ success: true, token: TOKEN, path: '/w/a.bin' }))
+            .mockRejectedValueOnce(new Error('Session encryption not found for s1'))
+            .mockRejectedValueOnce(new Error('RPC method not available'));
+
+        await expect(waitForStartingSession(rpc({ open }).calls, 1_000, 1).open(request)).resolves.toMatchObject({ success: true });
+        expect(open).toHaveBeenCalledTimes(3);
+    });
+
+    it('does not retry other errors', async () => {
+        const open = vi.fn<FileUploadRpc['open']>(async () => { throw new Error('Internal error'); });
+
+        await expect(waitForStartingSession(rpc({ open }).calls, 1_000, 1).open(request)).rejects.toThrow('Internal error');
+        expect(open).toHaveBeenCalledTimes(1);
+    });
+
+    it('gives up once the session has not answered in time', async () => {
+        const open = vi.fn<FileUploadRpc['open']>(async () => { throw new Error('RPC method not available'); });
+
+        await expect(waitForStartingSession(rpc({ open }).calls, 20, 5).open(request)).rejects.toThrow('RPC method not available');
+        expect(open.mock.calls.length).toBeGreaterThan(1);
     });
 });

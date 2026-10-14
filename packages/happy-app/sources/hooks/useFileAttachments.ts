@@ -10,6 +10,7 @@ import {
     FileUploadError,
     sessionFileUploadRpc,
     uploadSessionFile,
+    waitForStartingSession,
     type FileUploadErrorKind,
     type FileUploadSource,
 } from '@/sync/uploadSessionFile';
@@ -86,7 +87,7 @@ export function useFileAttachments(sessionId: string | null) {
         setFiles((current) => current.map((file) => file.id === id ? { ...file, ...patch } : file));
     }, []);
 
-    const enqueue = React.useCallback((id: string, targetSessionId: string): Promise<MessageAttachment | null> => {
+    const enqueue = React.useCallback((id: string, targetSessionId: string, starting = false): Promise<MessageAttachment | null> => {
         const controller = new AbortController();
         controllers.current.set(id, controller);
         const run = queue.current.then(async (): Promise<MessageAttachment | null> => {
@@ -94,7 +95,8 @@ export function useFileAttachments(sessionId: string | null) {
             if (!item || controller.signal.aborted) return null;
             const { source, close } = openSource(item);
             try {
-                const attachment = await uploadSessionFile(source, sessionFileUploadRpc(targetSessionId), controller.signal, (sent) => {
+                const rpc = sessionFileUploadRpc(targetSessionId);
+                const attachment = await uploadSessionFile(source, starting ? waitForStartingSession(rpc) : rpc, controller.signal, (sent) => {
                     if (!controller.signal.aborted) update(id, { sent });
                 });
                 if (controller.signal.aborted) return null;
@@ -187,12 +189,12 @@ export function useFileAttachments(sessionId: string | null) {
         void enqueue(id, sessionId);
     }, [enqueue, sessionId, update]);
 
-    /** Uploads the staged files (and retries failed ones) to a session that now exists. */
+    /** Uploads the staged files (and retries failed ones) to a session that was just created. */
     const uploadStaged = React.useCallback(async (targetSessionId: string): Promise<{ attachments: MessageAttachment[]; failedNames: string[] }> => {
         const pending = filesRef.current.filter((file) => file.status === 'staged' || file.status === 'failed');
         const ready = filesRef.current.flatMap((file) => file.status === 'ready' && file.attachment ? [file.attachment] : []);
         for (const file of pending) update(file.id, { status: 'uploading', sent: 0, error: undefined });
-        const results = await Promise.all(pending.map((file) => enqueue(file.id, targetSessionId)));
+        const results = await Promise.all(pending.map((file) => enqueue(file.id, targetSessionId, true)));
         const failedNames = pending.filter((_, index) => !results[index]).map((file) => file.name);
         return { attachments: [...ready, ...results.flatMap((attachment) => attachment ? [attachment] : [])], failedNames };
     }, [enqueue, update]);
