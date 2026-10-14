@@ -46,6 +46,13 @@ import { ThemePreferenceSync } from '@/components/ThemePreferenceSync';
 import { SessionHoverCardHost } from '@/components/SessionHoverCard';
 import { ActionMenuOverlayProvider } from '@/components/ActionMenuOverlayProvider';
 import { getNotificationSessionId } from '@/utils/notificationData';
+import { featureFlags } from 'react-native-screens';
+
+// iOS: once a back swipe or the back button has popped a screen natively, JS only learns of it
+// asynchronously. A stack update that lands in between (a screen's options changing, say) is
+// replayed when the pop animation ends and, still listing the popped screen, pushes it back —
+// the page goes back, forward, then back again. This keeps popped screens from being re-pushed.
+featureFlags.experiment.iosPreventReattachmentOfDismissedScreens = true;
 
 let currentAppState: string = AppState.currentState;
 let currentSessionId: string | null = null;
