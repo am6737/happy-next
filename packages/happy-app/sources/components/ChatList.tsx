@@ -6,6 +6,7 @@ import { LegendList, LegendListRef, LegendListRenderItemProps } from '@legendapp
 import { useHeaderHeight } from '@/utils/responsive';
 import { floatingComposerBottomInset } from './floatingComposer';
 import { ChatScrollView } from './ChatScrollView';
+import { GlassSurface, liquidGlassAvailable } from './GlassSurface';
 import { ScrollToBottomButton } from './ScrollToBottomButton';
 import { useChatOverlayStyle, useChatVisibleAreaStyle } from '@/hooks/useChatOverlayStyle';
 import { useChatStickToEnd } from '@/hooks/useChatStickToEnd';
@@ -871,26 +872,29 @@ const ChatListInternal = React.memo((props: {
                         alignItems: 'center',
                     }}
                 >
-                    <View
+                    <GlassSurface
+                        glass={liquidGlassAvailable}
+                        color={theme.colors.surfaceHighest}
                         style={{
                             flexDirection: 'row',
                             alignItems: 'center',
-                            backgroundColor: theme.colors.surfaceHighest,
                             borderRadius: 20,
                             paddingHorizontal: 14,
                             height: 36,
-                            shadowColor: theme.colors.shadow.color,
-                            shadowOffset: { width: 0, height: 2 },
-                            shadowOpacity: theme.colors.shadow.opacity,
-                            shadowRadius: 4,
-                            elevation: 4,
+                            ...(!liquidGlassAvailable && {
+                                shadowColor: theme.colors.shadow.color,
+                                shadowOffset: { width: 0, height: 2 },
+                                shadowOpacity: theme.colors.shadow.opacity,
+                                shadowRadius: 4,
+                                elevation: 4,
+                            }),
                         }}
                     >
                         <ActivityIndicator size="small" color={theme.colors.textSecondary} />
                         <Text style={{ marginLeft: 8, color: theme.colors.text, fontSize: 14 }}>
                             {t('session.locatingMessage')}
                         </Text>
-                    </View>
+                    </GlassSurface>
                 </View>
             )}
 

@@ -26,7 +26,7 @@ import { Modal } from '@/modal';
 import { voiceHooks } from '@/realtime/hooks/voiceHooks';
 import { startRealtimeSession, stopRealtimeSession } from '@/realtime/RealtimeSession';
 import { sessionAbort, machineGetClaudeSessionUserMessages, machineDuplicateClaudeSession, machineForkClaudeSession, machineSpawnNewSession, machineGetGeminiSessionUserMessages, machineDuplicateGeminiSession, machineForkGeminiSession, machineGetCodexSessionUserMessages, machineDuplicateCodexSession, machineForkCodexSession, machineResolveClaudeForkTarget, machineResolveGeminiForkTarget, machineResolveCodexForkTarget, machineGetClaudeSessionUserMessage, machineGetGeminiSessionUserMessage, machineGetCodexSessionUserMessage, machineGetQoderSessionUserMessages, machineGetQoderSessionUserMessage, machineResolveQoderForkTarget, machineDuplicateQoderSession, machineForkQoderSession, type UserMessageWithUuid, type UserMessagePage, type ResolvedForkTarget } from '@/sync/ops';
-import { storage, useIsDataReady, useLocalSetting, useOrchestratorRunningTaskCount, useOrchestratorHasRuns, useRealtimeStatus, useSessionMessages, useSessionMessagesFetching, useSessionPendingMessages, useSessionUsage, useSetting } from '@/sync/storage';
+import { storage, useIsDataReady, useOrchestratorRunningTaskCount, useOrchestratorHasRuns, useRealtimeStatus, useSessionMessages, useSessionMessagesFetching, useSessionPendingMessages, useSessionUsage, useSetting } from '@/sync/storage';
 import { useMachine, useSession } from '@/sync/storage';
 import { useInputHistory } from '@/hooks/useInputHistory';
 import { rememberSentSuggestions } from '@/sync/recentSuggestions';
@@ -50,7 +50,6 @@ import { ArchivedSessionBanner } from '@/components/ArchivedSessionBanner';
 import { sendFailureKey } from '@/utils/sendFailure';
 import { getNativeHeaderTitleWidth } from '@/utils/nativeHeaderTitleWidth';
 import { getSessionCliUpgrade } from '@/utils/cliUpdate';
-import { FloatingPill } from '@/components/CliUpdateBanner';
 import { log } from '@/log';
 import { Ionicons } from '@expo/vector-icons';
 import { useHeaderHeight as useNavigationHeaderHeight } from '@react-navigation/elements';
@@ -80,6 +79,10 @@ export const SessionView = React.memo((props: { id: string }) => {
     const router = useRouter();
     const navigation = useNavigation();
     const session = useSession(sessionId);
+    // The machine's daemon runs a newer CLI than this session: the header's right button becomes an
+    // upgrade icon that opens the session info page, where the session can restart on it
+    const machine = useMachine(session?.metadata?.machineId ?? '');
+    const headerCliUpgrade = session?.presence === 'online' ? getSessionCliUpgrade(session.metadata?.version, machine) : null;
     const isDataReady = useIsDataReady();
     const { theme } = useUnistyles();
     const safeArea = useSafeAreaInsets();
@@ -243,6 +246,7 @@ export const SessionView = React.memo((props: { id: string }) => {
                 avatarId={headerProps.avatarId}
                 isConnected={headerProps.isConnected}
                 onAvatarPress={headerProps.onAvatarPress}
+                cliUpgrade={headerCliUpgrade}
                 hasRuns={hasRuns}
                 runningTaskCount={runningTaskCount}
                 onOpenRuns={handleOpenSessionRuns}
@@ -255,7 +259,7 @@ export const SessionView = React.memo((props: { id: string }) => {
     }), [
         shouldHideHeader, shouldUseTransparentNativeHeader, isNarrowPhone, headerProps, leftAlignTitleWidth,
         headerTitleWidth, headerSubtitleColor, headerTintColor, handleBackPress, hasSession, hasRuns, runningTaskCount, handleOpenSessionRuns,
-        isSharedSession, handleNewSession,
+        isSharedSession, handleNewSession, headerCliUpgrade,
     ]);
 
     return (
@@ -352,16 +356,9 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
     const { messages, isLoaded, fetchVersion } = useSessionMessages(sessionId);
     const messagesFetching = useSessionMessagesFetching(sessionId);
     const pendingMessages = useSessionPendingMessages(sessionId);
-    const acknowledgedCliVersions = useLocalSetting('acknowledgedCliVersions');
 
-    // The machine's daemon runs a newer CLI than this session: offer restarting the session on it
-    // (from the session info page), until dismissed for that version
     const machineId = session.metadata?.machineId;
     const { models: qoderModels } = useQoderModels(machineId, session.metadata?.path ?? '', session.metadata?.flavor === 'qoder');
-    const machine = useMachine(machineId ?? '');
-    const sessionCliUpgrade = getSessionCliUpgrade(session.metadata?.version, machine);
-    const isSessionOnline = session.presence === 'online';
-    const shouldShowCliUpgrade = isSessionOnline && !!sessionCliUpgrade && acknowledgedCliVersions[sessionId] !== sessionCliUpgrade;
     // Get permission mode from session object, default to 'default'
     const permissionMode = session.permissionMode || 'default';
     // Get model mode from session object. "default" means use CLI/profile configured model.
@@ -585,19 +582,6 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
         const flavor = session?.metadata?.flavor;
         return flavor === 'claude' || flavor === 'gemini' || flavor === 'codex' || flavor === 'qoder';
     }, [session?.metadata?.flavor]);
-
-    const handleOpenCliUpgrade = React.useCallback(() => {
-        router.push(`/session/${sessionId}/info`);
-    }, [router, sessionId]);
-
-    // Dismissed per session and version; only the most recent sessions are remembered
-    const handleDismissCliUpgrade = React.useCallback(() => {
-        if (!sessionCliUpgrade) return;
-        const kept = Object.entries(acknowledgedCliVersions).filter(([id]) => id !== sessionId).slice(-49);
-        storage.getState().applyLocalSettings({
-            acknowledgedCliVersions: { ...Object.fromEntries(kept), [sessionId]: sessionCliUpgrade },
-        });
-    }, [sessionId, sessionCliUpgrade, acknowledgedCliVersions]);
 
     // Function to update permission mode
     const updatePermissionMode = React.useCallback((mode: 'default' | 'acceptEdits' | 'auto' | 'bypassPermissions' | 'plan' | 'read-only' | 'on-failure' | 'full-auto' | 'auto_edit' | 'yolo') => {
@@ -1498,18 +1482,6 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
             )}
 
 
-            {/* The session can restart on the newer CLI its machine now runs */}
-            {shouldShowCliUpgrade && sessionCliUpgrade && !shouldUseCompactLandscapeSessionLayout && (
-                <FloatingPill
-                    top={8 + headerInset} // Top of the content area, below a header drawn over it
-                    tone="warning"
-                    icon="arrow-up-circle-outline"
-                    text={t('sessionInfo.sessionUpgradeBanner', { version: sessionCliUpgrade })}
-                    onPress={handleOpenCliUpgrade}
-                    onDismiss={handleDismissCliUpgrade}
-                />
-            )}
-
             {/* Main content area - no padding since header is overlay */}
             <View
                 ref={dropZoneRef}
@@ -1646,6 +1618,8 @@ const ChatHeaderRight = React.memo((props: {
     avatarId?: string;
     isConnected?: boolean;
     onAvatarPress?: () => void;
+    /** The CLI version this session can restart on; its icon then takes the avatar's place. */
+    cliUpgrade: string | null;
     hasRuns: boolean;
     runningTaskCount: number;
     onOpenRuns: () => void;
@@ -1717,7 +1691,22 @@ const ChatHeaderRight = React.memo((props: {
                     />
                 </Pressable>
             ) : null}
-            {props.avatarId && props.onAvatarPress && (
+            {props.onAvatarPress && props.cliUpgrade ? (
+                <Pressable
+                    onPress={props.onAvatarPress}
+                    hitSlop={15}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('sessionInfo.sessionUpgradeBanner', { version: props.cliUpgrade })}
+                    style={{
+                        width: 38,
+                        height: 38,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                    }}
+                >
+                    <Ionicons name="arrow-up-circle-outline" size={30} color={theme.colors.box.success.text} />
+                </Pressable>
+            ) : props.avatarId && props.onAvatarPress && (
                 <Pressable
                     onPress={props.onAvatarPress}
                     hitSlop={15}

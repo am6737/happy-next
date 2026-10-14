@@ -134,6 +134,11 @@ export const lightTheme = {
                 background: '#FFF0F0',
                 border: '#FF3B30',
                 text: '#FF3B30',
+            },
+            success: {
+                background: '#F0FFF4',
+                border: '#34C759',
+                text: '#34C759',
             }
         },
 
@@ -415,6 +420,11 @@ export const darkTheme = {
                 background: 'rgba(255, 69, 58, 0.15)',
                 border: '#FF453A',
                 text: '#FF6B6B',
+            },
+            success: {
+                background: 'rgba(52, 199, 89, 0.15)',
+                border: '#34C759',
+                text: '#34C759',
             }
         },
 
