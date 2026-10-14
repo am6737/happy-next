@@ -59,17 +59,18 @@ const bracketPairs = {
 
 const openBrackets = Object.keys(bracketPairs);
 const closeBrackets = Object.values(bracketPairs);
+// `Array.includes` on every character of every code block was a measurable share of the cost.
+const openBracketSet = new Set(openBrackets);
+const closeBracketSet = new Set(closeBrackets);
 
-// Enhanced tokenizer with comprehensive token types
-const tokenizeCode = (code: string, language: string | null) => {
-  const tokens: Array<{ text: string; type: string; nestLevel?: number }> = [];
-  
-  if (!language) {
-    return [{ text: code, type: 'default' }];
-  }
+// Token tables (keyword sets + regex patterns) are per language, not per call: building them
+// inside the tokenizer recompiled six dynamically constructed regexes and re-allocated their
+// arrays for every code block on every render, which dominated a chat row's first render.
+type TokenPattern = { regex: RegExp; type: string; captureGroup?: number };
 
-  const lang = language.toLowerCase();
-  
+const languageTables = new Map<string, { patterns: TokenPattern[] }>();
+
+function buildLanguageTables(lang: string): { patterns: TokenPattern[] } {
   // Language-specific keyword sets
   const keywordSets = {
     controlFlow: ['if', 'else', 'elif', 'for', 'while', 'do', 'switch', 'case', 'break', 'continue', 'return', 'yield', 'try', 'catch', 'finally', 'throw', 'with'],
@@ -138,6 +139,27 @@ const tokenizeCode = (code: string, language: string | null) => {
     { regex: /([.,;])/g, type: 'punctuation' },
   ];
 
+  return { patterns };
+}
+
+function getLanguageTables(language: string): { patterns: TokenPattern[] } {
+  const lang = language.toLowerCase();
+  let tables = languageTables.get(lang);
+  if (!tables) {
+    tables = buildLanguageTables(lang);
+    languageTables.set(lang, tables);
+  }
+  return tables;
+}
+
+const tokenizeCodeUncached = (code: string, language: string | null): Array<{ text: string; type: string; nestLevel?: number }> => {
+  const tokens: Array<{ text: string; type: string; nestLevel?: number }> = [];
+
+  if (!language) {
+    return [{ text: code, type: 'default' }];
+  }
+
+  const patterns = getLanguageTables(language).patterns;
   // Calculate bracket nesting levels
   const calculateBracketNesting = (code: string) => {
     const nestingMap = new Map<number, number>();
@@ -146,10 +168,10 @@ const tokenizeCode = (code: string, language: string | null) => {
     for (let i = 0; i < code.length; i++) {
       const char = code[i];
       
-      if (openBrackets.includes(char)) {
+      if (openBracketSet.has(char)) {
         stack.push({ char, pos: i });
         nestingMap.set(i, stack.length);
-      } else if (closeBrackets.includes(char)) {
+      } else if (closeBracketSet.has(char)) {
         if (stack.length > 0) {
           const lastOpen = stack.pop();
           if (lastOpen && bracketPairs[lastOpen.char as keyof typeof bracketPairs] === char) {
@@ -247,11 +269,45 @@ const tokenizeCode = (code: string, language: string | null) => {
   return tokens;
 };
 
-export const SimpleSyntaxHighlighter: React.FC<SimpleSyntaxHighlighterProps> = ({
+// The same code block is tokenized again on every re-render of its row (streaming updates, theme
+// or selection changes), so finished token lists are cached by (language, code). The list is only
+// ever read afterwards; oversized blocks are tokenized without caching.
+const TOKEN_CACHE_LIMIT = 400;
+const TOKEN_CACHE_MAX_CODE = 20000;
+const tokenCache = new Map<string, Array<{ text: string; type: string; nestLevel?: number }>>();
+
+const tokenizeCode = (code: string, language: string | null) => {
+  if (!language || code.length > TOKEN_CACHE_MAX_CODE) {
+    return tokenizeCodeUncached(code, language);
+  }
+  const key = language + '\u0000' + code;
+  const cached = tokenCache.get(key);
+  if (cached) {
+    return cached;
+  }
+  const tokens = tokenizeCodeUncached(code, language);
+  if (tokenCache.size >= TOKEN_CACHE_LIMIT) {
+    const oldest = tokenCache.keys().next();
+    if (!oldest.done) {
+      tokenCache.delete(oldest.value);
+    }
+  }
+  tokenCache.set(key, tokens);
+  return tokens;
+};
+
+const MONO_FONT = Typography.mono().fontFamily;
+const LINE_STYLE = { fontFamily: MONO_FONT, fontSize: 14, lineHeight: 20 };
+const BOLD_TOKEN_TYPES = new Set(['keyword', 'controlFlow', 'type', 'function']);
+
+// Memoized: the row re-renders whenever anything in it changes, and this component used to
+// re-tokenize and re-render its whole text tree on every one of those renders. The props are
+// primitives, so the shallow comparison is exact.
+export const SimpleSyntaxHighlighter = React.memo(function SimpleSyntaxHighlighter({
   code,
   language,
   selectable
-}) => {
+}: SimpleSyntaxHighlighterProps) {
   const { theme } = useUnistyles();
   const colors = getColors(theme);
   const tokens = tokenizeCode(code, language);
@@ -326,11 +382,7 @@ export const SimpleSyntaxHighlighter: React.FC<SimpleSyntaxHighlighterProps> = (
         <Text
           key={lineIndex}
           selectable={selectable}
-          style={{
-            fontFamily: Typography.mono().fontFamily,
-            fontSize: 14,
-            lineHeight: 20,
-          }}
+          style={LINE_STYLE}
         >
           {lineTokens.map((token, index) => (
             <Text
@@ -338,8 +390,8 @@ export const SimpleSyntaxHighlighter: React.FC<SimpleSyntaxHighlighterProps> = (
               selectable={selectable}
               style={{
                 color: getColorForType(token.type, token.nestLevel),
-                fontFamily: Typography.mono().fontFamily,
-                fontWeight: ['keyword', 'controlFlow', 'type', 'function'].includes(token.type) ? '600' : '400',
+                fontFamily: MONO_FONT,
+                fontWeight: BOLD_TOKEN_TYPES.has(token.type) ? '600' : '400',
               }}
             >
               {token.text}
@@ -350,4 +402,4 @@ export const SimpleSyntaxHighlighter: React.FC<SimpleSyntaxHighlighterProps> = (
       ))}
     </View>
   );
-}; 
+}); 

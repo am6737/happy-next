@@ -1,7 +1,7 @@
 import * as SQLite from 'expo-sqlite';
 import type { ApiMessage } from '../apiTypes';
-import { mergeSessionState, toMessagePage } from './common';
-import type { MessagePage, MessageRepository, SessionMessageCacheState, SessionMessageCacheStatePatch } from './types';
+import { mergeSessionState, toMessageIndexPage, toMessagePage } from './common';
+import type { MessageIndexPage, MessageIndexRow, MessagePage, MessageRepository, SessionMessageCacheState, SessionMessageCacheStatePatch } from './types';
 
 const DATABASE_NAME = 'happy-message-cache-v1.db';
 const MESSAGES_TABLE = 'message_cache_messages';
@@ -249,6 +249,54 @@ class SQLiteMessageRepository implements MessageRepository {
         );
         const pageRows = rows.slice(0, limit);
         return toMessagePage(pageRows.map(rowToApiMessage), rows.length > limit);
+    }
+
+    async getLatestMessageIndexes(accountKey: string, sessionId: string, limit: number): Promise<MessageIndexPage> {
+        const db = await this.db();
+        const rows = await db.getAllAsync<MessageIndexRow>(
+            `SELECT id, seq FROM ${MESSAGES_TABLE}
+             WHERE account_key = ? AND session_id = ?
+             ORDER BY seq DESC
+             LIMIT ?`,
+            accountKey,
+            sessionId,
+            limit + 1,
+        );
+        return toMessageIndexPage(rows.slice(0, limit), rows.length > limit);
+    }
+
+    async getMessageIndexesBefore(accountKey: string, sessionId: string, beforeSeq: number, limit: number): Promise<MessageIndexPage> {
+        const db = await this.db();
+        const rows = await db.getAllAsync<MessageIndexRow>(
+            `SELECT id, seq FROM ${MESSAGES_TABLE}
+             WHERE account_key = ? AND session_id = ? AND seq < ?
+             ORDER BY seq DESC
+             LIMIT ?`,
+            accountKey,
+            sessionId,
+            beforeSeq,
+            limit + 1,
+        );
+        return toMessageIndexPage(rows.slice(0, limit), rows.length > limit);
+    }
+
+    async getMessagesByIds(accountKey: string, sessionId: string, ids: readonly string[]): Promise<ApiMessage[]> {
+        if (ids.length === 0) {
+            return [];
+        }
+        const db = await this.db();
+        const placeholders = ids.map(() => '?').join(', ');
+        const rows = await db.getAllAsync<MessageRow>(
+            `SELECT * FROM ${MESSAGES_TABLE}
+             WHERE account_key = ? AND session_id = ? AND id IN (${placeholders})`,
+            accountKey,
+            sessionId,
+            ...ids,
+        );
+        const byId = new Map(rows.map((row) => [row.id, rowToApiMessage(row)]));
+        // The caller pairs the results with the ids it asked for, so the rows come back in the
+        // requested order rather than SQLite's. Ids are expected to arrive as one page-sized batch.
+        return ids.map((id) => byId.get(id)).filter((message): message is ApiMessage => Boolean(message));
     }
 
     async getSessionState(accountKey: string, sessionId: string): Promise<SessionMessageCacheState | null> {

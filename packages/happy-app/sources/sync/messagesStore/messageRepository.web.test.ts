@@ -52,6 +52,23 @@ describe('IndexedDB message repository', () => {
         expect(await messageRepository.getSessionState('web-account', 's1')).toBeNull();
     });
 
+    it('pages over ids and seqs, and reads full rows by id in the requested order', async () => {
+        await messageRepository.upsertMessages('web-account', 's1', [msg(1), msg(2), msg(3), msg(4)]);
+
+        const latest = await messageRepository.getLatestMessageIndexes('web-account', 's1', 2);
+        expect(latest.rows).toEqual([{ id: 'web-m4', seq: 4 }, { id: 'web-m3', seq: 3 }]);
+        expect(latest.minSeq).toBe(3);
+        expect(latest.hasMoreLocal).toBe(true);
+
+        const before = await messageRepository.getMessageIndexesBefore('web-account', 's1', 3, 10);
+        expect(before.rows).toEqual([{ id: 'web-m2', seq: 2 }, { id: 'web-m1', seq: 1 }]);
+        expect(before.hasMoreLocal).toBe(false);
+
+        const byIds = await messageRepository.getMessagesByIds('web-account', 's1', ['web-m3', 'missing', 'web-m1']);
+        expect(byIds.map((m) => m.id)).toEqual(['web-m3', 'web-m1']);
+        expect(byIds[0].content.c).toBe('web-cipher-3');
+    });
+
     it('replaces old message when another row reuses the same session seq', async () => {
         await messageRepository.upsertMessages('web-account', 's1', [msg(1, { id: 'old-web-id' })]);
         await messageRepository.upsertMessages('web-account', 's1', [msg(1, { id: 'new-web-id' })]);

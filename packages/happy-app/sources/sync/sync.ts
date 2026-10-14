@@ -17,6 +17,7 @@ import {
 } from './apiTypes';
 import type { ApiEphemeralActivityUpdate, ApiUpdateContainer } from './apiTypes';
 import { Session, Machine, PendingMessage, SessionCapabilitiesSchema } from './storageTypes';
+import type { DecryptedMessage } from './storageTypes';
 import { InvalidateSync } from '@/utils/sync';
 import { ActivityUpdateAccumulator, isMinorActivityHeartbeat } from './reducer/activityUpdateAccumulator';
 import { randomUUID, getRandomBytes } from 'expo-crypto';
@@ -57,6 +58,7 @@ import { getDootaskFromServer } from './dootask/api';
 import { fetchArtifact, fetchArtifacts, createArtifact, updateArtifact } from './apiArtifacts';
 import { DecryptedArtifact, Artifact, ArtifactCreateRequest, ArtifactUpdateRequest } from './artifactTypes';
 import { ArtifactEncryption } from './encryption/artifactEncryption';
+import type { SessionEncryption } from './encryption/sessionEncryption';
 import { getFriendsList, getUserProfile } from './apiFriends';
 import { fetchFeed } from './apiFeed';
 import { FeedItem } from './feedTypes';
@@ -98,7 +100,7 @@ import {
     mergeOldestLoadedSeq,
     resolveNewerCoveragePatch,
 } from './messagesStore/common';
-import type { MessagePage, SessionMessageCacheState, SessionMessageCacheStatePatch } from './messagesStore/types';
+import type { MessageIndexPage, MessagePage, SessionMessageCacheState, SessionMessageCacheStatePatch } from './messagesStore/types';
 import {
     cachedMessageMatchesQuery,
     cachedMessageSnippet,
@@ -262,6 +264,14 @@ class Sync {
     /** Memoized minimap message lists per session, keyed by a cache-state freshness signature,
      *  so refocusing a session doesn't re-decrypt its whole history. See getCachedMinimapMessages. */
     private minimapMessagesCache = new Map<string, { signature: string; messages: MinimapMessage[] }>();
+    // `normalizeRawMessage` runs Zod over the whole raw record, which is the bulk of a minimap
+    // scan's cost, and a scan re-runs whenever the local message cache changes — i.e. on every new
+    // message — so the result is memoized per message id. Raw records are immutable once persisted
+    // and `normalizeRawMessage` reads nothing else that changes at runtime, so the entry stays
+    // valid. Only read-only consumers (the minimap scan and the search index) take from this
+    // cache: the batch fetch path keeps its own copies because the reducer mutates them.
+    private normalizedMessageCache = new Map<string, NormalizedMessage | null>();
+    private static readonly NORMALIZED_CACHE_MAX = 2000;
     /** Decrypted local message text used by Command+K search. Invalidated whenever cached rows change. */
     private cachedMessageSearchIndex = new Map<string, { signature: string; entries: CachedMessageSearchEntry[] }>();
     /** Per-session last-known seq for v3 incremental fetch */
@@ -3420,6 +3430,88 @@ class Sync {
         }
     }
 
+    /**
+     * Reads one page of the local message cache, newest first, together with the content of every
+     * row on it. Only the rows whose content has not been decrypted yet in this app run are read out
+     * of SQLite in full — the ciphertext column is the bulk of a cached row — and decrypted, so a
+     * read-only consumer that rescans the same history (the minimap scan on every new message, the
+     * search index) pays for the index alone once the page is already in the decryption cache.
+     * Content comes back null for rows that failed to decrypt, and in page order, newest first.
+     */
+    private readCachedMessagePage = async (sessionId: string, encryption: SessionEncryption, beforeSeq: number | null, limit: number): Promise<{ page: MessageIndexPage; messages: (DecryptedMessage | null)[] } | null> => {
+        const page = beforeSeq === null
+            ? await this.readCachedMessageIndexesLatest(sessionId, limit)
+            : await this.readCachedMessageIndexesBefore(sessionId, beforeSeq, limit);
+        if (!page || page.rows.length === 0) {
+            return null;
+        }
+
+        const messages: (DecryptedMessage | null)[] = new Array(page.rows.length);
+        const missingIds: string[] = [];
+        for (let index = 0; index < page.rows.length; index++) {
+            const cached = encryption.getCachedDecryptedMessage(page.rows[index].id);
+            messages[index] = cached;
+            if (!cached) {
+                missingIds.push(page.rows[index].id);
+            }
+        }
+
+        if (missingIds.length > 0) {
+            const fullRows = await this.readCachedMessagesByIds(sessionId, missingIds);
+            const decryptedRows = await encryption.decryptMessages(fullRows);
+            const decryptedById = new Map<string, DecryptedMessage | null>();
+            for (let index = 0; index < fullRows.length; index++) {
+                decryptedById.set(fullRows[index].id, decryptedRows[index] ?? null);
+            }
+            for (let index = 0; index < page.rows.length; index++) {
+                if (!messages[index]) {
+                    messages[index] = decryptedById.get(page.rows[index].id) ?? null;
+                }
+            }
+        }
+
+        return { page, messages };
+    }
+
+    private readCachedMessageIndexesLatest = async (sessionId: string, limit: number): Promise<MessageIndexPage | null> => {
+        const accountKey = this.getMessageAccountKey();
+        if (!accountKey) {
+            return null;
+        }
+        try {
+            return await messageRepository.getLatestMessageIndexes(accountKey, sessionId, limit);
+        } catch (error) {
+            console.warn(`Failed to read latest local message indexes for ${sessionId}:`, error);
+            return null;
+        }
+    }
+
+    private readCachedMessageIndexesBefore = async (sessionId: string, beforeSeq: number, limit: number): Promise<MessageIndexPage | null> => {
+        const accountKey = this.getMessageAccountKey();
+        if (!accountKey) {
+            return null;
+        }
+        try {
+            return await messageRepository.getMessageIndexesBefore(accountKey, sessionId, beforeSeq, limit);
+        } catch (error) {
+            console.warn(`Failed to read older local message indexes for ${sessionId}:`, error);
+            return null;
+        }
+    }
+
+    private readCachedMessagesByIds = async (sessionId: string, ids: readonly string[]) => {
+        const accountKey = this.getMessageAccountKey();
+        if (!accountKey) {
+            return [];
+        }
+        try {
+            return await messageRepository.getMessagesByIds(accountKey, sessionId, ids);
+        } catch (error) {
+            console.warn(`Failed to read local messages by id for ${sessionId}:`, error);
+            return [];
+        }
+    }
+
     private readCachedMessagesBefore = async (sessionId: string, beforeSeq: number, limit: number): Promise<MessagePage | null> => {
         const accountKey = this.getMessageAccountKey();
         if (!accountKey) {
@@ -3515,26 +3607,17 @@ class Sync {
                     hitScanCap = true;
                     break;
                 }
-                const page: MessagePage | null = beforeSeq === null
-                    ? await this.readCachedLatestMessages(sessionId, PAGE)
-                    : await this.readCachedMessagesBefore(sessionId, beforeSeq, PAGE);
-                if (!page || page.messages.length === 0) {
+                const loaded = await this.readCachedMessagePage(sessionId, encryption, beforeSeq, PAGE);
+                if (!loaded) {
                     break;
                 }
-                scanned += page.messages.length;
-
-                // Decrypt this page and pull out the top-level landmarks the rail draws. Build the
-                // message views directly from the normalized rows (no reducer): we only need prompts
-                // and the two tool calls the rail marks, so a full reducer pass — traceMessages,
-                // sidechain separation, event conversion — would be pure overhead. The real message
-                // id also keeps ids stable across refreshes (a fresh reducer would allocate new
-                // random ids each run, remounting every marker).
-                const decrypted = await encryption.decryptMessages(page.messages);
-                for (const item of decrypted) {
+                const { page, messages: pageMessages } = loaded;
+                scanned += page.rows.length;
+                for (const item of pageMessages) {
                     if (!item) {
                         continue;
                     }
-                    const normalized = normalizeRawMessage(item.id, item.localId, item.createdAt, item.content);
+                    const normalized = this.normalizeMessageCached(item.id, item.localId, item.createdAt, item.content);
                     if (!normalized) {
                         continue;
                     }
@@ -3649,6 +3732,22 @@ class Sync {
         return result;
     }
 
+    private normalizeMessageCached(id: string, localId: string | null, createdAt: number, raw: RawRecord): NormalizedMessage | null {
+        const cached = this.normalizedMessageCache.get(id);
+        if (cached !== undefined) {
+            return cached;
+        }
+        const normalized = normalizeRawMessage(id, localId, createdAt, raw);
+        if (this.normalizedMessageCache.size >= Sync.NORMALIZED_CACHE_MAX) {
+            const oldest = this.normalizedMessageCache.keys().next();
+            if (!oldest.done) {
+                this.normalizedMessageCache.delete(oldest.value);
+            }
+        }
+        this.normalizedMessageCache.set(id, normalized);
+        return normalized;
+    }
+
     private getCachedMessageSearchEntries = async (sessionId: string): Promise<CachedMessageSearchEntry[]> => {
         const accountKey = this.getMessageAccountKey();
         if (!accountKey) return [];
@@ -3668,17 +3767,16 @@ class Sync {
 
         try {
             while (true) {
-                const page: MessagePage | null = beforeSeq === null
-                    ? await this.readCachedLatestMessages(sessionId, PAGE_SIZE)
-                    : await this.readCachedMessagesBefore(sessionId, beforeSeq, PAGE_SIZE);
-                if (!page || page.messages.length === 0) break;
-
-                const decrypted = await encryption.decryptMessages(page.messages);
+                const loaded = await this.readCachedMessagePage(sessionId, encryption, beforeSeq, PAGE_SIZE);
+                if (!loaded) break;
+                const { page, messages: decrypted } = loaded;
                 for (const item of decrypted) {
                     if (!item) continue;
-                    const normalized = normalizeRawMessage(item.id, item.localId, item.createdAt, item.content);
+                    const normalized = this.normalizeMessageCached(item.id, item.localId, item.createdAt, item.content);
                     if (!normalized) continue;
-                    normalized.seq = item.seq;
+                    // `normalized` comes from the shared per-id cache, so it is read-only here: the
+                    // seq that goes into the entry below is the page row's, not the normalized
+                    // record's.
                     const text = isReasoningRecord(item.content) ? null : extractCachedMessageText(normalized);
                     if (!text) continue;
                     entries.push({

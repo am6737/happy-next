@@ -102,23 +102,29 @@ export class AES256Encryption implements Encryptor, Decryptor {
     }
 
     async decrypt(data: Uint8Array[]): Promise<(any | null)[]> {
-        // Process as batch, not Promise.all - more efficient
         const results: (any | null)[] = [];
-        for (const item of data) {
-            try {
-                if (item[0] !== 0) {
-                    results.push(null);
-                    continue;
-                }
-                const decryptedString = await decryptAESGCMString(encodeBase64(item.slice(1)), this.secretKeyB64);
-                if (!decryptedString) {
-                    results.push(null);
-                } else {
+        // The native call costs ~3 ms per message and is dominated by bridge overhead for a ~9 KB
+        // payload, not by the AES work itself (measured on a 100-message page: base64 6 ms, native
+        // waits 326 ms, JSON.parse 3 ms). The native side runs on the IO dispatcher, so the calls
+        // are issued together and awaited as one batch instead of one at a time. Chunked so a
+        // pathological batch cannot put thousands of concurrent calls on the native pool.
+        const CHUNK = 32;
+        for (let start = 0; start < data.length; start += CHUNK) {
+            const chunk = data.slice(start, start + CHUNK);
+            const chunkResults = await Promise.all(chunk.map(async (item): Promise<any | null> => {
+                try {
+                    if (item[0] !== 0) {
+                        return null;
+                    }
+                    const decryptedString = await decryptAESGCMString(encodeBase64(item.slice(1)), this.secretKeyB64);
                     // Parse JSON string back to object
-                    results.push(JSON.parse(decryptedString));
+                    return decryptedString ? JSON.parse(decryptedString) : null;
+                } catch (error) {
+                    return null;
                 }
-            } catch (error) {
-                results.push(null);
+            }));
+            for (const result of chunkResults) {
+                results.push(result);
             }
         }
         return results;

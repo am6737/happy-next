@@ -1,6 +1,6 @@
 import type { ApiMessage } from '../apiTypes';
-import { mergeSessionState, toMessagePage } from './common';
-import type { MessagePage, MessageRepository, SessionMessageCacheState, SessionMessageCacheStatePatch } from './types';
+import { mergeSessionState, toMessageIndexPage, toMessagePage } from './common';
+import type { MessageIndexPage, MessagePage, MessageRepository, SessionMessageCacheState, SessionMessageCacheStatePatch } from './types';
 
 type MessageKey = `${string}\u0000${string}\u0000${string}`;
 type StateKey = `${string}\u0000${string}`;
@@ -78,6 +78,29 @@ export class InMemoryMessageRepository implements MessageRepository {
             .sort((a, b) => b.seq - a.seq);
         const page = sorted.slice(0, limit);
         return toMessagePage(page.map(cloneMessage), sorted.length > limit);
+    }
+
+    async getLatestMessageIndexes(accountKey: string, sessionId: string, limit: number): Promise<MessageIndexPage> {
+        const sorted = this.getSessionMessages(accountKey, sessionId).sort((a, b) => b.seq - a.seq);
+        return toMessageIndexPage(sorted.slice(0, limit).map((message) => ({ id: message.id, seq: message.seq })), sorted.length > limit);
+    }
+
+    async getMessageIndexesBefore(accountKey: string, sessionId: string, beforeSeq: number, limit: number): Promise<MessageIndexPage> {
+        const sorted = this.getSessionMessages(accountKey, sessionId)
+            .filter((message) => message.seq < beforeSeq)
+            .sort((a, b) => b.seq - a.seq);
+        return toMessageIndexPage(sorted.slice(0, limit).map((message) => ({ id: message.id, seq: message.seq })), sorted.length > limit);
+    }
+
+    async getMessagesByIds(accountKey: string, sessionId: string, ids: readonly string[]): Promise<ApiMessage[]> {
+        const found: ApiMessage[] = [];
+        for (const id of ids) {
+            const message = this.messages.get(messageKey(accountKey, sessionId, id));
+            if (message) {
+                found.push(cloneMessage(message));
+            }
+        }
+        return found;
     }
 
     async getSessionState(accountKey: string, sessionId: string): Promise<SessionMessageCacheState | null> {

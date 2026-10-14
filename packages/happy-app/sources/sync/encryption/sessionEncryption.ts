@@ -100,6 +100,15 @@ export class SessionEncryption {
     }
 
     /**
+     * The already-decrypted content of a message in this app run, if it has been decrypted
+     * already. Lets read-only consumers use an index-only page of the local cache: the ciphertext
+     * of these messages does not have to be read out of SQLite or decrypted again.
+     */
+    getCachedDecryptedMessage(messageId: string): DecryptedMessage | null {
+        return this.cache.getCachedMessage(messageId);
+    }
+
+    /**
      * Single message convenience method
      */
     async decryptMessage(message: ApiMessage | null | undefined): Promise<DecryptedMessage | null> {

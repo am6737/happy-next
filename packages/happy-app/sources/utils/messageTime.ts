@@ -4,6 +4,36 @@ function pad2(n: number): string {
     return n < 10 ? `0${n}` : `${n}`;
 }
 
+// `new Intl.DateTimeFormat(...)` is expensive (tens of ms on Hermes), and both of these format
+// functions are called once per message on every render of a row, so the formatters are built
+// once per locale instead of once per call.
+const fullTimeFormatters = new Map<string, Intl.DateTimeFormat>();
+function fullTimeFormatter(locale: string): Intl.DateTimeFormat {
+    let formatter = fullTimeFormatters.get(locale);
+    if (!formatter) {
+        formatter = new Intl.DateTimeFormat(locale, {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+        });
+        fullTimeFormatters.set(locale, formatter);
+    }
+    return formatter;
+}
+
+const weekdayFormatters = new Map<string, Intl.DateTimeFormat>();
+function weekdayFormatter(locale: string): Intl.DateTimeFormat {
+    let formatter = weekdayFormatters.get(locale);
+    if (!formatter) {
+        formatter = new Intl.DateTimeFormat(locale, { weekday: 'short' });
+        weekdayFormatters.set(locale, formatter);
+    }
+    return formatter;
+}
+
 // Start of the natural week (Monday 00:00) containing `d`.
 function startOfWeek(d: Date): Date {
     const result = new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -46,7 +76,7 @@ export function formatMessageTime(
 
     const weekStart = startOfWeek(now);
     if (date.getTime() >= weekStart.getTime() && date.getTime() <= now.getTime()) {
-        const weekday = new Intl.DateTimeFormat(locale, { weekday: 'short' }).format(date);
+        const weekday = weekdayFormatter(locale).format(date);
         return `${weekday} ${hm}`;
     }
 
@@ -66,14 +96,7 @@ export function formatFullMessageTime(
     timestamp: number,
     locale: string = getCurrentLanguage(),
 ): string {
-    return new Intl.DateTimeFormat(locale, {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-    }).format(new Date(timestamp));
+    return fullTimeFormatter(locale).format(new Date(timestamp));
 }
 
 /**

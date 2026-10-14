@@ -36,6 +36,26 @@ describe('message repository contract', () => {
         expect(before.hasMoreLocal).toBe(true);
     });
 
+    it('pages over ids and seqs, and reads full rows by id in the requested order', async () => {
+        const repo = new InMemoryMessageRepository();
+        await repo.upsertMessages('account', 's1', [msg(1), msg(2), msg(3), msg(4)]);
+
+        const latest = await repo.getLatestMessageIndexes('account', 's1', 2);
+        expect(latest.rows).toEqual([{ id: 'm4', seq: 4 }, { id: 'm3', seq: 3 }]);
+        expect(latest.minSeq).toBe(3);
+        expect(latest.maxSeq).toBe(4);
+        expect(latest.hasMoreLocal).toBe(true);
+
+        const before = await repo.getMessageIndexesBefore('account', 's1', 3, 10);
+        expect(before.rows).toEqual([{ id: 'm2', seq: 2 }, { id: 'm1', seq: 1 }]);
+        expect(before.hasMoreLocal).toBe(false);
+
+        const byIds = await repo.getMessagesByIds('account', 's1', ['m3', 'missing', 'm1']);
+        expect(byIds.map((m) => m.id)).toEqual(['m3', 'm1']);
+        expect(byIds[0].content.c).toBe('cipher-3');
+        expect(await repo.getMessagesByIds('account', 's1', [])).toEqual([]);
+    });
+
     it('replaces stale rows on seq conflict', async () => {
         const repo = new InMemoryMessageRepository();
         await repo.upsertMessages('account', 's1', [msg(1, { id: 'old' })]);

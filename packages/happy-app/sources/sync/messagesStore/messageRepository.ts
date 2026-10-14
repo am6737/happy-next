@@ -1,6 +1,6 @@
 import type { ApiMessage } from '../apiTypes';
-import { mergeSessionState, toMessagePage } from './common';
-import type { MessagePage, MessageRepository, SessionMessageCacheState, SessionMessageCacheStatePatch } from './types';
+import { mergeSessionState, toMessageIndexPage, toMessagePage } from './common';
+import type { MessageIndexPage, MessagePage, MessageRepository, SessionMessageCacheState, SessionMessageCacheStatePatch } from './types';
 
 const DB_NAME = 'happy-message-cache-v1';
 const DB_VERSION = 4;
@@ -284,6 +284,48 @@ class IndexedDBMessageRepository implements MessageRepository {
         const { items, hasMore } = await collectCursor<StoredMessage>(index.openCursor(range, 'prev'), limit);
         await transactionDone(tx);
         return toMessagePage(items.map(toApiMessage), hasMore);
+    }
+
+    // IndexedDB has no column projection, so the index page still materializes the whole stored
+    // record; these two exist to keep the repository interface uniform across platforms (the
+    // ciphertext-skipping read only pays off against SQLite). The cursor order matches
+    // getLatestMessages / getMessagesBefore so callers can swap one for the other.
+    async getLatestMessageIndexes(accountKey: string, sessionId: string, limit: number): Promise<MessageIndexPage> {
+        const db = await this.db();
+        const tx = db.transaction(MESSAGES_STORE, 'readonly');
+        const index = tx.objectStore(MESSAGES_STORE).index(INDEX_SESSION_SEQ);
+        const range = sessionSeqRange(accountKey, sessionId, MIN_SEQ_KEY, MAX_SEQ_KEY);
+        const { items, hasMore } = await collectCursor<StoredMessage>(index.openCursor(range, 'prev'), limit);
+        await transactionDone(tx);
+        return toMessageIndexPage(items.map((message) => ({ id: message.id, seq: message.seq })), hasMore);
+    }
+
+    async getMessageIndexesBefore(accountKey: string, sessionId: string, beforeSeq: number, limit: number): Promise<MessageIndexPage> {
+        const db = await this.db();
+        const tx = db.transaction(MESSAGES_STORE, 'readonly');
+        const index = tx.objectStore(MESSAGES_STORE).index(INDEX_SESSION_SEQ);
+        const range = sessionSeqRange(accountKey, sessionId, MIN_SEQ_KEY, beforeSeq, false, true);
+        const { items, hasMore } = await collectCursor<StoredMessage>(index.openCursor(range, 'prev'), limit);
+        await transactionDone(tx);
+        return toMessageIndexPage(items.map((message) => ({ id: message.id, seq: message.seq })), hasMore);
+    }
+
+    async getMessagesByIds(accountKey: string, sessionId: string, ids: readonly string[]): Promise<ApiMessage[]> {
+        if (ids.length === 0) {
+            return [];
+        }
+        const db = await this.db();
+        const tx = db.transaction(MESSAGES_STORE, 'readonly');
+        const store = tx.objectStore(MESSAGES_STORE);
+        const rows = await Promise.all(ids.map((id) => requestToPromise<StoredMessage | undefined>(store.get([accountKey, sessionId, id]))));
+        await transactionDone(tx);
+        const byId = new Map<string, ApiMessage>();
+        for (const row of rows) {
+            if (row) {
+                byId.set(row.id, toApiMessage(row));
+            }
+        }
+        return ids.map((id) => byId.get(id)).filter((message): message is ApiMessage => Boolean(message));
     }
 
     async getSessionState(accountKey: string, sessionId: string): Promise<SessionMessageCacheState | null> {

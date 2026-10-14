@@ -1,5 +1,5 @@
 import type { ApiMessage } from '../apiTypes';
-import type { MessagePage, SessionMessageCacheState, SessionMessageCacheStatePatch } from './types';
+import type { MessageIndexPage, MessageIndexRow, MessagePage, SessionMessageCacheState, SessionMessageCacheStatePatch } from './types';
 
 export const MESSAGE_CACHE_INITIAL_STATE: SessionMessageCacheState = {
     forwardMaxSeq: 0,
@@ -36,6 +36,16 @@ export function toMessagePage(messages: ApiMessage[], hasMoreLocal: boolean): Me
         maxSeq = maxSeq === null ? message.seq : Math.max(maxSeq, message.seq);
     }
     return { messages, minSeq, maxSeq, hasMoreLocal };
+}
+
+export function toMessageIndexPage(rows: MessageIndexRow[], hasMoreLocal: boolean): MessageIndexPage {
+    let minSeq: number | null = null;
+    let maxSeq: number | null = null;
+    for (const row of rows) {
+        minSeq = minSeq === null ? row.seq : Math.min(minSeq, row.seq);
+        maxSeq = maxSeq === null ? row.seq : Math.max(maxSeq, row.seq);
+    }
+    return { rows, minSeq, maxSeq, hasMoreLocal };
 }
 
 export function mergeSessionState(

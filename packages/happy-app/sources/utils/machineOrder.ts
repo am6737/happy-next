@@ -1,5 +1,8 @@
 // The user's machine order (settings.machineOrder), shared by every machine list in the app.
 
+// Sorting by machine name is locale-aware; the collator is built once rather than per comparison.
+const collator = new Intl.Collator();
+
 // Listed machines first, in the saved order; the rest after them, in the order they came in.
 export function applyMachineOrder<T>(items: readonly T[], getId: (item: T) => string, order: readonly string[]): T[] {
     const rank = new Map(order.map((id, index) => [id, index]));
@@ -28,5 +31,9 @@ export function sortMachines<T extends { id: string; metadata: { displayName?: s
     order: readonly string[],
 ): T[] {
     const name = (machine: T) => machine.metadata?.displayName || machine.metadata?.host || machine.id;
-    return applyMachineOrder([...machines].sort((a, b) => name(a).localeCompare(name(b))), machine => machine.id, order);
+    // One name per machine and one collator for the whole sort: `localeCompare` builds a collator
+    // per call, which is the sort's dominant cost once a list is long enough to matter.
+    const byName = machines.map((machine) => ({ machine, name: name(machine) }));
+    byName.sort((a, b) => collator.compare(a.name, b.name));
+    return applyMachineOrder(byName.map((entry) => entry.machine), machine => machine.id, order);
 }
