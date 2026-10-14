@@ -37,7 +37,7 @@ export const SidebarNavigator = React.memo(() => {
     const isResizingRef = React.useRef(false);
 
     const defaultDrawerWidth = React.useMemo(() => {
-        return Math.min(Math.max(Math.floor(windowWidth * 0.3), 250), 360);
+        return Math.min(Math.max(Math.floor(windowWidth * 0.3), 250), 390);
     }, [windowWidth]);
 
     // Calculate drawer width only when needed
