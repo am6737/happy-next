@@ -63,6 +63,12 @@ export function findCodexSessionFile(codexSessionId: string, codexHomeDir = getC
   }
 }
 
+/** A natively archived thread keeps its rollout under $CODEX_HOME/archived_sessions/ until restored. */
+function findArchivedCodexSessionFile(codexSessionId: string): string | null {
+  return collectFilesRecursive(join(getCodexHomeDir(), 'archived_sessions'))
+    .find(path => basename(path).endsWith(`-${codexSessionId}.jsonl`)) ?? null;
+}
+
 const historyBaseSchema = z.object({
   thread_id: z.string().uuid(),
   end_byte_offset: z.number().int().nonnegative().safe(),
@@ -88,8 +94,7 @@ async function readCodexHistorySnapshot(filePath: string, ancestors: Set<string>
   }
 
   const base = historyBaseSchema.parse(metadata.payload.history_base);
-  const parentPath = findCodexSessionFile(base.thread_id)
-    ?? collectFilesRecursive(join(getCodexHomeDir(), 'archived_sessions')).find(path => basename(path).endsWith(`-${base.thread_id}.jsonl`));
+  const parentPath = findCodexSessionFile(base.thread_id) ?? findArchivedCodexSessionFile(base.thread_id);
   if (!parentPath) throw new Error(`Codex parent history not found: ${base.thread_id}`);
   const inherited = await readCodexHistorySnapshot(parentPath, visited, base.end_byte_offset);
   const inheritedLines = inherited.split('\n').filter(line => {
@@ -200,7 +205,8 @@ export async function readCodexSessionUserMessages(
 export async function readAllCodexSessionUserMessages(
   codexSessionId: string,
 ): Promise<CodexUserMessage[]> {
-  const filePath = findCodexSessionFile(codexSessionId);
+  // Archived history is still read here, so an archived session can pick a message to fork from.
+  const filePath = findCodexSessionFile(codexSessionId) ?? findArchivedCodexSessionFile(codexSessionId);
   if (!filePath) {
     logger.debug(`[CodexSessionReader] Session file not found for: ${codexSessionId}`);
     return [];

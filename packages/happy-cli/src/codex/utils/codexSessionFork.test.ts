@@ -10,7 +10,8 @@ import { CODEX_INITIALIZE_TIMEOUT_MS, resolveCodexRuntime } from '../codexRuntim
 
 const peer = vi.hoisted(() => ({ spawn: vi.fn(), request: vi.fn(), notify: vi.fn(), close: vi.fn() }));
 const restore = vi.hoisted(() => vi.fn());
-vi.mock('@/daemon/executeSessionArchive', () => ({ restoreCodexSession: restore }));
+const rearchive = vi.hoisted(() => vi.fn());
+vi.mock('@/daemon/executeSessionArchive', () => ({ restoreCodexSession: restore, rearchiveCodexSession: rearchive }));
 vi.mock('../appserver/CodexJsonRpcPeer', () => ({ CodexJsonRpcPeer: vi.fn(() => peer) }));
 
 const sourceId = '11111111-2222-4333-8444-555555555555';
@@ -86,7 +87,7 @@ describe('Codex session fork', () => {
       await writeFile(restoredPath, sourceContent);
       return originalHome;
     });
-    expect(await forkCodexSession(sourceId, true)).toEqual({ success: true, newFilePath: forkPath });
+    expect(await forkCodexSession(sourceId, 'restore')).toEqual({ success: true, newFilePath: forkPath });
     expect(restore).toHaveBeenCalledWith(sourceId);
     const runtime = resolveCodexRuntime(codexPackage(), ['app-server']);
     expect(peer.spawn).toHaveBeenCalledWith(runtime.command, runtime.args, {
@@ -96,10 +97,42 @@ describe('Codex session fork', () => {
     expect(peer.request).toHaveBeenCalledWith(Methods.THREAD_FORK, { threadId: sourceId, excludeTurns: true });
   });
 
+  it('keeps a restored source restored when resuming it', async () => {
+    await rm(sourcePath);
+    restore.mockImplementation(async () => { await writeFile(sourcePath, sourceContent); return undefined; });
+    expect((await forkCodexSession(sourceId, 'restore')).success).toBe(true);
+    expect(rearchive).not.toHaveBeenCalled();
+  });
+
+  it('borrows archived history for a message-level fork and archives the source again', async () => {
+    await rm(sourcePath);
+    restore.mockImplementation(async () => { await writeFile(sourcePath, sourceContent); return undefined; });
+    rearchive.mockResolvedValue(undefined);
+    expect(await forkAndTruncateCodexSession(sourceId, generateStableUuid(timestamp, 1), 'borrow')).toEqual({ success: true, newFilePath: forkPath });
+    expect(peer.request).toHaveBeenCalledWith(Methods.THREAD_FORK, { threadId: sourceId, excludeTurns: true, lastTurnId: 'turn-1' });
+    expect(rearchive).toHaveBeenCalledWith(sourceId);
+    expect(peer.close.mock.invocationCallOrder[0]).toBeLessThan(rearchive.mock.invocationCallOrder[0]);
+  });
+
+  it('archives a borrowed source again when the fork fails, and ignores a failed re-archive', async () => {
+    await rm(sourcePath);
+    restore.mockImplementation(async () => { await writeFile(sourcePath, sourceContent); return undefined; });
+    rearchive.mockRejectedValue(new Error('offline'));
+    peer.request.mockRejectedValue(new Error('failed'));
+    expect(await forkCodexSession(sourceId, 'borrow')).toEqual({ success: false, errorMessage: 'failed' });
+    expect(rearchive).toHaveBeenCalledWith(sourceId);
+  });
+
+  it('does not re-archive a source that was never archived', async () => {
+    expect((await forkCodexSession(sourceId, 'borrow')).success).toBe(true);
+    expect(restore).not.toHaveBeenCalled();
+    expect(rearchive).not.toHaveBeenCalled();
+  });
+
   it('does not fork when native restore fails', async () => {
     await rm(sourcePath);
     restore.mockRejectedValue(new Error('native failure'));
-    expect(await forkCodexSession(sourceId, true)).toMatchObject({
+    expect(await forkCodexSession(sourceId, 'restore')).toMatchObject({
       success: false, errorMessage: expect.stringContaining('Could not restore'),
     });
     expect(peer.spawn).not.toHaveBeenCalled();
@@ -108,7 +141,7 @@ describe('Codex session fork', () => {
   it('does not fork when restored history is still missing', async () => {
     await rm(sourcePath);
     restore.mockResolvedValue(home);
-    expect((await forkCodexSession(sourceId, true)).success).toBe(false);
+    expect((await forkCodexSession(sourceId, 'restore')).success).toBe(false);
     expect(restore).toHaveBeenCalledWith(sourceId);
     expect(peer.spawn).not.toHaveBeenCalled();
   });
@@ -118,7 +151,7 @@ describe('Codex session fork', () => {
     expect(await forkCodexSession(sourceId)).toMatchObject({
       success: false, errorMessage: expect.stringContaining('Restore the session'),
     });
-    expect((await forkAndTruncateCodexSession(sourceId, 'message-1', true)).success).toBe(false);
+    expect((await forkAndTruncateCodexSession(sourceId, 'message-1', 'restore')).success).toBe(false);
     expect(restore).not.toHaveBeenCalled();
     expect(peer.spawn).not.toHaveBeenCalled();
   });

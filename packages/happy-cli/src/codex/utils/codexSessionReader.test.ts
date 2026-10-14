@@ -236,6 +236,16 @@ describe('listCodexSessions', () => {
     expect(await readAllCodexSessionUserMessages(fixture.forkId)).toHaveLength(2);
   });
 
+  it('reads the messages of an archived session so a fork target can be picked', async () => {
+    const fixture = createHistorySnapshot();
+    const { readAllCodexSessionUserMessages } = await import('./codexSessionReader');
+    const live = await readAllCodexSessionUserMessages(fixture.parentId);
+    const archive = join(codexHomeDir, 'archived_sessions');
+    mkdirSync(archive);
+    renameSync(fixture.parentPath, join(archive, `rollout-2026-09-01T00-00-00-${fixture.parentId}.jsonl`));
+    expect(await readAllCodexSessionUserMessages(fixture.parentId)).toEqual(live);
+  });
+
   it('rejects cyclic ancestry instead of looping', async () => {
     const fixture = createHistorySnapshot();
     const metadata = { ...fixture.forkMeta, payload: { ...fixture.forkMeta.payload, history_base: { thread_id: fixture.forkId, end_byte_offset: 0 } } };

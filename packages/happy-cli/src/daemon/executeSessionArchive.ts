@@ -238,3 +238,10 @@ export async function restoreCodexSession(nativeSessionId: string): Promise<stri
     await syncCodexArchive({ ...binding, nativeSessionIds: [nativeSessionId] }, false);
     return binding.codexHome;
 }
+
+/** Archive again a thread that `restoreCodexSession` unarchived only to fork it. */
+export async function rearchiveCodexSession(nativeSessionId: string): Promise<void> {
+    const binding = listSessionBindings().find(binding => binding.provider === 'codex' && binding.nativeSessionIds.includes(nativeSessionId));
+    if (!binding) return;
+    await syncCodexArchive({ ...binding, nativeSessionIds: [nativeSessionId] }, true);
+}

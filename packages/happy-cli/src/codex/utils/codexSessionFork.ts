@@ -3,7 +3,7 @@
 import { stat } from 'node:fs/promises';
 import { basename, isAbsolute } from 'node:path';
 import { z } from 'zod';
-import { restoreCodexSession } from '@/daemon/executeSessionArchive';
+import { rearchiveCodexSession, restoreCodexSession } from '@/daemon/executeSessionArchive';
 import { logger } from '@/ui/logger';
 import { codexPackage } from '@/codex/package';
 import { CODEX_INITIALIZE_TIMEOUT_MS, resolveCodexRuntime } from '@/codex/codexRuntime';
@@ -94,26 +94,35 @@ async function findPreviousTurn(peer: CodexJsonRpcPeer, threadId: string, target
   throw new Error('Selected Codex turn is no longer present in the session');
 }
 
-export async function forkCodexSession(codexSessionId: string, restoreArchived = false): Promise<CodexForkResult> {
-  return forkAndTruncateCodexSession(codexSessionId, undefined, restoreArchived);
+/**
+ * What to do when the source history has been natively archived (Codex refuses to fork it):
+ * `reject` the fork, `restore` the source for good (resuming the archived entry), or `borrow` it —
+ * unarchive it only for the fork and archive it again, so the source stays archived.
+ */
+export type ArchivedSourcePolicy = 'reject' | 'restore' | 'borrow';
+
+export async function forkCodexSession(codexSessionId: string, archived: ArchivedSourcePolicy = 'reject'): Promise<CodexForkResult> {
+  return forkAndTruncateCodexSession(codexSessionId, undefined, archived);
 }
 
 /** Preserve history before the selected user message, never mutating the source thread. */
 export async function forkAndTruncateCodexSession(
   codexSessionId: string,
   truncateBeforeUuid?: string,
-  restoreArchived = false,
+  archived: ArchivedSourcePolicy = 'reject',
 ): Promise<CodexForkResult> {
   let peer: CodexJsonRpcPeer | undefined;
+  let borrowed = false;
   try {
     let originalPath = findCodexSessionFile(codexSessionId);
     let codexHome: string | undefined;
     if (!originalPath) {
-      if (!restoreArchived || truncateBeforeUuid) {
+      if (archived === 'reject' || (archived === 'restore' && truncateBeforeUuid)) {
         throw new Error('Session history is unavailable. Restore the session before forking.');
       }
       try {
         codexHome = await restoreCodexSession(codexSessionId);
+        borrowed = archived === 'borrow';
         originalPath = findCodexSessionFile(codexSessionId, codexHome);
       } catch (error) {
         logger.debug('[CodexSessionFork] Native restore failed', error);
@@ -156,5 +165,9 @@ export async function forkAndTruncateCodexSession(
     };
   } finally {
     await peer?.close();
+    // The fork reads its inherited history from archived_sessions too, so archiving the source back is safe.
+    if (borrowed) {
+      await rearchiveCodexSession(codexSessionId).catch((error) => logger.debug('[CodexSessionFork] Native re-archive failed', error));
+    }
   }
 }

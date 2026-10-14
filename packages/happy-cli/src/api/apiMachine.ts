@@ -881,7 +881,7 @@ export class ApiMachineClient {
 
         // Fork and truncate a Codex session for duplicate
         this.rpcHandlerManager.registerHandler('codex-duplicate-session', async (params: any) => {
-            const { codexSessionId, truncateBeforeUuid } = params || {};
+            const { codexSessionId, truncateBeforeUuid, borrowArchived } = params || {};
             if (!codexSessionId || typeof codexSessionId !== 'string') {
                 throw new Error('codexSessionId is required');
             }
@@ -889,7 +889,7 @@ export class ApiMachineClient {
                 throw new Error('truncateBeforeUuid is required');
             }
             return this.codexArchiveLock.inLock(async () => {
-                try { return await forkAndTruncateCodexSession(codexSessionId, truncateBeforeUuid); }
+                try { return await forkAndTruncateCodexSession(codexSessionId, truncateBeforeUuid, borrowArchived === true ? 'borrow' : 'reject'); }
                 finally { this.codexCache.invalidate(); }
             });
         });
@@ -901,7 +901,8 @@ export class ApiMachineClient {
                 throw new Error('codexSessionId is required');
             }
             return this.codexArchiveLock.inLock(async () => {
-                try { return await forkCodexSession(codexSessionId, params.restoreArchived === true); }
+                const archived = params.borrowArchived === true ? 'borrow' : params.restoreArchived === true ? 'restore' : 'reject';
+                try { return await forkCodexSession(codexSessionId, archived); }
                 finally { this.codexCache.invalidate(); }
             });
         });
