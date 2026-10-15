@@ -41,6 +41,7 @@ import {
 import { extractCodexSessionId, extractGeminiSessionId, extractGeminiSessionIdFromJsonLine, normalizeGeminiOutputText } from './orchestratorOutput';
 import { createOrchestratorShellExecutor, reportWithRetry } from './orchestratorShell';
 import { createOrchestratorTransferExecutor } from './orchestratorTransfer';
+import { dropSessionEnv } from './sessionEnv';
 
 const ORCHESTRATOR_WATCHDOG_GRACE_MS = 5_000;
 const ORCHESTRATOR_OUTPUT_CAPTURE_LIMIT = 64_000;
@@ -121,6 +122,8 @@ export async function startDaemon(): Promise<void> {
   });
 
   logger.debug('[DAEMON RUN] Starting daemon process...');
+  // Everything the daemon spawns inherits its environment, which must not carry the session it was started from
+  dropSessionEnv(process.env);
   logger.debugLargeJson('[DAEMON RUN] Environment', getEnvironmentInfo());
 
   // Check if already running
