@@ -12,6 +12,13 @@ import { FoldDelegatedMark } from './FoldDelegatedMark';
 /** How long the chevron takes to swing between open and folded. */
 const CHEVRON_TURN_MS = 180;
 
+/**
+ * A turn with nothing to fold that took no longer than this — as the line would read it, 5s at most —
+ * has no line: a quick reply needs no account of what it cost, and the rule under it would only fence
+ * off a sentence.
+ */
+const BRIEF_TURN_MS = 6000;
+
 /** The folded line's state, for the turns that have one. */
 export type TurnFoldProps = {
     folded: boolean;
@@ -45,7 +52,12 @@ export type TurnFoldProps = {
  * A turn whose process is long enough to be worth folding hands one in through
  * `fold`, and then this line is the fold: a chevron and what the process cost,
  * tap to open or close it. That displaces the exact-window tap, which moves to a
- * long press rather than being lost.
+ * long press rather than being lost. A settled one that took under a second says
+ * only its steps: "0s" is no duration worth reading.
+ *
+ * A brief turn with nothing to fold has no line at all (`BRIEF_TURN_MS`). One
+ * still running is held back until it outlasts that or takes its first step, and
+ * once shown the line stays: a line that went again would jog the rows above it.
  */
 export const TurnHeader = React.memo((props: {
     startedAt: number;
@@ -84,6 +96,9 @@ export const TurnHeader = React.memo((props: {
     const rotation = turn.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '-90deg'] });
     const elapsedMs = useElapsedMs(running ? startedAt : null);
     const elapsed = running ? elapsedMs : completedAt - startedAt;
+    const brief = fold === undefined && elapsed < BRIEF_TURN_MS;
+    const shownRef = React.useRef(false);
+    if (!brief) shownRef.current = true;
 
     let label: string;
     if (running && elapsed < 1000) {
@@ -92,6 +107,8 @@ export const TurnHeader = React.memo((props: {
         label = t('message.processing');
     } else if (running) {
         label = t('message.processed', { duration: formatDuration(elapsed) });
+    } else if (fold !== undefined && elapsed < 1000) {
+        label = t('message.segmentSteps', { steps: fold.steps });
     } else if (fold?.folded) {
         label = t('message.foldedProcess', { duration: formatDuration(elapsed), steps: fold.steps });
     } else {
@@ -118,6 +135,8 @@ export const TurnHeader = React.memo((props: {
     // disabled Pressable with `pointer-events: none`, so a running turn's fold would be untappable.
     const inert = onPress === undefined;
     const lit = foldable && hovered;
+
+    if (brief && !shownRef.current) return null;
 
     return (
         <Pressable
