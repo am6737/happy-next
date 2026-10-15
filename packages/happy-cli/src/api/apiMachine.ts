@@ -27,7 +27,7 @@ import { executeSessionArchive } from '@/daemon/executeSessionArchive';
 import type { CheckResult, CliUpdatePreflight, UpdateNowResult } from '@/daemon/cliUpdater';
 import { discoverCapabilities, type DiscoverCapabilitiesAgent } from '@/daemon/discoverCapabilities';
 import { remoteShell } from '@/daemon/orchestratorShell';
-import type { OrchestratorShellDispatchPayload } from '@/orchestrator/common';
+import type { OrchestratorShellDispatchPayload, OrchestratorTransferDispatchPayload, OrchestratorTransferSourceParams } from '@/orchestrator/common';
 import { AsyncLock } from '@/utils/lock';
 import { SessionCache, matchFields, type SessionCacheRuntimeStats } from '@/cache/SessionCache';
 import { encodeBase64, decodeBase64, encrypt, decrypt } from './encryption';
@@ -173,6 +173,17 @@ type MachineRpcHandlers = {
         accepted: boolean;
         duplicate?: boolean;
     }>;
+    /**
+     * Receiving files for a transfer (`dispatch`) and serving them to another machine's
+     * (`serveSource`). Absent when remote shell is turned off, like `orchestratorShellDispatch`.
+     */
+    orchestratorTransfer?: {
+        dispatch: (params: OrchestratorTransferDispatchPayload) => Promise<{
+            accepted: boolean;
+            duplicate?: boolean;
+        }>;
+        serveSource: (params: OrchestratorTransferSourceParams) => Promise<unknown>;
+    };
     /** Called on every connect, to let the server fail the executions this daemon has lost */
     orchestratorReconcile: () => Promise<void>;
     /** Install the latest CLI now (the daemon then restarts on it by itself) */
@@ -269,6 +280,7 @@ export class ApiMachineClient {
         orchestratorDispatch,
         orchestratorCancel,
         orchestratorShellDispatch,
+        orchestratorTransfer,
         orchestratorReconcile,
         updateCli,
         checkCliUpdate,
@@ -518,6 +530,52 @@ export class ApiMachineClient {
                     timeoutMs: timeoutMs === null ? null : Math.floor(timeoutMs),
                     workingDirectory,
                 });
+            });
+        }
+
+        // Register orchestrator transfer handlers: this machine receives a file or directory from
+        // another one, or sends one to another. Left unregistered with remote shell turned off.
+        if (orchestratorTransfer) {
+            this.rpcHandlerManager.registerHandler('orchestrator-transfer-dispatch', async (params: any) => {
+                const { executionId, runId, taskId, dispatchToken, provider, prompt, timeoutMs } = params || {};
+
+                for (const [name, value] of Object.entries({ executionId, runId, taskId, dispatchToken, prompt })) {
+                    if (!value || typeof value !== 'string') {
+                        throw new Error(`${name} is required`);
+                    }
+                }
+                if (provider !== 'transfer') {
+                    throw new Error(`Unsupported provider: ${provider}`);
+                }
+                if (timeoutMs !== null && (typeof timeoutMs !== 'number' || !Number.isFinite(timeoutMs) || timeoutMs <= 0)) {
+                    throw new Error('timeoutMs must be null or a positive number');
+                }
+
+                return orchestratorTransfer.dispatch({
+                    executionId,
+                    runId,
+                    taskId,
+                    dispatchToken,
+                    provider,
+                    prompt,
+                    timeoutMs: timeoutMs === null ? null : Math.floor(timeoutMs),
+                });
+            });
+            this.rpcHandlerManager.registerHandler('orchestrator-transfer-source', async (params: any) => {
+                const { transferId, path, op, publicKey, index } = params || {};
+                if (!transferId || typeof transferId !== 'string' || !path || typeof path !== 'string') {
+                    throw new Error('transferId and path are required');
+                }
+                if (op === 'open' && typeof publicKey === 'string') {
+                    return orchestratorTransfer.serveSource({ transferId, path, op, publicKey });
+                }
+                if (op === 'read' && Number.isSafeInteger(index) && index >= 0) {
+                    return orchestratorTransfer.serveSource({ transferId, path, op, index });
+                }
+                if (op === 'close') {
+                    return orchestratorTransfer.serveSource({ transferId, path, op });
+                }
+                throw new Error(`Invalid transfer step: ${op}`);
             });
         }
 

@@ -57,6 +57,7 @@ describe('canAutoApproveTool', () => {
             expect(approves('mcp__happy__orchestrator_submit', mode)).toBe(false);
             expect(approves('mcp__happy__orchestrator_send_message', mode)).toBe(false);
             expect(approves('mcp__happy__orchestrator_exec', mode)).toBe(false);
+            expect(approves('mcp__happy__orchestrator_transfer', mode)).toBe(false);
         }
     });
 

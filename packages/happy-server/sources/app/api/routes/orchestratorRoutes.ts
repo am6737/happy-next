@@ -63,6 +63,13 @@ const EXEC_DEFAULT_WAIT_MS = 30_000;
 // Below the 60s an MCP client waits for a tool call, so the caller is still there for the result
 const EXEC_MAX_WAIT_MS = 50_000;
 const SHELL_DISPATCH_METHOD_SUFFIX = ':orchestrator-shell-dispatch';
+// A machine takes files with this method and serves them with the other, both only with remote shell turned on
+const TRANSFER_DISPATCH_METHOD_SUFFIX = ':orchestrator-transfer-dispatch';
+const TRANSFER_SOURCE_METHOD = 'orchestrator-transfer-source';
+// How long the source machine has to answer one step of a transfer (opening it, one chunk)
+const TRANSFER_SOURCE_RPC_TIMEOUT_MS = 60_000;
+const TRANSFER_PATH_MAX_LENGTH = 4096;
+const TRANSFER_TITLE_PATH_MAX_LENGTH = 60;
 const EXEC_TITLE_COMMAND_MAX_LENGTH = 120;
 
 type ProviderName = typeof PROVIDERS[number];
@@ -123,11 +130,14 @@ async function fetchMachineIdentities(
     return result;
 }
 
-/** The machines that take shell tasks right now: connected, with remote shell turned on. */
-function listShellReadyMachineIds(userId: string): string[] {
+/**
+ * The machines that take shell tasks right now: connected, with remote shell turned on. With
+ * TRANSFER_DISPATCH_METHOD_SUFFIX, those that also take file transfers (a newer Happy CLI).
+ */
+function listShellReadyMachineIds(userId: string, methodSuffix: string = SHELL_DISPATCH_METHOD_SUFFIX): string[] {
     return listConnectedUserRpcMethods(userId)
-        .filter((method) => method.endsWith(SHELL_DISPATCH_METHOD_SUFFIX))
-        .map((method) => method.slice(0, -SHELL_DISPATCH_METHOD_SUFFIX.length));
+        .filter((method) => method.endsWith(methodSuffix))
+        .map((method) => method.slice(0, -methodSuffix.length));
 }
 
 type DetectionResult = {
@@ -258,6 +268,51 @@ const execBodySchema = z.object({
     maxConcurrency: z.coerce.number().int().min(1).max(SHELL_RUN_MAX_CONCURRENCY).optional(),
     title: z.string().min(1).max(256).optional(),
     controllerSessionId: z.string().optional(),
+});
+
+const transferBodySchema = z.object({
+    from: z.object({
+        machineId: z.string().min(1).max(128),
+        path: z.string().min(1).max(TRANSFER_PATH_MAX_LENGTH),
+    }),
+    to: z.object({
+        machineIds: z.union([
+            z.array(z.string().min(1).max(128)).min(1).max(RUN_MAX_TASKS),
+            z.literal('all_online'),
+        ]),
+        path: z.string().min(1).max(TRANSFER_PATH_MAX_LENGTH),
+    }),
+    overwrite: z.boolean().optional(),
+    timeoutMs: z.coerce.number().int().min(1000).max(SHELL_TASK_MAX_TIMEOUT_MS).optional(),
+    waitMs: z.coerce.number().int().min(0).max(EXEC_MAX_WAIT_MS).optional(),
+    title: z.string().min(1).max(256).optional(),
+    controllerSessionId: z.string().optional(),
+});
+
+// What a transfer task carries as its prompt: where the file comes from and where it goes
+const transferSpecSchema = z.object({
+    sourceMachineId: z.string(),
+    sourcePath: z.string(),
+    targetPath: z.string(),
+    overwrite: z.boolean(),
+});
+
+function parseTransferSpec(prompt: string): z.infer<typeof transferSpecSchema> | null {
+    try {
+        return transferSpecSchema.parse(JSON.parse(prompt));
+    } catch {
+        return null;
+    }
+}
+
+// What arrived at a transfer's target: `path` is where it was put, `files` counts the regular
+// files (1 for a file), `sha256` is the file's (null for a directory)
+const transferResultSchema = z.object({
+    path: z.string().min(1).max(TRANSFER_PATH_MAX_LENGTH),
+    kind: z.enum(['file', 'directory']),
+    bytes: z.number().int().min(0),
+    files: z.number().int().min(0),
+    sha256: z.string().max(64).nullable(),
 });
 
 // A shell task's output too long to keep in full: the daemon saved it to `path` on its machine
@@ -445,6 +500,46 @@ function mapShellTask(task: Prisma.OrchestratorTaskGetPayload<{ select: typeof s
         stderr: task.stderrText,
         stdoutFile: task.stdoutFile,
         stderrFile: task.stderrFile,
+        errorCode: task.errorCode,
+        errorMessage: task.errorMessage,
+        startedAt: execution?.startedAt?.toISOString() ?? null,
+        finishedAt: execution?.finishedAt?.toISOString() ?? null,
+    };
+}
+
+// What a transfer task's result is read from, for `mapTransferTask`
+const transferTaskSelect = {
+    id: true,
+    status: true,
+    targetMachineId: true,
+    prompt: true,
+    transferResult: true,
+    errorCode: true,
+    errorMessage: true,
+    executions: {
+        orderBy: { attempt: 'desc' },
+        take: 1,
+        select: {
+            startedAt: true,
+            finishedAt: true,
+        },
+    },
+} satisfies Prisma.OrchestratorTaskSelect;
+
+/**
+ * A transfer task as `/transfer` and `/pend` return it: the copy to one target machine, the same
+ * whether the run ended within the transfer call or later.
+ */
+function mapTransferTask(task: Prisma.OrchestratorTaskGetPayload<{ select: typeof transferTaskSelect }>) {
+    const execution = task.executions[0];
+    const spec = parseTransferSpec(task.prompt);
+    return {
+        taskId: task.id,
+        machineId: task.targetMachineId,
+        status: task.status,
+        from: spec ? { machineId: spec.sourceMachineId, path: spec.sourcePath } : null,
+        to: spec?.targetPath ?? null,
+        result: task.transferResult,
         errorCode: task.errorCode,
         errorMessage: task.errorMessage,
         startedAt: execution?.startedAt?.toISOString() ?? null,
@@ -677,8 +772,9 @@ async function loadTaskForUser(
 type NewTask = {
     taskKey?: string;
     title?: string;
-    // exec creates shell tasks, which run their prompt as a command, with no AI and no session
-    provider: ProviderName | 'shell';
+    // exec creates shell tasks, which run their prompt as a command, with no AI and no session;
+    // transfer creates transfer tasks, whose prompt is the transfer's spec (transferSpecSchema)
+    provider: ProviderName | 'shell' | 'transfer';
     model: string | null;
     prompt: string;
     workingDirectory?: string;
@@ -1338,6 +1434,123 @@ export function orchestratorRoutes(app: Fastify) {
         });
     });
 
+    // Copy a file or directory from one machine to others, as a run with one transfer task per
+    // target machine. Each target's daemon pulls the source through `transfer-source` in encrypted
+    // chunks. Waits up to `waitMs` like exec.
+    app.post('/v1/orchestrator/transfer', {
+        preHandler: app.authenticate,
+        schema: {
+            body: transferBodySchema,
+        },
+    }, async (request, reply) => {
+        const userId = request.userId;
+        const body = request.body;
+
+        if (body.controllerSessionId) {
+            const controllerSession = await db.session.findFirst({
+                where: {
+                    id: body.controllerSessionId,
+                    accountId: userId,
+                },
+                select: { id: true },
+            });
+            if (!controllerSession) {
+                return sendError(reply, 400, 'INVALID_ARGUMENT', 'controllerSessionId does not belong to current account');
+            }
+        }
+
+        const sourceMachineId = body.from.machineId;
+        // all_online sends to every other machine: the source has the file already
+        const machineIds = body.to.machineIds === 'all_online'
+            ? listShellReadyMachineIds(userId, TRANSFER_DISPATCH_METHOD_SUFFIX).filter((machineId) => machineId !== sourceMachineId)
+            : [...new Set(body.to.machineIds)];
+        if (machineIds.length === 0) {
+            return sendError(reply, 409, 'CONFLICT', 'No other machine is online with remote shell turned on');
+        }
+        if (machineIds.length > RUN_MAX_TASKS) {
+            return sendError(reply, 400, 'INVALID_ARGUMENT', `${machineIds.length} machines are online, more than the ${RUN_MAX_TASKS} one run takes; list machineIds instead`);
+        }
+        const knownMachines = await db.machine.findMany({
+            where: { accountId: userId, id: { in: [sourceMachineId, ...machineIds] } },
+            select: { id: true },
+        });
+        const knownMachineIds = new Set(knownMachines.map((machine) => machine.id));
+        const unknownMachineIds = [...new Set([sourceMachineId, ...machineIds])].filter((machineId) => !knownMachineIds.has(machineId));
+        if (unknownMachineIds.length > 0) {
+            return sendError(reply, 400, 'INVALID_ARGUMENT', `Unknown machineId: ${unknownMachineIds.join(', ')}`);
+        }
+        if (!hasUserRpcMethod(userId, `${sourceMachineId}:${TRANSFER_SOURCE_METHOD}`)) {
+            return sendError(reply, 409, 'CONFLICT', `Source machine ${sourceMachineId} is offline, has remote shell turned off, or runs a Happy CLI too old to send files`);
+        }
+
+        const shortPath = (path: string) => path.length > TRANSFER_TITLE_PATH_MAX_LENGTH
+            ? `…${path.slice(-TRANSFER_TITLE_PATH_MAX_LENGTH)}`
+            : path;
+        const title = body.title ?? `Transfer ${shortPath(body.from.path)} → ${shortPath(body.to.path)}`;
+        const prompt = JSON.stringify({
+            sourceMachineId,
+            sourcePath: body.from.path,
+            targetPath: body.to.path,
+            overwrite: body.overwrite ?? false,
+        } satisfies z.infer<typeof transferSpecSchema>);
+        const created = await createRunWithTasks(userId, {
+            title,
+            controllerSessionId: body.controllerSessionId,
+            maxConcurrency: machineIds.length,
+        }, machineIds.map((machineId) => ({
+            provider: 'transfer' as const,
+            model: null,
+            prompt,
+            timeoutMs: body.timeoutMs,
+            targetMachineId: machineId,
+            dependsOnTaskKeys: [],
+            retryMaxAttempts: 1,
+            retryBackoffMs: 0,
+        })));
+        const runId = created.run.id;
+
+        const waitMs = body.waitMs ?? EXEC_DEFAULT_WAIT_MS;
+        if (waitMs > 0) {
+            // The caller giving up on the response must not take the run's callback with it
+            const disconnected = new AbortController();
+            reply.raw.once('close', () => disconnected.abort());
+            await awaitOrchestratorRunTerminal(runId, waitMs, async () => {
+                const run = await db.orchestratorRun.findUnique({ where: { id: runId }, select: { status: true } });
+                return !!run && isRunTerminal(run.status);
+            }, disconnected.signal);
+        }
+
+        const run = await db.orchestratorRun.findUniqueOrThrow({
+            where: { id: runId },
+            select: {
+                status: true,
+                createdAt: true,
+                updatedAt: true,
+                tasks: {
+                    orderBy: { seq: 'asc' },
+                    select: transferTaskSelect,
+                },
+            },
+        });
+        const terminal = isRunTerminal(run.status);
+
+        return reply.send({
+            ok: true,
+            data: {
+                runId,
+                terminal,
+                run: {
+                    status: run.status,
+                    createdAt: run.createdAt.toISOString(),
+                    updatedAt: run.updatedAt.toISOString(),
+                    summary: summarizeTasksByStatus(run.tasks),
+                },
+                tasks: run.tasks.map(mapTransferTask),
+                next: terminal ? undefined : { hint: 'Await <orchestrator-callback>.', runId },
+            },
+        });
+    });
+
     app.get('/v1/orchestrator/runs/:runId', {
         preHandler: app.authenticate,
         schema: {
@@ -1468,8 +1681,8 @@ export function orchestratorRoutes(app: Fastify) {
             if (!task) {
                 return { kind: 'not_found' as const };
             }
-            if (task.provider === 'shell') {
-                return { kind: 'shell' as const };
+            if (task.provider === 'shell' || task.provider === 'transfer') {
+                return { kind: 'no_session' as const, provider: task.provider };
             }
 
             if (task.status !== 'completed' && task.status !== 'failed') {
@@ -1566,8 +1779,10 @@ export function orchestratorRoutes(app: Fastify) {
         if (result.kind === 'not_found') {
             return sendError(reply, 404, 'NOT_FOUND', 'Task not found');
         }
-        if (result.kind === 'shell') {
-            return sendError(reply, 400, 'INVALID_ARGUMENT', `Task ${taskId} is a shell task, which has no session to message; run another command instead`);
+        if (result.kind === 'no_session') {
+            return sendError(reply, 400, 'INVALID_ARGUMENT', result.provider === 'shell'
+                ? `Task ${taskId} is a shell task, which has no session to message; run another command instead`
+                : `Task ${taskId} is a file transfer, which has no session to message; start another transfer instead`);
         }
         if (result.kind === 'invalid_state') {
             return sendError(reply, 409, 'CONFLICT', `Task ${taskId} must be in completed/failed state to accept messages`);
@@ -1792,12 +2007,19 @@ export function orchestratorRoutes(app: Fastify) {
             const isLastPoll = pollIndex >= maxPolls - 1;
 
             if (waitSatisfied || timeoutReached || isLastPoll) {
-                // Shell tasks read as `/exec` returns them, for one shape however the result is fetched
-                const shellTasks = includeTasks && loaded.run.tasks.some((task) => task.provider === 'shell')
-                    ? new Map((await db.orchestratorTask.findMany({
-                        where: { runId: loaded.run.id, provider: 'shell' },
-                        select: shellTaskSelect,
-                    })).map((task) => [task.id, mapShellTask(task)]))
+                // Shell and transfer tasks read as `/exec` and `/transfer` return them, for one shape
+                // however the result is fetched
+                const shellTasks = includeTasks && loaded.run.tasks.some((task) => task.provider === 'shell' || task.provider === 'transfer')
+                    ? new Map<string, unknown>([
+                        ...(await db.orchestratorTask.findMany({
+                            where: { runId: loaded.run.id, provider: 'shell' },
+                            select: shellTaskSelect,
+                        })).map((task) => [task.id, mapShellTask(task)] as const),
+                        ...(await db.orchestratorTask.findMany({
+                            where: { runId: loaded.run.id, provider: 'transfer' },
+                            select: transferTaskSelect,
+                        })).map((task) => [task.id, mapTransferTask(task)] as const),
+                    ])
                     : null;
                 return reply.send({
                     ok: true,
@@ -2086,6 +2308,85 @@ export function orchestratorRoutes(app: Fastify) {
         });
     });
 
+    // A transfer's target daemon reads the source through this: each step is relayed to the source
+    // machine's `orchestrator-transfer-source` as is. The server only passes the steps on: the
+    // chunks are encrypted with a key the two machines agree on (from the public keys in `open`),
+    // which it does not have. Only a live transfer execution's own target, holding its
+    // dispatchToken, reaches the source, and only for the path of its task.
+    app.post('/v1/orchestrator/executions/:id/transfer-source', {
+        preHandler: app.authenticate,
+        schema: {
+            params: z.object({
+                id: z.string(),
+            }),
+            body: z.object({
+                dispatchToken: z.string().min(1),
+                op: z.enum(['open', 'read', 'close']),
+                publicKey: z.string().max(256).optional(),
+                index: z.number().int().min(0).optional(),
+            }),
+        },
+    }, async (request, reply) => {
+        const userId = request.userId;
+        const { id } = request.params;
+        const body = request.body;
+
+        const execution = await db.orchestratorExecution.findFirst({
+            where: {
+                id,
+                run: {
+                    accountId: userId,
+                },
+            },
+            select: {
+                status: true,
+                provider: true,
+                dispatchToken: true,
+                task: { select: { prompt: true } },
+            },
+        });
+        if (!execution || execution.provider !== 'transfer') {
+            return sendError(reply, 404, 'NOT_FOUND', 'Transfer execution not found');
+        }
+        if (execution.dispatchToken !== body.dispatchToken) {
+            return sendError(reply, 409, 'CONFLICT', 'dispatchToken mismatch');
+        }
+        // Closing is cleanup, which may come after the transfer was reported finished
+        if (body.op !== 'close' && execution.status !== 'dispatching' && execution.status !== 'running') {
+            return sendError(reply, 409, 'CONFLICT', `Transfer is ${execution.status}`);
+        }
+        const spec = parseTransferSpec(execution.task.prompt);
+        if (!spec) {
+            return sendError(reply, 500, 'INTERNAL', 'Transfer task has no valid spec');
+        }
+
+        let result: unknown;
+        try {
+            result = await invokeUserRpc(
+                userId,
+                `${spec.sourceMachineId}:${TRANSFER_SOURCE_METHOD}`,
+                {
+                    transferId: id,
+                    op: body.op,
+                    path: spec.sourcePath,
+                    publicKey: body.publicKey,
+                    index: body.index,
+                },
+                TRANSFER_SOURCE_RPC_TIMEOUT_MS,
+            );
+        } catch (error) {
+            // Not reached, or no answer in time: the source may be back for a retry
+            const message = error instanceof Error ? error.message : String(error);
+            return sendError(reply, 502, 'SOURCE_UNREACHABLE', `Source machine ${spec.sourceMachineId}: ${message}`);
+        }
+        // The source's handler failed (no such file, say): asking again gets the same answer
+        const sourceError = (result as { error?: unknown } | null)?.error;
+        if (typeof sourceError === 'string') {
+            return sendError(reply, 422, 'SOURCE_FAILED', `Source machine ${spec.sourceMachineId}: ${sourceError}`);
+        }
+        return reply.send({ ok: true, data: result });
+    });
+
     app.post('/v1/orchestrator/executions/:id/finish', {
         preHandler: app.authenticate,
         schema: {
@@ -2104,6 +2405,7 @@ export function orchestratorRoutes(app: Fastify) {
                 stderrText: z.string().max(1_000_000).nullable().optional(),
                 stdoutFile: outputFileSchema.nullable().optional(),
                 stderrFile: outputFileSchema.nullable().optional(),
+                transferResult: transferResultSchema.nullable().optional(),
                 errorCode: z.string().nullable().optional(),
                 errorMessage: z.string().max(10_000).nullable().optional(),
             }),
@@ -2190,6 +2492,7 @@ export function orchestratorRoutes(app: Fastify) {
                     stderrText: body.stderrText ?? null,
                     stdoutFile: body.stdoutFile ?? Prisma.DbNull,
                     stderrFile: body.stderrFile ?? Prisma.DbNull,
+                    transferResult: body.transferResult ?? Prisma.DbNull,
                     errorCode: body.errorCode ?? null,
                     errorMessage: body.errorMessage ?? null,
                 },
@@ -2210,6 +2513,7 @@ export function orchestratorRoutes(app: Fastify) {
                     stderrText: body.stderrText ?? null,
                     stdoutFile: body.stdoutFile ?? Prisma.DbNull,
                     stderrFile: body.stderrFile ?? Prisma.DbNull,
+                    transferResult: body.transferResult ?? Prisma.DbNull,
                     errorCode: body.errorCode ?? null,
                     errorMessage: body.errorMessage ?? null,
                     nextAttemptAt,

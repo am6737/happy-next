@@ -28,15 +28,18 @@ function extractRunIdFromResult(result: unknown): string | null {
 }
 
 // Tools whose call starts a run, which may still be going once the call has returned
-const RUN_STARTING_TOOL_NAMES = new Set(['orchestrator_submit', 'orchestrator_exec']);
+const RUN_STARTING_TOOL_NAMES = new Set(['orchestrator_submit', 'orchestrator_exec', 'orchestrator_transfer']);
 
 function extractRunTitle(tool: ToolCall): string | null {
     const parsed = parseMcpResult(tool.result);
     const obj = parsed && typeof parsed === 'object' ? parsed as Record<string, any> : null;
     // An untitled orchestrator_exec run is named after its command's first line, as the server names it
-    const command = normalizeOrchestratorToolName(tool.name) === 'orchestrator_exec'
+    const toolName = normalizeOrchestratorToolName(tool.name);
+    const command = toolName === 'orchestrator_exec'
         ? asString(tool.input?.command)?.trim().split('\n')[0]
         : null;
+    const fromPath = toolName === 'orchestrator_transfer' ? asString(tool.input?.fromPath) : null;
+    const toPath = toolName === 'orchestrator_transfer' ? asString(tool.input?.toPath) : null;
 
     return (
         asString(tool.input?.title)
@@ -45,6 +48,7 @@ function extractRunTitle(tool: ToolCall): string | null {
         ?? asString(obj?.run?.title)
         ?? asString(obj?.data?.run?.title)
         ?? (command ? `$ ${command}` : null)
+        ?? (fromPath && toPath ? `Transfer ${fromPath} → ${toPath}` : null)
     );
 }
 
@@ -79,7 +83,7 @@ export function getOrchestratorToolNavigationTarget(tool: ToolCall): Orchestrato
     };
 }
 
-/** The run an `orchestrator_submit` or `orchestrator_exec` call started, or null for any other call. */
+/** The run an `orchestrator_submit`, `orchestrator_exec` or `orchestrator_transfer` call started, or null for any other call. */
 export function extractOrchestratorSubmitRunId(tool: ToolCall): string | null {
     if (!RUN_STARTING_TOOL_NAMES.has(normalizeOrchestratorToolName(tool.name))) {
         return null;

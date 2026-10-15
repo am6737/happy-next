@@ -64,6 +64,7 @@ export class CodexTransport implements TransportHandler {
     'orchestrator_submit',
     // Before 'bash' below, whose 'exec' pattern it would otherwise match
     'orchestrator_exec',
+    'orchestrator_transfer',
     'orchestrator_pend',
     'orchestrator_list',
     'orchestrator_cancel',

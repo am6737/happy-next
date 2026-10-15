@@ -20,6 +20,7 @@ import { applyDefaultWorkingDirectory, compactShellTasks } from '@/orchestrator/
 import {
     ORCHESTRATOR_CANCEL_TOOL_SCHEMA,
     ORCHESTRATOR_EXEC_TOOL_SCHEMA,
+    ORCHESTRATOR_TRANSFER_TOOL_SCHEMA,
     ORCHESTRATOR_GET_CONTEXT_TOOL_SCHEMA,
     ORCHESTRATOR_LIST_TOOL_SCHEMA,
     ORCHESTRATOR_PEND_TOOL_SCHEMA,
@@ -288,6 +289,33 @@ function createMcpServer(client: ApiSessionClient, options: { enableHappyTools: 
             }
         });
 
+        mcp.registerTool('orchestrator_transfer', ORCHESTRATOR_TRANSFER_TOOL_SCHEMA, async (args) => {
+            const toMachineIds = args.allOnline ? 'all_online' as const : args.toMachineIds;
+            if (!toMachineIds) {
+                return toToolError('Pass toMachineIds, or allOnline: true');
+            }
+            // "current": the machine this session runs on
+            const currentMachineId = client.getMetadataSnapshot()?.machineId;
+            if (!currentMachineId && [args.fromMachineId, ...(args.toMachineIds ?? [])].includes('current')) {
+                return toToolError('This session does not know its machine, so "current" cannot be used; pass machine IDs from orchestrator_get_context');
+            }
+            const resolveMachineId = (machineId: string) => machineId === 'current' ? currentMachineId! : machineId;
+            try {
+                const response = await client.orchestratorTransfer({
+                    from: { machineId: resolveMachineId(args.fromMachineId), path: args.fromPath },
+                    to: { machineIds: toMachineIds === 'all_online' ? toMachineIds : toMachineIds.map(resolveMachineId), path: args.toPath },
+                    overwrite: args.overwrite,
+                    timeoutMs: args.timeoutMs,
+                    waitMs: args.waitMs,
+                    title: args.title,
+                    controllerSessionId: client.sessionId,
+                });
+                return toToolSuccess(response);
+            } catch (error) {
+                return toToolError('Failed to transfer', describeRequestError(error));
+            }
+        });
+
         mcp.registerTool('orchestrator_pend', ORCHESTRATOR_PEND_TOOL_SCHEMA, async (args) => {
             // A single task's output is only in the per-task details
             const include = args.taskId ? 'all_tasks' : args.include;
@@ -378,7 +406,7 @@ export async function startHappyServer(client: ApiSessionClient) {
     const enableHappyTools = shouldEnableOrchestratorTools();
     const enableOrchestratorTools = enableHappyTools;
     const toolNames = enableHappyTools
-        ? ['change_title', 'preview_html', 'orchestrator_get_context', 'orchestrator_submit', 'orchestrator_exec', 'orchestrator_pend', 'orchestrator_list', 'orchestrator_cancel', 'orchestrator_send_message']
+        ? ['change_title', 'preview_html', 'orchestrator_get_context', 'orchestrator_submit', 'orchestrator_exec', 'orchestrator_transfer', 'orchestrator_pend', 'orchestrator_list', 'orchestrator_cancel', 'orchestrator_send_message']
         : [];
 
     // Capture console.error from Hono to our logger

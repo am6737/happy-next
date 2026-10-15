@@ -9,7 +9,7 @@ import { configuration } from '@/configuration';
 import chalk from 'chalk';
 import { Credentials } from '@/persistence';
 import { connectionState, isNetworkError } from '@/utils/serverConnectionErrors';
-import type { OrchestratorOutputFile } from '@/orchestrator/common';
+import type { OrchestratorOutputFile, OrchestratorTransferResult, OrchestratorTransferSourceRequest } from '@/orchestrator/common';
 
 export class ApiClient {
 
@@ -353,6 +353,7 @@ export class ApiClient {
     stderrText?: string | null;
     stdoutFile?: OrchestratorOutputFile | null;
     stderrFile?: OrchestratorOutputFile | null;
+    transferResult?: OrchestratorTransferResult | null;
     errorCode?: string | null;
     errorMessage?: string | null;
   }): Promise<void> {
@@ -370,6 +371,7 @@ export class ApiClient {
         ...(opts.stderrText !== undefined ? { stderrText: opts.stderrText } : {}),
         ...(opts.stdoutFile !== undefined ? { stdoutFile: opts.stdoutFile } : {}),
         ...(opts.stderrFile !== undefined ? { stderrFile: opts.stderrFile } : {}),
+        ...(opts.transferResult !== undefined ? { transferResult: opts.transferResult } : {}),
         ...(opts.errorCode !== undefined ? { errorCode: opts.errorCode } : {}),
         ...(opts.errorMessage !== undefined ? { errorMessage: opts.errorMessage } : {}),
       },
@@ -381,6 +383,26 @@ export class ApiClient {
         timeout: 30000,
       }
     );
+  }
+
+  /**
+   * One step of pulling a transfer's source (target daemon -> server -> source daemon): the
+   * server relays it to the source machine, and its answer back.
+   */
+  async orchestratorTransferSource<T>(executionId: string, dispatchToken: string, request: OrchestratorTransferSourceRequest, signal?: AbortSignal): Promise<T> {
+    const response = await axios.post(
+      `${configuration.serverUrl}/v1/orchestrator/executions/${executionId}/transfer-source`,
+      { dispatchToken, ...request },
+      {
+        headers: {
+          'Authorization': `Bearer ${this.credential.token}`,
+          'Content-Type': 'application/json'
+        },
+        timeout: 90_000,
+        signal,
+      }
+    );
+    return response.data.data as T;
   }
 
   /**

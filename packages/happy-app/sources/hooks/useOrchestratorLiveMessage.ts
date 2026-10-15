@@ -8,7 +8,7 @@ const LIVE_MESSAGE_POLL_INTERVAL_MS = 3000;
 const LIVE_MESSAGE_PREVIEW_LIMIT = 10;
 
 // A shell task has no conversation to follow
-type Provider = Exclude<OrchestratorProvider, 'shell'>;
+type Provider = Exclude<OrchestratorProvider, 'shell' | 'transfer'>;
 
 async function fetchPreviewMessages(machineId: string, provider: Provider, childSessionId: string): Promise<SessionPreviewMessage[]> {
     const options = { limit: LIVE_MESSAGE_PREVIEW_LIMIT };

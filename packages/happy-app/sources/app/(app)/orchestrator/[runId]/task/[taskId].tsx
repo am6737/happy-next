@@ -12,6 +12,7 @@ import { OrchestratorStatusBadge } from '@/components/orchestrator/OrchestratorS
 import { OrchestratorDuration } from '@/components/orchestrator/OrchestratorDuration';
 import {
     formatOrchestratorProviderLabel,
+    parseOrchestratorTransferSpec,
     resolveTaskMachineId,
     resolveMachineName,
     resolveExecutionDurationMs,
@@ -158,9 +159,32 @@ function buildTaskTitle(task: OrchestratorTaskRecord): string {
 }
 
 function ExecutionResult({ execution }: { execution: OrchestratorExecutionRecord; }) {
+    if (execution.provider === 'transfer') {
+        return <TransferExecutionResult execution={execution} />;
+    }
     return execution.provider === 'shell'
         ? <ShellExecutionResult execution={execution} />
         : <AgentExecutionResult execution={execution} provider={execution.provider} />;
+}
+
+/** The result of one transfer: what arrived where, which the daemon reports once it ends. */
+function TransferExecutionResult({ execution }: { execution: OrchestratorExecutionRecord; }) {
+    const styles = stylesheet;
+    return (
+        <>
+            <Text style={styles.detailLabel}>{t('settings.orchestratorResultTitle')}</Text>
+            {execution.status === 'running'
+                ? <Text style={styles.row}>{t('settings.orchestratorTransferRunningHint')}</Text>
+                : (
+                    <>
+                        {!!execution.errorCode && <Text style={styles.row}>{t('settings.orchestratorLabelErrorCode')}: {execution.errorCode}</Text>}
+                        {execution.errorMessage
+                            ? <Text style={styles.row}>{t('settings.orchestratorLabelErrorMessage')}: {execution.errorMessage}</Text>
+                            : <Text style={styles.monoText} selectable>{execution.outputSummary || '-'}</Text>}
+                    </>
+                )}
+        </>
+    );
 }
 
 /**
@@ -194,7 +218,7 @@ function ShellExecutionResult({ execution }: { execution: OrchestratorExecutionR
  * final message). A running one is only mounted while its card is expanded, so following its
  * conversation starts on expand and stops on collapse.
  */
-function AgentExecutionResult({ execution, provider }: { execution: OrchestratorExecutionRecord; provider: Exclude<OrchestratorProvider, 'shell'>; }) {
+function AgentExecutionResult({ execution, provider }: { execution: OrchestratorExecutionRecord; provider: Exclude<OrchestratorProvider, 'shell' | 'transfer'>; }) {
     const styles = stylesheet;
     const isRunning = execution.status === 'running';
     const liveMessage = useOrchestratorLiveMessage({
@@ -305,7 +329,16 @@ export default function OrchestratorTaskDetailScreen() {
     }
 
     const providerLabel = formatOrchestratorProviderLabel(task);
-    const promptLabel = task.provider === 'shell' ? t('settings.orchestratorLabelCommand') : t('settings.orchestratorLabelPrompt');
+    const promptLabel = task.provider === 'shell'
+        ? t('settings.orchestratorLabelCommand')
+        : task.provider === 'transfer'
+            ? t('settings.orchestratorLabelTransfer')
+            : t('settings.orchestratorLabelPrompt');
+    // A transfer's prompt is its spec, shown as where it copies from and to
+    const transferSpec = task.provider === 'transfer' ? parseOrchestratorTransferSpec(task.prompt) : null;
+    const taskPrompt = transferSpec
+        ? `${resolveMachineName(transferSpec.sourceMachineId, machineNameMap)}:${transferSpec.sourcePath} → ${transferSpec.targetPath}${transferSpec.overwrite ? ' (overwrite)' : ''}`
+        : task.prompt;
     const executionSections: Array<{
         key: string;
         execution: OrchestratorExecutionRecord | null;
@@ -441,13 +474,13 @@ export default function OrchestratorTaskDetailScreen() {
                             <View style={[styles.card, styles.executionDetailsCard]}>
                                 <View style={styles.executionDetails}>
                                     <Text style={[styles.detailLabel, { marginTop: 0 }]}>{promptLabel}</Text>
-                                    <Text style={styles.monoText} selectable>{task.prompt || '-'}</Text>
+                                    <Text style={styles.monoText} selectable>{taskPrompt || '-'}</Text>
                                 </View>
                             </View>
                         );
                     }
 
-                    const executionPrompt = resolveOrchestratorExecutionPrompt(task.prompt, execution);
+                    const executionPrompt = resolveOrchestratorExecutionPrompt(taskPrompt, execution);
                     return (
                         <View style={[styles.card, styles.executionDetailsCard]}>
                             <View style={styles.executionDetails}>

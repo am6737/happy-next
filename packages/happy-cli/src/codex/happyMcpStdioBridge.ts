@@ -22,6 +22,7 @@ import { shouldEnableOrchestratorTools } from '@/orchestrator/prompt';
 import {
   ORCHESTRATOR_CANCEL_TOOL_SCHEMA,
   ORCHESTRATOR_EXEC_TOOL_SCHEMA,
+  ORCHESTRATOR_TRANSFER_TOOL_SCHEMA,
   ORCHESTRATOR_GET_CONTEXT_TOOL_SCHEMA,
   ORCHESTRATOR_LIST_TOOL_SCHEMA,
   ORCHESTRATOR_PEND_TOOL_SCHEMA,
@@ -119,6 +120,7 @@ async function main() {
     registerForwardedTool('orchestrator_get_context', ORCHESTRATOR_GET_CONTEXT_TOOL_SCHEMA);
     registerForwardedTool('orchestrator_submit', ORCHESTRATOR_SUBMIT_TOOL_SCHEMA);
     registerForwardedTool('orchestrator_exec', ORCHESTRATOR_EXEC_TOOL_SCHEMA);
+    registerForwardedTool('orchestrator_transfer', ORCHESTRATOR_TRANSFER_TOOL_SCHEMA);
     registerForwardedTool('orchestrator_pend', ORCHESTRATOR_PEND_TOOL_SCHEMA);
     registerForwardedTool('orchestrator_list', ORCHESTRATOR_LIST_TOOL_SCHEMA);
     registerForwardedTool('orchestrator_cancel', ORCHESTRATOR_CANCEL_TOOL_SCHEMA);

@@ -139,6 +139,16 @@ type OrchestratorExecBody = {
     controllerSessionId?: string;
 };
 
+type OrchestratorTransferBody = {
+    from: { machineId: string; path: string };
+    to: { machineIds: string[] | 'all_online'; path: string };
+    overwrite?: boolean;
+    timeoutMs?: number;
+    waitMs?: number;
+    title?: string;
+    controllerSessionId?: string;
+};
+
 type OrchestratorSendMessageBody = {
     taskId: string;
     message: string;
@@ -486,6 +496,19 @@ export class ApiSessionClient extends EventEmitter {
     async orchestratorExec(body: OrchestratorExecBody): Promise<any> {
         const response = await axios.post(
             `${configuration.serverUrl}/v1/orchestrator/exec`,
+            body,
+            {
+                headers: this.orchestratorHeaders(),
+                // The server holds the request open for up to waitMs
+                timeout: (body.waitMs ?? 30_000) + 30_000,
+            }
+        );
+        return response.data;
+    }
+
+    async orchestratorTransfer(body: OrchestratorTransferBody): Promise<any> {
+        const response = await axios.post(
+            `${configuration.serverUrl}/v1/orchestrator/transfer`,
             body,
             {
                 headers: this.orchestratorHeaders(),

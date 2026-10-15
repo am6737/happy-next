@@ -31,6 +31,49 @@ export type OrchestratorShellDispatchPayload = {
   workingDirectory?: string;
 };
 
+/** A transfer task, run on its target machine: `prompt` is the transfer's spec as JSON */
+export type OrchestratorTransferDispatchPayload = {
+  executionId: string;
+  runId: string;
+  taskId: string;
+  dispatchToken: string;
+  provider: 'transfer';
+  prompt: string;
+  /** Null: no timeout, the transfer runs until it ends or is cancelled */
+  timeoutMs: number | null;
+};
+
+/** What a transfer task's prompt holds */
+export type OrchestratorTransferSpec = {
+  sourceMachineId: string;
+  sourcePath: string;
+  targetPath: string;
+  overwrite: boolean;
+};
+
+/** What arrived at a transfer's target */
+export type OrchestratorTransferResult = {
+  path: string;
+  kind: 'file' | 'directory';
+  bytes: number;
+  /** The regular files written: 1 for a file */
+  files: number;
+  /** The file's sha256 in hex; null for a directory */
+  sha256: string | null;
+};
+
+/** One step of pulling a transfer's source, which the server relays to the source machine */
+export type OrchestratorTransferSourceRequest =
+  | { op: 'open'; publicKey: string }
+  | { op: 'read'; index: number }
+  | { op: 'close' };
+
+/** A transfer step as the source machine gets it: `transferId` is the execution's id */
+export type OrchestratorTransferSourceParams = OrchestratorTransferSourceRequest & {
+  transferId: string;
+  path: string;
+};
+
 /** Where a shell task's stream was saved in full, when it was too long for a tool result */
 export type OrchestratorOutputFile = {
   path: string;

@@ -48,6 +48,12 @@ it). Shell commands have no timeout unless one is set. To leave a service runnin
 and the result says where, to read in parts (\`grep -n\`, \`tail -n\`, \`sed -n\`). Ask the user
 before commands that change or remove things on a machine.
 
+Copy files or directories (up to 2 GiB) between machines with \`orchestrator_transfer\`, not through
+command output: \`"current"\` is the machine this session runs on, as the source to send from it or
+as a target to fetch to it. The destination works like \`cp\`: ending in \`/\` or naming a directory
+puts the source inside it, anything else is the exact path. An existing destination fails unless
+\`overwrite\` is set. Both machines need remote shell turned on.
+
 Use \`orchestrator_send_message\` when a completed or failed task should continue in its existing
 child session for feedback, fixes, or follow-up questions. Pass its \`taskId\`, not its \`taskKey\`.
 The task must have a resumable child session; otherwise, or when the new work does not need that

@@ -74,6 +74,7 @@ const ORCHESTRATOR_TOOLS = [
   'orchestrator_get_context',
   'orchestrator_submit',
   'orchestrator_exec',
+  'orchestrator_transfer',
   'orchestrator_pend',
   'orchestrator_list',
   'orchestrator_cancel',

@@ -74,7 +74,8 @@ export function formatMCPTitle(tool: ToolCall): string {
  * Hook that returns the MCP tool subtitle.
  *
  * For orchestrator_submit: caches runId→title and taskId→title from the result.
- * For orchestrator_exec: shows and caches its run's title, which is the command unless it was given one.
+ * For orchestrator_exec/transfer: shows and caches its run's title, which is the command (or the
+ * paths) unless it was given one.
  * For orchestrator_pend/cancel/send_message: reactively resolves title from cache,
  * falls back to displaying the raw ID.
  */
@@ -105,7 +106,7 @@ export function useMCPSubtitle(tool: ToolCall): string {
         }
     }, [isSubmit, tool.input?.title, tool.result]);
 
-    const isExec = toolName === 'orchestrator_exec';
+    const isExec = toolName === 'orchestrator_exec' || toolName === 'orchestrator_transfer';
     const execTitle = isExec ? extractOrchestratorSubmitTitle(tool) : null;
     const execRunId = isExec && tool.result ? parseMcpResult(tool.result)?.data?.runId : undefined;
     useEffect(() => {
@@ -148,6 +149,10 @@ export function formatMCPIcon(tool: ToolCall, size: number = 18, color: string =
 
     if (withoutPrefix === "orchestrator_exec") {
         return <Ionicons name="terminal-outline" size={size} color={color} />;
+    }
+
+    if (withoutPrefix === "orchestrator_transfer") {
+        return <Ionicons name="swap-horizontal-outline" size={size} color={color} />;
     }
 
     if (/^orchestrator_/.test(withoutPrefix)) {

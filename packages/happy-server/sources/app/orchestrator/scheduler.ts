@@ -47,7 +47,7 @@ export type SchedulerAction =
             childSessionId?: string;
             model?: string;
             prompt: string;
-            /** Null for a shell task without a timeout: it runs until it exits or is cancelled */
+            /** Null for a shell or transfer task without a timeout: it runs until it ends or is cancelled */
             timeoutMs: number | null;
             workingDirectory?: string;
         };
@@ -155,11 +155,29 @@ async function markDispatchFailed(action: Extract<SchedulerAction, { type: 'disp
     });
 }
 
+/** Providers the daemon runs itself, each with its RPC method and why a machine may not have it */
+const OWN_DISPATCH_HANDLERS: Record<string, { method: string; missingMessage: string }> = {
+    shell: {
+        method: 'orchestrator-shell-dispatch',
+        missingMessage: 'Remote shell is turned off on this machine, or its Happy CLI is too old to run shell commands',
+    },
+    transfer: {
+        method: 'orchestrator-transfer-dispatch',
+        missingMessage: 'Remote shell is turned off on this machine, or its Happy CLI is too old to receive file transfers',
+    },
+};
+
+/** Shell tasks and transfers have no timeout unless given one: they run until they end or are cancelled */
+export function isUntimedProvider(provider: string): boolean {
+    return provider === 'shell' || provider === 'transfer';
+}
+
 export async function executeSchedulerActions(actions: SchedulerAction[]): Promise<void> {
     for (const action of actions) {
         if (action.type === 'dispatch') {
-            // Shell commands have their own handler, which a machine can turn off
-            const method = action.payload.provider === 'shell' ? 'orchestrator-shell-dispatch' : 'orchestrator-dispatch';
+            // Shell commands and file transfers have their own handlers, which a machine can turn off
+            const ownHandler = OWN_DISPATCH_HANDLERS[action.payload.provider];
+            const method = ownHandler?.method ?? 'orchestrator-dispatch';
             try {
                 await invokeUserRpc(
                     action.accountId,
@@ -170,10 +188,10 @@ export async function executeSchedulerActions(actions: SchedulerAction[]): Promi
             } catch (error) {
                 const rpcMessage = error instanceof Error ? error.message : String(error);
                 // A connected machine without the shell handler has remote shell turned off, or a CLI from before it
-                const message = method === 'orchestrator-shell-dispatch'
+                const message = ownHandler
                     && !hasUserRpcMethod(action.accountId, `${action.machineId}:${method}`)
                     && hasUserRpcMethod(action.accountId, `${action.machineId}:orchestrator-dispatch`)
-                    ? 'Remote shell is turned off on this machine, or its Happy CLI is too old to run shell commands'
+                    ? ownHandler.missingMessage
                     : rpcMessage;
                 warn({ module: 'orchestrator-scheduler', runId: action.runId, executionId: action.executionId }, `Dispatch RPC failed: ${message}`);
                 let runStatus: string | null = null;
@@ -306,7 +324,7 @@ async function failExpiredRunningExecutionsTx(tx: any, runId: string, runStatus:
         : []);
 
     for (const execution of runningExecutions) {
-        const timeoutMs: number | null = execution.timeoutMs ?? (execution.provider === 'shell' ? null : ORCHESTRATOR_DEFAULT_TASK_TIMEOUT_MS);
+        const timeoutMs: number | null = execution.timeoutMs ?? (isUntimedProvider(execution.provider) ? null : ORCHESTRATOR_DEFAULT_TASK_TIMEOUT_MS);
         const startedAt = execution.startedAt ?? execution.createdAt;
         const failure = timeoutMs !== null && now.getTime() - startedAt.getTime() >= timeoutMs
             ? { status: 'timeout' as const, errorCode: 'TASK_TIMEOUT', errorMessage: `Task exceeded timeout (${timeoutMs}ms)` }
@@ -660,7 +678,7 @@ async function buildRunActions(run: {
                         continue;
                     }
 
-                    const timeoutMs: number | null = queuedExecution?.timeoutMs ?? task.timeoutMs ?? (task.provider === 'shell' ? null : ORCHESTRATOR_DEFAULT_TASK_TIMEOUT_MS);
+                    const timeoutMs: number | null = queuedExecution?.timeoutMs ?? task.timeoutMs ?? (isUntimedProvider(task.provider) ? null : ORCHESTRATOR_DEFAULT_TASK_TIMEOUT_MS);
                     const execution = queuedExecution
                         ? await tx.orchestratorExecution.update({
                             where: { id: queuedExecution.id },

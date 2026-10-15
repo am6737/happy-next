@@ -40,6 +40,7 @@ import {
 } from '@/orchestrator/common';
 import { extractCodexSessionId, extractGeminiSessionId, extractGeminiSessionIdFromJsonLine, normalizeGeminiOutputText } from './orchestratorOutput';
 import { createOrchestratorShellExecutor, reportWithRetry } from './orchestratorShell';
+import { createOrchestratorTransferExecutor } from './orchestratorTransfer';
 
 const ORCHESTRATOR_WATCHDOG_GRACE_MS = 5_000;
 const ORCHESTRATOR_OUTPUT_CAPTURE_LIMIT = 64_000;
@@ -157,6 +158,7 @@ export async function startDaemon(): Promise<void> {
     logger.debug('[DAEMON RUN] Auth and machine setup complete');
     let api!: ApiClient;
     let shellExecutor: ReturnType<typeof createOrchestratorShellExecutor> | null = null;
+    let transferExecutor: ReturnType<typeof createOrchestratorTransferExecutor> | null = null;
     // Every execution this daemon starts starts after this, on the same clock: the server fails
     // the ones that started before and that this daemon is not running
     const daemonStartedAt = new Date().toISOString();
@@ -433,7 +435,7 @@ export async function startDaemon(): Promise<void> {
     const handleOrchestratorCancel = async (payload: OrchestratorCancelPayload): Promise<{ accepted: boolean; notFound?: boolean }> => {
       const execution = executionIdToManagedExecution.get(payload.executionId);
       if (!execution) {
-        return shellExecutor?.cancel(payload) ?? { accepted: true, notFound: true };
+        return shellExecutor?.cancel(payload) ?? transferExecutor?.cancel(payload) ?? { accepted: true, notFound: true };
       }
       if (execution.payload.dispatchToken !== payload.dispatchToken) {
         throw new Error(`dispatchToken mismatch for execution ${payload.executionId}`);
@@ -1037,9 +1039,10 @@ export async function startDaemon(): Promise<void> {
     // Create API client
     api = await ApiClient.create(credentials);
 
-    // Shell commands sent from other machines run unless turned off here
+    // Shell commands sent from other machines run unless turned off here, and file transfers with them
     const remoteShellDisabled = configuration.disableRemoteShell || (await readSettings()).remoteShellDisabled === true;
     shellExecutor = remoteShellDisabled ? null : createOrchestratorShellExecutor(api);
+    transferExecutor = remoteShellDisabled ? null : createOrchestratorTransferExecutor(api);
     logger.debug(`[DAEMON RUN] Remote shell ${remoteShellDisabled ? 'disabled' : 'enabled'}`);
 
     // Get or create machine
@@ -1088,7 +1091,7 @@ export async function startDaemon(): Promise<void> {
       getActivity: () => ({
         sessions: pidToTrackedSession.size,
         terminals: apiMachine.terminalsLostOnRestart,
-        executions: executionIdToManagedExecution.size + (shellExecutor?.liveExecutionIds().length ?? 0),
+        executions: executionIdToManagedExecution.size + (shellExecutor?.liveExecutionIds().length ?? 0) + (transferExecutor?.liveExecutionIds().length ?? 0),
       }),
       reportStatus: (cliUpdate) => {
         apiMachine.updateDaemonState((state) => ({ ...state, status: state?.status ?? 'offline', cliUpdate })).catch((error) => {
@@ -1106,9 +1109,14 @@ export async function startDaemon(): Promise<void> {
       orchestratorDispatch: handleOrchestratorDispatch,
       orchestratorCancel: handleOrchestratorCancel,
       orchestratorShellDispatch: shellExecutor?.dispatch,
+      orchestratorTransfer: transferExecutor ?? undefined,
       orchestratorReconcile: () => reportWithRetry('orchestrator reconcile', () => api.reconcileOrchestratorMachine({
         machineId: machine.id,
-        liveExecutionIds: [...executionIdToManagedExecution.keys(), ...(shellExecutor?.liveExecutionIds() ?? [])],
+        liveExecutionIds: [
+          ...executionIdToManagedExecution.keys(),
+          ...(shellExecutor?.liveExecutionIds() ?? []),
+          ...(transferExecutor?.liveExecutionIds() ?? []),
+        ],
         daemonStartedAt,
       }), Date.now() + ORCHESTRATOR_RECONCILE_DEADLINE_MS),
       updateCli: cliUpdater.updateNow,
@@ -1229,7 +1237,7 @@ export async function startDaemon(): Promise<void> {
       // Give time for metadata update to send
       await new Promise(resolve => setTimeout(resolve, 100));
 
-      await Promise.all([stopAllOrchestratorExecutions(), shellExecutor?.stopAll()]);
+      await Promise.all([stopAllOrchestratorExecutions(), shellExecutor?.stopAll(), transferExecutor?.stopAll()]);
 
       apiMachine.shutdown();
       await stopControlServer();

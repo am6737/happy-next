@@ -6,18 +6,44 @@ function isMarkdownFenceLine(value: string): boolean {
 }
 
 export function formatOrchestratorProviderLabel(task: Pick<OrchestratorTaskRecord, 'provider' | 'model'>): string {
-    // A shell command runs on no model
-    if (task.provider === 'shell') {
+    // A shell command or a file transfer runs on no model
+    if (task.provider === 'shell' || task.provider === 'transfer') {
         return task.provider;
     }
     const model = task.model?.trim() || MODEL_MODE_DEFAULT;
     return `${task.provider} · ${model}`;
 }
 
-/** What a task is called: its title or key, else for a shell task the first line of its command. */
+/** What a transfer task's prompt holds: where the file comes from and where it goes. */
+export type OrchestratorTransferSpec = {
+    sourceMachineId: string;
+    sourcePath: string;
+    targetPath: string;
+    overwrite: boolean;
+};
+
+export function parseOrchestratorTransferSpec(prompt: string | null | undefined): OrchestratorTransferSpec | null {
+    try {
+        const spec = JSON.parse(prompt ?? '');
+        return typeof spec?.sourceMachineId === 'string' && typeof spec.sourcePath === 'string' && typeof spec.targetPath === 'string'
+            ? spec
+            : null;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * What a task is called: its title or key, else for a shell task the first line of its command,
+ * for a transfer where it copies from and to.
+ */
 export function resolveOrchestratorTaskName(task: Pick<OrchestratorTaskRecord, 'title' | 'taskKey' | 'provider' | 'prompt'>): string | null {
     const command = task.provider === 'shell' ? task.prompt?.trim().split('\n')[0] : undefined;
-    return task.title || task.taskKey || (command ? `$ ${command}` : null);
+    const transfer = task.provider === 'transfer' ? parseOrchestratorTransferSpec(task.prompt) : null;
+    return task.title
+        || task.taskKey
+        || (command ? `$ ${command}` : null)
+        || (transfer ? `${transfer.sourcePath} → ${transfer.targetPath}` : null);
 }
 
 export function resolveOrchestratorAttemptDisplay(task: Pick<OrchestratorTaskRecord, 'retry' | 'executions'>): { current: number; max: number; } {
