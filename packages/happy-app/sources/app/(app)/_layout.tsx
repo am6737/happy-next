@@ -1,4 +1,4 @@
-import { Stack, useRouter } from 'expo-router';
+import { Stack } from 'expo-router';
 import 'react-native-reanimated';
 import * as React from 'react';
 import { Typography } from '@/constants/Typography';
@@ -10,8 +10,8 @@ import { Platform, TouchableOpacity, Text } from 'react-native';
 import { isRunningOnMac } from '@/utils/platform';
 import { useUnistyles } from 'react-native-unistyles';
 import { t } from '@/text';
-import { Ionicons } from '@expo/vector-icons';
-import { isUsingCustomServer } from '@/sync/serverConfig';
+import { SettingsHeaderRight } from '@/components/SettingsHeaderRight';
+import { useUnifiedScanner } from '@/hooks/useUnifiedScanner';
 import { useAuth } from '@/auth/AuthContext';
 import { getDesktopPlatform } from '@/desktop/desktopWindowUtils';
 import { isDedicatedTerminalWindow } from '@/terminal/terminalPopupWindow';
@@ -25,8 +25,7 @@ export default function RootLayout() {
     // Use custom header on Android and Mac Catalyst, native header on iOS (non-Catalyst)
     const shouldUseCustomHeader = Platform.OS === 'android' || isRunningOnMac() || Platform.OS === 'web';
     const { theme } = useUnistyles();
-    const router = useRouter();
-    const isCustomServer = isUsingCustomServer();
+    const { launchScanner, enterUrlManually, isLoading: isScannerLoading } = useUnifiedScanner();
     const { isAuthenticated } = useAuth();
     const hideUnauthenticatedWindowsHeader = getDesktopPlatform() === 'windows' && !isAuthenticated;
     // The terminal window already says what it is in its tab strip, and a header
@@ -100,16 +99,13 @@ export default function RootLayout() {
                     ...softHeaderOptions,
                     headerShown: true,
                     headerTitle: t('settings.title'),
-                    headerRight: isCustomServer
-                        ? () => (
-                            <TouchableOpacity
-                                onPress={() => router.push('/server')}
-                                style={{ paddingHorizontal: 16 }}
-                            >
-                                <Ionicons name="server-outline" size={24} color={theme.colors.header.tint} />
-                            </TouchableOpacity>
-                        )
-                        : undefined,
+                    headerRight: () => (
+                        <SettingsHeaderRight
+                            onScanPress={launchScanner}
+                            onManualEntryPress={enterUrlManually}
+                            isLoading={isScannerLoading}
+                        />
+                    ),
                 }}
             />
             <Stack.Screen

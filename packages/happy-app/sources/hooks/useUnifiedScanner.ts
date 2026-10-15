@@ -84,8 +84,24 @@ export function useUnifiedScanner() {
         processUrl(code);
     });
 
+    const enterUrlManually = React.useCallback(async () => {
+        const url = await Modal.prompt(
+            t('modals.scanOrPasteUrl'),
+            t('modals.pasteUrlFromTerminalOrDevice'),
+            {
+                placeholder: 'happy://...',
+                confirmText: t('common.authenticate'),
+            },
+        );
+        if (url?.trim()) {
+            return processUrl(url.trim());
+        }
+        return false;
+    }, [processUrl]);
+
     return {
         launchScanner,
+        enterUrlManually,
         connectWithUrl: processUrl,
         isLoading,
     };

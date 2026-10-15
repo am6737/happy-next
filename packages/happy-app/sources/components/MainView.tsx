@@ -20,7 +20,8 @@ import { VoiceAssistantStatusBar } from './VoiceAssistantStatusBar';
 import { Ionicons } from '@expo/vector-icons';
 import { Typography } from '@/constants/Typography';
 import { t } from '@/text';
-import { isUsingCustomServer } from '@/sync/serverConfig';
+import { SettingsHeaderRight } from './SettingsHeaderRight';
+import { useUnifiedScanner } from '@/hooks/useUnifiedScanner';
 import { trackFriendsSearch } from '@/track';
 import { DooTaskCreateSheet, useDooTaskCreateItems } from './dootask/DooTaskCreateSheet';
 import { useAuth } from '@/auth/AuthContext';
@@ -282,17 +283,19 @@ const SessionsHeaderTitle = React.memo(({ scope, onPress }: { scope: SessionList
 const CLI_UPDATE_AS_DOT = Platform.OS !== 'ios';
 
 // Header right button - varies by tab
-const HeaderRight = React.memo(({ activeTab, onDootaskCreate, onSessionsCreate, sessionsCreateItems, cliUpdate, onCliUpdatePress }: {
+const HeaderRight = React.memo(({ activeTab, onDootaskCreate, onSessionsCreate, sessionsCreateItems, cliUpdate, onCliUpdatePress, onScanPress, onManualEntryPress, isScannerLoading }: {
     activeTab: ActiveTabType;
     onDootaskCreate?: () => void;
     onSessionsCreate?: () => void;
     sessionsCreateItems?: ActionMenuItem[];
     cliUpdate?: MachineCliUpdate;
     onCliUpdatePress?: () => void;
+    onScanPress: () => void;
+    onManualEntryPress: () => void;
+    isScannerLoading: boolean;
 }) => {
     const router = useRouter();
     const { theme } = useUnistyles();
-    const isCustomServer = isUsingCustomServer();
 
     if (activeTab === 'sessions') {
         const addLabel = t('sessionScope.addMenu');
@@ -360,17 +363,12 @@ const HeaderRight = React.memo(({ activeTab, onDootaskCreate, onSessionsCreate, 
     }
 
     if (activeTab === 'settings') {
-        if (!isCustomServer) {
-            return null;
-        }
         return (
-            <Pressable
-                onPress={() => router.push('/server')}
-                hitSlop={15}
-                style={styles.headerButton}
-            >
-                <Ionicons name="server-outline" size={24} color={theme.colors.header.tint} />
-            </Pressable>
+            <SettingsHeaderRight
+                onScanPress={onScanPress}
+                onManualEntryPress={onManualEntryPress}
+                isLoading={isScannerLoading}
+            />
         );
     }
 
@@ -389,7 +387,7 @@ export const MainView = React.memo(({ variant }: MainViewProps) => {
     const dootaskProfile = useDootaskProfile();
     const inboxHasContent = useInboxHasContent();
     const showDootaskTab = !!dootaskProfile;
-    const isCustomServer = isUsingCustomServer();
+    const { launchScanner, enterUrlManually, isLoading: isScannerLoading } = useUnifiedScanner();
     const profile = useProfile();
     const showGithubTab = !!profile?.github;
     const { credentials } = useAuth();
@@ -622,7 +620,7 @@ export const MainView = React.memo(({ variant }: MainViewProps) => {
                 headerSubtitle: connectionStatus.text || undefined,
                 headerSubtitleColor: connectionStatus.color,
                 headerLeft: () => <HeaderLogo />,
-                headerRight: shouldProvideMainHeaderRight(activeTab) && !(activeTab === 'settings' && !isCustomServer)
+                headerRight: shouldProvideMainHeaderRight(activeTab)
                     ? () => (
                         <HeaderRight
                             activeTab={activeTab as ActiveTabType}
@@ -631,6 +629,9 @@ export const MainView = React.memo(({ variant }: MainViewProps) => {
                             sessionsCreateItems={sessionsCreateItems}
                             cliUpdate={cliUpdate.update}
                             onCliUpdatePress={cliUpdate.open}
+                            onScanPress={launchScanner}
+                            onManualEntryPress={enterUrlManually}
+                            isScannerLoading={isScannerLoading}
                         />
                     )
                     : undefined,

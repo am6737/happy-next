@@ -12,7 +12,6 @@ import { isTauriDesktop } from '@/utils/tauri';
 import { Item } from '@/components/Item';
 import { ItemGroup } from '@/components/ItemGroup';
 import { ItemList } from '@/components/ItemList';
-import { useUnifiedScanner } from '@/hooks/useUnifiedScanner';
 import { useLocalSettingMutable, useSetting, useSettingMutable, useDootaskProfile } from '@/sync/storage';
 import { storage } from '@/sync/storage';
 import { trackWhatsNewClicked } from '@/track';
@@ -110,8 +109,6 @@ export const SettingsView = React.memo(function SettingsView() {
     const avatarUrl = getAvatarUrl(profile);
     const bio = getBio(profile);
     const tabBottomPadding = useMainTabBottomPadding();
-
-    const { launchScanner, connectWithUrl, isLoading } = useUnifiedScanner();
 
     const handleGitHub = async () => {
         await openExternalUrl('https://github.com/hitosea/happy-next');
@@ -287,37 +284,6 @@ export const SettingsView = React.memo(function SettingsView() {
                     )}
                 </View>
             </View>
-
-            {/* Connect Terminal - Only show on native platforms */}
-            {Platform.OS !== 'web' && (
-                <ItemGroup>
-                    <Item
-                        title={t('settings.scanQrCodeToAuthenticate')}
-                        icon={<Ionicons name="qr-code-outline" size={29} color="#007AFF" />}
-                        onPress={launchScanner}
-                        loading={isLoading}
-                        showChevron={false}
-                    />
-                    <Item
-                        title={t('connect.enterUrlManually')}
-                        icon={<Ionicons name="link-outline" size={29} color="#007AFF" />}
-                        onPress={async () => {
-                            const url = await Modal.prompt(
-                                t('modals.scanOrPasteUrl'),
-                                t('modals.pasteUrlFromTerminalOrDevice'),
-                                {
-                                    placeholder: 'happy://...',
-                                    confirmText: t('common.authenticate')
-                                }
-                            );
-                            if (url?.trim()) {
-                                connectWithUrl(url.trim());
-                            }
-                        }}
-                        showChevron={false}
-                    />
-                </ItemGroup>
-            )}
 
             <ItemGroup title={t('settings.connectedAccounts')}>
                 <Item

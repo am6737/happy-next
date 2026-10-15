@@ -7,6 +7,8 @@ import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { useScannerEvents } from '@/hooks/useScannerEvents';
 import { t } from '@/text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import { Modal } from '@/modal';
 
 function ScannerScreen() {
     const { theme } = useUnistyles();
@@ -17,6 +19,9 @@ function ScannerScreen() {
     const [permissionStatus, setPermissionStatus] = React.useState<CameraPermissionStatus>(() => Camera.getCameraPermissionStatus());
     const emitScan = useScannerEvents((s) => s.emitScan);
     const hasScannedRef = React.useRef(false);
+    const [isEnteringUrl, setIsEnteringUrl] = React.useState(false);
+    const isEnteringUrlRef = React.useRef(false);
+    const canScan = permissionStatus === 'granted' && !!device;
 
     // Keep the screen in sync when the user changes camera access in Settings.
     React.useEffect(() => {
@@ -56,34 +61,57 @@ function ScannerScreen() {
         codeTypes: ['qr'],
         onCodeScanned: (codes) => {
             const value = codes[0]?.value;
-            if (value) {
+            if (value && !isEnteringUrlRef.current) {
                 handleCodeScanned(value);
             }
         },
     });
 
+    const handleManualEntry = React.useCallback(async () => {
+        if (isEnteringUrlRef.current || hasScannedRef.current) {
+            return;
+        }
+        isEnteringUrlRef.current = true;
+        setIsEnteringUrl(true);
+        try {
+            const url = await Modal.prompt(
+                t('modals.scanOrPasteUrl'),
+                t('modals.pasteUrlFromTerminalOrDevice'),
+                {
+                    placeholder: 'happy://...',
+                    confirmText: t('common.authenticate'),
+                },
+            );
+            if (url?.trim()) {
+                handleCodeScanned(url.trim());
+            }
+        } finally {
+            isEnteringUrlRef.current = false;
+            setIsEnteringUrl(false);
+        }
+    }, [handleCodeScanned]);
+
     const handleClose = React.useCallback(() => {
         router.back();
     }, []);
 
+    let content: React.ReactNode;
     // Explain why camera access is needed before showing the system prompt.
     if (permissionStatus === 'not-determined') {
-        return (
-            <View style={[styles.container, { backgroundColor: theme.colors.surface }]}>
+        content = (
+            <>
                 <Text style={[styles.message, { color: theme.colors.text }]}>
                     {t('modals.cameraPermissionsRequiredToScanQr')}
                 </Text>
                 <TouchableOpacity style={styles.button} onPress={handleRequestPermission}>
                     <Text style={styles.buttonText}>{t('common.continue')}</Text>
                 </TouchableOpacity>
-            </View>
+            </>
         );
-    }
-
-    // Once access has been denied, iOS requires the user to enable it in Settings.
-    if (permissionStatus === 'denied' || permissionStatus === 'restricted') {
-        return (
-            <View style={[styles.container, { backgroundColor: theme.colors.surface }]}>
+    } else if (permissionStatus === 'denied' || permissionStatus === 'restricted') {
+        // Once access has been denied, iOS requires the user to enable it in Settings.
+        content = (
+            <>
                 <Text style={[styles.message, { color: theme.colors.text }]}>
                     {t('modals.cameraPermissionsRequiredToScanQr')}
                 </Text>
@@ -95,39 +123,58 @@ function ScannerScreen() {
                 <TouchableOpacity style={styles.secondaryButton} onPress={handleClose}>
                     <Text style={[styles.secondaryButtonText, { color: theme.colors.text }]}>{t('common.cancel')}</Text>
                 </TouchableOpacity>
-            </View>
+            </>
         );
-    }
-
-    // 无摄像头设备
-    if (!device) {
-        return (
-            <View style={[styles.container, { backgroundColor: theme.colors.surface }]}>
-                <Text style={[styles.message, { color: theme.colors.text }]}>
-                    {t('errors.noCameraDevice')}
-                </Text>
-            </View>
+    } else if (!device) {
+        content = (
+            <Text style={[styles.message, { color: theme.colors.text }]}>
+                {t('errors.noCameraDevice')}
+            </Text>
+        );
+    } else {
+        content = (
+            <>
+                <Camera
+                    style={StyleSheet.absoluteFill}
+                    device={device}
+                    isActive={!isEnteringUrl}
+                    codeScanner={codeScanner}
+                />
+                <View style={styles.overlay}>
+                    <View style={styles.scanFrame} />
+                </View>
+            </>
         );
     }
 
     return (
-        <View style={styles.container}>
-            <Camera
-                style={StyleSheet.absoluteFill}
-                device={device}
-                isActive={true}
-                codeScanner={codeScanner}
-            />
-            {/* 关闭按钮 */}
-            <TouchableOpacity
-                style={[styles.closeButton, { top: insets.top + 16 }]}
-                onPress={handleClose}
+        <View style={[styles.container, !canScan && { backgroundColor: theme.colors.surface }]}>
+            {canScan ? content : <View style={{ paddingTop: insets.top }}>{content}</View>}
+            <View
+                pointerEvents="box-none"
+                style={[styles.headerActions, {
+                    top: insets.top + 16,
+                    left: insets.left + 16,
+                    right: insets.right + 16,
+                }]}
             >
-                <Text style={styles.closeButtonText}>✕</Text>
-            </TouchableOpacity>
-            {/* 扫描框 */}
-            <View style={styles.overlay}>
-                <View style={styles.scanFrame} />
+                <TouchableOpacity
+                    style={styles.headerButton}
+                    onPress={handleClose}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('common.cancel')}
+                >
+                    <Ionicons name="close" size={22} color="#fff" />
+                </TouchableOpacity>
+                <TouchableOpacity
+                    style={styles.headerButton}
+                    onPress={handleManualEntry}
+                    disabled={isEnteringUrl}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('connect.enterUrlManually')}
+                >
+                    <Ionicons name="link-outline" size={22} color="#fff" />
+                </TouchableOpacity>
             </View>
         </View>
     );
@@ -169,21 +216,19 @@ const styles = StyleSheet.create((theme) => ({
         fontSize: 16,
         fontWeight: '600',
     },
-    closeButton: {
+    headerActions: {
         position: 'absolute',
-        left: 16,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        zIndex: 10,
+    },
+    headerButton: {
         width: 40,
         height: 40,
         borderRadius: 20,
         backgroundColor: 'rgba(0,0,0,0.5)',
         justifyContent: 'center',
         alignItems: 'center',
-        zIndex: 10,
-    },
-    closeButtonText: {
-        color: '#fff',
-        fontSize: 20,
-        fontWeight: 'bold',
     },
     overlay: {
         ...StyleSheet.absoluteFillObject,
