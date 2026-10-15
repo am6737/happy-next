@@ -56,10 +56,10 @@ const RUN_MAX_TASKS = 32;
 const EXEC_DEFAULT_WAIT_MS = 30_000;
 // Below the 60s an MCP client waits for a tool call, so the caller is still there for the result
 const EXEC_MAX_WAIT_MS = 50_000;
-const SHELL_DISPATCH_METHOD_SUFFIX = ':orchestrator-shell-dispatch';
+const SHELL_DISPATCH_METHOD_SUFFIX = ':orchestrator-sealed-shell-dispatch';
 // A machine takes files with this method and serves them with the other, both only with remote shell turned on
-const TRANSFER_DISPATCH_METHOD_SUFFIX = ':orchestrator-transfer-dispatch';
-const TRANSFER_SOURCE_METHOD = 'orchestrator-transfer-source';
+const TRANSFER_DISPATCH_METHOD_SUFFIX = ':orchestrator-sealed-transfer-dispatch';
+const TRANSFER_SOURCE_METHOD = 'orchestrator-sealed-transfer-source';
 // How long the source machine has to answer one step of a transfer (opening it, one chunk)
 const TRANSFER_SOURCE_RPC_TIMEOUT_MS = 60_000;
 
@@ -1032,8 +1032,8 @@ export function orchestratorRoutes(app: Fastify) {
         }
         const dispatchReadyMachineIds = new Set<string>();
         for (const method of listConnectedUserRpcMethods(userId)) {
-            if (method.endsWith(':orchestrator-dispatch')) {
-                dispatchReadyMachineIds.add(method.slice(0, -':orchestrator-dispatch'.length));
+            if (method.endsWith(':orchestrator-sealed-dispatch')) {
+                dispatchReadyMachineIds.add(method.slice(0, -':orchestrator-sealed-dispatch'.length));
             }
         }
 
@@ -2240,7 +2240,7 @@ export function orchestratorRoutes(app: Fastify) {
     });
 
     // A transfer's target daemon reads the source through this: each step is relayed to the source
-    // machine's `orchestrator-transfer-source` as is. The server only passes the steps on: the
+    // machine's `orchestrator-sealed-transfer-source` as is. The server only passes the steps on: the
     // chunks are encrypted with a key the two machines agree on (from the public keys in `open`),
     // which it does not have. Only a live transfer execution's own target, holding its
     // dispatchToken, reaches the source, and only for the path of its task: each step carries the

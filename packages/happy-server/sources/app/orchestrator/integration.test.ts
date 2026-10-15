@@ -845,8 +845,8 @@ const {
         return {};
     });
     const listConnectedUserRpcMethodsMock = vi.fn((_userId: string) => [
-        ...Array.from(state.dispatchReadyMachineIds).map((machineId) => `${machineId}:orchestrator-dispatch`),
-        ...Array.from(state.shellReadyMachineIds).map((machineId) => `${machineId}:orchestrator-shell-dispatch`),
+        ...Array.from(state.dispatchReadyMachineIds).map((machineId) => `${machineId}:orchestrator-sealed-dispatch`),
+        ...Array.from(state.shellReadyMachineIds).map((machineId) => `${machineId}:orchestrator-sealed-shell-dispatch`),
     ]);
     const eventRouterMock = {
         emitEphemeral: vi.fn((_event: any) => ({ sessionScoped: 1 })),
@@ -964,7 +964,7 @@ describe('orchestrator integration paths', () => {
         await orchestratorSchedulerTick(new Date('2026-03-16T00:00:00.000Z'));
         expect(invokeUserRpcMock).toHaveBeenCalledWith(
             'user-1',
-            'machine-1:orchestrator-dispatch',
+            'machine-1:orchestrator-sealed-dispatch',
             expect.objectContaining({
                 runId,
             }),
@@ -1334,7 +1334,7 @@ describe('orchestrator integration paths', () => {
         await orchestratorSchedulerTick(new Date('2026-03-16T00:00:00.000Z'));
         expect(invokeUserRpcMock).toHaveBeenCalledWith(
             'user-1',
-            'machine-1:orchestrator-dispatch',
+            'machine-1:orchestrator-sealed-dispatch',
             expect.objectContaining({
                 provider: 'codex',
                 model: 'gpt-5.5-high-fast',
@@ -1370,7 +1370,7 @@ describe('orchestrator integration paths', () => {
         await orchestratorSchedulerTick(new Date('2026-03-16T00:00:00.000Z'));
         expect(invokeUserRpcMock).toHaveBeenCalledWith(
             'user-1',
-            'machine-1:orchestrator-dispatch',
+            'machine-1:orchestrator-sealed-dispatch',
             expect.objectContaining({
                 provider: 'claude',
                 model: 'claude-sonnet-4-6-20260315',
@@ -1413,7 +1413,7 @@ describe('orchestrator integration paths', () => {
 
         expect(invokeUserRpcMock).toHaveBeenCalledWith(
             'user-1',
-            'machine-1:orchestrator-dispatch',
+            'machine-1:orchestrator-sealed-dispatch',
             expect.objectContaining({
                 provider: 'codex',
                 model: 'gpt-5.3-codex-high',
@@ -1499,7 +1499,7 @@ describe('orchestrator integration paths', () => {
         await orchestratorSchedulerTick(new Date('2026-03-16T00:00:02.000Z'));
         expect(invokeUserRpcMock).toHaveBeenLastCalledWith(
             'user-1',
-            'machine-1:orchestrator-dispatch',
+            'machine-1:orchestrator-sealed-dispatch',
             expect.objectContaining({
                 executionType: 'resume',
                 childSessionId: '11111111-2222-4333-8444-555555555555',
@@ -2436,7 +2436,7 @@ describe('orchestrator integration paths', () => {
         await orchestratorSchedulerTick(new Date('2026-03-16T00:00:00.000Z'));
         expect(invokeUserRpcMock).toHaveBeenCalledWith(
             'user-1',
-            'machine-2:orchestrator-dispatch',
+            'machine-2:orchestrator-sealed-dispatch',
             expect.objectContaining({
                 provider: 'gemini',
                 prompt: sealed('run on machine 2'),
@@ -2482,7 +2482,7 @@ describe('orchestrator integration paths', () => {
         await orchestratorSchedulerTick(new Date('2026-03-16T00:00:03.000Z'));
         expect(invokeUserRpcMock).toHaveBeenCalledWith(
             'user-1',
-            'machine-2:orchestrator-dispatch',
+            'machine-2:orchestrator-sealed-dispatch',
             expect.objectContaining({
                 provider: 'codex',
                 prompt: sealed('run on current machine'),
@@ -2615,7 +2615,7 @@ describe('orchestrator integration paths', () => {
             await orchestratorSchedulerTick(new Date('2026-03-16T00:00:00.000Z'));
             expect(invokeUserRpcMock).toHaveBeenCalledWith(
                 'user-1',
-                'machine-1:orchestrator-shell-dispatch',
+                'machine-1:orchestrator-sealed-shell-dispatch',
                 expect.objectContaining({ provider: 'shell', prompt: sealed('uptime\necho done'), timeoutMs: null }),
                 expect.any(Number),
             );

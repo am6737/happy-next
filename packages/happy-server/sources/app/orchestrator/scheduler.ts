@@ -160,14 +160,18 @@ async function markDispatchFailed(action: Extract<SchedulerAction, { type: 'disp
 /** Providers the daemon runs itself, each with its RPC method and why a machine may not have it */
 const OWN_DISPATCH_HANDLERS: Record<string, { method: string; missingMessage: string }> = {
     shell: {
-        method: 'orchestrator-shell-dispatch',
+        method: 'orchestrator-sealed-shell-dispatch',
         missingMessage: 'Remote shell is turned off on this machine, or its Happy CLI is too old to run shell commands',
     },
     transfer: {
-        method: 'orchestrator-transfer-dispatch',
+        method: 'orchestrator-sealed-transfer-dispatch',
         missingMessage: 'Remote shell is turned off on this machine, or its Happy CLI is too old to receive file transfers',
     },
 };
+
+// A Happy CLI from before tasks were sealed takes them by this method, and cannot open one
+const LEGACY_DISPATCH_METHOD = 'orchestrator-dispatch';
+const UNSEALED_CLI_MESSAGE = 'This machine runs a Happy CLI too old to open encrypted orchestrator tasks; update the Happy CLI there';
 
 /** Shell tasks and transfers have no timeout unless given one: they run until they end or are cancelled */
 export function isUntimedProvider(provider: string): boolean {
@@ -179,7 +183,7 @@ export async function executeSchedulerActions(actions: SchedulerAction[]): Promi
         if (action.type === 'dispatch') {
             // Shell commands and file transfers have their own handlers, which a machine can turn off
             const ownHandler = OWN_DISPATCH_HANDLERS[action.payload.provider];
-            const method = ownHandler?.method ?? 'orchestrator-dispatch';
+            const method = ownHandler?.method ?? 'orchestrator-sealed-dispatch';
             try {
                 await invokeUserRpc(
                     action.accountId,
@@ -189,12 +193,16 @@ export async function executeSchedulerActions(actions: SchedulerAction[]): Promi
                 );
             } catch (error) {
                 const rpcMessage = error instanceof Error ? error.message : String(error);
-                // A connected machine without the shell handler has remote shell turned off, or a CLI from before it
-                const message = ownHandler
-                    && !hasUserRpcMethod(action.accountId, `${action.machineId}:${method}`)
-                    && hasUserRpcMethod(action.accountId, `${action.machineId}:orchestrator-dispatch`)
-                    ? ownHandler.missingMessage
-                    : rpcMessage;
+                const hasMethod = hasUserRpcMethod(action.accountId, `${action.machineId}:${method}`);
+                // A connected machine without the shell handler has remote shell turned off, or a CLI from before it;
+                // one with only the plaintext dispatch runs a CLI from before tasks were sealed
+                const message = !hasMethod && hasUserRpcMethod(action.accountId, `${action.machineId}:${LEGACY_DISPATCH_METHOD}`)
+                    ? UNSEALED_CLI_MESSAGE
+                    : ownHandler
+                        && !hasMethod
+                        && hasUserRpcMethod(action.accountId, `${action.machineId}:orchestrator-sealed-dispatch`)
+                        ? ownHandler.missingMessage
+                        : rpcMessage;
                 warn({ module: 'orchestrator-scheduler', runId: action.runId, executionId: action.executionId }, `Dispatch RPC failed: ${message}`);
                 let runStatus: string | null = null;
                 try {

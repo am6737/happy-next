@@ -436,7 +436,7 @@ export class ApiMachineClient {
         });
 
         // Register orchestrator dispatch handler
-        this.rpcHandlerManager.registerHandler('orchestrator-dispatch', async (params: any) => {
+        this.rpcHandlerManager.registerHandler('orchestrator-sealed-dispatch', async (params: any) => {
             const { executionId, runId, taskId, dispatchToken, provider, executionType, childSessionId, model, prompt, resumeMessage, timeoutMs } = params || {};
 
             if (!executionId || typeof executionId !== 'string') {
@@ -522,7 +522,7 @@ export class ApiMachineClient {
         // Register orchestrator shell dispatch handler: runs a command on this machine for another one.
         // Left unregistered when turned off, so the server can tell (and say so) before dispatching.
         if (orchestratorShellDispatch) {
-            this.rpcHandlerManager.registerHandler('orchestrator-shell-dispatch', async (params: any) => {
+            this.rpcHandlerManager.registerHandler('orchestrator-sealed-shell-dispatch', async (params: any) => {
                 const { executionId, runId, taskId, dispatchToken, provider, prompt, timeoutMs } = params || {};
 
                 for (const [name, value] of Object.entries({ executionId, runId, taskId, dispatchToken })) {
@@ -555,7 +555,7 @@ export class ApiMachineClient {
         // Register orchestrator transfer handlers: this machine receives a file or directory from
         // another one, or sends one to another. Left unregistered with remote shell turned off.
         if (orchestratorTransfer) {
-            this.rpcHandlerManager.registerHandler('orchestrator-transfer-dispatch', async (params: any) => {
+            this.rpcHandlerManager.registerHandler('orchestrator-sealed-transfer-dispatch', async (params: any) => {
                 const { executionId, runId, taskId, dispatchToken, provider, prompt, timeoutMs } = params || {};
 
                 for (const [name, value] of Object.entries({ executionId, runId, taskId, dispatchToken, prompt })) {
@@ -580,7 +580,7 @@ export class ApiMachineClient {
                     timeoutMs: timeoutMs === null ? null : Math.floor(timeoutMs),
                 });
             });
-            this.rpcHandlerManager.registerHandler('orchestrator-transfer-source', async (params: any) => {
+            this.rpcHandlerManager.registerHandler('orchestrator-sealed-transfer-source', async (params: any) => {
                 const { transferId, spec, op, publicKey, index } = params || {};
                 if (!transferId || typeof transferId !== 'string' || !spec || typeof spec !== 'string') {
                     throw new Error('transferId and spec are required');

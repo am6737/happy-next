@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const {
     state,
     invokeUserRpcMock,
+    hasUserRpcMethodMock,
     dbMock,
     resetState,
 } = vi.hoisted(() => {
@@ -10,15 +11,20 @@ const {
         runStatus: 'running',
         taskStatus: 'dispatching',
         executionStatus: 'dispatching',
+        executionErrorMessage: null as string | null,
+        rpcMethods: [] as string[],
     };
 
     const resetState = () => {
         state.runStatus = 'running';
         state.taskStatus = 'dispatching';
         state.executionStatus = 'dispatching';
+        state.executionErrorMessage = null;
+        state.rpcMethods = [];
     };
 
     const invokeUserRpcMock = vi.fn(async () => ({}));
+    const hasUserRpcMethodMock = vi.fn((_userId: string, method: string) => state.rpcMethods.includes(method));
 
     const dbMock = {
         orchestratorRun: {
@@ -37,6 +43,7 @@ const {
                     })),
                     update: vi.fn(async (args: any) => {
                         state.executionStatus = args.data.status;
+                        state.executionErrorMessage = args.data.errorMessage ?? null;
                         return { id: 'exec_1' };
                     }),
                 },
@@ -74,6 +81,7 @@ const {
     return {
         state,
         invokeUserRpcMock,
+        hasUserRpcMethodMock,
         dbMock,
         resetState,
     };
@@ -85,6 +93,7 @@ vi.mock('@/storage/db', () => ({
 
 vi.mock('@/app/api/socket/rpcRegistry', () => ({
     invokeUserRpc: invokeUserRpcMock,
+    hasUserRpcMethod: hasUserRpcMethodMock,
 }));
 
 import { executeSchedulerActions, type SchedulerAction } from './scheduler';
@@ -125,7 +134,7 @@ describe('orchestrator scheduler actions', () => {
 
         expect(invokeUserRpcMock).toHaveBeenCalledWith(
             'user_1',
-            'machine_1:orchestrator-dispatch',
+            'machine_1:orchestrator-sealed-dispatch',
             expect.objectContaining({ executionId: 'exec_1' }),
             expect.any(Number),
         );
@@ -163,6 +172,42 @@ describe('orchestrator scheduler actions', () => {
         expect(state.taskStatus).toBe('failed');
         expect(state.runStatus).toBe('failed');
         expect(dbMock.$transaction).toHaveBeenCalledTimes(1);
+    });
+
+    it('tells a machine on a CLI from before sealed tasks to update it', async () => {
+        invokeUserRpcMock.mockRejectedValueOnce(new Error('RPC method not available'));
+        state.rpcMethods = ['machine_1:orchestrator-dispatch', 'machine_1:orchestrator-shell-dispatch'];
+
+        await executeSchedulerActions([
+            {
+                type: 'dispatch',
+                accountId: 'user_1',
+                machineId: 'machine_1',
+                executionId: 'exec_1',
+                runId: 'run_1',
+                taskId: 'task_1',
+                dispatchToken: 'token_1',
+                payload: {
+                    executionId: 'exec_1',
+                    runId: 'run_1',
+                    taskId: 'task_1',
+                    dispatchToken: 'token_1',
+                    provider: 'shell',
+                    executionType: 'initial',
+                    prompt: 'e2e1:AAAA',
+                    timeoutMs: null,
+                },
+            },
+        ]);
+
+        expect(invokeUserRpcMock).toHaveBeenCalledWith(
+            'user_1',
+            'machine_1:orchestrator-sealed-shell-dispatch',
+            expect.anything(),
+            expect.any(Number),
+        );
+        expect(state.executionStatus).toBe('failed');
+        expect(state.executionErrorMessage).toMatch(/too old to open encrypted orchestrator tasks/);
     });
 
     it('scheduler tick exits quietly when there are no active runs', async () => {

@@ -18,10 +18,10 @@ import { Socket } from 'socket.io-client';
 // Every other call comes from the user's apps and sessions and must be encrypted with this
 // manager's key, so the server cannot make one up (run a shell command, spawn a session).
 const PLAINTEXT_METHODS = new Set([
-    'orchestrator-dispatch',
-    'orchestrator-shell-dispatch',
-    'orchestrator-transfer-dispatch',
-    'orchestrator-transfer-source',
+    'orchestrator-sealed-dispatch',
+    'orchestrator-sealed-shell-dispatch',
+    'orchestrator-sealed-transfer-dispatch',
+    'orchestrator-sealed-transfer-source',
     'orchestrator-cancel',
     'machine-identity',
     'detect-providers',
