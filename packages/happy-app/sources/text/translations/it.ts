@@ -258,6 +258,7 @@ export const it: TranslationStructure = {
         orchestratorViewAll: 'Vedi tutte',
         orchestratorNoRuns: 'Nessuna esecuzione',
         orchestratorNoRunsMatch: 'Nessuna esecuzione dell\'orchestratore corrisponde al filtro selezionato.',
+        orchestratorUndecryptable: 'Impossibile decifrare con la tua chiave dell\'orchestratore',
         orchestratorLoading: 'Caricamento esecuzioni dell\'orchestratore...',
         orchestratorFilterAll: 'Tutte',
         orchestratorFilterActive: 'Attive',

@@ -260,6 +260,7 @@ export const zhHant: TranslationStructure = {
         orchestratorViewAll: '查看全部',
         orchestratorNoRuns: '暫無執行',
         orchestratorNoRunsMatch: '沒有符合所選篩選條件的編排任務。',
+        orchestratorUndecryptable: '無法用你的編排金鑰解密',
         orchestratorLoading: '正在載入編排任務...',
         orchestratorFilterAll: '全部',
         orchestratorFilterActive: '進行中',

@@ -19,6 +19,7 @@ import {
   type OrchestratorOutputFile,
   type OrchestratorShellDispatchPayload,
 } from '@/orchestrator/common';
+import type { OrchestratorEnvelopeOpener } from '@/orchestrator/seal';
 
 const SHELL_KILL_GRACE_MS = 5_000;
 // After the shell exits, how long its output may keep arriving. A command that left a background
@@ -140,8 +141,14 @@ export async function reportWithRetry(label: string, send: () => Promise<void>, 
  *
  * A stream longer than a tool result shows is also saved in full under `outputDir/<runId>/`, for
  * the AI to read in parts with further commands; the report says where.
+ *
+ * A command comes sealed in its task's envelope, which `opener` opens and checks before it runs.
  */
-export function createOrchestratorShellExecutor(api: ApiClient, outputDir: string = join(configuration.happyHomeDir, 'exec-output')) {
+export function createOrchestratorShellExecutor(
+  api: ApiClient,
+  opener: OrchestratorEnvelopeOpener,
+  outputDir: string = join(configuration.happyHomeDir, 'exec-output'),
+) {
   const executions = new Map<string, ShellExecution>();
 
   const sweepOutputFiles = async () => {
@@ -271,6 +278,7 @@ export function createOrchestratorShellExecutor(api: ApiClient, outputDir: strin
     await execution.startReport;
     await reportWithRetry(`finish of execution ${payload.executionId}`, () => api.reportOrchestratorExecutionFinish({
       executionId: payload.executionId,
+      taskId: payload.taskId,
       dispatchToken: payload.dispatchToken,
       status,
       finishedAt: new Date().toISOString(),
@@ -288,7 +296,11 @@ export function createOrchestratorShellExecutor(api: ApiClient, outputDir: strin
   };
 
   return {
-    dispatch: async (payload: OrchestratorShellDispatchPayload): Promise<{ accepted: boolean; duplicate?: boolean }> => {
+    dispatch: async (dispatched: OrchestratorShellDispatchPayload): Promise<{ accepted: boolean; duplicate?: boolean }> => {
+      // Opened first: from the check below to running the command nothing waits, so a dispatch
+      // the server repeated cannot start the command twice
+      const { envelope } = await opener.open('shell', dispatched);
+      const payload = { ...dispatched, prompt: envelope.command, workingDirectory: envelope.workingDirectory };
       const existing = executions.get(payload.executionId);
       if (existing) {
         if (existing.payload.dispatchToken !== payload.dispatchToken) {

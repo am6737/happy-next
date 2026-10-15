@@ -105,7 +105,8 @@ export async function notifyOrchestratorRunTerminal(userId: string, runId: strin
     await inTx(async (tx) => {
         await feedPost(tx, Context.create(userId), {
             kind: 'notice',
-            title: run.title,
+            // The run's own title is sealed for the app and the sessions, not readable here
+            title: `Orchestrator run ${run.status}`,
             text: [
                 `Status: ${run.status}`,
                 `Tasks: ${s.total} total — ${s.completed} completed, ${s.failed} failed, ${s.cancelled} cancelled`,

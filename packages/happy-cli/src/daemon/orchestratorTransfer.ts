@@ -27,8 +27,14 @@ import type {
   OrchestratorTransferResult,
   OrchestratorTransferSourceParams,
   OrchestratorTransferSourceRequest,
-  OrchestratorTransferSpec,
 } from '@/orchestrator/common';
+import {
+  openOrchestrator,
+  sealOrchestrator,
+  type OrchestratorEnvelopeOpener,
+  type OrchestratorTaskEnvelope,
+  type OrchestratorTransferKey,
+} from '@/orchestrator/seal';
 
 // What one relayed step carries: base64 makes it a third larger, within the 5 MB a socket message takes
 export const TRANSFER_CHUNK_BYTES = 2 * 1024 * 1024;
@@ -43,7 +49,7 @@ const TRANSFER_SHUTDOWN_WAIT_MS = 8_000;
 const START_REPORT_DEADLINE_MS = 45_000;
 const KEY_INFO = 'happy-orchestrator-transfer-v1';
 
-/** What the source answers to `open` */
+/** What the source answers to `open`; its public key sealed (OrchestratorTransferKey) */
 type SourceOpened = {
   name: string;
   kind: 'file' | 'directory';
@@ -68,6 +74,7 @@ type SourceSession = {
 
 type TargetTransfer = {
   payload: OrchestratorTransferDispatchPayload;
+  spec: Extract<OrchestratorTaskEnvelope, { kind: 'transfer' }>;
   abort: AbortController;
   cancelRequested: boolean;
   watchdogTriggered: boolean;
@@ -84,6 +91,15 @@ class TransferError extends Error {
 /** `~` is the home directory, and a relative path is relative to it, as in a login shell */
 export function resolveUserPath(path: string): string {
   return resolve(os.homedir(), path.replace(/^~(?=$|[\\/])/, os.homedir()));
+}
+
+/** An end's public key as the other sent it, sealed with the orchestrator key */
+function openTransferKey(sealed: unknown, key: Uint8Array, executionId: string, role: OrchestratorTransferKey['role']): string {
+  const opened = openOrchestrator<OrchestratorTransferKey>(sealed, key);
+  if (opened?.kind !== 'transfer-key' || opened.executionId !== executionId || opened.role !== role) {
+    throw new TransferError('TRANSFER_KEY_REJECTED', `The ${role} machine's key is not sealed with the orchestrator key for this transfer`);
+  }
+  return opened.publicKey;
 }
 
 /** An X25519 key pair for one transfer; the public key travels as base64url (its JWK `x`) */
@@ -185,11 +201,13 @@ function formatBytes(bytes: number): string {
  * A transfer runs on its target: it pulls the source chunk by chunk through the server, which
  * relays each step to the source machine (`serveSource`). The two machines agree on a key over
  * X25519 when the transfer opens and the source seals every chunk with AES-256-GCM, so the server
- * relays only ciphertext. A directory travels as a tar stream. What arrives is written beside its
+ * relays only ciphertext. What to copy comes sealed in the task's envelope, which `opener` opens
+ * and checks on both machines, and the public keys travel sealed with the orchestrator key, so
+ * the server cannot put its own in between. A directory travels as a tar stream. What arrives is written beside its
  * destination and renamed into place once complete, so a failed or cancelled transfer leaves
  * nothing half-written behind.
  */
-export function createOrchestratorTransferExecutor(api: ApiClient) {
+export function createOrchestratorTransferExecutor(api: ApiClient, opener: OrchestratorEnvelopeOpener) {
   const transfers = new Map<string, TargetTransfer>();
   const sources = new Map<string, SourceSession>();
 
@@ -208,7 +226,7 @@ export function createOrchestratorTransferExecutor(api: ApiClient) {
     const { executionId, dispatchToken } = transfer.payload;
     for (let attempt = 1; ; attempt++) {
       try {
-        return await api.orchestratorTransferSource<T>(executionId, dispatchToken, request, transfer.abort.signal);
+        return await api.orchestratorTransferSource<T>(executionId, dispatchToken, transfer.spec.sourceMachineId, request, transfer.abort.signal);
       } catch (error) {
         const status = axios.isAxiosError(error) ? error.response?.status : undefined;
         const final = transfer.abort.signal.aborted
@@ -224,10 +242,14 @@ export function createOrchestratorTransferExecutor(api: ApiClient) {
 
   const receive = async (transfer: TargetTransfer): Promise<OrchestratorTransferResult> => {
     const { executionId } = transfer.payload;
-    const spec = JSON.parse(transfer.payload.prompt) as OrchestratorTransferSpec;
+    const { spec } = transfer;
+    const sealKey = await api.orchestratorKey();
     const { privateKey, publicKey } = createTransferKeyPair();
-    const source = await relay<SourceOpened>(transfer, { op: 'open', publicKey });
-    const key = deriveTransferKey(privateKey, source.publicKey, executionId);
+    const source = await relay<SourceOpened>(transfer, {
+      op: 'open',
+      publicKey: sealOrchestrator({ kind: 'transfer-key', executionId, publicKey, role: 'target' } satisfies OrchestratorTransferKey, sealKey),
+    });
+    const key = deriveTransferKey(privateKey, openTransferKey(source.publicKey, sealKey, executionId, 'source'), executionId);
 
     const destination = await resolveTransferDestination(spec.targetPath, source.name);
     const existing = await lstat(destination).catch(() => null);
@@ -348,7 +370,7 @@ export function createOrchestratorTransferExecutor(api: ApiClient) {
       clearTimeout(watchdogTimer);
     }
     // The source keeps the transfer open for retries until told it is over
-    void api.orchestratorTransferSource(payload.executionId, payload.dispatchToken, { op: 'close' })
+    void api.orchestratorTransferSource(payload.executionId, payload.dispatchToken, transfer.spec.sourceMachineId, { op: 'close' })
       .catch((closeError) => logger.debug(`[ORCHESTRATOR TRANSFER] Failed to close source of ${payload.executionId}`, closeError));
 
     const summary = result
@@ -357,6 +379,7 @@ export function createOrchestratorTransferExecutor(api: ApiClient) {
     await transfer.startReport;
     await reportWithRetry(`finish of execution ${payload.executionId}`, () => api.reportOrchestratorExecutionFinish({
       executionId: payload.executionId,
+      taskId: payload.taskId,
       dispatchToken: payload.dispatchToken,
       status,
       finishedAt: new Date().toISOString(),
@@ -370,6 +393,9 @@ export function createOrchestratorTransferExecutor(api: ApiClient) {
 
   return {
     dispatch: async (payload: OrchestratorTransferDispatchPayload): Promise<{ accepted: boolean; duplicate?: boolean }> => {
+      // Opened first: from the check below to starting the transfer nothing waits, so a dispatch
+      // the server repeated cannot start it twice
+      const { envelope: spec } = await opener.open('transfer', payload);
       const existing = transfers.get(payload.executionId);
       if (existing) {
         if (existing.payload.dispatchToken !== payload.dispatchToken) {
@@ -380,6 +406,7 @@ export function createOrchestratorTransferExecutor(api: ApiClient) {
 
       const transfer: TargetTransfer = {
         payload,
+        spec,
         abort: new AbortController(),
         cancelRequested: false,
         watchdogTriggered: false,
@@ -411,7 +438,10 @@ export function createOrchestratorTransferExecutor(api: ApiClient) {
       if (params.op === 'open') {
         // Opened again when the target retried: the answer to the first open never reached it
         closeSource(transferId);
-        const path = resolveUserPath(params.path);
+        const spec = await opener.openSource(params.spec);
+        const sealKey = await api.orchestratorKey();
+        const peerPublicKey = openTransferKey(params.publicKey, sealKey, transferId, 'target');
+        const path = resolveUserPath(spec.sourcePath);
         const info = await stat(path).catch(() => null);
         if (!info || (!info.isFile() && !info.isDirectory())) {
           throw new Error(info ? `${path} is neither a file nor a directory` : `${path} does not exist`);
@@ -425,7 +455,7 @@ export function createOrchestratorTransferExecutor(api: ApiClient) {
           : tar.create({ cwd: dirname(path), portable: true }, [basename(path)]);
         const { privateKey, publicKey } = createTransferKeyPair();
         const session: SourceSession = {
-          key: deriveTransferKey(privateKey, params.publicKey, transferId),
+          key: deriveTransferKey(privateKey, peerPublicKey, transferId),
           chunks: fixedChunks(stream as AsyncIterable<Buffer>),
           stream,
           next: 0,
@@ -434,7 +464,13 @@ export function createOrchestratorTransferExecutor(api: ApiClient) {
         };
         sources.set(transferId, session);
         logger.debug(`[ORCHESTRATOR TRANSFER] Serving ${path} for ${transferId}`);
-        return { name: basename(path), kind, size: kind === 'file' ? info.size : null, mode: info.mode & 0o777, publicKey };
+        return {
+          name: basename(path),
+          kind,
+          size: kind === 'file' ? info.size : null,
+          mode: info.mode & 0o777,
+          publicKey: sealOrchestrator({ kind: 'transfer-key', executionId: transferId, publicKey, role: 'source' } satisfies OrchestratorTransferKey, sealKey),
+        };
       }
 
       const session = sources.get(transferId);

@@ -7,6 +7,7 @@ import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { layout } from '@/components/layout';
 import { useAuth } from '@/auth/AuthContext';
 import { getOrchestratorRunCounts, listOrchestratorRuns, type ListOrchestratorRunsQuery, type OrchestratorRunCounts, type OrchestratorRunDetail } from '@/sync/apiOrchestrator';
+import { sync } from '@/sync/sync';
 import { OrchestratorStatusBadge } from '@/components/orchestrator/OrchestratorStatusBadge';
 import { OrchestratorProgressBar } from '@/components/orchestrator/OrchestratorProgressBar';
 import { resolveOrchestratorSummaryLineData, resolveMachineName } from '@/components/orchestrator/display';
@@ -231,7 +232,7 @@ export default function OrchestratorRunsScreen() {
         try {
             setError(null);
             const [result] = await Promise.all([
-                listOrchestratorRuns(credentials, {
+                listOrchestratorRuns(credentials, sync.encryption, {
                     status: getFilterStatus(statusFilter),
                     limit: 50,
                     cursor: opts?.cursor,

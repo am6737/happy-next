@@ -46,10 +46,12 @@ export type SchedulerAction =
             executionType: 'initial' | 'resume';
             childSessionId?: string;
             model?: string;
+            /** The task's sealed envelope, which the daemon opens and goes by */
             prompt: string;
+            /** A resume's sealed message, which names the task it is for */
+            resumeMessage?: string;
             /** Null for a shell or transfer task without a timeout: it runs until it ends or is cancelled */
             timeoutMs: number | null;
-            workingDirectory?: string;
         };
     }
     | {
@@ -489,7 +491,6 @@ async function buildRunActions(run: {
                         provider: true,
                         model: true,
                         prompt: true,
-                        workingDirectory: true,
                         timeoutMs: true,
                         targetMachineId: true,
                         nextAttemptAt: true,
@@ -761,9 +762,9 @@ async function buildRunActions(run: {
                             executionType: execution.executionType as 'initial' | 'resume',
                             childSessionId: execution.childSessionId ?? undefined,
                             model: task.model ?? undefined,
-                            prompt: execution.resumeMessage ?? task.prompt,
+                            prompt: task.prompt,
+                            ...(execution.resumeMessage ? { resumeMessage: execution.resumeMessage } : {}),
                             timeoutMs,
-                            workingDirectory: task.workingDirectory ?? undefined,
                         },
                     });
                 }

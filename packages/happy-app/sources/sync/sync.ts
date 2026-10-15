@@ -2783,6 +2783,25 @@ class Sync {
         }
     }
 
+    async #handOrchestratorKey(machines: Array<{ id: string; orchestratorKey?: string | null }>) {
+        const key = encodeBase64(this.encryption.orchestratorKey);
+        for (const machine of machines) {
+            const machineEncryption = this.encryption.getMachineEncryption(machine.id);
+            const held = machine.orchestratorKey && machineEncryption ? await machineEncryption.decryptRaw(machine.orchestratorKey) : null;
+            if (!machineEncryption || held?.key === key) {
+                continue;
+            }
+            await fetch(`${getServerUrl()}/v1/machines/${encodeURIComponent(machine.id)}/orchestrator-key`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${this.credentials.token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ orchestratorKey: await machineEncryption.encryptRaw({ key }) }),
+            });
+        }
+    }
+
     private fetchMachines = async () => {
         if (!this.credentials) return;
 
@@ -2809,6 +2828,7 @@ class Sync {
             daemonState?: string | null;
             daemonStateVersion?: number;
             dataEncryptionKey?: string | null; // Add support for per-machine encryption keys
+            orchestratorKey?: string | null;
             seq: number;
             active: boolean;
             activeAt: number;  // Changed from lastActiveAt
@@ -2834,6 +2854,11 @@ class Sync {
 
         // Initialize machine encryptions
         await this.encryption.initializeMachines(machineKeysMap);
+
+        // Hand the orchestrator key to machines that cannot derive it (signed in by the app, with a
+        // data key) and do not hold it yet, sealed with the machine's data key (fire-and-forget:
+        // the next fetch retries)
+        this.#handOrchestratorKey(machines.filter((machine) => machineKeysMap.get(machine.id))).catch(() => {});
 
         // Process all machines first, then update state once
         const decryptedMachines: Machine[] = [];

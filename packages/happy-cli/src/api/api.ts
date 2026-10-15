@@ -10,6 +10,7 @@ import chalk from 'chalk';
 import { Credentials } from '@/persistence';
 import { connectionState, isNetworkError } from '@/utils/serverConnectionErrors';
 import type { OrchestratorOutputFile, OrchestratorTransferResult, OrchestratorTransferSourceRequest } from '@/orchestrator/common';
+import { loadOrchestratorKey, sealOrchestrator, type OrchestratorSealedResult } from '@/orchestrator/seal';
 
 export class ApiClient {
 
@@ -275,7 +276,7 @@ export class ApiClient {
   }
 
   sessionSyncClient(session: Session): ApiSessionClient {
-    return new ApiSessionClient(this.credential.token, session);
+    return new ApiSessionClient(this.credential.token, session, () => loadOrchestratorKey(this.credential));
   }
 
   machineSyncClient(machine: Machine): ApiMachineClient {
@@ -284,6 +285,11 @@ export class ApiClient {
 
   push(): PushNotificationClient {
     return this.pushClient;
+  }
+
+  /** The account's orchestrator key, which seals and opens orchestrator tasks */
+  orchestratorKey(): Promise<Uint8Array> {
+    return loadOrchestratorKey(this.credential);
   }
 
   /**
@@ -338,10 +344,12 @@ export class ApiClient {
   }
 
   /**
-   * Report orchestrator execution finish (daemon -> server)
+   * Report orchestrator execution finish (daemon -> server). What the execution produced is sealed
+   * with the orchestrator key; only its status, exit and error code reach the server readable.
    */
   async reportOrchestratorExecutionFinish(opts: {
     executionId: string;
+    taskId: string;
     dispatchToken: string;
     status: 'completed' | 'failed' | 'cancelled' | 'timeout';
     finishedAt: string;
@@ -357,6 +365,18 @@ export class ApiClient {
     errorCode?: string | null;
     errorMessage?: string | null;
   }): Promise<void> {
+    const result: OrchestratorSealedResult = {
+      kind: 'result',
+      taskId: opts.taskId,
+      executionId: opts.executionId,
+      outputSummary: opts.outputSummary ?? null,
+      outputText: opts.outputText ?? null,
+      stderrText: opts.stderrText ?? null,
+      stdoutFile: opts.stdoutFile ?? null,
+      stderrFile: opts.stderrFile ?? null,
+      transferResult: opts.transferResult ?? null,
+      errorMessage: opts.errorMessage ?? null,
+    };
     await axios.post(
       `${configuration.serverUrl}/v1/orchestrator/executions/${opts.executionId}/finish`,
       {
@@ -366,14 +386,8 @@ export class ApiClient {
         ...(opts.childSessionId !== undefined ? { childSessionId: opts.childSessionId } : {}),
         ...(opts.exitCode !== undefined ? { exitCode: opts.exitCode } : {}),
         ...(opts.signal !== undefined ? { signal: opts.signal } : {}),
-        ...(opts.outputSummary !== undefined ? { outputSummary: opts.outputSummary } : {}),
-        ...(opts.outputText !== undefined ? { outputText: opts.outputText } : {}),
-        ...(opts.stderrText !== undefined ? { stderrText: opts.stderrText } : {}),
-        ...(opts.stdoutFile !== undefined ? { stdoutFile: opts.stdoutFile } : {}),
-        ...(opts.stderrFile !== undefined ? { stderrFile: opts.stderrFile } : {}),
-        ...(opts.transferResult !== undefined ? { transferResult: opts.transferResult } : {}),
+        sealedResult: sealOrchestrator(result, await this.orchestratorKey()),
         ...(opts.errorCode !== undefined ? { errorCode: opts.errorCode } : {}),
-        ...(opts.errorMessage !== undefined ? { errorMessage: opts.errorMessage } : {}),
       },
       {
         headers: {
@@ -389,10 +403,10 @@ export class ApiClient {
    * One step of pulling a transfer's source (target daemon -> server -> source daemon): the
    * server relays it to the source machine, and its answer back.
    */
-  async orchestratorTransferSource<T>(executionId: string, dispatchToken: string, request: OrchestratorTransferSourceRequest, signal?: AbortSignal): Promise<T> {
+  async orchestratorTransferSource<T>(executionId: string, dispatchToken: string, sourceMachineId: string, request: OrchestratorTransferSourceRequest, signal?: AbortSignal): Promise<T> {
     const response = await axios.post(
       `${configuration.serverUrl}/v1/orchestrator/executions/${executionId}/transfer-source`,
-      { dispatchToken, ...request },
+      { dispatchToken, sourceMachineId, ...request },
       {
         headers: {
           'Authorization': `Bearer ${this.credential.token}`,

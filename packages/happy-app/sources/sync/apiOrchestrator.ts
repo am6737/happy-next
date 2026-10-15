@@ -1,6 +1,8 @@
 import { AuthCredentials } from '@/auth/tokenStorage';
 import { backoff } from '@/utils/time';
 import { getServerUrl } from './serverConfig';
+import type { Encryption } from './encryption/encryption';
+import { openOrchestratorTask, openOrchestratorTasks, openOrchestratorTitle, type SealedTaskRecord } from './orchestratorOpen';
 
 export type OrchestratorRunStatus = 'queued' | 'running' | 'canceling' | 'completed' | 'failed' | 'cancelled';
 export type OrchestratorTaskStatus = 'queued' | 'dispatching' | 'running' | 'completed' | 'failed' | 'cancelled' | 'dependency_failed';
@@ -127,6 +129,7 @@ export type ListOrchestratorRunsQuery = {
 
 export async function listOrchestratorRuns(
     credentials: AuthCredentials,
+    encryption: Encryption,
     query: ListOrchestratorRunsQuery = {},
 ): Promise<{ items: Array<Pick<OrchestratorRunDetail, 'runId' | 'title' | 'status' | 'createdAt' | 'updatedAt' | 'summary'> & { machines?: string[]; }>; nextCursor?: string; }> {
     const API_ENDPOINT = getServerUrl();
@@ -151,7 +154,10 @@ export async function listOrchestratorRuns(
                 nextCursor?: string;
             };
         };
-        return body.data;
+        return {
+            ...body.data,
+            items: await Promise.all(body.data.items.map(async (item) => ({ ...item, title: await openOrchestratorTitle(item.title, encryption) }))),
+        };
     });
 }
 
@@ -185,6 +191,7 @@ export type GetOrchestratorRunQuery = {
 
 export async function getOrchestratorRun(
     credentials: AuthCredentials,
+    encryption: Encryption,
     runId: string,
     query: GetOrchestratorRunQuery = {},
 ): Promise<OrchestratorRunDetail> {
@@ -202,13 +209,18 @@ export async function getOrchestratorRun(
         if (!response.ok) {
             throw new Error(await readErrorMessage(response));
         }
-        const body = await response.json() as { ok: true; data: OrchestratorRunDetail };
-        return body.data;
+        const body = await response.json() as { ok: true; data: OrchestratorRunDetail & { tasks?: SealedTaskRecord[] } };
+        return {
+            ...body.data,
+            title: await openOrchestratorTitle(body.data.title, encryption),
+            tasks: await openOrchestratorTasks(body.data.tasks, encryption),
+        };
     });
 }
 
 export async function pendOrchestratorRun(
     credentials: AuthCredentials,
+    encryption: Encryption,
     runId: string,
     query: {
         cursor?: string;
@@ -257,10 +269,10 @@ export async function pendOrchestratorRun(
                 summary: OrchestratorRunSummary;
                 updatedAt: string;
             };
-            tasks?: OrchestratorTaskRecord[];
+            tasks?: SealedTaskRecord[];
         };
     };
-    return body.data;
+    return { ...body.data, tasks: await openOrchestratorTasks(body.data.tasks, encryption) };
 }
 
 export type GetOrchestratorTaskQuery = {
@@ -269,6 +281,7 @@ export type GetOrchestratorTaskQuery = {
 
 export async function getOrchestratorTask(
     credentials: AuthCredentials,
+    encryption: Encryption,
     runId: string,
     taskId: string,
     query: GetOrchestratorTaskQuery = {},
@@ -290,8 +303,11 @@ export async function getOrchestratorTask(
         if (!response.ok) {
             throw new Error(await readErrorMessage(response));
         }
-        const body = await response.json() as { ok: true; data: OrchestratorTaskDetail };
-        return body.data;
+        const body = await response.json() as { ok: true; data: OrchestratorTaskDetail & { task: SealedTaskRecord } };
+        return {
+            run: { ...body.data.run, title: await openOrchestratorTitle(body.data.run.title, encryption) },
+            task: await openOrchestratorTask(body.data.task, encryption),
+        };
     });
 }
 

@@ -10,6 +10,7 @@ import { useAuth } from '@/auth/AuthContext';
 import { ActionMenuModal } from '@/components/ActionMenuModal';
 import type { ActionMenuItem } from '@/components/ActionMenu';
 import { cancelOrchestratorRun, getOrchestratorRun, pendOrchestratorRun, type OrchestratorRunDetail } from '@/sync/apiOrchestrator';
+import { sync } from '@/sync/sync';
 import { OrchestratorStatusBadge } from '@/components/orchestrator/OrchestratorStatusBadge';
 import { OrchestratorProgressBar } from '@/components/orchestrator/OrchestratorProgressBar';
 import { OrchestratorDuration } from '@/components/orchestrator/OrchestratorDuration';
@@ -166,7 +167,7 @@ export default function OrchestratorRunDetailScreen() {
         }
         try {
             setError(null);
-            const data = await getOrchestratorRun(credentials, runId, {
+            const data = await getOrchestratorRun(credentials, sync.encryption, runId, {
                 includeTasks: true,
                 includeExecutions: true,
             });
@@ -229,7 +230,7 @@ export default function OrchestratorRunDetailScreen() {
             while (!cancelled) {
                 try {
                     pendController = new AbortController();
-                    const pend = await pendOrchestratorRun(credentials, runId, {
+                    const pend = await pendOrchestratorRun(credentials, sync.encryption, runId, {
                         cursor,
                         waitFor: 'change',
                         timeoutMs: 25_000,

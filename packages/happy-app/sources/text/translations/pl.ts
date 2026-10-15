@@ -270,6 +270,7 @@ export const pl: TranslationStructure = {
         orchestratorViewAll: 'Pokaż wszystkie',
         orchestratorNoRuns: 'Brak uruchomień',
         orchestratorNoRunsMatch: 'Żadne uruchomienia orkiestratora nie pasują do wybranego filtra.',
+        orchestratorUndecryptable: 'Nie można odszyfrować kluczem orkiestratora',
         orchestratorLoading: 'Ładowanie uruchomień orkiestratora...',
         orchestratorFilterAll: 'Wszystkie',
         orchestratorFilterActive: 'Aktywne',

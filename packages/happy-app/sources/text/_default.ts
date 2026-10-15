@@ -258,6 +258,7 @@ export const en = {
         orchestratorViewAll: 'View all',
         orchestratorNoRuns: 'No runs',
         orchestratorNoRunsMatch: 'No orchestrator runs matched the selected filter.',
+        orchestratorUndecryptable: 'Cannot be decrypted with your orchestrator key',
         orchestratorLoading: 'Loading orchestrator runs...',
         orchestratorFilterAll: 'All',
         orchestratorFilterActive: 'Active',

@@ -13,6 +13,21 @@ import {
 } from './types';
 import { Socket } from 'socket.io-client';
 
+// The methods the server itself calls, with plaintext params: dispatching orchestrator tasks (whose
+// content is sealed with the orchestrator key), and asking about the machine for the orchestrator.
+// Every other call comes from the user's apps and sessions and must be encrypted with this
+// manager's key, so the server cannot make one up (run a shell command, spawn a session).
+const PLAINTEXT_METHODS = new Set([
+    'orchestrator-dispatch',
+    'orchestrator-shell-dispatch',
+    'orchestrator-transfer-dispatch',
+    'orchestrator-transfer-source',
+    'orchestrator-cancel',
+    'machine-identity',
+    'detect-providers',
+    'qoder-list-models',
+]);
+
 export class RpcHandlerManager {
     private handlers: RpcHandlerMap = new Map();
     private readonly scopePrefix: string;
@@ -69,6 +84,9 @@ export class RpcHandlerManager {
             // as plain objects. Client-originated calls (e.g. spawn-session from mobile app)
             // send params as base64-encrypted strings. Detect and handle both.
             const isPlaintext = typeof request.params !== 'string';
+            if (isPlaintext && !PLAINTEXT_METHODS.has(request.method.slice(this.scopePrefix.length + 1))) {
+                throw new Error('This method takes encrypted params only');
+            }
             const decryptedParams = isPlaintext
                 ? request.params
                 : decrypt(this.encryptionKey, this.encryptionVariant, decodeBase64(request.params));

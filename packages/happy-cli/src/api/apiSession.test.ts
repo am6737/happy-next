@@ -56,12 +56,12 @@ describe('ApiSessionClient connection handling', () => {
         // Should not throw during client creation
         // Note: socket is created with autoConnect: false, so connection happens later
         expect(() => {
-            new ApiSessionClient('fake-token', mockSession);
+            new ApiSessionClient('fake-token', mockSession, async () => new Uint8Array(32));
         }).not.toThrow();
     });
 
     it('should emit correct events on socket connection', () => {
-        const client = new ApiSessionClient('fake-token', mockSession);
+        const client = new ApiSessionClient('fake-token', mockSession, async () => new Uint8Array(32));
 
         // Should have set up event listeners
         expect(mockSocket.on).toHaveBeenCalledWith('connect', expect.any(Function));
@@ -70,7 +70,7 @@ describe('ApiSessionClient connection handling', () => {
     });
 
     it('should advertise supportsMessageReceipt capability in socket auth', () => {
-        new ApiSessionClient('fake-token', mockSession);
+        new ApiSessionClient('fake-token', mockSession, async () => new Uint8Array(32));
 
         expect(mockIo).toHaveBeenCalledWith(
             expect.any(String),
@@ -135,7 +135,7 @@ describe('ApiSessionClient v3 outbox', () => {
     });
 
     it('should initialize sendSync in the constructor', () => {
-        const client = new ApiSessionClient('fake-token', mockSession);
+        const client = new ApiSessionClient('fake-token', mockSession, async () => new Uint8Array(32));
 
         // The sendSync field should exist (it's private, but we can verify
         // indirectly by ensuring close() doesn't throw)
@@ -143,7 +143,7 @@ describe('ApiSessionClient v3 outbox', () => {
     });
 
     it('registers image-bearing tool calls before sending them to the app', () => {
-        const client = new ApiSessionClient('fake-token', mockSession);
+        const client = new ApiSessionClient('fake-token', mockSession, async () => new Uint8Array(32));
         const register = vi.spyOn(toolImageStoreModule, 'registerToolImageForCall').mockImplementation(() => {});
         const enqueue = vi.spyOn(client as any, 'enqueueMessage').mockImplementation(() => {});
         const body = { type: 'tool-call' as const, callId: 'image-call', name: 'view_image', input: { path: '/outside/image.png' }, id: 'message-1' };
@@ -156,7 +156,7 @@ describe('ApiSessionClient v3 outbox', () => {
     });
 
     it('registers every Claude tool call, including subagents', () => {
-        const client = new ApiSessionClient('fake-token', mockSession);
+        const client = new ApiSessionClient('fake-token', mockSession, async () => new Uint8Array(32));
         const register = vi.spyOn(toolImageStoreModule, 'registerToolImageForCall').mockImplementation(() => {});
         client.sendClaudeSessionMessage({
             type: 'assistant',
@@ -176,7 +176,7 @@ describe('ApiSessionClient v3 outbox', () => {
     });
 
     it('should NOT emit via socket when sending a Claude session message (v3 outbox only)', () => {
-        const client = new ApiSessionClient('fake-token', mockSession);
+        const client = new ApiSessionClient('fake-token', mockSession, async () => new Uint8Array(32));
 
         const body = {
             type: 'assistant' as const,
@@ -193,7 +193,7 @@ describe('ApiSessionClient v3 outbox', () => {
     });
 
     it('should NOT emit via socket when sending an agent message (v3 outbox only)', () => {
-        const client = new ApiSessionClient('fake-token', mockSession);
+        const client = new ApiSessionClient('fake-token', mockSession, async () => new Uint8Array(32));
 
         client.sendAgentMessage('gemini', { type: 'message', message: 'Hello from Gemini' });
 
@@ -202,7 +202,7 @@ describe('ApiSessionClient v3 outbox', () => {
     });
 
     it('should NOT emit via socket when sending a codex message (v3 outbox only)', () => {
-        const client = new ApiSessionClient('fake-token', mockSession);
+        const client = new ApiSessionClient('fake-token', mockSession, async () => new Uint8Array(32));
 
         client.sendCodexMessage({ type: 'message', text: 'Hello from Codex' });
 
@@ -211,7 +211,7 @@ describe('ApiSessionClient v3 outbox', () => {
     });
 
     it('should use snake_case tool_use_result payloads when trimming Claude tool results', () => {
-        const client = new ApiSessionClient('fake-token', mockSession) as any;
+        const client = new ApiSessionClient('fake-token', mockSession, async () => new Uint8Array(32)) as any;
         const trimSpy = vi.spyOn(trimToolUseResultModule, 'trimToolUseResult').mockReturnValue({
             _outputTrimmed: true,
             _callId: 'toolu_read_1',
@@ -283,7 +283,7 @@ describe('ApiSessionClient v3 outbox', () => {
     });
 
     it('should preserve trimmed WebSearch results from snake_case tool_use_result payloads', () => {
-        const client = new ApiSessionClient('fake-token', mockSession) as any;
+        const client = new ApiSessionClient('fake-token', mockSession, async () => new Uint8Array(32)) as any;
         const saveSpy = vi.spyOn(toolOutputStoreModule, 'saveToolOutputRecord').mockImplementation(() => {});
 
         client.buildMessageContent({
@@ -389,7 +389,7 @@ describe('ApiSessionClient message receipt', () => {
     }
 
     it('emits message-receipt ok=true when app-originated user message is accepted', () => {
-        new ApiSessionClient('fake-token', mockSession);
+        new ApiSessionClient('fake-token', mockSession, async () => new Uint8Array(32));
 
         vi.spyOn(encryptionModule, 'decodeBase64').mockReturnValue(new Uint8Array([1, 2, 3]));
         vi.spyOn(encryptionModule, 'decrypt').mockReturnValue({
@@ -420,7 +420,7 @@ describe('ApiSessionClient message receipt', () => {
     });
 
     it('emits message-receipt ok=false with original error on decrypt/parse failure', () => {
-        new ApiSessionClient('fake-token', mockSession);
+        new ApiSessionClient('fake-token', mockSession, async () => new Uint8Array(32));
 
         vi.spyOn(encryptionModule, 'decodeBase64').mockReturnValue(new Uint8Array([1, 2, 3]));
         vi.spyOn(encryptionModule, 'decrypt').mockImplementation(() => {
@@ -449,7 +449,7 @@ describe('ApiSessionClient message receipt', () => {
         });
     });
     it('flags the post-compaction summary so the app can keep it off the minimap', () => {
-        const client = new ApiSessionClient('fake-token', mockSession) as any;
+        const client = new ApiSessionClient('fake-token', mockSession, async () => new Uint8Array(32)) as any;
         const titleSpy = vi.spyOn(client, 'maybeSetInitialTitleFromUserText');
 
         const messageContent = client.buildMessageContent({
@@ -479,7 +479,7 @@ describe('ApiSessionClient message receipt', () => {
     });
 
     it('leaves ordinary user prompts unflagged', () => {
-        const client = new ApiSessionClient('fake-token', mockSession) as any;
+        const client = new ApiSessionClient('fake-token', mockSession, async () => new Uint8Array(32)) as any;
         const titleSpy = vi.spyOn(client, 'maybeSetInitialTitleFromUserText');
 
         const messageContent = client.buildMessageContent({
@@ -499,7 +499,7 @@ describe('ApiSessionClient message receipt', () => {
     });
 
     it('flags a compaction summary delivered as text blocks', () => {
-        const client = new ApiSessionClient('fake-token', mockSession) as any;
+        const client = new ApiSessionClient('fake-token', mockSession, async () => new Uint8Array(32)) as any;
 
         const messageContent = client.buildMessageContent({
             type: 'user',
@@ -541,7 +541,7 @@ describe('ApiSessionClient keepAlive', () => {
             agentStateVersion: 0,
             encryptionKey: new Uint8Array(32),
             encryptionVariant: 'legacy',
-        } as any);
+        } as any, async () => new Uint8Array(32));
         vi.spyOn((client as any).sendSync, 'invalidateAndAwait').mockImplementation(
             () => new Promise<void>((resolve) => { releaseOutbox = resolve; }),
         );

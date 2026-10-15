@@ -261,6 +261,7 @@ export const zhHans: TranslationStructure = {
         orchestratorViewAll: '查看全部',
         orchestratorNoRuns: '暂无运行',
         orchestratorNoRunsMatch: '没有符合所选筛选条件的编排任务。',
+        orchestratorUndecryptable: '无法用你的编排密钥解密',
         orchestratorLoading: '正在加载编排任务...',
         orchestratorFilterAll: '全部',
         orchestratorFilterActive: '进行中',

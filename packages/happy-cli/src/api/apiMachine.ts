@@ -33,9 +33,22 @@ import { SessionCache, matchFields, type SessionCacheRuntimeStats } from '@/cach
 import { encodeBase64, decodeBase64, encrypt, decrypt } from './encryption';
 import { backoff } from '@/utils/time';
 import { RpcHandlerManager } from './rpc/RpcHandlerManager';
-import { execSync, execFileSync } from 'node:child_process';
+import { exec, execSync, execFileSync } from 'node:child_process';
+import { hostname, homedir } from 'node:os';
+import { promisify } from 'node:util';
 import { readdirSync, rmdirSync } from 'node:fs';
 import { paginateSessionUserMessages, resolveSessionUserMessage, type SessionUserMessage } from '@/utils/sessionUserMessages';
+
+const execAsync = promisify(exec);
+
+// Prints `<provider>:true` for each agent CLI installed. Qoder's installer puts qodercli (or the
+// China build qoderclicn) in ~/.local/bin, which the daemon's PATH may lack.
+const PROVIDER_DETECTION_COMMAND =
+    '(command -v claude >/dev/null 2>&1 && echo "claude:true"); ' +
+    '(command -v codex >/dev/null 2>&1 && echo "codex:true"); ' +
+    '(command -v gemini >/dev/null 2>&1 && echo "gemini:true"); ' +
+    '((command -v qodercli || command -v qoderclicn || test -x ~/.local/bin/qodercli || test -x ~/.local/bin/qoderclicn) >/dev/null 2>&1 && echo "qoder:true"); ' +
+    'true';
 
 function createSessionCacheStatsReporter(
     saveStats: (stats: SessionCacheRuntimeStats) => Promise<void>,
@@ -152,9 +165,11 @@ type MachineRpcHandlers = {
         executionType: 'initial' | 'resume';
         childSessionId?: string;
         model?: string;
+        /** The task's sealed envelope */
         prompt: string;
+        /** A resume's sealed follow-up message */
+        resumeMessage?: string;
         timeoutMs: number;
-        workingDirectory?: string;
     }) => Promise<{
         accepted: boolean;
         duplicate?: boolean;
@@ -270,6 +285,14 @@ export class ApiMachineClient {
             const trimmed = displayName?.trim();
             // The shell tells the orchestrator which syntax this machine's shell tasks take
             return { name: trimmed || host || undefined, platform, shell: remoteShell.name };
+        });
+
+        // Which agent CLIs this machine has and its OS hostname, which the server asks for
+        // orchestrator_get_context
+        this.rpcHandlerManager.registerHandler('detect-providers', async () => {
+            const { stdout } = await execAsync(PROVIDER_DETECTION_COMMAND, { cwd: homedir(), timeout: 15_000 });
+            const providers = stdout.split('\n').filter((line) => line.endsWith(':true')).map((line) => line.slice(0, -':true'.length));
+            return { providers, hostname: hostname() };
         });
     }
 
@@ -414,7 +437,7 @@ export class ApiMachineClient {
 
         // Register orchestrator dispatch handler
         this.rpcHandlerManager.registerHandler('orchestrator-dispatch', async (params: any) => {
-            const { executionId, runId, taskId, dispatchToken, provider, executionType, childSessionId, model, prompt, timeoutMs, workingDirectory } = params || {};
+            const { executionId, runId, taskId, dispatchToken, provider, executionType, childSessionId, model, prompt, resumeMessage, timeoutMs } = params || {};
 
             if (!executionId || typeof executionId !== 'string') {
                 throw new Error('executionId is required');
@@ -446,11 +469,11 @@ export class ApiMachineClient {
             if (typeof prompt !== 'string' || prompt.trim().length === 0) {
                 throw new Error('prompt is required');
             }
+            if (executionType === 'resume' && typeof resumeMessage !== 'string') {
+                throw new Error('resumeMessage is required for resume execution');
+            }
             if (typeof timeoutMs !== 'number' || !Number.isFinite(timeoutMs) || timeoutMs <= 0) {
                 throw new Error('timeoutMs must be a positive number');
-            }
-            if (workingDirectory !== undefined && (typeof workingDirectory !== 'string' || workingDirectory.length > 512)) {
-                throw new Error('workingDirectory must be a string with max length 512');
             }
             if (model !== undefined && (typeof model !== 'string' || model.length === 0 || model.length > 128)) {
                 throw new Error('model must be a non-empty string with max length 128');
@@ -466,8 +489,8 @@ export class ApiMachineClient {
                 childSessionId,
                 model,
                 prompt,
+                resumeMessage,
                 timeoutMs: Math.floor(timeoutMs),
-                workingDirectory,
             });
         });
 
@@ -500,7 +523,7 @@ export class ApiMachineClient {
         // Left unregistered when turned off, so the server can tell (and say so) before dispatching.
         if (orchestratorShellDispatch) {
             this.rpcHandlerManager.registerHandler('orchestrator-shell-dispatch', async (params: any) => {
-                const { executionId, runId, taskId, dispatchToken, provider, prompt, timeoutMs, workingDirectory } = params || {};
+                const { executionId, runId, taskId, dispatchToken, provider, prompt, timeoutMs } = params || {};
 
                 for (const [name, value] of Object.entries({ executionId, runId, taskId, dispatchToken })) {
                     if (!value || typeof value !== 'string') {
@@ -516,9 +539,6 @@ export class ApiMachineClient {
                 if (timeoutMs !== null && (typeof timeoutMs !== 'number' || !Number.isFinite(timeoutMs) || timeoutMs <= 0)) {
                     throw new Error('timeoutMs must be null or a positive number');
                 }
-                if (workingDirectory !== undefined && (typeof workingDirectory !== 'string' || workingDirectory.length > 512)) {
-                    throw new Error('workingDirectory must be a string with max length 512');
-                }
 
                 return orchestratorShellDispatch({
                     executionId,
@@ -528,7 +548,6 @@ export class ApiMachineClient {
                     provider,
                     prompt,
                     timeoutMs: timeoutMs === null ? null : Math.floor(timeoutMs),
-                    workingDirectory,
                 });
             });
         }
@@ -562,18 +581,18 @@ export class ApiMachineClient {
                 });
             });
             this.rpcHandlerManager.registerHandler('orchestrator-transfer-source', async (params: any) => {
-                const { transferId, path, op, publicKey, index } = params || {};
-                if (!transferId || typeof transferId !== 'string' || !path || typeof path !== 'string') {
-                    throw new Error('transferId and path are required');
+                const { transferId, spec, op, publicKey, index } = params || {};
+                if (!transferId || typeof transferId !== 'string' || !spec || typeof spec !== 'string') {
+                    throw new Error('transferId and spec are required');
                 }
                 if (op === 'open' && typeof publicKey === 'string') {
-                    return orchestratorTransfer.serveSource({ transferId, path, op, publicKey });
+                    return orchestratorTransfer.serveSource({ transferId, spec, op, publicKey });
                 }
                 if (op === 'read' && Number.isSafeInteger(index) && index >= 0) {
-                    return orchestratorTransfer.serveSource({ transferId, path, op, index });
+                    return orchestratorTransfer.serveSource({ transferId, spec, op, index });
                 }
                 if (op === 'close') {
-                    return orchestratorTransfer.serveSource({ transferId, path, op });
+                    return orchestratorTransfer.serveSource({ transferId, spec, op });
                 }
                 throw new Error(`Invalid transfer step: ${op}`);
             });

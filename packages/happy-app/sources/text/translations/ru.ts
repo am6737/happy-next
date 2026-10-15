@@ -220,6 +220,7 @@ export const ru: TranslationStructure = {
         orchestratorViewAll: 'Показать все',
         orchestratorNoRuns: 'Нет запусков',
         orchestratorNoRunsMatch: 'Нет запусков оркестратора, соответствующих выбранному фильтру.',
+        orchestratorUndecryptable: 'Невозможно расшифровать ключом оркестратора',
         orchestratorLoading: 'Загрузка запусков оркестратора...',
         orchestratorFilterAll: 'Все',
         orchestratorFilterActive: 'Активные',

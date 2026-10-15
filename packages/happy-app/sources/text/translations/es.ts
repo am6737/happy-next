@@ -259,6 +259,7 @@ export const es: TranslationStructure = {
         orchestratorViewAll: 'Ver todas',
         orchestratorNoRuns: 'Sin ejecuciones',
         orchestratorNoRunsMatch: 'Ninguna ejecución del orquestador coincide con el filtro seleccionado.',
+        orchestratorUndecryptable: 'No se puede descifrar con tu clave del orquestador',
         orchestratorLoading: 'Cargando ejecuciones del orquestador...',
         orchestratorFilterAll: 'Todas',
         orchestratorFilterActive: 'Activas',

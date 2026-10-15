@@ -38,6 +38,7 @@ import {
   type OrchestratorDispatchPayload,
   type OrchestratorFinishStatus,
 } from '@/orchestrator/common';
+import { createOrchestratorEnvelopeOpener, type OrchestratorEnvelopeOpener } from '@/orchestrator/seal';
 import { extractCodexSessionId, extractGeminiSessionId, extractGeminiSessionIdFromJsonLine, normalizeGeminiOutputText } from './orchestratorOutput';
 import { createOrchestratorShellExecutor, reportWithRetry } from './orchestratorShell';
 import { createOrchestratorTransferExecutor } from './orchestratorTransfer';
@@ -160,6 +161,7 @@ export async function startDaemon(): Promise<void> {
     const { credentials, machineId } = await authAndSetupMachineIfNeeded();
     logger.debug('[DAEMON RUN] Auth and machine setup complete');
     let api!: ApiClient;
+    let opener!: OrchestratorEnvelopeOpener;
     let shellExecutor: ReturnType<typeof createOrchestratorShellExecutor> | null = null;
     let transferExecutor: ReturnType<typeof createOrchestratorTransferExecutor> | null = null;
     // Every execution this daemon starts starts after this, on the same clock: the server fails
@@ -253,6 +255,7 @@ export async function startDaemon(): Promise<void> {
         try {
           await api.reportOrchestratorExecutionFinish({
             executionId: execution.payload.executionId,
+            taskId: execution.payload.taskId,
             dispatchToken: execution.payload.dispatchToken,
             status: opts.status,
             finishedAt: new Date().toISOString(),
@@ -326,7 +329,17 @@ export async function startDaemon(): Promise<void> {
         });
     };
 
-    const handleOrchestratorDispatch = async (payload: OrchestratorDispatchPayload): Promise<{ accepted: boolean; duplicate?: boolean }> => {
+    const handleOrchestratorDispatch = async (dispatched: OrchestratorDispatchPayload): Promise<{ accepted: boolean; duplicate?: boolean }> => {
+      // The task runs as its sealed envelope says, not as the server does. Opened first: from the
+      // check below to spawning nothing waits, so a dispatch the server repeated cannot run twice.
+      const { envelope, resumeMessage } = await opener.open('task', dispatched);
+      const payload: OrchestratorDispatchPayload = {
+        ...dispatched,
+        provider: envelope.provider,
+        model: envelope.model,
+        prompt: resumeMessage ?? envelope.prompt,
+        workingDirectory: envelope.workingDirectory,
+      };
       const existing = executionIdToManagedExecution.get(payload.executionId);
       if (existing) {
         if (existing.payload.dispatchToken !== payload.dispatchToken) {
@@ -1041,11 +1054,12 @@ export async function startDaemon(): Promise<void> {
 
     // Create API client
     api = await ApiClient.create(credentials);
+    opener = createOrchestratorEnvelopeOpener({ loadKey: () => api.orchestratorKey(), machineId });
 
     // Shell commands sent from other machines run unless turned off here, and file transfers with them
     const remoteShellDisabled = configuration.disableRemoteShell || (await readSettings()).remoteShellDisabled === true;
-    shellExecutor = remoteShellDisabled ? null : createOrchestratorShellExecutor(api);
-    transferExecutor = remoteShellDisabled ? null : createOrchestratorTransferExecutor(api);
+    shellExecutor = remoteShellDisabled ? null : createOrchestratorShellExecutor(api, opener);
+    transferExecutor = remoteShellDisabled ? null : createOrchestratorTransferExecutor(api, opener);
     logger.debug(`[DAEMON RUN] Remote shell ${remoteShellDisabled ? 'disabled' : 'enabled'}`);
 
     // Get or create machine

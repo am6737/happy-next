@@ -6,12 +6,21 @@ import { join } from 'path';
 
 import type { ApiClient } from '@/api/api';
 import type { OrchestratorShellDispatchPayload } from '@/orchestrator/common';
+import { createOrchestratorEnvelopeOpener, sealOrchestrator } from '@/orchestrator/seal';
 import { createOrchestratorShellExecutor } from './orchestratorShell';
 
 type FinishReport = Parameters<ApiClient['reportOrchestratorExecutionFinish']>[0];
 
 const tempDir = mkdtempSync(join(tmpdir(), 'happy-shell-test-'));
 afterAll(() => rmSync(tempDir, { recursive: true, force: true }));
+
+const key = new Uint8Array(32).fill(7);
+
+function sealCommand(command: string, workingDirectory?: string, machineIds: string[] | 'all' = ['machine-1']) {
+  return sealOrchestrator({
+    kind: 'shell', sealId: `seal-${Math.random()}`, createdAt: Date.now(), machineIds, maxAttempts: 1, command, workingDirectory,
+  }, key);
+}
 
 function setup(outputDir: string = mkdtempSync(join(tempDir, 'output-'))) {
   const finished = new Map<string, (report: FinishReport) => void>();
@@ -22,9 +31,14 @@ function setup(outputDir: string = mkdtempSync(join(tempDir, 'output-'))) {
       finished.get(report.executionId)?.(report);
     }),
   } as unknown as ApiClient;
-  const executor = createOrchestratorShellExecutor(api, outputDir);
+  const opener = createOrchestratorEnvelopeOpener({
+    loadKey: async () => key,
+    machineId: 'machine-1',
+    seenFile: join(mkdtempSync(join(tempDir, 'seen-')), 'seals.json'),
+  });
+  const executor = createOrchestratorShellExecutor(api, opener, outputDir);
   let next = 0;
-  const run = async (command: string, options: Partial<OrchestratorShellDispatchPayload> = {}) => {
+  const run = async (command: string, options: Partial<OrchestratorShellDispatchPayload> = {}, workingDirectory?: string) => {
     const executionId = `exec-${next++}`;
     reports.set(executionId, new Promise((resolve) => finished.set(executionId, resolve)));
     const payload: OrchestratorShellDispatchPayload = {
@@ -33,7 +47,7 @@ function setup(outputDir: string = mkdtempSync(join(tempDir, 'output-'))) {
       taskId: `task-${executionId}`,
       dispatchToken: `token-${executionId}`,
       provider: 'shell',
-      prompt: command,
+      prompt: sealCommand(command, workingDirectory),
       timeoutMs: null,
       ...options,
     };
@@ -62,14 +76,14 @@ describe.skipIf(process.platform === 'win32')('orchestrator shell executor', () 
 
   it('completes on exit code 0, in the given working directory', async () => {
     const { run } = setup();
-    const { report } = await run('pwd', { workingDirectory: '/tmp' });
+    const { report } = await run('pwd', {}, '/tmp');
     expect(await report).toMatchObject({ status: 'completed', exitCode: 0, errorCode: undefined });
     expect((await report).outputText?.trim()).toMatch(/\/tmp$/);
   });
 
   it('fails with a clear error when the working directory is missing', async () => {
     const { run } = setup();
-    const { report } = await run('true', { workingDirectory: '/nonexistent/happy-shell-test' });
+    const { report } = await run('true', {}, '/nonexistent/happy-shell-test');
     expect(await report).toMatchObject({
       status: 'failed',
       errorCode: 'SPAWN_ERROR',
@@ -157,5 +171,22 @@ describe.skipIf(process.platform === 'win32')('orchestrator shell executor', () 
     expect(await executor.dispatch(payload)).toEqual({ accepted: true, duplicate: true });
     await expect(executor.dispatch({ ...payload, dispatchToken: 'other' })).rejects.toThrow('different dispatchToken');
     await report;
+  });
+
+  it('refuses a command not sealed with the orchestrator key, or sealed for another machine', async () => {
+    const { api, executor } = setup();
+    const payload: OrchestratorShellDispatchPayload = {
+      executionId: 'exec-refused', runId: 'run-1', taskId: 'task-refused', dispatchToken: 'token', provider: 'shell', prompt: 'echo hi', timeoutMs: null,
+    };
+    await expect(executor.dispatch(payload)).rejects.toThrow('not sealed with the orchestrator key');
+    await expect(executor.dispatch({ ...payload, prompt: sealCommand('echo hi', undefined, ['machine-2']) })).rejects.toThrow('not sent to this machine');
+    expect(api.reportOrchestratorExecutionStart).not.toHaveBeenCalled();
+  });
+
+  it('runs a sealed command once: a replay under another execution is refused', async () => {
+    const { executor, run } = setup();
+    const { payload, report } = await run('true');
+    await report;
+    await expect(executor.dispatch({ ...payload, executionId: 'exec-replay', dispatchToken: 'token-replay' })).rejects.toThrow('already ran');
   });
 });

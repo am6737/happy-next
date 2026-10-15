@@ -259,6 +259,7 @@ export const ca: TranslationStructure = {
         orchestratorViewAll: 'Veure totes',
         orchestratorNoRuns: 'Sense execucions',
         orchestratorNoRunsMatch: 'Cap execució de l\'orquestrador coincideix amb el filtre seleccionat.',
+        orchestratorUndecryptable: 'No es pot desxifrar amb la teva clau de l\'orquestrador',
         orchestratorLoading: 'Carregant execucions de l\'orquestrador...',
         orchestratorFilterAll: 'Totes',
         orchestratorFilterActive: 'Actives',

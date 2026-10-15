@@ -21,6 +21,7 @@ import { calculateCost } from '@/utils/pricing';
 import { isDebug } from '@/utils/env';
 import { MessageArchiveWriter } from '../modules/common/messageArchive';
 import { extractSearchableMessage, type MessageSearchRole } from 'happy-wire';
+import { openOrchestratorResponse, openOrchestratorTitle, sealOrchestrator, sealTitle, type OrchestratorResumeEnvelope, type OrchestratorTaskEnvelope } from '@/orchestrator/seal';
 
 
 function stripCapabilitiesFromMetadata(metadata: Metadata): Metadata {
@@ -207,10 +208,13 @@ export class ApiSessionClient extends EventEmitter {
      * on its SDK's `result` and `sendAgentMessage` on an ACP agent's `task_complete` or `turn_aborted`.
      */
     private turn: string | null = null;
+    /** The account's orchestrator key, which seals the tasks this session sends and opens what comes back */
+    private readonly loadOrchestratorKey: () => Promise<Uint8Array>;
 
-    constructor(token: string, session: Session) {
+    constructor(token: string, session: Session, loadOrchestratorKey: () => Promise<Uint8Array>) {
         super()
         this.token = token;
+        this.loadOrchestratorKey = loadOrchestratorKey;
         this.sessionId = session.id;
         this.metadata = session.metadata;
         recordSessionBinding(session.id, session.metadata);
@@ -285,11 +289,14 @@ export class ApiSessionClient extends EventEmitter {
             this.rpcHandlerManager.onSocketDisconnect();
         })
 
-        this.socket.on('ephemeral', (payload: any) => {
+        this.socket.on('ephemeral', async (payload: any) => {
             if (payload?.type === 'orchestrator-run-terminal') {
+                const title = await this.loadOrchestratorKey()
+                    .then((key) => openOrchestratorTitle(payload.title, key))
+                    .catch(() => payload.runId);
                 const text = [
                     '<orchestrator-callback>',
-                    `Run "${payload.title}" (${payload.runId}) reached terminal state: ${payload.status}.`,
+                    `Run "${title}" (${payload.runId}) reached terminal state: ${payload.status}.`,
                     'Use orchestrator_pend or orchestrator_list to fetch full results.',
                     '</orchestrator-callback>',
                 ].join('\n');
@@ -481,42 +488,101 @@ export class ApiSessionClient extends EventEmitter {
         return this.metadata ? JSON.parse(JSON.stringify(this.metadata)) : null;
     }
 
+    /**
+     * Each task's title and what it is to do go sealed (see orchestrator/seal.ts), with the machine
+     * it may run on and how often; the run's title carries the run's metadata.
+     */
     async orchestratorSubmit(body: OrchestratorSubmitBody): Promise<any> {
+        const key = await this.loadOrchestratorKey();
+        const { metadata, ...rest } = body;
         const response = await axios.post(
             `${configuration.serverUrl}/v1/orchestrator/submit`,
-            body,
+            {
+                ...rest,
+                title: sealTitle(body.title, metadata, key),
+                tasks: body.tasks.map(({ title, metadata, workingDirectory, ...task }) => ({
+                    ...task,
+                    title: sealTitle(title, metadata, key),
+                    prompt: sealOrchestrator({
+                        kind: 'task',
+                        sealId: randomUUID(),
+                        createdAt: Date.now(),
+                        machineIds: [task.target?.machineId ?? this.metadata?.machineId ?? ''],
+                        maxAttempts: task.retry?.maxAttempts ?? 1,
+                        provider: task.provider,
+                        // The server runs 'default' as the provider's own default
+                        model: task.model === 'default' ? undefined : task.model,
+                        prompt: task.prompt,
+                        workingDirectory,
+                    } satisfies OrchestratorTaskEnvelope, key),
+                })),
+            },
             {
                 headers: this.orchestratorHeaders(),
                 timeout: 60_000,
             }
         );
-        return response.data;
+        return openOrchestratorResponse(response.data, key);
     }
 
     async orchestratorExec(body: OrchestratorExecBody): Promise<any> {
+        const key = await this.loadOrchestratorKey();
+        const { command, workingDirectory, title, ...rest } = body;
+        const firstLine = command.trim().split('\n')[0];
         const response = await axios.post(
             `${configuration.serverUrl}/v1/orchestrator/exec`,
-            body,
+            {
+                ...rest,
+                title: sealTitle(title ?? `$ ${firstLine.length > 120 ? `${firstLine.slice(0, 120)}…` : firstLine}`, undefined, key),
+                prompt: sealOrchestrator({
+                    kind: 'shell',
+                    sealId: randomUUID(),
+                    createdAt: Date.now(),
+                    machineIds: body.machineIds === 'all_online' ? 'all' : body.machineIds,
+                    maxAttempts: 1,
+                    command,
+                    workingDirectory,
+                } satisfies OrchestratorTaskEnvelope, key),
+            },
             {
                 headers: this.orchestratorHeaders(),
                 // The server holds the request open for up to waitMs
                 timeout: (body.waitMs ?? 30_000) + 30_000,
             }
         );
-        return response.data;
+        return openOrchestratorResponse(response.data, key);
     }
 
     async orchestratorTransfer(body: OrchestratorTransferBody): Promise<any> {
+        const key = await this.loadOrchestratorKey();
+        const { from, to, overwrite, title, ...rest } = body;
+        const short = (path: string) => path.length > 60 ? `…${path.slice(-60)}` : path;
         const response = await axios.post(
             `${configuration.serverUrl}/v1/orchestrator/transfer`,
-            body,
+            {
+                ...rest,
+                title: sealTitle(title ?? `Transfer ${short(from.path)} → ${short(to.path)}`, undefined, key),
+                fromMachineId: from.machineId,
+                toMachineIds: to.machineIds,
+                prompt: sealOrchestrator({
+                    kind: 'transfer',
+                    sealId: randomUUID(),
+                    createdAt: Date.now(),
+                    machineIds: to.machineIds === 'all_online' ? 'all' : to.machineIds,
+                    maxAttempts: 1,
+                    sourceMachineId: from.machineId,
+                    sourcePath: from.path,
+                    targetPath: to.path,
+                    overwrite: overwrite ?? false,
+                } satisfies OrchestratorTaskEnvelope, key),
+            },
             {
                 headers: this.orchestratorHeaders(),
                 // The server holds the request open for up to waitMs
                 timeout: (body.waitMs ?? 30_000) + 30_000,
             }
         );
-        return response.data;
+        return openOrchestratorResponse(response.data, key);
     }
 
     async orchestratorGetContext(): Promise<any> {
@@ -540,6 +606,7 @@ export class ApiSessionClient extends EventEmitter {
     }
 
     async orchestratorGetRun(runId: string, includeTasks: boolean = true): Promise<any> {
+        const key = await this.loadOrchestratorKey();
         const response = await axios.get(
             `${configuration.serverUrl}/v1/orchestrator/runs/${encodeURIComponent(runId)}`,
             {
@@ -548,10 +615,11 @@ export class ApiSessionClient extends EventEmitter {
                 timeout: 30_000,
             }
         );
-        return response.data;
+        return openOrchestratorResponse(response.data, key);
     }
 
     async orchestratorListRuns(query: OrchestratorListQuery = {}): Promise<any> {
+        const key = await this.loadOrchestratorKey();
         const response = await axios.get(
             `${configuration.serverUrl}/v1/orchestrator/runs`,
             {
@@ -560,10 +628,11 @@ export class ApiSessionClient extends EventEmitter {
                 timeout: 30_000,
             }
         );
-        return response.data;
+        return openOrchestratorResponse(response.data, key);
     }
 
     async orchestratorPend(runId: string, query: OrchestratorPendQuery = {}): Promise<any> {
+        const key = await this.loadOrchestratorKey();
         const response = await axios.get(
             `${configuration.serverUrl}/v1/orchestrator/runs/${encodeURIComponent(runId)}/pend`,
             {
@@ -572,14 +641,22 @@ export class ApiSessionClient extends EventEmitter {
                 timeout: Math.min(Math.max((query.timeoutMs ?? 30_000) + 10_000, 15_000), 130_000),
             }
         );
-        return response.data;
+        return openOrchestratorResponse(response.data, key);
     }
 
+    /** The message goes sealed with the task it is for, so the server can neither read nor redirect it */
     async orchestratorSendMessage(body: OrchestratorSendMessageBody): Promise<any> {
+        const key = await this.loadOrchestratorKey();
         const response = await axios.post(
             `${configuration.serverUrl}/v1/orchestrator/tasks/${encodeURIComponent(body.taskId)}/send-message`,
             {
-                message: body.message,
+                message: sealOrchestrator({
+                    kind: 'resume',
+                    sealId: randomUUID(),
+                    taskId: body.taskId,
+                    message: body.message,
+                    createdAt: Date.now(),
+                } satisfies OrchestratorResumeEnvelope, key),
                 controllerSessionId: body.controllerSessionId,
             },
             {
@@ -587,7 +664,7 @@ export class ApiSessionClient extends EventEmitter {
                 timeout: 60_000,
             }
         );
-        return response.data;
+        return openOrchestratorResponse(response.data, key);
     }
 
     async orchestratorCancel(runId: string, body?: { reason?: string }): Promise<any> {

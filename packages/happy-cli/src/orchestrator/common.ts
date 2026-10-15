@@ -13,12 +13,18 @@ export type OrchestratorDispatchPayload = {
   executionType: 'initial' | 'resume';
   childSessionId?: string;
   model?: string;
+  /** As dispatched, the task's sealed envelope; once opened, what the agent is asked */
   prompt: string;
+  /** A resume's sealed follow-up message */
+  resumeMessage?: string;
   timeoutMs: number;
   workingDirectory?: string;
 };
 
-/** A shell task: `prompt` is the command, run by the daemon itself rather than by an agent */
+/**
+ * A shell task, run by the daemon itself rather than by an agent: `prompt` is its sealed
+ * envelope as dispatched, the command once opened
+ */
 export type OrchestratorShellDispatchPayload = {
   executionId: string;
   runId: string;
@@ -31,7 +37,7 @@ export type OrchestratorShellDispatchPayload = {
   workingDirectory?: string;
 };
 
-/** A transfer task, run on its target machine: `prompt` is the transfer's spec as JSON */
+/** A transfer task, run on its target machine: `prompt` is its sealed envelope */
 export type OrchestratorTransferDispatchPayload = {
   executionId: string;
   runId: string;
@@ -41,14 +47,6 @@ export type OrchestratorTransferDispatchPayload = {
   prompt: string;
   /** Null: no timeout, the transfer runs until it ends or is cancelled */
   timeoutMs: number | null;
-};
-
-/** What a transfer task's prompt holds */
-export type OrchestratorTransferSpec = {
-  sourceMachineId: string;
-  sourcePath: string;
-  targetPath: string;
-  overwrite: boolean;
 };
 
 /** What arrived at a transfer's target */
@@ -62,16 +60,22 @@ export type OrchestratorTransferResult = {
   sha256: string | null;
 };
 
-/** One step of pulling a transfer's source, which the server relays to the source machine */
+/**
+ * One step of pulling a transfer's source, which the server relays to the source machine. The
+ * target's public key travels sealed (OrchestratorTransferKey), as does the source's in answer.
+ */
 export type OrchestratorTransferSourceRequest =
   | { op: 'open'; publicKey: string }
   | { op: 'read'; index: number }
   | { op: 'close' };
 
-/** A transfer step as the source machine gets it: `transferId` is the execution's id */
+/**
+ * A transfer step as the source machine gets it: `transferId` is the execution's id, `spec` the
+ * task's sealed envelope, which says what to send
+ */
 export type OrchestratorTransferSourceParams = OrchestratorTransferSourceRequest & {
   transferId: string;
-  path: string;
+  spec: string;
 };
 
 /** Where a shell task's stream was saved in full, when it was too long for a tool result */

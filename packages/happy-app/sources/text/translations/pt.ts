@@ -259,6 +259,7 @@ export const pt: TranslationStructure = {
         orchestratorViewAll: 'Ver todas',
         orchestratorNoRuns: 'Sem execuções',
         orchestratorNoRunsMatch: 'Nenhuma execução do orquestrador corresponde ao filtro selecionado.',
+        orchestratorUndecryptable: 'Não é possível descriptografar com sua chave do orquestrador',
         orchestratorLoading: 'Carregando execuções do orquestrador...',
         orchestratorFilterAll: 'Todas',
         orchestratorFilterActive: 'Ativas',

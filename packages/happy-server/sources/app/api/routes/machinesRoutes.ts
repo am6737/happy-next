@@ -126,6 +126,7 @@ export function machinesRoutes(app: Fastify) {
             daemonState: m.daemonState,
             daemonStateVersion: m.daemonStateVersion,
             dataEncryptionKey: m.dataEncryptionKey ? Buffer.from(m.dataEncryptionKey).toString('base64') : null,
+            orchestratorKey: m.orchestratorKey,
             seq: m.seq,
             active: m.active,
             activeAt: m.lastActiveAt.getTime(),
@@ -165,6 +166,7 @@ export function machinesRoutes(app: Fastify) {
                 daemonState: machine.daemonState,
                 daemonStateVersion: machine.daemonStateVersion,
                 dataEncryptionKey: machine.dataEncryptionKey ? Buffer.from(machine.dataEncryptionKey).toString('base64') : null,
+                orchestratorKey: machine.orchestratorKey,
                 seq: machine.seq,
                 active: machine.active,
                 activeAt: machine.lastActiveAt.getTime(),
@@ -172,6 +174,30 @@ export function machinesRoutes(app: Fastify) {
                 updatedAt: machine.updatedAt.getTime()
             }
         };
+    });
+
+    // The app hands a machine the account's orchestrator key, sealed with the machine's data key,
+    // which only the app and that machine hold. The machine's daemon and sessions read it back
+    // from `GET /v1/machines/:id` to seal and open orchestrator tasks. Setting it again replaces it.
+    app.post('/v1/machines/:id/orchestrator-key', {
+        preHandler: app.authenticate,
+        schema: {
+            params: z.object({
+                id: z.string()
+            }),
+            body: z.object({
+                orchestratorKey: z.string().min(1).max(1024)
+            })
+        }
+    }, async (request, reply) => {
+        const updated = await db.machine.updateMany({
+            where: { accountId: request.userId, id: request.params.id },
+            data: { orchestratorKey: request.body.orchestratorKey }
+        });
+        if (updated.count === 0) {
+            return reply.code(404).send({ error: 'Machine not found' });
+        }
+        return { ok: true };
     });
 
 }

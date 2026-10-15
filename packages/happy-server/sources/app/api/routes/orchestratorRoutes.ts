@@ -41,12 +41,6 @@ const RUN_STATUSES = ['queued', 'running', 'canceling', 'completed', 'failed', '
 const EXECUTION_FINAL_STATUSES = ['completed', 'failed', 'cancelled', 'timeout'] as const;
 const LIST_RUN_STATUS_FILTERS = ['active', 'terminal', ...RUN_STATUSES] as const;
 const IDEMPOTENCY_RETRY_TIMES = 2;
-const CLI_DETECTION_COMMAND =
-    '(command -v claude >/dev/null 2>&1 && echo "claude:true" || echo "claude:false") && ' +
-    '(command -v codex >/dev/null 2>&1 && echo "codex:true" || echo "codex:false") && ' +
-    '(command -v gemini >/dev/null 2>&1 && echo "gemini:true" || echo "gemini:false") && ' +
-    '((command -v qodercli || command -v qoderclicn || test -x ~/.local/bin/qodercli || test -x ~/.local/bin/qoderclicn) >/dev/null 2>&1 && echo "qoder:true" || echo "qoder:false") && ' +     // Qoder's installer puts qodercli (or the China build qoderclicn) in ~/.local/bin, which the daemon's PATH may lack
-    'echo "hostname:$(hostname 2>/dev/null || echo \'\')"';
 const CLI_DETECTION_TIMEOUT_MS = 20_000;
 const IDEMPOTENCY_RETRY_DELAY_MS = 10;
 const DEFAULT_CONTEXT_MAX_CONCURRENCY = 2;
@@ -68,18 +62,24 @@ const TRANSFER_DISPATCH_METHOD_SUFFIX = ':orchestrator-transfer-dispatch';
 const TRANSFER_SOURCE_METHOD = 'orchestrator-transfer-source';
 // How long the source machine has to answer one step of a transfer (opening it, one chunk)
 const TRANSFER_SOURCE_RPC_TIMEOUT_MS = 60_000;
-const TRANSFER_PATH_MAX_LENGTH = 4096;
-const TRANSFER_TITLE_PATH_MAX_LENGTH = 60;
-const EXEC_TITLE_COMMAND_MAX_LENGTH = 120;
+
+// What a client seals with the account's orchestrator key: "e2e1:" and the base64 of the AES-GCM
+// bundle. The server only stores these and passes them on, with no key to read or forge them: a
+// daemon runs only tasks it can open, and checks they name it.
+const SEALED_PATTERN = /^e2e1:[A-Za-z0-9+/]+={0,2}$/;
+const SEALED_ERROR = 'must be sealed with the orchestrator key; update the Happy CLI';
+// Base64 of the bundle grows a sealed value by a third: a run's title, a task's title
+const SEALED_TITLE_MAX_LENGTH = 4096;
+// A task: its prompt of up to 64 KiB characters (3 UTF-8 bytes each at most) with its settings
+const SEALED_TASK_MAX_LENGTH = 300_000;
+// A result: up to 1M characters of stdout and of stderr each, with room for JSON escapes
+const SEALED_RESULT_MAX_LENGTH = 20_000_000;
+
+function sealedSchema(maxLength: number) {
+    return z.string().max(maxLength).regex(SEALED_PATTERN, SEALED_ERROR);
+}
 
 type ProviderName = typeof PROVIDERS[number];
-
-type BashRpcResponse = {
-    success: boolean;
-    stdout: string;
-    stderr: string;
-    exitCode?: number;
-};
 
 const MACHINE_IDENTITY_TIMEOUT_MS = 5_000;
 
@@ -146,9 +146,9 @@ type DetectionResult = {
 };
 
 /**
- * Detect which CLI providers are installed on the given machines via bash RPC,
- * plus the machine's OS hostname. Runs detection commands in parallel with a timeout.
- * On failure/timeout, returns empty providers for that machine.
+ * Ask the given machines which CLI providers they have installed, and their OS hostname, through
+ * their daemon's `detect-providers`. Asks in parallel with a timeout; a machine that fails to
+ * answer in time has no providers.
  */
 async function detectMachineProviders(
     userId: string,
@@ -160,42 +160,21 @@ async function detectMachineProviders(
     }
 
     const detectionPromises = machineIds.map(async (machineId): Promise<[string, DetectionResult]> => {
-        if (!hasUserRpcMethod(userId, `${machineId}:bash`)) {
+        if (!hasUserRpcMethod(userId, `${machineId}:detect-providers`)) {
             return [machineId, { providers: [] }];
         }
-
         try {
             const response = await invokeUserRpc(
                 userId,
-                `${machineId}:bash`,
-                { command: CLI_DETECTION_COMMAND, cwd: '/' },
+                `${machineId}:detect-providers`,
+                {},
                 CLI_DETECTION_TIMEOUT_MS,
-            ) as BashRpcResponse;
-
-            if (!response || !response.success) {
-                return [machineId, { providers: [] }];
-            }
-
-            const statusByProvider = new Map<ProviderName, boolean>();
-            let hostname: string | undefined;
-            const lines = (response.stdout || '').trim().split('\n');
-            for (const line of lines) {
-                const sepIdx = line.indexOf(':');
-                if (sepIdx < 0) continue;
-                const keyRaw = line.slice(0, sepIdx).trim();
-                const valueRaw = line.slice(sepIdx + 1).trim();
-                if (!keyRaw) continue;
-                if (keyRaw === 'hostname') {
-                    if (valueRaw) hostname = valueRaw;
-                    continue;
-                }
-                if (!PROVIDERS.includes(keyRaw as ProviderName)) continue;
-                if (!valueRaw) continue;
-                statusByProvider.set(keyRaw as ProviderName, valueRaw === 'true');
-            }
-
-            const providers = PROVIDERS.filter((provider) => statusByProvider.get(provider) === true);
-            return [machineId, { providers, hostname }];
+            ) as { providers?: unknown; hostname?: unknown } | null;
+            const installed = Array.isArray(response?.providers) ? response.providers : [];
+            return [machineId, {
+                providers: PROVIDERS.filter((provider) => installed.includes(provider)),
+                ...(typeof response?.hostname === 'string' && response.hostname ? { hostname: response.hostname } : {}),
+            }];
         } catch {
             return [machineId, { providers: [] }];
         }
@@ -211,13 +190,15 @@ async function detectMachineProviders(
     return result;
 }
 
+// A task's title and prompt arrive sealed (see SEALED_PATTERN): the prompt is the task's envelope,
+// which also names the machine it runs on, its provider, model and working directory, so the
+// daemon goes by those and not by the fields here
 const submitTaskSchema = z.object({
     taskKey: z.string().min(1).max(128).optional(),
-    title: z.string().min(1).max(256).optional(),
+    title: sealedSchema(SEALED_TITLE_MAX_LENGTH).optional(),
     provider: z.enum(PROVIDERS),
     model: z.string().min(1).max(128).optional(),
-    prompt: z.string().min(1).max(65536),
-    workingDirectory: z.string().max(512).optional(),
+    prompt: sealedSchema(SEALED_TASK_MAX_LENGTH),
     timeoutMs: z.coerce.number().int().min(1000).max(24 * 60 * 60 * 1000).optional(),
     dependsOn: z.array(z.string().min(1).max(128)).max(RUN_MAX_TASKS - 1).optional(),
     retry: z.object({
@@ -228,7 +209,6 @@ const submitTaskSchema = z.object({
         type: z.enum(['current_machine', 'machine_id']),
         machineId: z.string().optional(),
     }).optional(),
-    metadata: z.record(z.string(), z.string()).optional(),
 }).refine((value) => {
     if (value.target?.type === 'machine_id') {
         return !!value.target.machineId;
@@ -240,7 +220,7 @@ const submitTaskSchema = z.object({
 });
 
 const submitBodySchema = z.object({
-    title: z.string().min(1).max(256),
+    title: sealedSchema(SEALED_TITLE_MAX_LENGTH),
     controllerSessionId: z.string().optional(),
     controllerMachineId: z.string().optional(),
     tasks: z.array(submitTaskSchema).min(1).max(RUN_MAX_TASKS),
@@ -249,79 +229,36 @@ const submitBodySchema = z.object({
     waitTimeoutMs: z.coerce.number().int().min(1000).max(60 * 60 * 1000).optional(),
     pollIntervalMs: z.coerce.number().int().min(200).max(60_000).optional(),
     idempotencyKey: z.string().min(1).max(128).optional(),
-    metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
-// A command reaches the shell as one argument: Windows caps a whole command line at 32,767
-// UTF-16 characters, and Linux caps one argument at 128 KiB
-const EXEC_COMMAND_MAX_LENGTH = 32_000;
-
+// `prompt` is the sealed envelope every task of the run shares: the command, working directory
+// and the machines it may run on ('all' for all_online), which each daemon checks for itself
 const execBodySchema = z.object({
-    command: z.string().min(1).max(EXEC_COMMAND_MAX_LENGTH),
+    prompt: sealedSchema(SEALED_TASK_MAX_LENGTH),
+    title: sealedSchema(SEALED_TITLE_MAX_LENGTH),
     machineIds: z.union([
         z.array(z.string().min(1).max(128)).min(1).max(RUN_MAX_TASKS),
         z.literal('all_online'),
     ]),
-    workingDirectory: z.string().max(512).optional(),
     timeoutMs: z.coerce.number().int().min(1000).max(SHELL_TASK_MAX_TIMEOUT_MS).optional(),
     waitMs: z.coerce.number().int().min(0).max(EXEC_MAX_WAIT_MS).optional(),
     maxConcurrency: z.coerce.number().int().min(1).max(SHELL_RUN_MAX_CONCURRENCY).optional(),
-    title: z.string().min(1).max(256).optional(),
     controllerSessionId: z.string().optional(),
 });
 
+// `prompt` is the sealed envelope every task of the run shares: the source machine and path, the
+// target path and overwrite, and the target machines ('all' for all_online)
 const transferBodySchema = z.object({
-    from: z.object({
-        machineId: z.string().min(1).max(128),
-        path: z.string().min(1).max(TRANSFER_PATH_MAX_LENGTH),
-    }),
-    to: z.object({
-        machineIds: z.union([
-            z.array(z.string().min(1).max(128)).min(1).max(RUN_MAX_TASKS),
-            z.literal('all_online'),
-        ]),
-        path: z.string().min(1).max(TRANSFER_PATH_MAX_LENGTH),
-    }),
-    overwrite: z.boolean().optional(),
+    prompt: sealedSchema(SEALED_TASK_MAX_LENGTH),
+    title: sealedSchema(SEALED_TITLE_MAX_LENGTH),
+    fromMachineId: z.string().min(1).max(128),
+    toMachineIds: z.union([
+        z.array(z.string().min(1).max(128)).min(1).max(RUN_MAX_TASKS),
+        z.literal('all_online'),
+    ]),
     timeoutMs: z.coerce.number().int().min(1000).max(SHELL_TASK_MAX_TIMEOUT_MS).optional(),
     waitMs: z.coerce.number().int().min(0).max(EXEC_MAX_WAIT_MS).optional(),
-    title: z.string().min(1).max(256).optional(),
     controllerSessionId: z.string().optional(),
-});
-
-// What a transfer task carries as its prompt: where the file comes from and where it goes
-const transferSpecSchema = z.object({
-    sourceMachineId: z.string(),
-    sourcePath: z.string(),
-    targetPath: z.string(),
-    overwrite: z.boolean(),
-});
-
-function parseTransferSpec(prompt: string): z.infer<typeof transferSpecSchema> | null {
-    try {
-        return transferSpecSchema.parse(JSON.parse(prompt));
-    } catch {
-        return null;
-    }
-}
-
-// What arrived at a transfer's target: `path` is where it was put, `files` counts the regular
-// files (1 for a file), `sha256` is the file's (null for a directory)
-const transferResultSchema = z.object({
-    path: z.string().min(1).max(TRANSFER_PATH_MAX_LENGTH),
-    kind: z.enum(['file', 'directory']),
-    bytes: z.number().int().min(0),
-    files: z.number().int().min(0),
-    sha256: z.string().max(64).nullable(),
-});
-
-// A shell task's output too long to keep in full: the daemon saved it to `path` on its machine
-// (`complete` false: the file stopped at its size cap), and sent only part of it as the text
-const outputFileSchema = z.object({
-    path: z.string().min(1).max(1024),
-    chars: z.number().int().min(0),
-    lines: z.number().int().min(0),
-    complete: z.boolean(),
 });
 
 type RunWithTasks = {
@@ -351,6 +288,7 @@ type RunWithTasks = {
         outputSummary: string | null;
         outputText: string | null;
         stderrText: string | null;
+        sealedResult: string | null;
         errorCode: string | null;
         errorMessage: string | null;
         createdAt: Date;
@@ -374,6 +312,7 @@ type RunWithTasks = {
             outputSummary: string | null;
             outputText: string | null;
             stderrText: string | null;
+            sealedResult: string | null;
             createdAt: Date;
             updatedAt: Date;
         }>;
@@ -430,6 +369,7 @@ function mapTask(task: RunWithTasks['tasks'][number]) {
         outputSummary: task.outputSummary,
         outputText: task.outputText,
         stderrText: task.stderrText,
+        sealedResult: task.sealedResult,
         errorCode: task.errorCode,
         errorMessage: task.errorMessage,
         createdAt: task.createdAt.toISOString(),
@@ -454,6 +394,7 @@ function mapTask(task: RunWithTasks['tasks'][number]) {
                 outputSummary: execution.outputSummary,
                 outputText: execution.outputText,
                 stderrText: execution.stderrText,
+                sealedResult: execution.sealedResult,
                 createdAt: execution.createdAt.toISOString(),
                 updatedAt: execution.updatedAt.toISOString(),
             })),
@@ -468,6 +409,7 @@ const shellTaskSelect = {
     targetMachineId: true,
     outputText: true,
     stderrText: true,
+    sealedResult: true,
     stdoutFile: true,
     stderrFile: true,
     errorCode: true,
@@ -500,6 +442,7 @@ function mapShellTask(task: Prisma.OrchestratorTaskGetPayload<{ select: typeof s
         stderr: task.stderrText,
         stdoutFile: task.stdoutFile,
         stderrFile: task.stderrFile,
+        sealedResult: task.sealedResult,
         errorCode: task.errorCode,
         errorMessage: task.errorMessage,
         startedAt: execution?.startedAt?.toISOString() ?? null,
@@ -514,6 +457,7 @@ const transferTaskSelect = {
     targetMachineId: true,
     prompt: true,
     transferResult: true,
+    sealedResult: true,
     errorCode: true,
     errorMessage: true,
     executions: {
@@ -528,18 +472,19 @@ const transferTaskSelect = {
 
 /**
  * A transfer task as `/transfer` and `/pend` return it: the copy to one target machine, the same
- * whether the run ended within the transfer call or later.
+ * whether the run ended within the transfer call or later. `result` is only set on tasks that
+ * ended before results were sealed; newer ones carry it in `sealedResult`.
  */
 function mapTransferTask(task: Prisma.OrchestratorTaskGetPayload<{ select: typeof transferTaskSelect }>) {
     const execution = task.executions[0];
-    const spec = parseTransferSpec(task.prompt);
     return {
         taskId: task.id,
         machineId: task.targetMachineId,
         status: task.status,
-        from: spec ? { machineId: spec.sourceMachineId, path: spec.sourcePath } : null,
-        to: spec?.targetPath ?? null,
+        // The sealed envelope, which holds where the copy comes from and goes to
+        prompt: task.prompt,
         result: task.transferResult,
+        sealedResult: task.sealedResult,
         errorCode: task.errorCode,
         errorMessage: task.errorMessage,
         startedAt: execution?.startedAt?.toISOString() ?? null,
@@ -642,6 +587,7 @@ async function loadRunForUser(userId: string, runId: string, includeTasks: boole
                     outputSummary: true,
                     outputText: true,
                     stderrText: true,
+                    sealedResult: true,
                     errorCode: true,
                     errorMessage: true,
                     createdAt: true,
@@ -667,6 +613,7 @@ async function loadRunForUser(userId: string, runId: string, includeTasks: boole
                             outputSummary: true,
                             outputText: true,
                             stderrText: true,
+                            sealedResult: true,
                             createdAt: true,
                             updatedAt: true,
                         },
@@ -726,6 +673,7 @@ async function loadTaskForUser(
             outputSummary: true,
             outputText: true,
             stderrText: true,
+            sealedResult: true,
             errorCode: true,
             errorMessage: true,
             createdAt: true,
@@ -759,6 +707,7 @@ async function loadTaskForUser(
                     outputSummary: true,
                     outputText: true,
                     stderrText: true,
+                    sealedResult: true,
                     createdAt: true,
                     updatedAt: true,
                 },
@@ -773,11 +722,10 @@ type NewTask = {
     taskKey?: string;
     title?: string;
     // exec creates shell tasks, which run their prompt as a command, with no AI and no session;
-    // transfer creates transfer tasks, whose prompt is the transfer's spec (transferSpecSchema)
+    // transfer creates transfer tasks; each prompt is a sealed envelope
     provider: ProviderName | 'shell' | 'transfer';
     model: string | null;
     prompt: string;
-    workingDirectory?: string;
     timeoutMs?: number;
     targetMachineId: string | null;
     dependsOnTaskKeys: string[];
@@ -791,7 +739,6 @@ async function createRunWithTasks(userId: string, input: {
     controllerSessionId?: string;
     maxConcurrency: number;
     idempotencyKey?: string;
-    metadata?: Record<string, unknown>;
 }, newTasks: NewTask[]): Promise<{ run: RunWithTasks; summary: RunSummary }> {
     return db.$transaction(async (tx: Prisma.TransactionClient) => {
         const run = await tx.orchestratorRun.create({
@@ -802,7 +749,6 @@ async function createRunWithTasks(userId: string, input: {
                 status: 'queued',
                 maxConcurrency: input.maxConcurrency,
                 idempotencyKey: input.idempotencyKey,
-                metadata: input.metadata as Prisma.InputJsonValue | undefined,
             },
             select: {
                 id: true,
@@ -846,6 +792,7 @@ async function createRunWithTasks(userId: string, input: {
                 outputSummary: true,
                 outputText: true,
                 stderrText: true,
+                sealedResult: true,
                 errorCode: true,
                 errorMessage: true,
                 createdAt: true,
@@ -1267,14 +1214,12 @@ export function orchestratorRoutes(app: Fastify) {
                 controllerSessionId: body.controllerSessionId,
                 maxConcurrency: body.maxConcurrency ?? 2,
                 idempotencyKey: body.idempotencyKey,
-                metadata: body.metadata,
             }, body.tasks.map((task, index) => ({
                 taskKey: task.taskKey,
                 title: task.title,
                 provider: task.provider,
                 model: normalizedTaskModels[index] ?? null,
                 prompt: task.prompt,
-                workingDirectory: task.workingDirectory,
                 timeoutMs: task.timeoutMs,
                 targetMachineId: task.target?.type === 'machine_id'
                     ? task.target.machineId!
@@ -1371,19 +1316,14 @@ export function orchestratorRoutes(app: Fastify) {
             return sendError(reply, 400, 'INVALID_ARGUMENT', `Unknown machineId: ${unknownMachineIds.join(', ')}`);
         }
 
-        const firstLine = body.command.trim().split('\n')[0];
-        const title = body.title ?? `$ ${firstLine.length > EXEC_TITLE_COMMAND_MAX_LENGTH
-            ? `${firstLine.slice(0, EXEC_TITLE_COMMAND_MAX_LENGTH)}…`
-            : firstLine}`;
         const created = await createRunWithTasks(userId, {
-            title,
+            title: body.title,
             controllerSessionId: body.controllerSessionId,
             maxConcurrency: body.maxConcurrency ?? machineIds.length,
         }, machineIds.map((machineId) => ({
             provider: 'shell' as const,
             model: null,
-            prompt: body.command,
-            workingDirectory: body.workingDirectory,
+            prompt: body.prompt,
             timeoutMs: body.timeoutMs,
             targetMachineId: machineId,
             dependsOnTaskKeys: [],
@@ -1459,11 +1399,11 @@ export function orchestratorRoutes(app: Fastify) {
             }
         }
 
-        const sourceMachineId = body.from.machineId;
+        const sourceMachineId = body.fromMachineId;
         // all_online sends to every other machine: the source has the file already
-        const machineIds = body.to.machineIds === 'all_online'
+        const machineIds = body.toMachineIds === 'all_online'
             ? listShellReadyMachineIds(userId, TRANSFER_DISPATCH_METHOD_SUFFIX).filter((machineId) => machineId !== sourceMachineId)
-            : [...new Set(body.to.machineIds)];
+            : [...new Set(body.toMachineIds)];
         if (machineIds.length === 0) {
             return sendError(reply, 409, 'CONFLICT', 'No other machine is online with remote shell turned on');
         }
@@ -1483,24 +1423,14 @@ export function orchestratorRoutes(app: Fastify) {
             return sendError(reply, 409, 'CONFLICT', `Source machine ${sourceMachineId} is offline, has remote shell turned off, or runs a Happy CLI too old to send files`);
         }
 
-        const shortPath = (path: string) => path.length > TRANSFER_TITLE_PATH_MAX_LENGTH
-            ? `…${path.slice(-TRANSFER_TITLE_PATH_MAX_LENGTH)}`
-            : path;
-        const title = body.title ?? `Transfer ${shortPath(body.from.path)} → ${shortPath(body.to.path)}`;
-        const prompt = JSON.stringify({
-            sourceMachineId,
-            sourcePath: body.from.path,
-            targetPath: body.to.path,
-            overwrite: body.overwrite ?? false,
-        } satisfies z.infer<typeof transferSpecSchema>);
         const created = await createRunWithTasks(userId, {
-            title,
+            title: body.title,
             controllerSessionId: body.controllerSessionId,
             maxConcurrency: machineIds.length,
         }, machineIds.map((machineId) => ({
             provider: 'transfer' as const,
             model: null,
-            prompt,
+            prompt: body.prompt,
             timeoutMs: body.timeoutMs,
             targetMachineId: machineId,
             dependsOnTaskKeys: [],
@@ -1632,7 +1562,8 @@ export function orchestratorRoutes(app: Fastify) {
                 taskId: z.string(),
             }),
             body: z.object({
-                message: z.string().min(1).max(65_536),
+                // Sealed: the message, with the task it is for, which the daemon checks
+                message: sealedSchema(SEALED_TASK_MAX_LENGTH),
                 controllerSessionId: z.string().min(1).max(128).optional(),
             }),
         },
@@ -2312,7 +2243,8 @@ export function orchestratorRoutes(app: Fastify) {
     // machine's `orchestrator-transfer-source` as is. The server only passes the steps on: the
     // chunks are encrypted with a key the two machines agree on (from the public keys in `open`),
     // which it does not have. Only a live transfer execution's own target, holding its
-    // dispatchToken, reaches the source, and only for the path of its task.
+    // dispatchToken, reaches the source, and only for the path of its task: each step carries the
+    // task's sealed envelope, and the source serves only what that names, if it names the source.
     app.post('/v1/orchestrator/executions/:id/transfer-source', {
         preHandler: app.authenticate,
         schema: {
@@ -2322,7 +2254,10 @@ export function orchestratorRoutes(app: Fastify) {
             body: z.object({
                 dispatchToken: z.string().min(1),
                 op: z.enum(['open', 'read', 'close']),
-                publicKey: z.string().max(256).optional(),
+                // From the task's sealed envelope, which the source opens to check it names itself
+                sourceMachineId: z.string().min(1).max(128),
+                // The target's half of the key exchange, sealed with the execution it is for
+                publicKey: sealedSchema(SEALED_TITLE_MAX_LENGTH).optional(),
                 index: z.number().int().min(0).optional(),
             }),
         },
@@ -2355,20 +2290,17 @@ export function orchestratorRoutes(app: Fastify) {
         if (body.op !== 'close' && execution.status !== 'dispatching' && execution.status !== 'running') {
             return sendError(reply, 409, 'CONFLICT', `Transfer is ${execution.status}`);
         }
-        const spec = parseTransferSpec(execution.task.prompt);
-        if (!spec) {
-            return sendError(reply, 500, 'INTERNAL', 'Transfer task has no valid spec');
-        }
+        const sourceMachineId = body.sourceMachineId;
 
         let result: unknown;
         try {
             result = await invokeUserRpc(
                 userId,
-                `${spec.sourceMachineId}:${TRANSFER_SOURCE_METHOD}`,
+                `${sourceMachineId}:${TRANSFER_SOURCE_METHOD}`,
                 {
                     transferId: id,
                     op: body.op,
-                    path: spec.sourcePath,
+                    spec: execution.task.prompt,
                     publicKey: body.publicKey,
                     index: body.index,
                 },
@@ -2377,12 +2309,12 @@ export function orchestratorRoutes(app: Fastify) {
         } catch (error) {
             // Not reached, or no answer in time: the source may be back for a retry
             const message = error instanceof Error ? error.message : String(error);
-            return sendError(reply, 502, 'SOURCE_UNREACHABLE', `Source machine ${spec.sourceMachineId}: ${message}`);
+            return sendError(reply, 502, 'SOURCE_UNREACHABLE', `Source machine ${sourceMachineId}: ${message}`);
         }
         // The source's handler failed (no such file, say): asking again gets the same answer
         const sourceError = (result as { error?: unknown } | null)?.error;
         if (typeof sourceError === 'string') {
-            return sendError(reply, 422, 'SOURCE_FAILED', `Source machine ${spec.sourceMachineId}: ${sourceError}`);
+            return sendError(reply, 422, 'SOURCE_FAILED', `Source machine ${sourceMachineId}: ${sourceError}`);
         }
         return reply.send({ ok: true, data: result });
     });
@@ -2400,14 +2332,10 @@ export function orchestratorRoutes(app: Fastify) {
                 exitCode: z.number().int().nullable().optional(),
                 signal: z.string().nullable().optional(),
                 childSessionId: z.string().min(1).max(256).nullable().optional(),
-                outputSummary: z.string().max(4096).nullable().optional(),
-                outputText: z.string().max(1_000_000).nullable().optional(),
-                stderrText: z.string().max(1_000_000).nullable().optional(),
-                stdoutFile: outputFileSchema.nullable().optional(),
-                stderrFile: outputFileSchema.nullable().optional(),
-                transferResult: transferResultSchema.nullable().optional(),
+                // Sealed: the output, files, transfer result and error message, with the task and
+                // execution they belong to
+                sealedResult: sealedSchema(SEALED_RESULT_MAX_LENGTH).nullable().optional(),
                 errorCode: z.string().nullable().optional(),
-                errorMessage: z.string().max(10_000).nullable().optional(),
             }),
         },
     }, async (request, reply) => {
@@ -2487,14 +2415,15 @@ export function orchestratorRoutes(app: Fastify) {
                     ...(body.childSessionId
                         ? { childSessionId: body.childSessionId }
                         : {}),
-                    outputSummary: body.outputSummary ?? null,
-                    outputText: body.outputText ?? null,
-                    stderrText: body.stderrText ?? null,
-                    stdoutFile: body.stdoutFile ?? Prisma.DbNull,
-                    stderrFile: body.stderrFile ?? Prisma.DbNull,
-                    transferResult: body.transferResult ?? Prisma.DbNull,
+                    outputSummary: null,
+                    outputText: null,
+                    stderrText: null,
+                    stdoutFile: Prisma.DbNull,
+                    stderrFile: Prisma.DbNull,
+                    transferResult: Prisma.DbNull,
+                    sealedResult: body.sealedResult ?? null,
                     errorCode: body.errorCode ?? null,
-                    errorMessage: body.errorMessage ?? null,
+                    errorMessage: null,
                 },
             });
             if (updated.count === 0) {
@@ -2508,14 +2437,15 @@ export function orchestratorRoutes(app: Fastify) {
                 },
                 data: {
                     status: taskStatus,
-                    outputSummary: body.outputSummary ?? null,
-                    outputText: body.outputText ?? null,
-                    stderrText: body.stderrText ?? null,
-                    stdoutFile: body.stdoutFile ?? Prisma.DbNull,
-                    stderrFile: body.stderrFile ?? Prisma.DbNull,
-                    transferResult: body.transferResult ?? Prisma.DbNull,
+                    outputSummary: null,
+                    outputText: null,
+                    stderrText: null,
+                    stdoutFile: Prisma.DbNull,
+                    stderrFile: Prisma.DbNull,
+                    transferResult: Prisma.DbNull,
+                    sealedResult: body.sealedResult ?? null,
                     errorCode: body.errorCode ?? null,
-                    errorMessage: body.errorMessage ?? null,
+                    errorMessage: null,
                     nextAttemptAt,
                 },
             });

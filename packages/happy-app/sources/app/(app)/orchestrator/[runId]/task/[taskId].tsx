@@ -8,6 +8,7 @@ import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { layout } from '@/components/layout';
 import { useAuth } from '@/auth/AuthContext';
 import { getOrchestratorTask, type OrchestratorExecutionRecord, type OrchestratorProvider, type OrchestratorTaskDetail, type OrchestratorTaskRecord } from '@/sync/apiOrchestrator';
+import { sync } from '@/sync/sync';
 import { OrchestratorStatusBadge } from '@/components/orchestrator/OrchestratorStatusBadge';
 import { OrchestratorDuration } from '@/components/orchestrator/OrchestratorDuration';
 import {
@@ -271,7 +272,7 @@ export default function OrchestratorTaskDetailScreen() {
         }
         try {
             setError(null);
-            const taskData = await getOrchestratorTask(credentials, runId, taskId, {
+            const taskData = await getOrchestratorTask(credentials, sync.encryption, runId, taskId, {
                 includeExecutions: true,
             });
             setRun(taskData.run);

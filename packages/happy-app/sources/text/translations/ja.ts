@@ -261,6 +261,7 @@ export const ja: TranslationStructure = {
         orchestratorViewAll: 'すべて表示',
         orchestratorNoRuns: '実行なし',
         orchestratorNoRunsMatch: '選択したフィルターに一致するオーケストレーターの実行はありません。',
+        orchestratorUndecryptable: 'オーケストレーターキーで復号できません',
         orchestratorLoading: 'オーケストレーターの実行を読み込み中...',
         orchestratorFilterAll: 'すべて',
         orchestratorFilterActive: 'アクティブ',

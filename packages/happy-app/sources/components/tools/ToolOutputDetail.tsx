@@ -21,6 +21,7 @@ import { LongPressCopy, useCopySelectable } from '../LongPressCopy';
 import { t } from '@/text';
 import { useAuth } from '@/auth/AuthContext';
 import { getOrchestratorRun, pendOrchestratorRun } from '@/sync/apiOrchestrator';
+import { sync } from '@/sync/sync';
 import { create } from 'zustand';
 import { MMKV } from 'react-native-mmkv';
 
@@ -309,7 +310,7 @@ function useOrchestratorRunPolling(initialRuns: ParsedOrchestratorRun[]): Parsed
                 try {
                     const controller = new AbortController();
                     pendControllers.set(runId, controller);
-                    const pend = await pendOrchestratorRun(credentials, runId, {
+                    const pend = await pendOrchestratorRun(credentials, sync.encryption, runId, {
                         cursor,
                         waitFor: 'change',
                         timeoutMs: 25_000,
@@ -322,7 +323,7 @@ function useOrchestratorRunPolling(initialRuns: ParsedOrchestratorRun[]): Parsed
 
                     if (pend.changed) {
                         try {
-                            const detail = await getOrchestratorRun(credentials, runId, { includeTasks: true });
+                            const detail = await getOrchestratorRun(credentials, sync.encryption, runId, { includeTasks: true });
                             if (cancelled) break;
                             const updates = {
                                 status: detail.status,

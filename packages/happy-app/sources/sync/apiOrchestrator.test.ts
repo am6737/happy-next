@@ -6,6 +6,10 @@ vi.mock('./serverConfig', () => ({
     getServerUrl: () => 'https://happy.example',
 }));
 
+vi.mock('@/text', () => ({
+    t: (key: string) => key,
+}));
+
 vi.mock('@/utils/time', () => ({
     backoff: async <T>(callback: () => Promise<T>) => callback(),
 }));
@@ -37,7 +41,7 @@ describe('listOrchestratorRuns', () => {
         });
         vi.stubGlobal('fetch', fetchMock);
 
-        await listOrchestratorRuns(credentials, {
+        await listOrchestratorRuns(credentials, {} as never, {
             status: 'active',
             limit: 20,
             cursor: 'cursor-1',

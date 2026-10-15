@@ -5,6 +5,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { type Fastify } from '@/app/api/types';
 import { getValidModelModesForAgent } from 'happy-wire';
 
+// What a client sends for a sealed value: the server only checks its form
+const sealed = (text: string) => `e2e1:${Buffer.from(text).toString('base64')}`;
+
 type RunStatus = 'queued' | 'running' | 'canceling' | 'completed' | 'failed' | 'cancelled';
 type TaskStatus = 'queued' | 'dispatching' | 'running' | 'completed' | 'failed' | 'cancelled' | 'dependency_failed';
 type ExecutionStatus = 'queued' | 'dispatching' | 'running' | 'completed' | 'failed' | 'cancelled' | 'timeout';
@@ -47,6 +50,7 @@ type TaskRecord = {
     stderrText: string | null;
     stdoutFile: unknown;
     stderrFile: unknown;
+    sealedResult: string | null;
     errorCode: string | null;
     errorMessage: string | null;
     createdAt: Date;
@@ -78,6 +82,7 @@ type ExecutionRecord = {
     stderrText: string | null;
     stdoutFile: unknown;
     stderrFile: unknown;
+    sealedResult: string | null;
     errorCode: string | null;
     errorMessage: string | null;
     createdAt: Date;
@@ -523,6 +528,7 @@ const {
                     stderrText: null,
                     stdoutFile: null,
                     stderrFile: null,
+                    sealedResult: null,
                     errorCode: null,
                     errorMessage: null,
                     createdAt: now,
@@ -630,6 +636,7 @@ const {
                 stderrText: null,
                 stdoutFile: null,
                 stderrFile: null,
+                sealedResult: null,
                 errorCode: null,
                 errorMessage: null,
                 createdAt: now,
@@ -832,13 +839,8 @@ const {
     };
 
     const invokeUserRpcMock = vi.fn(async (_userId: string, method: string) => {
-        if (method.endsWith(':bash')) {
-            return {
-                success: true,
-                stdout: 'claude:true\ncodex:true\ngemini:true\n',
-                stderr: '',
-                exitCode: 0,
-            };
+        if (method.endsWith(':detect-providers')) {
+            return { providers: ['claude', 'codex', 'gemini'] };
         }
         return {};
     });
@@ -881,7 +883,7 @@ vi.mock('@/app/api/socket/rpcRegistry', () => ({
     invokeUserRpc: invokeUserRpcMock,
     listConnectedUserRpcMethods: listConnectedUserRpcMethodsMock,
     hasUserRpcMethod: vi.fn((_userId: string, method: string) => {
-        const machineId = method.replace(/:bash$/, '');
+        const machineId = method.replace(/:detect-providers$/, '');
         return state.dispatchReadyMachineIds.has(machineId);
     }),
 }));
@@ -929,13 +931,8 @@ describe('orchestrator integration paths', () => {
         resetState();
         invokeUserRpcMock.mockReset();
         invokeUserRpcMock.mockImplementation(async (_userId: string, method: string) => {
-            if (method.endsWith(':bash')) {
-                return {
-                    success: true,
-                    stdout: 'claude:true\ncodex:true\ngemini:true\n',
-                    stderr: '',
-                    exitCode: 0,
-                };
+            if (method.endsWith(':detect-providers')) {
+                return { providers: ['claude', 'codex', 'gemini'] };
             }
             return {};
         });
@@ -951,11 +948,11 @@ describe('orchestrator integration paths', () => {
             url: '/v1/orchestrator/submit',
             headers: { 'x-user-id': 'user-1' },
             payload: {
-                title: 'integration-run',
+                title: sealed('integration-run'),
                 tasks: [
                     {
                         provider: 'codex',
-                        prompt: 'do work',
+                        prompt: sealed('do work'),
                     },
                 ],
             },
@@ -1023,11 +1020,11 @@ describe('orchestrator integration paths', () => {
             url: '/v1/orchestrator/submit',
             headers: { 'x-user-id': 'user-1' },
             payload: {
-                title: 'cancel-run',
+                title: sealed('cancel-run'),
                 tasks: [
                     {
                         provider: 'claude',
-                        prompt: 'do work',
+                        prompt: sealed('do work'),
                     },
                 ],
             },
@@ -1069,17 +1066,17 @@ describe('orchestrator integration paths', () => {
             url: '/v1/orchestrator/submit',
             headers: { 'x-user-id': 'user-1' },
             payload: {
-                title: 'cancel-dag-run',
+                title: sealed('cancel-dag-run'),
                 tasks: [
                     {
                         taskKey: 'task-a',
                         provider: 'claude',
-                        prompt: 'task a',
+                        prompt: sealed('task a'),
                     },
                     {
                         taskKey: 'task-b',
                         provider: 'codex',
-                        prompt: 'task b',
+                        prompt: sealed('task b'),
                         dependsOn: ['task-a'],
                     },
                 ],
@@ -1131,11 +1128,11 @@ describe('orchestrator integration paths', () => {
             url: '/v1/orchestrator/submit',
             headers: { 'x-user-id': 'user-1' },
             payload: {
-                title: 'offline-run',
+                title: sealed('offline-run'),
                 tasks: [
                     {
                         provider: 'gemini',
-                        prompt: 'do work',
+                        prompt: sealed('do work'),
                     },
                 ],
             },
@@ -1165,6 +1162,53 @@ describe('orchestrator integration paths', () => {
         await app.close();
     });
 
+    it('rejects a run, a follow-up or a result that is not sealed', async () => {
+        const app = await createApp();
+        for (const payload of [
+            { title: 'plain', tasks: [{ provider: 'claude', prompt: sealed('work') }] },
+            { title: sealed('plain'), tasks: [{ provider: 'claude', prompt: 'work' }] },
+            { title: sealed('plain'), tasks: [{ provider: 'claude', prompt: sealed('work'), title: 'task' }] },
+            { title: sealed('plain'), tasks: [{ provider: 'claude', prompt: 'e2e1:not base64!' }] },
+        ]) {
+            const submit = await app.inject({
+                method: 'POST',
+                url: '/v1/orchestrator/submit',
+                headers: { 'x-user-id': 'user-1' },
+                payload,
+            });
+            expect(submit.statusCode).toBe(400);
+        }
+        expect(state.runs).toHaveLength(0);
+
+        const submit = await app.inject({
+            method: 'POST',
+            url: '/v1/orchestrator/submit',
+            headers: { 'x-user-id': 'user-1' },
+            payload: { title: sealed('sealed'), tasks: [{ provider: 'claude', prompt: sealed('work') }] },
+        });
+        expect(submit.statusCode).toBe(200);
+        await orchestratorSchedulerTick(new Date('2026-03-16T00:00:00.000Z'));
+        const execution = state.executions[0];
+        const finish = await app.inject({
+            method: 'POST',
+            url: `/v1/orchestrator/executions/${execution.id}/finish`,
+            headers: { 'x-user-id': 'user-1' },
+            payload: { dispatchToken: execution.dispatchToken, status: 'completed', sealedResult: 'done' },
+        });
+        expect(finish.statusCode).toBe(400);
+        expect(state.executions[0].status).not.toBe('completed');
+
+        state.tasks[0].status = 'completed';
+        const sendMessage = await app.inject({
+            method: 'POST',
+            url: `/v1/orchestrator/tasks/${state.tasks[0].id}/send-message`,
+            headers: { 'x-user-id': 'user-1' },
+            payload: { message: 'again' },
+        });
+        expect(sendMessage.statusCode).toBe(400);
+        await app.close();
+    });
+
     it('rejects submit when dependency references unknown taskKey', async () => {
         const app = await createApp();
         const submit = await app.inject({
@@ -1172,12 +1216,12 @@ describe('orchestrator integration paths', () => {
             url: '/v1/orchestrator/submit',
             headers: { 'x-user-id': 'user-1' },
             payload: {
-                title: 'dependency-invalid',
+                title: sealed('dependency-invalid'),
                 tasks: [
                     {
                         taskKey: 'task-a',
                         provider: 'claude',
-                        prompt: 'work',
+                        prompt: sealed('work'),
                         dependsOn: ['task-b'],
                     },
                 ],
@@ -1196,18 +1240,18 @@ describe('orchestrator integration paths', () => {
             url: '/v1/orchestrator/submit',
             headers: { 'x-user-id': 'user-1' },
             payload: {
-                title: 'dependency-cycle',
+                title: sealed('dependency-cycle'),
                 tasks: [
                     {
                         taskKey: 'task-a',
                         provider: 'claude',
-                        prompt: 'work-a',
+                        prompt: sealed('work-a'),
                         dependsOn: ['task-b'],
                     },
                     {
                         taskKey: 'task-b',
                         provider: 'codex',
-                        prompt: 'work-b',
+                        prompt: sealed('work-b'),
                         dependsOn: ['task-a'],
                     },
                 ],
@@ -1226,12 +1270,12 @@ describe('orchestrator integration paths', () => {
             url: '/v1/orchestrator/submit',
             headers: { 'x-user-id': 'user-1' },
             payload: {
-                title: 'invalid-task-model',
+                title: sealed('invalid-task-model'),
                 tasks: [
                     {
                         provider: 'claude',
                         model: 'gpt-5.5-high',
-                        prompt: 'work',
+                        prompt: sealed('work'),
                     },
                 ],
             },
@@ -1249,12 +1293,12 @@ describe('orchestrator integration paths', () => {
             url: '/v1/orchestrator/submit',
             headers: { 'x-user-id': 'user-1' },
             payload: {
-                title: 'invalid-fast-task-model',
+                title: sealed('invalid-fast-task-model'),
                 tasks: [
                     {
                         provider: 'codex',
                         model: 'claude-opus-5-max-fast',
-                        prompt: 'work',
+                        prompt: sealed('work'),
                     },
                 ],
             },
@@ -1272,12 +1316,12 @@ describe('orchestrator integration paths', () => {
             url: '/v1/orchestrator/submit',
             headers: { 'x-user-id': 'user-1' },
             payload: {
-                title: 'codex-fast-task-model',
+                title: sealed('codex-fast-task-model'),
                 tasks: [
                     {
                         provider: 'codex',
                         model: 'gpt-5.5-high-fast',
-                        prompt: 'work',
+                        prompt: sealed('work'),
                     },
                 ],
             },
@@ -1307,12 +1351,12 @@ describe('orchestrator integration paths', () => {
             url: '/v1/orchestrator/submit',
             headers: { 'x-user-id': 'user-1' },
             payload: {
-                title: 'unknown-task-model-forward',
+                title: sealed('unknown-task-model-forward'),
                 tasks: [
                     {
                         provider: 'claude',
                         model: 'claude-sonnet-4-6-20260315',
-                        prompt: 'work',
+                        prompt: sealed('work'),
                     },
                 ],
             },
@@ -1343,17 +1387,17 @@ describe('orchestrator integration paths', () => {
             url: '/v1/orchestrator/submit',
             headers: { 'x-user-id': 'user-1' },
             payload: {
-                title: 'task-model-passthrough',
+                title: sealed('task-model-passthrough'),
                 tasks: [
                     {
                         provider: 'codex',
                         model: 'gpt-5.3-codex-high',
-                        prompt: 'work-a',
+                        prompt: sealed('work-a'),
                     },
                     {
                         provider: 'claude',
                         model: 'default',
-                        prompt: 'work-b',
+                        prompt: sealed('work-b'),
                     },
                 ],
             },
@@ -1402,11 +1446,11 @@ describe('orchestrator integration paths', () => {
             url: '/v1/orchestrator/submit',
             headers: { 'x-user-id': 'user-1' },
             payload: {
-                title: 'resume-task-message',
+                title: sealed('resume-task-message'),
                 tasks: [
                     {
                         provider: 'codex',
-                        prompt: 'initial prompt',
+                        prompt: sealed('initial prompt'),
                     },
                 ],
             },
@@ -1439,7 +1483,7 @@ describe('orchestrator integration paths', () => {
             url: `/v1/orchestrator/tasks/${taskId}/send-message`,
             headers: { 'x-user-id': 'user-1' },
             payload: {
-                message: 'follow up question',
+                message: sealed('follow up question'),
             },
         });
         expect(sendMessage.statusCode).toBe(200);
@@ -1448,7 +1492,7 @@ describe('orchestrator integration paths', () => {
         expect(state.executions[1]).toEqual(expect.objectContaining({
             executionType: 'resume',
             childSessionId: '11111111-2222-4333-8444-555555555555',
-            resumeMessage: 'follow up question',
+            resumeMessage: sealed('follow up question'),
             status: 'queued',
         }));
 
@@ -1459,7 +1503,8 @@ describe('orchestrator integration paths', () => {
             expect.objectContaining({
                 executionType: 'resume',
                 childSessionId: '11111111-2222-4333-8444-555555555555',
-                prompt: 'follow up question',
+                prompt: sealed('initial prompt'),
+                resumeMessage: sealed('follow up question'),
             }),
             expect.any(Number),
         );
@@ -1489,9 +1534,9 @@ describe('orchestrator integration paths', () => {
             url: '/v1/orchestrator/submit',
             headers: { 'x-user-id': 'user-1' },
             payload: {
-                title: 'submitted-by-session-1',
+                title: sealed('submitted-by-session-1'),
                 controllerSessionId: 'controller-session-1',
-                tasks: [{ provider: 'codex', prompt: 'initial prompt', retry: { maxAttempts: 3 } }],
+                tasks: [{ provider: 'codex', prompt: sealed('initial prompt'), retry: { maxAttempts: 3 } }],
             },
         });
         expect(submit.statusCode).toBe(200);
@@ -1517,7 +1562,7 @@ describe('orchestrator integration paths', () => {
             url: `/v1/orchestrator/tasks/${state.tasks[0].id}/send-message`,
             headers: { 'x-user-id': 'user-1' },
             payload: {
-                message: 'follow up from session 2',
+                message: sealed('follow up from session 2'),
                 controllerSessionId: 'controller-session-2',
             },
         });
@@ -1530,8 +1575,8 @@ describe('orchestrator integration paths', () => {
             totalRunCount: 1,
         });
         expect(await activityOf('controller-session-1')).toEqual({ activity: {}, totalRunCount: 1 });
-        expect(await runTitlesOf('controller-session-1')).toEqual(['submitted-by-session-1']);
-        expect(await runTitlesOf('controller-session-2')).toEqual(['submitted-by-session-1']);
+        expect(await runTitlesOf('controller-session-1')).toEqual([sealed('submitted-by-session-1')]);
+        expect(await runTitlesOf('controller-session-2')).toEqual([sealed('submitted-by-session-1')]);
 
         // A failed attempt is retried for the same session.
         await orchestratorSchedulerTick(new Date('2026-03-16T00:00:01.000Z'));
@@ -1578,7 +1623,7 @@ describe('orchestrator integration paths', () => {
             method: 'POST',
             url: '/v1/orchestrator/tasks/task-1/send-message',
             headers: { 'x-user-id': 'user-1' },
-            payload: { message: 'hello', controllerSessionId: 'foreign-session' },
+            payload: { message: sealed('hello'), controllerSessionId: 'foreign-session' },
         });
         expect(response.statusCode).toBe(400);
         await app.close();
@@ -1591,8 +1636,8 @@ describe('orchestrator integration paths', () => {
             url: '/v1/orchestrator/submit',
             headers: { 'x-user-id': 'user-1' },
             payload: {
-                title: 'early-child-session',
-                tasks: [{ provider: 'codex', prompt: 'initial prompt' }],
+                title: sealed('early-child-session'),
+                tasks: [{ provider: 'codex', prompt: sealed('initial prompt') }],
             },
         });
         await orchestratorSchedulerTick(new Date('2026-03-16T00:00:00.000Z'));
@@ -1629,11 +1674,11 @@ describe('orchestrator integration paths', () => {
             url: '/v1/orchestrator/submit',
             headers: { 'x-user-id': 'user-1' },
             payload: {
-                title: 'resume-task-missing-child-session',
+                title: sealed('resume-task-missing-child-session'),
                 tasks: [
                     {
                         provider: 'codex',
-                        prompt: 'initial prompt',
+                        prompt: sealed('initial prompt'),
                     },
                 ],
             },
@@ -1661,7 +1706,7 @@ describe('orchestrator integration paths', () => {
             url: `/v1/orchestrator/tasks/${taskId}/send-message`,
             headers: { 'x-user-id': 'user-1' },
             payload: {
-                message: 'follow up question',
+                message: sealed('follow up question'),
             },
         });
         expect(sendMessage.statusCode).toBe(409);
@@ -1676,11 +1721,11 @@ describe('orchestrator integration paths', () => {
             url: '/v1/orchestrator/submit',
             headers: { 'x-user-id': 'user-1' },
             payload: {
-                title: 'resume-task-invalid-state',
+                title: sealed('resume-task-invalid-state'),
                 tasks: [
                     {
                         provider: 'claude',
-                        prompt: 'initial prompt',
+                        prompt: sealed('initial prompt'),
                     },
                 ],
             },
@@ -1693,7 +1738,7 @@ describe('orchestrator integration paths', () => {
             url: `/v1/orchestrator/tasks/${taskId}/send-message`,
             headers: { 'x-user-id': 'user-1' },
             payload: {
-                message: 'follow up question',
+                message: sealed('follow up question'),
             },
         });
         expect(sendMessage.statusCode).toBe(409);
@@ -1708,16 +1753,16 @@ describe('orchestrator integration paths', () => {
             url: '/v1/orchestrator/submit',
             headers: { 'x-user-id': 'user-1' },
             payload: {
-                title: 'dependency-non-keyed-downstream',
+                title: sealed('dependency-non-keyed-downstream'),
                 tasks: [
                     {
                         taskKey: 'task-a',
                         provider: 'claude',
-                        prompt: 'work-a',
+                        prompt: sealed('work-a'),
                     },
                     {
                         provider: 'codex',
-                        prompt: 'work-b',
+                        prompt: sealed('work-b'),
                         dependsOn: ['task-a'],
                     },
                 ],
@@ -1801,7 +1846,7 @@ describe('orchestrator integration paths', () => {
         await app.close();
     });
 
-    it('returns per-machine detected providers from bash RPC', async () => {
+    it('returns per-machine detected providers from detect-providers RPC', async () => {
         state.machines.push({
             id: 'machine-2',
             accountId: 'user-1',
@@ -1812,11 +1857,11 @@ describe('orchestrator integration paths', () => {
         state.dispatchReadyMachineIds = new Set(['machine-1', 'machine-2']);
 
         invokeUserRpcMock.mockImplementation(async (_userId: string, method: string) => {
-            if (method === 'machine-1:bash') {
-                return { success: true, stdout: 'claude:true\ncodex:true\ngemini:true\n', stderr: '', exitCode: 0 };
+            if (method === 'machine-1:detect-providers') {
+                return { providers: ['claude', 'codex', 'gemini'] };
             }
-            if (method === 'machine-2:bash') {
-                return { success: true, stdout: 'claude:true\ncodex:false\ngemini:false\n', stderr: '', exitCode: 0 };
+            if (method === 'machine-2:detect-providers') {
+                return { providers: ['claude'] };
             }
             return {};
         });
@@ -1847,9 +1892,9 @@ describe('orchestrator integration paths', () => {
         await app.close();
     });
 
-    it('returns empty providers when bash RPC times out', async () => {
+    it('returns empty providers when detect-providers RPC times out', async () => {
         invokeUserRpcMock.mockImplementation(async (_userId: string, method: string) => {
-            if (method.endsWith(':bash')) {
+            if (method.endsWith(':detect-providers')) {
                 throw new Error('timeout');
             }
             return {};
@@ -1877,16 +1922,16 @@ describe('orchestrator integration paths', () => {
             url: '/v1/orchestrator/submit',
             headers: { 'x-user-id': 'user-1' },
             payload: {
-                title: 'response-task-fields',
+                title: sealed('response-task-fields'),
                 tasks: [
                     {
                         taskKey: 'task-a',
                         provider: 'claude',
-                        prompt: 'step a',
+                        prompt: sealed('step a'),
                     },
                     {
                         provider: 'codex',
-                        prompt: 'step b',
+                        prompt: sealed('step b'),
                         dependsOn: ['task-a'],
                         retry: {
                             maxAttempts: 3,
@@ -1951,11 +1996,11 @@ describe('orchestrator integration paths', () => {
             url: '/v1/orchestrator/submit',
             headers: { 'x-user-id': 'user-1' },
             payload: {
-                title: 'list-machines',
+                title: sealed('list-machines'),
                 tasks: [
                     {
                         provider: 'claude',
-                        prompt: 'step a',
+                        prompt: sealed('step a'),
                     },
                 ],
             },
@@ -1988,11 +2033,11 @@ describe('orchestrator integration paths', () => {
             url: '/v1/orchestrator/submit',
             headers: { 'x-user-id': 'user-1' },
             payload: {
-                title: 'detail-machines-fallback',
+                title: sealed('detail-machines-fallback'),
                 tasks: [
                     {
                         provider: 'codex',
-                        prompt: 'step a',
+                        prompt: sealed('step a'),
                     },
                 ],
             },
@@ -2025,12 +2070,12 @@ describe('orchestrator integration paths', () => {
             url: '/v1/orchestrator/submit',
             headers: { 'x-user-id': 'user-1' },
             payload: {
-                title: 'single-task-detail',
+                title: sealed('single-task-detail'),
                 tasks: [
                     {
                         taskKey: 'task-a',
                         provider: 'claude',
-                        prompt: 'step a',
+                        prompt: sealed('step a'),
                     },
                 ],
             },
@@ -2051,7 +2096,7 @@ describe('orchestrator integration paths', () => {
         expect(response.json().data).toEqual(expect.objectContaining({
             run: expect.objectContaining({
                 runId,
-                title: 'single-task-detail',
+                title: sealed('single-task-detail'),
             }),
             task: expect.objectContaining({
                 taskId,
@@ -2075,12 +2120,12 @@ describe('orchestrator integration paths', () => {
             url: '/v1/orchestrator/submit',
             headers: { 'x-user-id': 'user-1' },
             payload: {
-                title: 'run-from-session-1',
+                title: sealed('run-from-session-1'),
                 controllerSessionId: 'controller-session-1',
                 tasks: [
                     {
                         provider: 'claude',
-                        prompt: 'step a',
+                        prompt: sealed('step a'),
                     },
                 ],
             },
@@ -2092,12 +2137,12 @@ describe('orchestrator integration paths', () => {
             url: '/v1/orchestrator/submit',
             headers: { 'x-user-id': 'user-1' },
             payload: {
-                title: 'run-from-session-2',
+                title: sealed('run-from-session-2'),
                 controllerSessionId: 'controller-session-2',
                 tasks: [
                     {
                         provider: 'codex',
-                        prompt: 'step b',
+                        prompt: sealed('step b'),
                     },
                 ],
             },
@@ -2109,11 +2154,11 @@ describe('orchestrator integration paths', () => {
             url: '/v1/orchestrator/submit',
             headers: { 'x-user-id': 'user-1' },
             payload: {
-                title: 'run-without-session',
+                title: sealed('run-without-session'),
                 tasks: [
                     {
                         provider: 'gemini',
-                        prompt: 'step c',
+                        prompt: sealed('step c'),
                     },
                 ],
             },
@@ -2129,7 +2174,7 @@ describe('orchestrator integration paths', () => {
         expect(response.statusCode).toBe(200);
         expect(response.json().data.items).toEqual([
             expect.objectContaining({
-                title: 'run-from-session-1',
+                title: sealed('run-from-session-1'),
             }),
         ]);
         await app.close();
@@ -2142,17 +2187,17 @@ describe('orchestrator integration paths', () => {
             url: '/v1/orchestrator/submit',
             headers: { 'x-user-id': 'user-1' },
             payload: {
-                title: 'dependency-failed-propagation',
+                title: sealed('dependency-failed-propagation'),
                 tasks: [
                     {
                         taskKey: 'task-a',
                         provider: 'claude',
-                        prompt: 'do task a',
+                        prompt: sealed('do task a'),
                     },
                     {
                         taskKey: 'task-b',
                         provider: 'codex',
-                        prompt: 'do task b',
+                        prompt: sealed('do task b'),
                         dependsOn: ['task-a'],
                     },
                 ],
@@ -2201,12 +2246,12 @@ describe('orchestrator integration paths', () => {
             url: '/v1/orchestrator/submit',
             headers: { 'x-user-id': 'user-1' },
             payload: {
-                title: 'retry-fixed-backoff',
+                title: sealed('retry-fixed-backoff'),
                 tasks: [
                     {
                         taskKey: 'task-a',
                         provider: 'codex',
-                        prompt: 'retry me',
+                        prompt: sealed('retry me'),
                         retry: {
                             maxAttempts: 3,
                             backoffMs: 5000,
@@ -2298,12 +2343,12 @@ describe('orchestrator integration paths', () => {
             url: '/v1/orchestrator/submit',
             headers: { 'x-user-id': 'user-1' },
             payload: {
-                title: 'retry-dag-linkage',
+                title: sealed('retry-dag-linkage'),
                 tasks: [
                     {
                         taskKey: 'task-a',
                         provider: 'claude',
-                        prompt: 'task a',
+                        prompt: sealed('task a'),
                         retry: {
                             maxAttempts: 2,
                             backoffMs: 5000,
@@ -2312,7 +2357,7 @@ describe('orchestrator integration paths', () => {
                     {
                         taskKey: 'task-b',
                         provider: 'codex',
-                        prompt: 'task b',
+                        prompt: sealed('task b'),
                         dependsOn: ['task-a'],
                     },
                 ],
@@ -2373,12 +2418,11 @@ describe('orchestrator integration paths', () => {
             url: '/v1/orchestrator/submit',
             headers: { 'x-user-id': 'user-1' },
             payload: {
-                title: 'target-machine',
+                title: sealed('target-machine'),
                 tasks: [
                     {
                         provider: 'gemini',
-                        prompt: 'run on machine 2',
-                        workingDirectory: '/workspace/repo-a',
+                        prompt: sealed('run on machine 2'),
                         target: {
                             type: 'machine_id',
                             machineId: 'machine-2',
@@ -2395,7 +2439,7 @@ describe('orchestrator integration paths', () => {
             'machine-2:orchestrator-dispatch',
             expect.objectContaining({
                 provider: 'gemini',
-                workingDirectory: '/workspace/repo-a',
+                prompt: sealed('run on machine 2'),
             }),
             expect.any(Number),
         );
@@ -2421,14 +2465,13 @@ describe('orchestrator integration paths', () => {
             url: '/v1/orchestrator/submit',
             headers: { 'x-user-id': 'user-1' },
             payload: {
-                title: 'current-machine-resolve',
+                title: sealed('current-machine-resolve'),
                 controllerSessionId: 'session-on-m2',
                 controllerMachineId: 'machine-2',
                 tasks: [
                     {
                         provider: 'codex',
-                        prompt: 'run on current machine',
-                        workingDirectory: '/workspace/repo-b',
+                        prompt: sealed('run on current machine'),
                         target: { type: 'current_machine' },
                     },
                 ],
@@ -2442,13 +2485,13 @@ describe('orchestrator integration paths', () => {
             'machine-2:orchestrator-dispatch',
             expect.objectContaining({
                 provider: 'codex',
-                workingDirectory: '/workspace/repo-b',
+                prompt: sealed('run on current machine'),
             }),
             expect.any(Number),
         );
         expect(state.executions).toHaveLength(1);
         expect(state.executions[0].machineId).toBe('machine-2');
-        const task = state.tasks.find((t) => t.prompt === 'run on current machine');
+        const task = state.tasks.find((t) => t.prompt === sealed('run on current machine'));
         expect(task?.targetMachineId).toBe('machine-2');
         await app.close();
     });
@@ -2467,11 +2510,11 @@ describe('orchestrator integration paths', () => {
             url: '/v1/orchestrator/submit',
             headers: { 'x-user-id': 'user-1' },
             payload: {
-                title: 'target-machine-alias',
+                title: sealed('target-machine-alias'),
                 tasks: [
                     {
                         provider: 'codex',
-                        prompt: 'run on machine 2 by alias',
+                        prompt: sealed('run on machine 2 by alias'),
                         target: {
                             type: 'machine',
                             machineId: 'machine-2',
@@ -2491,17 +2534,17 @@ describe('orchestrator integration paths', () => {
             url: '/v1/orchestrator/submit',
             headers: { 'x-user-id': 'user-1' },
             payload: {
-                title: 'dag-sequence',
+                title: sealed('dag-sequence'),
                 tasks: [
                     {
                         taskKey: 'task-a',
                         provider: 'claude',
-                        prompt: 'step a',
+                        prompt: sealed('step a'),
                     },
                     {
                         taskKey: 'task-b',
                         provider: 'codex',
-                        prompt: 'step b',
+                        prompt: sealed('step b'),
                         dependsOn: ['task-a'],
                     },
                 ],
@@ -2551,7 +2594,8 @@ describe('orchestrator integration paths', () => {
                 url: '/v1/orchestrator/exec',
                 headers: { 'x-user-id': 'user-1' },
                 payload: {
-                    command: 'uptime\necho done',
+                    prompt: sealed('uptime\necho done'),
+                    title: sealed('$ uptime'),
                     machineIds: 'all_online',
                     controllerSessionId: 'controller-session-1',
                     waitMs: 0,
@@ -2562,17 +2606,17 @@ describe('orchestrator integration paths', () => {
             expect(data.terminal).toBe(false);
             expect(data.next).toEqual({ hint: 'Await <orchestrator-callback>.', runId: data.runId });
             expect(data.tasks.map((task: any) => task.machineId)).toEqual(['machine-1', 'machine-2']);
-            expect(state.runs[0]).toEqual(expect.objectContaining({ title: '$ uptime', maxConcurrency: 2 }));
+            expect(state.runs[0]).toEqual(expect.objectContaining({ title: sealed('$ uptime'), maxConcurrency: 2 }));
             expect(state.tasks.map((task) => [task.provider, task.prompt, task.model])).toEqual([
-                ['shell', 'uptime\necho done', null],
-                ['shell', 'uptime\necho done', null],
+                ['shell', sealed('uptime\necho done'), null],
+                ['shell', sealed('uptime\necho done'), null],
             ]);
 
             await orchestratorSchedulerTick(new Date('2026-03-16T00:00:00.000Z'));
             expect(invokeUserRpcMock).toHaveBeenCalledWith(
                 'user-1',
                 'machine-1:orchestrator-shell-dispatch',
-                expect.objectContaining({ provider: 'shell', prompt: 'uptime\necho done', timeoutMs: null }),
+                expect.objectContaining({ provider: 'shell', prompt: sealed('uptime\necho done'), timeoutMs: null }),
                 expect.any(Number),
             );
 
@@ -2585,15 +2629,15 @@ describe('orchestrator integration paths', () => {
                         dispatchToken: execution.dispatchToken,
                         status: index === 0 ? 'completed' : 'failed',
                         exitCode: index,
-                        outputText: `out-${index}`,
-                        stderrText: `err-${index}`,
+                        sealedResult: sealed(`result-${index}`),
+                        errorCode: index === 0 ? null : 'EXIT_CODE',
                     },
                 });
                 expect(finish.statusCode).toBe(200);
             }
-            expect(state.tasks.map((task) => [task.outputText, task.stderrText])).toEqual([
-                ['out-0', 'err-0'],
-                ['out-1', 'err-1'],
+            expect(state.tasks.map((task) => [task.sealedResult, task.outputText, task.errorCode])).toEqual([
+                [sealed('result-0'), null, null],
+                [sealed('result-1'), null, 'EXIT_CODE'],
             ]);
             expect(state.runs[0].status).toBe('failed');
             expect(terminalCallbacks()).toHaveLength(1);
@@ -2605,8 +2649,8 @@ describe('orchestrator integration paths', () => {
             });
             expect(run.json().data.tasks[1]).toEqual(expect.objectContaining({
                 provider: 'shell',
-                stderrText: 'err-1',
-                executions: [expect.objectContaining({ exitCode: 1, stderrText: 'err-1' })],
+                sealedResult: sealed('result-1'),
+                executions: [expect.objectContaining({ exitCode: 1, sealedResult: sealed('result-1') })],
             }));
             await app.close();
         });
@@ -2618,7 +2662,8 @@ describe('orchestrator integration paths', () => {
                 url: '/v1/orchestrator/exec',
                 headers: { 'x-user-id': 'user-1' },
                 payload: {
-                    command: 'hostname',
+                    prompt: sealed('hostname'),
+                    title: sealed('$ hostname'),
                     machineIds: ['machine-1'],
                     controllerSessionId: 'controller-session-1',
                     waitMs: 10_000,
@@ -2635,8 +2680,7 @@ describe('orchestrator integration paths', () => {
                     dispatchToken: execution.dispatchToken,
                     status: 'completed',
                     exitCode: 0,
-                    outputText: 'host-1\n',
-                    stderrText: '',
+                    sealedResult: sealed('host-1'),
                 },
             });
 
@@ -2649,25 +2693,23 @@ describe('orchestrator integration paths', () => {
                 machineId: 'machine-1',
                 status: 'completed',
                 exitCode: 0,
-                stdout: 'host-1\n',
-                stderr: '',
+                sealedResult: sealed('host-1'),
             })]);
             expect(terminalCallbacks()).toHaveLength(0);
             await app.close();
         });
 
-        it('pend returns shell tasks the way exec does, with where the daemon saved output too long to send', async () => {
+        it('pend returns shell tasks the way exec does, with the sealed result in place of the output', async () => {
             const app = await createApp();
             const exec = await app.inject({
                 method: 'POST',
                 url: '/v1/orchestrator/exec',
                 headers: { 'x-user-id': 'user-1' },
-                payload: { command: 'cat big.log', machineIds: ['machine-1'], waitMs: 0 },
+                payload: { prompt: sealed('cat big.log'), title: sealed('$ cat big.log'), machineIds: ['machine-1'], waitMs: 0 },
             });
             const runId = exec.json().data.runId;
             await orchestratorSchedulerTick(new Date('2026-03-16T00:00:00.000Z'));
             const execution = state.executions[0];
-            const stdoutFile = { path: '/home/u/.happy-next/exec-output/r/t.stdout.log', chars: 500_000, lines: 9_000, complete: true };
             const finish = await app.inject({
                 method: 'POST',
                 url: `/v1/orchestrator/executions/${execution.id}/finish`,
@@ -2676,14 +2718,11 @@ describe('orchestrator integration paths', () => {
                     dispatchToken: execution.dispatchToken,
                     status: 'completed',
                     exitCode: 0,
-                    outputText: 'last part',
-                    stderrText: '',
-                    stdoutFile,
-                    stderrFile: null,
+                    sealedResult: sealed('last part'),
                 },
             });
             expect(finish.statusCode).toBe(200);
-            expect(state.executions[0]).toEqual(expect.objectContaining({ stdoutFile, stderrFile: null }));
+            expect(state.executions[0]).toEqual(expect.objectContaining({ sealedResult: sealed('last part'), outputText: null }));
 
             const pend = await app.inject({
                 method: 'GET',
@@ -2696,10 +2735,11 @@ describe('orchestrator integration paths', () => {
                 status: 'completed',
                 exitCode: 0,
                 signal: null,
-                stdout: 'last part',
-                stderr: '',
-                stdoutFile,
+                stdout: null,
+                stderr: null,
+                stdoutFile: null,
                 stderrFile: null,
+                sealedResult: sealed('last part'),
                 errorCode: null,
                 errorMessage: null,
                 startedAt: null,
@@ -2714,25 +2754,25 @@ describe('orchestrator integration paths', () => {
                 method: 'POST',
                 url: '/v1/orchestrator/exec',
                 headers: { 'x-user-id': 'user-1' },
-                payload: { command: 'ls', machineIds: ['machine-1', 'machine-x'] },
+                payload: { prompt: sealed('ls'), title: sealed('$ ls'), machineIds: ['machine-1', 'machine-x'] },
             });
             expect(unknown.statusCode).toBe(400);
             expect(unknown.json().error.message).toContain('machine-x');
 
-            const tooLong = await app.inject({
+            const plaintext = await app.inject({
                 method: 'POST',
                 url: '/v1/orchestrator/exec',
                 headers: { 'x-user-id': 'user-1' },
-                payload: { command: 'x'.repeat(32_001), machineIds: ['machine-1'] },
+                payload: { prompt: 'ls', title: sealed('$ ls'), machineIds: ['machine-1'] },
             });
-            expect(tooLong.statusCode).toBe(400);
+            expect(plaintext.statusCode).toBe(400);
 
             state.shellReadyMachineIds = new Set();
             const noneReady = await app.inject({
                 method: 'POST',
                 url: '/v1/orchestrator/exec',
                 headers: { 'x-user-id': 'user-1' },
-                payload: { command: 'ls', machineIds: 'all_online' },
+                payload: { prompt: sealed('ls'), title: sealed('$ ls'), machineIds: 'all_online' },
             });
             expect(noneReady.statusCode).toBe(409);
             expect(state.runs).toHaveLength(0);
@@ -2742,9 +2782,9 @@ describe('orchestrator integration paths', () => {
         it('leaves shell tasks to exec, which alone goes past the AI limits, and rejects follow-ups to them', async () => {
             const app = await createApp();
             for (const payload of [
-                { title: 'ai', tasks: [{ provider: 'claude', prompt: 'x', timeoutMs: 25 * 60 * 60 * 1000 }] },
-                { title: 'ai', maxConcurrency: 16, tasks: [{ provider: 'claude', prompt: 'x' }] },
-                { title: 'shell', tasks: [{ provider: 'shell', prompt: 'ls' }] },
+                { title: sealed('ai'), tasks: [{ provider: 'claude', prompt: sealed('x'), timeoutMs: 25 * 60 * 60 * 1000 }] },
+                { title: sealed('ai'), maxConcurrency: 16, tasks: [{ provider: 'claude', prompt: sealed('x') }] },
+                { title: sealed('shell'), tasks: [{ provider: 'shell', prompt: sealed('ls') }] },
             ]) {
                 const submit = await app.inject({
                     method: 'POST',
@@ -2761,7 +2801,8 @@ describe('orchestrator integration paths', () => {
                 url: '/v1/orchestrator/exec',
                 headers: { 'x-user-id': 'user-1' },
                 payload: {
-                    command: 'sleep 100000',
+                    prompt: sealed('sleep 100000'),
+                    title: sealed('$ sleep 100000'),
                     machineIds: ['machine-1'],
                     timeoutMs: 7 * 24 * 60 * 60 * 1000,
                     maxConcurrency: 16,
@@ -2776,7 +2817,7 @@ describe('orchestrator integration paths', () => {
                 method: 'POST',
                 url: `/v1/orchestrator/tasks/${state.tasks[0].id}/send-message`,
                 headers: { 'x-user-id': 'user-1' },
-                payload: { message: 'again' },
+                payload: { message: sealed('again') },
             });
             expect(sendMessage.statusCode).toBe(400);
             expect(sendMessage.json().error.code).toBe('INVALID_ARGUMENT');
@@ -2790,7 +2831,7 @@ describe('orchestrator integration paths', () => {
                     method: 'POST',
                     url: '/v1/orchestrator/exec',
                     headers: { 'x-user-id': 'user-1' },
-                    payload: { command, machineIds: ['machine-1'], controllerSessionId: 'controller-session-1', waitMs: 0 },
+                    payload: { prompt: sealed(command), title: sealed(`$ ${command}`), machineIds: ['machine-1'], controllerSessionId: 'controller-session-1', waitMs: 0 },
                 });
                 expect(exec.statusCode).toBe(200);
             }
@@ -2853,7 +2894,7 @@ describe('orchestrator integration paths', () => {
                 method: 'POST',
                 url: '/v1/orchestrator/exec',
                 headers: { 'x-user-id': 'user-1' },
-                payload: { command: 'job', machineIds: ['machine-2'], waitMs: 0 },
+                payload: { prompt: sealed('job'), title: sealed('$ job'), machineIds: ['machine-2'], waitMs: 0 },
             });
             await orchestratorSchedulerTick(new Date('2026-03-16T00:00:00.000Z'));
             const execution = state.executions[0];

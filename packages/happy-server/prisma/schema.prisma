@@ -208,6 +208,9 @@ model OrchestratorTask {
   stderrFile        Json?
   /// Transfer tasks only: what arrived at the target ({ path, kind, bytes, files, sha256 })
   transferResult    Json?
+  /// The latest execution's result, sealed by its daemon with the orchestrator key. The output
+  /// fields above stay empty beside it: the server cannot read what the task did
+  sealedResult      String?
   errorCode         String?
   errorMessage      String?
   createdAt         DateTime                @default(now())
@@ -259,6 +262,9 @@ model OrchestratorExecution {
   stderrFile          Json?
   /// Transfer executions only: what arrived at the target ({ path, kind, bytes, files, sha256 })
   transferResult      Json?
+  /// The result, sealed by the daemon with the orchestrator key. The output fields above stay
+  /// empty beside it: the server cannot read what the execution did
+  sealedResult        String?
   errorCode           String?
   errorMessage        String?
   createdAt           DateTime         @default(now())
@@ -416,6 +422,8 @@ model Machine {
   daemonState        String? // Encrypted - contains dynamic daemon state
   daemonStateVersion Int         @default(0)
   dataEncryptionKey  Bytes?
+  /// The account's orchestrator key, sealed by the app with this machine's data key
+  orchestratorKey    String?
   seq                Int         @default(0)
   active             Boolean     @default(true)
   lastActiveAt       DateTime    @default(now())

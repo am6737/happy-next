@@ -22,8 +22,12 @@ export class Encryption {
         // Derive anonymous ID
         const anonID = encodeHex((await deriveKey(masterSecret, 'Happy Coder', ['analytics', 'id']))).slice(0, 16).toLowerCase();
 
+        // Derive the orchestrator key, which seals orchestrator tasks end to end; CLIs signed in
+        // with the account's secret derive the same, the others get it from the app (see sync.ts)
+        const orchestratorKey = await deriveKey(masterSecret, 'Happy Orchestrator', ['key']);
+
         // Create encryption
-        return new Encryption(anonID, masterSecret, contentKeyPair);
+        return new Encryption(anonID, masterSecret, contentKeyPair, orchestratorKey);
     }
 
     private readonly legacyEncryption: SecretBoxEncryption;
@@ -31,19 +35,40 @@ export class Encryption {
     private readonly masterSecret: Uint8Array;
     readonly anonID: string;
     readonly contentDataKey: Uint8Array;
+    readonly orchestratorKey: Uint8Array;
+    private readonly orchestratorEncryption: AES256Encryption;
 
     // Session and machine encryption management
     private sessionEncryptions = new Map<string, SessionEncryption>();
     private machineEncryptions = new Map<string, MachineEncryption>();
     private cache: EncryptionCache;
 
-    private constructor(anonID: string, masterSecret: Uint8Array, contentKeyPair: sodium.KeyPair) {
+    private constructor(anonID: string, masterSecret: Uint8Array, contentKeyPair: sodium.KeyPair, orchestratorKey: Uint8Array) {
         this.anonID = anonID;
         this.contentKeyPair = contentKeyPair;
         this.masterSecret = masterSecret;
         this.legacyEncryption = new SecretBoxEncryption(masterSecret);
         this.cache = new EncryptionCache();
         this.contentDataKey = contentKeyPair.publicKey;
+        this.orchestratorKey = orchestratorKey;
+        this.orchestratorEncryption = new AES256Encryption(orchestratorKey);
+    }
+
+    /**
+     * Opens what orchestrator tasks carry sealed (`e2e1:` and the base64 of an AES-256-GCM bundle):
+     * an entry per value, null for one that is not sealed or not with the account's key.
+     */
+    async openOrchestrator(values: unknown[]): Promise<(any | null)[]> {
+        const sealed = values.map((value) => {
+            try {
+                return typeof value === 'string' && value.startsWith('e2e1:')
+                    ? decodeBase64(value.slice('e2e1:'.length))
+                    : new Uint8Array(0);
+            } catch {
+                return new Uint8Array(0);
+            }
+        });
+        return this.orchestratorEncryption.decrypt(sealed);
     }
 
     //

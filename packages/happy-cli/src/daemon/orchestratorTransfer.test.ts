@@ -6,7 +6,8 @@ import { join } from 'path';
 import { AxiosError, type AxiosResponse } from 'axios';
 
 import type { ApiClient } from '@/api/api';
-import type { OrchestratorTransferDispatchPayload, OrchestratorTransferSourceRequest, OrchestratorTransferSpec } from '@/orchestrator/common';
+import type { OrchestratorTransferDispatchPayload, OrchestratorTransferSourceRequest } from '@/orchestrator/common';
+import { createOrchestratorEnvelopeOpener, sealOrchestrator } from '@/orchestrator/seal';
 import {
   createOrchestratorTransferExecutor,
   createTransferKeyPair,
@@ -21,11 +22,13 @@ type FinishReport = Parameters<ApiClient['reportOrchestratorExecutionFinish']>[0
 const tempDir = mkdtempSync(join(tmpdir(), 'happy-transfer-test-'));
 afterAll(() => rmSync(tempDir, { recursive: true, force: true }));
 
+const key = new Uint8Array(32).fill(9);
+
 /**
  * One executor serving as both ends, with the server's relay in between: a step reaches
  * `serveSource` as the server passes it on, and a source failure comes back as the server's 422.
  */
-function setup() {
+function setup(serveSpec: (spec: string) => string = (spec) => spec) {
   const finished = new Map<string, (report: FinishReport) => void>();
   const relayed: Array<{ request: OrchestratorTransferSourceRequest; answer: unknown }> = [];
   const api = {
@@ -33,10 +36,10 @@ function setup() {
     reportOrchestratorExecutionFinish: vi.fn(async (report: FinishReport) => {
       finished.get(report.executionId)?.(report);
     }),
-    orchestratorTransferSource: vi.fn(async (executionId: string, _token: string, request: OrchestratorTransferSourceRequest) => {
-      const spec = specs.get(executionId)!;
+    orchestratorKey: vi.fn(async () => key),
+    orchestratorTransferSource: vi.fn(async (executionId: string, _token: string, _source: string, request: OrchestratorTransferSourceRequest) => {
       try {
-        const answer = await executor.serveSource({ ...request, transferId: executionId, path: spec.sourcePath });
+        const answer = await executor.serveSource({ ...request, transferId: executionId, spec: serveSpec(specs.get(executionId)!) });
         relayed.push({ request, answer });
         return answer;
       } catch (error) {
@@ -48,12 +51,21 @@ function setup() {
       }
     }),
   } as unknown as ApiClient;
-  const specs = new Map<string, OrchestratorTransferSpec>();
-  const executor = createOrchestratorTransferExecutor(api);
+  const specs = new Map<string, string>();
+  // One machine is both ends: the source and the target of every transfer
+  const opener = createOrchestratorEnvelopeOpener({
+    loadKey: async () => key,
+    machineId: 'machine-a',
+    seenFile: join(mkdtempSync(join(tempDir, 'seen-')), 'seals.json'),
+  });
+  const executor = createOrchestratorTransferExecutor(api, opener);
   let next = 0;
   const transfer = async (sourcePath: string, targetPath: string, overwrite = false) => {
     const executionId = `exec-${next++}`;
-    const spec = { sourceMachineId: 'machine-a', sourcePath, targetPath, overwrite };
+    const spec = sealOrchestrator({
+      kind: 'transfer', sealId: `seal-${executionId}`, createdAt: Date.now(), machineIds: ['machine-a'], maxAttempts: 1,
+      sourceMachineId: 'machine-a', sourcePath, targetPath, overwrite,
+    }, key);
     specs.set(executionId, spec);
     const report = new Promise<FinishReport>((resolve) => finished.set(executionId, resolve));
     const payload: OrchestratorTransferDispatchPayload = {
@@ -62,7 +74,7 @@ function setup() {
       taskId: `task-${executionId}`,
       dispatchToken: `token-${executionId}`,
       provider: 'transfer',
-      prompt: JSON.stringify(spec),
+      prompt: spec,
       timeoutMs: null,
     };
     await executor.dispatch(payload);
@@ -187,6 +199,21 @@ describe.skipIf(process.platform === 'win32')('orchestrator transfer executor', 
 
     expect(report).toMatchObject({ status: 'failed', errorCode: 'SOURCE_FAILED' });
     expect(report.errorMessage).toContain('does not exist');
+    expect(existsSync(destination)).toBe(false);
+  });
+
+  it('serves nothing for a spec not sealed with the orchestrator key', async () => {
+    const source = join(makeDir('forged-src'), 'secret.txt');
+    writeFileSync(source, 'secret');
+    const forged = JSON.stringify({ sourceMachineId: 'machine-a', sourcePath: source });
+    const { transfer, relayed } = setup(() => forged);
+    const destination = join(tempDir, 'forged-dst', 'secret.txt');
+
+    const report = await transfer(source, destination);
+
+    expect(report).toMatchObject({ status: 'failed', errorCode: 'SOURCE_FAILED' });
+    expect(report.errorMessage).toContain('not sealed with the orchestrator key');
+    expect(relayed.filter(({ request }) => request.op !== 'close')).toHaveLength(0);
     expect(existsSync(destination)).toBe(false);
   });
 });
