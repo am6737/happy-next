@@ -45,7 +45,7 @@ import {
     sortPendingQueue,
     upsertPendingMessageInQueue,
 } from "./pendingQueue";
-import { compareSessionsByLastMessage, sessionLastMessageAt } from '@/utils/sessionLastMessageAt';
+import { compareSessionsByLastMessage, sessionLastMessageAt, updateSessionDisplayOrder } from '@/utils/sessionLastMessageAt';
 
 // Debounce timer for realtimeMode changes
 let realtimeModeDebounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -329,6 +329,9 @@ function buildSessionListViewData(
     sessions: Record<string, Session>,
     sharedSessions?: Record<string, Session>
 ): SessionListViewItem[] {
+    // Every session change that can move the order rebuilds this list, so refresh the shared order here
+    updateSessionDisplayOrder([...Object.values(sessions), ...Object.values(sharedSessions ?? {})]);
+
     // Separate active and inactive sessions
     const activeSessions: Session[] = [];
     const inactiveSessions: Session[] = [];
