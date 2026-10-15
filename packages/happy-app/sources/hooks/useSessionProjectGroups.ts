@@ -3,6 +3,7 @@ import { useAllMachines, useLocalSettingMutable } from '@/sync/storage';
 import { Machine, Session } from '@/sync/storageTypes';
 import { t } from '@/text';
 import { projectLabels } from '@/utils/projectLabels';
+import { compareSessionsByLastMessage } from '@/utils/sessionLastMessageAt';
 import { SessionProjectLabel, useSessionProjectLabels } from './useSessionProjectLabel';
 
 export type SessionProjectMachineGroup = {
@@ -75,9 +76,9 @@ export function useSessionProjectGroups(sessions: Session[]): SessionProjectGrou
                 projectGroup.collapseKey = getSessionProjectCollapseKey(projectGroup.path, machineIds[0]);
             }
             for (const machineGroup of projectGroup.machines.values()) {
-                machineGroup.sessions.sort((a, b) => b.createdAt - a.createdAt);
+                machineGroup.sessions.sort(compareSessionsByLastMessage);
             }
-            projectGroup.sessions.sort((a, b) => b.createdAt - a.createdAt);
+            projectGroup.sessions.sort(compareSessionsByLastMessage);
         }
 
         // By name, whether full paths are shown or not, so switching between them leaves the order be.
