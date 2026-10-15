@@ -30,7 +30,7 @@ import { TurnHeader } from './TurnHeader';
 import { SegmentFoldLine } from './SegmentFoldLine';
 import { useMessageTts } from '@/hooks/useMessageTts';
 import { userTextPresentation, type CollapsedTextReason } from './messageCollapse';
-import { textGroupAround } from './messageTextGroup';
+import { textGroupEndingAt } from './messageTextGroup';
 
 export const MessageView = (props: {
   message: Message;
@@ -627,12 +627,12 @@ function AgentTextBlock(props: {
   const hasOptions = props.message.text.includes('<options>');
   const { hovered, handlers: hoverHandlers } = useMessageHover();
   const messageText = props.message.text;
-  // Copy, read aloud and long-press take the whole run of texts this row sits in, looked up when
-  // the reader acts (see textGroupAround).
+  // Copy, read aloud and long-press take this row with the run of texts right above it, looked up
+  // when the reader acts (see textGroupEndingAt).
   const resolveText = React.useCallback(() => {
     const state = storage.getState();
     const messages = state.sessionMessages[props.sessionId]?.messages;
-    return (messages && textGroupAround(messages, props.message.id, state.settings.showThinkingMessages)) || messageText;
+    return (messages && textGroupEndingAt(messages, props.message.id, state.settings.showThinkingMessages)) || messageText;
   }, [props.sessionId, props.message.id, messageText]);
   const handleCopy = React.useCallback(() => {
     copyMessageText(resolveText());
