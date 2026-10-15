@@ -826,6 +826,11 @@ export interface ClaudeUserMessageWithUuid {
 /**
  * Find the project ID for a given session ID by scanning the projects directory
  * Returns null if the session is not found
+ *
+ * A session can leave a transcript with the same name in several project
+ * directories: Claude Code moves it on entering a worktree, and a later turn
+ * from the original directory starts a fresh file there. The most recently
+ * modified one is where the session went on, so it wins.
  */
 export async function findClaudeProjectId(sessionId: string, store: TranscriptStore = claudeTranscriptStore()): Promise<string | null> {
     const projectsDir = join(store.configDir, 'projects');
@@ -837,23 +842,21 @@ export async function findClaudeProjectId(sessionId: string, store: TranscriptSt
         return null;
     }
 
-    // Search for the session file in each project directory
+    let latest: { projectId: string; mtimeMs: number } | null = null;
     for (const dirent of dirents) {
         if (!dirent.isDirectory()) continue;
         const projectId = dirent.name;
         const sessionPath = join(projectsDir, projectId, `${sessionId}.jsonl`);
 
         try {
-            await stat(sessionPath);
-            // File exists, return this project ID
-            return projectId;
+            const { mtimeMs } = await stat(sessionPath);
+            if (!latest || mtimeMs > latest.mtimeMs) latest = { projectId, mtimeMs };
         } catch {
             // File doesn't exist in this project, continue searching
-            continue;
         }
     }
 
-    return null;
+    return latest?.projectId ?? null;
 }
 
 /**

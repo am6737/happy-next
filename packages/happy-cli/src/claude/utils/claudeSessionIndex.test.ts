@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync, existsSync, readFileSync, statSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync, existsSync, readFileSync, statSync, utimesSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -216,5 +216,23 @@ describe('listClaudeSessionsFromIndex', () => {
 
         const secondWriteMtimeMs = statSync(cachePath).mtimeMs;
         expect(secondWriteMtimeMs).toBe(firstWriteMtimeMs);
+    });
+
+    it('finds the most recently modified transcript when several projects hold the same session', async () => {
+        const write = (projectId: string, mtimeSeconds: number) => {
+            const projectDir = join(claudeConfigDir, 'projects', projectId);
+            mkdirSync(projectDir, { recursive: true });
+            const sessionPath = join(projectDir, 'session-moved.jsonl');
+            writeFileSync(sessionPath, '{}\n');
+            utimesSync(sessionPath, mtimeSeconds, mtimeSeconds);
+        };
+        write('-repo', 2_000);
+        write('-repo--claude-worktrees-feature', 3_000);
+        write('-repo-other', 1_000);
+
+        const { findClaudeProjectId } = await import('./claudeSessionIndex');
+
+        expect(await findClaudeProjectId('session-moved')).toBe('-repo--claude-worktrees-feature');
+        expect(await findClaudeProjectId('session-missing')).toBeNull();
     });
 });
