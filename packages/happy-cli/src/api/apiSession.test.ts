@@ -646,4 +646,22 @@ describe('ApiSessionClient keepAlive', () => {
         expect(resumed).not.toBe(first);
         expect(prompt).toBeUndefined();
     });
+
+    it('stamps ACP messages with their turn, and draws a new one after task_complete or turn_aborted', () => {
+        const turns = () => pushOutbox.mock.calls.map(([content]: any[]) => content.meta?.turn);
+        const end = (type: 'task_complete' | 'turn_aborted') => client.sendAgentMessage('codex', { type, id: type });
+        client.sendAgentMessage('codex', { type: 'tool-call', callId: 'a', name: 'orchestrator_exec', input: {}, id: 'a' } as any);
+        end('task_complete');
+        // A background task reporting in: the agent starts again with no prompt.
+        client.sendAgentMessage('codex', { type: 'tool-call', callId: 'b', name: 'orchestrator_pend', input: {}, id: 'b' } as any);
+        end('turn_aborted');
+        client.sendAgentMessage('codex', { type: 'tool-call', callId: 'c', name: 'Bash', input: {}, id: 'c' } as any);
+        const [first, firstEnd, resumed, resumedEnd, next] = turns();
+        expect(first).toEqual(expect.any(String));
+        expect(firstEnd).toBe(first);
+        expect(resumed).toEqual(expect.any(String));
+        expect(resumed).not.toBe(first);
+        expect(resumedEnd).toBe(resumed);
+        expect(next).not.toBe(resumed);
+    });
 });

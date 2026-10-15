@@ -191,9 +191,10 @@ export class ApiSessionClient extends EventEmitter {
      */
     private heldText: { content: any; trailing: unknown[]; timer: NodeJS.Timeout } | null = null;
     /**
-     * The turn Claude's messages go out under, stamped on each as `meta.turn` so the app can tell a
-     * turn Claude starts on its own — a background task reporting in, with no prompt to open it —
-     * from the one before it. Drawn by the first message after `endTurn`.
+     * The turn the agent's messages go out under, stamped on each as `meta.turn` so the app can tell
+     * a turn the agent starts on its own — a background task reporting in, with no prompt to open it —
+     * from the one before it. Drawn by the first message after `endTurn`, which Claude's launcher calls
+     * on its SDK's `result` and `sendAgentMessage` on an ACP agent's `task_complete` or `turn_aborted`.
      */
     private turn: string | null = null;
 
@@ -962,7 +963,7 @@ export class ApiSessionClient extends EventEmitter {
         this.postSendProcessing(body);
     }
 
-    /** Claude has ended its turn (its SDK's `result`): the next message it sends opens a new one. */
+    /** The agent has ended its turn: the next message it sends opens a new one. */
     endTurn() {
         this.turn = null;
     }
@@ -1028,6 +1029,7 @@ export class ApiSessionClient extends EventEmitter {
             this.updateModelMetadata(body.model);
         }
 
+        this.turn ??= randomUUID();
         let content = {
             role: 'agent',
             content: {
@@ -1036,7 +1038,8 @@ export class ApiSessionClient extends EventEmitter {
                 data: body
             },
             meta: {
-                sentFrom: 'cli'
+                sentFrom: 'cli',
+                turn: this.turn
             }
         };
 
@@ -1044,6 +1047,11 @@ export class ApiSessionClient extends EventEmitter {
 
         // Deliver via v3 HTTP outbox (sole delivery path — no socket emit to avoid duplicates)
         this.enqueueMessage(content);
+
+        // The turn's own end goes out under it; whatever the agent sends next opens a new one.
+        if (body.type === 'task_complete' || body.type === 'turn_aborted') {
+            this.endTurn();
+        }
     }
 
     /**
