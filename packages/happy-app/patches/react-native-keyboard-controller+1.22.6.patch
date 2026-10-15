@@ -1,5 +1,190 @@
+diff --git a/node_modules/react-native-keyboard-controller/android/src/fabric/java/com/reactnativekeyboardcontroller/ClippingScrollViewDecoratorViewManager.kt b/node_modules/react-native-keyboard-controller/android/src/fabric/java/com/reactnativekeyboardcontroller/ClippingScrollViewDecoratorViewManager.kt
+index c732599..9200a46 100644
+--- a/node_modules/react-native-keyboard-controller/android/src/fabric/java/com/reactnativekeyboardcontroller/ClippingScrollViewDecoratorViewManager.kt
++++ b/node_modules/react-native-keyboard-controller/android/src/fabric/java/com/reactnativekeyboardcontroller/ClippingScrollViewDecoratorViewManager.kt
+@@ -1,5 +1,6 @@
+ package com.reactnativekeyboardcontroller
+ 
++import com.facebook.react.bridge.ReadableArray
+ import com.facebook.react.uimanager.ThemedReactContext
+ import com.facebook.react.uimanager.ViewGroupManager
+ import com.facebook.react.uimanager.ViewManagerDelegate
+@@ -41,4 +42,16 @@ class ClippingScrollViewDecoratorViewManager :
+   ) {
+     view?.setApplyWorkaroundForContentInsetHitTestBug(value)
+   }
++
++  override fun receiveCommand(
++    root: ClippingScrollViewDecoratorView,
++    commandId: String,
++    args: ReadableArray?,
++  ) {
++    if (commandId == "setKeyboardLift" && args != null) {
++      root.setKeyboardLift(args.getDouble(0), args.getDouble(1))
++    } else {
++      super.receiveCommand(root, commandId, args)
++    }
++  }
+ }
+diff --git a/node_modules/react-native-keyboard-controller/android/src/main/java/com/reactnativekeyboardcontroller/views/ClippingScrollViewDecoratorView.kt b/node_modules/react-native-keyboard-controller/android/src/main/java/com/reactnativekeyboardcontroller/views/ClippingScrollViewDecoratorView.kt
+index dbf4eca..acb2634 100644
+--- a/node_modules/react-native-keyboard-controller/android/src/main/java/com/reactnativekeyboardcontroller/views/ClippingScrollViewDecoratorView.kt
++++ b/node_modules/react-native-keyboard-controller/android/src/main/java/com/reactnativekeyboardcontroller/views/ClippingScrollViewDecoratorView.kt
+@@ -4,8 +4,10 @@ import android.annotation.SuppressLint
+ import android.view.MotionEvent
+ import android.view.View
+ import android.view.ViewGroup
++import android.view.ViewTreeObserver
+ import android.widget.ScrollView
+ import androidx.core.widget.NestedScrollView
++import com.facebook.react.uimanager.ReactClippingViewGroup
+ import com.facebook.react.uimanager.ThemedReactContext
+ import com.facebook.react.views.view.ReactViewGroup
+ import com.reactnativekeyboardcontroller.extensions.px
+@@ -19,11 +21,69 @@ class ClippingScrollViewDecoratorView(
+   private var insetTop = 0.0
+   private var appliedTopInsetPx = 0
+   private var paddingScrollWorkaroundActive = false
++  // React/Fabric owns only the base transform. Keyboard motion is command-owned and is composed
++  // separately, so a later transform reset/commit cannot discard an in-flight keyboard lift.
++  private var reactTranslationY = 0f
++  private var keyboardLiftPx = 0f
++
++  // A UI-thread command can run before another mount/layout pass. Apply handoffs at the drawing
++  // boundary so scrolling and dropping/starting a lift are presented together, not just set together.
++  private var pendingLiftScrollY: Double? = null
++  private var pendingKeyboardLift = 0.0
++  private var handOffObserver: ViewTreeObserver? = null
++  private val handOffPreDrawListener = ViewTreeObserver.OnPreDrawListener {
++    val y = pendingLiftScrollY
++    val lift = pendingKeyboardLift
++    pendingLiftScrollY = null
++    removeHandOffPreDrawListener()
++    if (y != null) {
++      applyKeyboardLift(lift, y)
++    }
++    true
++  }
++
++  private fun removeHandOffPreDrawListener() {
++    val observer = handOffObserver
++    if (observer != null) {
++      if (observer.isAlive) {
++        observer.removeOnPreDrawListener(handOffPreDrawListener)
++      } else if (viewTreeObserver.isAlive) {
++        viewTreeObserver.removeOnPreDrawListener(handOffPreDrawListener)
++      }
++    }
++    handOffObserver = null
++  }
++
++  private fun scheduleHandOff() {
++    if (!isAttachedToWindow || handOffObserver != null) {
++      return
++    }
++    val observer = viewTreeObserver
++    if (observer.isAlive) {
++      handOffObserver = observer
++      observer.addOnPreDrawListener(handOffPreDrawListener)
++      postInvalidateOnAnimation()
++    }
++  }
++
++  override fun onDetachedFromWindow() {
++    // A temporarily detached screen must keep its pending target for the first draw on reattach.
++    removeHandOffPreDrawListener()
++    super.onDetachedFromWindow()
++  }
++
++  override fun setTranslationY(value: Float) {
++    reactTranslationY = value
++    super.setTranslationY(value - keyboardLiftPx)
++  }
+ 
+   override fun onAttachedToWindow() {
+     super.onAttachedToWindow()
+ 
+     decorateScrollView()
++    if (pendingLiftScrollY != null) {
++      scheduleHandOff()
++    }
+   }
+ 
+   override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+@@ -64,6 +124,43 @@ class ClippingScrollViewDecoratorView(
+     decorateScrollView()
+   }
+ 
++  /**
++   * The only writer of the keyboard lift. A non-negative [y] queues a scroll + lift handoff for
++   * pre-draw, after mounting/layout; -1 normally updates just the translation during keyboard motion.
++   * While a handoff is pending, new lift values use its new logical base, so they must be held with
++   * the pending scroll. Neither value is a Fabric prop that a later commit can replay.
++   */
++  fun setKeyboardLift(lift: Double, y: Double) {
++    if (y >= 0) {
++      pendingLiftScrollY = y
++      pendingKeyboardLift = lift
++      scheduleHandOff()
++    } else if (pendingLiftScrollY != null) {
++      // The logical base has changed, but the scroll has not yet been drawn. Keep both updates
++      // together and consume the latest keyboard position at the drawing boundary.
++      pendingKeyboardLift = lift
++    } else {
++      applyKeyboardLift(lift, y)
++    }
++  }
++
++  private fun applyKeyboardLift(lift: Double, y: Double) {
++    val scrollView = findScrollView(this) ?: return
++
++    if (y >= 0) {
++      scrollView.scrollTo(scrollView.scrollX, y.toFloat().px.toInt())
++    }
++    keyboardLiftPx = lift.toFloat().px.toFloat()
++    super.setTranslationY(reactTranslationY - keyboardLiftPx)
++    if (y >= 0) {
++      // scrollTo updated clipping with the old transform. Refresh after both coordinate changes,
++      // and rebuild the display lists in this draw instead of reusing the lifted scroll view.
++      (scrollView as? ReactClippingViewGroup)?.updateClippingRect()
++      scrollView.invalidate()
++      invalidate()
++    }
++  }
++
+   @Suppress("detekt:UnusedParameter")
+   fun setApplyWorkaroundForContentInsetHitTestBug(value: Boolean) {
+     // iOS-only workaround; no-op on Android
+diff --git a/node_modules/react-native-keyboard-controller/android/src/paper/java/com/reactnativekeyboardcontroller/ClippingScrollViewDecoratorViewManager.kt b/node_modules/react-native-keyboard-controller/android/src/paper/java/com/reactnativekeyboardcontroller/ClippingScrollViewDecoratorViewManager.kt
+index f7251d4..3e2f9bc 100644
+--- a/node_modules/react-native-keyboard-controller/android/src/paper/java/com/reactnativekeyboardcontroller/ClippingScrollViewDecoratorViewManager.kt
++++ b/node_modules/react-native-keyboard-controller/android/src/paper/java/com/reactnativekeyboardcontroller/ClippingScrollViewDecoratorViewManager.kt
+@@ -1,5 +1,6 @@
+ package com.reactnativekeyboardcontroller
+ 
++import com.facebook.react.bridge.ReadableArray
+ import com.facebook.react.uimanager.ThemedReactContext
+ import com.facebook.react.uimanager.ViewGroupManager
+ import com.facebook.react.uimanager.annotations.ReactProp
+@@ -37,4 +38,16 @@ class ClippingScrollViewDecoratorViewManager : ViewGroupManager<ClippingScrollVi
+   ) {
+     view.setApplyWorkaroundForContentInsetHitTestBug(value)
+   }
++
++  override fun receiveCommand(
++    root: ClippingScrollViewDecoratorView,
++    commandId: String,
++    args: ReadableArray?,
++  ) {
++    if (commandId == "setKeyboardLift" && args != null) {
++      root.setKeyboardLift(args.getDouble(0), args.getDouble(1))
++    } else {
++      super.receiveCommand(root, commandId, args)
++    }
++  }
+ }
 diff --git a/node_modules/react-native-keyboard-controller/ios/observers/movement/observer/KeyboardMovementObserver+Listeners.swift b/node_modules/react-native-keyboard-controller/ios/observers/movement/observer/KeyboardMovementObserver+Listeners.swift
-index 464eec7..6bfdbbd 100644
+index 60ae5de..bf603ea 100644
 --- a/node_modules/react-native-keyboard-controller/ios/observers/movement/observer/KeyboardMovementObserver+Listeners.swift
 +++ b/node_modules/react-native-keyboard-controller/ios/observers/movement/observer/KeyboardMovementObserver+Listeners.swift
 @@ -12,7 +12,7 @@ extension KeyboardMovementObserver {
@@ -20,7 +205,7 @@ index 464eec7..6bfdbbd 100644
        tag = UIResponder.current.reactViewTag
        self.keyboardHeight = keyboardHeight
  
-@@ -113,4 +113,33 @@ extension KeyboardMovementObserver {
+@@ -114,4 +114,33 @@ extension KeyboardMovementObserver {
      keyboardDidTask = task
      DispatchQueue.main.asyncAfter(deadline: .now() + duration, execute: task)
    }
@@ -54,3 +239,294 @@ index 464eec7..6bfdbbd 100644
 +    return min(raw, visibleHeight + visualOffsetY)
 +  }
  }
+diff --git a/node_modules/react-native-keyboard-controller/src/components/KeyboardChatScrollView/index.tsx b/node_modules/react-native-keyboard-controller/src/components/KeyboardChatScrollView/index.tsx
+index 935bc71..b5adbd2 100644
+--- a/node_modules/react-native-keyboard-controller/src/components/KeyboardChatScrollView/index.tsx
++++ b/node_modules/react-native-keyboard-controller/src/components/KeyboardChatScrollView/index.tsx
+@@ -51,6 +51,8 @@ const KeyboardChatScrollView: React.ForwardRefExoticComponent<
+     const {
+       padding,
+       currentHeight,
++      lift,
++      liftHandOff,
+       contentOffsetY,
+       scroll,
+       layout,
+@@ -138,7 +140,8 @@ const KeyboardChatScrollView: React.ForwardRefExoticComponent<
+     // see https://github.com/software-mansion/react-native-reanimated/issues/9000
+     const commitStyle = useAnimatedStyle(
+       () => ({
+-        transform: [{ translateY: -currentHeight.value }],
++        // A layout prop: Reanimated may apply transforms without a commit
++        top: -currentHeight.value,
+       }),
+       [],
+     );
+@@ -158,6 +161,8 @@ const KeyboardChatScrollView: React.ForwardRefExoticComponent<
+           bottomPadding={totalPadding}
+           contentOffsetY={contentOffsetY}
+           inverted={inverted}
++          lift={lift}
++          liftHandOff={liftHandOff}
+           scrollIndicatorPadding={indicatorPadding}
+           ScrollViewComponent={ScrollViewComponent}
+           onContentSizeChange={onContentSizeChange}
+diff --git a/node_modules/react-native-keyboard-controller/src/components/KeyboardChatScrollView/useChatKeyboard/index.ts b/node_modules/react-native-keyboard-controller/src/components/KeyboardChatScrollView/useChatKeyboard/index.ts
+index 48178d9..218db2b 100644
+--- a/node_modules/react-native-keyboard-controller/src/components/KeyboardChatScrollView/useChatKeyboard/index.ts
++++ b/node_modules/react-native-keyboard-controller/src/components/KeyboardChatScrollView/useChatKeyboard/index.ts
+@@ -1,6 +1,7 @@
+ import { scrollTo, useSharedValue } from "react-native-reanimated";
+ 
+ import { useKeyboardHandler } from "../../../hooks";
++import { useAnimatedReaction, useDerivedValue } from "../../../reanimated";
+ import useScrollState from "../../hooks/useScrollState";
+ 
+ import {
+@@ -20,7 +21,8 @@ import type Reanimated from "react-native-reanimated";
+ /**
+  * Hook that manages keyboard-driven scrolling for chat-style scroll views.
+  * Calculates padding (extra scrollable space) and content shift values,
+- * using per-frame scrollTo updates (Android and other platforms).
++ * using native lift commands for non-inverted "always" lists on Android and
++ * per-frame scrollTo updates for the other lift behaviors.
+  *
+  * @param scrollViewRef - Animated ref to the scroll view.
+  * @param options - Configuration for inverted and keyboardLiftBehavior.
+@@ -50,6 +52,20 @@ function useChatKeyboard(
+   const closing = useSharedValue(false);
+   const minimumPaddingFractionOnOpen = useSharedValue(0);
+   const actualOpenShift = useSharedValue(0);
++  // While the keyboard moves, the non-inverted list is lifted with a translate instead of a
++  // scrollTo per frame: a native scroll every frame re-lays the list out and sends a scroll event
++  // to JS each frame. The scroll position stays at its keyboard-down place (`liftBase`), the
++  // translate shows the list at `visual`, and once the keyboard stops it is scrolled there.
++  const visual = useSharedValue(0);
++  const liftBase = useSharedValue(0);
++  const lifting = useSharedValue(false);
++  // A new object requests a native scroll together with the current lift. Both are consumed by
++  // one reaction/command, never by transform style or contentOffset props in a Fabric commit.
++  const liftHandOff = useSharedValue<{ y: number } | null>(null);
++  // Keep the settled offset available until its native scroll event arrives. This only tracks
++  // the logical position; the native view owns the translation and needs no JS acknowledgement.
++  const handingOff = useSharedValue(false);
++  const liftable = !inverted && keyboardLiftBehavior === "always";
+   const {
+     layout,
+     size,
+@@ -57,6 +73,18 @@ function useChatKeyboard(
+     onLayout,
+     onContentSizeChange,
+   } = useScrollState(scrollViewRef);
++  const lift = useDerivedValue(() =>
++    lifting.value ? visual.value - liftBase.value : 0,
++  );
++  useAnimatedReaction(
++    () => scroll.value,
++    (current, previous) => {
++      if (current === previous) {
++        return;
++      }
++      handingOff.value = false;
++    },
++  );
+   const clampScrollIfNeeded = (
+     effective: number,
+     totalPaddingForMaxScroll?: number,
+@@ -137,7 +165,18 @@ function useChatKeyboard(
+           // Android: keyboard opening — set padding + capture scroll position
+           minimumPaddingFractionOnOpen.value = visibleFraction >= 1 ? 1 : 0;
+           padding.value = effective;
+-          offsetBeforeScroll.value = scroll.value;
++          if (handingOff.value) {
++            // Scrolled to `visual` natively, with the translate gone
++            handingOff.value = false;
++            liftBase.value = visual.value;
++          } else if (liftable && !lifting.value) {
++            liftBase.value = scroll.value;
++            visual.value = scroll.value;
++          }
++          offsetBeforeScroll.value = liftable ? visual.value : scroll.value;
++          if (liftable) {
++            lifting.value = true;
++          }
+ 
+           if (!inverted && keyboardLiftBehavior === "whenAtEnd" && !atEnd) {
+             // Sentinel: don't scroll in onMove (non-inverted only)
+@@ -155,10 +194,28 @@ function useChatKeyboard(
+             offsetBeforeScroll.value = scroll.value;
+           } else {
+             // Preserve "whenAtEnd" sentinel: if open didn't shift, close shouldn't either
+-            if (offsetBeforeScroll.value !== -1) {
++            if (offsetBeforeScroll.value !== -1 && !liftable) {
+               // Use the actual displacement recorded at end of open animation
+               // (not the theoretical value) so close is symmetric with open
+               offsetBeforeScroll.value = scroll.value - actualOpenShift.value;
++            } else if (offsetBeforeScroll.value !== -1) {
++              const current =
++                lifting.value || handingOff.value ? visual.value : scroll.value;
++
++              handingOff.value = false;
++              offsetBeforeScroll.value = current - actualOpenShift.value;
++              // Scroll to where the list ends up in one go, and hold it at
++              // where it is now with the translate, which then runs down to 0
++              liftBase.value = clampedScrollTarget(
++                offsetBeforeScroll.value,
++                0,
++                size.value.height,
++                layout.value.height,
++                Math.max(blankSpace.value, extraContentPadding.value),
++              );
++              visual.value = current;
++              lifting.value = true;
++              liftHandOff.value = { y: liftBase.value };
+             }
+           }
+         }
+@@ -170,7 +227,9 @@ function useChatKeyboard(
+           return;
+         }
+ 
+-        currentHeight.value = e.height;
++        if (!lifting.value) {
++          currentHeight.value = e.height;
++        }
+ 
+         if (inverted) {
+           // Skip post-interactive snap-back (duration === -1)
+@@ -329,7 +388,12 @@ function useChatKeyboard(
+             actualTotalPadding,
+           );
+ 
+-          scrollTo(scrollViewRef, 0, target, false);
++          if (lifting.value) {
++            // Only ever lifted up: below its base the list would leave a gap under its top edge
++            visual.value = Math.max(target, liftBase.value);
++          } else {
++            scrollTo(scrollViewRef, 0, target, false);
++          }
+ 
+           // Track actual (clamped) displacement during open for symmetric close
+           if (!closing.value) {
+@@ -352,9 +416,19 @@ function useChatKeyboard(
+ 
+         padding.value = effective;
+ 
++        const settled = lifting.value ? visual.value : scroll.value;
++
++        if (lifting.value) {
++          // Reset the logical lift now: the native command consumes this zero and the scroll
++          // target atomically, so no held transform or contentOffset commit can replay old state.
++          handingOff.value = true;
++          liftHandOff.value = { y: settled };
++          lifting.value = false;
++        }
++
+         // Record actual scroll displacement so close can be symmetric
+         if (effective > 0 && offsetBeforeScroll.value !== -1) {
+-          actualOpenShift.value = scroll.value - offsetBeforeScroll.value;
++          actualOpenShift.value = settled - offsetBeforeScroll.value;
+         }
+       },
+     },
+@@ -364,6 +438,8 @@ function useChatKeyboard(
+   return {
+     padding,
+     currentHeight,
++    lift,
++    liftHandOff,
+     contentOffsetY: undefined,
+     scroll,
+     layout,
+diff --git a/node_modules/react-native-keyboard-controller/src/components/KeyboardChatScrollView/useChatKeyboard/types.ts b/node_modules/react-native-keyboard-controller/src/components/KeyboardChatScrollView/useChatKeyboard/types.ts
+index f89b7c8..6fb5e8a 100644
+--- a/node_modules/react-native-keyboard-controller/src/components/KeyboardChatScrollView/useChatKeyboard/types.ts
++++ b/node_modules/react-native-keyboard-controller/src/components/KeyboardChatScrollView/useChatKeyboard/types.ts
+@@ -20,6 +20,10 @@ type UseChatKeyboardReturn = {
+   padding: SharedValue<number>;
+   /** Raw keyboard height updated every frame in onMove. Used to force Reanimated commits on Fabric. */
+   currentHeight: SharedValue<number>;
++  /** How far the scroll view is translated up while the keyboard moves (Android). */
++  lift?: SharedValue<number>;
++  /** A new target requests an atomic native scroll + lift update (Android). */
++  liftHandOff?: SharedValue<{ y: number } | null>;
+   /** Absolute Y content offset for iOS (set once in onStart). `undefined` on Android. */
+   contentOffsetY: SharedValue<number> | undefined;
+   /** Current vertical scroll offset. */
+diff --git a/node_modules/react-native-keyboard-controller/src/components/ScrollViewWithBottomPadding/index.tsx b/node_modules/react-native-keyboard-controller/src/components/ScrollViewWithBottomPadding/index.tsx
+index 6902a73..5ad1eee 100644
+--- a/node_modules/react-native-keyboard-controller/src/components/ScrollViewWithBottomPadding/index.tsx
++++ b/node_modules/react-native-keyboard-controller/src/components/ScrollViewWithBottomPadding/index.tsx
+@@ -1,6 +1,11 @@
+ import React, { forwardRef, useEffect } from "react";
+ import { Platform } from "react-native";
+-import Reanimated, { runOnJS, useSharedValue } from "react-native-reanimated";
++import Reanimated, {
++  dispatchCommand,
++  runOnJS,
++  useAnimatedRef,
++  useSharedValue,
++} from "react-native-reanimated";
+ 
+ import { ClippingScrollView } from "../../bindings";
+ import {
+@@ -44,6 +49,10 @@ type ScrollViewWithBottomPaddingProps = {
+   scrollIndicatorPadding?: SharedValue<number>;
+   /** Absolute Y content offset (iOS only, for KeyboardChatScrollView). */
+   contentOffsetY?: SharedValue<number>;
++  /** How far to translate the scroll view up (Android, while the keyboard moves). */
++  lift?: SharedValue<number>;
++  /** A new target requests an atomic native scroll + lift update (Android). */
++  liftHandOff?: SharedValue<{ y: number } | null>;
+   applyWorkaroundForContentInsetHitTestBug?: boolean;
+   /**
+    * Fires whenever the effective content inset changes (combines the static `contentInset`
+@@ -66,6 +75,8 @@ const ScrollViewWithBottomPadding = forwardRef<
+       scrollIndicatorInsets,
+       inverted,
+       contentOffsetY,
++      lift,
++      liftHandOff,
+       applyWorkaroundForContentInsetHitTestBug,
+       onContentInsetChange,
+       children,
+@@ -174,8 +185,39 @@ const ScrollViewWithBottomPadding = forwardRef<
+       contentOffset?.x,
+     ]);
+ 
++    const clippingRef = useAnimatedRef();
++
++    useAnimatedReaction(
++      () =>
++        OS === "android" && lift
++          ? { lift: lift.value, handOff: liftHandOff?.value ?? null }
++          : null,
++      (current, previous) => {
++        if (!current || !clippingRef()) {
++          return;
++        }
++
++        const handOff = current.handOff !== previous?.handOff;
++
++        if (!handOff && current.lift === previous?.lift) {
++          return;
++        }
++
++        // One command stream owns Android's lift. A handoff carries the latest lift, not the
++        // value from an earlier keyboard event; -1 leaves the native scroll untouched on moves.
++        // Never put this transform in animated style/props: synchronous UI props and Fabric's
++        // shadow-tree commits can otherwise overwrite each other with stale transforms.
++        dispatchCommand(clippingRef, "setKeyboardLift", [
++          current.lift,
++          handOff && current.handOff ? current.handOff.y : -1,
++        ]);
++      },
++      [lift, liftHandOff],
++    );
++
+     return (
+       <ReanimatedClippingScrollView
++        ref={OS === "android" ? clippingRef : undefined}
+         animatedProps={animatedProps}
+         applyWorkaroundForContentInsetHitTestBug={
+           applyWorkaroundForContentInsetHitTestBug

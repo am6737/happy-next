@@ -5,6 +5,7 @@ import { ScrollView } from 'react-native-gesture-handler';
 import { KeyboardStickyView, useKeyboardState } from 'react-native-keyboard-controller';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { SharedValue } from 'react-native-reanimated';
+import { useUnistyles } from 'react-native-unistyles';
 import { ComposerKeyboardOffsetContext } from './composerKeyboardOffset';
 
 interface AgentContentViewProps {
@@ -34,6 +35,7 @@ export const AgentContentView: React.FC<AgentContentViewProps> = React.memo((pro
  */
 const SafeAreaContentView = React.memo(({ input, content, placeholder, betweenContentAndInput }: AgentContentViewProps) => {
     const safeArea = useSafeAreaInsets();
+    const { theme } = useUnistyles();
     // Rests on the keyboard, as the comment screens' composer does on Android; `ChatScrollView`
     // lifts the list by the same amount (its Android `keyboardOffset`).
     const keyboardOffset = safeArea.bottom;
@@ -53,7 +55,9 @@ const SafeAreaContentView = React.memo(({ input, content, placeholder, betweenCo
                         </ScrollView>
                     )}
                 </View>
-                <KeyboardStickyView offset={{ opened: keyboardOffset }}>
+                {/* Android's status row sits outside the input card; its moving backplate must
+                    also cover the row and surrounding spacing so the list cannot show through. */}
+                <KeyboardStickyView offset={{ opened: keyboardOffset }} style={{ backgroundColor: theme.colors.surface }}>
                     {betweenContentAndInput}
                     {input}
                 </KeyboardStickyView>
@@ -100,6 +104,9 @@ const styles = StyleSheet.create({
     contentArea: {
         flex: 1,
         minHeight: 0,
+        // The list is translated up while the keyboard moves (`ChatScrollView`), and Android
+        // draws children past their parent's bounds, over the header above.
+        overflow: 'hidden',
     },
     placeholderContent: {
         flexGrow: 1,
