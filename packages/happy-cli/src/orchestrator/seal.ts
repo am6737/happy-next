@@ -143,9 +143,14 @@ function openResult(target: Record<string, any>, key: Uint8Array, taskId: unknow
     };
 }
 
+// A task's working directory is also sealed on its own, for runs that list tasks without their
+// prompts; the envelope's, where the prompt came along, is the one the daemon runs in
 function openTask(task: Record<string, any>, key: Uint8Array): Record<string, any> {
+    const workingDirectory = isSealed(task.workingDirectory)
+        ? { workingDirectory: openOrchestrator<string>(task.workingDirectory, key) ?? UNREADABLE }
+        : {};
     return {
-        ...openResult({ ...task, ...openPrompt(task, key) }, key, task.taskId),
+        ...openResult({ ...task, ...workingDirectory, ...openPrompt(task, key) }, key, task.taskId),
         ...('title' in task ? { title: openOrchestratorTitle(task.title, key) } : {}),
         ...(Array.isArray(task.executions) ? {
             executions: task.executions.map((execution: Record<string, any>) => openResult({

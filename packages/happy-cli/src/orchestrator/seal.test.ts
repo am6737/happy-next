@@ -122,6 +122,22 @@ describe('orchestrator responses', () => {
         expect(response.data.tasks[1].prompt).toBeUndefined();
     });
 
+    it('opens the working directory a run lists without its prompt', () => {
+        const response = openOrchestratorResponse({
+            ok: true,
+            data: {
+                tasks: [
+                    { taskId: 'task-1', workingDirectory: sealOrchestrator('/repo', key), sealedResult: null },
+                    { taskId: 'task-2', workingDirectory: sealOrchestrator('/repo', otherKey), sealedResult: null },
+                    { taskId: 'task-3', workingDirectory: null, sealedResult: null },
+                ],
+            },
+        }, key);
+        expect(response.data.tasks[0]).toEqual({ taskId: 'task-1', workingDirectory: '/repo' });
+        expect(response.data.tasks[1].workingDirectory).toContain('cannot be decrypted');
+        expect(response.data.tasks[2].workingDirectory).toBeNull();
+    });
+
     it('marks what another key sealed as unreadable', () => {
         const response = openOrchestratorResponse({ ok: true, data: { items: [{ runId: 'r', title: sealTitle('x', undefined, otherKey) }] } }, key);
         expect(response.data.items[0].title).toContain('cannot be decrypted');

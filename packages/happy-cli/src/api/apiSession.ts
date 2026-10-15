@@ -503,6 +503,7 @@ export class ApiSessionClient extends EventEmitter {
                 tasks: body.tasks.map(({ title, metadata, workingDirectory, ...task }) => ({
                     ...task,
                     title: sealTitle(title, metadata, key),
+                    workingDirectory: workingDirectory === undefined ? undefined : sealOrchestrator(workingDirectory, key),
                     prompt: sealOrchestrator({
                         kind: 'task',
                         sealId: randomUUID(),
@@ -534,6 +535,7 @@ export class ApiSessionClient extends EventEmitter {
             {
                 ...rest,
                 title: sealTitle(title ?? `$ ${firstLine.length > 120 ? `${firstLine.slice(0, 120)}…` : firstLine}`, undefined, key),
+                workingDirectory: workingDirectory === undefined ? undefined : sealOrchestrator(workingDirectory, key),
                 prompt: sealOrchestrator({
                     kind: 'shell',
                     sealId: randomUUID(),

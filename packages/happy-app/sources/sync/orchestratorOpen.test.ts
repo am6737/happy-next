@@ -55,6 +55,15 @@ describe('openOrchestratorTask', () => {
         expect(opened.executions?.[0]).toMatchObject({ resumeMessage: 'settings.orchestratorUndecryptable', errorMessage: 'settings.orchestratorUndecryptable' });
     });
 
+    it('opens the working directory a run lists without its prompt', async () => {
+        const opened = await openOrchestratorTask(task({ prompt: undefined, workingDirectory: 'e2e1:cwd' }), fakeEncryption({
+            'e2e1:cwd': '/repo',
+        }));
+        expect(opened.workingDirectory).toBe('/repo');
+        const unreadable = await openOrchestratorTask(task({ prompt: undefined, workingDirectory: 'e2e1:other' }), fakeEncryption({}));
+        expect(unreadable.workingDirectory).toBe('settings.orchestratorUndecryptable');
+    });
+
     it('leaves a title that was never sealed as it is', async () => {
         expect(await openOrchestratorTitle(null, fakeEncryption({}))).toBeNull();
         expect(await openOrchestratorTitle('e2e1:x', fakeEncryption({ 'e2e1:x': { title: 'Run' } }))).toBe('Run');

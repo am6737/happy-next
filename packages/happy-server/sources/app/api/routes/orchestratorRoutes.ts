@@ -192,10 +192,12 @@ async function detectMachineProviders(
 
 // A task's title and prompt arrive sealed (see SEALED_PATTERN): the prompt is the task's envelope,
 // which also names the machine it runs on, its provider, model and working directory, so the
-// daemon goes by those and not by the fields here
+// daemon goes by those and not by the fields here. The working directory comes sealed on its own
+// too, for runs to show without their prompts.
 const submitTaskSchema = z.object({
     taskKey: z.string().min(1).max(128).optional(),
     title: sealedSchema(SEALED_TITLE_MAX_LENGTH).optional(),
+    workingDirectory: sealedSchema(SEALED_TITLE_MAX_LENGTH).optional(),
     provider: z.enum(PROVIDERS),
     model: z.string().min(1).max(128).optional(),
     prompt: sealedSchema(SEALED_TASK_MAX_LENGTH),
@@ -236,6 +238,7 @@ const submitBodySchema = z.object({
 const execBodySchema = z.object({
     prompt: sealedSchema(SEALED_TASK_MAX_LENGTH),
     title: sealedSchema(SEALED_TITLE_MAX_LENGTH),
+    workingDirectory: sealedSchema(SEALED_TITLE_MAX_LENGTH).optional(),
     machineIds: z.union([
         z.array(z.string().min(1).max(128)).min(1).max(RUN_MAX_TASKS),
         z.literal('all_online'),
@@ -726,6 +729,8 @@ type NewTask = {
     provider: ProviderName | 'shell' | 'transfer';
     model: string | null;
     prompt: string;
+    /** Sealed, for display only: the daemon runs in the envelope's */
+    workingDirectory?: string;
     timeoutMs?: number;
     targetMachineId: string | null;
     dependsOnTaskKeys: string[];
@@ -1220,6 +1225,7 @@ export function orchestratorRoutes(app: Fastify) {
                 provider: task.provider,
                 model: normalizedTaskModels[index] ?? null,
                 prompt: task.prompt,
+                workingDirectory: task.workingDirectory,
                 timeoutMs: task.timeoutMs,
                 targetMachineId: task.target?.type === 'machine_id'
                     ? task.target.machineId!
@@ -1324,6 +1330,7 @@ export function orchestratorRoutes(app: Fastify) {
             provider: 'shell' as const,
             model: null,
             prompt: body.prompt,
+            workingDirectory: body.workingDirectory,
             timeoutMs: body.timeoutMs,
             targetMachineId: machineId,
             dependsOnTaskKeys: [],

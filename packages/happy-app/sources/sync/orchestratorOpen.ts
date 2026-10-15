@@ -62,8 +62,9 @@ function applyResult<R extends { outputSummary: string | null; outputText: strin
 }
 
 // What the task's envelope says, in the fields the views read: a transfer's prompt is its spec
-// as JSON (see parseOrchestratorTransferSpec)
-function applyEnvelope(task: OrchestratorTaskRecord, envelope: any): Pick<OrchestratorTaskRecord, 'prompt' | 'workingDirectory'> {
+// as JSON (see parseOrchestratorTransferSpec). Runs list tasks without their prompts, so the
+// working directory, sealed on its own too, is opened from there.
+function applyEnvelope(task: OrchestratorTaskRecord, envelope: any, workingDirectory: any): Pick<OrchestratorTaskRecord, 'prompt' | 'workingDirectory'> {
     switch (envelope?.kind) {
         case 'task':
             return { prompt: envelope.prompt, workingDirectory: envelope.workingDirectory ?? null };
@@ -79,24 +80,29 @@ function applyEnvelope(task: OrchestratorTaskRecord, envelope: any): Pick<Orches
                 }),
                 workingDirectory: null,
             };
-        default:
+        default: {
+            const openedWorkingDirectory = isSealed(task.workingDirectory)
+                ? (typeof workingDirectory === 'string' ? workingDirectory : t('settings.orchestratorUndecryptable'))
+                : task.workingDirectory;
             return isSealed(task.prompt)
-                ? { prompt: t('settings.orchestratorUndecryptable'), workingDirectory: task.workingDirectory }
-                : { prompt: task.prompt, workingDirectory: task.workingDirectory };
+                ? { prompt: t('settings.orchestratorUndecryptable'), workingDirectory: openedWorkingDirectory }
+                : { prompt: task.prompt, workingDirectory: openedWorkingDirectory };
+        }
     }
 }
 
 export async function openOrchestratorTask(task: SealedTaskRecord, encryption: Encryption): Promise<OrchestratorTaskRecord> {
     const executions = task.executions ?? [];
-    const [title, envelope, result, ...opened] = await encryption.openOrchestrator([
+    const [title, envelope, workingDirectory, result, ...opened] = await encryption.openOrchestrator([
         task.title,
         task.prompt,
+        task.workingDirectory,
         task.sealedResult,
         ...executions.flatMap((execution) => [execution.sealedResult, execution.resumeMessage]),
     ]);
     const openedTask: OrchestratorTaskRecord = {
         ...applyResult(task, result, task.taskId),
-        ...applyEnvelope(task, envelope),
+        ...applyEnvelope(task, envelope, workingDirectory),
         title: isSealed(task.title)
             ? (typeof title?.title === 'string' ? title.title : t('settings.orchestratorUndecryptable'))
             : task.title,
