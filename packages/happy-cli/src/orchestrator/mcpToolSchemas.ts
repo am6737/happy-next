@@ -74,19 +74,19 @@ export const ORCHESTRATOR_EXEC_TOOL_SCHEMA = {
 } as const;
 
 export const ORCHESTRATOR_TRANSFER_TOOL_SCHEMA = {
-  description: 'Copy a file or directory (up to 2 GiB) from one machine to one or more others, encrypted end to end; "current" is the machine you run on, so it both sends and fetches. Like cp: into the destination when it ends in "/" or is a directory, else to that exact path; missing parent directories are created; an existing destination fails unless overwrite is true. Returns each target\'s path, bytes, files and sha256. Waits up to waitMs; if still running, wait for <orchestrator-callback> before calling orchestrator_pend.',
+  description: 'Copy a file or directory (up to 2 GiB, encrypted end to end) from one machine to one or more others and return each target\'s path, bytes, files and sha256; an existing destination fails it unless overwrite is true. Waits up to waitMs; if still running, wait for <orchestrator-callback> before calling orchestrator_pend. Ask the user before overwriting.',
   title: 'Orchestrator Transfer',
   inputSchema: {
     fromMachineId: z.string().min(1).max(128)
-      .describe('Machine the file or directory is on: a machine ID with shellReady: true in orchestrator_get_context, or "current".'),
+      .describe('Source machine ID with shellReady: true in orchestrator_get_context, or "current" for the machine you run on.'),
     fromPath: z.string().min(1).max(4096)
       .describe('Path on the source machine; "~" expands, and a relative path is relative to the home directory.'),
     toMachineIds: z.array(z.string().min(1).max(128)).min(1).max(32).optional()
-      .describe('Target machine IDs with shellReady: true, or "current". Required unless allOnline is true.'),
+      .describe('Target machine IDs with shellReady: true in orchestrator_get_context, or "current". Required unless allOnline is true.'),
     allOnline: z.boolean().optional()
       .describe('Send to every other online machine with shellReady: true instead of toMachineIds.'),
     toPath: z.string().min(1).max(4096)
-      .describe('Destination on each target; "~" expands, a relative path is relative to the home directory. End it with "/" to put the source inside it under its own name.'),
+      .describe('Destination on each target; "~" expands, and a relative path is relative to the home directory. Like cp: ending in "/" or naming a directory puts the source inside it, else it is the exact path; missing parents are created.'),
     overwrite: z.boolean().optional()
       .describe('Replace an existing destination of the same kind (a directory is replaced, not merged). Defaults to false.'),
     timeoutMs: z.number().int().min(1000).max(2 ** 31 - 1).optional()

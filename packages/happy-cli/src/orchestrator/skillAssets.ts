@@ -52,7 +52,7 @@ Copy files or directories (up to 2 GiB) between machines with \`orchestrator_tra
 command output: \`"current"\` is the machine this session runs on, as the source to send from it or
 as a target to fetch to it. The destination works like \`cp\`: ending in \`/\` or naming a directory
 puts the source inside it, anything else is the exact path. An existing destination fails unless
-\`overwrite\` is set. Both machines need remote shell turned on.
+\`overwrite\` is set; ask the user before overwriting. Both machines need remote shell turned on.
 
 Use \`orchestrator_send_message\` when a completed or failed task should continue in its existing
 child session for feedback, fixes, or follow-up questions. Pass its \`taskId\`, not its \`taskKey\`.
