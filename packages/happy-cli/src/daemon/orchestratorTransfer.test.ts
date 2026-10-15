@@ -142,7 +142,7 @@ describe.skipIf(process.platform === 'win32')('orchestrator transfer executor', 
 
     expect(report).toMatchObject({
       status: 'completed',
-      transferResult: { path: destination, kind: 'directory', files: 2, sha256: null },
+      transferResult: { path: destination, kind: 'directory', bytes: 'alpha'.length + 'beta'.length, files: 2, sha256: null },
     });
     expect(readFileSync(join(destination, 'a.txt'), 'utf8')).toBe('alpha');
     expect(readFileSync(join(destination, 'nested', 'b.txt'), 'utf8')).toBe('beta');

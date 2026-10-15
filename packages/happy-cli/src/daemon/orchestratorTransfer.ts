@@ -242,7 +242,9 @@ export function createOrchestratorTransferExecutor(api: ApiClient) {
     const temp = join(dirname(destination), `.${basename(destination)}.happy-transfer-${executionId}`);
     const hash = createHash('sha256');
     let files = source.kind === 'file' ? 1 : 0;
-    let bytes = 0;
+    // A directory reports what its files hold, not the tar stream (headers and padding) that carried them
+    let fileBytes = 0;
+    let streamed = 0;
     if (source.kind === 'directory') {
       await mkdir(temp);
     }
@@ -255,6 +257,7 @@ export function createOrchestratorTransferExecutor(api: ApiClient) {
         strict: true,
         onReadEntry: (entry) => {
           files += entry.type === 'File' ? 1 : 0;
+          fileBytes += entry.type === 'File' ? entry.size : 0;
         },
       });
     // Both are event emitters, with event maps too different to call through the union
@@ -273,8 +276,8 @@ export function createOrchestratorTransferExecutor(api: ApiClient) {
       for (let index = 0; ; index++) {
         const chunk = await relay<SealedChunk>(transfer, { op: 'read', index });
         const plaintext = openTransferChunk(key, executionId, index, chunk.eof, chunk.data);
-        bytes += plaintext.length;
-        if (bytes > TRANSFER_MAX_BYTES) {
+        streamed += plaintext.length;
+        if (streamed > TRANSFER_MAX_BYTES) {
           throw new TransferError('TRANSFER_TOO_LARGE', `Source is larger than the ${TRANSFER_MAX_BYTES / 1024 ** 3} GiB a transfer takes`);
         }
         hash.update(plaintext);
@@ -319,7 +322,7 @@ export function createOrchestratorTransferExecutor(api: ApiClient) {
     return {
       path: destination,
       kind: source.kind,
-      bytes,
+      bytes: source.kind === 'file' ? streamed : fileBytes,
       files,
       sha256: source.kind === 'file' ? hash.digest('hex') : null,
     };
