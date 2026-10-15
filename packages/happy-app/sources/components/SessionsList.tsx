@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Pressable, FlatList, Platform, RefreshControl, NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
+import { View, Pressable, FlatList, Platform, RefreshControl, NativeScrollEvent, NativeSyntheticEvent, Animated } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { Text } from '@/components/StyledText';
 import { usePathname } from 'expo-router';
@@ -308,25 +308,29 @@ const stylesheet = StyleSheet.create((theme) => ({
     },
     sectionDividerName: {
         flexShrink: 1,
-        fontSize: 12,
+        fontSize: 15,
         color: theme.colors.textSecondary,
         ...Typography.default('semiBold'),
+        fontWeight: '700',
     },
     sectionDividerCount: {
         fontSize: 12,
         color: theme.colors.textSecondary,
+        opacity: 0.7,
         ...Typography.default(),
     },
-    sectionDividerLine: {
-        flex: 1,
-        height: StyleSheet.hairlineWidth,
-        marginHorizontal: 4,
-        backgroundColor: theme.colors.divider,
+    // Pushed to the far end, square so it turns on its own centre.
+    sectionDividerChevron: {
+        marginLeft: 'auto',
+        width: 24,
+        height: 24,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     machineOnlineDot: {
-        width: 6,
-        height: 6,
-        borderRadius: 3,
+        width: 7,
+        height: 7,
+        borderRadius: 3.5,
     },
 }));
 
@@ -401,7 +405,6 @@ function ViewportInsetsReporter({ height, onChange }: { height: number; onChange
 
 type RevealAlign = 'nearest' | 'roomy' | 'center';
 
-const SECTION_HEADER_DOUBLE_TAP_MS = 400;
 // A row the list jumped to flashes once it holds still this long, or after the longest wait at most.
 const FLASH_SETTLE_MS = 100;
 const FLASH_MAX_WAIT_MS = 1500;
@@ -421,40 +424,42 @@ function measureRowTop(row: View, callback: (top: number) => void) {
     row.measureInWindow((_x, y) => callback(y));
 }
 
-// Header of one section in the sidebar's "All machines" view: a plain divider that stays pinned while
-// its sessions scroll by. Only the project groups below it fold, so the list has a single fold level.
-// Double-tapping it folds all of the section's project groups, or unfolds them when all are folded.
-const SessionSectionHeader = React.memo(({ section }: { section: SessionSection }) => {
+// Header of one section in the sidebar's "All machines" view: a divider that stays pinned while its
+// sessions scroll by, and folds the whole section when tapped. Its chevron, like a project header's
+// on the desktop, shows under the pointer and while the section is folded.
+const SessionSectionHeader = React.memo(({ section, collapsed, onToggle }: {
+    section: SessionSection;
+    collapsed: boolean;
+    onToggle: (sectionId: string) => void;
+}) => {
     const styles = stylesheet;
     const { theme } = useUnistyles();
-    const [collapsedGroups, setCollapsedGroups] = useLocalSettingMutable('collapsedSessionProjectGroups');
-    const lastTapRef = React.useRef(0);
-    const handlePress = React.useCallback(() => {
-        const now = Date.now();
-        if (now - lastTapRef.current >= SECTION_HEADER_DOUBLE_TAP_MS) {
-            lastTapRef.current = now;
-            return;
-        }
-        lastTapRef.current = 0;
-        // The same keys useSessionProjectGroups gives: by path and machine, or by path alone when the
-        // path spans machines (the unknown-machine section) or its machine is unknown.
-        const machineIdsByPath = new Map<string, Set<string | undefined>>();
-        for (const session of section.sessions) {
-            const path = session.metadata?.path || '';
-            if (!machineIdsByPath.has(path)) machineIdsByPath.set(path, new Set());
-            machineIdsByPath.get(path)!.add(session.metadata?.machineId || undefined);
-        }
-        const keys = Array.from(machineIdsByPath, ([path, machineIds]) => getSessionProjectCollapseKey(
-            path,
-            machineIds.size === 1 ? machineIds.values().next().value : undefined,
-        ));
-        const next = { ...collapsedGroups };
-        if (keys.some(key => !next[key])) for (const key of keys) next[key] = true;
-        else for (const key of keys) delete next[key];
-        setCollapsedGroups(next);
-    }, [section.sessions, collapsedGroups, setCollapsedGroups]);
+    const sectionId = section.id;
+    const handlePress = React.useCallback(() => onToggle(sectionId), [onToggle, sectionId]);
+
+    const isWeb = Platform.OS === 'web';
+    const [hovered, setHovered] = React.useState(false);
+    const hoverHandlers = isWeb ? {
+        onPointerEnter: () => setHovered(true),
+        onPointerLeave: () => setHovered(false),
+    } : {};
+    const expansion = React.useRef(new Animated.Value(collapsed ? 0 : 1)).current;
+    const chevronOpacity = React.useRef(new Animated.Value(!isWeb || collapsed ? 1 : 0)).current;
+    React.useEffect(() => {
+        Animated.parallel([
+            Animated.timing(expansion, { toValue: collapsed ? 0 : 1, duration: 140, useNativeDriver: true }),
+            Animated.timing(chevronOpacity, { toValue: !isWeb || hovered || collapsed ? 1 : 0, duration: 150, useNativeDriver: true }),
+        ]).start();
+    }, [collapsed, hovered, isWeb, expansion, chevronOpacity]);
+
     return (
-        <Pressable style={styles.sectionDividerHeader} onPress={handlePress}>
+        <Pressable
+            style={styles.sectionDividerHeader}
+            onPress={handlePress}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: !collapsed }}
+            {...(hoverHandlers as any)}
+        >
             {section.online !== undefined && (
                 <View style={[styles.machineOnlineDot, { backgroundColor: section.online ? theme.colors.status.connected : theme.colors.textSecondary }]} />
             )}
@@ -466,8 +471,20 @@ const SessionSectionHeader = React.memo(({ section }: { section: SessionSection 
             >
                 {section.name}
             </Text>
-            <View style={styles.sectionDividerLine} />
             <Text style={styles.sectionDividerCount} selectable={false}>{section.sessions.length}</Text>
+            <Animated.View
+                style={[
+                    styles.sectionDividerChevron,
+                    {
+                        opacity: chevronOpacity,
+                        transform: [{
+                            rotate: expansion.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '90deg'] }),
+                        }],
+                    },
+                ]}
+            >
+                <Ionicons name="chevron-forward" size={16} color={theme.colors.textSecondary} />
+            </Animated.View>
         </Pressable>
     );
 });
@@ -800,6 +817,34 @@ export function SessionsList() {
         });
     }, [dataWithSelected, revealSessionRow, flashRowWhenSettled]);
 
+    // The folded machine sections of the "All machines" view. Their sessions stay in the list's
+    // data, so jumping and locating still find them, and unfold the section on the way.
+    const [collapsedMachineSections, setCollapsedMachineSections] = useLocalSettingMutable('collapsedSessionMachineSections');
+    const toggleMachineSection = React.useCallback((sectionId: string) => {
+        const next = { ...collapsedMachineSections };
+        if (next[sectionId]) delete next[sectionId];
+        else next[sectionId] = true;
+        setCollapsedMachineSections(next);
+    }, [collapsedMachineSections, setCollapsedMachineSections]);
+    const unfoldMachineSectionOf = React.useCallback((sessionId: string) => {
+        const section = (tabData ?? []).find(item => item.type === 'machine-sessions'
+            && item.section.sessions.some(session => session.id === sessionId));
+        if (section?.type !== 'machine-sessions') return false;
+        if (collapsedMachineSections[section.section.id]) {
+            const next = { ...collapsedMachineSections };
+            delete next[section.section.id];
+            setCollapsedMachineSections(next);
+        }
+        return true;
+    }, [tabData, collapsedMachineSections, setCollapsedMachineSections]);
+    // Opening a session unfolds its section, as it does its project group.
+    const lastUnfoldedSessionIdRef = React.useRef<string | null>(null);
+    React.useEffect(() => {
+        if (!selectedSessionId || lastUnfoldedSessionIdRef.current === selectedSessionId) return;
+        // Not listed yet (or not in a section): try again once the list has it.
+        if (unfoldMachineSectionOf(selectedSessionId)) lastUnfoldedSessionIdRef.current = selectedSessionId;
+    }, [selectedSessionId, unfoldMachineSectionOf]);
+
     // Double-tapping the sessions tab reveals the next session that wants a look (see
     // sessionListJump), unfolding its project group first if needed; with none, back to the top.
     const [collapsedProjectGroups, setCollapsedProjectGroups] = useLocalSettingMutable('collapsedSessionProjectGroups');
@@ -836,8 +881,9 @@ export function SessionsList() {
             for (const key of collapseKeys) delete next[key];
             setCollapsedProjectGroups(next);
         }
+        unfoldMachineSectionOf(nextId);
         scheduleRevealSelectedSession(nextId, 'center', true);
-    }), [tabSessions, tabData, collapsedProjectGroups, setCollapsedProjectGroups, scheduleRevealSelectedSession, scrollListToTop]);
+    }), [tabSessions, tabData, collapsedProjectGroups, setCollapsedProjectGroups, unfoldMachineSectionOf, scheduleRevealSelectedSession, scrollListToTop]);
 
     // A pinned session's hover card can show where it would sit in the list: its project's group,
     // on the same machine, among the sessions left unpinned below. It flashes once found.
@@ -863,6 +909,7 @@ export function SessionsList() {
     const locatePinnedSessionProject = React.useCallback((sessionId: string) => {
         const target = findPinnedSessionProject(sessionId);
         if (!target) return;
+        unfoldMachineSectionOf(sessionId);
         const reveal = () => {
             const key = target.collapseKeys.find(collapseKey => getProjectHeader(collapseKey));
             const header = key && getProjectHeader(key);
@@ -881,7 +928,7 @@ export function SessionsList() {
                 reveal();
             });
         });
-    }, [findPinnedSessionProject, revealRow, flashRowWhenSettled]);
+    }, [findPinnedSessionProject, unfoldMachineSectionOf, revealRow, flashRowWhenSettled]);
     React.useEffect(() => {
         setSessionProjectLocator({
             canLocate: sessionId => findPinnedSessionProject(sessionId) !== null,
@@ -983,9 +1030,16 @@ export function SessionsList() {
                 );
 
             case 'machine-header':
-                return <SessionSectionHeader section={item.section} />;
+                return (
+                    <SessionSectionHeader
+                        section={item.section}
+                        collapsed={!!collapsedMachineSections[item.section.id]}
+                        onToggle={toggleMachineSection}
+                    />
+                );
 
             case 'machine-sessions':
+                if (collapsedMachineSections[item.section.id]) return null;
                 return (
                     <ActiveComponent
                         sessions={item.section.sessions}
@@ -1026,7 +1080,7 @@ export function SessionsList() {
                     />
                 );
         }
-    }, [isTablet, selectedSessionId, dataWithSelected, compactSessionView, registerSessionRowRef]);
+    }, [isTablet, selectedSessionId, dataWithSelected, compactSessionView, registerSessionRowRef, collapsedMachineSections, toggleMachineSection]);
 
     const isDisconnected = socketStatus.status === 'disconnected' || socketStatus.status === 'error';
     const canStartAnywhere = !isDisconnected && machineGroups.some(group => group.online);

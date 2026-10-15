@@ -37,6 +37,11 @@ import { SessionProjectGroup, useCollapsedSessionProjectGroups, useSessionProjec
 // Rounds the project card, and with it the first and last row inside it.
 const CARD_RADIUS = Platform.select({ ios: 10, default: 16 });
 
+// A project's sessions start where its header's name does: past the header's inset, the chevron
+// (in the app only — on the desktop it sits on the right), and the avatar with its gap.
+const PROJECT_HEADER_INSET = 12;
+const SESSION_ROW_INDENT = PROJECT_HEADER_INSET + (Platform.OS === 'web' ? 0 : 16 + 4) + 24 + 8;
+
 const stylesheet = StyleSheet.create((theme, runtime) => ({
     container: {
         backgroundColor: theme.colors.groupped.background,
@@ -76,13 +81,19 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
         justifyContent: 'space-between',
         alignItems: 'center',
     },
-    // Inset to the card's width below, so a located header lights up as a band of its own.
-    sectionHeaderFlash: {
-        top: 6,
-        bottom: 2,
-        left: Platform.select({ ios: 16, default: 12 }),
-        right: Platform.select({ ios: 16, default: 12 }),
-        borderRadius: 8,
+    // The project's header is the first row of its card, as tall as a session row.
+    projectHeader: {
+        paddingVertical: 10,
+        paddingLeft: PROJECT_HEADER_INSET,
+        paddingRight: 16,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    // A project's card opens with its header, so it needs only the gap to the next card.
+    projectCardWithHeader: {
+        marginTop: 0,
+        marginBottom: 12,
     },
     sectionHeaderRight: {
         flexDirection: 'row',
@@ -95,6 +106,13 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
         width: 16,
         height: 16,
         marginRight: 4,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    // Square and centred like the + beside it, so the turn pivots on the icon itself.
+    sectionHeaderChevronRight: {
+        width: 24,
+        height: 24,
         alignItems: 'center',
         justifyContent: 'center',
     },
@@ -134,9 +152,9 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
         textAlign: 'right',
     },
     newSessionHeaderButton: {
-        width: 28,
-        height: 28,
-        alignItems: 'flex-end',
+        width: 24,
+        height: 24,
+        alignItems: 'center',
         justifyContent: 'center',
         borderRadius: 6,
     },
@@ -147,12 +165,28 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
         alignItems: 'flex-end',
         justifyContent: 'center',
     },
+    // The + fades in over the git status, right-aligned in the slot.
+    sectionHeaderNewSessionLayer: {
+        position: 'absolute',
+        right: 0,
+        top: 0,
+        bottom: 0,
+        justifyContent: 'center',
+    },
+    // Opens from nothing so an expanded project's git status keeps the right edge. The negative
+    // margin takes back the row's gap, which would otherwise stand where the hidden chevron is.
+    sectionHeaderChevronReveal: {
+        height: 24,
+        marginLeft: -8,
+        overflow: 'hidden',
+        alignItems: 'flex-end',
+    },
     sessionRow: {
         height: 48,
         flexDirection: 'row',
         alignItems: 'center',
         paddingHorizontal: 16,
-        paddingInlineStart: 36,
+        paddingInlineStart: SESSION_ROW_INDENT,
         backgroundColor: theme.colors.surface,
     },
     sessionRowUnindented: {
@@ -303,32 +337,49 @@ function ProjectSectionHeader({
             useNativeDriver: true,
         }).start();
     }, [collapsed, expansion]);
+    // In the app the chevron leads the header. On the desktop it sits on the right: under the
+    // pointer the + fades in over the git status and the chevron opens out beside it, and a
+    // collapsed project keeps its chevron so it still reads as collapsed.
+    const isWeb = Platform.OS === 'web';
+    const hover = React.useRef(new Animated.Value(0)).current;
+    const chevronReveal = React.useRef(new Animated.Value(collapsed ? 1 : 0)).current;
+    React.useEffect(() => {
+        if (!isWeb) return;
+        // Width can't run on the native driver, so neither value does.
+        Animated.parallel([
+            Animated.timing(hover, { toValue: hovered ? 1 : 0, duration: 150, useNativeDriver: false }),
+            Animated.timing(chevronReveal, { toValue: hovered || collapsed ? 1 : 0, duration: 150, useNativeDriver: false }),
+        ]).start();
+    }, [isWeb, hovered, collapsed, hover, chevronReveal]);
+    const chevron = (
+        <Animated.View
+            style={[
+                isWeb ? styles.sectionHeaderChevronRight : styles.sectionHeaderChevron,
+                {
+                    transform: [{
+                        rotate: expansion.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '90deg'] }),
+                    }],
+                },
+            ]}
+        >
+            <Ionicons name="chevron-forward" size={isWeb ? 16 : 14} color={styles.sectionHeaderPath.color} />
+        </Animated.View>
+    );
     const collapseKey = projectGroup.collapseKey;
     const headerRef = React.useCallback((node: View | null) => registerProjectHeader(collapseKey, node), [collapseKey]);
 
     return (
         <View ref={headerRef} {...(hoverHandlers as any)}>
-            <SessionRowFlash sessionId={getProjectHeaderFlashId(collapseKey)} style={styles.sectionHeaderFlash} />
+            <SessionRowFlash sessionId={getProjectHeaderFlashId(collapseKey)} />
             <Pressable
-                style={styles.sectionHeader}
+                style={styles.projectHeader}
                 onPress={onToggle}
                 accessibilityRole="button"
                 accessibilityState={{ expanded: !collapsed }}
                 accessibilityLabel={`${collapsed ? t('duplicate.expandText') : t('duplicate.collapseText')} ${[projectGroup.label.name, projectGroup.label.detail].filter(Boolean).join(', ')}`}
             >
             <View style={styles.sectionHeaderLeft}>
-                <Animated.View
-                    style={[
-                        styles.sectionHeaderChevron,
-                        {
-                            transform: [{
-                                rotate: expansion.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '90deg'] }),
-                            }],
-                        },
-                    ]}
-                >
-                    <Ionicons name="chevron-forward" size={14} color={styles.sectionHeaderPath.color} />
-                </Animated.View>
+                {!isWeb && chevron}
                 {avatar && <View style={styles.sectionHeaderAvatar}>{avatar}</View>}
                 <ProjectLabelText
                     label={projectGroup.label}
@@ -337,28 +388,51 @@ function ProjectSectionHeader({
                 />
             </View>
                 <View style={styles.sectionHeaderRight}>
-                    <View style={styles.sectionHeaderActionSlot}>
-                        <View style={hovered && onNewSession ? { opacity: 0 } : undefined}>
+                    {isWeb ? (
+                        <>
+                            <View style={styles.sectionHeaderActionSlot}>
+                                <Animated.View style={{ opacity: hover.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }) }}>
+                                    {rightContent}
+                                </Animated.View>
+                                {onNewSession && (
+                                    <Animated.View
+                                        pointerEvents={hovered ? 'auto' : 'none'}
+                                        style={[styles.sectionHeaderNewSessionLayer, { opacity: hover }]}
+                                    >
+                                        <Pressable
+                                            style={({ pressed }) => [
+                                                styles.newSessionHeaderButton,
+                                                pressed && { backgroundColor: '#00000012' },
+                                            ]}
+                                            onPress={(event) => {
+                                                event.stopPropagation?.();
+                                                onNewSession();
+                                            }}
+                                            accessibilityRole="button"
+                                            accessibilityLabel={t('newSession.startNewSessionInFolder')}
+                                        >
+                                            <Ionicons name="add" size={18} color={styles.sectionHeaderPath.color} />
+                                        </Pressable>
+                                    </Animated.View>
+                                )}
+                            </View>
+                            <Animated.View
+                                style={[
+                                    styles.sectionHeaderChevronReveal,
+                                    {
+                                        width: chevronReveal.interpolate({ inputRange: [0, 1], outputRange: [0, 24] }),
+                                        opacity: chevronReveal,
+                                    },
+                                ]}
+                            >
+                                {chevron}
+                            </Animated.View>
+                        </>
+                    ) : (
+                        <View style={styles.sectionHeaderActionSlot}>
                             {rightContent}
                         </View>
-                        {onNewSession && hovered && Platform.OS === 'web' && (
-                            <Pressable
-                                style={({ pressed }) => [
-                                    styles.newSessionHeaderButton,
-                                    { position: 'absolute', right: 0 },
-                                    pressed && { backgroundColor: '#00000012' },
-                                ]}
-                                onPress={(event) => {
-                                    event.stopPropagation?.();
-                                    onNewSession();
-                                }}
-                                accessibilityRole="button"
-                                accessibilityLabel={t('newSession.startNewSessionInFolder')}
-                            >
-                                <Ionicons name="add" size={20} color={styles.sectionHeaderPath.color} />
-                            </Pressable>
-                        )}
-                    </View>
+                    )}
                 </View>
             </Pressable>
         </View>
@@ -431,8 +505,8 @@ const ProjectSection = React.memo(function ProjectSection({ projectGroup, collap
     const handleToggle = React.useCallback(() => onToggle(collapseKey), [onToggle, collapseKey]);
     const projectPath = projectGroup.path;
     const machineEntries = Array.from(projectGroup.machines.entries());
-    // The card is one rounded box spanning every machine in the project, so the rows
-    // the card rounds are its first and last overall — see `cardRowFirst`.
+    // The card is one rounded box opening with the header and spanning every machine in the
+    // project, so the only row it rounds is the last overall — see `cardRowLast`.
     const cardMachines = [...machineEntries]
         .sort(([, machineA], [, machineB]) => machineA.machineName.localeCompare(machineB.machineName));
     const firstSession = machineEntries[0]?.[1]?.sessions[0];
@@ -454,8 +528,7 @@ const ProjectSection = React.memo(function ProjectSection({ projectGroup, collap
     } : undefined;
 
     return (
-        <View>
-            {/* Section header on grouped background */}
+        <View style={[styles.projectCard, styles.projectCardWithHeader]}>
             <ProjectSectionHeader
                 projectGroup={projectGroup}
                 collapsed={collapsed}
@@ -488,9 +561,8 @@ const ProjectSection = React.memo(function ProjectSection({ projectGroup, collap
                 )}
             />
 
-            {/* Card with just the sessions */}
-            {!collapsed && <View style={styles.projectCard}>
-                {/* Sessions grouped by machine within the card */}
+            {/* Sessions grouped by machine under the header */}
+            {!collapsed && <View>
                 {cardMachines.map(([machineId, machineGroup], machineIndex) => (
                     <View key={`${projectPath}-${machineId}`}>
                         {machineGroup.sessions.map((session, index) => (
@@ -499,7 +571,6 @@ const ProjectSection = React.memo(function ProjectSection({ projectGroup, collap
                                 session={session}
                                 selected={selectedSessionId === session.id}
                                 registerSessionRowRef={registerSessionRowRef}
-                                isCardFirst={machineIndex === 0 && index === 0}
                                 isCardLast={machineIndex === cardMachines.length - 1
                                     && index === machineGroup.sessions.length - 1}
                             />
