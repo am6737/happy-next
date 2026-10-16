@@ -2111,7 +2111,7 @@ export const zhHant: TranslationStructure = {
 
     message: {
         switchedToMode: ({ mode }: { mode: string }) => `已切換到 ${mode} 模式`,
-        forkedFrom: ({ title }: { title: string }) => `複製自「${title}」`,
+        forkedFrom: ({ title }: { title: string }) => `來自：${title}`,
         earlierTurnsOmitted: ({ count }: { count: number }) => `更早的 ${count} 輪對話未顯示`,
         unknownEvent: '未知事件',
         usageLimitUntil: ({ time }: { time: string }) => `使用限制到 ${time}`,

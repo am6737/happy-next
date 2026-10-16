@@ -9,7 +9,7 @@
 import { logger } from '@/ui/logger';
 import { readGeminiSessionLog } from './sessionReader';
 import type { GeminiSessionLine } from './sessionTypes';
-import { forkedHistoryNotice, isInjectedPrompt, selectBackfillTurns } from '@/modules/common/backfillTurns';
+import { isInjectedPrompt, selectBackfillTurns, withForkedHistoryNotices } from '@/modules/common/backfillTurns';
 import { stripAttachmentsFromPrompt } from '@/modules/common/fileUpload';
 
 export interface GeminiBackfillOptions {
@@ -49,18 +49,15 @@ export async function backfillGeminiSessionHistory(opts: GeminiBackfillOptions):
 
     const { selected, omittedTurns } = selectBackfillTurns(textLines, (line) => line.type === 'user' ? 'prompt' : 'reply', opts.maxTurns ?? 20);
     const localIdPrefix = `gemini-log:${opts.sessionId}:`;
-    const notice = forkedHistoryNotice(localIdPrefix, omittedTurns);
-    if (selected.length === 0 && !notice) {
+    const batch = withForkedHistoryNotices(localIdPrefix, omittedTurns, selected.map((line) => ({
+        content: buildMessageContent(line),
+        localId: `${localIdPrefix}${line.uuid}`,
+    })));
+    if (batch.length === 0) {
         logger.debug('[GEMINI-BACKFILL] No messages to backfill');
         return;
     }
     logger.debug(`[GEMINI-BACKFILL] Backfilling ${selected.length} messages (omitted turns: ${omittedTurns})`);
 
-    await opts.sendBatch([
-        ...(notice ? [notice] : []),
-        ...selected.map((line) => ({
-            content: buildMessageContent(line),
-            localId: `${localIdPrefix}${line.uuid}`,
-        })),
-    ]);
+    await opts.sendBatch(batch);
 }

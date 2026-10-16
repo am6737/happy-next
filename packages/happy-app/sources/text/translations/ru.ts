@@ -2108,7 +2108,7 @@ export const ru: TranslationStructure = {
 
     message: {
         switchedToMode: ({ mode }: { mode: string }) => `Переключено в режим ${mode}`,
-        forkedFrom: ({ title }: { title: string }) => `Скопировано из «${title}»`,
+        forkedFrom: ({ title }: { title: string }) => `Из: ${title}`,
         earlierTurnsOmitted: ({ count }: { count: number }) => `Более ранних ходов не показано: ${count}`,
         unknownEvent: 'Неизвестное событие',
         usageLimitUntil: ({ time }: { time: string }) => `Лимит использования достигнут до ${time}`,

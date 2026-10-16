@@ -735,7 +735,8 @@ function LimitNoticeText(props: {
   );
 }
 
-// The line that opens a copied or resumed session's backfilled history. The title is the source
+// A notice around a copied or resumed session's backfilled history: above it how many earlier turns
+// it leaves out, below it a divider naming the session it came from. The title is the source
 // session's current one while it still exists, and pressing it opens that session.
 function ForkedHistoryNotice(props: { event: Extract<AgentEvent, { type: 'forked-history' }> }) {
   const { sourceSessionId, sourceTitle, omittedTurns } = props.event;
@@ -745,18 +746,27 @@ function ForkedHistoryNotice(props: { event: Extract<AgentEvent, { type: 'forked
   const handleOpenSource = React.useCallback(() => {
     if (sourceSessionId) navigateToSession(sourceSessionId);
   }, [navigateToSession, sourceSessionId]);
+  const { theme } = useUnistyles();
   return (
-    <View style={styles.agentEventContainer}>
-      <Text style={styles.agentEventText}>
-        {title !== undefined && (
-          <Text style={source ? styles.forkedHistorySource : undefined} onPress={source ? handleOpenSource : undefined}>
-            {t('message.forkedFrom', { title })}
-          </Text>
-        )}
-        {title !== undefined && omittedTurns > 0 && ' · '}
-        {omittedTurns > 0 && t('message.earlierTurnsOmitted', { count: omittedTurns })}
-      </Text>
-    </View>
+    <>
+      {omittedTurns > 0 && (
+        <View style={styles.agentEventContainer}>
+          <Text style={styles.agentEventText}>{t('message.earlierTurnsOmitted', { count: omittedTurns })}</Text>
+        </View>
+      )}
+      {title !== undefined && (
+        <View style={styles.forkedHistoryDivider}>
+          <View style={styles.forkedHistoryRule} />
+          <Pressable style={styles.forkedHistorySource} onPress={handleOpenSource} disabled={!source}>
+            <Ionicons name="git-branch-outline" size={14} color={theme.colors.agentEventText} />
+            <Text style={[styles.agentEventText, source && styles.forkedHistorySourceLink]} numberOfLines={1}>
+              {t('message.forkedFrom', { title })}
+            </Text>
+          </Pressable>
+          <View style={styles.forkedHistoryRule} />
+        </View>
+      )}
+    </>
   );
 }
 
@@ -942,8 +952,29 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.agentEventText,
     fontSize: 14,
   },
+  // A rule across the chat with the source in its middle, where the copied history ends and the
+  // new conversation begins; the title gives way before the rules do.
+  forkedHistoryDivider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 16,
+    paddingVertical: 12,
+    gap: 10,
+  },
+  forkedHistoryRule: {
+    flex: 1,
+    minWidth: 24,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: theme.colors.divider,
+  },
   forkedHistorySource: {
-    textDecorationLine: 'underline',
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexShrink: 1,
+    gap: 6,
+  },
+  forkedHistorySourceLink: {
+    color: theme.colors.textLink,
   },
   toolContainer: {
     marginHorizontal: 16,

@@ -2112,7 +2112,7 @@ export const ja: TranslationStructure = {
 
     message: {
         switchedToMode: ({ mode }: { mode: string }) => `${mode}モードに切り替えました`,
-        forkedFrom: ({ title }: { title: string }) => `「${title}」からコピー`,
+        forkedFrom: ({ title }: { title: string }) => `元：${title}`,
         earlierTurnsOmitted: ({ count }: { count: number }) => `それ以前の ${count} ターンは表示されていません`,
         unknownEvent: '不明なイベント',
         usageLimitUntil: ({ time }: { time: string }) => `${time}まで使用制限中`,

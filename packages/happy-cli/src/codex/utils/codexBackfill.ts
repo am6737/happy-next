@@ -8,7 +8,7 @@
 
 import { basename, isAbsolute } from 'node:path';
 import { logger } from '@/ui/logger';
-import { forkedHistoryNotice, isInjectedPrompt, selectBackfillTurns } from '@/modules/common/backfillTurns';
+import { isInjectedPrompt, selectBackfillTurns, withForkedHistoryNotices } from '@/modules/common/backfillTurns';
 import { stripAttachmentsFromPrompt } from '@/modules/common/fileUpload';
 import {
     findCodexSessionFile,
@@ -154,18 +154,15 @@ export async function backfillCodexSessionHistory(opts: CodexBackfillOptions): P
     // Use filename as stable key for localId deduplication
     const fileKey = basename(filePath, '.jsonl');
     const localIdPrefix = `codex-log:${fileKey}:`;
-    const notice = forkedHistoryNotice(localIdPrefix, omittedTurns);
-    if (selected.length === 0 && !notice) {
+    const batch = withForkedHistoryNotices(localIdPrefix, omittedTurns, selected.map((msg) => ({
+        content: buildMessageContent(msg),
+        localId: `${localIdPrefix}${generateStableUuid(msg.timestamp, msg.index)}`,
+    })));
+    if (batch.length === 0) {
         logger.debug('[CODEX-BACKFILL] No messages to backfill');
         return;
     }
     logger.debug(`[CODEX-BACKFILL] Backfilling ${selected.length} messages (omitted turns: ${omittedTurns})`);
 
-    await opts.sendBatch([
-        ...(notice ? [notice] : []),
-        ...selected.map((msg) => ({
-            content: buildMessageContent(msg),
-            localId: `${localIdPrefix}${generateStableUuid(msg.timestamp, msg.index)}`,
-        })),
-    ]);
+    await opts.sendBatch(batch);
 }

@@ -9,7 +9,7 @@
 
 import type { SessionNotification } from '@agentclientprotocol/sdk';
 import { stripQoderSessionInstructions } from '@/qoder/prompt';
-import { forkedHistoryNotice, isInjectedPrompt, selectBackfillTurns } from '@/modules/common/backfillTurns';
+import { isInjectedPrompt, selectBackfillTurns, withForkedHistoryNotices } from '@/modules/common/backfillTurns';
 import { stripAttachmentsFromPrompt } from '@/modules/common/fileUpload';
 
 type BackfillMessage = { content: unknown; localId: string };
@@ -41,15 +41,10 @@ export function buildQoderBackfillMessages(updates: SessionNotification['update'
     .filter((entry) => entry.text.trim().length > 0);
   const { selected, omittedTurns } = selectBackfillTurns(texts, (entry) => entry.role === 'agent' ? 'reply' : isInjectedPrompt(entry.text) ? null : 'prompt', maxTurns);
   const localIdPrefix = `qoder-log:${sessionId}:`;
-  const notice = forkedHistoryNotice(localIdPrefix, omittedTurns);
-
-  return [
-    ...(notice ? [notice] : []),
-    ...selected.map((entry) => ({
-      localId: `${localIdPrefix}${entry.index}`,
-      content: entry.role === 'user'
-        ? { role: 'user', content: { type: 'text', text: entry.text }, meta: { sentFrom: 'cli' } }
-        : { role: 'agent', content: { type: 'acp', provider: 'qoder', data: { type: 'message', message: entry.text } }, meta: { sentFrom: 'cli' } },
-    })),
-  ];
+  return withForkedHistoryNotices(localIdPrefix, omittedTurns, selected.map((entry) => ({
+    localId: `${localIdPrefix}${entry.index}`,
+    content: entry.role === 'user'
+      ? { role: 'user', content: { type: 'text', text: entry.text }, meta: { sentFrom: 'cli' } }
+      : { role: 'agent', content: { type: 'acp', provider: 'qoder', data: { type: 'message', message: entry.text } }, meta: { sentFrom: 'cli' } },
+  })));
 }

@@ -2120,7 +2120,7 @@ export const pl: TranslationStructure = {
 
     message: {
         switchedToMode: ({ mode }: { mode: string }) => `Przełączono na tryb ${mode}`,
-        forkedFrom: ({ title }: { title: string }) => `Skopiowano z „${title}”`,
+        forkedFrom: ({ title }: { title: string }) => `Z: ${title}`,
         earlierTurnsOmitted: ({ count }: { count: number }) => `Nie pokazano wcześniejszych tur: ${count}`,
         unknownEvent: 'Nieznane zdarzenie',
         usageLimitUntil: ({ time }: { time: string }) => `Osiągnięto limit użycia do ${time}`,

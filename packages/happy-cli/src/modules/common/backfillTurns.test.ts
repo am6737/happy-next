@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { forkedHistoryNotice, isInjectedPrompt, selectBackfillTurns } from './backfillTurns';
+import { isInjectedPrompt, selectBackfillTurns, withForkedHistoryNotices } from './backfillTurns';
 import { appendAttachmentsToPrompt, stripAttachmentsFromPrompt } from './fileUpload';
 
 type Item = { role: 'prompt' | 'reply' | null; id: string };
@@ -29,33 +29,37 @@ describe('isInjectedPrompt', () => {
     });
 });
 
-describe('forkedHistoryNotice', () => {
+describe('withForkedHistoryNotices', () => {
     afterEach(() => {
         vi.unstubAllEnvs();
     });
 
-    it('is none for a history neither copied nor cut short', () => {
+    const dataOf = (item: any) => item.content.content.data;
+
+    it('adds nothing to a history neither copied nor cut short', () => {
         vi.stubEnv('HAPPY_FORKED_FROM_SESSION_ID', '');
         vi.stubEnv('HAPPY_FORKED_FROM_TITLE', '');
-        expect(forkedHistoryNotice('claude-log:s1:', 0)).toBeNull();
+        expect(withForkedHistoryNotices('claude-log:s1:', 0, ['a'])).toEqual(['a']);
     });
 
-    it('names a source known only by its title', () => {
+    it('names a source known only by its title below the history', () => {
         vi.stubEnv('HAPPY_FORKED_FROM_SESSION_ID', '');
         vi.stubEnv('HAPPY_FORKED_FROM_TITLE', 'From history');
-        const data = (forkedHistoryNotice('claude-log:s1:', 0)?.content as any).content.data;
-        expect(data).toEqual({ type: 'forked-history', omittedTurns: 0, sourceTitle: 'From history' });
+        const batch = withForkedHistoryNotices('claude-log:s1:', 0, ['a']);
+        expect(batch[0]).toBe('a');
+        expect(dataOf(batch[1])).toEqual({ type: 'forked-history', omittedTurns: 0, sourceTitle: 'From history' });
     });
 
-    it('names the session copied from and the turns left out', () => {
+    it('puts the turns left out above the history and the session copied from below it', () => {
         vi.stubEnv('HAPPY_FORKED_FROM_SESSION_ID', 'src');
         vi.stubEnv('HAPPY_FORKED_FROM_TITLE', 'Original');
-        const notice = forkedHistoryNotice('claude-log:s1:', 3);
-        expect(notice?.localId).toBe('claude-log:s1:forked-history');
-        expect(notice?.content).toMatchObject({
-            role: 'agent',
-            content: { type: 'event', data: { type: 'forked-history', omittedTurns: 3, sourceSessionId: 'src', sourceTitle: 'Original' } },
-        });
+        const [above, message, below] = withForkedHistoryNotices('claude-log:s1:', 3, ['a']) as any[];
+        expect(above.localId).toBe('claude-log:s1:forked-history');
+        expect(above.content).toMatchObject({ role: 'agent', content: { type: 'event', data: { type: 'forked-history', omittedTurns: 3 } } });
+        expect(dataOf(above)).not.toHaveProperty('sourceTitle');
+        expect(message).toBe('a');
+        expect(below.localId).toBe('claude-log:s1:forked-from');
+        expect(dataOf(below)).toEqual({ type: 'forked-history', omittedTurns: 0, sourceSessionId: 'src', sourceTitle: 'Original' });
     });
 });
 

@@ -41,33 +41,38 @@ export function selectBackfillTurns<T>(items: readonly T[], roleOf: (item: T) =>
     };
 }
 
-/**
- * The notice a backfill opens with: the session it was copied from (the app passes it when it copies
- * or resumes one; from an agent's own history list only its title) and how many earlier turns it
- * leaves out. None when it names no source and is not cut short.
- * `localIdPrefix` is the backfill's own, so a backfill that runs again replaces it with the rest.
- */
-export function forkedHistoryNotice(localIdPrefix: string, omittedTurns: number): { content: unknown; localId: string } | null {
-    const sourceSessionId = process.env.HAPPY_FORKED_FROM_SESSION_ID?.trim();
-    const sourceTitle = process.env.HAPPY_FORKED_FROM_TITLE?.trim();
-    if (!sourceSessionId && !sourceTitle && omittedTurns === 0) {
-        return null;
-    }
+type BackfillNotice = { content: unknown; localId: string };
+
+function forkedHistoryEvent(localId: string, data: Record<string, unknown>): BackfillNotice {
     return {
-        localId: `${localIdPrefix}forked-history`,
+        localId,
         content: {
             role: 'agent',
-            content: {
-                id: randomUUID(),
-                type: 'event',
-                data: {
-                    type: 'forked-history',
-                    omittedTurns,
-                    ...(sourceSessionId ? { sourceSessionId } : {}),
-                    ...(sourceTitle ? { sourceTitle } : {}),
-                },
-            },
+            content: { id: randomUUID(), type: 'event', data: { type: 'forked-history', ...data } },
             meta: { sentFrom: 'cli' },
         },
     };
+}
+
+/**
+ * A backfill's messages between its two notices: above them how many earlier turns it leaves out,
+ * below them the session they came from (the app passes it when it copies, resumes or upgrades one;
+ * from an agent's own history list only its title), so that one sits where the copied history ends
+ * and the new conversation begins. Each notice only when it has something to say.
+ * `localIdPrefix` is the backfill's own, so a backfill that runs again replaces them with its own.
+ */
+export function withForkedHistoryNotices<T>(localIdPrefix: string, omittedTurns: number, messages: readonly T[]): (T | BackfillNotice)[] {
+    const sourceSessionId = process.env.HAPPY_FORKED_FROM_SESSION_ID?.trim();
+    const sourceTitle = process.env.HAPPY_FORKED_FROM_TITLE?.trim();
+    return [
+        ...(omittedTurns > 0 ? [forkedHistoryEvent(`${localIdPrefix}forked-history`, { omittedTurns })] : []),
+        ...messages,
+        ...(sourceSessionId || sourceTitle
+            ? [forkedHistoryEvent(`${localIdPrefix}forked-from`, {
+                omittedTurns: 0,
+                ...(sourceSessionId ? { sourceSessionId } : {}),
+                ...(sourceTitle ? { sourceTitle } : {}),
+            })]
+            : []),
+    ];
 }

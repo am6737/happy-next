@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { RawJSONLines, RawJSONLinesSchema } from '@/claude/types';
 import { getProjectPath } from './path';
 import { logger } from '@/ui/logger';
-import { forkedHistoryNotice, isInjectedPrompt, selectBackfillTurns, type BackfillRole } from '@/modules/common/backfillTurns';
+import { isInjectedPrompt, selectBackfillTurns, type BackfillRole, withForkedHistoryNotices } from '@/modules/common/backfillTurns';
 import { stripAttachmentsFromPrompt } from '@/modules/common/fileUpload';
 
 /** A transcript record to convert and send, or a message already built (the backfill's notice). */
@@ -124,18 +124,15 @@ export async function backfillClaudeSessionHistory(opts: {
 
     const { selected, omittedTurns } = selectBackfillTurns(messages, backfillRole, opts.maxTurns ?? 20);
     const localIdPrefix = `claude-log:${opts.sessionId}:`;
-    const notice = forkedHistoryNotice(localIdPrefix, omittedTurns);
-    if (!selected.length && !notice) {
+    const batch = withForkedHistoryNotices(localIdPrefix, omittedTurns, selected.map((message) => ({
+        message: displayed(message),
+        localId: `${localIdPrefix}${messageKey(message)}`,
+    })));
+    if (!batch.length) {
         logger.debug('[BACKFILL] No messages to backfill');
         return;
     }
     logger.debug(`[BACKFILL] Backfilling ${selected.length} messages (omitted turns: ${omittedTurns})`);
 
-    await opts.sendBatch([
-        ...(notice ? [notice] : []),
-        ...selected.map((message) => ({
-            message: displayed(message),
-            localId: `${localIdPrefix}${messageKey(message)}`,
-        })),
-    ]);
+    await opts.sendBatch(batch);
 }
