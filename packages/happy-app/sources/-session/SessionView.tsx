@@ -768,6 +768,7 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
                 agent,
                 resumeSessionId,
                 sessionTitle: newSessionTitle,
+                forkedFrom: { sessionId: session.id, title: getSessionName(session) },
                 skipForkSession: true,
             });
 

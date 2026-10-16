@@ -93,6 +93,16 @@ export function appendAttachmentsToPrompt(text: string, attachments: MessageAtta
     return text.trim() ? `${text}\n\n${block}` : block;
 }
 
+/**
+ * The text the user typed, from a prompt `appendAttachmentsToPrompt` built: what a copied session's
+ * history shows, as the live session did. A prompt that was only files keeps its block, the one
+ * trace of what was sent.
+ */
+export function stripAttachmentsFromPrompt(text: string): string {
+    const typed = text.replace(/(^|\n\n)<attached-files>\n[\s\S]*<\/attached-files>\s*$/, '');
+    return typed.trim() ? typed : text;
+}
+
 type Upload = {
     handle: FileHandle;
     folder: string;

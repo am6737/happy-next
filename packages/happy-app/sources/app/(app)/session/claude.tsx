@@ -318,6 +318,7 @@ export default function ClaudeSessionHistory() {
                 agent: 'claude',
                 resumeSessionId: forkResult.newSessionId,
                 sessionTitle: sessionTitle || undefined,
+                forkedFrom: sessionTitle ? { title: sessionTitle } : undefined,
                 skipForkSession: true,
             });
 

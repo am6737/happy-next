@@ -362,6 +362,7 @@ function useSessionQuickActions(session: Session) {
                 agent,
                 resumeSessionId,
                 sessionTitle,
+                forkedFrom: { sessionId: session.id, title: originalTitle },
                 skipForkSession: true,
             });
             if (result.type === 'requestToApproveDirectoryCreation') {

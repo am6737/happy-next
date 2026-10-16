@@ -602,7 +602,6 @@ export async function startDaemon(): Promise<void> {
         let extraEnv = { ...options.environmentVariables, ...authEnv };
         if (resumeSessionId && isClaudeAgent) {
           extraEnv.HAPPY_CLAUDE_BACKFILL = '1';
-          extraEnv.HAPPY_CLAUDE_BACKFILL_MAX_MESSAGES = '200';
           extraEnv.HAPPY_CLAUDE_BACKFILL_MAX_USER_MESSAGES = '20';
           extraEnv.HAPPY_CLAUDE_RESUME_SESSION_ID = resumeSessionId;
           if (skipForkSession) {
@@ -623,6 +622,13 @@ export async function startDaemon(): Promise<void> {
         // Session title - passed to all agents (Claude, Codex, Gemini)
         if (sessionTitle) {
           extraEnv.HAPPY_SESSION_TITLE = sessionTitle;
+        }
+        // The session this one was copied or resumed from, which its backfill names at its top
+        if (options.forkedFrom?.sessionId) {
+          extraEnv.HAPPY_FORKED_FROM_SESSION_ID = options.forkedFrom.sessionId;
+        }
+        if (options.forkedFrom?.title) {
+          extraEnv.HAPPY_FORKED_FROM_TITLE = options.forkedFrom.title;
         }
         // Worktree metadata - passed to agent process so initial metadata includes it
         if (options.worktreeBasePath) {

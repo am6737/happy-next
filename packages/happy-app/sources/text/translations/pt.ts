@@ -2110,6 +2110,8 @@ export const pt: TranslationStructure = {
 
     message: {
         switchedToMode: ({ mode }: { mode: string }) => `Mudou para o modo ${mode}`,
+        forkedFrom: ({ title }: { title: string }) => `Copiada de “${title}”`,
+        earlierTurnsOmitted: ({ count }: { count: number }) => `${count} ${count === 1 ? 'turno anterior não exibido' : 'turnos anteriores não exibidos'}`,
         unknownEvent: 'Evento desconhecido',
         usageLimitUntil: ({ time }: { time: string }) => `Limite de uso atingido até ${time}`,
         processing: 'Processando',

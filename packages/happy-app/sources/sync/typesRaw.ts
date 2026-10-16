@@ -42,6 +42,13 @@ const agentEventSchema = z.discriminatedUnion('type', [z.object({
     type: z.literal('limit-resets'),
     endsAt: z.number(),
 }), z.object({
+    // Opens a resumed or copied session's backfilled history: the session it was copied from, if it
+    // is a copy, and how many earlier turns the backfill left out.
+    type: z.literal('forked-history'),
+    omittedTurns: z.number(),
+    sourceSessionId: z.string().optional(),
+    sourceTitle: z.string().optional(),
+}), z.object({
     type: z.literal('ready'),
 }), z.object({
     type: z.literal('hidden'),

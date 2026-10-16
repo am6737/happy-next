@@ -529,7 +529,7 @@ export async function runQoder(opts: {
       for (let i = 0; i < 15 && !session.isConnected(); i++) {
         await new Promise((resolve) => setTimeout(resolve, 200));
       }
-      await session.sendBackfillBatch(buildQoderBackfillMessages(replayed), 'replace');
+      await session.sendBackfillBatch(buildQoderBackfillMessages(replayed, resumeSessionId), 'replace');
       await sendContextUsage();
       messageBuffer.addMessage('Resumed previous Qoder conversation', 'status');
     } else if (resumeSessionId) {

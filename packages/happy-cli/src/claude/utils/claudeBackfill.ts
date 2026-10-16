@@ -4,6 +4,11 @@ import { join } from 'node:path';
 import { RawJSONLines, RawJSONLinesSchema } from '@/claude/types';
 import { getProjectPath } from './path';
 import { logger } from '@/ui/logger';
+import { forkedHistoryNotice, isInjectedPrompt, selectBackfillTurns, type BackfillRole } from '@/modules/common/backfillTurns';
+import { stripAttachmentsFromPrompt } from '@/modules/common/fileUpload';
+
+/** A transcript record to convert and send, or a message already built (the backfill's notice). */
+export type ClaudeBackfillItem = { message: RawJSONLines; localId: string } | { content: unknown; localId: string };
 
 const INTERNAL_CLAUDE_EVENT_TYPES = new Set([
     'file-history-snapshot',
@@ -12,38 +17,58 @@ const INTERNAL_CLAUDE_EVENT_TYPES = new Set([
 ]);
 
 function messageKey(message: RawJSONLines): string {
-    if (message.type === 'user') {
-        return message.uuid;
-    }
-    if (message.type === 'assistant') {
-        return message.uuid;
-    }
     if (message.type === 'summary') {
         return `summary:${message.leafUuid}`;
     }
-    if (message.type === 'system') {
-        return message.uuid;
-    }
-    if (message.type === 'progress') {
-        return message.uuid;
-    }
-    return `unknown:${Math.random()}`;
+    return message.uuid;
 }
 
-function isPrimaryUserMessage(message: RawJSONLines): boolean {
-    if (message.type !== 'user') return false;
-    if ((message as any).isSidechain) return false;
-    if ((message as any).isMeta) return false;
-    // Tool results have content as array with tool_result type, not real user input
-    const content = (message as any).message?.content;
-    if (Array.isArray(content)) return false;
+const LOCAL_COMMAND_OUTPUT_PREFIX = '<local-command-stdout>';
+const INTERRUPTED_PREFIX = '[Request interrupted';
+
+/**
+ * A prompt the user sent: typed text, a slash command, or a prompt with images. Not tool results,
+ * the records Claude Code writes beside them (meta, compaction summaries, command output, an
+ * interruption), or a prompt Happy handed it.
+ */
+function isPrompt(message: RawJSONLines): boolean {
+    if (message.type !== 'user' || message.isSidechain || message.isMeta || message.isCompactSummary) return false;
+    const content = message.message.content;
     if (typeof content === 'string') {
-        const text = content.trim();
-        if (text.startsWith('<task-notification>') && text.includes('</task-notification>')) {
-            return false;
-        }
+        return !isInjectedPrompt(content) && !content.trim().startsWith(LOCAL_COMMAND_OUTPUT_PREFIX);
     }
-    return true;
+    return Array.isArray(content) && content.some((block: any) =>
+        block?.type === 'image' || (block?.type === 'text' && typeof block.text === 'string' && !block.text.startsWith(INTERRUPTED_PREFIX)))
+        && !content.some((block: any) => block?.type === 'tool_result');
+}
+
+function assistantTextBlocks(message: RawJSONLines): any[] {
+    if (message.type !== 'assistant' || (message as any).isSidechain) return [];
+    const content = message.message?.content;
+    return Array.isArray(content) ? content.filter((block: any) => block?.type === 'text' && typeof block.text === 'string' && block.text.trim()) : [];
+}
+
+function backfillRole(message: RawJSONLines): BackfillRole {
+    if (isPrompt(message)) return 'prompt';
+    return assistantTextBlocks(message).length > 0 ? 'reply' : null;
+}
+
+/** The prompt as the user typed it, and the reply as its text alone. */
+function displayed(message: RawJSONLines): RawJSONLines {
+    if (message.type === 'assistant') {
+        return { ...message, message: { ...message.message, content: assistantTextBlocks(message) } } as RawJSONLines;
+    }
+    if (message.type !== 'user') return message;
+    const content = message.message.content;
+    return {
+        ...message,
+        message: {
+            ...message.message,
+            content: typeof content === 'string'
+                ? stripAttachmentsFromPrompt(content)
+                : content.map((block: any) => block?.type === 'text' && typeof block.text === 'string' ? { ...block, text: stripAttachmentsFromPrompt(block.text) } : block),
+        },
+    };
 }
 
 async function readSessionLog(projectDir: string, sessionId: string): Promise<RawJSONLines[]> {
@@ -81,16 +106,9 @@ async function readSessionLog(projectDir: string, sessionId: string): Promise<Ra
 export async function backfillClaudeSessionHistory(opts: {
     workingDirectory: string;
     sessionId: string;
-    send?: (message: RawJSONLines, localId?: string) => void;
-    sendBatch?: (messages: { message: RawJSONLines; localId: string }[]) => void | Promise<void>;
-    maxMessages?: number;
-    maxUserMessages?: number;
-    maxBytes?: number;
+    sendBatch: (items: ClaudeBackfillItem[]) => void | Promise<void>;
+    maxTurns?: number;
 }) {
-    const maxMessages = opts.maxMessages ?? 200;
-    const maxUserMessages = opts.maxUserMessages ?? 20;
-    const maxBytes = opts.maxBytes ?? Number.POSITIVE_INFINITY;
-
     const projectDir = getProjectPath(opts.workingDirectory);
     let messages = await readSessionLog(projectDir, opts.sessionId);
 
@@ -104,71 +122,20 @@ export async function backfillClaudeSessionHistory(opts: {
         }
     }
 
-    if (!messages.length) {
+    const { selected, omittedTurns } = selectBackfillTurns(messages, backfillRole, opts.maxTurns ?? 20);
+    const localIdPrefix = `claude-log:${opts.sessionId}:`;
+    const notice = forkedHistoryNotice(localIdPrefix, omittedTurns);
+    if (!selected.length && !notice) {
         logger.debug('[BACKFILL] No messages to backfill');
         return;
     }
+    logger.debug(`[BACKFILL] Backfilling ${selected.length} messages (omitted turns: ${omittedTurns})`);
 
-    const selected: RawJSONLines[] = [];
-    let totalCount = 0;
-    let userCount = 0;
-    let totalBytes = 0;
-
-    // Work backwards from the most recent message
-    for (let i = messages.length - 1; i >= 0; i--) {
-        const message = messages[i];
-        if (message.type === 'summary') {
-            continue; // Skip summaries to avoid title churn
-        }
-        const estimatedBytes = Buffer.byteLength(JSON.stringify(message), 'utf8');
-        if (totalBytes + estimatedBytes > maxBytes) {
-            if (selected.length === 0) {
-                selected.push(message);
-                totalBytes += estimatedBytes;
-            }
-            break;
-        }
-        selected.push(message);
-        totalBytes += estimatedBytes;
-
-        // Progress messages are included but don't count toward limits
-        if (message.type === 'progress') {
-            continue;
-        }
-
-        totalCount += 1;
-        const isPrimaryUser = isPrimaryUserMessage(message);
-        if (isPrimaryUser) {
-            userCount += 1;
-        }
-
-        // Stop when we reach the user-message limit (always on a user message),
-        // or when we reach the max message limit *and* the current message is a user.
-        // This ensures the oldest restored message is a user message even if we exceed maxMessages.
-        if (userCount >= maxUserMessages) {
-            break;
-        }
-        if (totalCount >= maxMessages && isPrimaryUser) {
-            break;
-        }
-    }
-
-    selected.reverse();
-    logger.debug(`[BACKFILL] Backfilling ${selected.length} messages (users: ${userCount}, total: ${totalCount}, bytes: ${totalBytes})`);
-
-    const batch = selected.map((message) => ({
-        message,
-        localId: `claude-log:${opts.sessionId}:${messageKey(message)}`
-    }));
-
-    if (opts.sendBatch) {
-        await opts.sendBatch(batch);
-        return;
-    }
-
-    if (opts.send) {
-        for (const item of batch) {
-            opts.send(item.message, item.localId);
-        }
-    }
+    await opts.sendBatch([
+        ...(notice ? [notice] : []),
+        ...selected.map((message) => ({
+            message: displayed(message),
+            localId: `${localIdPrefix}${messageKey(message)}`,
+        })),
+    ]);
 }

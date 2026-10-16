@@ -8,6 +8,8 @@
 
 import { basename, isAbsolute } from 'node:path';
 import { logger } from '@/ui/logger';
+import { forkedHistoryNotice, isInjectedPrompt, selectBackfillTurns } from '@/modules/common/backfillTurns';
+import { stripAttachmentsFromPrompt } from '@/modules/common/fileUpload';
 import {
     findCodexSessionFile,
     extractUserText,
@@ -25,12 +27,8 @@ export interface CodexBackfillOptions {
     sessionIdOrPath: string;
     /** Send the batch to the app */
     sendBatch: (messages: { content: unknown; localId: string }[]) => Promise<void>;
-    /** Max total messages to include (default: 200) */
-    maxMessages?: number;
-    /** Max user messages to include (default: 20) */
-    maxUserMessages?: number;
-    /** Max total bytes (default: 3 MB) */
-    maxBytes?: number;
+    /** Max turns to include (default: 20) */
+    maxTurns?: number;
 }
 
 /**
@@ -60,7 +58,6 @@ interface ParsedCodexMessage {
     text: string;
     timestamp: string;
     index: number;
-    estimatedBytes: number;
 }
 
 function buildMessageContent(msg: ParsedCodexMessage): unknown {
@@ -96,10 +93,6 @@ function resolveCodexSessionFile(sessionIdOrPath: string): string | null {
 }
 
 export async function backfillCodexSessionHistory(opts: CodexBackfillOptions): Promise<void> {
-    const maxMessages = opts.maxMessages ?? 200;
-    const maxUserMessages = opts.maxUserMessages ?? 20;
-    const maxBytes = opts.maxBytes ?? 3 * 1024 * 1024;
-
     const filePath = resolveCodexSessionFile(opts.sessionIdOrPath);
     if (!filePath) {
         logger.debug(`[CODEX-BACKFILL] Session file not found for: ${opts.sessionIdOrPath}`);
@@ -135,14 +128,13 @@ export async function backfillCodexSessionHistory(opts: CodexBackfillOptions): P
 
         if (payload?.role === 'user') {
             const text = extractUserText(payload);
-            if (!text || isSystemMessage(text)) continue;
+            if (!text || isSystemMessage(text) || isInjectedPrompt(text)) continue;
 
             allMessages.push({
                 role: 'user',
-                text,
+                text: stripAttachmentsFromPrompt(text),
                 timestamp,
                 index: msgIndex++,
-                estimatedBytes: Buffer.byteLength(text, 'utf8'),
             });
         } else if (payload?.role === 'assistant') {
             const text = extractAssistantText(payload);
@@ -153,48 +145,27 @@ export async function backfillCodexSessionHistory(opts: CodexBackfillOptions): P
                 text,
                 timestamp,
                 index: msgIndex++,
-                estimatedBytes: Buffer.byteLength(text, 'utf8'),
             });
         }
     }
 
-    if (allMessages.length === 0) {
-        logger.debug('[CODEX-BACKFILL] No messages to backfill');
-        return;
-    }
-
-    // Select from the end, respecting limits
-    const selected: ParsedCodexMessage[] = [];
-    let totalCount = 0;
-    let userCount = 0;
-    let totalBytes = 0;
-
-    for (let i = allMessages.length - 1; i >= 0; i--) {
-        const msg = allMessages[i];
-        if (totalBytes + msg.estimatedBytes > maxBytes && selected.length > 0) break;
-
-        selected.push(msg);
-        totalBytes += msg.estimatedBytes;
-        totalCount++;
-
-        if (msg.role === 'user') {
-            userCount++;
-        }
-
-        if (userCount >= maxUserMessages) break;
-        if (totalCount >= maxMessages && msg.role === 'user') break;
-    }
-
-    selected.reverse();
+    const { selected, omittedTurns } = selectBackfillTurns(allMessages, (msg) => msg.role === 'user' ? 'prompt' : 'reply', opts.maxTurns ?? 20);
 
     // Use filename as stable key for localId deduplication
     const fileKey = basename(filePath, '.jsonl');
-    logger.debug(`[CODEX-BACKFILL] Backfilling ${selected.length} messages (users: ${userCount}, total: ${totalCount}, bytes: ${totalBytes})`);
+    const localIdPrefix = `codex-log:${fileKey}:`;
+    const notice = forkedHistoryNotice(localIdPrefix, omittedTurns);
+    if (selected.length === 0 && !notice) {
+        logger.debug('[CODEX-BACKFILL] No messages to backfill');
+        return;
+    }
+    logger.debug(`[CODEX-BACKFILL] Backfilling ${selected.length} messages (omitted turns: ${omittedTurns})`);
 
-    const batch = selected.map((msg) => ({
-        content: buildMessageContent(msg),
-        localId: `codex-log:${fileKey}:${generateStableUuid(msg.timestamp, msg.index)}`,
-    }));
-
-    await opts.sendBatch(batch);
+    await opts.sendBatch([
+        ...(notice ? [notice] : []),
+        ...selected.map((msg) => ({
+            content: buildMessageContent(msg),
+            localId: `${localIdPrefix}${generateStableUuid(msg.timestamp, msg.index)}`,
+        })),
+    ]);
 }

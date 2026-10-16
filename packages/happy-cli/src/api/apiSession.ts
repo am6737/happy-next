@@ -16,6 +16,7 @@ import { RpcHandlerManager } from './rpc/RpcHandlerManager';
 
 import { registerCommonHandlers } from '../modules/common/registerCommonHandlers';
 import { appendAttachmentsToPrompt } from '../modules/common/fileUpload';
+import type { ClaudeBackfillItem } from '@/claude/utils/claudeBackfill';
 import { registerToolImageForCall } from '../modules/common/toolImageStore';
 import { calculateCost } from '@/utils/pricing';
 import { isDebug } from '@/utils/env';
@@ -1070,18 +1071,18 @@ export class ApiSessionClient extends EventEmitter {
         this.turn = null;
     }
 
-    async sendClaudeSessionMessageBatch(messages: { message: RawJSONLines, localId?: string }[], mode: 'replace' | 'append' = 'append') {
+    async sendClaudeSessionMessageBatch(messages: ClaudeBackfillItem[], mode: 'replace' | 'append' = 'append') {
         if (!this.socket.connected) {
             logger.debug('[API] Socket not connected, cannot send Claude session message batch. Messages will be lost:', { count: messages.length });
             return { result: 'error' as const };
         }
 
         const payload = messages.map((item) => {
-            const content = this.buildMessageContent(item.message);
+            const content = 'message' in item ? this.buildMessageContent(item.message) : item.content;
             const encrypted = encodeBase64(encrypt(this.encryptionKey, this.encryptionVariant, content));
             return {
                 message: encrypted,
-                localId: item.localId ?? null
+                localId: item.localId
             };
         });
 
@@ -1093,7 +1094,9 @@ export class ApiSessionClient extends EventEmitter {
 
         if (response?.result === 'success') {
             for (const item of messages) {
-                this.postSendProcessing(item.message);
+                if ('message' in item) {
+                    this.postSendProcessing(item.message);
+                }
             }
         }
 

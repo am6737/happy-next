@@ -2127,6 +2127,8 @@ export const en: TranslationStructure = {
 
     message: {
         switchedToMode: ({ mode }: { mode: string }) => `Switched to ${mode} mode`,
+        forkedFrom: ({ title }: { title: string }) => `Copied from “${title}”`,
+        earlierTurnsOmitted: ({ count }: { count: number }) => `${count} earlier ${count === 1 ? 'turn' : 'turns'} not shown`,
         unknownEvent: 'Unknown event',
         usageLimitUntil: ({ time }: { time: string }) => `Usage limit reached until ${time}`,
         processing: 'Processing',

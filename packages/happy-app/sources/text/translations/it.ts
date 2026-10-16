@@ -2109,6 +2109,8 @@ export const it: TranslationStructure = {
 
     message: {
         switchedToMode: ({ mode }: { mode: string }) => `Passato alla modalità ${mode}`,
+        forkedFrom: ({ title }: { title: string }) => `Copiata da «${title}»`,
+        earlierTurnsOmitted: ({ count }: { count: number }) => `${count} ${count === 1 ? 'turno precedente non mostrato' : 'turni precedenti non mostrati'}`,
         unknownEvent: 'Evento sconosciuto',
         usageLimitUntil: ({ time }: { time: string }) => `Limite di utilizzo raggiunto fino a ${time}`,
         processing: 'Elaborazione',

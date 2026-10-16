@@ -2112,6 +2112,8 @@ export const zhHans: TranslationStructure = {
 
     message: {
         switchedToMode: ({ mode }: { mode: string }) => `已切换到 ${mode} 模式`,
+        forkedFrom: ({ title }: { title: string }) => `复制自「${title}」`,
+        earlierTurnsOmitted: ({ count }: { count: number }) => `更早的 ${count} 轮对话未显示`,
         unknownEvent: '未知事件',
         usageLimitUntil: ({ time }: { time: string }) => `使用限制到 ${time}`,
         processing: '正在处理',

@@ -507,6 +507,7 @@ export default function AgentHistoryPage() {
                 agent,
                 resumeSessionId,
                 sessionTitle: sessionTitle || undefined,
+                forkedFrom: sessionTitle ? { title: sessionTitle } : undefined,
                 skipForkSession: true,
             });
 

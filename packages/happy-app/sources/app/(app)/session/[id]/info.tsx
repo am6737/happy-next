@@ -399,6 +399,7 @@ function SessionInfoContent({ session, leavingRef }: { session: Session; leaving
                 agent,
                 resumeSessionId,
                 sessionTitle,
+                forkedFrom: { sessionId: session.id, title: originalTitle },
                 skipForkSession: true,
             });
             if (result.type === 'requestToApproveDirectoryCreation') {
@@ -507,6 +508,7 @@ function SessionInfoContent({ session, leavingRef }: { session: Session; leaving
                 resumeSessionId,
                 skipForkSession: true,
                 sessionTitle: session.metadata?.summary?.text,
+                forkedFrom: { sessionId: session.id, title: session.metadata?.summary?.text || getSessionName(session) },
             });
 
             if (result.type !== 'success') {

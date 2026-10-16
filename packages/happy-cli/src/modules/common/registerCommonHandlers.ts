@@ -126,6 +126,8 @@ export interface SpawnSessionOptions {
     sessionId?: string;
     resumeSessionId?: string;
     sessionTitle?: string;
+    // The Happy session this one is a copy of, named at the top of its backfilled history
+    forkedFrom?: { sessionId?: string; title?: string };
     skipForkSession?: boolean;
     approvedNewDirectoryCreation?: boolean;
     agent?: 'claude' | 'codex' | 'gemini' | 'qoder';

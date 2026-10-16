@@ -2110,6 +2110,8 @@ export const ca: TranslationStructure = {
 
     message: {
         switchedToMode: ({ mode }: { mode: string }) => `S'ha canviat al mode ${mode}`,
+        forkedFrom: ({ title }: { title: string }) => `Copiada de «${title}»`,
+        earlierTurnsOmitted: ({ count }: { count: number }) => `${count} ${count === 1 ? 'torn anterior no mostrat' : 'torns anteriors no mostrats'}`,
         unknownEvent: 'Esdeveniment desconegut',
         usageLimitUntil: ({ time }: { time: string }) => `Límit d'ús assolit fins a ${time}`,
         processing: 'Processant',

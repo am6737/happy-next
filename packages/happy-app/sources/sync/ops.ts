@@ -188,6 +188,8 @@ export interface SpawnSessionOptions {
     agent?: 'codex' | 'claude' | 'gemini' | 'qoder';
     resumeSessionId?: string;
     sessionTitle?: string;
+    // The session this one is a copy of, named at the top of its backfilled history
+    forkedFrom?: { sessionId?: string; title?: string };
     skipForkSession?: boolean;
     // Extra environment variables for the agent process (e.g. a GitHub token); the daemon adds them on top of its own environment
     environmentVariables?: Record<string, string>;
@@ -277,12 +279,12 @@ export type SessionPreviewMessage = ClaudeSessionPreviewMessage;
  */
 export async function machineSpawnNewSession(options: SpawnSessionOptions): Promise<SpawnSessionResult> {
 
-    const { machineId, directory, approvedNewDirectoryCreation = false, token, agent, resumeSessionId, sessionTitle, skipForkSession, environmentVariables, worktreeBasePath, worktreeBranchName, mcpServers, workspaceRepos, workspacePath, repoScripts } = options;
+    const { machineId, directory, approvedNewDirectoryCreation = false, token, agent, resumeSessionId, sessionTitle, forkedFrom, skipForkSession, environmentVariables, worktreeBasePath, worktreeBranchName, mcpServers, workspaceRepos, workspacePath, repoScripts } = options;
 
     try {
         const result = await apiSocket.machineSpawnHTTP<SpawnSessionResult | { error: string }>(
             machineId,
-            { type: 'spawn-in-directory', directory, approvedNewDirectoryCreation, token, agent, resumeSessionId, sessionTitle, skipForkSession, environmentVariables, worktreeBasePath, worktreeBranchName, mcpServers, workspaceRepos, workspacePath, repoScripts }
+            { type: 'spawn-in-directory', directory, approvedNewDirectoryCreation, token, agent, resumeSessionId, sessionTitle, forkedFrom, skipForkSession, environmentVariables, worktreeBasePath, worktreeBranchName, mcpServers, workspaceRepos, workspacePath, repoScripts }
         );
         if ('error' in result) {
             return { type: 'error', errorMessage: result.error };

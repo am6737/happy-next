@@ -22,7 +22,9 @@ import { Option } from './markdown/MarkdownView';
 import { OptionItem as OptionItemData } from './markdown/parseMarkdown';
 import { Modal } from "@/modal";
 import { sync } from "@/sync/sync";
-import { storage, useSetting } from "@/sync/storage";
+import { storage, useSession, useSetting } from "@/sync/storage";
+import { useNavigateToSession } from '@/hooks/useNavigateToSession';
+import { getSessionName } from '@/utils/sessionUtils';
 import { showCopiedToast, showToast } from '@/components/Toast';
 import { formatMessageTime, formatFullMessageTime } from '@/utils/messageTime';
 import { hapticsLight } from './haptics';
@@ -733,6 +735,31 @@ function LimitNoticeText(props: {
   );
 }
 
+// The line that opens a copied or resumed session's backfilled history. The title is the source
+// session's current one while it still exists, and pressing it opens that session.
+function ForkedHistoryNotice(props: { event: Extract<AgentEvent, { type: 'forked-history' }> }) {
+  const { sourceSessionId, sourceTitle, omittedTurns } = props.event;
+  const source = useSession(sourceSessionId ?? '');
+  const navigateToSession = useNavigateToSession();
+  const title = source ? getSessionName(source) : sourceTitle;
+  const handleOpenSource = React.useCallback(() => {
+    if (sourceSessionId) navigateToSession(sourceSessionId);
+  }, [navigateToSession, sourceSessionId]);
+  return (
+    <View style={styles.agentEventContainer}>
+      <Text style={styles.agentEventText}>
+        {title !== undefined && (
+          <Text style={source ? styles.forkedHistorySource : undefined} onPress={source ? handleOpenSource : undefined}>
+            {t('message.forkedFrom', { title })}
+          </Text>
+        )}
+        {title !== undefined && omittedTurns > 0 && ' · '}
+        {omittedTurns > 0 && t('message.earlierTurnsOmitted', { count: omittedTurns })}
+      </Text>
+    </View>
+  );
+}
+
 function AgentEventBlock(props: {
   event: AgentEvent;
   metadata: Metadata | null;
@@ -752,6 +779,9 @@ function AgentEventBlock(props: {
         <Text style={styles.agentEventText}>{stripAnsi(props.event.message)}</Text>
       </View>
     );
+  }
+  if (props.event.type === 'forked-history') {
+    return <ForkedHistoryNotice event={props.event} />;
   }
   if (props.event.type === 'limit-reached') {
     const formatTime = (timestamp: number): string => {
@@ -911,6 +941,9 @@ const styles = StyleSheet.create((theme) => ({
   agentEventText: {
     color: theme.colors.agentEventText,
     fontSize: 14,
+  },
+  forkedHistorySource: {
+    textDecorationLine: 'underline',
   },
   toolContainer: {
     marginHorizontal: 16,
