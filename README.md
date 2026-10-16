@@ -100,6 +100,7 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Desktop diagnostics, rotating local logs, WebKit storage maintenance, upload retry recovery, microphone/camera support, native context menus, reliable theme-isolated HTML preview windows, CSP-compatible code editing, system-browser external links, and restricted native capabilities
 
 - Terminals open in a dedicated desktop window with a tab bar of their own, titled by the directory the shell is in
+- Terminals on this computer are reached directly through the local daemon rather than the server, so typing is immediate and an open terminal keeps working while the server is down, falling back to the server when the daemon can't be reached; a tab's tooltip adds "(direct)" when connected directly
 - The macOS title bar is a compact toolbar
 
 ### Orchestrator

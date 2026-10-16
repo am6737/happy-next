@@ -47,6 +47,7 @@ Happy Next now ships as a native-feeling desktop client instead of requiring a b
 - **Platform visuals**: refreshed logos, favicons, splash screens, notification assets, and independent macOS and Windows icons, including the macOS 26 layered icon format and compatibility fallback for older macOS versions
 
 - **Terminal windows**: a terminal opens in a window of its own with a tab bar, titled by the directory the shell is in
+- **Direct local terminals**: terminals on this computer are reached directly through the local daemon rather than the server — typing is immediate, an open terminal keeps working while the server is down, and it falls back to the server when the daemon can't be reached; a tab's tooltip adds "(direct)" when connected directly
 - **Compact macOS title bar**: the macOS title bar is a compact toolbar
 
 ## Orchestrator

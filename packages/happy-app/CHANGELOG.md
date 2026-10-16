@@ -1,5 +1,17 @@
 # Changelog
 
+## Version 33 - 2026-10-16
+
+Happy Next v2.18.0 lets the desktop app reach terminals on its own computer directly instead of through the server, so typing is immediate and an open terminal keeps working while the server is down. Read aloud starts speaking sooner, and a key pressed during another no longer gets lost with an input method on. Happy CLI is updated to v0.15.0.
+
+- Terminal: on desktop, terminals on this computer connect straight to the local daemon — keystrokes no longer travel to the server and back, an open terminal stays alive when the server is down, and it falls back to the server whenever the daemon can't be reached (needs Happy CLI v0.15.0)
+- Terminal: every tab, panel title and list row has a tooltip, and a terminal reached directly adds "(direct)"
+- Terminal: with an input method on, a key pressed while another is still held is no longer lost on desktop
+- Read aloud: long messages start speaking sooner
+- Welcome: the title no longer runs to the screen edges on phones, and the header no longer shows "disconnected" before you log in
+- Session list: a collapsed project's header sits centered
+- CLI: Happy CLI v0.15.0 serves terminals to the desktop app on the same computer over a local, token-protected connection
+
 ## Version 32 - 2026-10-16
 
 Happy Next v2.17.0 encrypts orchestrator tasks end to end and lets agents copy files and directories between machines, picks read-aloud back up where a flaky network cut it off, and offers CLI updates for you to install instead of installing them by itself. Copied and resumed sessions bring over only what was said, archived sessions can be forked, and the session list reads calmer. Happy CLI is updated to v0.14.0, and new Codex sessions start on Codex v0.163.0.
