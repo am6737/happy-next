@@ -91,6 +91,36 @@ export const TerminalXtermView = memo(({ xtermTheme, active, autoFocus = true, o
     }
 
     const dataSubscription = terminal.onData((data) => onInputRef.current(data));
+
+    // With an input method active, WebKit reports digits and punctuation as keyCode 229 and
+    // inserts their text a moment later. xterm reads that text by diffing its textarea on a timer
+    // only one key can hold at a time, so a second key pressed before the first one's text lands
+    // is never read: 1 and 2 typed in quick rollover give just 1. These keys are taken from the
+    // input event instead, which carries exactly what was inserted. The listener captures on the
+    // container so xterm's own input handler on the textarea does not see it a second time.
+    let imeKeysPending = 0;
+    terminal.attachCustomKeyEventHandler((event) => {
+      if (event.type === "keydown" && event.keyCode === 229 && !event.isComposing) {
+        imeKeysPending += 1;
+        return false;
+      }
+      return true;
+    });
+    const takeImeInput = (event: Event) => {
+      const input = event as InputEvent;
+      if (imeKeysPending === 0 || input.isComposing || input.inputType !== "insertText" || !input.data) {
+        return;
+      }
+      imeKeysPending -= 1;
+      event.stopPropagation();
+      onInputRef.current(input.data);
+    };
+    // A key that starts a composition goes to the composition, which sends its own text.
+    const resetImeKeys = () => {
+      imeKeysPending = 0;
+    };
+    container.addEventListener("input", takeImeInput, true);
+    container.addEventListener("compositionstart", resetImeKeys, true);
     const observer = new ResizeObserver(() => {
       const size = measure();
       if (size) {
@@ -107,6 +137,8 @@ export const TerminalXtermView = memo(({ xtermTheme, active, autoFocus = true, o
     return () => {
       observer.disconnect();
       dataSubscription.dispose();
+      container.removeEventListener("input", takeImeInput, true);
+      container.removeEventListener("compositionstart", resetImeKeys, true);
       onMirrorRef.current(null);
       terminalRef.current = null;
       terminal.dispose();
