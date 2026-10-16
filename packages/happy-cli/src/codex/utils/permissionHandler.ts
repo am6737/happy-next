@@ -9,6 +9,7 @@ import { logger } from "@/ui/logger";
 import { ApiSessionClient } from "@/api/apiSession";
 import { PushNotificationClient } from "@/api/pushNotifications";
 import type { PermissionMode } from '@/api/types';
+import { HAPPY_TOOLS_APPROVED_WITHOUT_ASKING } from '@/agent/mcp/happyToolsApproved';
 import {
     BasePermissionHandler,
     PermissionResult,
@@ -47,7 +48,7 @@ export class CodexPermissionHandler extends BasePermissionHandler {
             return false;
         }
 
-        const alwaysAutoApproveNames = ['change_title', 'happy__change_title', 'preview_html', 'happy__preview_html', 'CodexReasoning', 'think', 'save_memory'];
+        const alwaysAutoApproveNames = [...HAPPY_TOOLS_APPROVED_WITHOUT_ASKING, 'CodexReasoning', 'think', 'save_memory'];
         const alwaysAutoApproveIds = ['change_title', 'preview_html', 'save_memory'];
 
         if (alwaysAutoApproveNames.some(name => toolName.toLowerCase().includes(name.toLowerCase()))) {

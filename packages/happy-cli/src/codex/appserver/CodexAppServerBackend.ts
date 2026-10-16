@@ -54,6 +54,7 @@ import type {
   StartSessionResult,
 } from '@/agent/core';
 import { logger } from '@/ui/logger';
+import { HAPPY_TOOLS_APPROVED_WITHOUT_ASKING } from '@/agent/mcp/happyToolsApproved';
 import { splitFastModeSuffix } from 'happy-wire';
 
 // ─── Options ────────────────────────────────────────────────────
@@ -147,21 +148,29 @@ function supportsStructuredLegacyDenials(userAgent: string): boolean {
   return true;
 }
 
-// Servers bundled by happy-cli itself — approving the session implies approving these tools.
-// User-added MCPs (HAPPY_EXTRA_MCP_SERVERS) still go through normal approval.
-const TRUSTED_MCP_SERVER_NAMES = new Set(['happy']);
+// Happy's own server asks for its tools like any other (`prompt`), except the ones that never
+// ask, which Codex runs without an elicitation. Trusting the whole server let orchestrator_exec
+// and _transfer run unasked. User-added MCPs (HAPPY_EXTRA_MCP_SERVERS) keep Codex's default.
+const HAPPY_MCP_SERVER_CONFIG = {
+  default_tools_approval_mode: 'prompt',
+  tools: Object.fromEntries(HAPPY_TOOLS_APPROVED_WITHOUT_ASKING.map(tool => [tool, { approval_mode: 'approve' }])),
+};
 
 const buildMcpToolName = (server: string, tool: string) => `mcp:${server}:${tool}`;
 
 interface ElicitationMeta {
   approvalKind: unknown;
   serverName: string;
-  toolTitle: string;
+  /** The tool's own name, read from the message; falls back to its display title. */
+  toolName: string;
   toolParams: Record<string, unknown>;
 }
 
 // Codex 0.121 puts `_meta` at the top level of the elicitation params; older
 // documented shapes nested it under `request.meta` / `request._meta`. Check all four.
+// `_meta` names the tool only by its display title ('Change Chat Title'); the message,
+// 'Allow the happy MCP server to run tool "change_title"?', carries the name the
+// permission handler's never-ask list matches.
 function parseElicitationMeta(params: unknown): ElicitationMeta {
   const p = (params ?? {}) as Record<string, unknown>;
   const nestedRequest = (p.request ?? {}) as Record<string, unknown>;
@@ -169,10 +178,11 @@ function parseElicitationMeta(params: unknown): ElicitationMeta {
   const serverName = typeof p.serverName === 'string'
     ? p.serverName
     : (typeof meta.connector_name === 'string' ? meta.connector_name : '');
+  const message = String(p.message ?? nestedRequest.message ?? '');
   return {
     approvalKind: meta.codex_approval_kind,
     serverName,
-    toolTitle: typeof meta.tool_title === 'string' ? meta.tool_title : '',
+    toolName: message.match(/to run tool "([^"]+)"/)?.[1] ?? (typeof meta.tool_title === 'string' ? meta.tool_title : ''),
     toolParams: (meta.tool_params ?? {}) as Record<string, unknown>,
   };
 }
@@ -487,14 +497,10 @@ export class CodexAppServerBackend implements AgentBackend {
     // Build config overrides (MCP servers + reasoning effort)
     const config: Record<string, unknown> = {};
     if (this.options.mcpServers && Object.keys(this.options.mcpServers).length > 0) {
-      // `default_tools_approval_mode: "approve"` lets Codex's guardian skip MCP
-      // approval for trusted servers; handleMcpElicitation stays as fallback.
-      // Codex 0.125 renamed the variant from PascalCase `Approve` to lowercase `approve`.
+      // Approval modes are lowercase since Codex 0.125 (`approve`, not `Approve`).
       const mcpServers: Record<string, unknown> = {};
       for (const [name, cfg] of Object.entries(this.options.mcpServers)) {
-        mcpServers[name] = TRUSTED_MCP_SERVER_NAMES.has(name)
-          ? { ...cfg, default_tools_approval_mode: 'approve' }
-          : cfg;
+        mcpServers[name] = name === 'happy' ? { ...cfg, ...HAPPY_MCP_SERVER_CONFIG } : cfg;
       }
       config.mcp_servers = mcpServers;
     }
@@ -1256,9 +1262,9 @@ export class CodexAppServerBackend implements AgentBackend {
 
   /**
    * Codex reuses `mcpServer/elicitation/request` for both structured user input
-   * and MCP tool-call approvals (kind = `mcp_tool_call`). We auto-accept tool
-   * calls from trusted servers, decline other elicitations, and delegate
-   * untrusted tools to the permission handler so they surface in the app UI.
+   * and MCP tool-call approvals (kind = `mcp_tool_call`). We decline other
+   * elicitations and delegate tool calls to the permission handler, which
+   * approves Happy's never-ask tools itself and surfaces the rest in the app UI.
    */
   private handleMcpElicitation(params: unknown, jsonRpcId: number | string): void {
     const parsed = parseElicitationMeta(params);
@@ -1268,21 +1274,14 @@ export class CodexAppServerBackend implements AgentBackend {
       return;
     }
 
-    // Trusted servers skip shouldAutoApprove because Codex gives us `tool_title`
-    // (display name), not the raw tool name the whitelist would need to match.
-    if (TRUSTED_MCP_SERVER_NAMES.has(parsed.serverName)) {
-      this.peer.respond(jsonRpcId, { action: 'accept', meta: { persist: 'session' } });
-      return;
-    }
-
     if (!this.options.permissionHandler) {
       this.peer.respond(jsonRpcId, { action: 'decline' });
       return;
     }
 
-    const fullToolName = parsed.serverName && parsed.toolTitle
-      ? buildMcpToolName(parsed.serverName, parsed.toolTitle)
-      : (parsed.toolTitle || parsed.serverName || 'mcp_tool_call');
+    const fullToolName = parsed.serverName && parsed.toolName
+      ? buildMcpToolName(parsed.serverName, parsed.toolName)
+      : (parsed.toolName || parsed.serverName || 'mcp_tool_call');
     const callId = `mcp-elicit-${String(jsonRpcId)}`;
 
     this.options.permissionHandler

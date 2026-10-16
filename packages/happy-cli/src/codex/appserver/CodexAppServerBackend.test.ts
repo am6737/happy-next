@@ -882,42 +882,41 @@ describe('CodexAppServerBackend approval request parsing', () => {
         params: { serverName: 'happy', _meta: {}, message: 'Enter API key' },
         expected: { action: 'decline' },
       },
-      {
-        name: 'trusted happy server auto-accepts (Codex 0.121 shape)',
-        params: {
-          serverName: 'happy',
-          _meta: {
-            codex_approval_kind: 'mcp_tool_call',
-            tool_title: 'Change Chat Title',
-            tool_params: { title: '新标题' },
-          },
-          message: 'Allow the happy MCP server to run tool "change_title"?',
-        },
-        expected: { action: 'accept', meta: { persist: 'session' } },
-      },
-      {
-        name: 'trusted happy server accepts nested request._meta (older shape)',
-        params: {
-          serverName: 'happy',
-          request: { _meta: { codex_approval_kind: 'mcp_tool_call', tool_title: 'Change Chat Title' } },
-        },
-        expected: { action: 'accept', meta: { persist: 'session' } },
-      },
     ])('$name', ({ params, expected }) => {
       const { backend, respond } = setup();
       dispatch(backend, params, 42);
       expect(respond).toHaveBeenCalledWith(42, expected);
     });
 
-    it('trusted happy server never reaches the permission handler', () => {
-      const permissionHandler = { handleToolCall: vi.fn() };
+    // The happy server is not trusted wholesale: orchestrator_exec and _transfer must ask.
+    // The permission handler gets the tool's own name from the message, not its title, so
+    // its never-ask list (change_title, orchestrator_get_context, ...) can match it.
+    it.each([
+      {
+        name: 'Codex 0.121 shape',
+        params: {
+          serverName: 'happy',
+          _meta: { codex_approval_kind: 'mcp_tool_call', tool_title: 'Orchestrator Exec', tool_params: { command: 'ls' } },
+          message: 'Allow the happy MCP server to run tool "orchestrator_exec"?',
+        },
+      },
+      {
+        name: 'nested request (older shape)',
+        params: {
+          serverName: 'happy',
+          request: {
+            _meta: { codex_approval_kind: 'mcp_tool_call', tool_title: 'Orchestrator Exec', tool_params: { command: 'ls' } },
+            message: 'Allow the happy MCP server to run tool "orchestrator_exec"?',
+          },
+        },
+      },
+    ])('happy server tool calls go through the permission handler by name ($name)', async ({ params }) => {
+      const permissionHandler = { handleToolCall: vi.fn().mockResolvedValue({ decision: 'denied' }) };
       const { backend, respond } = setup(permissionHandler);
-      dispatch(backend, {
-        serverName: 'happy',
-        _meta: { codex_approval_kind: 'mcp_tool_call', tool_title: 'Change Chat Title' },
-      }, 7);
-      expect(permissionHandler.handleToolCall).not.toHaveBeenCalled();
-      expect(respond).toHaveBeenCalledWith(7, { action: 'accept', meta: { persist: 'session' } });
+      dispatch(backend, params, 7);
+      await flush();
+      expect(permissionHandler.handleToolCall).toHaveBeenCalledWith('mcp-elicit-7', 'mcp:happy:orchestrator_exec', { command: 'ls' });
+      expect(respond).toHaveBeenCalledWith(7, { action: 'decline' });
     });
 
     it('untrusted server routes approval through permission handler', async () => {
@@ -1007,7 +1006,7 @@ describe('buildThreadParams', () => {
     expect(params.config?.model_reasoning_effort).toBe('high');
   });
 
-  it('injects default_tools_approval_mode=approve for the happy MCP server', () => {
+  it('makes the happy MCP server ask, except for the tools that never ask', () => {
     const backend = new CodexAppServerBackend({
       cwd: process.cwd(),
       command: 'codex',
@@ -1018,7 +1017,13 @@ describe('buildThreadParams', () => {
     });
     const params = (backend as any).buildThreadParams();
     const servers = params.config?.mcp_servers as Record<string, any>;
-    expect(servers.happy.default_tools_approval_mode).toBe('approve');
+    expect(servers.happy.default_tools_approval_mode).toBe('prompt');
+    expect(Object.keys(servers.happy.tools).sort()).toEqual([
+      'change_title', 'orchestrator_get_context', 'orchestrator_list', 'orchestrator_pend', 'preview_html',
+    ]);
+    for (const tool of Object.values(servers.happy.tools)) {
+      expect(tool).toEqual({ approval_mode: 'approve' });
+    }
     expect(servers.happy.command).toBe('/bin/happy-mcp');
     expect(servers.happy.args).toEqual(['--url', 'http://127.0.0.1:40573/']);
     expect(servers.dootask.default_tools_approval_mode).toBeUndefined();

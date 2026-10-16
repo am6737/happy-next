@@ -45,17 +45,21 @@ const approves = (tool: string, mode: typeof ALL_CLAUDE_MODES[number]) =>
     canAutoApproveTool(tool, mode, getToolDescriptor(tool));
 
 describe('canAutoApproveTool', () => {
-    it('exempts the two Happy UI tools in every mode', () => {
+    it('exempts the Happy UI tools and the read-only orchestrator tools in every mode', () => {
         for (const mode of ALL_CLAUDE_MODES) {
             expect(approves('mcp__happy__change_title', mode)).toBe(true);
             expect(approves('mcp__happy__preview_html', mode)).toBe(true);
+            expect(approves('mcp__happy__orchestrator_get_context', mode)).toBe(true);
+            expect(approves('mcp__happy__orchestrator_list', mode)).toBe(true);
+            expect(approves('mcp__happy__orchestrator_pend', mode)).toBe(true);
         }
     });
 
-    it('leaves the orchestrator tools asking, though they share the prefix', () => {
+    it('leaves the orchestrator tools that run or change things asking, though they share the prefix', () => {
         for (const mode of ALL_CLAUDE_MODES) {
             expect(approves('mcp__happy__orchestrator_submit', mode)).toBe(false);
             expect(approves('mcp__happy__orchestrator_send_message', mode)).toBe(false);
+            expect(approves('mcp__happy__orchestrator_cancel', mode)).toBe(false);
             expect(approves('mcp__happy__orchestrator_exec', mode)).toBe(false);
             expect(approves('mcp__happy__orchestrator_transfer', mode)).toBe(false);
         }

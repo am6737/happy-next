@@ -18,6 +18,7 @@ import { getToolDescriptor } from "./getToolDescriptor";
 import { delay } from "@/utils/time";
 import { addBashRules, isBashCommandAllowed } from "happy-wire";
 import { persistAllowRules } from "@/utils/allowRulesSettings";
+import { HAPPY_TOOLS_APPROVED_WITHOUT_ASKING_PREFIXED } from "@/agent/mcp/happyToolsApproved";
 
 interface PermissionResponse {
     id: string;
@@ -30,20 +31,10 @@ interface PermissionResponse {
 }
 
 
-// Happy's own MCP UI tools: renaming the chat, and showing a preview inside the app. The
-// app is the one issuing them, and it renders `change_title` as an event message rather
-// than a tool row, so a pending permission for it has no footer to approve it from - the
-// turn hangs with the session stuck on "needs permission". Neither touches the user's
-// machine: one writes the app's own title, the other hands the app a document to render.
-// Both are therefore exempt in every mode, plan included, which is also what Gemini and
-// Codex have always done; Claude was the only handler missing it.
-//
-// An exact list on purpose, not an `mcp__happy__` prefix: the orchestrator tools share that
-// prefix, and they spawn and drive real agent work that must keep asking.
-const HAPPY_UI_TOOLS: ReadonlySet<string> = new Set([
-    'mcp__happy__change_title',
-    'mcp__happy__preview_html',
-]);
+// Happy's own MCP tools that never ask, in every mode, plan included (see happyToolsApproved).
+// An exact list on purpose, not an `mcp__happy__` prefix: the orchestrator tools that run or
+// change things share that prefix and must keep asking.
+const HAPPY_TOOLS_APPROVED: ReadonlySet<string> = new Set(HAPPY_TOOLS_APPROVED_WITHOUT_ASKING_PREFIXED);
 
 interface PendingRequest {
     resolve: (value: PermissionResult) => void;
@@ -71,11 +62,11 @@ export function canAutoApproveForMode(mode: PermissionMode, descriptor: { edit?:
 
 /**
  * The whole auto-approval policy for a tool that has reached our permission callback:
- * Happy's own UI tools never ask, in any mode, and an edit asks only outside acceptEdits.
+ * Happy's own approved tools never ask, in any mode, and an edit asks only outside acceptEdits.
  * Everything else falls through to the user.
  */
 export function canAutoApproveTool(toolName: string, mode: PermissionMode, descriptor: { edit?: boolean }): boolean {
-    return HAPPY_UI_TOOLS.has(toolName) || canAutoApproveForMode(mode, descriptor);
+    return HAPPY_TOOLS_APPROVED.has(toolName) || canAutoApproveForMode(mode, descriptor);
 }
 
 export class PermissionHandler {

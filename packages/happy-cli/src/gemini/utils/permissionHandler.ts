@@ -9,6 +9,7 @@ import { logger } from "@/ui/logger";
 import { ApiSessionClient } from "@/api/apiSession";
 import { PushNotificationClient } from "@/api/pushNotifications";
 import type { PermissionMode } from '@/api/types';
+import { HAPPY_TOOLS_APPROVED_WITHOUT_ASKING } from '@/agent/mcp/happyToolsApproved';
 import {
     BasePermissionHandler,
     PermissionResult,
@@ -61,7 +62,7 @@ export class GeminiPermissionHandler extends BasePermissionHandler {
         // - GeminiReasoning: Reasoning is just display of thinking process, not an action
         // - think: Thinking/saving memories is safe
         // - save_memory: Saving memories is safe
-        const alwaysAutoApproveNames = ['change_title', 'preview_html', 'GeminiReasoning', 'CodexReasoning', 'think', 'save_memory'];
+        const alwaysAutoApproveNames = [...HAPPY_TOOLS_APPROVED_WITHOUT_ASKING, 'GeminiReasoning', 'CodexReasoning', 'think', 'save_memory'];
         const alwaysAutoApproveIds = ['change_title', 'preview_html', 'save_memory'];
         
         // Check by tool name

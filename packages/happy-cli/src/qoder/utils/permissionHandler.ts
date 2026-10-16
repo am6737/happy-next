@@ -14,9 +14,10 @@ import type { ApiSessionClient } from '@/api/apiSession';
 import type { PushNotificationClient } from '@/api/pushNotifications';
 import { BasePermissionHandler, type PermissionResult } from '@/utils/BasePermissionHandler';
 import { persistAllowRules } from '@/utils/allowRulesSettings';
+import { HAPPY_TOOLS_APPROVED_WITHOUT_ASKING_PREFIXED } from '@/agent/mcp/happyToolsApproved';
 
 // Named as QoderTransport reads them back from qodercli's permission titles.
-export const HAPPY_TOOLS_APPROVED_WITHOUT_ASKING = ['mcp__happy__change_title', 'mcp__happy__preview_html'];
+export const HAPPY_TOOLS_APPROVED_WITHOUT_ASKING = HAPPY_TOOLS_APPROVED_WITHOUT_ASKING_PREFIXED;
 
 export class QoderPermissionHandler extends BasePermissionHandler {
     /** `shownInput` gives the input the app shows for a request (ExitPlanMode's gets its plan). */

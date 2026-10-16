@@ -13,6 +13,7 @@
 import { join } from 'node:path';
 import { projectPath } from '@/projectPath';
 import { startHappyServer } from '@/claude/utils/startHappyServer';
+import { HAPPY_TOOLS_APPROVED_WITHOUT_ASKING } from '@/agent/mcp/happyToolsApproved';
 import type { ApiSessionClient } from '@/api/apiSession';
 import type { McpServerHttpConfig, McpServerStdioConfig } from '@/agent/core/AgentBackend';
 
@@ -43,7 +44,7 @@ export interface McpContext {
     configForStdio(): Record<string, McpServerStdioConfig>;
     /** Get MCP config adapted for HTTP-capable ACP agents (Gemini) */
     configForHttp(): Record<string, McpServerHttpConfig>;
-    /** Get all allowed tool names prefixed as mcp__<server>__<tool> */
+    /** Happy tools the agent may run without asking, prefixed as mcp__happy__<tool> */
     allowedToolNames(): string[];
     /**
      * Normalize a raw tool name to mcp:server:tool format (Codex-style).
@@ -152,12 +153,13 @@ export async function createMcpContext(session: ApiSessionClient): Promise<McpCo
         },
 
         allowedToolNames() {
-            // Keep explicit allow-list entries for known tools (e.g. happy/change_title)
-            // even when some external MCP servers use auto-discovery.
-            // Auto-discovered tools are simply omitted from this allow-list.
-            return Object.entries(servers).flatMap(([name, def]) =>
-                def.toolNames.map(tool => `mcp__${name}__${tool}`)
-            );
+            // Only the Happy tools that never ask: the agent runs whatever is on this list
+            // without consulting our permission callback, so listing every Happy tool here
+            // let orchestrator_exec and _transfer run unasked. External servers' tools are
+            // auto-discovered and left to the normal permission flow.
+            return servers.happy.toolNames
+                .filter(tool => HAPPY_TOOLS_APPROVED_WITHOUT_ASKING.includes(tool))
+                .map(tool => `mcp__happy__${tool}`);
         },
 
         normalizeToolName(rawName: string): string {
