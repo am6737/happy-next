@@ -399,7 +399,7 @@ function SessionInfoContent({ session, leavingRef }: { session: Session; leaving
                 agent,
                 resumeSessionId,
                 sessionTitle,
-                forkedFrom: { sessionId: session.id, title: originalTitle },
+                forkedFrom: { sessionId: session.id, title: originalTitle, contextWindowSize: session.agentState?.contextWindowSize ?? undefined },
                 skipForkSession: true,
             });
             if (result.type === 'requestToApproveDirectoryCreation') {
@@ -508,7 +508,7 @@ function SessionInfoContent({ session, leavingRef }: { session: Session; leaving
                 resumeSessionId,
                 skipForkSession: true,
                 sessionTitle: session.metadata?.summary?.text,
-                forkedFrom: { sessionId: session.id, title: session.metadata?.summary?.text || getSessionName(session) },
+                forkedFrom: { sessionId: session.id, title: session.metadata?.summary?.text || getSessionName(session), contextWindowSize: session.agentState?.contextWindowSize ?? undefined },
             });
 
             if (result.type !== 'success') {

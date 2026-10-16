@@ -416,10 +416,14 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
     logger.infoDeveloper(`Session: ${response.id}`);
     logger.infoDeveloper(`Logs: ${logPath}`);
 
-    // Set initial agent state
+    // Set initial agent state. A copy starts with the context window of the session it was copied
+    // from, so the app's usage bar reads right from the start; the first turn syncs Claude Code's own
+    // value over it. (Set here, not in the state the session is created with: the server drops that.)
+    const forkedContextWindowSize = Number(process.env.HAPPY_FORKED_FROM_CONTEXT_WINDOW_SIZE) || undefined;
     session.updateAgentState((currentState) => ({
         ...currentState,
-        controlledByUser: options.startingMode !== 'remote'
+        controlledByUser: options.startingMode !== 'remote',
+        ...(forkedContextWindowSize ? { contextWindowSize: forkedContextWindowSize } : {}),
     }));
 
     // Start caffeinate to prevent sleep on macOS

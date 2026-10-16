@@ -188,8 +188,9 @@ export interface SpawnSessionOptions {
     agent?: 'codex' | 'claude' | 'gemini' | 'qoder';
     resumeSessionId?: string;
     sessionTitle?: string;
-    // The session this one is a copy of, named at the top of its backfilled history
-    forkedFrom?: { sessionId?: string; title?: string };
+    // The session this one is a copy of, named at the top of its backfilled history; its context
+    // window lets the copy's usage bar read right before the copy has run a turn of its own
+    forkedFrom?: { sessionId?: string; title?: string; contextWindowSize?: number };
     skipForkSession?: boolean;
     // Extra environment variables for the agent process (e.g. a GitHub token); the daemon adds them on top of its own environment
     environmentVariables?: Record<string, string>;

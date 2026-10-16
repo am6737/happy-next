@@ -632,6 +632,9 @@ export async function startDaemon(): Promise<void> {
         if (options.forkedFrom?.title) {
           extraEnv.HAPPY_FORKED_FROM_TITLE = options.forkedFrom.title;
         }
+        if (options.forkedFrom?.contextWindowSize) {
+          extraEnv.HAPPY_FORKED_FROM_CONTEXT_WINDOW_SIZE = String(options.forkedFrom.contextWindowSize);
+        }
         // Worktree metadata - passed to agent process so initial metadata includes it
         if (options.worktreeBasePath) {
           extraEnv.HAPPY_WORKTREE_BASE_PATH = options.worktreeBasePath;

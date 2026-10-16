@@ -103,7 +103,7 @@ const forkSession = React.useCallback(async (session: Session, mode: SessionFork
             agent,
             resumeSessionId,
             sessionTitle,
-            forkedFrom: { sessionId: session.id, title: originalTitle },
+            forkedFrom: { sessionId: session.id, title: originalTitle, contextWindowSize: session.agentState?.contextWindowSize ?? undefined },
             skipForkSession: true,
         });
         if (result.type === 'requestToApproveDirectoryCreation') {
