@@ -72,6 +72,8 @@ A multi-agent orchestration system that lets you define task dependency graphs a
 - **Final-message results**: a task's result is just the agent's final message, and running tasks can be followed live
 - **Follow-ups report to the sender**: a resumed task reports back to the session that sent the follow-up, and the run is listed in both sessions
 - **`orchestrator_exec`**: run shell commands on one or every online machine; long output is saved on the machine
+- **Encrypted tasks**: a task's title, prompt, command, working directory and target machines are end-to-end encrypted, so the server never sees them, and tasks only go to machines whose CLI can open them
+- **`orchestrator_transfer`**: copy files and directories between machines — send from this one, fetch to it, or relay between two others — streamed end-to-end encrypted
 
 ## Pending Message Queue
 
@@ -273,6 +275,7 @@ Extensive improvements to the chat and session management experience.
 
 - **Image attachment** in the new-session wizard and during chat, including desktop drag-and-drop with a clear drop indicator; multi-image previews remain on the selected image
 - **Image paste from clipboard** on web
+- **Any file by drop or paste** on web: files that are not images (or images the AI cannot see) are attached as files
 - **Message pagination** for loading older messages
 - **Unread blue dot indicator** when tasks complete (synced across devices via metadata)
 - **Compact session list view**
@@ -389,6 +392,13 @@ Extensive improvements to the chat and session management experience.
 - **Compaction notice**: automatic compaction is announced like a manual `/compact`
 - **Bottom sheets**: every bottom sheet shares one look and returns to its place when the keyboard hides
 
+- **Lean copied history**: copying or resuming a session brings over only what was said, with a divider naming where it came from
+- **Forking archived sessions**: archived sessions, Codex included, can be forked, and show a banner offering resume in place of the composer
+- **Self-started turns**: a turn an agent starts on its own, such as a background task reporting in, gets its own place in the chat for all four agents
+- **Resumed read-aloud**: speech cut off by a flaky network picks up where it stopped, retrying through an outage of up to 30 seconds
+- **Schedule from a usage-limit notice**: the reset time in a Claude usage-limit notice opens the schedule sheet
+- **Calmer session list**: rows tell when a session last moved, a project's header opens its card, and machines fold in the all machines view
+
 ## CLI Improvements
 
 The CLI (`happy-next-cli`) received substantial upgrades.
@@ -445,7 +455,9 @@ The CLI (`happy-next-cli`) received substantial upgrades.
 - **Happy CLI v0.12.0 with Codex v0.162.0**: attached files are sent to the agent, session profiles stay separate per agent, and `sudo happy update` no longer misreports not-logged-in
 - **Codex v0.162.1**: new Codex sessions start on Codex v0.162.1
 
-- **Happy CLI v0.13.0**: adds Qoder, installs new releases by itself once the machine is idle (the app shows the status and can update now), upgrades a root-owned global install through passwordless sudo, archives each session's messages for search, and sends Gemini's and Qoder's reasoning as one thinking message
+- **Happy CLI v0.13.0**: adds Qoder, checks for new releases on its own and installs them when you ask from the app, upgrades a root-owned global install through passwordless sudo, archives each session's messages for search, and sends Gemini's and Qoder's reasoning as one thinking message
+
+- **Happy CLI v0.14.0 with Codex v0.163.0**: adds `orchestrator_transfer` and encrypted orchestrator tasks, forks archived Codex sessions, keeps Qoder's model list cached, and a daemon started from inside a session no longer makes new sessions resume it
 
 ## Server
 

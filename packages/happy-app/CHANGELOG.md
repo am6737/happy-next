@@ -1,5 +1,30 @@
 # Changelog
 
+## Version 32 - 2026-10-16
+
+Happy Next v2.17.0 encrypts orchestrator tasks end to end and lets agents copy files and directories between machines, picks read-aloud back up where a flaky network cut it off, and offers CLI updates for you to install instead of installing them by itself. Copied and resumed sessions bring over only what was said, archived sessions can be forked, and the session list reads calmer. Happy CLI is updated to v0.14.0, and new Codex sessions start on Codex v0.163.0.
+
+- Orchestrator: tasks are end-to-end encrypted — the server no longer sees a task's title, prompt, command, working directory or target machines, and tasks only go to machines whose CLI can open them
+- Orchestrator: agents copy files and directories between machines with `orchestrator_transfer`, streamed end-to-end encrypted
+- Machines: the CLI checks for updates on its own but installs only when you ask — the machine page shows the update and what it would interrupt, an online session's header shows an upgrade icon, and the picked machine's update shows beside the session list's +
+- Read aloud: speech that stopped on a flaky network picks up where it was cut, retrying through an outage of up to 30 seconds
+- Sessions: copying or resuming a session brings over only what was said, faster, with a divider naming where it came from
+- Sessions: fork archived sessions, Codex included, and an archived session shows a banner with resume in place of the composer
+- Session list: calmer rows that tell when a session last moved, a project's header opens its card, machines fold in the all machines view, and sessions are ordered by their last message without two replying sessions trading places
+- Conversation: a turn an agent starts on its own, such as a background task reporting in, gets its own place in the chat for all four agents, and a quick turn with nothing to fold has no header line
+- Conversation: the message action bar draws its icons in one set a size up, with fork's own icon and the time on the bar's outer end
+- Composer: drop or paste any file on web, and the text field grows and shrinks smoothly on iOS 26
+- Claude: the reset time in a usage-limit notice opens the schedule sheet
+- Settings: scan a QR code (native) or enter a server URL (web) from the settings header
+- Android: the chat and composer follow the keyboard frame by frame, chats start right under the header, and a running session no longer keeps the screen redrawing
+- iOS: going back no longer sometimes returns to the page and leaves it again
+- Layout: long page titles no longer run over the header's buttons, the default sidebar is a little wider, and the logo sits centered
+- DooTask: the planned-time sheets say what they set, and the time wheels scroll on Android
+- Performance: long sessions open faster, and session updates no longer re-render every web chat row or the new session page
+- Fixes: files attached on the new session screen upload reliably, a session is marked read only from its chat, and `preview_html` reads a file written in the same turn
+- CLI: Happy CLI v0.14.0 adds `orchestrator_transfer` and encrypted tasks, installs updates only when asked, forks archived Codex sessions, keeps Qoder's model list cached, and a daemon started from inside a session no longer makes new sessions resume it
+- Codex: new Codex sessions start on Codex v0.163.0
+
 ## Version 31 - 2026-10-13
 
 Happy Next v2.16.1 adds Qoder as a fourth agent, searches every machine's message history from the command palette, docks a terminal panel along the bottom on web and desktop, and lets the orchestrator run shell commands on any online machine. The new session screen gathers everything into one card, with an AI tab, `/` and `$` autocomplete, files and scheduled send. Happy CLI is updated to v0.13.0 and installs new releases by itself once a machine is idle.

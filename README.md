@@ -114,6 +114,8 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Runs and tasks show how long they take, run filters are simplified to All, Active, Completed, Failed and Cancelled, and a task's result is just the agent's final message, followed live while it runs
 - A resumed task reports back to the session that sent the follow-up, and the run is listed in both sessions
 - `orchestrator_exec` runs shell commands on one or every online machine, with long output saved on the machine
+- Orchestrator tasks are end-to-end encrypted — the server never sees a task's title, prompt, command, working directory or target machines — and only go to machines whose CLI can open them
+- `orchestrator_transfer` copies files and directories between machines, streamed end-to-end encrypted
 
 ### Pending Message Queue
 - Messages sent while the CLI is busy are queued server-side and auto-dispatched
@@ -225,7 +227,7 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Session draft rewritten as a single source of truth — fewer cases of drafts vanishing or reappearing
 
 ### Chat & Session UX
-- Image attachment, clipboard paste (web), and desktop drag-and-drop in new or active sessions; image support in drafts and high-quality pass-through up to 1568px preserve text sharpness in code/UI screenshots, while multi-image previews stay on the selected image
+- Image attachment, clipboard paste (web), and desktop drag-and-drop in new or active sessions, and any other file can be dropped or pasted on web too; image support in drafts and high-quality pass-through up to 1568px preserve text sharpness in code/UI screenshots, while multi-image previews stay on the selected image
 - Session titles seeded from the first user message for new sessions (until an AI summary takes over)
 - Slash command results surface even when the agent emits no assistant message (e.g. unknown commands no longer blank out)
 - Slash-command autocomplete shows each command's source scope (repo / user / plugin / system) and kind; after selecting a root command, suggestions stay limited to its matching subcommands instead of mixing in skills for free-form arguments; session capabilities are stored separately from metadata and sync live so command and skill lists stay fresh
@@ -313,6 +315,12 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Turns fold on iOS and Android as on web, the previous turn slides shut when you send, thinking folds like a tool call, and automatic compaction is announced like a manual `/compact`
 - Every bottom sheet shares one look and returns to its place when the keyboard hides
 
+- Copying or resuming a session brings over only what was said, with a divider naming where it came from, and archived sessions (Codex included) can be forked, with a banner offering resume in place of the composer
+- A turn an agent starts on its own, such as a background task reporting in, gets its own place in the chat for all four agents
+- Read aloud picks up where a flaky network cut it off, retrying through an outage of up to 30 seconds
+- The reset time in a Claude usage-limit notice opens the schedule sheet
+- Session list rows tell when a session last moved, a project's header opens its card, and machines fold in the all machines view
+
 ### CLI
 - `happy update` self-upgrade, `happy --version` with all agent versions
 - Daemon auto-start on boot (`happy daemon enable/disable`), restart command
@@ -344,7 +352,9 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Happy CLI v0.12.0 sends attached files to the agent, keeps session profiles separate per agent, and no longer misreports not-logged-in on `sudo happy update`; new Codex sessions start on Codex v0.162.0
 - New Codex sessions start on Codex v0.162.1
 
-- Happy CLI v0.13.0 adds Qoder, installs new releases by itself once the machine is idle (the app shows the status and can update now), upgrades a root-owned global install through passwordless sudo, archives each session's messages for search, and sends Gemini's and Qoder's reasoning as one thinking message
+- Happy CLI v0.13.0 adds Qoder, checks for new releases on its own and installs them when you ask from the app, upgrades a root-owned global install through passwordless sudo, archives each session's messages for search, and sends Gemini's and Qoder's reasoning as one thinking message
+
+- Happy CLI v0.14.0 adds `orchestrator_transfer` and encrypted orchestrator tasks, forks archived Codex sessions, keeps Qoder's model list cached, and a daemon started from inside a session no longer makes new sessions resume it; new Codex sessions start on Codex v0.163.0
 
 ### Bug Fixes & Stability
 - 255+ bug fixes: message sending reliability, session lifecycle, Markdown rendering, navigation, voice, DooTask, sharing
