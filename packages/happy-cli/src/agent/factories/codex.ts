@@ -10,6 +10,7 @@ import {
   type CodexAppServerBackendOptions,
   type CodexPermissionHandler,
   type ApprovalPolicy,
+  type ApprovalsReviewer,
   type SandboxMode,
 } from '@/codex/appserver';
 import type { AgentBackend, McpServerConfig, AgentFactoryOptions } from '../core';
@@ -29,6 +30,8 @@ export interface CodexBackendOptions extends AgentFactoryOptions {
   reasoningEffort?: string | null;
   /** Approval policy */
   approvalPolicy?: ApprovalPolicy | null;
+  /** Who reviews approval requests */
+  approvalsReviewer?: ApprovalsReviewer | null;
   /** Sandbox mode */
   sandbox?: SandboxMode | null;
   /** Base instructions (system prompt) for the agent */
@@ -80,6 +83,7 @@ export function createCodexBackend(options: CodexBackendOptions): CodexBackendRe
     model,
     reasoningEffort: options.reasoningEffort,
     approvalPolicy: options.approvalPolicy,
+    approvalsReviewer: options.approvalsReviewer,
     sandbox: options.sandbox,
     baseInstructions: options.baseInstructions,
     mcpServers: options.mcpServers,
@@ -93,6 +97,7 @@ export function createCodexBackend(options: CodexBackendOptions): CodexBackendRe
     model: model ?? '(Codex CLI default)',
     reasoningEffort: options.reasoningEffort ?? '(Codex CLI default)',
     approvalPolicy: options.approvalPolicy,
+    approvalsReviewer: options.approvalsReviewer,
     sandbox: options.sandbox,
     mcpServerCount: options.mcpServers ? Object.keys(options.mcpServers).length : 0,
     hasResumeFile: !!options.resumeFile,

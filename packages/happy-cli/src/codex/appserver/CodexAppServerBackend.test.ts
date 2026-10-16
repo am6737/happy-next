@@ -1006,6 +1006,18 @@ describe('buildThreadParams', () => {
     expect(params.config?.model_reasoning_effort).toBe('high');
   });
 
+  it('passes the approvals reviewer, and leaves it to Codex when unset', () => {
+    const reviewed = new CodexAppServerBackend({
+      cwd: process.cwd(),
+      command: 'codex',
+      approvalPolicy: 'on-request',
+      approvalsReviewer: 'auto_review',
+    });
+    expect((reviewed as any).buildThreadParams()).toMatchObject({ approvalPolicy: 'on-request', approvalsReviewer: 'auto_review' });
+    const plain = new CodexAppServerBackend({ cwd: process.cwd(), command: 'codex' });
+    expect((plain as any).buildThreadParams().approvalsReviewer).toBeUndefined();
+  });
+
   it('makes the happy MCP server ask, except for the tools that never ask', () => {
     const backend = new CodexAppServerBackend({
       cwd: process.cwd(),

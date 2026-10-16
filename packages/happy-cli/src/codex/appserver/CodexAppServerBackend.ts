@@ -33,6 +33,7 @@ import {
   type V2ApprovalDecision,
   type ReviewDecision,
   type ApprovalPolicy,
+  type ApprovalsReviewer,
   type SandboxMode,
   type ThreadTokenUsage,
   type ReviewStartParams,
@@ -80,6 +81,8 @@ export interface CodexAppServerBackendOptions {
   model?: string | null;
   /** Optional approval policy */
   approvalPolicy?: ApprovalPolicy | null;
+  /** Who reviews approval requests: the user or Codex's reviewer subagent */
+  approvalsReviewer?: ApprovalsReviewer | null;
   /** Optional sandbox mode */
   sandbox?: SandboxMode | null;
   /** Optional abort signal */
@@ -486,6 +489,7 @@ export class CodexAppServerBackend implements AgentBackend {
     const { model: resolvedModel, isFast } = resolveModel(this.options.model);
     if (resolvedModel) params.model = resolvedModel;
     if (this.options.approvalPolicy) params.approvalPolicy = this.options.approvalPolicy;
+    if (this.options.approvalsReviewer) params.approvalsReviewer = this.options.approvalsReviewer;
     if (this.options.sandbox) params.sandbox = this.options.sandbox;
     if (this.options.baseInstructions) params.baseInstructions = this.options.baseInstructions;
 

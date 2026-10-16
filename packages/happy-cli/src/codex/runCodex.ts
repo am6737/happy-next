@@ -5,7 +5,7 @@ import { createCodexBackend } from '@/agent/factories/codex';
 import { codexPackage } from './package';
 import { codexPackageVersion, isCodexRuntimeWarm } from './codexRuntime';
 import type { CodexAppServerBackend } from './appserver/CodexAppServerBackend';
-import type { ApprovalPolicy, SandboxMode } from './appserver/types';
+import type { ApprovalPolicy, ApprovalsReviewer, SandboxMode } from './appserver/types';
 import type { PermissionMode } from '@/api/types';
 import { CodexPermissionHandler } from './utils/permissionHandler';
 import { ReasoningProcessor } from './utils/reasoningProcessor';
@@ -120,13 +120,22 @@ export function formatCodexProcessExitMessage(error: unknown): string {
  */
 function mapApprovalPolicy(permissionMode: string): ApprovalPolicy {
     switch (permissionMode) {
-        // Codex v0.98+: untrusted, on-failure, on-request, never
+        // Codex dropped `on-failure` (thread/start rejects it); untrusted, on-request, never remain
         case 'default': return 'on-request';
         case 'read-only': return 'untrusted';
-        case 'on-failure': return 'on-failure';
+        case 'on-failure': return 'on-request';
         case 'full-auto': return 'never';
         default: return 'on-request';
     }
+}
+
+/**
+ * Map Happy permission mode to who reviews Codex's approval requests. Happy's 'on-failure'
+ * (自动审查) is Codex's "Approve for me": the same requests as the default mode, but a Codex
+ * reviewer subagent weighs each one and approves or denies it instead of the user.
+ */
+function mapApprovalsReviewer(permissionMode: string): ApprovalsReviewer {
+    return permissionMode === 'on-failure' ? 'auto_review' : 'user';
 }
 
 /**
@@ -991,6 +1000,7 @@ export async function runCodex(opts: {
         model?: string;
         reasoningEffort?: string;
         approvalPolicy: ApprovalPolicy;
+        approvalsReviewer: ApprovalsReviewer;
         sandbox: SandboxMode;
         resumeFile?: string | null;
         baseInstructions?: string;
@@ -1005,6 +1015,7 @@ export async function runCodex(opts: {
             model: opts.model,
             reasoningEffort: opts.reasoningEffort,
             approvalPolicy: opts.approvalPolicy,
+            approvalsReviewer: opts.approvalsReviewer,
             sandbox: opts.sandbox,
             baseInstructions: opts.baseInstructions,
             mcpServers,
@@ -1042,6 +1053,7 @@ export async function runCodex(opts: {
             model: message.mode.model,
             reasoningEffort: message.mode.reasoningEffort,
             approvalPolicy,
+            approvalsReviewer: mapApprovalsReviewer(message.mode.permissionMode),
             sandbox,
             resumeFile,
             baseInstructions: sessionSystemPrompt,
@@ -1342,6 +1354,7 @@ Tokens used: ${goal.tokensUsed}${goal.tokenBudget ? ` / ${goal.tokenBudget}` : '
                         model: message.mode.model,
                         reasoningEffort: message.mode.reasoningEffort,
                         approvalPolicy,
+                        approvalsReviewer: mapApprovalsReviewer(message.mode.permissionMode),
                         sandbox,
                         resumeFile,
                         baseInstructions: sessionSystemPrompt,

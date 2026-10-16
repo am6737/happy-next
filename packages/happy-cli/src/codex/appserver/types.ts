@@ -74,12 +74,15 @@ export interface ThreadStartParams {
   developerInstructions?: string | null;
   config?: Record<string, unknown> | null;
   approvalPolicy?: ApprovalPolicy | null;
+  approvalsReviewer?: ApprovalsReviewer | null;
   sandbox?: SandboxMode | null;
   serviceTier?: ServiceTier | null;
   ephemeral?: boolean | null;
 }
 
-export type ApprovalPolicy = 'untrusted' | 'on-failure' | 'on-request' | 'never';
+export type ApprovalPolicy = 'untrusted' | 'on-request' | 'never';
+/** Who approval requests go to: the user, or Codex's reviewer subagent ("Approve for me"). */
+export type ApprovalsReviewer = 'user' | 'auto_review';
 export type SandboxMode = 'read-only' | 'workspace-write' | 'danger-full-access';
 export type ServiceTier = 'fast' | 'flex';
 
@@ -123,6 +126,7 @@ export interface ThreadResumeParams {
   developerInstructions?: string | null;
   config?: Record<string, unknown> | null;
   approvalPolicy?: ApprovalPolicy | null;
+  approvalsReviewer?: ApprovalsReviewer | null;
   sandbox?: SandboxMode | null;
   serviceTier?: ServiceTier | null;
 }

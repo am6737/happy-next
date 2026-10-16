@@ -61,8 +61,8 @@ export class CodexPermissionHandler extends BasePermissionHandler {
         switch (this.currentPermissionMode) {
             case 'full-auto':
                 return true;
-            case 'on-failure':
-                return true;
+            // 'on-failure' (自动审查) hands approvals to Codex's reviewer subagent, so it falls
+            // through to asking: whatever still reaches us is one the user has to decide.
             case 'read-only': {
                 const writeTools = ['write', 'edit', 'create', 'delete', 'patch', 'fs-edit'];
                 return !writeTools.some(wt => toolName.toLowerCase().includes(wt));
