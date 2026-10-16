@@ -146,7 +146,7 @@
             "status": "active",
             "label": "Haiku 4.5",
             "displayName": "Claude Haiku 4.5",
-            "description": "Fastest",
+            "description": "Previous generation Haiku",
             "efforts": [],
             "contextWindow": 200000,
             "pricing": { "input": 1, "output": 5, "cacheWrite": 1.25, "cacheRead": 0.1 }
@@ -280,12 +280,22 @@
             "contextWindow": 272000
         },
         {
+            "id": "gemini-4-argon",
+            "agent": "gemini",
+            "status": "active",
+            "label": "4 Argon",
+            "displayName": "Gemini 4 Argon",
+            "description": "Most capable for complex coding and agentic tasks",
+            "efforts": [],
+            "contextWindow": 1048576
+        },
+        {
             "id": "gemini-3.8-flash",
             "agent": "gemini",
             "status": "active",
             "label": "3.8 Flash",
             "displayName": "Gemini 3.8 Flash",
-            "description": "Latest balance of speed and intelligence",
+            "description": "Fast frontier balance of speed and intelligence",
             "efforts": [],
             "contextWindow": 1048576
         },
