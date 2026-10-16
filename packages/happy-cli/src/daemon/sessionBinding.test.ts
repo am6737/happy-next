@@ -36,6 +36,8 @@ describe.skipIf(process.platform === 'win32')('verified session process binding'
         expect(isBindingRunning(binding)).toBe(true);
         await stopBoundSession(binding);
         expect(isBindingRunning(binding)).toBe(false);
+        // The process is gone, but Node sets signalCode only once it delivers 'exit'.
+        if (child.exitCode === null && child.signalCode === null) await once(child, 'exit');
         expect(child.signalCode).toBe('SIGTERM');
         const snapshot = readStopSnapshot(binding).find(entry => entry.pid === binding.pid);
         expect(processStart(snapshot!.identity)).toBe(processStart(binding.identity));
