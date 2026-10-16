@@ -26,7 +26,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardController } from 'react-native-keyboard-controller';
 import { FullWindowOverlay } from 'react-native-screens';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { Text } from './StyledText';
 import { handleCopyMenuContextMenu } from './copyMenuContextMenu';
@@ -424,7 +424,7 @@ export const DuplicateSheet = React.memo(function DuplicateSheet({
                         {/* Header */}
                         <View style={styles.header as ViewStyle}>
                             <View style={styles.headerIcon as ViewStyle}>
-                                <Ionicons name="git-branch" size={20} color="#fff" />
+                                <MaterialCommunityIcons name="call-split" size={21} color="#fff" style={{ transform: [{ rotate: '90deg' }] }} />
                             </View>
                             <View style={styles.headerContent as ViewStyle}>
                                 <Text style={styles.title as TextStyle} numberOfLines={1}>{t('duplicate.title')}</Text>
@@ -564,7 +564,7 @@ export const DuplicateSheet = React.memo(function DuplicateSheet({
                                 {confirming ? (
                                     <ActivityIndicator size="small" color="#fff" />
                                 ) : (
-                                    <Ionicons name="git-branch" size={18} color="#fff" />
+                                    <MaterialCommunityIcons name="call-split" size={19} color="#fff" style={{ transform: [{ rotate: '90deg' }] }} />
                                 )}
                                 <Text style={styles.confirmButtonText as TextStyle}>
                                     {confirming ? t('duplicate.duplicating') : t('duplicate.confirm')}

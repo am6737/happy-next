@@ -1153,7 +1153,7 @@ function SessionInfoContent({ session, leavingRef }: { session: Session; leaving
                             <Item
                                 title={t('sessionInfo.cliVersion')}
                                 subtitle={session.metadata.version}
-                                icon={<Ionicons name="git-branch-outline" size={29} color="#5856D6" />}
+                                icon={<Ionicons name="information-circle-outline" size={29} color="#5856D6" />}
                                 showChevron={false}
                                 onPress={() => session.metadata?.version && copyValue(session.metadata.version)}
                             />

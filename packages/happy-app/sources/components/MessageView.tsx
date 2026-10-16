@@ -1,7 +1,7 @@
 import * as React from "react";
 import { View, Text, Pressable, Platform, ActivityIndicator } from "react-native";
 import { Image } from "expo-image";
-import { Ionicons, SimpleLineIcons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons, SimpleLineIcons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { useRouter } from 'expo-router';
 import { ImageViewer } from "./ImageViewer";
@@ -292,7 +292,7 @@ function MessageActionBar(props: {
           {props.forkLoading ? (
             <ActivityIndicator size="small" color={theme.colors.textSecondary} style={styles.actionSpinner} />
           ) : (
-            <Ionicons name="git-branch-outline" size={14} color={theme.colors.textSecondary} />
+            <MaterialCommunityIcons name="call-split" size={16} color={theme.colors.textSecondary} style={{ transform: [{ rotate: '90deg' }] }} />
           )}
         </Pressable>
       ) : null}
@@ -758,7 +758,7 @@ function ForkedHistoryNotice(props: { event: Extract<AgentEvent, { type: 'forked
         <View style={styles.forkedHistoryDivider}>
           <View style={styles.forkedHistoryRule} />
           <Pressable style={styles.forkedHistorySource} onPress={handleOpenSource} disabled={!source}>
-            <Ionicons name="git-branch-outline" size={14} color={theme.colors.agentEventText} />
+            <MaterialCommunityIcons name="call-split" size={15} color={theme.colors.agentEventText} style={{ transform: [{ rotate: '90deg' }] }} />
             <Text style={[styles.agentEventText, source && styles.forkedHistorySourceLink]} numberOfLines={1}>
               {t('message.forkedFrom', { title })}
             </Text>
