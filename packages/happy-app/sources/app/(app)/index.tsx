@@ -1,6 +1,7 @@
 import { RoundButton } from "@/components/RoundButton";
 import { useAuth } from "@/auth/AuthContext";
-import { Text, View, Image, Platform } from "react-native";
+import { Text, View, Platform } from "react-native";
+import { Image } from "expo-image";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as React from 'react';
 import { encodeBase64 } from "@/encryption/base64";
@@ -57,7 +58,7 @@ function NotAuthenticated() {
             <View style={styles.portraitContent}>
                 <Image
                     source={theme.dark ? require('@/assets/images/logotype-light.svg') : require('@/assets/images/logotype-dark.svg')}
-                    resizeMode="contain"
+                    contentFit="contain"
                     style={styles.logo}
                 />
                 <Text style={styles.title}>
@@ -117,7 +118,7 @@ function NotAuthenticated() {
                 <View style={styles.landscapeLogoSection}>
                     <Image
                         source={theme.dark ? require('@/assets/images/logotype-light.svg') : require('@/assets/images/logotype-dark.svg')}
-                        resizeMode="contain"
+                        contentFit="contain"
                         style={styles.logo}
                     />
                 </View>

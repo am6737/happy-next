@@ -1,5 +1,6 @@
 import * as React from 'react';
-import { View, ActivityIndicator, Text, Pressable, Platform, Image } from 'react-native';
+import { View, ActivityIndicator, Text, Pressable, Platform } from 'react-native';
+import { Image } from 'expo-image';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import TabView from './NativeBottomTabs';
 import { useFriendRequests, useSocketStatus, useRealtimeStatus, useDootaskProfile, useProfile } from '@/sync/storage';
@@ -598,7 +599,7 @@ export const MainView = React.memo(({ variant }: MainViewProps) => {
                         source={theme.dark
                             ? require('@/assets/images/logo-white.svg')
                             : require('@/assets/images/logo-black.svg')}
-                        resizeMode="contain"
+                        contentFit="contain"
                         style={styles.emptyDetailLogo}
                     />
                 </View>
