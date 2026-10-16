@@ -11,7 +11,7 @@ vi.mock('./env', () => ({
         VOLC_TTS_BIDI_RESOURCE_ID: 'seed-tts-2.0',
     },
 }));
-vi.mock('./log', () => ({ logError: vi.fn(), logWarn: vi.fn() }));
+vi.mock('./log', () => ({ logError: vi.fn(), logInfo: vi.fn(), logWarn: vi.fn() }));
 vi.mock('./cleanForSpeech', () => ({ cleanForSpeech: vi.fn() }));
 vi.mock('./tts', () => ({ synthesize: vi.fn() }));
 vi.mock('./ttsBidi', () => {
@@ -143,6 +143,36 @@ afterEach(() => {
 });
 
 describe('TtsStreamSessionRegistry', () => {
+    it('logs one timing line with milestones relative to prepare', async () => {
+        let clock = 1000;
+        const lines: string[] = [];
+        const pipeline = deferredPipeline();
+        const store = new TtsStreamSessionRegistry({
+            startPipeline: pipeline.start,
+            now: () => clock,
+            onTiming: (line) => lines.push(line),
+        });
+        const prepared = store.prepare({ text: 'hello' })!;
+        clock = 1150;
+        store.subscribe(prepared.streamId, makeSubscriber().subscriber);
+        const { trace } = pipeline.handlers();
+        trace?.('path', 'bidi');
+        clock = 1400;
+        trace?.('bidiReady');
+        trace?.('llm', 'full');
+        trace?.('llm', 'regex-fallback');
+        clock = 1900;
+        await pipeline.handlers().onChunk(Buffer.from('one'));
+        clock = 2000;
+        await pipeline.handlers().onChunk(Buffer.from('two'));
+        pipeline.resolve();
+        await flushMicrotasks();
+
+        expect(lines).toEqual([
+            'chars=5 subscribe=+150ms path=bidi bidiReady=+400ms llm=full>regex-fallback firstAudio=+900ms end=+1000ms audio=0.0s outcome=complete',
+        ]);
+    });
+
     it('starts synthesis once, broadcasts live chunks, and replays from byte zero', async () => {
         const pipeline = deferredPipeline();
         const store = new TtsStreamSessionRegistry({ startPipeline: pipeline.start });

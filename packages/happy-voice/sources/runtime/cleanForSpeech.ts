@@ -3,12 +3,16 @@ import { logError } from './log';
 import { streamCleanForSpeech, type CleanMode } from './ark';
 import { needsLlmClean, regexCleanForSpeech } from './textClean';
 
+/** Which path produced the speech text; 'regex-fallback' = the LLM failed before its first delta. */
+export type SpeechCleanMode = 'regex' | CleanMode | 'regex-fallback';
+
 /**
  * Unified TTS-text cleaning. Decides between an instant regex-only result and a
  * streamed LLM rewrite, and falls back to regex on LLM failure/timeout.
  *
  * - `onText` receives streamed deltas on the LLM path, or the full text once on the
  *   regex-only / fallback path.
+ * - `onMode` reports the path taken (latency tracing), possibly twice: LLM mode, then 'regex-fallback'.
  * - `externalSignal` aborts the LLM call when the consumer goes away (e.g. the SSE
  *   client disconnects). An internal idle timer (TTS_CLEAN_TIMEOUT_MS) aborts a stalled
  *   LLM independently; it only measures time spent waiting for the next Ark delta —
@@ -23,9 +27,11 @@ export async function cleanForSpeech(
     text: string,
     onText: (piece: string) => void | Promise<void>,
     externalSignal?: AbortSignal,
+    onMode?: (mode: SpeechCleanMode) => void,
 ): Promise<boolean> {
     const cleaned = regexCleanForSpeech(text);
     if (!env.TTS_CLEAN_LLM || !env.ARK_API_KEY || !needsLlmClean(text, cleaned, env.TTS_CLEAN_SKIP_MAX_CHARS)) {
+        onMode?.('regex');
         await onText(cleaned);
         return true;
     }
@@ -50,6 +56,7 @@ export async function cleanForSpeech(
     // delta still falls back to the FULL regex text — content over brevity.
     const digestAt = Math.min(env.TTS_CLEAN_DIGEST_MIN_CHARS, 12000);
     const mode: CleanMode = cleaned.length > digestAt ? 'digest' : 'full';
+    onMode?.(mode);
 
     let sentAny = false;
     try {
@@ -67,6 +74,7 @@ export async function cleanForSpeech(
             logError('LLM clean failed; regex fallback', { error, chars: text.length });
         }
         if (!sentAny && !externalSignal?.aborted) {
+            onMode?.('regex-fallback');
             await onText(cleaned);
             return true;
         }

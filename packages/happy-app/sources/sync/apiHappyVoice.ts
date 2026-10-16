@@ -170,7 +170,9 @@ export async function synthesizeSpeech(text: string): Promise<HappyVoiceTtsRespo
  */
 export async function prepareSpeechStream(text: string, signal?: AbortSignal): Promise<{ url: string }> {
     const { voiceType, speechRate } = getVoicePrefs();
+    const t0 = Date.now();
     const voiceAuth = await getVoiceAuthToken();
+    const t1 = Date.now();
     const response = await fetch(`${getVoiceGatewayUrlFromAuth(voiceAuth)}/v1/voice/tts/stream/prepare`, {
         method: 'POST',
         headers: getVoiceGatewayHeaders(voiceAuth),
@@ -182,6 +184,8 @@ export async function prepareSpeechStream(text: string, signal?: AbortSignal): P
         throw new Error(`Failed to prepare speech stream: ${response.status} ${errorText}`);
     }
     const data = (await response.json()) as { streamId: string; url: string; expiresAt: string };
+    // Latency tracing; pairs with the gateway's "TTS stream timing" line.
+    console.log(`[tts] prepared: token=${t1 - t0}ms prepare=${Date.now() - t1}ms`);
     return { url: data.url };
 }
 

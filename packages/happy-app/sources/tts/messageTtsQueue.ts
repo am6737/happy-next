@@ -34,11 +34,15 @@ export function getTtsQueueSnapshot(): TtsQueueSnapshot {
 
 function start(item: TtsQueueItem) {
     const gen = ++generation;
+    const startedAt = Date.now();
     current = item;
     phase = 'loading';
     handle = startPlayback(item.text, {
         onPlaying: () => {
             if (gen !== generation) return;
+            // Latency tracing: tap (or queue advance) → audible, end to end.
+            // Web re-fires 'playing' after a stall; only the first counts.
+            if (phase === 'loading') console.log(`[tts] first audio after ${Date.now() - startedAt}ms (chars=${item.text.length})`);
             phase = 'playing';
             notify();
         },

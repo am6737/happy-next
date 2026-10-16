@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { cleanForSpeech } from './cleanForSpeech';
 import { env } from './env';
-import { logError, logWarn } from './log';
+import { logError, logInfo, logWarn } from './log';
 import { Mp3FrameIndex } from './mp3FrameIndex';
 import { synthesize } from './tts';
 import { synthesizeBidirectional, TtsBidiStartupError } from './ttsBidi';
@@ -42,6 +42,8 @@ export interface TtsAudioSubscriber {
 
 export interface TtsStreamPipelineHandlers {
     onChunk: (chunk: Buffer) => Promise<void>;
+    /** Latency tracing: no value = timestamp a milestone (first call wins); a value = record a label. */
+    trace?: (key: string, value?: string) => void;
 }
 
 export type TtsStreamPipeline = (
@@ -71,6 +73,8 @@ interface TtsStreamRecord extends PreparedTtsStream {
     chunkBytes: number;
     nonReplayable: boolean;
     frames: Mp3FrameIndex;
+    /** Milestones ("+123ms" since prepare) and labels, in insertion order, for the timing log line. */
+    timing: Record<string, string>;
     subscribers: Map<TtsAudioSubscriber, TtsSubscriberState>;
     controller: AbortController;
     expiryTimer?: ReturnType<typeof setTimeout>;
@@ -93,6 +97,8 @@ export interface TtsStreamSessionRegistryOptions {
     maxSubscribersPerStream?: number;
     now?: () => number;
     onPipelineError?: (error: unknown, streamId: string) => void;
+    /** One summary line per stream once synthesis ends, for first-audio latency analysis. */
+    onTiming?: (line: string) => void;
 }
 
 export interface TtsStreamStatus {
@@ -163,6 +169,7 @@ export class TtsStreamSessionRegistry {
             chunkBytes: 0,
             nonReplayable: false,
             frames: new Mp3FrameIndex(),
+            timing: { chars: String(input.text.length) },
             subscribers: new Map(),
             controller: new AbortController(),
         };
@@ -217,6 +224,7 @@ export class TtsStreamSessionRegistry {
             drainWaiters: [],
         };
         record.subscribers.set(subscriber, state);
+        this.trace(record, 'subscribe');
         void this.attachSubscriber(record, state, record.frames.byteOffsetAt(fromSeconds));
         if (record.state === 'pending') this.start(record);
 
@@ -267,12 +275,15 @@ export class TtsStreamSessionRegistry {
         }
         void this.options.startPipeline(record.input, {
             onChunk: (chunk) => this.publish(record, chunk),
+            trace: (key, value) => this.trace(record, key, value),
         }, record.controller.signal).then(() => {
+            this.logTiming(record, 'complete');
             if (this.sessions.get(record.streamId) !== record) return;
             record.state = 'complete';
             this.endSubscribers(record);
             this.scheduleCompletedChunkRelease(record);
         }).catch((error) => {
+            this.logTiming(record, record.controller.signal.aborted ? 'aborted' : 'failed');
             if (this.sessions.get(record.streamId) !== record) return;
             record.state = 'failed';
             this.destroySubscribers(record, error instanceof Error ? error : undefined);
@@ -283,8 +294,25 @@ export class TtsStreamSessionRegistry {
         });
     }
 
+    private trace(record: TtsStreamRecord, key: string, value?: string) {
+        if (value !== undefined) {
+            const prev = record.timing[key];
+            record.timing[key] = prev ? `${prev}>${value}` : value;
+        } else if (!(key in record.timing)) {
+            record.timing[key] = `+${this.now() - record.createdAtMs}ms`;
+        }
+    }
+
+    private logTiming(record: TtsStreamRecord, outcome: 'complete' | 'failed' | 'aborted') {
+        if (!this.options.onTiming) return;
+        const fields = Object.entries(record.timing).map(([key, value]) => `${key}=${value}`);
+        fields.push(`end=+${this.now() - record.createdAtMs}ms`, `audio=${record.frames.durationSeconds.toFixed(1)}s`, `outcome=${outcome}`);
+        this.options.onTiming(fields.join(' '));
+    }
+
     private async publish(record: TtsStreamRecord, chunk: Buffer) {
         if (this.sessions.get(record.streamId) !== record || record.state !== 'running' || chunk.length === 0) return;
+        this.trace(record, 'firstAudio');
         const stored = Buffer.from(chunk);
         record.frames.push(stored);
         if (!record.nonReplayable && record.chunkBytes + stored.length <= this.replayBufferLimitBytes) {
@@ -491,8 +519,16 @@ export class TtsStreamSessionRegistry {
     }
 }
 
-async function cleanIntoBidi(input: TtsStreamInput, signal: AbortSignal, sendText: (delta: string) => Promise<void>) {
-    const complete = await cleanForSpeech(input.text, sendText, signal);
+async function cleanIntoBidi(
+    input: TtsStreamInput,
+    signal: AbortSignal,
+    sendText: (delta: string) => Promise<void>,
+    trace?: TtsStreamPipelineHandlers['trace'],
+) {
+    const complete = await cleanForSpeech(input.text, (delta) => {
+        trace?.('textFirst');
+        return sendText(delta);
+    }, signal, (mode) => trace?.('llm', mode));
     if (!complete && !signal.aborted) {
         logWarn('TTS bidi text cleaning ended after partial output', { chars: input.text.length });
         throw new Error('TTS bidi text cleaning ended after partial output');
@@ -509,6 +545,7 @@ async function streamRestFallback(
     const sendSentence = async (raw: string) => {
         const sentence = raw.trim();
         if (!sentence || signal.aborted) return;
+        handlers.trace?.('textFirst');
         const result = await synthesize(sentence, {
             voiceType: input.voiceType,
             speechRate: input.speechRate,
@@ -542,7 +579,7 @@ async function streamRestFallback(
     const complete = await cleanForSpeech(input.text, async (piece) => {
         buffer += piece;
         await drain(false);
-    }, signal);
+    }, signal, (mode) => handlers.trace?.('llm', mode));
     await drain(true);
     if (!complete && !signal.aborted) {
         logWarn('TTS REST fallback text cleaning ended after partial output', { chars: input.text.length });
@@ -552,13 +589,15 @@ async function streamRestFallback(
 
 export const startTtsStreamPipeline: TtsStreamPipeline = async (input, handlers, signal) => {
     if (env.TTS_BIDI_ENABLED) {
+        handlers.trace?.('path', 'bidi');
         try {
             await synthesizeBidirectional({
                 voiceType: input.voiceType,
                 speechRate: input.speechRate,
                 signal,
                 onAudio: handlers.onChunk,
-                produceText: (sendText, producerSignal) => cleanIntoBidi(input, producerSignal, sendText),
+                onSessionStarted: () => handlers.trace?.('bidiReady'),
+                produceText: (sendText, producerSignal) => cleanIntoBidi(input, producerSignal, sendText, handlers.trace),
             });
             return;
         } catch (error) {
@@ -570,6 +609,7 @@ export const startTtsStreamPipeline: TtsStreamPipeline = async (input, handlers,
         }
     }
 
+    handlers.trace?.('path', 'rest');
     await streamRestFallback(input, handlers, signal);
 };
 
@@ -578,4 +618,5 @@ export const ttsStreamSessionStore = new TtsStreamSessionRegistry({
     onPipelineError: (error) => {
         logError('TTS stream synthesis ended early', { error });
     },
+    onTiming: (line) => logInfo(`TTS stream timing ${line}`),
 });

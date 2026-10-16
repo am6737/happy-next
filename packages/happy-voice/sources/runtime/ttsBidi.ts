@@ -167,6 +167,8 @@ export interface TtsBidiSynthesisOptions {
     speechRate?: number;
     signal?: AbortSignal;
     onAudio: (chunk: Buffer) => void | Promise<void>;
+    /** SessionStarted arrived: the handshake is over and text can flow (latency tracing). */
+    onSessionStarted?: () => void;
     produceText: (sendText: (delta: string) => Promise<void>, signal: AbortSignal) => Promise<void>;
 }
 
@@ -343,6 +345,7 @@ export async function synthesizeBidirectional(options: TtsBidiSynthesisOptions):
                     case TtsBidiEvent.SessionStarted:
                         sessionStarted = true;
                         clearTimeout(startupTimer);
+                        options.onSessionStarted?.();
                         refreshRunningIdleTimer();
                         await options.produceText(async (delta) => {
                             if (!delta) return;
