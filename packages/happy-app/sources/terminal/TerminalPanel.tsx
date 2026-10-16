@@ -215,6 +215,7 @@ export const TerminalPanel = memo(({ open, columnHeight }: { open: boolean; colu
         setTerminalPanelOpen(false);
     }, []);
 
+    const title = status ?? t('terminalSession.title');
     const showList = tabs.length >= 2;
     const compactList = listWidth < TERMINAL_PANEL_LIST_COMPACT_WIDTH;
     // `selected` keeps the hover look on a button whose state is on, such as maximise.
@@ -257,11 +258,11 @@ export const TerminalPanel = memo(({ open, columnHeight }: { open: boolean; colu
             <View style={styles.header}>
                 <Text
                     numberOfLines={1}
-                    ref={setTooltip(activeTab ? routeLabel(activeTab) : '')}
+                    ref={setTooltip(activeTab ? routeLabel(activeTab, title) : title)}
                     selectable={false}
                     style={[styles.title, { color: colors.foreground }]}
                 >
-                    {status ?? t('terminalSession.title')}
+                    {title}
                 </Text>
                 {headerButton('add', t('terminalSession.newTerminal'), handleNewHere, isBusy)}
                 {/* With the list hidden, or too narrow for its own, there is nowhere else to close

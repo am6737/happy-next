@@ -1580,8 +1580,7 @@ export const zhHant: TranslationStructure = {
         restorePanel: '還原面板',
         closePanel: '關閉面板',
         openInWindow: '在新視窗中開啟',
-        routeLocal: '本機直連',
-        routeServerFallback: '經伺服器（未連上本機 daemon）',
+        routeLocal: '直連',
     },
 
 

@@ -1581,8 +1581,7 @@ export const ja: TranslationStructure = {
         restorePanel: 'パネルを元に戻す',
         closePanel: 'パネルを閉じる',
         openInWindow: '新しいウィンドウで開く',
-        routeLocal: 'このコンピューターに直接接続',
-        routeServerFallback: 'サーバー経由（このコンピューターの daemon に接続できません）',
+        routeLocal: '直接接続',
     },
 
 

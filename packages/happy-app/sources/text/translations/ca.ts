@@ -1579,8 +1579,7 @@ export const ca: TranslationStructure = {
         restorePanel: 'Restaura el plafó',
         closePanel: 'Tanca el plafó',
         openInWindow: 'Obre en una finestra nova',
-        routeLocal: 'Connectat directament en aquest ordinador',
-        routeServerFallback: 'A través del servidor (no s\'ha pogut contactar amb el daemon d\'aquest ordinador)',
+        routeLocal: 'directe',
     },
 
 

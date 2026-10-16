@@ -62,7 +62,7 @@ export const TerminalPanelList = memo(({
                                 compact={compact}
                                 key={key}
                                 label={labels.get(key) ?? tab.terminal.id}
-                                routeLabel={routeLabel(tab)}
+                                tooltip={routeLabel(tab, labels.get(key) ?? tab.terminal.id)}
                                 onClose={onClose}
                                 onDuplicate={onDuplicate}
                                 onRename={onRename}
@@ -80,7 +80,7 @@ export const TerminalPanelList = memo(({
 const TerminalPanelListRow = memo(({
     tab,
     label,
-    routeLabel,
+    tooltip,
     active,
     colors,
     compact,
@@ -91,7 +91,7 @@ const TerminalPanelListRow = memo(({
 }: {
     tab: TerminalTab;
     label: string;
-    routeLabel: string;
+    tooltip: string;
     active: boolean;
     colors: TerminalPanelColors;
     compact: boolean;
@@ -119,8 +119,7 @@ const TerminalPanelListRow = memo(({
         <TerminalTabContextMenu items={items} title={label}>
             <View {...hoverHandlers}>
                 <Pressable
-                    // The name is not on screen when compact, so the pointer gets it instead.
-                    ref={setTooltip([compact ? label : '', routeLabel].filter(Boolean).join('\n'))}
+                    ref={setTooltip(tooltip)}
                     accessibilityLabel={label}
                     accessibilityRole="tab"
                     accessibilityState={{ selected: active }}

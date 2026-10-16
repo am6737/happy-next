@@ -120,7 +120,7 @@ export const TerminalTabBar = memo(({
                     <TerminalTabContextMenu items={items} key={key} title={label}>
                         <Pressable
                             {...reorder.tabProps(key)}
-                            ref={setTooltip(routeLabel(tab))}
+                            ref={setTooltip(routeLabel(tab, label))}
                             accessibilityRole="tab"
                             accessibilityState={{ selected: active }}
                             onPress={() => onSelect(tab)}
