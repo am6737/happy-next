@@ -54,58 +54,60 @@ function NotAuthenticated() {
 
     const portraitLayout = (
         <View style={styles.portraitContainer}>
-            <Image
-                source={theme.dark ? require('@/assets/images/logotype-light.svg') : require('@/assets/images/logotype-dark.svg')}
-                resizeMode="contain"
-                style={styles.logo}
-            />
-            <Text style={styles.title}>
-                {welcomeTitle}
-            </Text>
-            <Text style={styles.subtitle}>
-                {t('welcome.subtitle')}
-            </Text>
-            {!isMobilePlatform ? (
-                <>
-                    <View style={styles.buttonContainer}>
-                        <RoundButton
-                            title={t('welcome.loginWithMobileApp')}
-                            onPress={() => {
-                                trackAccountRestored();
-                                router.push('/restore');
-                            }}
-                        />
-                    </View>
-                    <View style={styles.buttonContainerSecondary}>
-                        <RoundButton
-                            size="normal"
-                            title={t('welcome.createAccount')}
-                            action={createAccount}
-                            display="inverted"
-                        />
-                    </View>
-                </>
-            ) : (
-                <>
-                    <View style={styles.buttonContainer}>
-                        <RoundButton
-                            title={t('welcome.createAccount')}
-                            action={createAccount}
-                        />
-                    </View>
-                    <View style={styles.buttonContainerSecondary}>
-                        <RoundButton
-                            size="normal"
-                            title={t('welcome.linkOrRestoreAccount')}
-                            onPress={() => {
-                                trackAccountRestored();
-                                router.push('/restore');
-                            }}
-                            display="inverted"
-                        />
-                    </View>
-                </>
-            )}
+            <View style={styles.portraitContent}>
+                <Image
+                    source={theme.dark ? require('@/assets/images/logotype-light.svg') : require('@/assets/images/logotype-dark.svg')}
+                    resizeMode="contain"
+                    style={styles.logo}
+                />
+                <Text style={styles.title}>
+                    {welcomeTitle}
+                </Text>
+                <Text style={styles.subtitle}>
+                    {t('welcome.subtitle')}
+                </Text>
+                {!isMobilePlatform ? (
+                    <>
+                        <View style={styles.buttonContainer}>
+                            <RoundButton
+                                title={t('welcome.loginWithMobileApp')}
+                                onPress={() => {
+                                    trackAccountRestored();
+                                    router.push('/restore');
+                                }}
+                            />
+                        </View>
+                        <View style={styles.buttonContainerSecondary}>
+                            <RoundButton
+                                size="normal"
+                                title={t('welcome.createAccount')}
+                                action={createAccount}
+                                display="inverted"
+                            />
+                        </View>
+                    </>
+                ) : (
+                    <>
+                        <View style={styles.buttonContainer}>
+                            <RoundButton
+                                title={t('welcome.createAccount')}
+                                action={createAccount}
+                            />
+                        </View>
+                        <View style={styles.buttonContainerSecondary}>
+                            <RoundButton
+                                size="normal"
+                                title={t('welcome.linkOrRestoreAccount')}
+                                onPress={() => {
+                                    trackAccountRestored();
+                                    router.push('/restore');
+                                }}
+                                display="inverted"
+                            />
+                        </View>
+                    </>
+                )}
+            </View>
         </View>
     );
 
@@ -186,25 +188,32 @@ const styles = StyleSheet.create((theme) => ({
         alignItems: 'center',
         justifyContent: 'center',
     },
+    portraitContent: {
+        width: '100%',
+        maxWidth: 360,
+        paddingHorizontal: 32,
+        alignItems: 'center',
+    },
     logo: {
-        width: 300,
-        height: 90,
+        width: 250,
+        height: 75,
     },
     title: {
-        marginTop: 16,
+        marginTop: 24,
         textAlign: 'center',
-        fontSize: 24,
+        fontSize: 22,
+        lineHeight: 31,
         ...Typography.default('semiBold'),
         color: theme.colors.text,
     },
     subtitle: {
         ...Typography.default(),
-        fontSize: 18,
+        fontSize: 15,
+        lineHeight: 23,
         color: theme.colors.textSecondary,
-        marginTop: 16,
+        marginTop: 12,
         textAlign: 'center',
-        marginHorizontal: 24,
-        marginBottom: 64,
+        marginBottom: 56,
     },
     buttonContainer: {
         maxWidth: 280,

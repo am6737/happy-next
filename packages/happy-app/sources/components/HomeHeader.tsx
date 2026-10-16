@@ -106,7 +106,7 @@ export const HomeHeaderNotAuth = React.memo(() => {
     const { theme } = useUnistyles();
     return (
         <Header
-            title={<HeaderTitleWithSubtitle subtitle={serverInfo.isCustom ? serverInfo.hostname + (serverInfo.port ? `:${serverInfo.port}` : '') : undefined} />}
+            title={<HeaderTitleWithSubtitle subtitle={serverInfo.isCustom ? serverInfo.hostname + (serverInfo.port ? `:${serverInfo.port}` : '') : undefined} hideConnectionStatus />}
             headerRight={() => <HeaderRightNotAuth />}
             headerLeft={() => <HeaderLeft />}
             headerShadowVisible={false}
@@ -164,7 +164,7 @@ function HeaderLeft() {
     );
 }
 
-function HeaderTitleWithSubtitle({ subtitle }: { subtitle?: string }) {
+function HeaderTitleWithSubtitle({ subtitle, hideConnectionStatus }: { subtitle?: string; hideConnectionStatus?: boolean }) {
     const socketStatus = useSocketStatus();
     const styles = stylesheet;
 
@@ -212,7 +212,8 @@ function HeaderTitleWithSubtitle({ subtitle }: { subtitle?: string }) {
 
     const hasCustomSubtitle = !!subtitle;
     const connectionStatus = getConnectionStatus();
-    const showConnectionStatus = !hasCustomSubtitle && connectionStatus.text;
+    // Before login there is nothing to connect to, so "disconnected" would only read as an error
+    const showConnectionStatus = !hideConnectionStatus && !hasCustomSubtitle && connectionStatus.text;
 
     return (
         <View style={styles.titleContainer}>
