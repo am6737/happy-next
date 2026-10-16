@@ -46,7 +46,45 @@ vi.mock('@/sync/apiSocket', () => ({
     },
 }));
 
+const getLocalTerminalConnection = vi.fn();
+
+vi.mock('./localTerminalConnection', () => ({
+    getLocalTerminalConnection: (...args: unknown[]) => getLocalTerminalConnection(...args),
+}));
+
+vi.mock('@/utils/tauri', () => ({
+    isTauriDesktop: () => false,
+}));
+
 const { TerminalStream } = await import('./terminalStream');
+
+/** A loopback connection to the daemon, driven by the test. */
+function fakeLocalConnection() {
+    let frameHandler: ((frame: TerminalRelayedFrame) => void) | null = null;
+    const closeListeners = new Set<() => void>();
+    return {
+        rpc: vi.fn().mockResolvedValue({ ok: true, revision: 1 }),
+        subscribe: vi.fn((_terminalId: string, handler: (frame: TerminalRelayedFrame) => void) => {
+            frameHandler = handler;
+            return () => {
+                frameHandler = null;
+            };
+        }),
+        onClose: vi.fn((listener: () => void) => {
+            closeListeners.add(listener);
+            return () => closeListeners.delete(listener);
+        }),
+        push: async (frame: TerminalRelayedFrame) => {
+            frameHandler?.(frame);
+            await settle();
+        },
+        close: () => {
+            for (const listener of [...closeListeners]) {
+                listener();
+            }
+        },
+    };
+}
 
 const MACHINE_ID = 'machine-1';
 const TERMINAL_ID = 'term-1';
@@ -180,6 +218,7 @@ beforeEach(() => {
     // `mockResolvedValueOnce` values in place, so a test that does not consume
     // its queue feeds stale bodies to the next one.
     vi.resetAllMocks();
+    getLocalTerminalConnection.mockResolvedValue(null);
     machine.setActive(true);
 });
 
@@ -526,5 +565,80 @@ describe('TerminalStream', () => {
         // Nothing may be attached when the relay refused the subscription.
         expect(machineRPC).not.toHaveBeenCalled();
         harness.stream.dispose();
+    });
+
+    describe('over loopback', () => {
+        it('attaches through the daemon directly, without the relay', async () => {
+            const local = fakeLocalConnection();
+            getLocalTerminalConnection.mockResolvedValue(local);
+            const harness = createHarness();
+            await startAttached(harness);
+
+            expect(emitWithAck).not.toHaveBeenCalledWith('terminal-subscribe', expect.anything());
+            expect(machineRPC).not.toHaveBeenCalled();
+            expect(local.subscribe).toHaveBeenCalledWith(TERMINAL_ID, expect.any(Function));
+            expect(local.rpc).toHaveBeenCalledWith('terminal-attach', { terminalId: TERMINAL_ID });
+            expect(harness.statuses.at(-1)).toEqual({ attaching: false, error: null, offline: false });
+
+            await local.push(frame(1, { type: 'snapshot', ansi: 'local', rows: 6, cols: 20 }));
+            harness.stream.write('ls\n');
+            await harness.settle();
+
+            expect(harness.screen()).toContain('local');
+            expect(local.rpc).toHaveBeenCalledWith('terminal-input', { terminalId: TERMINAL_ID, data: 'ls\n' });
+            harness.stream.dispose();
+        });
+
+        it('ignores what the server says about the machine while on loopback', async () => {
+            const local = fakeLocalConnection();
+            getLocalTerminalConnection.mockResolvedValue(local);
+            const harness = createHarness();
+            await startAttached(harness);
+            local.rpc.mockClear();
+
+            // The daemon can be gone from the server and still right here.
+            machine.setActive(false);
+            await harness.reconnect();
+
+            expect(harness.statuses.at(-1)?.offline).toBe(false);
+            expect(local.rpc).not.toHaveBeenCalled();
+            harness.stream.dispose();
+        });
+
+        it('falls back to the server when the loopback connection closes', async () => {
+            const local = fakeLocalConnection();
+            getLocalTerminalConnection.mockResolvedValueOnce(local);
+            const harness = createHarness();
+            await startAttached(harness);
+
+            local.close();
+            await harness.settle();
+
+            expect(emitWithAck).toHaveBeenCalledWith('terminal-subscribe', {
+                machineId: MACHINE_ID,
+                terminalId: TERMINAL_ID,
+            });
+            expect(machineRPC).toHaveBeenCalledWith(MACHINE_ID, 'terminal-attach', { terminalId: TERMINAL_ID });
+            harness.stream.dispose();
+        });
+
+        it('drops a frame that already came the other way', async () => {
+            const local = fakeLocalConnection();
+            getLocalTerminalConnection.mockResolvedValue(local);
+            const harness = createHarness();
+            await startAttached(harness);
+            await local.push(frame(1, { type: 'snapshot', ansi: '', rows: 6, cols: 20 }));
+            await local.push(frame(2, { type: 'output', data: 'once' }));
+            local.rpc.mockClear();
+
+            // Revision 2 again, by the relay this time: neither applied twice nor
+            // taken for a hole that needs a re-attach.
+            await harness.emit(frame(2, { type: 'output', data: 'once' }));
+
+            expect(harness.screen()).toContain('once');
+            expect(harness.screen()).not.toContain('onceonce');
+            expect(local.rpc).not.toHaveBeenCalledWith('terminal-attach', expect.anything());
+            harness.stream.dispose();
+        });
     });
 });

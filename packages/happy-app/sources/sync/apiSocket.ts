@@ -183,32 +183,46 @@ export class ApiSocket {
      * RPC call for machines
      */
     async machineRPC<R, A>(machineId: string, method: string, params: A, timeout: number = 30000): Promise<R> {
+        const result = await this.socket!.timeout(timeout).emitWithAck('rpc-call', {
+            method: `${machineId}:${method}`,
+            params: await this.encryptMachinePayload(machineId, params)
+        });
+
+        if (result.ok) {
+            return await this.decryptMachineRpcResult<R>(machineId, result.result);
+        }
+        throw new Error(result.error || 'RPC call failed');
+    }
+
+    /** Params for a machine RPC, sealed with the machine key, whichever path carries them. */
+    async encryptMachinePayload<A>(machineId: string, params: A): Promise<string> {
+        const machineEncryption = this.encryption!.getMachineEncryption(machineId);
+        if (!machineEncryption) {
+            throw new Error(`Machine encryption not found for ${machineId}`);
+        }
+        return await machineEncryption.encryptRaw(params);
+    }
+
+    /** A machine RPC's answer, whichever path carried it. */
+    async decryptMachineRpcResult<R>(machineId: string, result: string): Promise<R> {
         const machineEncryption = this.encryption!.getMachineEncryption(machineId);
         if (!machineEncryption) {
             throw new Error(`Machine encryption not found for ${machineId}`);
         }
 
-        const result = await this.socket!.timeout(timeout).emitWithAck('rpc-call', {
-            method: `${machineId}:${method}`,
-            params: await machineEncryption.encryptRaw(params)
-        });
+        // Try standard decryption first
+        let decrypted = await machineEncryption.decryptRaw(result);
 
-        if (result.ok) {
-            // Try standard decryption first
-            let decrypted = await machineEncryption.decryptRaw(result.result);
-
-            // If standard decryption fails, try legacy format
-            if (decrypted === null) {
-                decrypted = machineEncryption.decryptRawLegacy(result.result);
-            }
-
-            if (decrypted === null) {
-                throw new Error('Failed to decrypt machine RPC response');
-            }
-
-            return decrypted as R;
+        // If standard decryption fails, try legacy format
+        if (decrypted === null) {
+            decrypted = machineEncryption.decryptRawLegacy(result);
         }
-        throw new Error(result.error || 'RPC call failed');
+
+        if (decrypted === null) {
+            throw new Error('Failed to decrypt machine RPC response');
+        }
+
+        return decrypted as R;
     }
 
     /**

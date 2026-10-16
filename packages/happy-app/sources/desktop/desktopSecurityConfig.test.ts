@@ -21,6 +21,8 @@ describe('desktop security configuration', () => {
         expect(connectSources).toEqual(expect.arrayContaining(["'self'", 'ipc:', 'blob:', 'https:', 'wss:']));
         expect(connectSources).not.toContain('http:');
         expect(connectSources).not.toContain('ws:');
+        // The one plaintext socket: the CLI daemon on this computer, for its terminals.
+        expect(connectSources.filter((source) => source.startsWith('ws:'))).toEqual(['ws://127.0.0.1:*']);
         expect(directive(config.app.security.csp, 'object-src')).toEqual(["'none'"]);
     });
 

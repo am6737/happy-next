@@ -22,6 +22,8 @@ import { writeDaemonState, DaemonLocallyPersistedState, readDaemonState, acquire
 
 import { cleanupDaemonState, isDaemonRunningCurrentlyInstalledHappyVersion, stopDaemon } from './controlClient';
 import { startDaemonControlServer } from './controlServer';
+import { startLocalTerminalServer } from '@/modules/terminal/localTerminalServer';
+import { randomBytes } from 'crypto';
 import { readFileSync } from 'fs';
 import { execSync, exec, type ChildProcess } from 'child_process';
 import { join } from 'path';
@@ -1031,7 +1033,7 @@ export async function startDaemon(): Promise<void> {
     };
 
     // Start control server
-    const { port: controlPort, stop: stopControlServer } = await startDaemonControlServer({
+    const { port: controlPort, server: controlHttpServer, stop: stopControlServer } = await startDaemonControlServer({
       getChildren: getCurrentChildren,
       stopSession,
       spawnSession,
@@ -1045,7 +1047,8 @@ export async function startDaemon(): Promise<void> {
       httpPort: controlPort,
       startTime: new Date().toLocaleString(),
       startedWithCliVersion: packageJson.version,
-      daemonLogPath: logger.logFilePath
+      daemonLogPath: logger.logFilePath,
+      localToken: randomBytes(32).toString('base64url')
     };
     writeDaemonState(fileState);
     logger.debug('[DAEMON RUN] Daemon state written');
@@ -1150,6 +1153,14 @@ export async function startDaemon(): Promise<void> {
     // Connect to server
     apiMachine.connect();
 
+    // Terminals for a desktop client on this computer, without the server in between
+    const localTerminalServer = startLocalTerminalServer({
+      server: controlHttpServer,
+      token: fileState.localToken!,
+      handleRequest: (method, params) => apiMachine.handleLocalRequest(method, params),
+      onFrame: (listener) => apiMachine.onTerminalFrame(listener),
+    });
+
     // Keep the model catalog (and its cache for spawned sessions) in sync with the server
     startModelCatalogSync();
 
@@ -1224,7 +1235,8 @@ export async function startDaemon(): Promise<void> {
           startTime: fileState.startTime,
           startedWithCliVersion: packageJson.version,
           lastHeartbeat: new Date().toLocaleString(),
-          daemonLogPath: fileState.daemonLogPath
+          daemonLogPath: fileState.daemonLogPath,
+          localToken: fileState.localToken
         };
         writeDaemonState(updatedState);
         if (isDebug()) {
@@ -1262,6 +1274,7 @@ export async function startDaemon(): Promise<void> {
 
       await Promise.all([stopAllOrchestratorExecutions(), shellExecutor?.stopAll(), transferExecutor?.stopAll()]);
 
+      localTerminalServer.stop();
       apiMachine.shutdown();
       await stopControlServer();
       await cleanupDaemonState();

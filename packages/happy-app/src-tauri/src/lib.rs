@@ -1864,23 +1864,19 @@ fn get_desktop_diagnostics(app: AppHandle) -> Result<DesktopDiagnostics, String>
     })
 }
 
-/// Machine ids the CLI on this computer is registered under.
+/// Every CLI home on this computer, each with the machine id its `settings.json` names.
 ///
-/// A session's `metadata.machineId` is one of these exactly when that session runs on this
-/// computer — which is what "show in file manager" needs to know before offering itself. Only
-/// the id leaves this function: the settings files also hold the user's environment variables.
-#[tauri::command]
-async fn get_desktop_local_machine_ids(app: AppHandle) -> Vec<String> {
+/// Every CLI home is a dot-directory: `.happy-next` by default, `.happy-next-dev` for a dev build,
+/// `.happy` for installs the CLI has not migrated yet.
+fn cli_homes_with_machine_ids(app: &AppHandle) -> Vec<(PathBuf, String)> {
     let Ok(home) = app.path().home_dir() else {
         return Vec::new();
     };
     let Ok(entries) = fs::read_dir(&home) else {
         return Vec::new();
     };
-    let mut ids: Vec<String> = Vec::new();
+    let mut homes = Vec::new();
     for entry in entries.flatten() {
-        // Every CLI home is a dot-directory: `.happy-next` by default, `.happy-next-dev` for a
-        // dev build, `.happy` for installs the CLI has not migrated yet.
         if !entry.file_name().to_string_lossy().starts_with(".happy") {
             continue;
         }
@@ -1893,11 +1889,52 @@ async fn get_desktop_local_machine_ids(app: AppHandle) -> Vec<String> {
         let Some(id) = settings.get("machineId").and_then(|id| id.as_str()) else {
             continue;
         };
-        if !id.is_empty() && !ids.iter().any(|known| known == id) {
-            ids.push(id.to_owned());
+        if !id.is_empty() {
+            homes.push((entry.path(), id.to_owned()));
+        }
+    }
+    homes
+}
+
+/// Machine ids the CLI on this computer is registered under.
+///
+/// A session's `metadata.machineId` is one of these exactly when that session runs on this
+/// computer — which is what "show in file manager" needs to know before offering itself. Only
+/// the id leaves this function: the settings files also hold the user's environment variables.
+#[tauri::command]
+async fn get_desktop_local_machine_ids(app: AppHandle) -> Vec<String> {
+    let mut ids: Vec<String> = Vec::new();
+    for (_, id) in cli_homes_with_machine_ids(&app) {
+        if !ids.contains(&id) {
+            ids.push(id);
         }
     }
     ids
+}
+
+#[derive(serde::Serialize)]
+struct LocalTerminalEndpoint {
+    port: u16,
+    token: String,
+}
+
+/// Where the daemon of `machine_id` takes terminals over loopback, if it runs on this computer.
+///
+/// Read fresh on every call: a restarted daemon listens on a new port with a new token. `None`
+/// for a machine elsewhere, a daemon that is not running, and one too old to offer the socket —
+/// all of which the caller answers by going through the server instead.
+#[tauri::command]
+async fn get_local_terminal_endpoint(app: AppHandle, machine_id: String) -> Option<LocalTerminalEndpoint> {
+    cli_homes_with_machine_ids(&app)
+        .into_iter()
+        .filter(|(_, id)| *id == machine_id)
+        .find_map(|(home, _)| {
+            let contents = fs::read_to_string(home.join("daemon.state.json")).ok()?;
+            let state = serde_json::from_str::<serde_json::Value>(&contents).ok()?;
+            let port = u16::try_from(state.get("httpPort")?.as_u64()?).ok()?;
+            let token = state.get("localToken")?.as_str()?.to_owned();
+            Some(LocalTerminalEndpoint { port, token })
+        })
 }
 
 #[tauri::command]
@@ -2412,6 +2449,7 @@ pub fn run() {
             get_desktop_diagnostics,
             open_desktop_log_directory,
             get_desktop_local_machine_ids,
+            get_local_terminal_endpoint,
             open_desktop_html_preview,
             open_desktop_terminal_window,
             take_terminal_focus,

@@ -6,7 +6,7 @@
 
 import { FileHandle } from 'node:fs/promises'
 import { readFile, writeFile, mkdir, open, unlink, rename, stat } from 'node:fs/promises'
-import { existsSync, writeFileSync, readFileSync, unlinkSync } from 'node:fs'
+import { existsSync, writeFileSync, readFileSync, unlinkSync, chmodSync } from 'node:fs'
 import { constants } from 'node:fs'
 import { configuration } from '@/configuration'
 import * as z from 'zod';
@@ -67,6 +67,11 @@ export interface DaemonLocallyPersistedState {
   startedWithCliVersion: string;
   lastHeartbeat?: string;
   daemonLogPath?: string;
+  /**
+   * The secret a desktop client on this computer presents to open a terminal
+   * over loopback. New with every daemon start, so it dies with the process.
+   */
+  localToken?: string;
 }
 
 export async function readSettings(): Promise<Settings> {
@@ -294,7 +299,10 @@ export async function readDaemonState(): Promise<DaemonLocallyPersistedState | n
  * Write daemon state to local file (synchronously for atomic operation)
  */
 export function writeDaemonState(state: DaemonLocallyPersistedState): void {
-  writeFileSync(configuration.daemonStateFile, JSON.stringify(state, null, 2), 'utf-8');
+  // Owner-only: the file carries the loopback terminal token. The mode applies
+  // to a file being created, so one left from before is narrowed as well.
+  writeFileSync(configuration.daemonStateFile, JSON.stringify(state, null, 2), { encoding: 'utf-8', mode: 0o600 });
+  chmodSync(configuration.daemonStateFile, 0o600);
 }
 
 /**

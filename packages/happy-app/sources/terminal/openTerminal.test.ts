@@ -9,6 +9,19 @@ vi.mock('@/sync/apiSocket', () => ({
     },
 }));
 
+vi.mock('@/utils/tauri', () => ({
+    isTauriDesktop: () => false,
+}));
+
+vi.mock('@/desktop/desktopLocalMachine', () => ({
+    getLocalMachineIds: () => new Set(),
+    loadLocalMachineIds: () => Promise.resolve(),
+}));
+
+vi.mock('@tauri-apps/api/core', () => ({
+    invoke: vi.fn(),
+}));
+
 import { listMachineTerminals, normalizeTerminal, spawnTerminal } from './openTerminal';
 
 function terminal(overrides: Partial<TerminalInfo> = {}): TerminalInfo {
@@ -90,6 +103,7 @@ describe('spawnTerminal', () => {
             'machine-1',
             'terminal-spawn',
             expect.objectContaining({ cwd: '/srv/app' }),
+            expect.any(Number),
         );
     });
 });

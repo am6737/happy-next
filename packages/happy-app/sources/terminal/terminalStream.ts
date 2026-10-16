@@ -1,4 +1,5 @@
 import type {
+    LocalTerminalMethod,
     TerminalFrameBody,
     TerminalRelayedFrame,
     TerminalAttachResponse,
@@ -9,6 +10,8 @@ import type {
 import { apiSocket } from '@/sync/apiSocket';
 import { storage } from '@/sync/storage';
 import { subscribeTerminalFrames } from './terminalFrameRelay';
+import { getLocalTerminalConnection, type LocalTerminalConnection } from './localTerminalConnection';
+import { isTauriDesktop } from '@/utils/tauri';
 import { createNativeHeadlessTerminal, type TerminalViewportState } from './headlessTerminalState';
 import type { TerminalMirror } from './terminalMirror';
 
@@ -59,6 +62,15 @@ function watchMachineConnection(
     });
 }
 
+/** How often a terminal on the server path checks whether its daemon can be reached directly again. */
+const LOCAL_RETRY_INTERVAL_MS = 10000;
+
+/** The loopback line a terminal is on, with what to undo when it leaves it. */
+interface LocalRoute {
+    connection: LocalTerminalConnection;
+    release: () => void;
+}
+
 export interface TerminalStreamOptions {
     machineId: string;
     terminalId: string;
@@ -92,6 +104,15 @@ export class TerminalStream {
     private unsubscribeFrame: (() => void) | null = null;
     private unsubscribeReconnect: (() => void) | null = null;
     private unsubscribeMachine: (() => void) | null = null;
+    /**
+     * Set while the daemon is reached over loopback. Calls and frames then skip
+     * the server entirely, and what the server says about the machine — its
+     * reconnects, its view of whether the daemon is online — stops mattering.
+     */
+    private local: LocalRoute | null = null;
+    /** This client's socket is subscribed to the relay for this terminal. */
+    private serverSubscribed = false;
+    private localRetryTimer: ReturnType<typeof setInterval> | null = null;
     private disposed = false;
     private status: TerminalStreamStatus = { attaching: true, error: null, offline: false };
     /**
@@ -144,9 +165,14 @@ export class TerminalStream {
         // The server drops subscriptions when the socket goes away, so a
         // reconnect has to re-subscribe and re-attach from scratch.
         this.unsubscribeReconnect = apiSocket.onReconnected(() => {
-            void this.attach();
+            if (!this.local) {
+                void this.attach();
+            }
         });
         this.unsubscribeMachine = watchMachineConnection(this.options.machineId, (connected) => {
+            if (this.local) {
+                return;
+            }
             if (connected) {
                 // Nothing on screen is trustworthy any more: it is what the
                 // daemon that left had drawn. Rebuilding is the only way back to
@@ -160,7 +186,83 @@ export class TerminalStream {
             this.setStatus({ attaching: false, error: null, offline: true });
         });
 
+        // A terminal that fell back to the server, or opened while the daemon
+        // was down, moves to loopback as soon as the daemon can be reached.
+        if (isTauriDesktop()) {
+            this.localRetryTimer = setInterval(() => {
+                if (this.local) {
+                    return;
+                }
+                void getLocalTerminalConnection(this.options.machineId).then((connection) => {
+                    if (connection && !this.local && !this.disposed) {
+                        void this.attach();
+                    }
+                });
+            }, LOCAL_RETRY_INTERVAL_MS);
+        }
+
         void this.attach();
+    }
+
+    private rpc<R, A>(method: LocalTerminalMethod, params: A): Promise<R> {
+        return this.local
+            ? this.local.connection.rpc<R, A>(method, params)
+            : apiSocket.machineRPC<R, A>(this.options.machineId, method, params);
+    }
+
+    /**
+     * Moves the terminal onto `connection`, or back onto the server for null.
+     *
+     * Frames already on their way by the old path can still land after the
+     * switch. They carry the same revisions on both, so the ordering below
+     * drops whichever copy comes second.
+     */
+    private useLocal(connection: LocalTerminalConnection | null): void {
+        if (this.local?.connection === connection) {
+            return;
+        }
+        this.local?.release();
+        this.local = null;
+        if (!connection) {
+            return;
+        }
+        const { machineId, terminalId } = this.options;
+        const unsubscribe = connection.subscribe(terminalId, (frame) => {
+            this.enqueueFrame({ ...frame, machineId });
+        });
+        const stopWatching = connection.onClose(() => {
+            if (this.local?.connection !== connection) {
+                return;
+            }
+            this.local.release();
+            this.local = null;
+            // Back to the server, or to the daemon on its new port: attach
+            // finds out which, and the snapshot it brings rebuilds the screen.
+            void this.attach();
+        });
+        this.local = {
+            connection,
+            release: () => {
+                unsubscribe();
+                stopWatching();
+            },
+        };
+    }
+
+    private releaseServerSubscription(): void {
+        if (!this.serverSubscribed) {
+            return;
+        }
+        this.serverSubscribed = false;
+        // The subscription is per-socket and the socket outlives this screen,
+        // so release it explicitly — otherwise frames keep arriving for a
+        // terminal nobody is watching.
+        void apiSocket.emitWithAck('terminal-unsubscribe', {
+            machineId: this.options.machineId,
+            terminalId: this.options.terminalId,
+        }).catch(() => {
+            // The socket may already be gone, which releases it anyway.
+        });
     }
 
     private setStatus(patch: Partial<TerminalStreamStatus>): void {
@@ -176,21 +278,33 @@ export class TerminalStream {
         const { machineId, terminalId } = this.options;
         this.setStatus({ attaching: true, error: null });
         try {
-            const subscribed = await apiSocket.emitWithAck<{ ok: boolean; error?: string }>(
-                'terminal-subscribe',
-                { machineId, terminalId },
-            );
-            if (!subscribed?.ok) {
-                // The relay refuses terminals whose machine this account does not
-                // own, and a subscription that was rejected would leave the
-                // screen waiting for frames that are never coming.
-                throw new Error(subscribed?.error ?? 'Unable to subscribe to terminal');
+            const local = await getLocalTerminalConnection(machineId);
+            if (this.disposed) {
+                return;
+            }
+            this.useLocal(local);
+            if (local) {
+                this.releaseServerSubscription();
+            } else {
+                // Marked before the round trip so a dispose that lands during it
+                // still releases what the server is about to hold.
+                this.serverSubscribed = true;
+                const subscribed = await apiSocket.emitWithAck<{ ok: boolean; error?: string }>(
+                    'terminal-subscribe',
+                    { machineId, terminalId },
+                );
+                if (!subscribed?.ok) {
+                    // The relay refuses terminals whose machine this account does not
+                    // own, and a subscription that was rejected would leave the
+                    // screen waiting for frames that are never coming.
+                    throw new Error(subscribed?.error ?? 'Unable to subscribe to terminal');
+                }
             }
 
             // Claim the size before attaching so the snapshot is rendered at the
             // width this client will draw. Without it the first screen arrives at
             // whatever size the last viewer left behind.
-            await apiSocket.machineRPC<TerminalOkResponse, TerminalResizeRequest>(machineId, 'terminal-resize', {
+            await this.rpc<TerminalOkResponse, TerminalResizeRequest>('terminal-resize', {
                 terminalId,
                 rows: this.size.rows,
                 cols: this.size.cols,
@@ -200,11 +314,7 @@ export class TerminalStream {
             // becomes the screen of record regardless of what came before.
             this.sawSnapshot = false;
 
-            await apiSocket.machineRPC<TerminalAttachResponse, { terminalId: string }>(
-                machineId,
-                'terminal-attach',
-                { terminalId },
-            );
+            await this.rpc<TerminalAttachResponse, { terminalId: string }>('terminal-attach', { terminalId });
 
             // Reaching the daemon at all settles the offline question, and the
             // snapshot below is what makes the screen current again.
@@ -263,7 +373,9 @@ export class TerminalStream {
             return;
         }
 
-        if (revision <= this.baselineRevision) {
+        // Already applied, or folded into the snapshot. A copy that came the
+        // other way around a switch between server and loopback lands here too.
+        if (revision <= this.lastAppliedRevision) {
             return;
         }
 
@@ -364,8 +476,7 @@ export class TerminalStream {
             const data = this.pendingInput;
             this.pendingInput = '';
             try {
-                await apiSocket.machineRPC<TerminalOkResponse, TerminalInputRequest>(
-                    this.options.machineId,
+                await this.rpc<TerminalOkResponse, TerminalInputRequest>(
                     'terminal-input',
                     { terminalId: this.options.terminalId, data },
                 );
@@ -386,8 +497,8 @@ export class TerminalStream {
         this.mirror.resize(size);
         this.publishViewport();
 
-        void apiSocket
-            .machineRPC<TerminalOkResponse, TerminalResizeRequest>(this.options.machineId, 'terminal-resize', {
+        void this
+            .rpc<TerminalOkResponse, TerminalResizeRequest>('terminal-resize', {
                 terminalId: this.options.terminalId,
                 rows: size.rows,
                 cols: size.cols,
@@ -413,18 +524,15 @@ export class TerminalStream {
         this.unsubscribeFrame = null;
         this.unsubscribeReconnect = null;
         this.unsubscribeMachine = null;
+        if (this.localRetryTimer) {
+            clearInterval(this.localRetryTimer);
+            this.localRetryTimer = null;
+        }
+        this.local?.release();
+        this.local = null;
         if (!this.options.mirror) {
             this.mirror.dispose();
         }
-
-        // The subscription is per-socket and the socket outlives this screen,
-        // so release it explicitly — otherwise frames keep arriving for a
-        // terminal nobody is watching.
-        void apiSocket.emitWithAck('terminal-unsubscribe', {
-            machineId: this.options.machineId,
-            terminalId: this.options.terminalId,
-        }).catch(() => {
-            // The socket may already be gone, which releases it anyway.
-        });
+        this.releaseServerSubscription();
     }
 }

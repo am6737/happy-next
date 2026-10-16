@@ -4,6 +4,7 @@
  */
 
 import fastify, { FastifyInstance } from 'fastify';
+import type { Server } from 'node:http';
 import { z } from 'zod';
 import { serializerCompiler, validatorCompiler, ZodTypeProvider } from 'fastify-type-provider-zod';
 import { logger } from '@/ui/logger';
@@ -23,7 +24,7 @@ export function startDaemonControlServer({
   spawnSession: (options: SpawnSessionOptions) => Promise<SpawnSessionResult>;
   requestShutdown: () => void;
   onHappySessionWebhook: (sessionId: string, metadata: Metadata) => void;
-}): Promise<{ port: number; stop: () => Promise<void> }> {
+}): Promise<{ port: number; server: Server; stop: () => Promise<void> }> {
   return new Promise((resolve) => {
     const app = fastify({
       logger: false // We use our own logger
@@ -200,6 +201,7 @@ export function startDaemonControlServer({
 
       resolve({
         port,
+        server: app.server,
         stop: async () => {
           logger.debug('[CONTROL SERVER] Stopping server');
           await app.close();

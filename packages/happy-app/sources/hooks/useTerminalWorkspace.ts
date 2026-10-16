@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { BottomSheetModal } from '@gorhom/bottom-sheet';
 import type { TerminalOkResponse, TerminalRefRequest } from 'happy-wire';
-import { apiSocket } from '@/sync/apiSocket';
+import { terminalRPC } from '@/terminal/localTerminalConnection';
 import { useAllMachines, useLocalSettingMutable, useMachine } from '@/sync/storage';
 import { useMachineNameMap } from '@/hooks/useMachineNameMap';
 import { t } from '@/text';
@@ -269,10 +269,9 @@ export function useTerminalWorkspace(focus: { machineId: string; terminalId: str
             // Disposing rather than merely closing: a tab that stayed after
             // being closed would have no way to be dismissed, and the daemon
             // would hold the record for the life of the process.
-            void apiSocket
-                .machineRPC<TerminalOkResponse, TerminalRefRequest>(tab.machineId, 'terminal-dispose', {
-                    terminalId: tab.terminal.id,
-                })
+            void terminalRPC<TerminalOkResponse, TerminalRefRequest>(tab.machineId, 'terminal-dispose', {
+                terminalId: tab.terminal.id,
+            })
                 .then(refresh)
                 .catch(() => {
                     // It may already be gone; the refresh below is the point.

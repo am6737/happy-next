@@ -1,5 +1,5 @@
 import type { TerminalInfo, TerminalSpawnRequest } from 'happy-wire';
-import { apiSocket } from '@/sync/apiSocket';
+import { terminalRPC } from './localTerminalConnection';
 import type { TerminalTab } from './terminalTabs';
 
 /** A first paint is not worth a second round trip, so the real size is claimed
@@ -26,7 +26,7 @@ export function resolveTerminalDirectory(input: { sessionPath?: string; homeDir?
  * nothing.
  */
 export async function spawnTerminal(input: { machineId: string; cwd: string }): Promise<TerminalInfo> {
-    return await apiSocket.machineRPC<TerminalInfo, TerminalSpawnRequest>(
+    return await terminalRPC<TerminalInfo, TerminalSpawnRequest>(
         input.machineId,
         'terminal-spawn',
         { cwd: input.cwd, rows: PLACEHOLDER_ROWS, cols: PLACEHOLDER_COLS },
@@ -64,7 +64,7 @@ export function normalizeTerminal(terminal: TerminalInfo): TerminalInfo {
  * that is slow to answer should cost its own tabs rather than the whole strip.
  */
 export async function listMachineTerminals(machineId: string, timeout = 10000): Promise<TerminalTab[]> {
-    const terminals = await apiSocket.machineRPC<TerminalInfo[], Record<string, never>>(
+    const terminals = await terminalRPC<TerminalInfo[], Record<string, never>>(
         machineId,
         'terminal-list',
         {},

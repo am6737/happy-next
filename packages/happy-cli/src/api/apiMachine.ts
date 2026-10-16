@@ -214,6 +214,8 @@ export class ApiMachineClient {
     private keepAliveInterval: NodeJS.Timeout | null = null;
     private rpcHandlerManager: RpcHandlerManager;
     private terminalManager: TerminalManager;
+    /** Taps on the terminal frame stream, besides the server: the loopback socket. */
+    private terminalFrameListeners = new Set<(frame: TerminalFrame) => void>();
 
     private claudeCache = new SessionCache({
         loader: listClaudeSessionsFromIndex,
@@ -269,7 +271,12 @@ export class ApiMachineClient {
             machineId: this.machine.id,
             encryptionKey: this.machine.encryptionKey,
             encryptionVariant: this.machine.encryptionVariant,
+            // One frame, one revision, every path: a client that switches between
+            // the server and loopback mid-stream must see a single sequence.
             sendFrame: (frame) => {
+                for (const listener of this.terminalFrameListeners) {
+                    listener(frame);
+                }
                 if (!this.socket?.connected) {
                     return;
                 }
@@ -1188,6 +1195,18 @@ export class ApiMachineClient {
             this.keepAliveInterval = null;
             logger.debug('[API MACHINE] Keep-alive stopped');
         }
+    }
+
+    onTerminalFrame(listener: (frame: TerminalFrame) => void): () => void {
+        this.terminalFrameListeners.add(listener);
+        return () => {
+            this.terminalFrameListeners.delete(listener);
+        };
+    }
+
+    /** Runs an encrypted call that reached the daemon over loopback instead of the server. */
+    handleLocalRequest(method: string, params: string): Promise<unknown> {
+        return this.rpcHandlerManager.handleRequest({ method: `${this.machine.id}:${method}`, params });
     }
 
     get terminalsLostOnRestart(): number {

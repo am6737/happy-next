@@ -140,3 +140,44 @@ export interface TerminalAttachResponse {
 export interface TerminalOkResponse {
     ok: true;
 }
+
+/**
+ * The terminal methods a desktop client on the daemon's own computer may call
+ * over the loopback socket rather than through the server. Nothing else is
+ * reachable there: the socket exists to take the server out of a terminal's
+ * keystroke round trip, not to be a second door into the daemon.
+ */
+export const LOCAL_TERMINAL_METHODS = [
+    'terminal-spawn',
+    'terminal-attach',
+    'terminal-input',
+    'terminal-resize',
+    'terminal-close',
+    'terminal-dispose',
+    'terminal-list',
+    'terminal-state',
+] as const;
+
+export type LocalTerminalMethod = (typeof LOCAL_TERMINAL_METHODS)[number];
+
+/**
+ * What a client sends on the loopback terminal socket.
+ *
+ * `params` is encrypted with the machine key exactly as on the server's RPC
+ * path, so the daemon runs it through the same handler and answers in kind.
+ */
+export type LocalTerminalClientMessage =
+    | { type: 'rpc'; id: number; method: LocalTerminalMethod; params: string }
+    | { type: 'subscribe'; terminalId: string }
+    | { type: 'unsubscribe'; terminalId: string };
+
+/**
+ * What the daemon sends back. `result` is the encrypted answer the server path
+ * would have relayed; `error` is the socket refusing the call before any
+ * handler saw it. Frames are the very ones the server relays, revisions
+ * included, so a client can switch between the two paths mid-stream.
+ */
+export type LocalTerminalServerMessage =
+    | { type: 'rpc-result'; id: number; result: string }
+    | { type: 'rpc-result'; id: number; error: string }
+    | { type: 'frame'; frame: TerminalFrame };
