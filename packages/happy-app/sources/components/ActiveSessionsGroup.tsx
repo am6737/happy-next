@@ -79,10 +79,10 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
         justifyContent: 'space-between',
         alignItems: 'center',
     },
-    // The project's header is the first row of its card, kept low above the taller session rows.
+    // The project's header is the first row of its card. The padding is even so the title stays
+    // centred when the project is collapsed and the header is the whole card.
     projectHeader: {
-        paddingTop: 12,
-        paddingBottom: 4,
+        paddingVertical: 8,
         paddingHorizontal: 16,
         flexDirection: 'row',
         justifyContent: 'space-between',
