@@ -1,7 +1,8 @@
 import * as React from "react";
 import { View, Text, Pressable, Platform, ActivityIndicator } from "react-native";
 import { Image } from "expo-image";
-import { Ionicons, MaterialCommunityIcons, SimpleLineIcons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
+import { ClockIcon, CopyIcon, ForkIcon, PauseIcon, SpeakerIcon } from './MessageActionIcons';
 import * as Clipboard from 'expo-clipboard';
 import { useRouter } from 'expo-router';
 import { ImageViewer } from "./ImageViewer";
@@ -209,6 +210,13 @@ export const MessageView = (props: {
   );
 };
 
+// The action bar's icons, a size up on touch screens, where the slop around a button lets a
+// finger have it.
+const ACTION_ICON_SIZE = Platform.OS === 'web' ? 16 : 17;
+const ACTION_BUTTON_SIZE = Platform.OS === 'web' ? 24 : 26;
+const ACTION_HIT_SLOP = Platform.OS === 'web' ? 6 : 8;
+const ACTION_GAP = Platform.OS === 'web' ? 8 : 6;
+
 function MessageActionBar(props: {
   side: 'left' | 'right';
   hovered: boolean;
@@ -251,9 +259,9 @@ function MessageActionBar(props: {
           style={styles.actionButton}
           onPress={props.onCopy}
           accessibilityLabel={t('common.copy')}
-          hitSlop={6}
+          hitSlop={ACTION_HIT_SLOP}
         >
-          <Ionicons name="copy-outline" size={14} color={theme.colors.textSecondary} />
+          <CopyIcon size={ACTION_ICON_SIZE} color={theme.colors.textSecondary} />
         </Pressable>
       ) : null}
       {props.onSpeak ? (
@@ -266,18 +274,16 @@ function MessageActionBar(props: {
               : ttsState === 'queued' ? t('message.queuedVoice')
                 : t('message.playVoice')
           }
-          hitSlop={6}
+          hitSlop={ACTION_HIT_SLOP}
         >
           {ttsState === 'loading' ? (
             <ActivityIndicator size="small" color={theme.colors.textSecondary} style={styles.actionSpinner} />
           ) : ttsState === 'queued' ? (
-            <Ionicons name="time-outline" size={15} color={theme.colors.textSecondary} />
+            <ClockIcon size={ACTION_ICON_SIZE} color={theme.colors.textSecondary} />
+          ) : ttsState === 'playing' ? (
+            <PauseIcon size={ACTION_ICON_SIZE} color={theme.colors.textSecondary} />
           ) : (
-            <SimpleLineIcons
-              name={ttsState === 'playing' ? 'control-pause' : 'volume-2'}
-              size={ttsState === 'playing' ? 12 : 14.5}
-              color={theme.colors.textSecondary}
-            />
+            <SpeakerIcon size={ACTION_ICON_SIZE} color={theme.colors.textSecondary} />
           )}
         </Pressable>
       ) : null}
@@ -287,19 +293,19 @@ function MessageActionBar(props: {
           onPress={props.forkLoading ? undefined : () => { hapticsLight(); props.onFork?.(); }}
           disabled={props.forkLoading}
           accessibilityLabel={t('message.forkFromHere')}
-          hitSlop={6}
+          hitSlop={ACTION_HIT_SLOP}
         >
           {props.forkLoading ? (
             <ActivityIndicator size="small" color={theme.colors.textSecondary} style={styles.actionSpinner} />
           ) : (
-            <MaterialCommunityIcons name="call-split" size={16} color={theme.colors.textSecondary} style={{ transform: [{ rotate: '90deg' }] }} />
+            <ForkIcon size={ACTION_ICON_SIZE} color={theme.colors.textSecondary} />
           )}
         </Pressable>
       ) : null}
       {/* The time states the time and nothing more: no hover tooltip on web, here
           or on the turn header above a reply — pressing it gives the full
           timestamp in a toast, on both platforms. */}
-      <Pressable onPress={showFullTime} hitSlop={6}>
+      <Pressable onPress={showFullTime} hitSlop={ACTION_HIT_SLOP}>
         <Text style={styles.actionTime}>{label}</Text>
       </Pressable>
     </View>
@@ -758,7 +764,7 @@ function ForkedHistoryNotice(props: { event: Extract<AgentEvent, { type: 'forked
         <View style={styles.forkedHistoryDivider}>
           <View style={styles.forkedHistoryRule} />
           <Pressable style={styles.forkedHistorySource} onPress={handleOpenSource} disabled={!source}>
-            <MaterialCommunityIcons name="call-split" size={15} color={theme.colors.agentEventText} style={{ transform: [{ rotate: '90deg' }] }} />
+            <ForkIcon size={14} color={theme.colors.agentEventText} />
             <Text style={[styles.agentEventText, source && styles.forkedHistorySourceLink]} numberOfLines={1}>
               {t('message.forkedFrom', { title })}
             </Text>
@@ -902,7 +908,7 @@ const styles = StyleSheet.create((theme) => ({
   actionBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: ACTION_GAP,
     marginTop: 4,
     paddingHorizontal: 4,
   },
@@ -913,15 +919,15 @@ const styles = StyleSheet.create((theme) => ({
     alignSelf: 'flex-start',
   },
   actionButton: {
-    width: 20,
-    height: 20,
+    width: ACTION_BUTTON_SIZE,
+    height: ACTION_BUTTON_SIZE,
     alignItems: 'center',
     justifyContent: 'center',
   },
   actionTime: {
-    fontSize: 11,
-    height: 20,
-    lineHeight: 20,
+    fontSize: Platform.OS === 'web' ? 12 : 13,
+    height: ACTION_BUTTON_SIZE,
+    lineHeight: ACTION_BUTTON_SIZE,
     color: theme.colors.textSecondary,
   },
   actionSpinner: {
