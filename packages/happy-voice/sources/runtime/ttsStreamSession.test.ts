@@ -169,7 +169,7 @@ describe('TtsStreamSessionRegistry', () => {
         await flushMicrotasks();
 
         expect(lines).toEqual([
-            'chars=5 subscribe=+150ms path=bidi bidiReady=+400ms llm=full>regex-fallback firstAudio=+900ms end=+1000ms audio=0.0s outcome=complete',
+            `id=${prepared.streamId.slice(0, 8)} chars=5 subscribe=+150ms path=bidi bidiReady=+400ms llm=full>regex-fallback firstAudio=+900ms end=+1000ms audio=0.0s outcome=complete`,
         ]);
     });
 
@@ -324,7 +324,6 @@ describe('TtsStreamSessionRegistry', () => {
         const store = new TtsStreamSessionRegistry({
             startPipeline: start,
             replayBufferLimitBytes: 4,
-            completedChunkReleaseMs: 60_000,
         });
         const prepared = store.prepare({ text: 'hello' })!;
         const live = makeSubscriber();
@@ -333,24 +332,23 @@ describe('TtsStreamSessionRegistry', () => {
         expect(store.subscribe(prepared.streamId, makeSubscriber().subscriber).status).toBe('gone');
     });
 
-    it('releases completed chunks after 60 seconds while keeping the record as gone until TTL', async () => {
+    it('keeps completed audio replayable until the stream expires', async () => {
         const start: TtsStreamPipeline = async (_input, handlers) => {
             await handlers.onChunk(Buffer.from('mp3'));
         };
-        const store = new TtsStreamSessionRegistry({
-            startPipeline: start,
-            ttlMs: 600_000,
-            completedChunkReleaseMs: 60_000,
-        });
+        const store = new TtsStreamSessionRegistry({ startPipeline: start, ttlMs: 600_000 });
         const prepared = store.prepare({ text: 'hello' })!;
         const first = makeSubscriber();
         expect(store.subscribe(prepared.streamId, first.subscriber).status).toBe('ok');
         await vi.waitFor(() => expect(first.ended()).toBe(1));
-        vi.advanceTimersByTime(59_999);
-        expect(store.has(prepared.streamId)).toBe(true);
-        vi.advanceTimersByTime(1);
-        expect(store.subscribe(prepared.streamId, makeSubscriber().subscriber).status).toBe('gone');
-        expect(store.has(prepared.streamId)).toBe(true);
+        // A player re-requesting mid-playback, long after the first download ended.
+        vi.advanceTimersByTime(540_000);
+        const again = makeSubscriber();
+        expect(store.subscribe(prepared.streamId, again.subscriber).status).toBe('ok');
+        await vi.waitFor(() => expect(again.text()).toBe('mp3'));
+        expect(store.status(prepared.streamId)?.replayable).toBe(true);
+        vi.advanceTimersByTime(600_000);
+        expect(store.subscribe(prepared.streamId, makeSubscriber().subscriber).status).toBe('not_found');
     });
 
     it('waits for drain when a subscriber applies backpressure', async () => {

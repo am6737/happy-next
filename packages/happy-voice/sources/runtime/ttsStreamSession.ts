@@ -6,6 +6,9 @@ import { Mp3FrameIndex } from './mp3FrameIndex';
 import { synthesize } from './tts';
 import { synthesizeBidirectional, TtsBidiStartupError } from './ttsBidi';
 
+// Finished audio lives as long as its stream: players download far faster than
+// they play and iOS re-requests the URL mid-playback, so the audio must outlast
+// the download by the whole listening time.
 const DEFAULT_TTL_MS = 10 * 60 * 1000;
 const DEFAULT_ABSOLUTE_TTL_MS = 60 * 60 * 1000;
 // Long enough for a client on a flaky network to reconnect and resume.
@@ -13,7 +16,6 @@ const DEFAULT_DISCONNECT_GRACE_MS = 60_000;
 const DEFAULT_MAX_ACTIVE = 8;
 const DEFAULT_MAX_ACTIVE_PER_USER = 2;
 const DEFAULT_PENDING_CLAIM_TIMEOUT_MS = 60_000;
-const DEFAULT_COMPLETED_CHUNK_RELEASE_MS = 60_000;
 const DEFAULT_REPLAY_BUFFER_LIMIT_BYTES = 16 * 1024 * 1024;
 const DEFAULT_SUBSCRIBER_BACKPRESSURE_LIMIT_BYTES = 4 * 1024 * 1024;
 const DEFAULT_MAX_SUBSCRIBERS_PER_STREAM = 4;
@@ -80,7 +82,6 @@ interface TtsStreamRecord extends PreparedTtsStream {
     expiryTimer?: ReturnType<typeof setTimeout>;
     pendingTimer?: ReturnType<typeof setTimeout>;
     disconnectTimer?: ReturnType<typeof setTimeout>;
-    chunkReleaseTimer?: ReturnType<typeof setTimeout>;
 }
 
 export interface TtsStreamSessionRegistryOptions {
@@ -91,7 +92,6 @@ export interface TtsStreamSessionRegistryOptions {
     maxActive?: number;
     maxActivePerUser?: number;
     pendingClaimTimeoutMs?: number;
-    completedChunkReleaseMs?: number;
     replayBufferLimitBytes?: number;
     subscriberBackpressureLimitBytes?: number;
     maxSubscribersPerStream?: number;
@@ -115,6 +115,11 @@ export type TtsStreamSubscribeResult =
     | { status: 'gone' }
     | { status: 'capacity' };
 
+/** Log-safe prefix of a stream id (the full id is a capability token). */
+export function shortStreamId(streamId: string): string {
+    return streamId.slice(0, 8);
+}
+
 function unrefTimer(timer: ReturnType<typeof setTimeout>) {
     timer.unref?.();
     return timer;
@@ -128,7 +133,6 @@ export class TtsStreamSessionRegistry {
     private readonly maxActive: number;
     private readonly maxActivePerUser: number;
     private readonly pendingClaimTimeoutMs: number;
-    private readonly completedChunkReleaseMs: number;
     private readonly replayBufferLimitBytes: number;
     private readonly subscriberBackpressureLimitBytes: number;
     private readonly maxSubscribersPerStream: number;
@@ -142,7 +146,6 @@ export class TtsStreamSessionRegistry {
         this.maxActive = options.maxActive ?? DEFAULT_MAX_ACTIVE;
         this.maxActivePerUser = options.maxActivePerUser ?? DEFAULT_MAX_ACTIVE_PER_USER;
         this.pendingClaimTimeoutMs = options.pendingClaimTimeoutMs ?? DEFAULT_PENDING_CLAIM_TIMEOUT_MS;
-        this.completedChunkReleaseMs = options.completedChunkReleaseMs ?? DEFAULT_COMPLETED_CHUNK_RELEASE_MS;
         this.replayBufferLimitBytes = options.replayBufferLimitBytes ?? DEFAULT_REPLAY_BUFFER_LIMIT_BYTES;
         this.subscriberBackpressureLimitBytes = options.subscriberBackpressureLimitBytes ?? DEFAULT_SUBSCRIBER_BACKPRESSURE_LIMIT_BYTES;
         this.maxSubscribersPerStream = options.maxSubscribersPerStream ?? DEFAULT_MAX_SUBSCRIBERS_PER_STREAM;
@@ -206,10 +209,6 @@ export class TtsStreamSessionRegistry {
             clearTimeout(record.disconnectTimer);
             record.disconnectTimer = undefined;
         }
-        if (record.chunkReleaseTimer) {
-            clearTimeout(record.chunkReleaseTimer);
-            record.chunkReleaseTimer = undefined;
-        }
         if (record.pendingTimer) {
             clearTimeout(record.pendingTimer);
             record.pendingTimer = undefined;
@@ -234,10 +233,7 @@ export class TtsStreamSessionRegistry {
             detached = true;
             state.closed = true;
             record.subscribers.delete(subscriber);
-            if (record.subscribers.size === 0) {
-                this.extendExpiryWithoutSubscribers(record);
-                this.scheduleCompletedChunkRelease(record);
-            }
+            if (record.subscribers.size === 0) this.extendExpiryWithoutSubscribers(record);
             if (record.state === 'running' && record.subscribers.size === 0) {
                 this.scheduleDisconnectRelease(record);
             }
@@ -281,13 +277,11 @@ export class TtsStreamSessionRegistry {
             if (this.sessions.get(record.streamId) !== record) return;
             record.state = 'complete';
             this.endSubscribers(record);
-            this.scheduleCompletedChunkRelease(record);
         }).catch((error) => {
             this.logTiming(record, record.controller.signal.aborted ? 'aborted' : 'failed');
             if (this.sessions.get(record.streamId) !== record) return;
             record.state = 'failed';
             this.destroySubscribers(record, error instanceof Error ? error : undefined);
-            this.scheduleCompletedChunkRelease(record);
             if (!record.controller.signal.aborted) {
                 this.options.onPipelineError?.(error, record.streamId);
             }
@@ -305,7 +299,7 @@ export class TtsStreamSessionRegistry {
 
     private logTiming(record: TtsStreamRecord, outcome: 'complete' | 'failed' | 'aborted') {
         if (!this.options.onTiming) return;
-        const fields = Object.entries(record.timing).map(([key, value]) => `${key}=${value}`);
+        const fields = [`id=${shortStreamId(record.streamId)}`, ...Object.entries(record.timing).map(([key, value]) => `${key}=${value}`)];
         fields.push(`end=+${this.now() - record.createdAtMs}ms`, `audio=${record.frames.durationSeconds.toFixed(1)}s`, `outcome=${outcome}`);
         this.options.onTiming(fields.join(' '));
     }
@@ -439,10 +433,7 @@ export class TtsStreamSessionRegistry {
             else state.subscriber.destroy(error);
         } catch {
         }
-        if (record.subscribers.size === 0) {
-            this.extendExpiryWithoutSubscribers(record);
-            this.scheduleCompletedChunkRelease(record);
-        }
+        if (record.subscribers.size === 0) this.extendExpiryWithoutSubscribers(record);
     }
 
     private scheduleDisconnectRelease(record: TtsStreamRecord) {
@@ -453,18 +444,6 @@ export class TtsStreamSessionRegistry {
                 this.release(record);
             }
         }, this.disconnectGraceMs));
-    }
-
-    private scheduleCompletedChunkRelease(record: TtsStreamRecord) {
-        if ((record.state !== 'complete' && record.state !== 'failed') || record.subscribers.size > 0 || record.chunkReleaseTimer || record.chunks.length === 0) return;
-        record.chunkReleaseTimer = unrefTimer(setTimeout(() => {
-            record.chunkReleaseTimer = undefined;
-            if ((record.state === 'complete' || record.state === 'failed') && record.subscribers.size === 0) {
-                record.chunks = [];
-                record.chunkBytes = 0;
-                record.nonReplayable = true;
-            }
-        }, this.completedChunkReleaseMs));
     }
 
     private extendExpiryForActiveSubscribers(record: TtsStreamRecord) {
@@ -513,7 +492,6 @@ export class TtsStreamSessionRegistry {
         if (record.expiryTimer) clearTimeout(record.expiryTimer);
         if (record.pendingTimer) clearTimeout(record.pendingTimer);
         if (record.disconnectTimer) clearTimeout(record.disconnectTimer);
-        if (record.chunkReleaseTimer) clearTimeout(record.chunkReleaseTimer);
         record.controller.abort();
         this.destroySubscribers(record, new Error('TTS stream expired'));
     }

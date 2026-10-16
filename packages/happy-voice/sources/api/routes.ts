@@ -9,7 +9,7 @@ import { buildRtcToken } from '../runtime/rtcToken';
 import { startVoiceChat, stopVoiceChat } from '../runtime/rtcOpenApi';
 import { synthesize } from '../runtime/tts';
 import { cleanForSpeech } from '../runtime/cleanForSpeech';
-import { ttsStreamSessionStore } from '../runtime/ttsStreamSession';
+import { shortStreamId, ttsStreamSessionStore } from '../runtime/ttsStreamSession';
 import { regexCleanForSpeech } from '../runtime/textClean';
 import { renderPrompt } from '../runtime/prompts';
 import type { VoiceSessionRecord } from '../types/voice';
@@ -292,12 +292,25 @@ export function registerRoutes(app: FastifyInstance) {
     }, async (request, reply) => {
         const { streamId } = z.object({ streamId: z.string().min(1) }).parse(request.params);
         const { from } = z.object({ from: z.coerce.number().min(0).optional() }).parse(request.query);
+        // One line per request, so a playback that stopped early can be traced
+        // to who closed the connection and how much audio went out.
+        const startedAt = Date.now();
+        const logLine = (result: string) => logInfo(
+            `TTS stream audio id=${shortStreamId(streamId)} from=${from ?? 0} ${result} ms=${Date.now() - startedAt}`,
+        );
+        let sentBytes = 0;
+        let closedBy: 'complete' | 'server' | undefined;
         const subscriber = {
-            write: (chunk: Buffer) => reply.raw.write(chunk),
+            write: (chunk: Buffer) => {
+                sentBytes += chunk.length;
+                return reply.raw.write(chunk);
+            },
             end: () => {
+                closedBy ??= 'complete';
                 if (!reply.raw.writableEnded) reply.raw.end();
             },
             destroy: () => {
+                closedBy ??= 'server';
                 if (!reply.raw.destroyed) reply.raw.destroy();
             },
             once: (event: 'drain', listener: () => void) => reply.raw.once(event, listener),
@@ -307,6 +320,7 @@ export function registerRoutes(app: FastifyInstance) {
             },
         };
         const subscription = ttsStreamSessionStore.subscribe(streamId, subscriber, from);
+        if (subscription.status !== 'ok') logLine(`rejected=${subscription.status}`);
         if (subscription.status === 'not_found') {
             return reply.code(404).send({ error: 'not_found', message: 'TTS stream not found.' });
         }
@@ -325,11 +339,15 @@ export function registerRoutes(app: FastifyInstance) {
             'Transfer-Encoding': 'chunked',
         });
 
-        if (reply.raw.destroyed) {
+        const onClose = () => {
             subscription.unsubscribe();
+            logLine(`bytes=${sentBytes} close=${closedBy ?? 'client'}`);
+        };
+        if (reply.raw.destroyed) {
+            onClose();
             return;
         }
-        reply.raw.once('close', subscription.unsubscribe);
+        reply.raw.once('close', onClose);
     });
 
     // Legacy SSE endpoint: keep sentence-splitting behavior for old clients.
