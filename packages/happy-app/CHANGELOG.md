@@ -9,7 +9,7 @@ Happy Next v2.18.0 lets the desktop app reach terminals on its own computer dire
 - Terminal: with an input method on, a key pressed while another is still held is no longer lost on desktop
 - Read aloud: long messages start speaking sooner
 - Welcome: the title no longer runs to the screen edges on phones, and the header no longer shows "disconnected" before you log in
-- Session list: a collapsed project's header sits centered
+- Session list: the time under a session's name is a softer grey that no longer reads as an unavailable session, a session you haven't written in shows when it was created instead of always "just now", and a collapsed project's header sits centered
 - CLI: Happy CLI v0.15.0 serves terminals to the desktop app on the same computer over a local, token-protected connection
 
 ## Version 32 - 2026-10-16
