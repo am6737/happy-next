@@ -269,12 +269,29 @@ export function registerRoutes(app: FastifyInstance) {
         return reply.send({ ...prepared, url });
     });
 
-    typed.get('/v1/voice/tts/stream/:streamId/audio.mp3', {
+    // Capability URL like audio.mp3: a client whose stream dropped asks here
+    // whether it was cut short (resume) or simply played to the end.
+    typed.get('/v1/voice/tts/stream/:streamId/status', {
         schema: {
             params: z.object({ streamId: z.string().min(1) }),
         },
     }, async (request, reply) => {
         const { streamId } = z.object({ streamId: z.string().min(1) }).parse(request.params);
+        const status = ttsStreamSessionStore.status(streamId);
+        if (!status) {
+            return reply.code(404).send({ error: 'not_found', message: 'TTS stream not found.' });
+        }
+        return reply.header('Cache-Control', 'no-store').send(status);
+    });
+
+    typed.get('/v1/voice/tts/stream/:streamId/audio.mp3', {
+        schema: {
+            params: z.object({ streamId: z.string().min(1) }),
+            querystring: z.object({ from: z.coerce.number().min(0).optional() }),
+        },
+    }, async (request, reply) => {
+        const { streamId } = z.object({ streamId: z.string().min(1) }).parse(request.params);
+        const { from } = z.object({ from: z.coerce.number().min(0).optional() }).parse(request.query);
         const subscriber = {
             write: (chunk: Buffer) => reply.raw.write(chunk),
             end: () => {
@@ -289,7 +306,7 @@ export function registerRoutes(app: FastifyInstance) {
                 return reply.raw.writableLength;
             },
         };
-        const subscription = ttsStreamSessionStore.subscribe(streamId, subscriber);
+        const subscription = ttsStreamSessionStore.subscribe(streamId, subscriber, from);
         if (subscription.status === 'not_found') {
             return reply.code(404).send({ error: 'not_found', message: 'TTS stream not found.' });
         }

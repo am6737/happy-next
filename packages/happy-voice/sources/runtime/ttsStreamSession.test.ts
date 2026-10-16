@@ -178,6 +178,42 @@ describe('TtsStreamSessionRegistry', () => {
         expect(pipeline.start).toHaveBeenCalledOnce();
     });
 
+    it('resumes a dropped listener at the frame playing at the requested time and reports status', async () => {
+        // MPEG2 Layer III 32 kbps 24 kHz: 96-byte frames of 24 ms, numbered by fill byte.
+        const frame = (n: number) => {
+            const buf = Buffer.alloc(96, n);
+            buf.set([0xff, 0xf3, 0x44, 0xc4]);
+            return buf;
+        };
+        const pipeline = deferredPipeline();
+        const store = new TtsStreamSessionRegistry({ startPipeline: pipeline.start });
+        const prepared = store.prepare({ text: 'hello' })!;
+        const first = makeSubscriber();
+        const subscription = store.subscribe(prepared.streamId, first.subscriber);
+        await pipeline.handlers().onChunk(Buffer.concat([frame(1), frame(2)]));
+        await pipeline.handlers().onChunk(Buffer.concat([frame(3), frame(4)]));
+        await flushMicrotasks();
+        if (subscription.status === 'ok') subscription.unsubscribe();
+
+        const status = store.status(prepared.streamId)!;
+        expect(status.state).toBe('running');
+        expect(status.replayable).toBe(true);
+        expect(status.durationSeconds).toBeCloseTo(0.096);
+
+        const chunks: Buffer[] = [];
+        const resumed = { ...makeSubscriber().subscriber, write: (chunk: Buffer) => { chunks.push(Buffer.from(chunk)); } };
+        expect(store.subscribe(prepared.streamId, resumed, 0.03).status).toBe('ok');
+        await pipeline.handlers().onChunk(frame(5));
+        await flushMicrotasks();
+        expect(Buffer.concat(chunks)).toEqual(Buffer.concat([frame(2), frame(3), frame(4), frame(5)]));
+
+        pipeline.resolve();
+        await flushMicrotasks();
+        expect(store.status(prepared.streamId)!.state).toBe('complete');
+        expect(store.status(prepared.streamId)!.durationSeconds).toBeCloseTo(0.12);
+        expect(store.status('missing')).toBeNull();
+    });
+
     it('allows reconnect during the 15 second grace period', () => {
         const pipeline = deferredPipeline();
         const store = new TtsStreamSessionRegistry({

@@ -20,7 +20,9 @@ export interface TtsQueueSnapshot {
 export interface PlaybackCallbacks {
     /** Audio is audibly coming out (loading → playing). */
     onPlaying: () => void;
-    /** Playback is over — natural end, failure or watchdog; the queue advances either way. */
+    /** Playing → loading again while a dropped stream reconnects. */
+    onLoading: () => void;
+    /** Playback is over — natural end, or a drop that couldn't be resumed; the queue advances either way. */
     onDone: () => void;
 }
 

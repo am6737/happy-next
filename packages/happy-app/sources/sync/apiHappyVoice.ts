@@ -185,6 +185,33 @@ export async function prepareSpeechStream(text: string, signal?: AbortSignal): P
     return { url: data.url };
 }
 
+export interface SpeechStreamStatus {
+    state: 'pending' | 'running' | 'complete' | 'failed';
+    /** Seconds of audio synthesized so far (the total once complete/failed). */
+    durationSeconds: number;
+    /** Whether the stream can still be replayed or resumed. */
+    replayable: boolean;
+}
+
+/** Audio URL of a prepared stream, resumed `fromSeconds` in (0 = from the start). */
+export function speechStreamUrlFrom(audioUrl: string, fromSeconds: number): string {
+    if (!(fromSeconds > 0)) return audioUrl;
+    return `${audioUrl}${audioUrl.includes('?') ? '&' : '?'}from=${fromSeconds.toFixed(3)}`;
+}
+
+/**
+ * Status of a prepared stream, addressed by its capability audio URL.
+ * Resolves null once the gateway no longer knows the stream; throws on
+ * network errors so the caller can retry.
+ */
+export async function fetchSpeechStreamStatus(audioUrl: string, signal?: AbortSignal): Promise<SpeechStreamStatus | null> {
+    const statusUrl = audioUrl.replace(/\/audio\.mp3(\?.*)?$/, '/status');
+    const response = await fetch(statusUrl, { signal });
+    if (response.status === 404) return null;
+    if (!response.ok) throw new Error(`Failed to fetch speech stream status: ${response.status}`);
+    return (await response.json()) as SpeechStreamStatus;
+}
+
 /**
  * LLM-clean text for speech via the gateway (regex fallback). Used by the in-call
  * "announce Happy's reply" path before handing text to ExternalTextToSpeech.

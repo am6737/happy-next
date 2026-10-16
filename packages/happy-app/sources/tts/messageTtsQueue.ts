@@ -42,6 +42,11 @@ function start(item: TtsQueueItem) {
             phase = 'playing';
             notify();
         },
+        onLoading: () => {
+            if (gen !== generation) return;
+            phase = 'loading';
+            notify();
+        },
         // Natural end and failure both just advance; failures were never
         // surfaced to the user in the pre-queue version either.
         onDone: () => {

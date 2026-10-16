@@ -2,12 +2,14 @@ import { randomBytes } from 'node:crypto';
 import { cleanForSpeech } from './cleanForSpeech';
 import { env } from './env';
 import { logError, logWarn } from './log';
+import { Mp3FrameIndex } from './mp3FrameIndex';
 import { synthesize } from './tts';
 import { synthesizeBidirectional, TtsBidiStartupError } from './ttsBidi';
 
 const DEFAULT_TTL_MS = 10 * 60 * 1000;
 const DEFAULT_ABSOLUTE_TTL_MS = 60 * 60 * 1000;
-const DEFAULT_DISCONNECT_GRACE_MS = 15_000;
+// Long enough for a client on a flaky network to reconnect and resume.
+const DEFAULT_DISCONNECT_GRACE_MS = 60_000;
 const DEFAULT_MAX_ACTIVE = 8;
 const DEFAULT_MAX_ACTIVE_PER_USER = 2;
 const DEFAULT_PENDING_CLAIM_TIMEOUT_MS = 60_000;
@@ -68,6 +70,7 @@ interface TtsStreamRecord extends PreparedTtsStream {
     chunks: Buffer[];
     chunkBytes: number;
     nonReplayable: boolean;
+    frames: Mp3FrameIndex;
     subscribers: Map<TtsAudioSubscriber, TtsSubscriberState>;
     controller: AbortController;
     expiryTimer?: ReturnType<typeof setTimeout>;
@@ -90,6 +93,14 @@ export interface TtsStreamSessionRegistryOptions {
     maxSubscribersPerStream?: number;
     now?: () => number;
     onPipelineError?: (error: unknown, streamId: string) => void;
+}
+
+export interface TtsStreamStatus {
+    state: TtsStreamState;
+    /** Seconds of audio synthesized so far (the total once complete/failed). */
+    durationSeconds: number;
+    /** Whether a new subscriber can still replay or resume this stream. */
+    replayable: boolean;
 }
 
 export type TtsStreamSubscribeResult =
@@ -151,6 +162,7 @@ export class TtsStreamSessionRegistry {
             chunks: [],
             chunkBytes: 0,
             nonReplayable: false,
+            frames: new Mp3FrameIndex(),
             subscribers: new Map(),
             controller: new AbortController(),
         };
@@ -166,7 +178,18 @@ export class TtsStreamSessionRegistry {
         return !!this.getLive(streamId);
     }
 
-    subscribe(streamId: string, subscriber: TtsAudioSubscriber): TtsStreamSubscribeResult {
+    status(streamId: string): TtsStreamStatus | null {
+        const record = this.getLive(streamId);
+        if (!record) return null;
+        return {
+            state: record.state,
+            durationSeconds: record.frames.durationSeconds,
+            replayable: !record.nonReplayable,
+        };
+    }
+
+    /** `fromSeconds` resumes a dropped listener at the frame playing then. */
+    subscribe(streamId: string, subscriber: TtsAudioSubscriber, fromSeconds = 0): TtsStreamSubscribeResult {
         const record = this.getLive(streamId);
         if (!record) return { status: 'not_found' };
         if (record.nonReplayable) return { status: 'gone' };
@@ -194,7 +217,7 @@ export class TtsStreamSessionRegistry {
             drainWaiters: [],
         };
         record.subscribers.set(subscriber, state);
-        void this.attachSubscriber(record, state);
+        void this.attachSubscriber(record, state, record.frames.byteOffsetAt(fromSeconds));
         if (record.state === 'pending') this.start(record);
 
         let detached = false;
@@ -263,6 +286,7 @@ export class TtsStreamSessionRegistry {
     private async publish(record: TtsStreamRecord, chunk: Buffer) {
         if (this.sessions.get(record.streamId) !== record || record.state !== 'running' || chunk.length === 0) return;
         const stored = Buffer.from(chunk);
+        record.frames.push(stored);
         if (!record.nonReplayable && record.chunkBytes + stored.length <= this.replayBufferLimitBytes) {
             record.chunks.push(stored);
             record.chunkBytes += stored.length;
@@ -277,11 +301,16 @@ export class TtsStreamSessionRegistry {
         if (record.subscribers.size === 0) this.scheduleDisconnectRelease(record);
     }
 
-    private async attachSubscriber(record: TtsStreamRecord, state: TtsSubscriberState) {
+    private async attachSubscriber(record: TtsStreamRecord, state: TtsSubscriberState, startByte: number) {
         let index = 0;
+        let offset = 0;
         try {
             while (!state.closed && !record.nonReplayable && index < record.chunks.length) {
-                await this.enqueueWrite(record, state, record.chunks[index]);
+                const chunk = record.chunks[index];
+                if (offset + chunk.length > startByte) {
+                    await this.enqueueWrite(record, state, offset >= startByte ? chunk : chunk.subarray(startByte - offset));
+                }
+                offset += chunk.length;
                 index++;
             }
             if (state.closed || this.sessions.get(record.streamId) !== record) return;
