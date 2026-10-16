@@ -30,6 +30,7 @@ import { SessionContextMenu } from './SessionContextMenu';
 import { SessionForkSpinner } from './SessionForkSpinner';
 import { useSessionForking } from '@/utils/sessionForkProgress';
 import { canArchiveSession } from '@/utils/sessionLifecycle';
+import { sessionLastMessageAt } from '@/utils/sessionLastMessageAt';
 import { SessionRowFlash } from './SessionRowFlash';
 import { PressHighlight } from './PressHighlight';
 import { getProjectHeaderFlashId, registerProjectHeader } from './sessionProjectLocate';
@@ -227,10 +228,11 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
         justifyContent: 'center',
     },
     lastActivityText: {
-        fontSize: 12,
+        fontSize: 13,
         lineHeight: 16,
-        color: theme.colors.textSecondary,
-        ...Typography.default(),
+        color: '#8E8E93',
+        // The system face, so the digits and the CJK around them come from one font.
+        fontFamily: Platform.select({ web: '-apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", "Microsoft YaHei", system-ui, sans-serif', default: undefined }),
     },
     statusDotContainer: {
         alignItems: 'center',
@@ -763,7 +765,7 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder, isCardFir
                     tells when the session last moved instead, in grey and at the same height, so the
                     title holds still as the state comes and goes. */}
                 <View style={styles.statusRow}>
-                    {plainOnline ? <SessionLastActivity at={session.lastMessageAt ?? session.activeAt} /> : <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    {plainOnline ? <SessionLastActivity at={sessionLastMessageAt(session)} /> : <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                         <View style={styles.statusDotContainer}>
                             <StatusDot color={sessionStatus.statusDotColor} isPulsing={sessionStatus.isPulsing} />
                         </View>
