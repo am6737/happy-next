@@ -7,10 +7,12 @@ import type { SessionProjectLabel } from '@/hooks/useSessionProjectLabel';
  * A project's label on one line: its name, then the detail in a fainter shade, which gives way first
  * when the line runs out of room. On web, hovering shows the full path.
  */
-export const ProjectLabelText = React.memo(({ label, fullPath, style }: {
+export const ProjectLabelText = React.memo(({ label, fullPath, style, detailStyle }: {
     label: SessionProjectLabel;
     fullPath?: string;
     style: StyleProp<TextStyle>;
+    // Set on the detail over `style`, for a detail that differs from the name in more than shade.
+    detailStyle?: StyleProp<TextStyle>;
 }) => {
     return (
         <View
@@ -20,7 +22,7 @@ export const ProjectLabelText = React.memo(({ label, fullPath, style }: {
             <Text style={[style, styles.name]} numberOfLines={1}>{label.name}</Text>
             {label.detail ? (
                 // Cut in the middle: names that differ only at the end, like machines', stay told apart.
-                <Text style={[style, styles.detail]} numberOfLines={1} ellipsizeMode="middle">{label.detail}</Text>
+                <Text style={[style, styles.detail, detailStyle]} numberOfLines={1} ellipsizeMode="middle">{label.detail}</Text>
             ) : null}
         </View>
     );

@@ -37,10 +37,10 @@ import { SessionProjectGroup, useCollapsedSessionProjectGroups, useSessionProjec
 // Rounds the project card, and with it the first and last row inside it.
 const CARD_RADIUS = Platform.select({ ios: 10, default: 16 });
 
-// A project's sessions start where its header's name does: past the header's inset, the chevron
-// (in the app only — on the desktop it sits on the right), and the avatar with its gap.
+// A project's sessions start where its header's name does: past the header's inset and the avatar
+// with its gap.
 const PROJECT_HEADER_INSET = 12;
-const SESSION_ROW_INDENT = PROJECT_HEADER_INSET + (Platform.OS === 'web' ? 0 : 16 + 4) + 24 + 8;
+const SESSION_ROW_INDENT = PROJECT_HEADER_INSET + 24 + 8;
 
 const stylesheet = StyleSheet.create((theme, runtime) => ({
     container: {
@@ -93,7 +93,7 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
     // A project's card opens with its header, so it needs only the gap to the next card.
     projectCardWithHeader: {
         marginTop: 0,
-        marginBottom: 12,
+        marginBottom: 16,
     },
     sectionHeaderRight: {
         flexDirection: 'row',
@@ -101,13 +101,6 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
         justifyContent: 'flex-end',
         gap: 8,
         maxWidth: '52%',
-    },
-    sectionHeaderChevron: {
-        width: 16,
-        height: 16,
-        marginRight: 4,
-        alignItems: 'center',
-        justifyContent: 'center',
     },
     // Square and centred like the + beside it, so the turn pivots on the icon itself.
     sectionHeaderChevronRight: {
@@ -131,6 +124,20 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
         height: 24,
         alignItems: 'center',
         justifyContent: 'center',
+    },
+    // The project's name leads its card in the text colour; its path follows in the section-title grey.
+    projectHeaderName: {
+        ...Typography.default('semiBold'),
+        color: theme.colors.text,
+        fontSize: 15,
+        lineHeight: 20,
+        flexShrink: 1,
+    },
+    projectHeaderDetail: {
+        ...Typography.default(),
+        color: theme.colors.groupped.sectionTitle,
+        fontSize: 13,
+        opacity: 1,
     },
     sectionHeaderPath: {
         ...Typography.default('regular'),
@@ -337,9 +344,9 @@ function ProjectSectionHeader({
             useNativeDriver: true,
         }).start();
     }, [collapsed, expansion]);
-    // In the app the chevron leads the header. On the desktop it sits on the right: under the
-    // pointer the + fades in over the git status and the chevron opens out beside it, and a
-    // collapsed project keeps its chevron so it still reads as collapsed.
+    // The chevron sits on the right, after the git status. In the app it always shows. On the
+    // desktop it shows under the pointer, opening out beside the + that fades in over the git
+    // status, and while the project is collapsed, so it still reads as collapsed.
     const isWeb = Platform.OS === 'web';
     const hover = React.useRef(new Animated.Value(0)).current;
     const chevronReveal = React.useRef(new Animated.Value(collapsed ? 1 : 0)).current;
@@ -354,7 +361,7 @@ function ProjectSectionHeader({
     const chevron = (
         <Animated.View
             style={[
-                isWeb ? styles.sectionHeaderChevronRight : styles.sectionHeaderChevron,
+                styles.sectionHeaderChevronRight,
                 {
                     transform: [{
                         rotate: expansion.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '90deg'] }),
@@ -362,7 +369,7 @@ function ProjectSectionHeader({
                 },
             ]}
         >
-            <Ionicons name="chevron-forward" size={isWeb ? 16 : 14} color={styles.sectionHeaderPath.color} />
+            <Ionicons name="chevron-forward" size={16} color={styles.sectionHeaderPath.color} />
         </Animated.View>
     );
     const collapseKey = projectGroup.collapseKey;
@@ -379,12 +386,12 @@ function ProjectSectionHeader({
                 accessibilityLabel={`${collapsed ? t('duplicate.expandText') : t('duplicate.collapseText')} ${[projectGroup.label.name, projectGroup.label.detail].filter(Boolean).join(', ')}`}
             >
             <View style={styles.sectionHeaderLeft}>
-                {!isWeb && chevron}
                 {avatar && <View style={styles.sectionHeaderAvatar}>{avatar}</View>}
                 <ProjectLabelText
                     label={projectGroup.label}
                     fullPath={projectGroup.path}
-                    style={styles.sectionHeaderPath}
+                    style={styles.projectHeaderName}
+                    detailStyle={styles.projectHeaderDetail}
                 />
             </View>
                 <View style={styles.sectionHeaderRight}>
@@ -429,9 +436,14 @@ function ProjectSectionHeader({
                             </Animated.View>
                         </>
                     ) : (
-                        <View style={styles.sectionHeaderActionSlot}>
-                            {rightContent}
-                        </View>
+                        <>
+                            <View style={styles.sectionHeaderActionSlot}>
+                                {rightContent}
+                            </View>
+                            <View style={[styles.sectionHeaderChevronReveal, { width: 24 }]}>
+                                {chevron}
+                            </View>
+                        </>
                     )}
                 </View>
             </Pressable>

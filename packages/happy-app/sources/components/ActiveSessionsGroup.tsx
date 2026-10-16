@@ -5,7 +5,8 @@ import { Text } from '@/components/StyledText';
 import { useRouter } from 'expo-router';
 import { Session } from '@/sync/storageTypes';
 import { Ionicons } from '@expo/vector-icons';
-import { getSessionName, useSessionStatus, getSessionAvatarId } from '@/utils/sessionUtils';
+import { getSessionName, useSessionStatus, getSessionAvatarId, formatLastSeen } from '@/utils/sessionUtils';
+import { useMinuteTick } from '@/hooks/useMinuteTick';
 import { Avatar } from './Avatar';
 import { Typography } from '@/constants/Typography';
 import { StatusDot } from './StatusDot';
@@ -80,7 +81,8 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
     },
     // The project's header is the first row of its card, kept low above the taller session rows.
     projectHeader: {
-        paddingVertical: 6,
+        paddingTop: 12,
+        paddingBottom: 4,
         paddingHorizontal: 16,
         flexDirection: 'row',
         justifyContent: 'space-between',
@@ -89,7 +91,7 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
     // A project's card opens with its header, so it needs only the gap to the next card.
     projectCardWithHeader: {
         marginTop: 0,
-        marginBottom: 12,
+        marginBottom: 16,
     },
     sectionHeaderRight: {
         flexDirection: 'row',
@@ -97,13 +99,6 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
         justifyContent: 'flex-end',
         gap: 8,
         maxWidth: '55%',
-    },
-    sectionHeaderChevron: {
-        width: 16,
-        height: 16,
-        marginRight: 5,
-        alignItems: 'center',
-        justifyContent: 'center',
     },
     // Square and centred like the + beside it, so the turn pivots on the icon itself.
     sectionHeaderChevronRight: {
@@ -120,6 +115,20 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
     },
     sectionHeaderSharedIcon: {
         marginRight: 6,
+    },
+    // The project's name leads its card in the text colour; its path follows in the section-title grey.
+    projectHeaderName: {
+        ...Typography.default('semiBold'),
+        color: theme.colors.text,
+        fontSize: 15,
+        lineHeight: 20,
+        flexShrink: 1,
+    },
+    projectHeaderDetail: {
+        ...Typography.default(),
+        color: theme.colors.groupped.sectionTitle,
+        fontSize: 13,
+        opacity: 1,
     },
     sectionHeaderPath: {
         ...Typography.default('regular'),
@@ -211,6 +220,17 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between'
+    },
+    // As tall as the dot and status text it stands in for.
+    lastActivity: {
+        height: 18,
+        justifyContent: 'center',
+    },
+    lastActivityText: {
+        fontSize: 12,
+        lineHeight: 16,
+        color: theme.colors.textSecondary,
+        ...Typography.default(),
     },
     statusDotContainer: {
         alignItems: 'center',
@@ -356,9 +376,9 @@ function ProjectSectionHeader({
             useNativeDriver: true,
         }).start();
     }, [collapsed, expansion]);
-    // In the app the chevron leads the header. On the desktop it sits on the right: under the
-    // pointer the + fades in over the git status and the chevron opens out beside it, and a
-    // collapsed project keeps its chevron so it still reads as collapsed.
+    // The chevron sits on the right, after the git status. In the app it always shows. On the
+    // desktop it shows under the pointer, opening out beside the + that fades in over the git
+    // status, and while the project is collapsed, so it still reads as collapsed.
     const isWeb = Platform.OS === 'web';
     const hover = React.useRef(new Animated.Value(0)).current;
     const chevronReveal = React.useRef(new Animated.Value(collapsed ? 1 : 0)).current;
@@ -373,7 +393,7 @@ function ProjectSectionHeader({
     const chevron = (
         <Animated.View
             style={[
-                isWeb ? styles.sectionHeaderChevronRight : styles.sectionHeaderChevron,
+                styles.sectionHeaderChevronRight,
                 {
                     transform: [{
                         rotate: expansion.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '90deg'] }),
@@ -381,7 +401,7 @@ function ProjectSectionHeader({
                 },
             ]}
         >
-            <Ionicons name="chevron-forward" size={isWeb ? 16 : 14} color={styles.sectionHeaderPath.color} />
+            <Ionicons name="chevron-forward" size={16} color={styles.sectionHeaderPath.color} />
         </Animated.View>
     );
     const collapseKey = projectGroup.collapseKey;
@@ -398,7 +418,6 @@ function ProjectSectionHeader({
                 accessibilityLabel={`${collapsed ? t('duplicate.expandText') : t('duplicate.collapseText')} ${[projectGroup.label.name, projectGroup.label.detail].filter(Boolean).join(', ')}`}
             >
             <View style={styles.sectionHeaderLeft}>
-                {!isWeb && chevron}
                 {shared && (
                     <View style={styles.sectionHeaderSharedIcon}>
                         <Ionicons name="people-outline" size={16} color={styles.sectionHeaderPath.color} />
@@ -407,7 +426,8 @@ function ProjectSectionHeader({
                 <ProjectLabelText
                     label={projectGroup.label}
                     fullPath={projectGroup.path}
-                    style={styles.sectionHeaderPath}
+                    style={styles.projectHeaderName}
+                    detailStyle={styles.projectHeaderDetail}
                 />
             </View>
                 <View style={styles.sectionHeaderRight}>
@@ -452,9 +472,14 @@ function ProjectSectionHeader({
                             </Animated.View>
                         </>
                     ) : (
-                        <View style={styles.sectionHeaderActionSlot}>
-                            {rightContent}
-                        </View>
+                        <>
+                            <View style={styles.sectionHeaderActionSlot}>
+                                {rightContent}
+                            </View>
+                            <View style={[styles.sectionHeaderChevronReveal, { width: 24 }]}>
+                                {chevron}
+                            </View>
+                        </>
                     )}
                 </View>
             </Pressable>
@@ -570,6 +595,17 @@ export function ActiveSessionsGroup({ sessions, selectedSessionId, registerSessi
 }
 
 // Compact session row component with status line
+// When a plain-online session last moved ("3 minutes ago"), aging on screen once a minute.
+const SessionLastActivity = React.memo(({ at }: { at: number }) => {
+    const styles = stylesheet;
+    useMinuteTick();
+    return (
+        <View style={styles.lastActivity}>
+            <Text style={styles.lastActivityText} numberOfLines={1}>{formatLastSeen(at)}</Text>
+        </View>
+    );
+});
+
 const CompactSessionRow = React.memo(({ session, selected, showBorder, isCardFirst, isCardLast, registerSessionRowRef }: {
     session: Session;
     selected?: boolean;
@@ -676,6 +712,7 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder, isCardFir
     const avatarId = React.useMemo(() => {
         return getSessionAvatarId(session);
     }, [session]);
+    const plainOnline = sessionStatus.state === 'waiting';
 
     const itemContent = (
         <SessionContextMenu session={session} highlightShape={cardRowShape}>
@@ -722,9 +759,11 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder, isCardFir
                     </Text>
                 </View>
 
-                {/* Status line with dot */}
+                {/* Status line with dot. Plain online is every row's state, so it goes unsaid: the line
+                    tells when the session last moved instead, in grey and at the same height, so the
+                    title holds still as the state comes and goes. */}
                 <View style={styles.statusRow}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    {plainOnline ? <SessionLastActivity at={session.lastMessageAt ?? session.activeAt} /> : <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                         <View style={styles.statusDotContainer}>
                             <StatusDot color={sessionStatus.statusDotColor} isPulsing={sessionStatus.isPulsing} />
                         </View>
@@ -734,7 +773,7 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder, isCardFir
                         ]}>
                             {sessionStatus.statusText}
                         </Text>
-                    </View>
+                    </View>}
 
                     {/* Status indicators on the right side */}
                     <View style={styles.statusIndicatorsRight}>
