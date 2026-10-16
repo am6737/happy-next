@@ -1,6 +1,42 @@
 import { gzipSync } from 'node:zlib';
 import { describe, expect, it, vi } from 'vitest';
 
+// Minimal stand-in for a ws socket: records client frames, lets a test push server frames.
+// Hoisted with vi.mock, so it can't use imports.
+const { FakeSocket, sockets } = vi.hoisted(() => {
+    const sockets: FakeSocket[] = [];
+    class FakeSocket {
+        static OPEN = 1;
+        static CONNECTING = 0;
+        readyState = 0;
+        sent: Buffer[] = [];
+        private listeners = new Map<string, Array<(...args: unknown[]) => void>>();
+        constructor() {
+            sockets.push(this);
+        }
+        on(event: string, listener: (...args: unknown[]) => void) {
+            this.listeners.set(event, [...(this.listeners.get(event) ?? []), listener]);
+            return this;
+        }
+        emit(event: string, ...args: unknown[]) {
+            for (const listener of this.listeners.get(event) ?? []) listener(...args);
+        }
+        open() {
+            this.readyState = 1;
+            this.emit('open');
+        }
+        send(data: Buffer, cb: (error?: Error) => void) {
+            this.sent.push(data);
+            cb();
+        }
+        close() {
+            this.readyState = 3;
+        }
+    }
+    return { FakeSocket, sockets };
+});
+vi.mock('ws', () => ({ default: FakeSocket }));
+
 vi.mock('./env', () => ({
     env: {
         VOLC_TTS_APP_ID: 'app',
@@ -14,6 +50,7 @@ import {
     decodeTtsBidiFrame,
     decodeTtsBidiPayload,
     encodeTtsBidiClientFrame,
+    synthesizeBidirectional,
     TtsBidiEvent,
     TtsBidiMessageType,
 } from './ttsBidi';
@@ -116,5 +153,57 @@ describe('Volcano TTS bidi frame codec', () => {
 
     it('rejects truncated frames instead of reading out of bounds', () => {
         expect(() => decodeTtsBidiFrame(Buffer.from([0x11, 0x90, 0x10, 0]))).toThrow(/Invalid TTS bidi frame/);
+    });
+});
+
+describe('synthesizeBidirectional', () => {
+    const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+    const serverEvent = (event: number) => serverFrame({ type: TtsBidiMessageType.FullServerResponse, event, payload: Buffer.from('{}') });
+    const sentTexts = (socket: InstanceType<typeof FakeSocket>) => socket.sent
+        .filter((frame) => frame.readInt32BE(4) === TtsBidiEvent.TaskRequest)
+        .map((frame) => JSON.parse(frame.subarray(frame.indexOf('{')).toString()).req_params.text);
+    const sentEvents = (socket: InstanceType<typeof FakeSocket>) => socket.sent.map((frame) => frame.readInt32BE(4));
+
+    it('runs the text producer during the handshake and flushes its deltas in order once the session starts', async () => {
+        let producerStarted = false;
+        let emit!: (delta: string) => Promise<void>;
+        let endText!: () => void;
+        const done = synthesizeBidirectional({
+            onAudio: vi.fn(),
+            produceText: (sendText) => {
+                producerStarted = true;
+                emit = sendText;
+                return new Promise<void>((resolve) => { endText = resolve; });
+            },
+        });
+        const socket = sockets[sockets.length - 1];
+        expect(producerStarted).toBe(true);
+
+        await emit('第一句。');
+        await emit('第二句');
+        socket.open();
+        socket.emit('message', serverEvent(TtsBidiEvent.ConnectionStarted));
+        await flush();
+        expect(sentTexts(socket)).toEqual([]);
+
+        socket.emit('message', serverEvent(TtsBidiEvent.SessionStarted));
+        await flush();
+        await emit('还在继续。');
+        expect(sentTexts(socket)).toEqual(['第一句。', '第二句', '还在继续。']);
+        expect(sentEvents(socket)).not.toContain(TtsBidiEvent.FinishSession);
+
+        endText();
+        await flush();
+        expect(sentEvents(socket).at(-1)).toBe(TtsBidiEvent.FinishSession);
+        socket.emit('message', serverEvent(TtsBidiEvent.SessionFinished));
+        await expect(done).resolves.toBeUndefined();
+    });
+
+    it('treats a producer failure during the handshake as a synthesis error, not a startup error', async () => {
+        const done = synthesizeBidirectional({
+            onAudio: vi.fn(),
+            produceText: async () => { throw new Error('clean failed'); },
+        });
+        await expect(done).rejects.toMatchObject({ name: 'TtsBidiError', message: 'clean failed' });
     });
 });

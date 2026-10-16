@@ -192,7 +192,11 @@ function framePayloadText(frame: TtsBidiFrame): string {
     }
 }
 
-/** Bidi TTS session: after SessionStarted, pass cleaned text deltas through unsplit. */
+/**
+ * Bidi TTS session: pass cleaned text deltas through unsplit. The text producer
+ * starts with the handshake rather than after it — the LLM's first token takes
+ * longer than the handshake — and its deltas are held until SessionStarted.
+ */
 export async function synthesizeBidirectional(options: TtsBidiSynthesisOptions): Promise<void> {
     const connectId = randomUUID();
     const sessionId = randomUUID();
@@ -201,6 +205,9 @@ export async function synthesizeBidirectional(options: TtsBidiSynthesisOptions):
     let sessionStarted = false;
     let sessionFinished = false;
     let settled = false;
+    // A producer failure is never a startup failure: falling back to REST would
+    // only clean the same text again.
+    let producerFailed = false;
     const producerController = new AbortController();
 
     await new Promise<void>((resolve, reject) => {
@@ -259,7 +266,7 @@ export async function synthesizeBidirectional(options: TtsBidiSynthesisOptions):
                 return;
             }
             const message = error instanceof Error ? error.message : String(error);
-            reject(sessionStarted
+            reject(sessionStarted || producerFailed
                 ? new TtsBidiError(message, { cause: error, logId })
                 : new TtsBidiStartupError(message, { cause: error, logId }));
         }
@@ -293,6 +300,28 @@ export async function synthesizeBidirectional(options: TtsBidiSynthesisOptions):
             return;
         }
         options.signal?.addEventListener('abort', onAbort, { once: true });
+
+        const sendTask = (text: string) => send(TtsBidiEvent.TaskRequest, JSON.stringify({
+            user: { uid: 'happy-voice' },
+            event: TtsBidiEvent.TaskRequest,
+            namespace: 'BidirectionalTTS',
+            req_params: { text },
+        }), sessionId);
+        // Deltas wait here until SessionStarted flushes them; textLive after that.
+        const heldText: string[] = [];
+        let textLive = false;
+        const producerDone = options.produceText(async (delta) => {
+            if (!delta) return;
+            if (!textLive) {
+                heldText.push(delta);
+                return;
+            }
+            await sendTask(delta);
+        }, producerController.signal);
+        producerDone.catch((error) => {
+            producerFailed = true;
+            fail(error);
+        });
 
         ws.on('upgrade', (response) => {
             const value = response.headers['x-tt-logid'];
@@ -347,15 +376,10 @@ export async function synthesizeBidirectional(options: TtsBidiSynthesisOptions):
                         clearTimeout(startupTimer);
                         options.onSessionStarted?.();
                         refreshRunningIdleTimer();
-                        await options.produceText(async (delta) => {
-                            if (!delta) return;
-                            await send(TtsBidiEvent.TaskRequest, JSON.stringify({
-                                user: { uid: 'happy-voice' },
-                                event: TtsBidiEvent.TaskRequest,
-                                namespace: 'BidirectionalTTS',
-                                req_params: { text: delta },
-                            }), sessionId);
-                        }, producerController.signal);
+                        // Deltas arriving mid-flush queue behind it, keeping order.
+                        while (heldText.length > 0) await sendTask(heldText.shift()!);
+                        textLive = true;
+                        await producerDone;
                         if (options.signal?.aborted) throw createAbortError();
                         await send(TtsBidiEvent.FinishSession, '{}', sessionId);
                         break;
