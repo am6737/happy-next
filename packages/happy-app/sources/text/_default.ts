@@ -506,6 +506,8 @@ export const en = {
         plannedTime: 'Planned Time',
         startTime: 'Start',
         endTime: 'End',
+        setStartTime: 'Set start time',
+        setEndTime: 'Set end time',
         creating: 'Creating...',
         createSuccess: 'Created successfully',
         createFailed: 'Failed to create',

@@ -55,11 +55,15 @@ export const DatePickerSheet = React.memo(React.forwardRef<BottomSheetModal, Dat
                 ref={innerRef}
                 snapPoints={['60%']}
                 enableDynamicSizing={false}
+                // The time wheels are plain FlatLists; with content panning on, the sheet's pan
+                // gesture wins the vertical drag on Android and the wheels never scroll. The
+                // handle and backdrop still close the sheet.
+                enableContentPanningGesture={false}
             >
                 <BottomSheetView style={{ paddingHorizontal: 20 }}>
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                         {title ? (
-                            <Text style={{ ...Typography.default('semiBold'), fontSize: 16, color: theme.colors.text }}>
+                            <Text style={{ ...Typography.default(), fontSize: 14, color: theme.colors.text }}>
                                 {title}
                             </Text>
                         ) : <View />}

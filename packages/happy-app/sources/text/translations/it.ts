@@ -497,6 +497,8 @@ export const it: TranslationStructure = {
         plannedTime: 'Tempo Pianificato',
         startTime: 'Inizio',
         endTime: 'Fine',
+        setStartTime: 'Imposta ora di inizio',
+        setEndTime: 'Imposta ora di fine',
         creating: 'Creazione in corso...',
         createSuccess: 'Creato con successo',
         createFailed: 'Creazione fallita',

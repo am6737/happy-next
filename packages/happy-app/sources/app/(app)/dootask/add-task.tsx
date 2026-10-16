@@ -636,7 +636,7 @@ export default React.memo(function AddTaskPage() {
                     date={activePickerField === 'start' ? startDate : endDate}
                     onChange={handlePickerChange}
                     minDate={activePickerField === 'end' ? startDate : undefined}
-                    title={activePickerField === 'start' ? t('dootask.startTime') : t('dootask.endTime')}
+                    title={activePickerField === 'start' ? t('dootask.setStartTime') : t('dootask.setEndTime')}
                 />
             )}
         </KeyboardAvoidingView>

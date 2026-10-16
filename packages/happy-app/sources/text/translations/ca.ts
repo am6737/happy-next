@@ -498,6 +498,8 @@ export const ca: TranslationStructure = {
         plannedTime: 'Temps planificat',
         startTime: 'Inici',
         endTime: 'Fi',
+        setStartTime: 'Defineix l\'hora d\'inici',
+        setEndTime: 'Defineix l\'hora de fi',
         creating: 'Creant...',
         createSuccess: 'Creat amb èxit',
         createFailed: 'Error en crear',

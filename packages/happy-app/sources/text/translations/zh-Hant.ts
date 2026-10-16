@@ -499,6 +499,8 @@ export const zhHant: TranslationStructure = {
         plannedTime: '計劃時間',
         startTime: '開始',
         endTime: '結束',
+        setStartTime: '設定開始時間',
+        setEndTime: '設定結束時間',
         creating: '建立中...',
         createSuccess: '建立成功',
         createFailed: '建立失敗',

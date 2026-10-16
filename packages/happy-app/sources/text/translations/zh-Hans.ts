@@ -500,6 +500,8 @@ export const zhHans: TranslationStructure = {
         plannedTime: '计划时间',
         startTime: '开始',
         endTime: '结束',
+        setStartTime: '设置开始时间',
+        setEndTime: '设置结束时间',
         creating: '创建中...',
         createSuccess: '创建成功',
         createFailed: '创建失败',

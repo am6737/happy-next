@@ -509,6 +509,8 @@ export const pl: TranslationStructure = {
         plannedTime: 'Planowany czas',
         startTime: 'Początek',
         endTime: 'Koniec',
+        setStartTime: 'Ustaw czas rozpoczęcia',
+        setEndTime: 'Ustaw czas zakończenia',
         creating: 'Tworzenie...',
         createSuccess: 'Utworzono pomyślnie',
         createFailed: 'Nie udało się utworzyć',

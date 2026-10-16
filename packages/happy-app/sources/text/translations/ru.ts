@@ -459,6 +459,8 @@ export const ru: TranslationStructure = {
         plannedTime: 'Запланированное время',
         startTime: 'Начало',
         endTime: 'Окончание',
+        setStartTime: 'Задать время начала',
+        setEndTime: 'Задать время окончания',
         creating: 'Создание...',
         createSuccess: 'Успешно создано',
         createFailed: 'Не удалось создать',

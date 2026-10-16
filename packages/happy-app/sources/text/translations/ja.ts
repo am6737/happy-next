@@ -500,6 +500,8 @@ export const ja: TranslationStructure = {
         plannedTime: '予定時間',
         startTime: '開始',
         endTime: '終了',
+        setStartTime: '開始時間を設定',
+        setEndTime: '終了時間を設定',
         creating: '作成中...',
         createSuccess: '作成しました',
         createFailed: '作成に失敗しました',
