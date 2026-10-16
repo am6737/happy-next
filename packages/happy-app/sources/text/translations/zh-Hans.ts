@@ -1581,6 +1581,8 @@ export const zhHans: TranslationStructure = {
         restorePanel: '还原面板',
         closePanel: '关闭面板',
         openInWindow: '在新窗口中打开',
+        routeLocal: '本机直连',
+        routeServerFallback: '经服务器（未连上本机 daemon）',
     },
 
 

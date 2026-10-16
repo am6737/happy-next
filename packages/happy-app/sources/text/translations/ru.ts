@@ -1589,6 +1589,8 @@ export const ru: TranslationStructure = {
         restorePanel: 'Восстановить панель',
         closePanel: 'Закрыть панель',
         openInWindow: 'Открыть в новом окне',
+        routeLocal: 'Прямое подключение на этом компьютере',
+        routeServerFallback: 'Через сервер (не удалось подключиться к daemon на этом компьютере)',
     },
 
 

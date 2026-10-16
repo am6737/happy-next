@@ -13,6 +13,7 @@ import { TerminalPanelIcon, type TerminalPanelIconName } from './TerminalPanelIc
 import { setTooltip, TerminalPanelList } from './TerminalPanelList';
 import { TerminalScreen } from './TerminalScreen';
 import { terminalTabKey, type TerminalTab } from './terminalTabs';
+import { useTerminalRouteLabel } from './useTerminalRouteLabel';
 import {
     clampTerminalPanelHeight,
     clampTerminalPanelListWidth,
@@ -67,6 +68,7 @@ export const TerminalPanel = memo(({ open, columnHeight }: { open: boolean; colu
         handleDuplicate,
         sheets,
     } = useTerminalWorkspace(focus);
+    const routeLabel = useTerminalRouteLabel();
 
     // ------------------------------------------------------------------
     // Size: the panel's height, dragged at its top edge, and the list's
@@ -253,7 +255,12 @@ export const TerminalPanel = memo(({ open, columnHeight }: { open: boolean; colu
             {/* Straddles the panel's top edge, so the line can be caught from either side of it. */}
             <View {...heightResponder.panHandlers} style={[styles.heightHandle, { cursor: 'row-resize' } as object]} />
             <View style={styles.header}>
-                <Text numberOfLines={1} selectable={false} style={[styles.title, { color: colors.foreground }]}>
+                <Text
+                    numberOfLines={1}
+                    ref={setTooltip(activeTab ? routeLabel(activeTab) : '')}
+                    selectable={false}
+                    style={[styles.title, { color: colors.foreground }]}
+                >
                     {status ?? t('terminalSession.title')}
                 </Text>
                 {headerButton('add', t('terminalSession.newTerminal'), handleNewHere, isBusy)}

@@ -1579,6 +1579,8 @@ export const es: TranslationStructure = {
         restorePanel: 'Restaurar panel',
         closePanel: 'Cerrar panel',
         openInWindow: 'Abrir en una ventana nueva',
+        routeLocal: 'Conectado directamente en este equipo',
+        routeServerFallback: 'A través del servidor (no se pudo contactar con el daemon de este equipo)',
     },
 
 

@@ -6,6 +6,7 @@ import type { ActionMenuItem } from '@/components/ActionMenu';
 import { TerminalTabContextMenu } from './TerminalTabContextMenu';
 import { groupTerminalTabsByMachine, type TerminalPanelColors } from './terminalPanelState';
 import { terminalTabKey, type TerminalTab } from './terminalTabs';
+import { useTerminalRouteLabel } from './useTerminalRouteLabel';
 
 /**
  * The terminals beside the panel, grouped by the machine they run on, the way an editor lists
@@ -39,6 +40,7 @@ export const TerminalPanelList = memo(({
     onRename,
 }: TerminalPanelListProps) => {
     const groups = useMemo(() => groupTerminalTabsByMachine(tabs), [tabs]);
+    const routeLabel = useTerminalRouteLabel();
 
     return (
         <ScrollView style={styles.list} contentContainerStyle={styles.content}>
@@ -60,6 +62,7 @@ export const TerminalPanelList = memo(({
                                 compact={compact}
                                 key={key}
                                 label={labels.get(key) ?? tab.terminal.id}
+                                routeLabel={routeLabel(tab)}
                                 onClose={onClose}
                                 onDuplicate={onDuplicate}
                                 onRename={onRename}
@@ -77,6 +80,7 @@ export const TerminalPanelList = memo(({
 const TerminalPanelListRow = memo(({
     tab,
     label,
+    routeLabel,
     active,
     colors,
     compact,
@@ -87,6 +91,7 @@ const TerminalPanelListRow = memo(({
 }: {
     tab: TerminalTab;
     label: string;
+    routeLabel: string;
     active: boolean;
     colors: TerminalPanelColors;
     compact: boolean;
@@ -115,7 +120,7 @@ const TerminalPanelListRow = memo(({
             <View {...hoverHandlers}>
                 <Pressable
                     // The name is not on screen when compact, so the pointer gets it instead.
-                    ref={setTooltip(compact ? label : '')}
+                    ref={setTooltip([compact ? label : '', routeLabel].filter(Boolean).join('\n'))}
                     accessibilityLabel={label}
                     accessibilityRole="tab"
                     accessibilityState={{ selected: active }}

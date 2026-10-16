@@ -7,6 +7,8 @@ import type { ActionMenuItem } from '@/components/ActionMenu';
 import { useTerminalTabReorder } from '@/hooks/useTerminalTabReorder';
 import { TerminalTabContextMenu } from './TerminalTabContextMenu';
 import { terminalTabKey, type TerminalTab } from './terminalTabs';
+import { setTooltip } from './TerminalPanelList';
+import { useTerminalRouteLabel } from './useTerminalRouteLabel';
 
 /**
  * The row of open terminals.
@@ -67,6 +69,7 @@ export const TerminalTabBar = memo(({
     isBusy = false,
 }: TerminalTabBarProps) => {
     const { theme } = useUnistyles();
+    const routeLabel = useTerminalRouteLabel();
     const scrollRef = useRef<ScrollView>(null);
     const reorder = useTerminalTabReorder({
         tabs,
@@ -117,6 +120,7 @@ export const TerminalTabBar = memo(({
                     <TerminalTabContextMenu items={items} key={key} title={label}>
                         <Pressable
                             {...reorder.tabProps(key)}
+                            ref={setTooltip(routeLabel(tab))}
                             accessibilityRole="tab"
                             accessibilityState={{ selected: active }}
                             onPress={() => onSelect(tab)}

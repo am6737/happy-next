@@ -1589,6 +1589,8 @@ export const pl: TranslationStructure = {
         restorePanel: 'Przywróć panel',
         closePanel: 'Zamknij panel',
         openInWindow: 'Otwórz w nowym oknie',
+        routeLocal: 'Połączono bezpośrednio na tym komputerze',
+        routeServerFallback: 'Przez serwer (nie udało się połączyć z demonem na tym komputerze)',
     },
 
 

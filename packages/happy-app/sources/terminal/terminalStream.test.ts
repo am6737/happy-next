@@ -57,6 +57,7 @@ vi.mock('@/utils/tauri', () => ({
 }));
 
 const { TerminalStream } = await import('./terminalStream');
+const { getTerminalRoute, getTerminalRoutes } = await import('./terminalRoute');
 
 /** A loopback connection to the daemon, driven by the test. */
 function fakeLocalConnection() {
@@ -568,6 +569,7 @@ describe('TerminalStream', () => {
     });
 
     describe('over loopback', () => {
+        const currentRoute = () => getTerminalRoute(getTerminalRoutes(), MACHINE_ID, TERMINAL_ID);
         it('attaches through the daemon directly, without the relay', async () => {
             const local = fakeLocalConnection();
             getLocalTerminalConnection.mockResolvedValue(local);
@@ -611,15 +613,18 @@ describe('TerminalStream', () => {
             const harness = createHarness();
             await startAttached(harness);
 
+            expect(currentRoute()).toBe('local');
             local.close();
             await harness.settle();
 
+            expect(currentRoute()).toBe('server');
             expect(emitWithAck).toHaveBeenCalledWith('terminal-subscribe', {
                 machineId: MACHINE_ID,
                 terminalId: TERMINAL_ID,
             });
             expect(machineRPC).toHaveBeenCalledWith(MACHINE_ID, 'terminal-attach', { terminalId: TERMINAL_ID });
             harness.stream.dispose();
+            expect(currentRoute()).toBeNull();
         });
 
         it('drops a frame that already came the other way', async () => {

@@ -11,6 +11,7 @@ import { apiSocket } from '@/sync/apiSocket';
 import { storage } from '@/sync/storage';
 import { subscribeTerminalFrames } from './terminalFrameRelay';
 import { getLocalTerminalConnection, type LocalTerminalConnection } from './localTerminalConnection';
+import { setTerminalRoute } from './terminalRoute';
 import { isTauriDesktop } from '@/utils/tauri';
 import { createNativeHeadlessTerminal, type TerminalViewportState } from './headlessTerminalState';
 import type { TerminalMirror } from './terminalMirror';
@@ -283,6 +284,7 @@ export class TerminalStream {
                 return;
             }
             this.useLocal(local);
+            setTerminalRoute(machineId, terminalId, local ? 'local' : 'server');
             if (local) {
                 this.releaseServerSubscription();
             } else {
@@ -530,6 +532,7 @@ export class TerminalStream {
         }
         this.local?.release();
         this.local = null;
+        setTerminalRoute(this.options.machineId, this.options.terminalId, null);
         if (!this.options.mirror) {
             this.mirror.dispose();
         }
