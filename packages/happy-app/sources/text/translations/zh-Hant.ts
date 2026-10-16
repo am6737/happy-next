@@ -1218,11 +1218,15 @@ export const zhHant: TranslationStructure = {
         codexPermissionMode: {
             default: '預設權限',
             readOnly: '唯讀模式',
-            onFailure: '自動審查',
+            onFailure: '幫我批准',
             fullAuto: '完全存取權限',
             badgeReadOnly: '唯讀模式',
-            badgeOnFailure: '自動審查',
+            badgeOnFailure: '幫我批准',
             badgeFullAuto: '完全存取權限',
+            defaultDescription: '編輯外部檔案和使用網際網路時一律詢問',
+            readOnlyDescription: '只能讀取檔案，修改檔案或執行命令前都會詢問',
+            onFailureDescription: '僅對偵測到的風險操作請求批准',
+            fullAutoDescription: '可不受限制地存取網際網路和你電腦上的任何檔案',
         },
         codexModel: {
             title: 'CODEX 模型',

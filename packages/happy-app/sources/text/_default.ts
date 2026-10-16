@@ -1229,11 +1229,15 @@ export const en = {
         codexPermissionMode: {
             default: 'Default Permissions',
             readOnly: 'Read Only',
-            onFailure: 'Auto Review',
+            onFailure: 'Approve for Me',
             fullAuto: 'Full Access',
             badgeReadOnly: 'Read Only',
-            badgeOnFailure: 'Auto Review',
+            badgeOnFailure: 'Approve for Me',
             badgeFullAuto: 'Full Access',
+            defaultDescription: 'Always asks before editing files outside the workspace or using the internet',
+            readOnlyDescription: 'Can only read files; asks before editing files or running commands',
+            onFailureDescription: 'Asks for approval only for actions it detects as risky',
+            fullAutoDescription: 'Unrestricted access to the internet and any file on your computer',
         },
         codexModel: {
             title: 'CODEX MODEL',

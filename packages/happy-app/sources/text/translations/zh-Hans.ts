@@ -1219,11 +1219,15 @@ export const zhHans: TranslationStructure = {
         codexPermissionMode: {
             default: '默认权限',
             readOnly: '只读模式',
-            onFailure: '自动审查',
+            onFailure: '帮我批准',
             fullAuto: '完全访问权限',
             badgeReadOnly: '只读模式',
-            badgeOnFailure: '自动审查',
+            badgeOnFailure: '帮我批准',
             badgeFullAuto: '完全访问权限',
+            defaultDescription: '编辑外部文件和使用互联网时始终询问',
+            readOnlyDescription: '只能读取文件，修改文件或执行命令前都会询问',
+            onFailureDescription: '仅对检测到的风险操作请求批准',
+            fullAutoDescription: '可不受限制地访问互联网和你电脑上的任何文件',
         },
         codexModel: {
             title: 'CODEX 模型',

@@ -714,11 +714,16 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
         return '';
     }, [isCodex, isGemini, isQoder]);
 
-    const qoderPermissionModeDescriptions: Partial<Record<PermissionMode, string>> = isQoder ? {
+    const permissionModeDescriptions: Partial<Record<PermissionMode, string>> = isQoder ? {
         default: t('agentInput.qoderPermissionMode.defaultDescription'),
         acceptEdits: t('agentInput.qoderPermissionMode.acceptEditsDescription'),
         auto: t('agentInput.qoderPermissionMode.autoDescription'),
         yolo: t('agentInput.qoderPermissionMode.yoloDescription'),
+    } : isCodex ? {
+        default: t('agentInput.codexPermissionMode.defaultDescription'),
+        'read-only': t('agentInput.codexPermissionMode.readOnlyDescription'),
+        'on-failure': t('agentInput.codexPermissionMode.onFailureDescription'),
+        'full-auto': t('agentInput.codexPermissionMode.fullAutoDescription'),
     } : {};
     // Qoder's plan mode stands apart from its permission mode and only an approved plan ends it.
     // The badge shows it; the picker keeps the chosen mode, which applies once the plan is approved.
@@ -1912,7 +1917,7 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                             </View>
                                         )}
                                         {permissionModeOptions.map((mode) => {
-                                            const config = { label: getPermissionModeLabel(mode), description: qoderPermissionModeDescriptions[mode] };
+                                            const config = { label: getPermissionModeLabel(mode), description: permissionModeDescriptions[mode] };
                                             if (!config.label) return null;
                                             const isSelected = props.permissionMode === mode;
 
