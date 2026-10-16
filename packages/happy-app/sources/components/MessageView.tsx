@@ -215,7 +215,6 @@ export const MessageView = (props: {
 const ACTION_ICON_SIZE = Platform.OS === 'web' ? 16 : 17;
 const ACTION_BUTTON_SIZE = Platform.OS === 'web' ? 24 : 26;
 const ACTION_HIT_SLOP = Platform.OS === 'web' ? 6 : 8;
-const ACTION_GAP = Platform.OS === 'web' ? 8 : 6;
 
 function MessageActionBar(props: {
   side: 'left' | 'right';
@@ -245,6 +244,20 @@ function MessageActionBar(props: {
   const ttsActive = ttsState !== 'idle';
   const contentVisible = Platform.OS !== 'web' || props.hovered || !!props.forkLoading || ttsActive
     || !!props.isNewestMessage;
+  // The time states the time and nothing more: no hover tooltip on web, here
+  // or on the turn header above a reply — pressing it gives the full
+  // timestamp in a toast, on both platforms. It stands on the bar's outer
+  // end, leading the user's own messages and closing the agent's, a little
+  // further from the icons than they are from each other.
+  const time = (
+    <Pressable
+      onPress={showFullTime}
+      hitSlop={ACTION_HIT_SLOP}
+      style={props.side === 'right' ? styles.actionTimeLeading : styles.actionTimeTrailing}
+    >
+      <Text style={styles.actionTime}>{label}</Text>
+    </Pressable>
+  );
   return (
     <View
       style={[
@@ -254,6 +267,7 @@ function MessageActionBar(props: {
       ]}
       pointerEvents={contentVisible ? 'auto' : 'none'}
     >
+      {props.side === 'right' && time}
       {props.onCopy ? (
         <Pressable
           style={styles.actionButton}
@@ -302,12 +316,7 @@ function MessageActionBar(props: {
           )}
         </Pressable>
       ) : null}
-      {/* The time states the time and nothing more: no hover tooltip on web, here
-          or on the turn header above a reply — pressing it gives the full
-          timestamp in a toast, on both platforms. */}
-      <Pressable onPress={showFullTime} hitSlop={ACTION_HIT_SLOP}>
-        <Text style={styles.actionTime}>{label}</Text>
-      </Pressable>
+      {props.side !== 'right' && time}
     </View>
   );
 }
@@ -908,7 +917,7 @@ const styles = StyleSheet.create((theme) => ({
   actionBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: ACTION_GAP,
+    gap: 6,
     marginTop: 4,
     paddingHorizontal: 4,
   },
@@ -929,6 +938,12 @@ const styles = StyleSheet.create((theme) => ({
     height: ACTION_BUTTON_SIZE,
     lineHeight: ACTION_BUTTON_SIZE,
     color: theme.colors.textSecondary,
+  },
+  actionTimeLeading: {
+    marginRight: 2,
+  },
+  actionTimeTrailing: {
+    marginLeft: 2,
   },
   actionSpinner: {
     transform: [{ scale: 0.7 }],
