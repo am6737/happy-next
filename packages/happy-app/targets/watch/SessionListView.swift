@@ -1,14 +1,13 @@
 import SwiftUI
+import UIKit
 
-/// The active sessions, those waiting on a permission first
+/// The active sessions, ordered as the app orders its list: by when their conversation last moved
 struct SessionListView: View {
   @EnvironmentObject private var store: WatchStore
 
   private var sessions: [HappySession] {
     store.sessions.sorted { a, b in
-      let rankA = a.status == .needsApproval ? 0 : 1
-      let rankB = b.status == .needsApproval ? 0 : 1
-      return rankA != rankB ? rankA < rankB : a.activeAt > b.activeAt
+      a.lastMessageAt != b.lastMessageAt ? a.lastMessageAt > b.lastMessageAt : a.id < b.id
     }
   }
 
@@ -25,7 +24,7 @@ struct SessionListView: View {
         }
       }
     }
-    .navigationTitle("Happy")
+    .navigationTitle("Happy Next")
     .navigationDestination(for: String.self) { id in
       SessionDetailView(sessionId: id)
     }
@@ -43,18 +42,25 @@ struct SessionListView: View {
 
 private struct SessionRow: View {
   let session: HappySession
+  /// The avatar is as tall as a line of the title, and centred on its first line
+  @ScaledMetric(relativeTo: .headline) private var avatarSize: CGFloat = 20
+  private var titleLineHeight: CGFloat { UIFont.preferredFont(forTextStyle: .headline).lineHeight }
 
   var body: some View {
-    HStack(spacing: 8) {
-      StatusBadge(status: session.status)
+    HStack(alignment: .top, spacing: 8) {
+      SessionAvatar(session: session, size: avatarSize)
+        .frame(height: max(titleLineHeight, avatarSize))
       VStack(alignment: .leading, spacing: 2) {
         Text(session.title)
           .font(.headline)
           .lineLimit(2)
-        Text(statusText)
-          .font(.footnote)
-          .foregroundStyle(statusColor)
-          .lineLimit(1)
+        HStack(spacing: 4) {
+          StatusBadge(status: session.status, size: 12)
+          Text(statusText)
+            .foregroundStyle(statusColor)
+            .lineLimit(1)
+        }
+        .font(.footnote)
         if !session.detail.isEmpty {
           Text(session.detail)
             .font(.footnote)
@@ -88,13 +94,14 @@ private struct SessionRow: View {
 
 struct StatusBadge: View {
   let status: HappySession.Status
+  let size: CGFloat
 
   var body: some View {
     switch status {
     case .needsApproval:
       Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.orange)
     case .thinking:
-      ProgressView().frame(width: 16, height: 16)
+      ProgressView().frame(width: size, height: size)
     case .waiting:
       Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
     }

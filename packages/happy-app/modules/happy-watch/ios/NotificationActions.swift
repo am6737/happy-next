@@ -93,7 +93,7 @@ final class NotificationActions: NotificationDelegate {
 
   private static func perform(_ action: Action, sessionId: String, requestId: String?, text: String?) async {
     guard let credentials = HappyCredentialsStore.load(), let client = HappyClient(credentials: credentials) else {
-      await notifyFailure(L("Open Happy to sign in again.", "请打开 Happy 重新登录。"))
+      await notifyFailure(L("Open Happy Next to sign in again.", "请打开 Happy Next 重新登录。"))
       return
     }
     do {
@@ -109,14 +109,14 @@ final class NotificationActions: NotificationDelegate {
         try await client.send(text: text, sessionId: sessionId)
       }
     } catch {
-      await notifyFailure(L("Couldn't reach the session. Open Happy to try again.", "无法连接到会话，请打开 Happy 重试。"))
+      await notifyFailure(L("Couldn't reach the session. Open Happy Next to try again.", "无法连接到会话，请打开 Happy Next 重试。"))
     }
   }
 
   /// A failed action leaves no trace otherwise: the notification it came from is already gone
   private static func notifyFailure(_ message: String) async {
     let content = UNMutableNotificationContent()
-    content.title = "Happy"
+    content.title = "Happy Next"
     content.body = message
     let request = UNNotificationRequest(identifier: "happy.actionFailed", content: content, trigger: nil)
     try? await UNUserNotificationCenter.current().add(request)

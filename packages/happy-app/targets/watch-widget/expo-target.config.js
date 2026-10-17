@@ -7,7 +7,7 @@
 module.exports = (config) => ({
     type: 'watch-widget',
     name: 'HappyWatchWidget',
-    displayName: 'Happy',
+    displayName: config.name,
     bundleIdentifier: '.watchkitapp.widget',
     deploymentTarget: '10.0',
     colors: {

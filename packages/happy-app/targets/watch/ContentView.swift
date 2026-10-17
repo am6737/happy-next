@@ -22,7 +22,7 @@ private struct SignInView: View {
         Image(systemName: "iphone")
           .font(.system(size: 34))
           .foregroundStyle(.tint)
-        Text(L("Open Happy on your iPhone to sign in.", "在 iPhone 上打开 Happy 以登录。"))
+        Text(L("Open Happy Next on your iPhone to sign in.", "在 iPhone 上打开 Happy Next 以登录。"))
           .multilineTextAlignment(.center)
         Button(L("Try Again", "重试")) {
           WatchSessionReceiver.shared.requestCredentials()

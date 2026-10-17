@@ -18,7 +18,7 @@ public actor HappyClient {
 
   // MARK: Sessions
 
-  /// The sessions active in the last 15 minutes, the most recently active first
+  /// The sessions active in the last 15 minutes
   public func activeSessions() async throws -> [HappySession] {
     let response = try await request("GET", "/v2/sessions/active?limit=50")
     guard let list = response["sessions"] as? [[String: Any]] else { throw HappyError.badResponse }
@@ -51,14 +51,29 @@ public actor HappyClient {
       .compactMap { key, value in (value as? [String: Any]).map { HappyPermissionRequest(id: key, record: $0) } }
       .sorted { $0.createdAt < $1.createdAt }
 
-    let activeAt = (json["activeAt"] as? Double).map { Date(timeIntervalSince1970: $0 / 1000) } ?? Date()
+    // `agentModelName`: an ACP agent names its model by a code its `models` list spells out
+    let modelCode = metadata["model"] as? String
+    let model = (metadata["models"] as? [[String: Any]])?
+      .first { $0["code"] as? String == modelCode }?["value"] as? String ?? modelCode
+    let machineId = metadata["machineId"] as? String ?? ""
+    let avatarId = !machineId.isEmpty && !path.isEmpty ? "\(machineId):\(path)" : id
+
+    func date(_ key: String) -> Date? {
+      (json[key] as? Double).map { Date(timeIntervalSince1970: $0 / 1000) }
+    }
+    let activeAt = date("activeAt") ?? Date()
     return HappySession(
       id: id,
       title: title,
       detail: detail,
       flavor: flavor,
+      model: model,
+      reasoningEffort: metadata["reasoningEffort"] as? String,
+      avatarId: avatarId,
+      sessionIcon: (metadata["sessionIcon"] as? String).flatMap { $0.isEmpty ? nil : $0 },
       thinking: json["thinking"] as? Bool ?? false,
       activeAt: activeAt,
+      lastMessageAt: date("lastMessageAt") ?? date("createdAt") ?? activeAt,
       requests: requests
     )
   }

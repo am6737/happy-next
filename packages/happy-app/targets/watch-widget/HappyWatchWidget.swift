@@ -73,7 +73,7 @@ struct SessionCountsView: View {
       Label(summary, systemImage: symbol)
     default:
       VStack(alignment: .leading, spacing: 2) {
-        Text("Happy")
+        Text("Happy Next")
           .font(.headline)
           .widgetAccentable()
         if entry.snapshot == nil {
@@ -111,7 +111,7 @@ struct HappyWatchWidget: Widget {
       SessionCountsView(entry: entry)
         .containerBackground(for: .widget) { Color.clear }
     }
-    .configurationDisplayName("Happy")
+    .configurationDisplayName("Happy Next")
     .description(L("Sessions waiting for approval and working.", "等待审批和执行中的会话。"))
     .supportedFamilies([.accessoryCircular, .accessoryRectangular, .accessoryInline, .accessoryCorner])
   }

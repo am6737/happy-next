@@ -24,8 +24,18 @@ public struct HappySession: Identifiable, Hashable {
   /// The host and folder the session runs in
   public let detail: String
   public let flavor: String?
+  /// The model the agent runs, as the session's metadata names it, and its reasoning effort
+  public let model: String?
+  public let reasoningEffort: String?
+  /// What the app draws the session's avatar from: the machine and folder, or the session alone
+  public let avatarId: String
+  /// A preset key, an image URL or an emoji the session is marked with
+  public let sessionIcon: String?
   public let thinking: Bool
   public let activeAt: Date
+  /// When the conversation last moved, or when the session was created before its first message;
+  /// what the app orders its list by
+  public let lastMessageAt: Date
   public let requests: [HappyPermissionRequest]
 
   public var status: Status {
@@ -34,6 +44,17 @@ public struct HappySession: Identifiable, Hashable {
   }
 
   var isCodex: Bool { flavor == "codex" }
+
+  /// The agent's name, as the app's session card gives it
+  public var agentName: String {
+    switch flavor {
+    case nil, "claude": return "Claude"
+    case "codex", "gpt", "openai": return "Codex"
+    case "gemini": return "Gemini"
+    case "qoder": return "Qoder"
+    case let other?: return other
+    }
+  }
 }
 
 /// A permission the agent waits on (`agentState.requests`)

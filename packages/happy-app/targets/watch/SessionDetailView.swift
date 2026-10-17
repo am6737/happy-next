@@ -6,6 +6,8 @@ struct SessionDetailView: View {
   let sessionId: String
   @EnvironmentObject private var store: WatchStore
   @State private var messages: [HappyMessage] = []
+  /// Whether the messages were read once, till when a spinner stands in for them
+  @State private var loaded = false
   @State private var draft = ""
   @State private var busy = false
   @State private var failed = false
@@ -25,8 +27,17 @@ struct SessionDetailView: View {
           }
         }
 
+        if !loaded {
+          HStack(spacing: 8) {
+            ProgressView().frame(width: 16, height: 16)
+            Text(L("Loading…", "加载中…"))
+              .foregroundStyle(.secondary)
+          }
+          .listRowBackground(Color.clear)
+        }
+
         ForEach(messages.suffix(20)) { message in
-          MessageRow(message: message)
+          MessageRow(message: message, agent: agentLabel)
             .id(message.id)
         }
 
@@ -63,9 +74,17 @@ struct SessionDetailView: View {
     }
   }
 
+  /// "Claude · Opus 5.5 (High)": the agent the session runs, and its model when the session names one
+  private var agentLabel: String {
+    guard let session else { return L("Agent", "助手") }
+    let model = ModelLabels.label(model: session.model, reasoningEffort: session.reasoningEffort)
+    return [session.agentName, model].compactMap { $0 }.joined(separator: " · ")
+  }
+
   private func loadMessages() async {
-    guard let client = store.client,
-          let latest = try? await client.messages(sessionId: sessionId) else { return }
+    guard let client = store.client else { return }
+    defer { loaded = true }
+    guard let latest = try? await client.messages(sessionId: sessionId) else { return }
     if latest != messages { messages = latest }
   }
 
@@ -143,11 +162,13 @@ private struct PermissionCard: View {
 
 private struct MessageRow: View {
   let message: HappyMessage
+  let agent: String
 
   var body: some View {
     VStack(alignment: .leading, spacing: 2) {
-      Text(message.role == .user ? L("You", "你") : L("Agent", "助手"))
+      Text(message.role == .user ? L("You", "你") : agent)
         .font(.caption2)
+        .lineLimit(1)
         .foregroundStyle(message.role == .user ? Color.accentColor : .secondary)
       Text(message.text)
         .font(.footnote)
