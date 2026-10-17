@@ -1,5 +1,6 @@
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
+import { clearNativeCredentials } from '@/sync/nativeCredentials';
 
 const AUTH_KEY = 'auth_credentials';
 
@@ -51,6 +52,7 @@ export const TokenStorage = {
         try {
             await SecureStore.deleteItemAsync(AUTH_KEY);
             credentialsCache = null; // Clear cache
+            clearNativeCredentials();
             return true;
         } catch (error) {
             console.error('Error removing credentials:', error);

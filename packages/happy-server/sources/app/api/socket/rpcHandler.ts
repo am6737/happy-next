@@ -46,6 +46,127 @@ function canSharedUserCallSessionRpc(accessLevel: 'view' | 'edit' | 'admin', rpc
     }
 }
 
+export type RpcCallResult = { ok: true, result: any } | { ok: false, error: string };
+
+/**
+ * Forwards an RPC call to the socket registered for its method, the caller's own or, for a
+ * shared session, the owner's. The caller is the socket that made the call, or null when it
+ * came over HTTP (the watch and the iPhone's notification actions, which hold no socket).
+ */
+export async function forwardRpcCall(userId: string, data: any, rpcListeners: Map<string, Socket>, callerSocket: Socket | null): Promise<RpcCallResult> {
+    try {
+        const { method, params } = data ?? {};
+
+        if (!method || typeof method !== 'string') {
+            return {
+                ok: false,
+                error: 'Invalid parameters: method is required'
+            };
+        }
+
+        let targetSocket = rpcListeners.get(method);
+
+        // If not found in current user's listeners, check if this is a shared session
+        if (!targetSocket || !targetSocket.connected) {
+            const colonIndex = method.indexOf(':');
+            if (colonIndex > 0) {
+                const sessionId = method.substring(0, colonIndex);
+                const rpcMethod = method.substring(colonIndex + 1);
+                const access = await checkSessionAccess(userId, sessionId);
+                if (access && !access.isOwner && access.level !== 'owner') {
+                    if (!canSharedUserCallSessionRpc(access.level, rpcMethod)) {
+                        return {
+                            ok: false,
+                            error: 'Forbidden'
+                        };
+                    }
+
+                    // Look up the session owner and try their RPC listeners
+                    const session = await db.session.findUnique({
+                        where: { id: sessionId },
+                        select: { accountId: true }
+                    });
+                    if (session) {
+                        const ownerListeners = getOrCreateUserRpcListeners(session.accountId);
+                        const ownerSocket = ownerListeners.get(method);
+                        if (ownerSocket?.connected) {
+                            targetSocket = ownerSocket;
+                        }
+                    }
+                }
+            }
+        }
+
+        if (!targetSocket || !targetSocket.connected) {
+            return {
+                ok: false,
+                error: 'RPC method not available'
+            };
+        }
+
+        // Don't allow calling your own socket
+        if (targetSocket === callerSocket) {
+            // log({ module: 'websocket-rpc' }, `RPC call failed: Attempted self-call on method ${method}`);
+            return {
+                ok: false,
+                error: 'Cannot call RPC on the same socket'
+            };
+        }
+
+        // Log RPC call initiation
+        const startTime = Date.now();
+        // log({ module: 'websocket-rpc' }, `RPC call initiated: ${callerSocket?.id} -> ${method} (target: ${targetSocket.id})`);
+
+        // Forward the RPC request to the target socket using emitWithAck
+        try {
+            // Codex native history operations may include process shutdown and app-server startup.
+            const nativeHistory = [':codex-archive-session', ':codex-fork-session', ':codex-duplicate-session']
+                .some(suffix => method.endsWith(suffix));
+            const filePreview = method.endsWith(':openFilePreview') || method.endsWith(':openFileDownload');
+            const response = await targetSocket.timeout(nativeHistory ? 110000 : filePreview ? 60000 : 30000).emitWithAck('rpc-request', {
+                method,
+                params
+            });
+
+            const duration = Date.now() - startTime;
+            // log({ module: 'websocket-rpc' }, `RPC call succeeded: ${method} (${duration}ms)`);
+
+            // Eagerly clear thinking state on abort completion.
+            // The CLI sends session-alive { thinking: false } via volatile emit,
+            // but that may arrive after this ack or be dropped entirely.
+            if (method.endsWith(':abort')) {
+                const sessionId = method.substring(0, method.length - ':abort'.length);
+                const { turnEnded } = updateThinkingState(sessionId, false, Date.now());
+                if (turnEnded) {
+                    await dispatchNextPendingIfPossible({ ownerId: userId, sessionId });
+                }
+            }
+
+            return {
+                ok: true,
+                result: response
+            };
+
+        } catch (error) {
+            const duration = Date.now() - startTime;
+            const errorMsg = error instanceof Error ? error.message : 'RPC call failed';
+            // log({ module: 'websocket-rpc' }, `RPC call failed: ${method} - ${errorMsg} (${duration}ms)`);
+
+            // Timeout or error occurred
+            return {
+                ok: false,
+                error: errorMsg
+            };
+        }
+    } catch (error) {
+        // log({ module: 'websocket', level: 'error' }, `Error in rpc-call: ${error}`);
+        return {
+            ok: false,
+            error: 'Internal error'
+        };
+    }
+}
+
 export function rpcHandler(userId: string, socket: Socket, rpcListeners: Map<string, Socket>) {
     
     // RPC register - Register this socket as a listener for an RPC method
@@ -109,135 +230,9 @@ export function rpcHandler(userId: string, socket: Socket, rpcListeners: Map<str
 
     // RPC call - Call an RPC method on another socket of the same user
     socket.on('rpc-call', async (data: any, callback: (response: any) => void) => {
-        try {
-            const { method, params } = data;
-
-            if (!method || typeof method !== 'string') {
-                if (callback) {
-                    callback({
-                        ok: false,
-                        error: 'Invalid parameters: method is required'
-                    });
-                }
-                return;
-            }
-
-            let targetSocket = rpcListeners.get(method);
-
-            // If not found in current user's listeners, check if this is a shared session
-            if (!targetSocket || !targetSocket.connected) {
-                const colonIndex = method.indexOf(':');
-                if (colonIndex > 0) {
-                    const sessionId = method.substring(0, colonIndex);
-                    const rpcMethod = method.substring(colonIndex + 1);
-                    const access = await checkSessionAccess(userId, sessionId);
-                    if (access && !access.isOwner && access.level !== 'owner') {
-                        if (!canSharedUserCallSessionRpc(access.level, rpcMethod)) {
-                            if (callback) {
-                                callback({
-                                    ok: false,
-                                    error: 'Forbidden'
-                                });
-                            }
-                            return;
-                        }
-
-                        // Look up the session owner and try their RPC listeners
-                        const session = await db.session.findUnique({
-                            where: { id: sessionId },
-                            select: { accountId: true }
-                        });
-                        if (session) {
-                            const ownerListeners = getOrCreateUserRpcListeners(session.accountId);
-                            const ownerSocket = ownerListeners.get(method);
-                            if (ownerSocket?.connected) {
-                                targetSocket = ownerSocket;
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (!targetSocket || !targetSocket.connected) {
-                if (callback) {
-                    callback({
-                        ok: false,
-                        error: 'RPC method not available'
-                    });
-                }
-                return;
-            }
-
-            // Don't allow calling your own socket
-            if (targetSocket === socket) {
-                // log({ module: 'websocket-rpc' }, `RPC call failed: Attempted self-call on method ${method}`);
-                if (callback) {
-                    callback({
-                        ok: false,
-                        error: 'Cannot call RPC on the same socket'
-                    });
-                }
-                return;
-            }
-
-            // Log RPC call initiation
-            const startTime = Date.now();
-            // log({ module: 'websocket-rpc' }, `RPC call initiated: ${socket.id} -> ${method} (target: ${targetSocket.id})`);
-
-            // Forward the RPC request to the target socket using emitWithAck
-            try {
-                // Codex native history operations may include process shutdown and app-server startup.
-                const nativeHistory = [':codex-archive-session', ':codex-fork-session', ':codex-duplicate-session']
-                    .some(suffix => method.endsWith(suffix));
-                const filePreview = method.endsWith(':openFilePreview') || method.endsWith(':openFileDownload');
-                const response = await targetSocket.timeout(nativeHistory ? 110000 : filePreview ? 60000 : 30000).emitWithAck('rpc-request', {
-                    method,
-                    params
-                });
-
-                const duration = Date.now() - startTime;
-                // log({ module: 'websocket-rpc' }, `RPC call succeeded: ${method} (${duration}ms)`);
-
-                // Eagerly clear thinking state on abort completion.
-                // The CLI sends session-alive { thinking: false } via volatile emit,
-                // but that may arrive after this ack or be dropped entirely.
-                if (method.endsWith(':abort')) {
-                    const sessionId = method.substring(0, method.length - ':abort'.length);
-                    const { turnEnded } = updateThinkingState(sessionId, false, Date.now());
-                    if (turnEnded) {
-                        await dispatchNextPendingIfPossible({ ownerId: userId, sessionId });
-                    }
-                }
-
-                // Forward the response back to the caller via callback
-                if (callback) {
-                    callback({
-                        ok: true,
-                        result: response
-                    });
-                }
-
-            } catch (error) {
-                const duration = Date.now() - startTime;
-                const errorMsg = error instanceof Error ? error.message : 'RPC call failed';
-                // log({ module: 'websocket-rpc' }, `RPC call failed: ${method} - ${errorMsg} (${duration}ms)`);
-
-                // Timeout or error occurred
-                if (callback) {
-                    callback({
-                        ok: false,
-                        error: errorMsg
-                    });
-                }
-            }
-        } catch (error) {
-            // log({ module: 'websocket', level: 'error' }, `Error in rpc-call: ${error}`);
-            if (callback) {
-                callback({
-                    ok: false,
-                    error: 'Internal error'
-                });
-            }
+        const response = await forwardRpcCall(userId, data, rpcListeners, socket);
+        if (callback) {
+            callback(response);
         }
     });
 

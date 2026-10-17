@@ -7,6 +7,30 @@ import { delay } from '@/utils/time'
 
 const PUSH_CAPABILITIES = 'doopush-relay-v1'
 
+// Notification categories the iOS app registers; their actions (allow, deny, reply...) are
+// answered natively by the app, so they also work from the watch with the app not running
+export const PUSH_CATEGORY_PERMISSION = 'happy.permission'
+export const PUSH_CATEGORY_READY = 'happy.ready'
+
+// Tools whose permission is an answer only the app's own UI can give: a question's choices, a plan's review
+const TOOLS_ANSWERED_IN_APP = new Set(['AskUserQuestion', 'ask_user_question', 'ExitPlanMode', 'exit_plan_mode'])
+
+/** The category of a push by what its data is about, or none for a push that has no actions */
+export function pushCategoryOf(data: Record<string, any> | undefined): string | undefined {
+    if (typeof data?.sessionId !== 'string') {
+        return undefined
+    }
+    if (data.type === 'permission_request') {
+        return typeof data.requestId === 'string' && !TOOLS_ANSWERED_IN_APP.has(data.tool)
+            ? PUSH_CATEGORY_PERMISSION
+            : undefined
+    }
+    if (data.type === 'ready') {
+        return PUSH_CATEGORY_READY
+    }
+    return undefined
+}
+
 export interface PushToken {
     id: string
     token: string
@@ -89,7 +113,8 @@ export class PushNotificationClient {
         title: string,
         body: string,
         data: Record<string, any> | undefined,
-        badge: number
+        badge: number,
+        category: string | undefined
     ): Promise<DooPushSendResult> {
         const idempotencyKey = randomUUID()
         for (let attempt = 0; attempt <= DOOPUSH_RETRY_DELAYS_MS.length; attempt++) {
@@ -101,7 +126,7 @@ export class PushNotificationClient {
                     state?: 'processing'
                 }>(
                     `${this.baseUrl}/v1/push/send`,
-                    { idempotencyKey, title, body, data, badge },
+                    { idempotencyKey, title, body, data, badge, ...(category && { category }) },
                     {
                         headers: {
                             'Authorization': `Bearer ${this.token}`,
@@ -277,6 +302,7 @@ export class PushNotificationClient {
                 }
 
                 const { expoTokens, dooPushTokens } = partitionPushTokens(tokens)
+                const category = pushCategoryOf(data)
 
                 const expoMessages: ExpoPushMessage[] = expoTokens.map((token, index) => {
                     logger.debug(`[PUSH] Creating Expo message ${index + 1}`)
@@ -288,7 +314,8 @@ export class PushNotificationClient {
                         channelId: 'default',
                         sound: 'default',
                         priority: 'high',
-                        badge: badgeCount
+                        badge: badgeCount,
+                        ...(category && { categoryId: category })
                     }
                 })
 
@@ -296,7 +323,7 @@ export class PushNotificationClient {
                 const [, dooPushResult] = await Promise.all([
                     this.sendPushNotifications(expoMessages),
                     dooPushTokens.length > 0
-                        ? this.sendDooPushNotifications(title, body, data, badgeCount)
+                        ? this.sendDooPushNotifications(title, body, data, badgeCount, category)
                         : Promise.resolve(null)
                 ])
                 if (dooPushResult && !dooPushResult.accepted) {
@@ -325,11 +352,14 @@ export class PushNotificationClient {
      * failure a chance to recover without leaving an unbounded timer/request
      * alive or permanently suppressing later, independent controller turns.
      */
-    sendCompletionToAllDevices(title: string, body: string, data?: Record<string, any>): void {
+    sendCompletionToAllDevices(title: string, body: string, completionData?: Record<string, any>): void {
         if (isOrchestratorWorkerSession()) {
             logger.debug('[PUSH] Suppressing worker completion notification')
             return
         }
+
+        // Marks the push as a finished turn, so it carries the reply action
+        const data: Record<string, any> | undefined = completionData ? { ...completionData, type: 'ready' } : undefined
 
         const controllerSessionId = typeof data?.sessionId === 'string' ? data.sessionId : null
         if (!controllerSessionId) {

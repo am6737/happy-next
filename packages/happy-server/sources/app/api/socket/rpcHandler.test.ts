@@ -8,7 +8,7 @@ vi.mock('@/storage/db', () => ({ db: { session: { findUnique: vi.fn().mockResolv
 vi.mock('./rpcRegistry', () => ({ getOrCreateUserRpcListeners: vi.fn() }));
 vi.mock('@/app/presence/sessionTurnRuntime', () => ({ updateThinkingState: vi.fn(() => ({ turnEnded: false })) }));
 vi.mock('@/app/session/pendingMessageAutoDispatch', () => ({ dispatchNextPendingIfPossible: vi.fn() }));
-import { rpcHandler } from './rpcHandler';
+import { forwardRpcCall, rpcHandler } from './rpcHandler';
 import { checkSessionAccess } from '@/app/share/accessControl';
 import { getOrCreateUserRpcListeners } from './rpcRegistry';
 
@@ -76,5 +76,19 @@ describe('shared-session preview permissions', () => {
         await handlers.get('rpc-call')!({ method, params: 'encrypted-params' }, callback);
         expect(callback).toHaveBeenCalledWith(allowed ? { ok: true, result: 'encrypted-result' } : { ok: false, error: 'Forbidden' });
         expect(target.emitWithAck).toHaveBeenCalledTimes(allowed ? 1 : 0);
+    });
+});
+
+describe('RPC over HTTP', () => {
+    it('forwards a call that comes without a socket', async () => {
+        const target = { connected: true, timeout: vi.fn().mockReturnThis(), emitWithAck: vi.fn().mockResolvedValue('encrypted-result') };
+        const result = await forwardRpcCall('owner', { method: 'session:permission', params: 'encrypted-params' }, new Map([['session:permission', target as unknown as Socket]]), null);
+        expect(target.emitWithAck).toHaveBeenCalledWith('rpc-request', { method: 'session:permission', params: 'encrypted-params' });
+        expect(result).toEqual({ ok: true, result: 'encrypted-result' });
+    });
+
+    it('rejects a call without a method', async () => {
+        const result = await forwardRpcCall('owner', { params: 'encrypted-params' }, new Map(), null);
+        expect(result).toEqual({ ok: false, error: 'Invalid parameters: method is required' });
     });
 });

@@ -156,6 +156,8 @@ export default {
             "@livekit/react-native-expo-plugin",
             "@config-plugins/react-native-webrtc",
             "react-native-bottom-tabs",
+            // The Apple Watch app and its complication, from targets/
+            "@bacons/apple-targets",
             [
                 "expo-audio",
                 {

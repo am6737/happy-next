@@ -1,3 +1,4 @@
+import { isSessionThinking } from "@/app/presence/sessionTurnRuntime";
 import { eventRouter, buildNewSessionUpdate } from "@/app/events/eventRouter";
 import { type Fastify } from "../types";
 import { db } from "@/storage/db";
@@ -300,6 +301,8 @@ export function sessionRoutes(app: Fastify) {
                 agentState: v.agentState,
                 agentStateVersion: v.agentStateVersion,
                 dataEncryptionKey: v.dataEncryptionKey ? Buffer.from(v.dataEncryptionKey).toString('base64') : null,
+                // The watch reads sessions over HTTP and has no socket to hear the agent's turns
+                thinking: isSessionThinking(v.id),
             }))
         });
     });

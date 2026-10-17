@@ -23,7 +23,7 @@ vi.mock('@/ui/logger', () => ({
     },
 }))
 
-import { partitionPushTokens, PushNotificationClient } from './pushNotifications'
+import { partitionPushTokens, pushCategoryOf, PushNotificationClient } from './pushNotifications'
 
 describe('partitionPushTokens', () => {
     it('uses provider metadata and falls back to legacy token detection', () => {
@@ -36,6 +36,26 @@ describe('partitionPushTokens', () => {
 
         expect(result.expoTokens.map(({ id }) => id)).toEqual(['1', '3'])
         expect(result.dooPushTokens.map(({ id }) => id)).toEqual(['2', '4'])
+    })
+})
+
+describe('pushCategoryOf', () => {
+    it('makes a permission request actionable', () => {
+        expect(pushCategoryOf({ sessionId: 's', requestId: 'r', tool: 'Bash', type: 'permission_request' })).toBe('happy.permission')
+    })
+
+    it('leaves questions and plans to the app', () => {
+        expect(pushCategoryOf({ sessionId: 's', requestId: 'r', tool: 'AskUserQuestion', type: 'permission_request' })).toBeUndefined()
+        expect(pushCategoryOf({ sessionId: 's', requestId: 'r', tool: 'ExitPlanMode', type: 'permission_request' })).toBeUndefined()
+    })
+
+    it('lets a ready notification be replied to', () => {
+        expect(pushCategoryOf({ sessionId: 's', type: 'ready' })).toBe('happy.ready')
+    })
+
+    it('has no category without a session', () => {
+        expect(pushCategoryOf({ type: 'ready' })).toBeUndefined()
+        expect(pushCategoryOf(undefined)).toBeUndefined()
     })
 })
 
@@ -101,7 +121,7 @@ describe('PushNotificationClient completion notifications', () => {
         client.sendCompletionToAllDevices('Ready', 'Waiting', { sessionId: 'controller-1' })
         await vi.advanceTimersByTimeAsync(0)
 
-        expect(send).toHaveBeenCalledWith('Ready', 'Waiting', { sessionId: 'controller-1' })
+        expect(send).toHaveBeenCalledWith('Ready', 'Waiting', { sessionId: 'controller-1', type: 'ready' })
     })
 
     it('still sends an ordinary ready notification after delegated run history exists', async () => {

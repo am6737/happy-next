@@ -132,6 +132,18 @@ describe('POST /v1/push/send', () => {
         }));
     });
 
+    it('passes the iOS notification category to DooPush', async () => {
+        const response = await app.inject({
+            method: 'POST',
+            url: '/v1/push/send',
+            payload: { ...requestBody, category: 'happy.permission' },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const upstreamBody = JSON.parse(fetchMock.mock.calls[0][1].body);
+        expect(upstreamBody.payload.apns).toEqual({ category: 'happy.permission' });
+    });
+
     it('reports and caches only devices accepted by DooPush', async () => {
         fetchMock.mockResolvedValue({
             ok: true,

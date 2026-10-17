@@ -43,6 +43,7 @@ import { loadPendingSettings, savePendingSettings, loadSessionLastViewedAt, save
 import { initializeTracking, tracking } from '@/track';
 import { parseToken } from '@/utils/parseToken';
 import { getServerUrl, onServerUrlChanged } from './serverConfig';
+import { setNativeCredentials } from './nativeCredentials';
 import { clearGithubSession } from './github/client';
 import { log } from '@/log';
 import { signContentPublicKey } from './directShareEncryption';
@@ -5833,9 +5834,11 @@ async function syncInit(credentials: AuthCredentials, restore: boolean) {
     // Initialize socket connection
     const API_ENDPOINT = getServerUrl();
     apiSocket.initialize({ endpoint: API_ENDPOINT, token: credentials.token }, encryption);
+    setNativeCredentials(credentials.token, credentials.secret, API_ENDPOINT);
     onServerUrlChanged((serverUrl) => {
         clearGithubSession();
         apiSocket.updateEndpoint(serverUrl);
+        setNativeCredentials(credentials.token, credentials.secret, serverUrl);
     });
 
     // Wire socket status to storage

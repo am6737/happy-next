@@ -51,7 +51,9 @@ export function pushRoutes(app: Fastify) {
                 title: z.string().min(1).max(200),
                 body: z.string().min(1).max(2_048),
                 badge: z.number().int().nonnegative().optional(),
-                data: z.record(z.unknown()).optional()
+                data: z.record(z.unknown()).optional(),
+                // iOS notification category, which gives the push its action buttons
+                category: z.string().min(1).max(64).optional()
             }),
             response: {
                 200: z.object({
@@ -161,6 +163,9 @@ export function pushRoutes(app: Fastify) {
                             oppo: {
                                 category: OPPO_PUSH_CATEGORY,
                             },
+                            ...(request.body.category && {
+                                apns: { category: request.body.category },
+                            }),
                         }
                     })
                 }
