@@ -10,8 +10,6 @@ module.exports = (config) => ({
     displayName: 'Happy',
     bundleIdentifier: '.watchkitapp.widget',
     deploymentTarget: '10.0',
-    // Relative to the target's folder
-    icon: '../../sources/assets/images/icon.png',
     colors: {
         $accent: '#FF9500',
         $widgetBackground: '#000000',
