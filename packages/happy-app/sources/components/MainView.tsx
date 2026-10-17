@@ -286,7 +286,7 @@ const CLI_UPDATE_AS_DOT = Platform.OS !== 'ios';
 
 // Header right button - varies by tab
 // The sessions "+" starts a new session on a tap and opens its menu on a long press; a tap opens the
-// menu too while a new session cannot start (`onSessionsNewSession` unset).
+// menu too while a new session cannot start (`onSessionsNewSession` unset) or a CLI update dot is on it.
 const HeaderRight = React.memo(({ activeTab, onDootaskCreate, onSessionsNewSession, onSessionsCreate, sessionsCreateItems, cliUpdate, onCliUpdatePress, onScanPress, onManualEntryPress, isScannerLoading }: {
     activeTab: ActiveTabType;
     onDootaskCreate?: () => void;
@@ -305,10 +305,12 @@ const HeaderRight = React.memo(({ activeTab, onDootaskCreate, onSessionsNewSessi
     if (activeTab === 'sessions') {
         const addLabel = t('sessionScope.addMenu');
         if (CLI_UPDATE_AS_DOT || !cliUpdate || cliUpdate.state === 'none') {
+            // While the dot shows, a tap opens the menu, where its update row is
+            const hasDot = !!cliUpdate && cliUpdate.state !== 'none';
             return (
                 <Pressable
                     ref={webTitle(addLabel)}
-                    onPress={onSessionsNewSession ?? onSessionsCreate}
+                    onPress={hasDot ? onSessionsCreate : onSessionsNewSession ?? onSessionsCreate}
                     onLongPress={onSessionsCreate}
                     hitSlop={15}
                     style={styles.headerButton}
