@@ -713,6 +713,10 @@ export function SessionsList() {
     // The iOS phone list leads with a search field; the sidebar has its own, and elsewhere the phone
     // header has a search button beside its "+".
     const showsSearchRow = !isTablet && Platform.OS === 'ios';
+    // Without the search field the first card sits under the header, as far from it as from the
+    // sides: the groups' own top padding (8) and this make the cards' side margin (12). The compact
+    // cards already sit further down, on their vertical margin.
+    const listTopPadding = !isTablet && !showsSearchRow && !compactSessionView ? 4 : 0;
     const scrollListToTop = React.useCallback(() => {
         listRef.current?.scrollToOffset({ offset: -getVisibleInsets().top, animated: true });
     }, [getVisibleInsets]);
@@ -1155,7 +1159,7 @@ export function SessionsList() {
                         keyExtractor={keyExtractor}
                         stickyHeaderIndices={stickyHeaderIndices}
                         contentContainerStyle={[
-                            { paddingBottom: safeArea.bottom + 128, maxWidth: layout.maxWidth },
+                            { paddingTop: listTopPadding, paddingBottom: safeArea.bottom + 128, maxWidth: layout.maxWidth },
                             isEmpty && emptyContentStyle,
                         ]}
                         ListHeaderComponent={showsSearchRow ? <SessionsSearchField /> : undefined}
