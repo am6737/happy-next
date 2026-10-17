@@ -51,6 +51,7 @@ function headerMenuAction(item: ActionMenuItem): NativeStackHeaderItemMenuAction
     return {
         type: 'action',
         label: item.label,
+        icon: item.icon ? { type: 'sfSymbol', name: item.icon.sfSymbol } : undefined,
         onPress: item.onPress,
         destructive: item.destructive,
         disabled: item.disabled,

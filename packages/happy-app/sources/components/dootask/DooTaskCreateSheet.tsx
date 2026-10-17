@@ -13,8 +13,8 @@ type Props = {
 /** The DooTask "create" choices, shared by this sheet and the native header menu (iOS). */
 export function useDooTaskCreateItems(onSelectTask: () => void, onSelectProject: () => void): ActionMenuItem[] {
     return React.useMemo(() => [
-        { label: t('dootask.addTask'), onPress: onSelectTask },
-        { label: t('dootask.addProject'), onPress: onSelectProject },
+        { label: t('dootask.addTask'), icon: { ionicon: 'checkbox-outline', sfSymbol: 'checkmark.square' }, onPress: onSelectTask },
+        { label: t('dootask.addProject'), icon: { ionicon: 'folder-outline', sfSymbol: 'folder' }, onPress: onSelectProject },
     ], [onSelectTask, onSelectProject]);
 }
 

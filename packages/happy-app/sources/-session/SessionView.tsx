@@ -1029,14 +1029,15 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
     const handleCloseRescheduleSheet = React.useCallback(() => setReschedulePendingId(null), []);
 
     const imagePickerMenuItems: ActionMenuItem[] = React.useMemo(() => [
-        ...(Platform.OS === 'web' ? [] : [{ label: t('session.takePhoto'), onPress: pickFromCamera, disabled: !supportsImages }]),
+        ...(Platform.OS === 'web' ? [] : [{ label: t('session.takePhoto'), icon: { ionicon: 'camera-outline', sfSymbol: 'camera' }, onPress: pickFromCamera, disabled: !supportsImages } satisfies ActionMenuItem]),
         {
             label: t('session.chooseFromLibrary'),
+            icon: { ionicon: 'images-outline', sfSymbol: 'photo.on.rectangle' },
             onPress: Platform.OS === 'web' ? () => fileInputRef.current?.click() : pickFromGallery,
             disabled: !supportsImages,
         },
-        ...(canAttachFiles ? [{ label: t('session.files.menu'), onPress: () => void pickFiles() }] : []),
-        { label: t('session.scheduleMessage'), onPress: () => handleOpenScheduleSheet() },
+        ...(canAttachFiles ? [{ label: t('session.files.menu'), icon: { ionicon: 'document-outline', sfSymbol: 'doc' }, onPress: () => void pickFiles() } satisfies ActionMenuItem] : []),
+        { label: t('session.scheduleMessage'), icon: { ionicon: 'time-outline', sfSymbol: 'clock' }, onPress: () => handleOpenScheduleSheet() },
     ], [pickFromCamera, pickFromGallery, supportsImages, canAttachFiles, pickFiles, handleOpenScheduleSheet]);
 
     // Handle file input change (web only)

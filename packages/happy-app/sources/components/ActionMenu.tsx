@@ -13,6 +13,15 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Typography } from '@/constants/Typography';
 import { t } from '@/text';
 import { GlassSurface, liquidGlassAvailable } from './GlassSurface';
+import type { Button as SwiftUIButton } from '@expo/ui/swift-ui';
+
+type SFSymbol = NonNullable<React.ComponentProps<typeof SwiftUIButton>['systemImage']>;
+
+/** A row's icon, named for each place it renders: Ionicons in the sheet, an SF Symbol in iOS's native menu. */
+export interface ActionMenuIcon {
+    ionicon: React.ComponentProps<typeof Ionicons>['name'];
+    sfSymbol: SFSymbol;
+}
 
 export interface ActionMenuItem {
     label: string;
@@ -25,6 +34,7 @@ export interface ActionMenuItem {
     /** Show checkmark to indicate current/active state */
     selected?: boolean;
     disabled?: boolean;
+    icon?: ActionMenuIcon;
 }
 
 interface ActionMenuProps {
@@ -148,6 +158,16 @@ export function ActionMenu({ items, onClose, title, headerContent, footerContent
                             onPress={() => handleItemPress(item)}
                         >
                             <View style={styles.itemContent}>
+                                {item.icon ? (
+                                    <Ionicons
+                                        name={item.icon.ionicon}
+                                        size={22}
+                                        color={item.color
+                                            || (item.destructive ? theme.colors.textDestructive
+                                                : item.secondary ? theme.colors.textSecondary
+                                                    : theme.colors.textLink)}
+                                    />
+                                ) : null}
                                 <Text
                                     style={[
                                         styles.itemText,

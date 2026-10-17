@@ -491,7 +491,14 @@ export const MainView = React.memo(({ variant }: MainViewProps) => {
     const cliUpdateColor = useCliUpdateColor(cliUpdate.update);
     // With the update as a dot on the "+", its menu has a row that opens it
     const sessionsMenuItems = React.useMemo(() => CLI_UPDATE_AS_DOT && cliUpdate.update.state !== 'none'
-        ? [...sessionsCreateItems, { label: cliUpdateLabel(cliUpdate.update), color: cliUpdateColor, onPress: cliUpdate.open }]
+        ? [...sessionsCreateItems, {
+            label: cliUpdateLabel(cliUpdate.update),
+            icon: cliUpdate.update.state === 'failed'
+                ? { ionicon: 'alert-circle-outline', sfSymbol: 'exclamationmark.circle' }
+                : { ionicon: 'arrow-up-circle-outline', sfSymbol: 'arrow.up.circle' },
+            color: cliUpdateColor,
+            onPress: cliUpdate.open,
+        } satisfies ActionMenuItem]
         : sessionsCreateItems, [sessionsCreateItems, cliUpdate.update, cliUpdate.open, cliUpdateColor]);
     // On iOS a CLI update takes the "+" out of the native header items, into a custom view beside it
     const sessionsHeaderMenu = cliUpdate.update.state === 'none' ? sessionsCreateItems : null;

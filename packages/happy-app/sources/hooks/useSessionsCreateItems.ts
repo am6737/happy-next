@@ -19,9 +19,10 @@ export function useSessionsCreateItems(scope: SessionListScope, onAddMachine: ()
     return React.useMemo(() => [
         {
             label: t('sessionScope.newSession'),
+            icon: { ionicon: 'chatbubble-outline', sfSymbol: 'bubble.left' },
             disabled: !connected || !anyOnline,
             onPress: () => router.push(machineId ? `/new?${new URLSearchParams({ machineId }).toString()}` : '/new'),
         },
-        { label: t('sessionScope.addMachine'), onPress: onAddMachine },
+        { label: t('sessionScope.addMachine'), icon: { ionicon: 'laptop-outline', sfSymbol: 'laptopcomputer' }, onPress: onAddMachine },
     ], [connected, anyOnline, machineId, router, onAddMachine]);
 }

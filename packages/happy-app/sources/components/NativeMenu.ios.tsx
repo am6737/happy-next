@@ -56,6 +56,7 @@ export const NativeMenu = React.memo((props: NativeMenuProps) => {
                                     key={index}
                                     role={item.destructive ? 'destructive' : 'default'}
                                     disabled={item.disabled}
+                                    systemImage={item.icon?.sfSymbol}
                                     onPress={item.onPress}
                                 >
                                     {item.label}

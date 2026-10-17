@@ -395,14 +395,15 @@ function NewSessionWizard() {
     // Add (+) menu, same as in a session. Image rows are disabled (not hidden) when the AI has no
     // image support. Web has no camera and opens the file picker for the library.
     const imagePickerMenuItems: ActionMenuItem[] = React.useMemo(() => [
-        ...(Platform.OS === 'web' ? [] : [{ label: t('session.takePhoto'), onPress: pickFromCamera, disabled: !supportsImages }]),
+        ...(Platform.OS === 'web' ? [] : [{ label: t('session.takePhoto'), icon: { ionicon: 'camera-outline', sfSymbol: 'camera' }, onPress: pickFromCamera, disabled: !supportsImages } satisfies ActionMenuItem]),
         {
             label: t('session.chooseFromLibrary'),
+            icon: { ionicon: 'images-outline', sfSymbol: 'photo.on.rectangle' },
             onPress: Platform.OS === 'web' ? () => fileInputRef.current?.click() : pickFromGallery,
             disabled: !supportsImages,
         },
-        { label: t('session.files.menu'), onPress: () => void pickFiles() },
-        { label: t('session.scheduleMessage'), onPress: () => setScheduleSheetVisible(true) },
+        { label: t('session.files.menu'), icon: { ionicon: 'document-outline', sfSymbol: 'doc' }, onPress: () => void pickFiles() },
+        { label: t('session.scheduleMessage'), icon: { ionicon: 'time-outline', sfSymbol: 'clock' }, onPress: () => setScheduleSheetVisible(true) },
     ], [pickFromCamera, pickFromGallery, supportsImages, pickFiles]);
 
     const handleFileInputChange = React.useCallback((event: React.ChangeEvent<HTMLInputElement>) => {

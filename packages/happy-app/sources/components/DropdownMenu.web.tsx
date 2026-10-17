@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { Animated, Modal, Pressable, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { Text } from '@/components/StyledText';
 import { Typography } from '@/constants/Typography';
@@ -160,6 +161,14 @@ export const DropdownMenu = React.memo(({ items, accessibilityLabel, style, hove
                                     (hovered || pressed) && !item.disabled && styles.itemHovered,
                                 ]}
                             >
+                                {item.icon && (
+                                    <Ionicons
+                                        name={item.icon.ionicon}
+                                        size={16}
+                                        color={item.disabled ? theme.colors.textSecondary : item.destructive ? theme.colors.textDestructive : theme.colors.text}
+                                        style={item.disabled && { opacity: 0.6 }}
+                                    />
+                                )}
                                 <Text
                                     numberOfLines={1}
                                     style={[
@@ -195,7 +204,9 @@ const stylesheet = StyleSheet.create((theme) => ({
     },
     item: {
         height: 32,
-        justifyContent: 'center',
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
         paddingHorizontal: 10,
         borderRadius: 6,
     },
@@ -203,6 +214,7 @@ const stylesheet = StyleSheet.create((theme) => ({
         backgroundColor: theme.colors.surfacePressed,
     },
     itemText: {
+        flex: 1,
         fontSize: 13,
         color: theme.colors.text,
         ...Typography.default(),
