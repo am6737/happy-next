@@ -1,4 +1,5 @@
 import SwiftUI
+import WatchKit
 
 /// A session: the permissions it waits on, its latest messages, a reply, and stopping its turn
 struct SessionDetailView: View {
@@ -8,6 +9,8 @@ struct SessionDetailView: View {
   @State private var draft = ""
   @State private var busy = false
   @State private var failed = false
+  /// The permission whose answer didn't reach the session, told on its own card where it was tapped
+  @State private var failedRequestId: String?
 
   private var session: HappySession? { store.session(id: sessionId) }
 
@@ -16,8 +19,8 @@ struct SessionDetailView: View {
       List {
         if let session {
           ForEach(session.requests) { request in
-            PermissionCard(request: request, busy: busy) { answer in
-              run { try await $0.answer(answer, request: request, sessionId: sessionId) }
+            PermissionCard(request: request, busy: busy, failed: failedRequestId == request.id) { answer in
+              run(for: request.id) { try await $0.answer(answer, request: request, sessionId: sessionId) }
             }
           }
         }
@@ -75,16 +78,23 @@ struct SessionDetailView: View {
     }
   }
 
-  /// Runs an action against the server, then reads the session again to show what came of it
-  private func run(_ action: @escaping (HappyClient) async throws -> Void) {
+  /// Runs an action against the server, then reads the session again to show what came of it;
+  /// a failure taps the wrist and is told on the permission's card when the action answers one
+  private func run(for requestId: String? = nil, _ action: @escaping (HappyClient) async throws -> Void) {
     guard let client = store.client, !busy else { return }
     busy = true
     failed = false
+    failedRequestId = nil
     Task {
       do {
         try await action(client)
       } catch {
-        failed = true
+        if let requestId {
+          failedRequestId = requestId
+        } else {
+          failed = true
+        }
+        WKInterfaceDevice.current().play(.failure)
       }
       await store.refresh()
       await loadMessages()
@@ -96,6 +106,7 @@ struct SessionDetailView: View {
 private struct PermissionCard: View {
   let request: HappyPermissionRequest
   let busy: Bool
+  let failed: Bool
   let answer: (HappyPermissionAnswer) -> Void
 
   var body: some View {
@@ -117,6 +128,11 @@ private struct PermissionCard: View {
           .tint(.green)
         Button(L("Allow for This Session", "本次会话总是允许")) { answer(.allowForSession) }
         Button(L("Deny", "拒绝"), role: .destructive) { answer(.deny) }
+        if failed {
+          Text(L("Couldn't reach the session.", "无法连接到会话。"))
+            .font(.footnote)
+            .foregroundStyle(.red)
+        }
       }
     }
     .disabled(busy)
