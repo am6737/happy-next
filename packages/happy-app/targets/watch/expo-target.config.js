@@ -1,5 +1,3 @@
-const path = require('path');
-
 /**
  * The Apple Watch app: the active sessions and their status, a session's latest messages, answering
  * permissions and replying (dictation is the watch's own text input). It signs in with the iPhone
@@ -14,7 +12,8 @@ module.exports = (config) => ({
     displayName: 'Happy',
     bundleIdentifier: '.watchkitapp',
     deploymentTarget: '10.0',
-    icon: path.join(__dirname, '../../sources/assets/images/icon.png'),
+    // Relative to the target's folder
+    icon: '../../sources/assets/images/icon.png',
     colors: {
         $accent: '#FF9500',
     },

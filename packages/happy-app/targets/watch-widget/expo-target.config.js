@@ -1,5 +1,3 @@
-const path = require('path');
-
 /**
  * The watch face complication: how many sessions wait for a permission and how many are working.
  * It reads the server with the credentials the watch app keeps in their shared group, and falls back
@@ -12,7 +10,8 @@ module.exports = (config) => ({
     displayName: 'Happy',
     bundleIdentifier: '.watchkitapp.complication',
     deploymentTarget: '10.0',
-    icon: path.join(__dirname, '../../sources/assets/images/icon.png'),
+    // Relative to the target's folder
+    icon: '../../sources/assets/images/icon.png',
     colors: {
         $accent: '#FF9500',
         $widgetBackground: '#000000',

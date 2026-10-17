@@ -1,0 +1,1 @@
+../../../modules/happy-watch/ios/HappyKit/HappyCredentials.swift

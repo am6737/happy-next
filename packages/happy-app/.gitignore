@@ -23,3 +23,8 @@ xiaomi-services.json
 oppo-services.json
 vivo-services.json
 meizu-services.json
+
+# Written by @bacons/apple-targets on prebuild
+targets/*/Info.plist
+targets/*/generated.entitlements
+targets/*/Assets.xcassets/
