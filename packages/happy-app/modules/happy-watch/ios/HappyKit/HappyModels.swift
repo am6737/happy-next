@@ -104,9 +104,11 @@ public struct HappyPermissionRequest: Identifiable, Hashable {
 }
 
 /// A page of a session's transcript, newest records first on the server: the text messages among
-/// them, the oldest record's seq (where the page before it ends), and whether there is one
+/// them, how many records it held, the oldest record's seq (where the page before it ends), and
+/// whether there is one
 public struct HappyMessagePage {
   public let messages: [HappyMessage]
+  public let recordCount: Int
   public let oldestSeq: Int?
   public let hasMore: Bool
 }

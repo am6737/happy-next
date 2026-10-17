@@ -107,6 +107,7 @@ public actor HappyClient {
     .sorted { $0.seq < $1.seq }
     return HappyMessagePage(
       messages: messages,
+      recordCount: list.count,
       oldestSeq: list.compactMap { $0["seq"] as? Int }.min(),
       hasMore: response["hasMore"] as? Bool ?? (list.count == limit)
     )
