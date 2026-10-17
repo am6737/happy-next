@@ -34,6 +34,8 @@ export default {
         ios: {
             supportsTablet: true,
             bundleIdentifier: bundleId,
+            // Signs the watch app and its complication (@bacons/apple-targets); the team in eas.json
+            appleTeamId: "G365J5PZA2",
             config: {
                 usesNonExemptEncryption: false
             },
