@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { GlassView } from 'expo-glass-effect';
 import { FullWindowOverlay } from 'react-native-screens';
@@ -36,9 +36,15 @@ export type ScheduleMessageSheetProps = {
 
 // The selected send time. The relative ones count from the moment of confirming, as their
 // subtitles show; `custom` is the time picked by hand (or a reschedule's existing time).
-type TimeOption = 'limit' | 'in30' | 'in60' | 'custom';
+type TimeOption = 'limit' | RelativeOption | 'custom';
+type RelativeOption = 'minutes' | 'hours';
 
-const RELATIVE_MINUTES = { in30: 30, in60: 60 } as const;
+// Tapping a relative option that is already selected offers these finer times, in minutes.
+const RELATIVE_CHOICES: Record<RelativeOption, readonly number[]> = {
+    minutes: [10, 15, 20, 30, 45, 50, 55],
+    hours: [60, 90, 120, 150, 180, 240, 300],
+};
+const DEFAULT_RELATIVE_MINUTES: Record<RelativeOption, number> = { minutes: 30, hours: 60 };
 
 const ANIMATION_DURATION = 250;
 const isIOS = Platform.OS === 'ios';
@@ -66,6 +72,18 @@ function formatSendTime(date: Date): string {
         return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
     }
     return formatDateTime(date);
+}
+
+function relativeTitle(option: RelativeOption, minutes: number): string {
+    return option === 'minutes'
+        ? t('scheduleMessage.inMinutes', { count: minutes })
+        : t('scheduleMessage.inHours', { count: minutes / 60 });
+}
+
+function relativeChoiceLabel(option: RelativeOption, minutes: number): string {
+    return option === 'minutes'
+        ? t('scheduleMessage.minutes', { count: minutes })
+        : t('scheduleMessage.hours', { count: minutes / 60 });
 }
 
 /** The custom option's starting time: half an hour out, rounded up to the next half hour. */
@@ -98,7 +116,10 @@ export const ScheduleMessageSheet = React.memo(function ScheduleMessageSheet({
     const [customDate, setCustomDate] = React.useState(defaultCustomDate);
     // Ticks so the relative options' times stay current while the sheet is open.
     const [now, setNow] = React.useState(Date.now);
-    const [selectedOption, setSelectedOption] = React.useState<TimeOption>('in30');
+    const [selectedOption, setSelectedOption] = React.useState<TimeOption>('minutes');
+    // Each relative option keeps its own finer time, and at most one shows its choices.
+    const [relativeMinutes, setRelativeMinutes] = React.useState(DEFAULT_RELATIVE_MINUTES);
+    const [expandedOption, setExpandedOption] = React.useState<RelativeOption | null>(null);
     const [showDatePicker, setShowDatePicker] = React.useState(false);
     const [submitting, setSubmitting] = React.useState(false);
 
@@ -137,8 +158,10 @@ export const ScheduleMessageSheet = React.memo(function ScheduleMessageSheet({
                 setSelectedOption('custom');
             } else {
                 setCustomDate(defaultCustomDate());
-                setSelectedOption(limitDate ? 'limit' : 'in30');
+                setSelectedOption(limitDate ? 'limit' : 'minutes');
             }
+            setRelativeMinutes(DEFAULT_RELATIVE_MINUTES);
+            setExpandedOption(null);
             setShowDatePicker(false);
             setSubmitting(false);
 
@@ -163,10 +186,34 @@ export const ScheduleMessageSheet = React.memo(function ScheduleMessageSheet({
 
     const chooseOption = React.useCallback((option: TimeOption) => {
         setSelectedOption(option);
+        setExpandedOption(null);
         setShowDatePicker(false);
     }, []);
 
+    // A second tap on the selected relative option opens (or closes) its finer times.
+    const pressRelativeOption = (option: RelativeOption) => {
+        if (selectedOption !== option) {
+            chooseOption(option);
+            // Switching while the other group's times are open opens this one's in their place.
+            if (expandedOption) setExpandedOption(option);
+            return;
+        }
+        setShowDatePicker(false);
+        setExpandedOption((value) => (value === option ? null : option));
+    };
+
+    const chooseRelativeMinutes = (option: RelativeOption, minutes: number) => {
+        setRelativeMinutes((value) => ({ ...value, [option]: minutes }));
+    };
+
     const closeDatePicker = React.useCallback(() => setShowDatePicker(false), []);
+
+    // Like the date picker, the finer times stay open while picking and close once the editor
+    // takes focus or another option is chosen, so the sheet does not jump on every pick.
+    const handleEditorFocus = React.useCallback(() => {
+        setShowDatePicker(false);
+        setExpandedOption(null);
+    }, []);
 
     const handleCustomDateChange = React.useCallback((next: Date) => {
         setCustomDate(next);
@@ -175,9 +222,9 @@ export const ScheduleMessageSheet = React.memo(function ScheduleMessageSheet({
 
     const deliverAtFor = (option: TimeOption, from: number): number | null => {
         switch (option) {
-            case 'in30':
-            case 'in60':
-                return from + RELATIVE_MINUTES[option] * 60_000;
+            case 'minutes':
+            case 'hours':
+                return from + relativeMinutes[option] * 60_000;
             case 'limit':
                 return limitDate?.getTime() ?? null;
             case 'custom':
@@ -250,8 +297,8 @@ export const ScheduleMessageSheet = React.memo(function ScheduleMessageSheet({
                                 multiline
                                 value={text}
                                 onChangeText={setText}
-                                // The keyboard takes the room the date picker needs, so typing closes it.
-                                onFocus={closeDatePicker}
+                                // The keyboard takes the room the date picker and finer times need, so typing closes them.
+                                onFocus={handleEditorFocus}
                                 placeholder={t('scheduleMessage.placeholder')}
                                 placeholderTextColor={theme.colors.textSecondary}
                                 style={styles.editor}
@@ -284,18 +331,33 @@ export const ScheduleMessageSheet = React.memo(function ScheduleMessageSheet({
                                     <Text style={styles.optionSubtitle}>{formatSendTime(limitDate)}</Text>
                                 </Pressable>
                             )}
-                            <Pressable style={[styles.option, selectedOption === 'in30' && styles.optionSelected]} onPress={() => chooseOption('in30')}>
-                                <Text style={styles.optionTitle}>{t('scheduleMessage.in30Minutes')}</Text>
-                                <Text style={styles.optionSubtitle}>{formatSendTime(new Date(now + 30 * 60_000))}</Text>
-                            </Pressable>
-                            <Pressable style={[styles.option, selectedOption === 'in60' && styles.optionSelected]} onPress={() => chooseOption('in60')}>
-                                <Text style={styles.optionTitle}>{t('scheduleMessage.in1Hour')}</Text>
-                                <Text style={styles.optionSubtitle}>{formatSendTime(new Date(now + 60 * 60_000))}</Text>
-                            </Pressable>
+                            {(['minutes', 'hours'] as const).map((option) => (
+                                <Pressable
+                                    key={option}
+                                    style={[styles.option, selectedOption === option && styles.optionSelected]}
+                                    onPress={() => pressRelativeOption(option)}
+                                >
+                                    <View style={styles.optionTitleRow}>
+                                        <Text style={styles.optionTitle}>{relativeTitle(option, relativeMinutes[option])}</Text>
+                                        {/* Hints that a second tap offers finer times. */}
+                                        {selectedOption === option && (
+                                            <Ionicons
+                                                name={expandedOption === option ? 'chevron-up' : 'chevron-down'}
+                                                size={13}
+                                                color={theme.colors.textSecondary}
+                                            />
+                                        )}
+                                    </View>
+                                    <Text style={styles.optionSubtitle}>
+                                        {formatSendTime(new Date(now + relativeMinutes[option] * 60_000))}
+                                    </Text>
+                                </Pressable>
+                            ))}
                             <Pressable
                                 style={[styles.option, selectedOption === 'custom' && styles.optionSelected]}
                                 onPress={() => {
                                     setSelectedOption('custom');
+                                    setExpandedOption(null);
                                     // The date picker needs the room the keyboard takes.
                                     if (!showDatePicker) Keyboard.dismiss();
                                     setShowDatePicker((value) => !value);
@@ -305,6 +367,19 @@ export const ScheduleMessageSheet = React.memo(function ScheduleMessageSheet({
                                 <Text style={styles.optionSubtitle}>{formatDateTime(customDate)}</Text>
                             </Pressable>
                         </ScrollView>
+                        {expandedOption && (
+                            <View style={styles.choices}>
+                                {RELATIVE_CHOICES[expandedOption].map((minutes) => (
+                                    <Pressable
+                                        key={minutes}
+                                        style={[styles.choice, relativeMinutes[expandedOption] === minutes && styles.optionSelected]}
+                                        onPress={() => chooseRelativeMinutes(expandedOption, minutes)}
+                                    >
+                                        <Text style={styles.choiceText}>{relativeChoiceLabel(expandedOption, minutes)}</Text>
+                                    </Pressable>
+                                ))}
+                            </View>
+                        )}
                         <DatePickerPopover
                             visible={showDatePicker}
                             onClose={closeDatePicker}
@@ -318,8 +393,10 @@ export const ScheduleMessageSheet = React.memo(function ScheduleMessageSheet({
                     <Pressable
                         onPress={() => void submit()}
                         disabled={!canSubmit}
-                        style={[styles.submit, !canSubmit && styles.submitDisabled]}
+                        // While saving it stays at full strength with a spinner, unlike when there is nothing to send.
+                        style={[styles.submit, !canSubmit && !submitting && styles.submitDisabled]}
                     >
+                        {submitting && <ActivityIndicator size="small" color={theme.colors.button.primary.tint} />}
                         <Text style={styles.submitText}>
                             {mode === 'create' ? t('scheduleMessage.confirm') : t('scheduleMessage.save')}
                         </Text>
@@ -420,6 +497,11 @@ const styles = StyleSheet.create((theme) => ({
         borderColor: theme.colors.button.primary.background,
         backgroundColor: liquidGlassAvailable ? GLASS_SHEET_FILL : theme.colors.surfaceHigh,
     },
+    optionTitleRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 3,
+    },
     optionTitle: {
         fontSize: 13,
         color: theme.colors.text,
@@ -430,8 +512,28 @@ const styles = StyleSheet.create((theme) => ({
         marginTop: 2,
         color: theme.colors.textSecondary,
     },
+    choices: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+    },
+    choice: {
+        borderWidth: 1,
+        borderColor: theme.colors.divider,
+        borderRadius: 8,
+        paddingHorizontal: 12,
+        paddingVertical: 7,
+    },
+    choiceText: {
+        fontSize: 13,
+        color: theme.colors.text,
+        ...Typography.default('semiBold'),
+    },
     submit: {
+        flexDirection: 'row',
+        justifyContent: 'center',
         alignItems: 'center',
+        gap: 8,
         borderRadius: 10,
         paddingVertical: 13,
         backgroundColor: theme.colors.button.primary.background,
