@@ -105,6 +105,7 @@ export default {
             require("./plugins/withVolcEngineAndroidMaven.js"),
             require("./plugins/withVolcEnginePodsSource.js"),
             require("./plugins/withRNAudioAPIIosFFmpeg.js"),
+            require("./plugins/withMinimumPodDeploymentTarget.js"),
             [
                 require("./plugins/withDooPushAutolinking.js"),
                 { enabled: dooPushConfig.enabled },
