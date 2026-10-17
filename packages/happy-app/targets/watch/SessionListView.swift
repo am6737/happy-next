@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 
 /// The active sessions, ordered as the app orders its list: by when their conversation last moved
 struct SessionListView: View {
@@ -42,31 +41,31 @@ struct SessionListView: View {
 
 private struct SessionRow: View {
   let session: HappySession
-  /// The avatar is as tall as a line of the title, and centred on its first line
-  @ScaledMetric(relativeTo: .headline) private var avatarSize: CGFloat = 20
-  private var titleLineHeight: CGFloat { UIFont.preferredFont(forTextStyle: .headline).lineHeight }
+  /// The avatar is about as tall as the status and the folder beside it
+  @ScaledMetric(relativeTo: .footnote) private var avatarSize: CGFloat = 30
 
   var body: some View {
-    HStack(alignment: .top, spacing: 8) {
-      SessionAvatar(session: session, size: avatarSize)
-        .frame(height: max(titleLineHeight, avatarSize))
-      VStack(alignment: .leading, spacing: 2) {
-        Text(session.title)
-          .font(.headline)
-          .lineLimit(2)
-        HStack(spacing: 4) {
-          StatusBadge(status: session.status, size: 12)
-          Text(statusText)
-            .foregroundStyle(statusColor)
-            .lineLimit(1)
+    VStack(alignment: .leading, spacing: 2) {
+      Text(session.title)
+        .font(.headline)
+        .lineLimit(2)
+      HStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: 2) {
+          HStack(spacing: 4) {
+            StatusBadge(status: session.status, size: 12)
+            Text(statusText)
+              .foregroundStyle(statusColor)
+              .lineLimit(1)
+          }
+          if !session.detail.isEmpty {
+            Text(session.detail)
+              .foregroundStyle(.secondary)
+              .lineLimit(1)
+          }
         }
         .font(.footnote)
-        if !session.detail.isEmpty {
-          Text(session.detail)
-            .font(.footnote)
-            .foregroundStyle(.secondary)
-            .lineLimit(1)
-        }
+        Spacer(minLength: 0)
+        SessionAvatar(session: session, size: avatarSize)
       }
     }
     .padding(.vertical, 2)

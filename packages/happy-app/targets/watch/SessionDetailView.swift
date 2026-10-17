@@ -17,6 +17,8 @@ struct SessionDetailView: View {
   @State private var earlierPages = 0
   @State private var loadingEarlier = false
   @State private var openMessage: HappyMessage?
+  /// The message that led the list before earlier ones were read above it, scrolled back to the top
+  @State private var keepAtTop: String?
   /// Whether the messages were read once, till when a spinner stands in for them
   @State private var loaded = false
   @State private var draft = ""
@@ -74,7 +76,7 @@ struct SessionDetailView: View {
           .simultaneousGesture(LongPressGesture().onEnded { _ in openMessage = message })
           .listRowBackground(
             RoundedRectangle(cornerRadius: 10)
-              .fill(message.role == .user ? Color.accentColor.opacity(0.18) : Color.gray.opacity(0.18))
+              .fill(message.role == .user ? MessageStyle.userBackground : Color.gray.opacity(0.18))
           )
           .id(message.id)
         }
@@ -111,6 +113,11 @@ struct SessionDetailView: View {
       }
       .onChange(of: messages.last?.id) { _, last in
         if let last { proxy.scrollTo(last, anchor: .bottom) }
+      }
+      .onChange(of: records.count) {
+        guard let id = keepAtTop else { return }
+        keepAtTop = nil
+        proxy.scrollTo(id, anchor: .top)
       }
     }
   }
@@ -152,6 +159,7 @@ struct SessionDetailView: View {
         return
       }
       let known = Set(records.map(\.id))
+      keepAtTop = messages.first?.id
       records = page.messages.filter { !known.contains($0.id) } + records
       oldestSeq = page.oldestSeq ?? before
       hasEarlier = page.hasMore
@@ -237,10 +245,10 @@ private struct MessageRow: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 2) {
-      Text(message.role == .user ? L("You", "你") : agent)
+      Text(message.role == .user ? L("Me", "我") : agent)
         .font(.caption2)
         .lineLimit(1)
-        .foregroundStyle(message.role == .user ? Color.accentColor : .secondary)
+        .foregroundStyle(message.role == .user ? MessageStyle.userLabel : .secondary)
       Text(PlainText.from(markdown: message.text))
         .font(.footnote)
         .lineLimit(12)

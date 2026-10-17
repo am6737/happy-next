@@ -66,6 +66,12 @@ enum PlainText {
   }
 }
 
+/// How the user's own messages stand apart from the agent's
+enum MessageStyle {
+  static let userBackground = Color(hex: 0x2B3A4C)
+  static let userLabel = Color(hex: 0x9DB8D9)
+}
+
 /// A message in full, opened from the session where its row shows only its first lines
 struct MessageDetailView: View {
   let message: HappyMessage
@@ -74,9 +80,9 @@ struct MessageDetailView: View {
   var body: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: 6) {
-        Text(message.role == .user ? L("You", "你") : agent)
+        Text(message.role == .user ? L("Me", "我") : agent)
           .font(.caption2)
-          .foregroundStyle(message.role == .user ? Color.accentColor : .secondary)
+          .foregroundStyle(message.role == .user ? MessageStyle.userLabel : .secondary)
         Text(PlainText.from(markdown: message.text))
           .font(.footnote)
           .frame(maxWidth: .infinity, alignment: .leading)

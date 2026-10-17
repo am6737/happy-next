@@ -26,7 +26,8 @@ module.exports = (config) => ({
     // Relative to the target's folder
     icon: '../../sources/assets/images/icon.png',
     colors: {
-        $accent: '#FF9500',
+        // The titles and controls in white, as the system's own apps
+        $accent: '#FFFFFF',
     },
     // Relative to the target's folder
     images: {
