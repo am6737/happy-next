@@ -2,7 +2,7 @@ import Foundation
 
 /// The App Group the watch app shares with its complication: `group.<the iPhone app's bundle id>.watch`,
 /// the watch app's bundle id being the iPhone app's with `.watchkitapp` (and the complication's
-/// `.watchkitapp.complication`) after it
+/// `.watchkitapp.widget`) after it
 public enum HappyAppGroup {
   public static var identifier: String? {
     guard let bundleId = Bundle.main.bundleIdentifier,
