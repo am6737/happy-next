@@ -230,7 +230,7 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
     lastActivityText: {
         fontSize: 13,
         lineHeight: 16,
-        color: '#8E8E93',
+        color: theme.colors.textSecondary,
         // The system face, so the digits and the CJK around them come from one font.
         fontFamily: Platform.select({ web: '-apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", "Microsoft YaHei", system-ui, sans-serif', default: undefined }),
     },
