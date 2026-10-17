@@ -109,11 +109,39 @@ export interface TtsStreamStatus {
     replayable: boolean;
 }
 
+/** A single HTTP byte range: `bytes=start-end`, `bytes=start-` or the suffix `bytes=-length`. */
+export type TtsByteRangeRequest = { start: number; end?: number } | { suffix: number };
+
+export interface TtsSubscribeOptions {
+    /** Resume a dropped listener at the frame playing then (the app's `?from=`). */
+    fromSeconds?: number;
+    /** Byte range of the audio served from `fromSeconds`; honored once synthesis is complete. */
+    range?: TtsByteRangeRequest;
+}
+
 export type TtsStreamSubscribeResult =
-    | { status: 'ok'; unsubscribe: () => void }
+    | {
+        status: 'ok';
+        unsubscribe: () => void;
+        /** Total bytes served from `fromSeconds`, known once synthesis is complete. */
+        length?: number;
+        /** The range being served (inclusive), when one was requested and honored. */
+        range?: { start: number; end: number };
+    }
     | { status: 'not_found' }
     | { status: 'gone' }
-    | { status: 'capacity' };
+    | { status: 'capacity' }
+    | { status: 'range_not_satisfiable'; length: number };
+
+/** Inclusive byte bounds of `range` within `length` bytes, or null when it is not satisfiable. */
+function resolveByteRange(range: TtsByteRangeRequest, length: number): { start: number; end: number } | null {
+    if ('suffix' in range) {
+        if (range.suffix <= 0 || length === 0) return null;
+        return { start: Math.max(0, length - range.suffix), end: length - 1 };
+    }
+    if (range.start >= length) return null;
+    return { start: range.start, end: Math.min(range.end ?? length - 1, length - 1) };
+}
 
 /** Log-safe prefix of a stream id (the full id is a capability token). */
 export function shortStreamId(streamId: string): string {
@@ -198,12 +226,22 @@ export class TtsStreamSessionRegistry {
         };
     }
 
-    /** `fromSeconds` resumes a dropped listener at the frame playing then. */
-    subscribe(streamId: string, subscriber: TtsAudioSubscriber, fromSeconds = 0): TtsStreamSubscribeResult {
+    subscribe(streamId: string, subscriber: TtsAudioSubscriber, options: TtsSubscribeOptions = {}): TtsStreamSubscribeResult {
         const record = this.getLive(streamId);
         if (!record) return { status: 'not_found' };
         if (record.nonReplayable) return { status: 'gone' };
         if (record.subscribers.size >= this.maxSubscribersPerStream) return { status: 'capacity' };
+
+        const fromByte = record.frames.byteOffsetAt(options.fromSeconds ?? 0);
+        // Length and ranges only exist once the audio is final. Players re-request
+        // a finished stream mid-playback (iOS does) with the range they still need;
+        // answering from byte zero would restart the speech.
+        const length = record.state === 'complete' ? record.chunkBytes - fromByte : undefined;
+        let range: { start: number; end: number } | undefined;
+        if (length !== undefined && options.range) {
+            range = resolveByteRange(options.range, length) ?? undefined;
+            if (!range) return { status: 'range_not_satisfiable', length };
+        }
 
         if (record.disconnectTimer) {
             clearTimeout(record.disconnectTimer);
@@ -224,11 +262,16 @@ export class TtsStreamSessionRegistry {
         };
         record.subscribers.set(subscriber, state);
         this.trace(record, 'subscribe');
-        void this.attachSubscriber(record, state, record.frames.byteOffsetAt(fromSeconds));
+        void this.attachSubscriber(
+            record,
+            state,
+            fromByte + (range?.start ?? 0),
+            range ? fromByte + range.end + 1 : Infinity,
+        );
         if (record.state === 'pending') this.start(record);
 
         let detached = false;
-        return { status: 'ok', unsubscribe: () => {
+        return { status: 'ok', length, range, unsubscribe: () => {
             if (detached) return;
             detached = true;
             state.closed = true;
@@ -323,14 +366,15 @@ export class TtsStreamSessionRegistry {
         if (record.subscribers.size === 0) this.scheduleDisconnectRelease(record);
     }
 
-    private async attachSubscriber(record: TtsStreamRecord, state: TtsSubscriberState, startByte: number) {
+    /** Replays stored chunks over [startByte, endByte), then follows live audio. */
+    private async attachSubscriber(record: TtsStreamRecord, state: TtsSubscriberState, startByte: number, endByte: number) {
         let index = 0;
         let offset = 0;
         try {
-            while (!state.closed && !record.nonReplayable && index < record.chunks.length) {
+            while (!state.closed && !record.nonReplayable && index < record.chunks.length && offset < endByte) {
                 const chunk = record.chunks[index];
                 if (offset + chunk.length > startByte) {
-                    await this.enqueueWrite(record, state, offset >= startByte ? chunk : chunk.subarray(startByte - offset));
+                    await this.enqueueWrite(record, state, chunk.subarray(Math.max(0, startByte - offset), endByte - offset));
                 }
                 offset += chunk.length;
                 index++;

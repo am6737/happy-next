@@ -232,7 +232,7 @@ describe('TtsStreamSessionRegistry', () => {
 
         const chunks: Buffer[] = [];
         const resumed = { ...makeSubscriber().subscriber, write: (chunk: Buffer) => { chunks.push(Buffer.from(chunk)); } };
-        expect(store.subscribe(prepared.streamId, resumed, 0.03).status).toBe('ok');
+        expect(store.subscribe(prepared.streamId, resumed, { fromSeconds: 0.03 }).status).toBe('ok');
         await pipeline.handlers().onChunk(frame(5));
         await flushMicrotasks();
         expect(Buffer.concat(chunks)).toEqual(Buffer.concat([frame(2), frame(3), frame(4), frame(5)]));
@@ -349,6 +349,76 @@ describe('TtsStreamSessionRegistry', () => {
         expect(store.status(prepared.streamId)?.replayable).toBe(true);
         vi.advanceTimersByTime(600_000);
         expect(store.subscribe(prepared.streamId, makeSubscriber().subscriber).status).toBe('not_found');
+    });
+
+    it('serves byte ranges of finished audio and ignores them while synthesizing', async () => {
+        const pipeline = deferredPipeline();
+        const store = new TtsStreamSessionRegistry({ startPipeline: pipeline.start });
+        const prepared = store.prepare({ text: 'hello' })!;
+        const live = makeSubscriber();
+        expect(store.subscribe(prepared.streamId, live.subscriber)).toMatchObject({ status: 'ok', length: undefined });
+        await pipeline.handlers().onChunk(Buffer.from('abcde'));
+
+        // No length yet, so a range can't be honored: the whole stream is served.
+        const early = makeSubscriber();
+        const earlyResult = store.subscribe(prepared.streamId, early.subscriber, { range: { start: 3 } });
+        expect(earlyResult).toMatchObject({ status: 'ok', length: undefined, range: undefined });
+        await pipeline.handlers().onChunk(Buffer.from('fghij'));
+        pipeline.resolve();
+        await vi.waitFor(() => expect(early.ended()).toBe(1));
+        expect(early.text()).toBe('abcdefghij');
+
+        const whole = makeSubscriber();
+        expect(store.subscribe(prepared.streamId, whole.subscriber)).toMatchObject({ status: 'ok', length: 10, range: undefined });
+        await vi.waitFor(() => expect(whole.ended()).toBe(1));
+        expect(whole.text()).toBe('abcdefghij');
+
+        // A player re-requesting mid-playback gets what it asked for, across chunks.
+        const middle = makeSubscriber();
+        expect(store.subscribe(prepared.streamId, middle.subscriber, { range: { start: 3, end: 7 } }))
+            .toMatchObject({ status: 'ok', length: 10, range: { start: 3, end: 7 } });
+        await vi.waitFor(() => expect(middle.ended()).toBe(1));
+        expect(middle.text()).toBe('defgh');
+
+        const open = makeSubscriber();
+        expect(store.subscribe(prepared.streamId, open.subscriber, { range: { start: 6, end: 99 } }))
+            .toMatchObject({ range: { start: 6, end: 9 } });
+        await vi.waitFor(() => expect(open.ended()).toBe(1));
+        expect(open.text()).toBe('ghij');
+
+        const suffix = makeSubscriber();
+        expect(store.subscribe(prepared.streamId, suffix.subscriber, { range: { suffix: 2 } }))
+            .toMatchObject({ range: { start: 8, end: 9 } });
+        await vi.waitFor(() => expect(suffix.ended()).toBe(1));
+        expect(suffix.text()).toBe('ij');
+
+        expect(store.subscribe(prepared.streamId, makeSubscriber().subscriber, { range: { start: 10 } }))
+            .toEqual({ status: 'range_not_satisfiable', length: 10 });
+    });
+
+    it('measures ranges from the resume point when both are given', async () => {
+        // 96-byte frames of 24 ms, as above: 0.03 s resumes at frame 2.
+        const frame = (n: number) => {
+            const buf = Buffer.alloc(96, n);
+            buf.set([0xff, 0xf3, 0x44, 0xc4]);
+            return buf;
+        };
+        const start: TtsStreamPipeline = async (_input, handlers) => {
+            await handlers.onChunk(Buffer.concat([frame(1), frame(2), frame(3)]));
+        };
+        const store = new TtsStreamSessionRegistry({ startPipeline: start });
+        const prepared = store.prepare({ text: 'hello' })!;
+        const first = makeSubscriber();
+        store.subscribe(prepared.streamId, first.subscriber);
+        await vi.waitFor(() => expect(first.ended()).toBe(1));
+
+        const chunks: Buffer[] = [];
+        let ended = 0;
+        const resumed = { ...makeSubscriber().subscriber, write: (chunk: Buffer) => { chunks.push(Buffer.from(chunk)); }, end: () => { ended++; } };
+        expect(store.subscribe(prepared.streamId, resumed, { fromSeconds: 0.03, range: { start: 96 } }))
+            .toMatchObject({ status: 'ok', length: 192, range: { start: 96, end: 191 } });
+        await vi.waitFor(() => expect(ended).toBe(1));
+        expect(Buffer.concat(chunks)).toEqual(frame(3));
     });
 
     it('waits for drain when a subscriber applies backpressure', async () => {

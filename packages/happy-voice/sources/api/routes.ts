@@ -9,7 +9,7 @@ import { buildRtcToken } from '../runtime/rtcToken';
 import { startVoiceChat, stopVoiceChat } from '../runtime/rtcOpenApi';
 import { synthesize } from '../runtime/tts';
 import { cleanForSpeech } from '../runtime/cleanForSpeech';
-import { shortStreamId, ttsStreamSessionStore } from '../runtime/ttsStreamSession';
+import { shortStreamId, ttsStreamSessionStore, type TtsByteRangeRequest } from '../runtime/ttsStreamSession';
 import { regexCleanForSpeech } from '../runtime/textClean';
 import { renderPrompt } from '../runtime/prompts';
 import type { VoiceSessionRecord } from '../types/voice';
@@ -21,6 +21,17 @@ function getAuthClaims(request: FastifyRequest): VoiceAuthClaims | null {
         return verifyVoiceAuthToken(authorization.slice('Bearer '.length).trim(), env.VOICE_AUTH_SECRET);
     }
     return null;
+}
+
+/** A single-range `Range: bytes=…` header; anything else is ignored, as HTTP allows. */
+function parseByteRange(header: string | undefined): TtsByteRangeRequest | undefined {
+    const match = header?.trim().match(/^bytes=(\d*)-(\d*)$/);
+    if (!match || (!match[1] && !match[2])) return undefined;
+    if (!match[1]) return { suffix: Number(match[2]) };
+    const start = Number(match[1]);
+    const end = match[2] ? Number(match[2]) : undefined;
+    if (end !== undefined && end < start) return undefined;
+    return { start, end };
 }
 
 function rejectUnauthorized(reply: FastifyReply) {
@@ -295,8 +306,10 @@ export function registerRoutes(app: FastifyInstance) {
         // One line per request, so a playback that stopped early can be traced
         // to who closed the connection and how much audio went out.
         const startedAt = Date.now();
+        const rangeHeader = request.headers.range;
         const logLine = (result: string) => logInfo(
-            `TTS stream audio id=${shortStreamId(streamId)} from=${from ?? 0} ${result} ms=${Date.now() - startedAt}`,
+            `TTS stream audio id=${shortStreamId(streamId)} from=${from ?? 0} `
+            + `range=${rangeHeader?.replace(/\s+/g, '').slice(0, 40) || '-'} ${result} ms=${Date.now() - startedAt}`,
         );
         let sentBytes = 0;
         let closedBy: 'complete' | 'server' | undefined;
@@ -319,7 +332,10 @@ export function registerRoutes(app: FastifyInstance) {
                 return reply.raw.writableLength;
             },
         };
-        const subscription = ttsStreamSessionStore.subscribe(streamId, subscriber, from);
+        const subscription = ttsStreamSessionStore.subscribe(streamId, subscriber, {
+            fromSeconds: from,
+            range: parseByteRange(rangeHeader),
+        });
         if (subscription.status !== 'ok') logLine(`rejected=${subscription.status}`);
         if (subscription.status === 'not_found') {
             return reply.code(404).send({ error: 'not_found', message: 'TTS stream not found.' });
@@ -330,18 +346,30 @@ export function registerRoutes(app: FastifyInstance) {
         if (subscription.status === 'capacity') {
             return reply.code(429).send({ error: 'too_many_subscribers', message: 'Too many subscribers for this TTS stream.' });
         }
+        if (subscription.status === 'range_not_satisfiable') {
+            return reply.code(416).header('Content-Range', `bytes */${subscription.length}`).send();
+        }
 
+        // Still synthesizing: an open-ended chunked stream that can't serve ranges.
+        // Finished: a plain file with a length, which players can range into.
+        const { length, range } = subscription;
+        const statusCode = range ? 206 : 200;
         reply.hijack();
-        reply.raw.writeHead(200, {
+        reply.raw.writeHead(statusCode, {
             'Content-Type': 'audio/mpeg',
             'Cache-Control': 'no-store',
-            'Accept-Ranges': 'none',
-            'Transfer-Encoding': 'chunked',
+            ...(length === undefined
+                ? { 'Accept-Ranges': 'none', 'Transfer-Encoding': 'chunked' }
+                : {
+                    'Accept-Ranges': 'bytes',
+                    'Content-Length': String(range ? range.end - range.start + 1 : length),
+                    ...(range && { 'Content-Range': `bytes ${range.start}-${range.end}/${length}` }),
+                }),
         });
 
         const onClose = () => {
             subscription.unsubscribe();
-            logLine(`bytes=${sentBytes} close=${closedBy ?? 'client'}`);
+            logLine(`status=${statusCode} bytes=${sentBytes} close=${closedBy ?? 'client'}`);
         };
         if (reply.raw.destroyed) {
             onClose();
