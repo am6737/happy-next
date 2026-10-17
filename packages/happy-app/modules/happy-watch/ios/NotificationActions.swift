@@ -73,20 +73,10 @@ final class NotificationActions: NotificationDelegate {
     let text = (response as? UNTextInputNotificationResponse)?.userText.trimmingCharacters(in: .whitespacesAndNewlines)
 
     // expo-notifications completes the response right away, so the work asks for time of its own
-    let application = UIApplication.shared
-    var task = UIBackgroundTaskIdentifier.invalid
-    task = application.beginBackgroundTask(withName: "happy.notificationAction") {
-      application.endBackgroundTask(task)
-      task = .invalid
-    }
+    let task = BackgroundTask(name: "happy.notificationAction")
     Task {
       await Self.perform(action, sessionId: sessionId, requestId: requestId, text: text)
-      await MainActor.run {
-        if task != .invalid {
-          application.endBackgroundTask(task)
-          task = .invalid
-        }
-      }
+      await MainActor.run { task.end() }
     }
     return true
   }
@@ -147,5 +137,23 @@ final class NotificationActions: NotificationDelegate {
       if let key = key as? String { root[key] = value }
     }
     return root
+  }
+}
+
+/// Time in the background for one piece of work, ended when the work is done or the time is up.
+/// Used on the main thread only.
+private final class BackgroundTask: @unchecked Sendable {
+  private var identifier = UIBackgroundTaskIdentifier.invalid
+
+  init(name: String) {
+    identifier = UIApplication.shared.beginBackgroundTask(withName: name) { [weak self] in
+      self?.end()
+    }
+  }
+
+  func end() {
+    guard identifier != .invalid else { return }
+    UIApplication.shared.endBackgroundTask(identifier)
+    identifier = .invalid
   }
 }
