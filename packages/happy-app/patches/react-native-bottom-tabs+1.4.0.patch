@@ -1,3 +1,46 @@
+diff --git a/node_modules/react-native-bottom-tabs/android/src/main/java/com/rcttabview/RCTTabView.kt b/node_modules/react-native-bottom-tabs/android/src/main/java/com/rcttabview/RCTTabView.kt
+index 3c3d4bd..d97ede4 100644
+--- a/node_modules/react-native-bottom-tabs/android/src/main/java/com/rcttabview/RCTTabView.kt
++++ b/node_modules/react-native-bottom-tabs/android/src/main/java/com/rcttabview/RCTTabView.kt
+@@ -16,6 +16,7 @@ import android.view.Choreographer
+ import android.view.HapticFeedbackConstants
+ import android.view.MenuItem
+ import android.view.View
++import android.view.WindowInsets
+ import android.view.ViewGroup
+ import android.widget.FrameLayout
+ import android.widget.LinearLayout
+@@ -23,6 +24,8 @@ import android.widget.TextView
+ import androidx.core.view.AccessibilityDelegateCompat
+ import androidx.core.view.MenuItemCompat
+ import androidx.core.view.ViewCompat
++import androidx.core.view.WindowInsetsCompat
++import androidx.core.graphics.Insets
+ import androidx.core.view.accessibility.AccessibilityNodeInfoCompat
+ import androidx.core.view.forEachIndexed
+ import coil3.ImageLoader
+@@ -46,6 +49,21 @@ class ExtendedBottomNavigationView(context: Context) : BottomNavigationView(cont
+   override fun getMaxItemCount(): Int {
+     return 100
+   }
++
++  // Edge to edge, the keyboard comes in the window insets, and the bar pads its bottom by them:
++  // it grew by the keyboard's height, its items riding up on top of the keyboard. The bar only
++  // keeps clear of the system navigation bar, so the keyboard covers it, as iOS's tab bar.
++  override fun dispatchApplyWindowInsets(insets: WindowInsets): WindowInsets {
++    val compat = WindowInsetsCompat.toWindowInsetsCompat(insets, this)
++    if (!compat.isVisible(WindowInsetsCompat.Type.ime())) {
++      return super.dispatchApplyWindowInsets(insets)
++    }
++    val withoutKeyboard = WindowInsetsCompat.Builder(compat)
++      .setInsets(WindowInsetsCompat.Type.ime(), Insets.NONE)
++      .setSystemWindowInsets(compat.getInsets(WindowInsetsCompat.Type.systemBars()))
++      .build()
++    return super.dispatchApplyWindowInsets(withoutKeyboard.toWindowInsets() ?: insets)
++  }
+ }
+ 
+ class ReactBottomNavigationView(context: Context) : LinearLayout(context) {
 diff --git a/node_modules/react-native-bottom-tabs/ios/Extensions.swift b/node_modules/react-native-bottom-tabs/ios/Extensions.swift
 index fed3dd2..447643e 100644
 --- a/node_modules/react-native-bottom-tabs/ios/Extensions.swift
