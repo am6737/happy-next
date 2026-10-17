@@ -172,6 +172,9 @@ const agentFlavorIcons = {
 // padding of its own, so identical frames would still read as different sizes - measured ink
 // in a 12px frame: Codex 12px, Claude 9.8px.
 const AGENT_MARK_SLOT = 12;
+// Every text in the status row (connection, context, model, permission mode) sits on this fixed line:
+// Latin and CJK glyphs measure differently, so an auto-sized line made the row jump as the labels changed language.
+const STATUS_LINE_HEIGHT = 16;
 const agentMarkArtworkSize: Record<keyof typeof agentFlavorIcons, number> = {
     claude: 12,
     codex: 10,
@@ -1378,6 +1381,8 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
             />
             <Text style={{
                 fontSize: 11,
+                lineHeight: STATUS_LINE_HEIGHT,
+                height: STATUS_LINE_HEIGHT,
                 color: props.connectionStatus.color,
                 ...Typography.default()
             }}>
@@ -1491,6 +1496,8 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                                     <Text style={{
                                         fontSize: 11,
+                                        lineHeight: STATUS_LINE_HEIGHT,
+                                        height: STATUS_LINE_HEIGHT,
                                         color: props.connectionStatus.cliStatus.claude
                                             ? theme.colors.success
                                             : theme.colors.textDestructive,
@@ -1500,6 +1507,8 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                     </Text>
                                     <Text style={{
                                         fontSize: 11,
+                                        lineHeight: STATUS_LINE_HEIGHT,
+                                        height: STATUS_LINE_HEIGHT,
                                         color: props.connectionStatus.cliStatus.claude
                                             ? theme.colors.success
                                             : theme.colors.textDestructive,
@@ -1511,6 +1520,8 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                                     <Text style={{
                                         fontSize: 11,
+                                        lineHeight: STATUS_LINE_HEIGHT,
+                                        height: STATUS_LINE_HEIGHT,
                                         color: props.connectionStatus.cliStatus.codex
                                             ? theme.colors.success
                                             : theme.colors.textDestructive,
@@ -1520,6 +1531,8 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                     </Text>
                                     <Text style={{
                                         fontSize: 11,
+                                        lineHeight: STATUS_LINE_HEIGHT,
+                                        height: STATUS_LINE_HEIGHT,
                                         color: props.connectionStatus.cliStatus.codex
                                             ? theme.colors.success
                                             : theme.colors.textDestructive,
@@ -1532,6 +1545,8 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                                         <Text style={{
                                             fontSize: 11,
+                                            lineHeight: STATUS_LINE_HEIGHT,
+                                            height: STATUS_LINE_HEIGHT,
                                             color: props.connectionStatus.cliStatus.qoder
                                                 ? theme.colors.success
                                                 : theme.colors.textDestructive,
@@ -1541,6 +1556,8 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                         </Text>
                                         <Text style={{
                                             fontSize: 11,
+                                            lineHeight: STATUS_LINE_HEIGHT,
+                                            height: STATUS_LINE_HEIGHT,
                                             color: props.connectionStatus.cliStatus.qoder
                                                 ? theme.colors.success
                                                 : theme.colors.textDestructive,
@@ -1554,6 +1571,8 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                                         <Text style={{
                                             fontSize: 11,
+                                            lineHeight: STATUS_LINE_HEIGHT,
+                                            height: STATUS_LINE_HEIGHT,
                                             color: props.connectionStatus.cliStatus.gemini
                                                 ? theme.colors.success
                                                 : theme.colors.textDestructive,
@@ -1563,6 +1582,8 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                         </Text>
                                         <Text style={{
                                             fontSize: 11,
+                                            lineHeight: STATUS_LINE_HEIGHT,
+                                            height: STATUS_LINE_HEIGHT,
                                             color: props.connectionStatus.cliStatus.gemini
                                                 ? theme.colors.success
                                                 : theme.colors.textDestructive,
@@ -1611,6 +1632,8 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                             >
                                 <Text style={{
                                     fontSize: 11,
+                                    lineHeight: STATUS_LINE_HEIGHT,
+                                    height: STATUS_LINE_HEIGHT,
                                     color: contextWarning.color,
                                     ...Typography.default()
                                 }}>
@@ -1689,6 +1712,8 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                             </View>
                             <Text style={{
                                 fontSize: 11,
+                                lineHeight: STATUS_LINE_HEIGHT,
+                                height: STATUS_LINE_HEIGHT,
                                 color: theme.colors.textSecondary,
                                 ...Typography.default()
                             }}>
@@ -1702,6 +1727,8 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                     <Pressable hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }} onPress={handlePermissionPress} style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}>
                         <Text style={{
                             fontSize: 11,
+                            lineHeight: STATUS_LINE_HEIGHT,
+                            height: STATUS_LINE_HEIGHT,
                             color: shownPermissionMode === 'acceptEdits' ? theme.colors.permission.acceptEdits :
                                 shownPermissionMode === 'bypassPermissions' ? theme.colors.permission.yolo :
                                     shownPermissionMode === 'plan' ? theme.colors.permission.plan :
@@ -1817,23 +1844,26 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                                         borderRadius: 8,
                                                     }}
                                                 >
+                                                    {/* Fixed line heights: Latin and CJK glyphs measure differently, so an auto-sized line would make the header jump as the labels change */}
                                                     <Text style={{
                                                         fontSize: 13,
+                                                        lineHeight: 18,
+                                                        height: 18,
                                                         color: isActive ? theme.colors.text : theme.colors.textSecondary,
                                                         ...Typography.default(isActive ? 'semiBold' : 'regular'),
-                                                    }}>
+                                                    }} numberOfLines={1}>
                                                         {tab.label}
                                                     </Text>
-                                                    {tab.subtitle ? (
-                                                        <Text style={{
-                                                            fontSize: 10,
-                                                            color: theme.colors.textSecondary,
-                                                            marginTop: 1,
-                                                            ...Typography.default(),
-                                                        }} numberOfLines={1}>
-                                                            {tab.subtitle}
-                                                        </Text>
-                                                    ) : null}
+                                                    <Text style={{
+                                                        fontSize: 10,
+                                                        lineHeight: 14,
+                                                        height: 14,
+                                                        color: theme.colors.textSecondary,
+                                                        marginTop: 1,
+                                                        ...Typography.default(),
+                                                    }} numberOfLines={1}>
+                                                        {tab.subtitle}
+                                                    </Text>
                                                 </Pressable>
                                             );
                                         });
