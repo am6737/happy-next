@@ -117,13 +117,15 @@ function syncCodex(models: ModelCatalogEntry[], upstream: CodexUpstreamModel[], 
             });
             report.added.push(`Codex \`${up.id}\` (${up.displayName}): efforts ${efforts.join(', ')}`);
             report.review.push(`\`${up.id}\` context window ${contextWindow.toLocaleString('en-US')} is borrowed from ${sibling ? `\`${sibling.id}\`` : 'the default'} — Codex does not report it.`);
+            report.review.push(`\`${up.id}\`: add \`descriptionTranslations\` — until then its description shows in English.`);
             continue;
         }
 
         const next: ModelCatalogEntry = { ...existing, status: 'active', label: up.displayName, shortLabel, displayName: up.displayName, description: up.description, efforts };
-        if (next.effortDescriptions) {
-            const kept = Object.fromEntries(Object.entries(next.effortDescriptions).filter(([effort]) => efforts.includes(effort as ReasoningEffort)));
-            next.effortDescriptions = Object.keys(kept).length > 0 ? kept : undefined;
+        // Translations of an old description would contradict the new one; English shows until they're redone.
+        if (next.descriptionTranslations && existing.description !== up.description) {
+            next.descriptionTranslations = undefined;
+            report.review.push(`\`${up.id}\`: description changed, so its translations were dropped — add \`descriptionTranslations\` for the new one.`);
         }
         if (existing.status === 'retired') report.added.push(`Codex \`${up.id}\` is listed again and was reactivated`);
         for (const field of ['label', 'shortLabel', 'description', 'efforts'] as const) {
@@ -199,6 +201,7 @@ function syncClaude(models: ModelCatalogEntry[], upstream: ClaudeUpstreamModel[]
             label,
             displayName: `Claude ${label}`,
             description: newest.description,
+            descriptionTranslations: newest.descriptionTranslations,
             efforts: up.efforts ?? newest.efforts,
             contextWindow,
             ...(up.fastPricing ? { fastMode: true } : {}),
@@ -207,7 +210,7 @@ function syncClaude(models: ModelCatalogEntry[], upstream: ClaudeUpstreamModel[]
         };
         next = next.flatMap((model) => (model === newest ? [entry, model] : [model]));
         report.added.push(`Claude \`${up.id}\` (${entry.displayName}), based on \`${newest.id}\``);
-        report.review.push(`\`${up.id}\`: description copied from \`${newest.id}\` ("${newest.description}"); update both, e.g. mark \`${newest.id}\` as previous generation.`);
+        report.review.push(`\`${up.id}\`: description and its translations copied from \`${newest.id}\` ("${newest.description}"); update both, e.g. mark \`${newest.id}\` as previous generation.`);
         if (!up.efforts) report.review.push(`\`${up.id}\`: upstream lists no efforts; copied from \`${newest.id}\` (${newest.efforts.join(', ')}).`);
         if (!up.pricing) report.review.push(`\`${up.id}\`: no upstream pricing — add \`pricing\` or its cost reads as the default model's.`);
     }

@@ -20,6 +20,10 @@
             "label": "Fable 5.1",
             "displayName": "Claude Fable 5.1",
             "description": "Most capable for long-horizon agentic work",
+            "descriptionTranslations": {
+                "zh-Hans": "最强大，适合长时间运行的智能体任务",
+                "zh-Hant": "最強大，適合長時間執行的智慧體任務"
+            },
             "efforts": ["max", "xhigh", "high", "medium", "low"],
             "contextWindow": 1000000,
             "pricing": { "input": 10, "output": 50, "cacheWrite": 12.5, "cacheRead": 0.25 }
@@ -31,6 +35,10 @@
             "label": "Fable 5",
             "displayName": "Claude Fable 5",
             "description": "Previous generation Fable",
+            "descriptionTranslations": {
+                "zh-Hans": "上一代 Fable",
+                "zh-Hant": "上一代 Fable"
+            },
             "efforts": ["max", "xhigh", "high", "medium", "low"],
             "contextWindow": 1000000,
             "pricing": { "input": 10, "output": 50, "cacheWrite": 12.5, "cacheRead": 1 }
@@ -42,6 +50,10 @@
             "label": "Opus 5.5",
             "displayName": "Claude Opus 5.5",
             "description": "Best for complex agentic coding",
+            "descriptionTranslations": {
+                "zh-Hans": "最适合复杂的智能体编程",
+                "zh-Hant": "最適合複雜的智慧體程式設計"
+            },
             "efforts": ["max", "xhigh", "high", "medium", "low"],
             "contextWindow": 1000000,
             "fastMode": true,
@@ -55,6 +67,10 @@
             "label": "Opus 5",
             "displayName": "Claude Opus 5",
             "description": "Previous generation Opus",
+            "descriptionTranslations": {
+                "zh-Hans": "上一代 Opus",
+                "zh-Hant": "上一代 Opus"
+            },
             "efforts": ["max", "xhigh", "high", "medium", "low"],
             "contextWindow": 1000000,
             "fastMode": true,
@@ -68,6 +84,10 @@
             "label": "Sonnet 5.5",
             "displayName": "Claude Sonnet 5.5",
             "description": "Best balance of speed and intelligence",
+            "descriptionTranslations": {
+                "zh-Hans": "速度与智能的最佳平衡",
+                "zh-Hant": "速度與智慧的最佳平衡"
+            },
             "efforts": ["max", "xhigh", "high", "medium", "low"],
             "contextWindow": 1000000,
             "pricing": { "input": 2, "output": 10, "cacheWrite": 2.5, "cacheRead": 0.1 }
@@ -79,6 +99,10 @@
             "label": "Sonnet 5",
             "displayName": "Claude Sonnet 5",
             "description": "Previous generation Sonnet",
+            "descriptionTranslations": {
+                "zh-Hans": "上一代 Sonnet",
+                "zh-Hant": "上一代 Sonnet"
+            },
             "efforts": ["max", "xhigh", "high", "medium", "low"],
             "contextWindow": 1000000,
             "pricing": { "input": 2, "output": 10, "cacheWrite": 2.5, "cacheRead": 0.2 }
@@ -90,6 +114,10 @@
             "label": "Opus 4.8",
             "displayName": "Claude Opus 4.8",
             "description": "Older Opus",
+            "descriptionTranslations": {
+                "zh-Hans": "较早的 Opus",
+                "zh-Hant": "較早的 Opus"
+            },
             "efforts": ["max", "xhigh", "high", "medium", "low"],
             "contextWindow": 1000000,
             "fastMode": true,
@@ -103,6 +131,10 @@
             "label": "Opus 4.7",
             "displayName": "Claude Opus 4.7",
             "description": "Older Opus",
+            "descriptionTranslations": {
+                "zh-Hans": "较早的 Opus",
+                "zh-Hant": "較早的 Opus"
+            },
             "efforts": ["max", "xhigh", "high", "medium", "low"],
             "contextWindow": 200000,
             "pricing": { "input": 5, "output": 25, "cacheWrite": 6.25, "cacheRead": 0.5 }
@@ -114,6 +146,10 @@
             "label": "Opus 4.6",
             "displayName": "Claude Opus 4.6",
             "description": "Older Opus",
+            "descriptionTranslations": {
+                "zh-Hans": "较早的 Opus",
+                "zh-Hant": "較早的 Opus"
+            },
             "efforts": ["max", "high", "medium", "low"],
             "contextWindow": 200000,
             "pricing": { "input": 5, "output": 25, "cacheWrite": 6.25, "cacheRead": 0.5 }
@@ -125,6 +161,10 @@
             "label": "Sonnet 4.6",
             "displayName": "Claude Sonnet 4.6",
             "description": "Older Sonnet",
+            "descriptionTranslations": {
+                "zh-Hans": "较早的 Sonnet",
+                "zh-Hant": "較早的 Sonnet"
+            },
             "efforts": ["max", "high", "medium", "low"],
             "contextWindow": 200000,
             "pricing": { "input": 3, "output": 15, "cacheWrite": 3.75, "cacheRead": 0.3 }
@@ -136,6 +176,10 @@
             "label": "Haiku 5.5",
             "displayName": "Claude Haiku 5.5",
             "description": "Fastest",
+            "descriptionTranslations": {
+                "zh-Hans": "速度最快",
+                "zh-Hant": "速度最快"
+            },
             "efforts": ["max", "xhigh", "high", "medium", "low"],
             "contextWindow": 1000000,
             "pricing": { "input": 0.1, "output": 0.5, "cacheWrite": 0.125, "cacheRead": 0.01 }
@@ -147,6 +191,10 @@
             "label": "Haiku 4.5",
             "displayName": "Claude Haiku 4.5",
             "description": "Previous generation Haiku",
+            "descriptionTranslations": {
+                "zh-Hans": "上一代 Haiku",
+                "zh-Hant": "上一代 Haiku"
+            },
             "efforts": [],
             "contextWindow": 200000,
             "pricing": { "input": 1, "output": 5, "cacheWrite": 1.25, "cacheRead": 0.1 }
@@ -159,6 +207,10 @@
             "shortLabel": "6.1-Sol",
             "displayName": "GPT-6.1-Sol",
             "description": "Latest workhorse model for coding and everyday work.",
+            "descriptionTranslations": {
+                "zh-Hans": "最新主力模型，适合编程和日常工作",
+                "zh-Hant": "最新主力模型，適合程式設計和日常工作"
+            },
             "efforts": ["ultra", "max", "xhigh", "high", "medium", "low"],
             "contextWindow": 1050000
         },
@@ -170,6 +222,10 @@
             "shortLabel": "6-Astra",
             "displayName": "GPT-6-Astra",
             "description": "Frontier intelligence for the most demanding work.",
+            "descriptionTranslations": {
+                "zh-Hans": "前沿智能，应对最艰巨的工作",
+                "zh-Hant": "前沿智慧，應對最艱鉅的工作"
+            },
             "efforts": ["ultra", "max", "xhigh", "high", "medium", "low"],
             "contextWindow": 1050000
         },
@@ -181,6 +237,10 @@
             "shortLabel": "6-Sol",
             "displayName": "GPT-6-Sol",
             "description": "Previous generation workhorse model.",
+            "descriptionTranslations": {
+                "zh-Hans": "上一代主力模型",
+                "zh-Hant": "上一代主力模型"
+            },
             "efforts": ["ultra", "max", "xhigh", "high", "medium", "low"],
             "contextWindow": 1050000
         },
@@ -192,12 +252,11 @@
             "shortLabel": "6-Luna",
             "displayName": "GPT-6-Luna",
             "description": "Fast and affordable model for easier tasks.",
-            "efforts": ["max", "xhigh", "high", "medium", "low"],
-            "effortDescriptions": {
-                "low": "Fastest responses",
-                "medium": "Balanced speed and quality",
-                "high": "Higher quality with good speed"
+            "descriptionTranslations": {
+                "zh-Hans": "快速实惠，适合较简单的任务",
+                "zh-Hant": "快速實惠，適合較簡單的任務"
             },
+            "efforts": ["max", "xhigh", "high", "medium", "low"],
             "contextWindow": 1050000
         },
         {
@@ -208,6 +267,10 @@
             "shortLabel": "5.6-Sol",
             "displayName": "GPT-5.6-Sol",
             "description": "Older generation workhorse model.",
+            "descriptionTranslations": {
+                "zh-Hans": "更早一代的主力模型",
+                "zh-Hant": "更早一代的主力模型"
+            },
             "efforts": ["ultra", "max", "xhigh", "high", "medium", "low"],
             "contextWindow": 272000
         },
@@ -219,6 +282,10 @@
             "shortLabel": "5.6-Terra",
             "displayName": "GPT-5.6-Terra",
             "description": "Older balanced model for straightforward work.",
+            "descriptionTranslations": {
+                "zh-Hans": "较早的均衡模型，适合简单直接的工作",
+                "zh-Hant": "較早的均衡模型，適合簡單直接的工作"
+            },
             "efforts": ["ultra", "max", "xhigh", "high", "medium", "low"],
             "contextWindow": 272000
         },
@@ -230,12 +297,11 @@
             "shortLabel": "5.6-Luna",
             "displayName": "GPT-5.6-Luna",
             "description": "Older fast and efficient model.",
-            "efforts": ["max", "xhigh", "high", "medium", "low"],
-            "effortDescriptions": {
-                "low": "Fastest responses",
-                "medium": "Balanced speed and quality",
-                "high": "Higher quality with good speed"
+            "descriptionTranslations": {
+                "zh-Hans": "较早的快速高效模型",
+                "zh-Hant": "較早的快速高效模型"
             },
+            "efforts": ["max", "xhigh", "high", "medium", "low"],
             "contextWindow": 272000
         },
         {
@@ -246,10 +312,11 @@
             "shortLabel": "5.5",
             "displayName": "GPT-5.5",
             "description": "Legacy coding model.",
-            "efforts": ["xhigh", "high", "medium", "low"],
-            "effortDescriptions": {
-                "xhigh": "Best quality"
+            "descriptionTranslations": {
+                "zh-Hans": "旧版编程模型",
+                "zh-Hant": "舊版程式設計模型"
             },
+            "efforts": ["xhigh", "high", "medium", "low"],
             "contextWindow": 272000
         },
         {
@@ -286,6 +353,10 @@
             "label": "4 Argon",
             "displayName": "Gemini 4 Argon",
             "description": "Most capable for complex coding and agentic tasks",
+            "descriptionTranslations": {
+                "zh-Hans": "最强大，适合复杂编程和智能体任务",
+                "zh-Hant": "最強大，適合複雜程式設計和智慧體任務"
+            },
             "efforts": [],
             "contextWindow": 1048576
         },
@@ -296,6 +367,10 @@
             "label": "3.8 Flash",
             "displayName": "Gemini 3.8 Flash",
             "description": "Fast frontier balance of speed and intelligence",
+            "descriptionTranslations": {
+                "zh-Hans": "前沿级快速模型，兼顾速度与智能",
+                "zh-Hant": "前沿級快速模型，兼顧速度與智慧"
+            },
             "efforts": [],
             "contextWindow": 1048576
         },
@@ -306,6 +381,10 @@
             "label": "3.7 Flash",
             "displayName": "Gemini 3.7 Flash",
             "description": "Previous generation Flash",
+            "descriptionTranslations": {
+                "zh-Hans": "上一代 Flash",
+                "zh-Hant": "上一代 Flash"
+            },
             "efforts": [],
             "contextWindow": 1048576
         },
@@ -316,6 +395,10 @@
             "label": "3.6 Flash",
             "displayName": "Gemini 3.6 Flash",
             "description": "Previous generation Flash",
+            "descriptionTranslations": {
+                "zh-Hans": "上一代 Flash",
+                "zh-Hant": "上一代 Flash"
+            },
             "efforts": [],
             "contextWindow": 1000000
         },
@@ -327,6 +410,10 @@
             "shortLabel": "3.1 Pro",
             "displayName": "Gemini 3.1 Pro (Preview)",
             "description": "Previous generation Pro",
+            "descriptionTranslations": {
+                "zh-Hans": "上一代 Pro",
+                "zh-Hant": "上一代 Pro"
+            },
             "efforts": [],
             "contextWindow": 1000000
         },
@@ -337,6 +424,10 @@
             "label": "3.5 Flash",
             "displayName": "Gemini 3.5 Flash",
             "description": "Fast frontier agentic and coding model",
+            "descriptionTranslations": {
+                "zh-Hans": "前沿级快速模型，擅长智能体和编程任务",
+                "zh-Hant": "前沿級快速模型，擅長智慧體和程式設計任務"
+            },
             "efforts": [],
             "contextWindow": 1000000
         },
@@ -347,6 +438,10 @@
             "label": "3.5 Flash-Lite",
             "displayName": "Gemini 3.5 Flash-Lite",
             "description": "Fastest, most cost-effective 3.5 model",
+            "descriptionTranslations": {
+                "zh-Hans": "3.5 系列中最快、最具性价比的模型",
+                "zh-Hant": "3.5 系列中最快、最具性價比的模型"
+            },
             "efforts": [],
             "contextWindow": 1000000
         },
@@ -357,6 +452,10 @@
             "label": "3.1 Flash-Lite",
             "displayName": "Gemini 3.1 Flash-Lite",
             "description": "Lightweight, optimized for speed and cost",
+            "descriptionTranslations": {
+                "zh-Hans": "轻量模型，针对速度和成本优化",
+                "zh-Hant": "輕量模型，針對速度和成本最佳化"
+            },
             "efforts": [],
             "contextWindow": 1000000
         },
@@ -367,6 +466,10 @@
             "label": "2.5 Pro",
             "displayName": "Gemini 2.5 Pro",
             "description": "Previous generation",
+            "descriptionTranslations": {
+                "zh-Hans": "上一代",
+                "zh-Hant": "上一代"
+            },
             "efforts": [],
             "contextWindow": 1000000
         },
@@ -377,6 +480,10 @@
             "label": "2.5 Flash-Lite",
             "displayName": "Gemini 2.5 Flash-Lite",
             "description": "Lightweight free-tier friendly model",
+            "descriptionTranslations": {
+                "zh-Hans": "轻量模型，适合免费额度使用",
+                "zh-Hant": "輕量模型，適合免費額度使用"
+            },
             "efforts": [],
             "contextWindow": 1000000
         }

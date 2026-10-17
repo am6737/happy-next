@@ -23,9 +23,9 @@ const catalog: ModelCatalog = {
         claude('claude-opus-5', 'Opus 5', { fastMode: true, fastPricing: { input: 10, output: 50, cacheWrite: 12.5, cacheRead: 1 } }),
         claude('claude-opus-4-7', 'Opus 4.7', { contextWindow: 200_000 }),
         claude('claude-haiku-4-5', 'Haiku 4.5', { efforts: [], contextWindow: 200_000 }),
-        codex('gpt-6-astra', 'GPT-6-Astra', { contextWindow: 1_050_000 }),
-        codex('gpt-5.6-sol', 'GPT-5.6-Sol'),
-        codex('gpt-5.6-luna', 'GPT-5.6-Luna', { efforts: ['max', 'xhigh', 'high', 'medium', 'low'], effortDescriptions: { low: 'Fastest', medium: 'Balanced', high: 'Better' } }),
+        codex('gpt-6-astra', 'GPT-6-Astra', { contextWindow: 1_050_000, descriptionTranslations: { 'zh-Hans': '旧文案' } }),
+        codex('gpt-5.6-sol', 'GPT-5.6-Sol', { descriptionTranslations: { 'zh-Hans': '不变' } }),
+        codex('gpt-5.6-luna', 'GPT-5.6-Luna', { efforts: ['max', 'xhigh', 'high', 'medium', 'low'] }),
         codex('gpt-5.5', 'GPT-5.5'),
         codex('gpt-5.4', 'GPT-5.4', { status: 'retired', description: undefined }),
         { id: 'gemini-3.8-flash', agent: 'gemini', status: 'active', label: '3.8 Flash', displayName: 'Gemini 3.8 Flash', description: 'Flash', efforts: [], contextWindow: 1_048_576 },
@@ -71,6 +71,7 @@ describe('syncCatalog', () => {
         });
         expect(result.report.added).toHaveLength(1);
         expect(result.report.review.join('\n')).toContain('gpt-6-sol');
+        expect(result.report.review).toContain('`gpt-6-sol`: add `descriptionTranslations` — until then its description shows in English.');
     });
 
     it('falls back to the same tier for a new Codex generation', () => {
@@ -90,11 +91,11 @@ describe('syncCatalog', () => {
         expect(model('gpt-5.5', result.catalog).status).toBe('retired');
         expect(result.report.retired).toHaveLength(1);
         expect(model('gpt-6-astra', result.catalog).description).toBe('New copy.');
-        // Effort descriptions for efforts the model lost are dropped; the rest stay.
-        expect(model('gpt-5.6-luna', result.catalog)).toMatchObject({
-            efforts: ['high', 'medium'],
-            effortDescriptions: { medium: 'Balanced', high: 'Better' },
-        });
+        // Translations of a changed description are dropped for review; unchanged ones stay.
+        expect(model('gpt-6-astra', result.catalog).descriptionTranslations).toBeUndefined();
+        expect(result.report.review.some((line) => line.includes('`gpt-6-astra`: description changed'))).toBe(true);
+        expect(model('gpt-5.6-sol', result.catalog).descriptionTranslations).toEqual({ 'zh-Hans': '不变' });
+        expect(model('gpt-5.6-luna', result.catalog).efforts).toEqual(['high', 'medium']);
         expect(ModelCatalogSchema.safeParse(result.catalog).success).toBe(true);
     });
 

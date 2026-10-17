@@ -28,7 +28,14 @@ export type ClaudeModelFamily = string;
 /** A Codex model id, or `default`. */
 export type CodexModelFamily = string;
 
-export type ModelOption = { value: string; label: string; shortLabel: string; description: string };
+export type ModelOption = {
+    value: string;
+    label: string;
+    shortLabel: string;
+    description: string;
+    /** `description` by app language code; see `ModelCatalogEntry.descriptionTranslations`. */
+    descriptionTranslations?: Record<string, string>;
+};
 
 const EXTENDED_CONTEXT_WINDOW = 1_000_000;
 
@@ -55,6 +62,7 @@ function toModelOption(model: ModelCatalogEntry): ModelOption {
         label: model.label,
         shortLabel: model.shortLabel ?? model.label,
         description: model.description ?? '',
+        descriptionTranslations: model.descriptionTranslations,
     };
 }
 
@@ -114,15 +122,6 @@ function buildCatalogIndex(catalog: ModelCatalog) {
         qoder: [DEFAULT_MODEL_OPTION, ...activeModels('qoder').map(toModelOption)],
     };
 
-    const codexModeOptions: readonly { value: ModelMode; label: string; description: string }[] = [
-        { value: MODEL_MODE_DEFAULT, label: 'Default', description: 'Use CLI default model' },
-        ...activeModels('codex').flatMap((model) => effortsAscending(model).map((effort) => ({
-            value: `${model.id}-${effort}`,
-            label: `${model.label} (${REASONING_EFFORT_LABELS[effort]})`,
-            description: model.effortDescriptions?.[effort] ?? catalog.effortDescriptions[effort],
-        }))),
-    ];
-
     const contextWindows = new Map<string, number>(catalog.models.map((model) => [model.id, model.contextWindow]));
 
     return {
@@ -141,7 +140,6 @@ function buildCatalogIndex(catalog: ModelCatalog) {
             qoder: new Set(modesByAgent.qoder),
         } satisfies Record<AgentFlavor, Set<ModelMode>>,
         familyOptions,
-        codexModeOptions,
         contextWindows,
     };
 }
@@ -195,11 +193,6 @@ export function getValidModelModesForAgent(agent: AgentFlavor): readonly ModelMo
 /** Picker options for the agent's models (Claude: base families; Codex: families without effort), `default` first. */
 export function getModelFamilyOptions(agent: AgentFlavor): readonly ModelOption[] {
     return index.familyOptions[agent];
-}
-
-/** One Codex option per model and effort, `default` first. */
-export function getCodexModelOptions(): readonly { value: ModelMode; label: string; description: string }[] {
-    return index.codexModeOptions;
 }
 
 /** Resolve a retired composite mode to the model and effort it names, or null. */

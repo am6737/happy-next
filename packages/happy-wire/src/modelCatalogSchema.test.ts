@@ -3,7 +3,6 @@ import catalogJson from './modelCatalog.json';
 import { ModelCatalogSchema, type ModelCatalogEntry } from './modelCatalogSchema';
 import {
     BUNDLED_MODEL_CATALOG,
-    getCodexModelOptions,
     getValidModelModesForAgent,
     isModelMode,
 } from './modelCatalog';
@@ -16,6 +15,10 @@ function withModel(patch: Partial<ModelCatalogEntry>) {
 describe('modelCatalogSchema', () => {
     it('accepts the bundled catalog', () => {
         expect(ModelCatalogSchema.safeParse(catalogJson).success).toBe(true);
+    });
+
+    it('keeps the effort descriptions older clients require', () => {
+        expect(Object.keys(catalogJson.effortDescriptions).sort()).toEqual(['high', 'low', 'max', 'medium', 'ultra', 'xhigh']);
     });
 
     it('rejects duplicate ids', () => {
@@ -53,13 +56,5 @@ describe('modelCatalogSchema', () => {
     it('has no [1m] Claude modes', () => {
         expect(getValidModelModesForAgent('claude').some((mode) => mode.includes('[1m]'))).toBe(false);
         expect(getValidModelModesForAgent('claude')).not.toContain('claude-haiku-4-5-low');
-    });
-
-    it('applies per-model effort descriptions over the defaults', () => {
-        const describe = (value: string) => getCodexModelOptions().find((option) => option.value === value)?.description;
-        expect(describe('gpt-5.6-luna-low')).toBe('Fastest responses');
-        expect(describe('gpt-5.5-xhigh')).toBe('Best quality');
-        expect(describe('gpt-5.5-low')).toBe('Fast responses');
-        expect(describe('gpt-6-astra-ultra')).toBe('Maximum reasoning with automatic task delegation');
     });
 });

@@ -32,12 +32,15 @@ export const ModelCatalogEntrySchema = z.object({
     displayName: z.string().min(1),
     description: z.string().optional(),
     /**
+     * `description` in other app languages, keyed by language code (e.g. `zh-Hans`).
+     * Languages without an entry show `description`.
+     */
+    descriptionTranslations: z.record(z.string(), z.string()).optional(),
+    /**
      * Supported reasoning efforts, strongest first (picker order). Empty when the
      * model has no effort control. Claude and Codex modes are `${id}-${effort}`.
      */
     efforts: z.array(ReasoningEffortSchema),
-    /** Per-effort descriptions for Codex options, overriding the catalog defaults. */
-    effortDescriptions: z.record(ReasoningEffortSchema, z.string()).optional(),
     contextWindow: z.number().int().positive(),
     /** Claude fast mode (`-fast` model suffix). */
     fastMode: z.boolean().optional(),
@@ -54,7 +57,10 @@ export const ModelCatalogSchema = z.object({
         /** Exact version, so a matching `codex` on PATH can be used instead of npx. */
         version: z.string().regex(/^\d+\.\d+\.\d+(?:-[\w.]+)?$/, 'Expected an exact version like 0.155.1'),
     }),
-    /** Default per-effort descriptions for Codex options. */
+    /**
+     * Unused. Clients from before it was dropped require it and reject a catalog
+     * without it, so it stays in the published file until they are gone.
+     */
     effortDescriptions: z.object({
         low: z.string(),
         medium: z.string(),
@@ -62,7 +68,7 @@ export const ModelCatalogSchema = z.object({
         xhigh: z.string(),
         max: z.string(),
         ultra: z.string(),
-    }),
+    }).optional(),
     models: z.array(ModelCatalogEntrySchema),
 }).superRefine((catalog, ctx) => {
     const seen = new Set<string>();
