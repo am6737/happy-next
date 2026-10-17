@@ -18,6 +18,8 @@ interface CommandPaletteResultsProps {
     executingCommandId: string | null;
     searchQuery: string;
     tileColumns: number;
+    // Rows only, for a page that scrolls them along with its own content (the phone's search page)
+    page?: boolean;
 }
 
 // Memoized: showing or hiding the palette must not re-render every result row
@@ -29,6 +31,7 @@ export const CommandPaletteResults = React.memo(function CommandPaletteResults({
     executingCommandId,
     searchQuery,
     tileColumns,
+    page = false,
 }: CommandPaletteResultsProps) {
     const scrollViewRef = useRef<ScrollView>(null);
     const itemRefs = useRef<{ [key: number]: View | null }>({});
@@ -95,6 +98,44 @@ export const CommandPaletteResults = React.memo(function CommandPaletteResults({
 
     let currentIndex = 0;
 
+    const content = categories.map(category => {
+        if (category.commands.length === 0) return null;
+
+        const categoryStartIndex = currentIndex;
+        const asTiles = isTileCategory(category, searchQuery);
+        const categoryCommands = category.commands.map((command, idx) => {
+            const commandIndex = categoryStartIndex + idx;
+            const isSelected = commandIndex === selectedIndex;
+            currentIndex++;
+
+            return (
+                <ResultRow
+                    key={command.id}
+                    command={command}
+                    index={commandIndex}
+                    isSelected={isSelected}
+                    isExecuting={executingCommandId === command.id}
+                    searchQuery={searchQuery}
+                    tileWidth={asTiles ? `${100 / tileColumns}%` : undefined}
+                    onPressIndex={handlePressIndex}
+                    onHoverIndex={handleHoverIndex}
+                    registerRef={registerRef}
+                />
+            );
+        });
+
+        return (
+            <View key={category.id}>
+                <Text style={[styles.categoryTitle, Typography.default('semiBold')]}>
+                    {category.title}
+                </Text>
+                {asTiles ? <View style={styles.tileGrid}>{categoryCommands}</View> : categoryCommands}
+            </View>
+        );
+    });
+
+    if (page) return <View style={styles.pageContent}>{content}</View>;
+
     return (
         <ScrollView 
             ref={scrollViewRef}
@@ -102,41 +143,7 @@ export const CommandPaletteResults = React.memo(function CommandPaletteResults({
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
         >
-            {categories.map(category => {
-                if (category.commands.length === 0) return null;
-                
-                const categoryStartIndex = currentIndex;
-                const asTiles = isTileCategory(category, searchQuery);
-                const categoryCommands = category.commands.map((command, idx) => {
-                    const commandIndex = categoryStartIndex + idx;
-                    const isSelected = commandIndex === selectedIndex;
-                    currentIndex++;
-
-                    return (
-                        <ResultRow
-                            key={command.id}
-                            command={command}
-                            index={commandIndex}
-                            isSelected={isSelected}
-                            isExecuting={executingCommandId === command.id}
-                            searchQuery={searchQuery}
-                            tileWidth={asTiles ? `${100 / tileColumns}%` : undefined}
-                            onPressIndex={handlePressIndex}
-                            onHoverIndex={handleHoverIndex}
-                            registerRef={registerRef}
-                        />
-                    );
-                });
-
-                return (
-                    <View key={category.id}>
-                        <Text style={[styles.categoryTitle, Typography.default('semiBold')]}>
-                            {category.title}
-                        </Text>
-                        {asTiles ? <View style={styles.tileGrid}>{categoryCommands}</View> : categoryCommands}
-                    </View>
-                );
-            })}
+            {content}
         </ScrollView>
     );
 });
@@ -224,6 +231,9 @@ const styles = StyleSheet.create((theme) => ({
         } as any : {
             maxHeight: 560, // Fallback for native
         }),
+        paddingVertical: 4,
+    },
+    pageContent: {
         paddingVertical: 4,
     },
     emptyContainer: {

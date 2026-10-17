@@ -348,6 +348,27 @@ export default function RootLayout() {
                 }}
             />
             <Stack.Screen
+                name="search"
+                // iOS keeps the system header, which moves along with the other headers as pages open and
+                // close: the page puts its field in the title, where the back button gives way to it, and
+                // the header closes the page with its own button. Where the app draws the headers, the
+                // page's own bar stands in for one
+                options={shouldUseCustomHeader ? { headerShown: false } : ({ navigation }) => ({
+                    ...softHeaderOptions,
+                    headerShown: true,
+                    // The back button of a result opened from the page
+                    title: t('sessionScope.search'),
+                    headerTitle: '',
+                    headerBackVisible: false,
+                    unstable_headerRightItems: () => [{
+                        type: 'button',
+                        label: t('sessionScope.close'),
+                        icon: { type: 'sfSymbol', name: 'xmark' },
+                        onPress: () => navigation.goBack(),
+                    }],
+                })}
+            />
+            <Stack.Screen
                 name="repos/index"
                 options={{
                     ...softHeaderOptions,

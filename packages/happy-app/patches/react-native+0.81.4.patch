@@ -83,3 +83,42 @@ index a9aedca..c61df89 100644
                                                                 getServerHost(bundleURL),
                                                                 escapedInspectorDeviceId]];
    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+diff --git a/node_modules/react-native/React/Fabric/Mounting/ComponentViews/TextInput/RCTTextInputComponentView.mm b/node_modules/react-native/React/Fabric/Mounting/ComponentViews/TextInput/RCTTextInputComponentView.mm
+index 577bebe..9cba2e6 100644
+--- a/node_modules/react-native/React/Fabric/Mounting/ComponentViews/TextInput/RCTTextInputComponentView.mm
++++ b/node_modules/react-native/React/Fabric/Mounting/ComponentViews/TextInput/RCTTextInputComponentView.mm
+@@ -707,6 +707,7 @@ static NSSet<NSNumber *> *returnKeyTypesSet;
+       .contentSize = RCTSizeFromCGSize(_backedTextInputView.contentSize),
+       .layoutMeasurement = RCTSizeFromCGSize(_backedTextInputView.bounds.size),
+       .zoomScale = _backedTextInputView.zoomScale,
++      .composing = _backedTextInputView.markedTextRange != nil,
+   };
+ }
+ 
+diff --git a/node_modules/react-native/ReactCommon/react/renderer/components/textinput/TextInputEventEmitter.cpp b/node_modules/react-native/ReactCommon/react/renderer/components/textinput/TextInputEventEmitter.cpp
+index a9bc219..982bc29 100644
+--- a/node_modules/react-native/ReactCommon/react/renderer/components/textinput/TextInputEventEmitter.cpp
++++ b/node_modules/react-native/ReactCommon/react/renderer/components/textinput/TextInputEventEmitter.cpp
+@@ -24,6 +24,8 @@ static jsi::Value textInputMetricsPayload(
+ 
+   payload.setProperty(runtime, "eventCount", textInputMetrics.eventCount);
+ 
++  payload.setProperty(runtime, "isComposing", textInputMetrics.composing);
++
+   if (includeSelectionState) {
+     auto selection = jsi::Object(runtime);
+     selection.setProperty(
+diff --git a/node_modules/react-native/ReactCommon/react/renderer/components/textinput/TextInputEventEmitter.h b/node_modules/react-native/ReactCommon/react/renderer/components/textinput/TextInputEventEmitter.h
+index dbce575..941b491 100644
+--- a/node_modules/react-native/ReactCommon/react/renderer/components/textinput/TextInputEventEmitter.h
++++ b/node_modules/react-native/ReactCommon/react/renderer/components/textinput/TextInputEventEmitter.h
+@@ -28,6 +28,9 @@ class TextInputEventEmitter : public ViewEventEmitter {
+     Size layoutMeasurement;
+     Float zoomScale;
+     Tag target;
++    // Whether an input method is still composing the text (iOS's marked text, as pinyin before a
++    // character is picked)
++    bool composing{false};
+   };
+ 
+   struct KeyPressMetrics {

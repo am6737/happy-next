@@ -45,6 +45,7 @@ import { SessionRowFlash, flashSessionRow } from './SessionRowFlash';
 import { PressHighlight } from './PressHighlight';
 import { getProjectHeader, getProjectHeaderFlashId, setSessionProjectLocator } from './sessionProjectLocate';
 import { SessionMarkerBar } from './SessionColorMarker';
+import { SessionsSearchField } from './SessionsSearchField';
 
 const stylesheet = StyleSheet.create((theme) => ({
     container: {
@@ -709,6 +710,8 @@ export function SessionsList() {
         const max = Math.max(-top, contentHeightRef.current + bottom - viewportHeightRef.current);
         return Math.min(Math.max(offset, -top), max);
     }, [getVisibleInsets]);
+    // The phone list leads with a search field; the sidebar has its own.
+    const showsSearchRow = !isTablet;
     const scrollListToTop = React.useCallback(() => {
         listRef.current?.scrollToOffset({ offset: -getVisibleInsets().top, animated: true });
     }, [getVisibleInsets]);
@@ -1154,6 +1157,7 @@ export function SessionsList() {
                             { paddingBottom: safeArea.bottom + 128, maxWidth: layout.maxWidth },
                             isEmpty && emptyContentStyle,
                         ]}
+                        ListHeaderComponent={showsSearchRow ? <SessionsSearchField /> : undefined}
                         ListEmptyComponent={EmptyComponent}
                         removeClippedSubviews={true}
                         onLayout={event => {

@@ -14,10 +14,12 @@ interface CommandPaletteHistoryProps {
     anchorRef: React.MutableRefObject<NavigationAnchor | null>;
     onRemove: (entry: string) => void;
     onClear: () => void;
+    // Rows only, for a page that scrolls them along with its own content (the phone's search page)
+    page?: boolean;
 }
 
 // Past search terms, in a dropdown under the history button; picking one searches it again
-export const CommandPaletteHistory = React.memo(function CommandPaletteHistory({ history, selectedIndex, onSelect, anchorRef, onRemove, onClear }: CommandPaletteHistoryProps) {
+export const CommandPaletteHistory = React.memo(function CommandPaletteHistory({ history, selectedIndex, onSelect, anchorRef, onRemove, onClear, page = false }: CommandPaletteHistoryProps) {
     const scrollViewRef = React.useRef<ScrollView>(null);
     const rowRefs = React.useRef<(View | null)[]>([]);
     // As in the results: hovering only highlights, and the arrows start from the hovered row
@@ -38,14 +40,9 @@ export const CommandPaletteHistory = React.memo(function CommandPaletteHistory({
         (rowRefs.current[selectedIndex] as any)?.scrollIntoView?.({ block: 'nearest' });
     }, [selectedIndex]);
 
-    return (
-        <ScrollView
-            ref={scrollViewRef}
-            style={styles.container}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-        >
-            <View style={styles.header}>
+    const content = (
+        <>
+            <View style={[styles.header, page && styles.headerPage]}>
                 <Text style={[styles.title, Typography.default('semiBold')]}>
                     {t('commandPalette.searchHistory')}
                 </Text>
@@ -65,19 +62,34 @@ export const CommandPaletteHistory = React.memo(function CommandPaletteHistory({
                         onPress={() => onSelect(entry)}
                         onHover={(hovered) => handleHover(index, hovered)}
                         onRemove={() => onRemove(entry)}
+                        page={page}
                     />
                 </View>
             ))}
+        </>
+    );
+
+    if (page) return <View>{content}</View>;
+
+    return (
+        <ScrollView
+            ref={scrollViewRef}
+            style={styles.container}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+        >
+            {content}
         </ScrollView>
     );
 });
 
-function HistoryRow({ entry, isSelected, onPress, onHover, onRemove }: {
+function HistoryRow({ entry, isSelected, onPress, onHover, onRemove, page }: {
     entry: string;
     isSelected: boolean;
     onPress: () => void;
     onHover: (hovered: boolean) => void;
     onRemove: () => void;
+    page: boolean;
 }) {
     const { theme } = useUnistyles();
     const [isHovered, setIsHovered] = React.useState(false);
@@ -87,6 +99,7 @@ function HistoryRow({ entry, isSelected, onPress, onHover, onRemove }: {
     const pressableProps: any = {
         style: ({ pressed }: any) => [
             styles.row,
+            page && styles.rowPage,
             isSelected && styles.selected,
             isHovered && !isSelected && styles.hovered,
             pressed && styles.pressed,
@@ -147,6 +160,11 @@ const styles = StyleSheet.create((theme) => ({
         paddingTop: 12,
         paddingBottom: 4,
     },
+    // On a page the rows line up with the results below them
+    headerPage: {
+        paddingHorizontal: 20,
+        paddingTop: 16,
+    },
     title: {
         fontSize: 12,
         color: theme.colors.textSecondary,
@@ -170,6 +188,10 @@ const styles = StyleSheet.create((theme) => ({
         marginHorizontal: 4,
         marginVertical: 2,
         borderRadius: 8,
+    },
+    rowPage: {
+        paddingHorizontal: 13,
+        marginHorizontal: 6,
     },
     selected: {
         backgroundColor: theme.dark ? 'rgba(10, 132, 255, 0.16)' : 'rgba(0, 122, 255, 0.09)',
