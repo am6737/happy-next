@@ -80,12 +80,14 @@ public actor HappyClient {
 
   // MARK: Messages
 
-  /// The last messages of a session that carry text, oldest first
-  public func messages(sessionId: String, limit: Int = 40) async throws -> [HappyMessage] {
+  /// A page of a session's messages that carry text, oldest first: the last `limit` records, or
+  /// those before the record `before`
+  public func messages(sessionId: String, before: Int? = nil, limit: Int = 40) async throws -> HappyMessagePage {
     let cipher = try await cipher(for: sessionId)
-    let response = try await request("GET", "/v1/sessions/\(sessionId)/messages?limit=\(limit)")
+    let cursor = before.map { "&before=\($0)" } ?? ""
+    let response = try await request("GET", "/v1/sessions/\(sessionId)/messages?limit=\(limit)\(cursor)")
     guard let list = response["messages"] as? [[String: Any]] else { throw HappyError.badResponse }
-    return list.compactMap { json -> HappyMessage? in
+    let messages = list.compactMap { json -> HappyMessage? in
       guard let id = json["id"] as? String,
             let content = json["content"] as? [String: Any],
             content["t"] as? String == "encrypted",
@@ -103,6 +105,11 @@ public actor HappyClient {
       )
     }
     .sorted { $0.seq < $1.seq }
+    return HappyMessagePage(
+      messages: messages,
+      oldestSeq: list.compactMap { $0["seq"] as? Int }.min(),
+      hasMore: response["hasMore"] as? Bool ?? (list.count == limit)
+    )
   }
 
   /// Sends a message as the user, in the mode and with the model the session is already in

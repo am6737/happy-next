@@ -103,6 +103,14 @@ public struct HappyPermissionRequest: Identifiable, Hashable {
   }
 }
 
+/// A page of a session's transcript, newest records first on the server: the text messages among
+/// them, the oldest record's seq (where the page before it ends), and whether there is one
+public struct HappyMessagePage {
+  public let messages: [HappyMessage]
+  public let oldestSeq: Int?
+  public let hasMore: Bool
+}
+
 /// A message of a session's transcript, as text
 public struct HappyMessage: Identifiable, Hashable {
   public enum Role { case user, agent }
@@ -113,44 +121,108 @@ public struct HappyMessage: Identifiable, Hashable {
   public let text: String
   public let createdAt: Date
 
-  /// The text of a decrypted raw record, for the records that carry text: what the user sent and
-  /// the agent's replies, in the formats the CLIs write them in. Tool calls, results and events are
-  /// left to the app.
+  /// The text of a decrypted raw record, for the records that carry text: the prompts the user sent
+  /// (from the app or typed in the terminal) and the agent's replies, in the formats the CLIs write
+  /// them in. Tool calls, results, events, a subagent's work and the prompts Happy hands the agent
+  /// itself are left to the app, as a copied session's backfill leaves them out.
   static func text(ofRecord record: [String: Any]) -> (Role, String)? {
     guard let role = record["role"] as? String, let content = record["content"] as? [String: Any] else { return nil }
+    let entry: (Role, String)?
     switch role {
     case "user":
-      guard let text = content["text"] as? String else { return nil }
-      return (.user, text)
+      entry = (content["text"] as? String).map { (.user, $0) }
     case "agent":
-      return agentText(content).map { (.agent, $0) }
+      entry = agentText(content)
     case "session":
-      guard let envelope = content["data"] as? [String: Any] else { return nil }
-      return envelopeText(envelope)
+      entry = (content["data"] as? [String: Any]).flatMap(envelopeText)
+    default:
+      entry = nil
+    }
+    guard let entry else { return nil }
+    if entry.0 == .user {
+      guard !isInjectedPrompt(entry.1) else { return nil }
+      return (.user, stripAttachments(entry.1))
+    }
+    return entry
+  }
+
+  private static func agentText(_ content: [String: Any]) -> (Role, String)? {
+    let data = content["data"] as? [String: Any] ?? [:]
+    switch content["type"] as? String {
+    case "output":
+      guard data["isSidechain"] as? Bool != true else { return nil }
+      let message = data["message"] as? [String: Any]
+      switch data["type"] as? String {
+      case "assistant":
+        guard let items = message?["content"] as? [[String: Any]] else { return nil }
+        return texts(of: items).map { (.agent, $0) }
+      case "user":
+        return claudePrompt(data, content: message?["content"]).map { (.user, $0) }
+      default:
+        return nil
+      }
+    case "codex", "acp":
+      guard data["type"] as? String == "message", let text = data["message"] as? String else { return nil }
+      return (.agent, text)
+    case "session":
+      return envelopeText(data)
     default:
       return nil
     }
   }
 
-  private static func agentText(_ content: [String: Any]) -> String? {
-    let data = content["data"] as? [String: Any] ?? [:]
-    switch content["type"] as? String {
-    case "output":
-      guard data["type"] as? String == "assistant",
-            let items = (data["message"] as? [String: Any])?["content"] as? [[String: Any]] else { return nil }
-      let text = items
-        .filter { $0["type"] as? String == "text" }
-        .compactMap { $0["text"] as? String }
-        .joined(separator: "\n")
-      return text.isEmpty ? nil : text
-    case "codex", "acp":
-      guard data["type"] as? String == "message" else { return nil }
-      return data["message"] as? String
-    case "session":
-      return envelopeText(data).map { $0.1 }
-    default:
-      return nil
+  private static func texts(of items: [[String: Any]]) -> String? {
+    let text = items
+      .filter { $0["type"] as? String == "text" }
+      .compactMap { $0["text"] as? String }
+      .joined(separator: "\n")
+    return text.isEmpty ? nil : text
+  }
+
+  /// A prompt Claude Code wrote to its transcript, as `isPrompt` in the CLI's backfill tells one:
+  /// typed text, not tool results or the records written beside them (meta, a compaction's
+  /// summary, a local command's output, an interruption)
+  private static func claudePrompt(_ data: [String: Any], content: Any?) -> String? {
+    guard data["isMeta"] as? Bool != true, data["isCompactSummary"] as? Bool != true else { return nil }
+    if let text = content as? String {
+      return text.trimmingCharacters(in: .whitespaces).hasPrefix("<local-command-stdout>") ? nil : text
     }
+    guard let items = content as? [[String: Any]],
+          !items.contains(where: { $0["type"] as? String == "tool_result" }),
+          let text = texts(of: items),
+          !text.hasPrefix("[Request interrupted") else { return nil }
+    return text
+  }
+
+  /// `isInjectedPrompt` from the CLI: a run's terminal callback or a background task's report, which
+  /// Happy or the agent handed the agent as a prompt of its own
+  private static func isInjectedPrompt(_ text: String) -> Bool {
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    return ["task-notification", "orchestrator-callback"].contains { tag in
+      trimmed.hasPrefix("<\(tag)>") && trimmed.contains("</\(tag)>")
+    }
+  }
+
+  /// `stripAttachmentsFromPrompt` from the CLI: the prompt as typed, without the files listed after it
+  private static func stripAttachments(_ text: String) -> String {
+    let typed = text.replacingOccurrences(
+      of: #"(^|\n\n)<attached-files>\n[\s\S]*</attached-files>\s*$"#, with: "", options: .regularExpression)
+    return typed.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? text : typed
+  }
+
+  /// What a copied session's backfill keeps of a transcript (`selectBackfillTurns`): each prompt,
+  /// and of the agent's replies to it only the last, the one its turn ended on (or, while the turn
+  /// runs, the latest)
+  public static func turns(_ messages: [HappyMessage]) -> [HappyMessage] {
+    var kept: [HappyMessage] = []
+    for message in messages {
+      if message.role == .agent, kept.last?.role == .agent {
+        kept[kept.count - 1] = message
+      } else {
+        kept.append(message)
+      }
+    }
+    return kept
   }
 
   private static func envelopeText(_ envelope: [String: Any]) -> (Role, String)? {
