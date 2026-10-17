@@ -15,9 +15,11 @@ export const nativeHeaderMenuAvailable = Platform.OS === 'ios' && !isRunningOnMa
  * "…" (read out as "More") unless `icon` and `label` say otherwise, as for a menu of things to create.
  *
  * `null` items take the menu away again, for a screen whose header only has it some of the time.
+ * With `onPress` a tap on the button calls it and the menu opens on a long press instead.
+ * `haptic` plays a light haptic each time the menu opens.
  * The native menu has no secondary or custom-coloured rows; those items show as plain ones.
  */
-export function headerMenuOptions(items: ActionMenuItem[] | null, options: { disabled?: boolean; icon?: 'ellipsis' | 'plus'; label?: string } = {}) {
+export function headerMenuOptions(items: ActionMenuItem[] | null, options: { disabled?: boolean; icon?: 'ellipsis' | 'plus'; label?: string; onPress?: () => void; haptic?: boolean } = {}) {
     if (!nativeHeaderMenuAvailable) {
         return {};
     }
@@ -25,14 +27,23 @@ export function headerMenuOptions(items: ActionMenuItem[] | null, options: { dis
         // Header options are merged, so a screen that only sometimes has the menu has to clear it.
         return { unstable_headerRightItems: undefined };
     }
+    const menu = {
+        // A single-selection menu (the default) checks the row last tapped and keeps the check
+        // while its rows stay the same, so only a choice of one value is one.
+        multiselectable: !items.every(item => typeof item.selected === 'boolean'),
+        hapticFeedback: options.haptic,
+        items: items.map(headerMenuAction),
+    };
+    const item = {
+        label: options.label ?? t('common.more'),
+        icon: { type: 'sfSymbol' as const, name: options.icon ?? 'ellipsis' },
+        disabled: options.disabled,
+        menu,
+    };
     return {
-        unstable_headerRightItems: () => [{
-            type: 'menu' as const,
-            label: options.label ?? t('common.more'),
-            icon: { type: 'sfSymbol' as const, name: options.icon ?? 'ellipsis' },
-            disabled: options.disabled,
-            menu: { items: items.map(headerMenuAction) },
-        }],
+        unstable_headerRightItems: () => [options.onPress
+            ? { type: 'button' as const, onPress: options.onPress, ...item }
+            : { type: 'menu' as const, ...item }],
     };
 }
 

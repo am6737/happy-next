@@ -7,6 +7,8 @@ export type NativeMenuProps = {
     items: ActionMenuItem[];
     /** Opens the menu on a tap (`press`) or a long press (`longPress`). */
     activation?: 'press' | 'longPress';
+    /** What a tap does while the menu opens on a long press. */
+    onPress?: () => void;
     /**
      * The trigger sits at the bottom of the screen, so the menu opens above it. iOS puts the first
      * row nearest the trigger, which reads bottom-up there; this keeps `items` reading top-down.
@@ -25,11 +27,11 @@ export type NativeMenuProps = {
  * A trigger that opens its menu natively where it can (see `NativeMenu.ios.tsx`). Here it is a
  * plain pressable that hands over to the page's own `ActionMenuModal`.
  */
-export const NativeMenu = React.memo(({ activation = 'press', disabled, style, onFallbackOpen, children }: NativeMenuProps) => (
+export const NativeMenu = React.memo(({ activation = 'press', onPress, disabled, style, onFallbackOpen, children }: NativeMenuProps) => (
     <Pressable
         style={style}
         disabled={disabled}
-        onPress={activation === 'press' ? onFallbackOpen : undefined}
+        onPress={activation === 'press' ? onFallbackOpen : onPress}
         onLongPress={activation === 'longPress' ? onFallbackOpen : undefined}
     >
         {children}

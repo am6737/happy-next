@@ -1,7 +1,16 @@
 diff --git a/node_modules/@react-navigation/native-stack/lib/module/views/useHeaderConfigProps.js b/node_modules/@react-navigation/native-stack/lib/module/views/useHeaderConfigProps.js
-index 492390b..54adc85 100644
+index 492390b..308d12f 100644
 --- a/node_modules/@react-navigation/native-stack/lib/module/views/useHeaderConfigProps.js
 +++ b/node_modules/@react-navigation/native-stack/lib/module/views/useHeaderConfigProps.js
+@@ -46,7 +46,7 @@ const processBarButtonItems = (items, colors, fonts) => {
+           templateSource: icon.source
+         } : icon
+       };
+-      if (processedItem.type === 'menu' && item.type === 'menu') {
++      if ((processedItem.type === 'menu' || processedItem.type === 'button') && item.menu != null) {
+         const {
+           multiselectable,
+           layout
 @@ -135,6 +135,8 @@ export function useHeaderConfigProps({
    headerBlurEffect,
    headerTintColor,
@@ -21,7 +30,7 @@ index 492390b..54adc85 100644
      titleColor,
      titleFontFamily,
 diff --git a/node_modules/@react-navigation/native-stack/lib/typescript/src/types.d.ts b/node_modules/@react-navigation/native-stack/lib/typescript/src/types.d.ts
-index 98c516c..59fa619 100644
+index 98c516c..7bd9225 100644
 --- a/node_modules/@react-navigation/native-stack/lib/typescript/src/types.d.ts
 +++ b/node_modules/@react-navigation/native-stack/lib/typescript/src/types.d.ts
 @@ -311,6 +311,21 @@ export type NativeStackNavigationOptions = {
@@ -46,8 +55,32 @@ index 98c516c..59fa619 100644
      headerTitle?: string | ((props: {
          /**
           * The title text of the header.
+@@ -899,6 +914,12 @@ export type NativeStackHeaderItemButton = SharedHeaderItem & {
+      * Read more: https://developer.apple.com/documentation/uikit/uibarbuttonitem/isselected
+      */
+     selected?: boolean;
++    /**
++     * Menu shown on a long press, the tap still calling `onPress`.
++     *
++     * Read more: https://developer.apple.com/documentation/uikit/uibarbuttonitem/menu
++     */
++    menu?: NativeStackHeaderItemMenu['menu'];
+ };
+ /**
+  * An action item in a menu.
+@@ -1054,6 +1075,10 @@ export type NativeStackHeaderItemMenu = SharedHeaderItem & {
+         /**
+          * Array of menu items (actions or submenus).
+          */
++        /**
++         * Whether a light haptic plays each time the menu opens.
++         */
++        hapticFeedback?: boolean;
+         items: (NativeStackHeaderItemMenuAction | NativeStackHeaderItemMenuSubmenu)[];
+     };
+ };
 diff --git a/node_modules/@react-navigation/native-stack/src/types.tsx b/node_modules/@react-navigation/native-stack/src/types.tsx
-index 12c5cf6..638b8ff 100644
+index 12c5cf6..379f4d7 100644
 --- a/node_modules/@react-navigation/native-stack/src/types.tsx
 +++ b/node_modules/@react-navigation/native-stack/src/types.tsx
 @@ -359,6 +359,21 @@ export type NativeStackNavigationOptions = {
@@ -72,10 +105,43 @@ index 12c5cf6..638b8ff 100644
    headerTitle?:
      | string
      | ((props: {
+@@ -956,6 +971,12 @@ export type NativeStackHeaderItemButton = SharedHeaderItem & {
+    * Read more: https://developer.apple.com/documentation/uikit/uibarbuttonitem/isselected
+    */
+   selected?: boolean;
++  /**
++   * Menu shown on a long press, the tap still calling `onPress`.
++   *
++   * Read more: https://developer.apple.com/documentation/uikit/uibarbuttonitem/menu
++   */
++  menu?: NativeStackHeaderItemMenu['menu'];
+ };
+ 
+ /**
+@@ -1111,6 +1132,10 @@ export type NativeStackHeaderItemMenu = SharedHeaderItem & {
+      * Read more: https://developer.apple.com/documentation/uikit/uimenu/options-swift.struct/displayaspalette
+      */
+     layout?: 'default' | 'palette';
++    /**
++     * Whether a light haptic plays each time the menu opens.
++     */
++    hapticFeedback?: boolean;
+     /**
+      * Array of menu items (actions or submenus).
+      */
 diff --git a/node_modules/@react-navigation/native-stack/src/views/useHeaderConfigProps.tsx b/node_modules/@react-navigation/native-stack/src/views/useHeaderConfigProps.tsx
-index 14a0093..6f8a8eb 100644
+index 14a0093..9cd2bf4 100644
 --- a/node_modules/@react-navigation/native-stack/src/views/useHeaderConfigProps.tsx
 +++ b/node_modules/@react-navigation/native-stack/src/views/useHeaderConfigProps.tsx
+@@ -93,7 +93,7 @@ const processBarButtonItems = (
+               : icon,
+         };
+ 
+-        if (processedItem.type === 'menu' && item.type === 'menu') {
++        if ((processedItem.type === 'menu' || processedItem.type === 'button') && item.menu != null) {
+           const { multiselectable, layout } = item.menu;
+ 
+           processedItem = {
 @@ -186,6 +186,8 @@ export function useHeaderConfigProps({
    headerBlurEffect,
    headerTintColor,

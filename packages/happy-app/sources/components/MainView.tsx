@@ -37,6 +37,7 @@ import { getSwitcherDot, type SessionScopeDot as Dot } from './sessionListScope'
 import { SessionScopeDot } from './SessionScopeDot';
 import { requestSessionListJump } from './sessionListJump';
 import { useAddMachine } from '@/hooks/useAddMachine';
+import { hapticsLight } from './haptics';
 import { useSessionsCreateItems } from '@/hooks/useSessionsCreateItems';
 import { useSelectedMachineCliUpdate } from '@/hooks/useSelectedMachineCliUpdate';
 import { CliUpdateDot, CliUpdateIcon, cliUpdateLabel, useCliUpdateColor, webTitle } from './CliUpdateIndicator';
@@ -284,9 +285,12 @@ const SessionsHeaderTitle = React.memo(({ scope, onPress }: { scope: SessionList
 const CLI_UPDATE_AS_DOT = Platform.OS !== 'ios';
 
 // Header right button - varies by tab
-const HeaderRight = React.memo(({ activeTab, onDootaskCreate, onSessionsCreate, sessionsCreateItems, cliUpdate, onCliUpdatePress, onScanPress, onManualEntryPress, isScannerLoading }: {
+// The sessions "+" starts a new session on a tap and opens its menu on a long press; a tap opens the
+// menu too while a new session cannot start (`onSessionsNewSession` unset).
+const HeaderRight = React.memo(({ activeTab, onDootaskCreate, onSessionsNewSession, onSessionsCreate, sessionsCreateItems, cliUpdate, onCliUpdatePress, onScanPress, onManualEntryPress, isScannerLoading }: {
     activeTab: ActiveTabType;
     onDootaskCreate?: () => void;
+    onSessionsNewSession?: () => void;
     onSessionsCreate?: () => void;
     sessionsCreateItems?: ActionMenuItem[];
     cliUpdate?: MachineCliUpdate;
@@ -304,7 +308,8 @@ const HeaderRight = React.memo(({ activeTab, onDootaskCreate, onSessionsCreate, 
             return (
                 <Pressable
                     ref={webTitle(addLabel)}
-                    onPress={onSessionsCreate}
+                    onPress={onSessionsNewSession ?? onSessionsCreate}
+                    onLongPress={onSessionsCreate}
                     hitSlop={15}
                     style={styles.headerButton}
                     accessibilityLabel={addLabel}
@@ -327,7 +332,12 @@ const HeaderRight = React.memo(({ activeTab, onDootaskCreate, onSessionsCreate, 
                     <CliUpdateIcon update={cliUpdate} size={24} />
                 </Pressable>
                 {/* The native iOS menu of the header's own "+", here opened from a custom button */}
-                <NativeMenu items={sessionsCreateItems ?? []} onFallbackOpen={onSessionsCreate ?? (() => {})}>
+                <NativeMenu
+                    items={sessionsCreateItems ?? []}
+                    activation={onSessionsNewSession ? 'longPress' : 'press'}
+                    onPress={onSessionsNewSession}
+                    onFallbackOpen={onSessionsCreate ?? (() => {})}
+                >
                     <View style={styles.capsuleButton} accessibilityLabel={addLabel}>
                         <Ionicons name="add" size={26} color={theme.colors.header.tint} />
                     </View>
@@ -442,6 +452,7 @@ export const MainView = React.memo(({ variant }: MainViewProps) => {
     const [createMenuVisible, setCreateMenuVisible] = React.useState(false);
 
     const handleCreatePress = React.useCallback(() => {
+        hapticsLight();
         setCreateMenuVisible(true);
     }, []);
 
@@ -465,9 +476,15 @@ export const MainView = React.memo(({ variant }: MainViewProps) => {
     }, []);
     const addMachine = useAddMachine();
     const [sessionsMenuVisible, setSessionsMenuVisible] = React.useState(false);
-    const handleSessionsCreatePress = React.useCallback(() => setSessionsMenuVisible(true), []);
+    const handleSessionsCreatePress = React.useCallback(() => {
+        hapticsLight();
+        setSessionsMenuVisible(true);
+    }, []);
     const handleSessionsMenuClose = React.useCallback(() => setSessionsMenuVisible(false), []);
     const sessionsCreateItems = useSessionsCreateItems(sessionScope, addMachine);
+    // A tap on the "+" starts a new session (the first create item) when it can start
+    const newSessionItem = sessionsCreateItems[0];
+    const handleSessionsNewSession = newSessionItem.disabled ? undefined : newSessionItem.onPress;
     const cliUpdate = useSelectedMachineCliUpdate(sessionScope.selection);
     const cliUpdateColor = useCliUpdateColor(cliUpdate.update);
     // With the update as a dot on the "+", its menu has a row that opens it
@@ -626,6 +643,7 @@ export const MainView = React.memo(({ variant }: MainViewProps) => {
                         <HeaderRight
                             activeTab={activeTab as ActiveTabType}
                             onDootaskCreate={handleCreatePress}
+                            onSessionsNewSession={handleSessionsNewSession}
                             onSessionsCreate={handleSessionsCreatePress}
                             sessionsCreateItems={sessionsCreateItems}
                             cliUpdate={cliUpdate.update}
@@ -638,7 +656,12 @@ export const MainView = React.memo(({ variant }: MainViewProps) => {
                     : undefined,
                 ...headerMenuOptions(
                     activeTab === 'dootask' ? dootaskCreateItems : activeTab === 'sessions' ? sessionsHeaderMenu : null,
-                    { icon: 'plus', label: activeTab === 'sessions' ? t('sessionScope.addMenu') : t('common.create') },
+                    {
+                        icon: 'plus',
+                        label: activeTab === 'sessions' ? t('sessionScope.addMenu') : t('common.create'),
+                        onPress: activeTab === 'sessions' ? handleSessionsNewSession : undefined,
+                        haptic: true,
+                    },
                 ),
             }}
         />

@@ -6,6 +6,7 @@ import { useUnistyles } from 'react-native-unistyles';
 import { useRouter, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { headerMenuOptions } from '@/components/navigation/headerMenu';
+import { hapticsLight } from '@/components/haptics';
 import { t } from '@/text';
 
 export default function DooTaskPage() {
@@ -15,6 +16,7 @@ export default function DooTaskPage() {
     const [createMenuVisible, setCreateMenuVisible] = React.useState(false);
 
     const handleCreatePress = React.useCallback(() => {
+        hapticsLight();
         setCreateMenuVisible(true);
     }, []);
 
@@ -48,7 +50,7 @@ export default function DooTaskPage() {
                             />
                         </Pressable>
                     ),
-                    ...headerMenuOptions(createItems, { icon: 'plus', label: t('common.create') }),
+                    ...headerMenuOptions(createItems, { icon: 'plus', label: t('common.create'), haptic: true }),
                 }}
             />
             <DooTaskListView />

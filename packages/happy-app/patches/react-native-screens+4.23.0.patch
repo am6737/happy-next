@@ -23,6 +23,34 @@ index 22a5710..0032a8a 100644
      override fun setBackTitle(
          view: ScreenStackHeaderConfig?,
          value: String?,
+diff --git a/node_modules/react-native-screens/ios/RNSBarButtonItem.mm b/node_modules/react-native-screens/ios/RNSBarButtonItem.mm
+index 3f4a5e1..e5adca1 100644
+--- a/node_modules/react-native-screens/ios/RNSBarButtonItem.mm
++++ b/node_modules/react-native-screens/ios/RNSBarButtonItem.mm
+@@ -130,7 +130,22 @@ static UIMenuOptions RNSMakeUIMenuOptionsFromConfig(NSDictionary *config);
+   if (@available(tvOS 17.0, *)) {
+     NSDictionary *menu = dict[@"menu"];
+     if (menu) {
+-      self.menu = [[self class] initUIMenuWithDict:menu menuAction:menuAction];
++      UIMenu *uiMenu = [[self class] initUIMenuWithDict:menu menuAction:menuAction];
++#if !TARGET_OS_TV
++      NSNumber *hapticFeedback = menu[@"hapticFeedback"];
++      if (hapticFeedback != nil && [hapticFeedback boolValue]) {
++        if (@available(iOS 15.0, *)) {
++          // Asked for its (no) rows each time the menu opens, it plays the haptic then
++          UIDeferredMenuElement *feedback = [UIDeferredMenuElement
++              elementWithUncachedProvider:^(void (^completion)(NSArray<UIMenuElement *> *)) {
++                [[[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight] impactOccurred];
++                completion(@[]);
++              }];
++          uiMenu = [uiMenu menuByReplacingChildren:[uiMenu.children arrayByAddingObject:feedback]];
++        }
++      }
++#endif
++      self.menu = uiMenu;
+     }
+   }
+ #endif
 diff --git a/node_modules/react-native-screens/ios/RNSScreenStackHeaderConfig.h b/node_modules/react-native-screens/ios/RNSScreenStackHeaderConfig.h
 index d5ea95f..900349e 100644
 --- a/node_modules/react-native-screens/ios/RNSScreenStackHeaderConfig.h
@@ -86,6 +114,59 @@ index 3270127..537d9e1 100644
  RCT_EXPORT_VIEW_PROPERTY(backTitle, NSString)
  RCT_EXPORT_VIEW_PROPERTY(backTitleFontFamily, NSString)
  RCT_EXPORT_VIEW_PROPERTY(backTitleFontSize, NSNumber)
+diff --git a/node_modules/react-native-screens/lib/typescript/types.d.ts b/node_modules/react-native-screens/lib/typescript/types.d.ts
+index b197c16..9307917 100644
+--- a/node_modules/react-native-screens/lib/typescript/types.d.ts
++++ b/node_modules/react-native-screens/lib/typescript/types.d.ts
+@@ -1050,6 +1050,12 @@ export interface HeaderBarButtonItemWithAction extends SharedHeaderBarButtonItem
+      * Read more: https://developer.apple.com/documentation/uikit/uibarbuttonitem/isselected
+      */
+     selected?: boolean;
++    /**
++     * Menu shown on a long press, the tap still calling `onPress`.
++     *
++     * Read more: https://developer.apple.com/documentation/uikit/uibarbuttonitem/menu
++     */
++    menu?: HeaderBarButtonItemWithMenu['menu'];
+ }
+ export interface HeaderBarButtonItemMenuAction {
+     type: 'action';
+@@ -1111,6 +1117,10 @@ export interface HeaderBarButtonItemWithMenu extends SharedHeaderBarButtonItem {
+         items: (HeaderBarButtonItemMenuAction | HeaderBarButtonItemSubmenu)[];
+         singleSelection?: boolean;
+         displayAsPalette?: boolean;
++        /**
++         * Whether a light haptic plays each time the menu opens.
++         */
++        hapticFeedback?: boolean;
+     };
+     /**
+      * A Boolean value that indicates whether the button title should indicate selection or not.
+diff --git a/node_modules/react-native-screens/src/components/ScreenStackHeaderConfig.tsx b/node_modules/react-native-screens/src/components/ScreenStackHeaderConfig.tsx
+index 6ca8ed7..9f2f463 100644
+--- a/node_modules/react-native-screens/src/components/ScreenStackHeaderConfig.tsx
++++ b/node_modules/react-native-screens/src/components/ScreenStackHeaderConfig.tsx
+@@ -98,7 +98,7 @@ export const ScreenStackHeaderConfig = React.forwardRef<
+           ...(preparedHeaderRightBarButtonItems ?? []),
+         ];
+         for (const item of allItems) {
+-          if (item && item.type === 'menu' && item.menu) {
++          if (item && (item.type === 'menu' || item.type === 'button') && item.menu) {
+             const action = findInMenu(item.menu, event.nativeEvent.menuId);
+             if (action) {
+               action.onPress();
+diff --git a/node_modules/react-native-screens/src/components/helpers/prepareHeaderBarButtonItems.ts b/node_modules/react-native-screens/src/components/helpers/prepareHeaderBarButtonItems.ts
+index 35bdfc5..db0436c 100644
+--- a/node_modules/react-native-screens/src/components/helpers/prepareHeaderBarButtonItems.ts
++++ b/node_modules/react-native-screens/src/components/helpers/prepareHeaderBarButtonItems.ts
+@@ -79,6 +79,7 @@ export const prepareHeaderBarButtonItems = (
+       return {
+         ...processedItem,
+         buttonId: `${index}-${side}`,
++        menu: item.menu ? prepareMenu(item.menu, index, side) : undefined,
+       };
+     }
+     if (item.type === 'menu') {
 diff --git a/node_modules/react-native-screens/src/fabric/ScreenStackHeaderConfigNativeComponent.ts b/node_modules/react-native-screens/src/fabric/ScreenStackHeaderConfigNativeComponent.ts
 index fcbb268..2150a3b 100644
 --- a/node_modules/react-native-screens/src/fabric/ScreenStackHeaderConfigNativeComponent.ts
@@ -100,7 +181,7 @@ index fcbb268..2150a3b 100644
    backButtonDisplayMode?: CT.WithDefault<BackButtonDisplayMode, 'default'>;
    hideBackButton?: boolean;
 diff --git a/node_modules/react-native-screens/src/types.tsx b/node_modules/react-native-screens/src/types.tsx
-index a657c0f..7eede2c 100644
+index a657c0f..35242d4 100644
 --- a/node_modules/react-native-screens/src/types.tsx
 +++ b/node_modules/react-native-screens/src/types.tsx
 @@ -801,6 +801,20 @@ export interface ScreenStackHeaderConfigProps extends ViewProps {
@@ -124,3 +205,27 @@ index a657c0f..7eede2c 100644
    titleColor?: ColorValue;
    /**
     * Customize font family to be used for the title.
+@@ -1168,6 +1182,12 @@ export interface HeaderBarButtonItemWithAction
+    * Read more: https://developer.apple.com/documentation/uikit/uibarbuttonitem/isselected
+    */
+   selected?: boolean;
++  /**
++   * Menu shown on a long press, the tap still calling `onPress`.
++   *
++   * Read more: https://developer.apple.com/documentation/uikit/uibarbuttonitem/menu
++   */
++  menu?: HeaderBarButtonItemWithMenu['menu'];
+ }
+ 
+ export interface HeaderBarButtonItemMenuAction {
+@@ -1232,6 +1252,10 @@ export interface HeaderBarButtonItemWithMenu extends SharedHeaderBarButtonItem {
+     items: (HeaderBarButtonItemMenuAction | HeaderBarButtonItemSubmenu)[];
+     singleSelection?: boolean;
+     displayAsPalette?: boolean;
++    /**
++     * Whether a light haptic plays each time the menu opens.
++     */
++    hapticFeedback?: boolean;
+   };
+   /**
+    * A Boolean value that indicates whether the button title should indicate selection or not.

@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Button, ContextMenu, Host, Picker, Rectangle } from '@expo/ui/swift-ui';
-import { foregroundStyle, opacity } from '@expo/ui/swift-ui/modifiers';
+import { foregroundStyle, onTapGesture, opacity } from '@expo/ui/swift-ui/modifiers';
 import { useUnistyles } from 'react-native-unistyles';
 import { isRunningOnMac } from '@/utils/platform';
 import { NativeMenu as FallbackMenu, type NativeMenuProps } from './NativeMenu';
@@ -9,8 +9,8 @@ import { NativeMenu as FallbackMenu, type NativeMenuProps } from './NativeMenu';
 /**
  * A trigger that opens its menu as a native iOS menu: a tap opens it from the trigger in the
  * system's own glass (a SwiftUI `Menu`), a long press lifts the trigger with the menu beside it
- * (`contextMenu`). The rows are the page's `ActionMenuItem`s, so its `ActionMenuModal` keeps serving
- * Catalyst and the other platforms.
+ * (`contextMenu`), a tap then calling `onPress`. The rows are the page's `ActionMenuItem`s, so its
+ * `ActionMenuModal` keeps serving Catalyst and the other platforms.
  *
  * A menu whose rows all carry `selected` is a choice of one value, shown as an inline picker with
  * the system's checkmark; any other is a list of actions, destructive ones in red. Rows cannot be
@@ -23,7 +23,7 @@ import { NativeMenu as FallbackMenu, type NativeMenuProps } from './NativeMenu';
  * and the React Native view it had adopted is gone.
  */
 export const NativeMenu = React.memo((props: NativeMenuProps) => {
-    const { activation = 'press', opensUpward, disabled, style, children } = props;
+    const { activation = 'press', onPress, opensUpward, disabled, style, children } = props;
     // iOS orders the rows outward from the trigger; reversed, a menu above it still reads top-down
     const items = opensUpward ? [...props.items].reverse() : props.items;
     const { theme } = useUnistyles();
@@ -64,7 +64,13 @@ export const NativeMenu = React.memo((props: NativeMenuProps) => {
                         )}
                     </ContextMenu.Items>
                     <ContextMenu.Trigger>
-                        <Rectangle modifiers={[foregroundStyle(theme.dark ? 'black' : 'white'), opacity(0.011)]} />
+                        <Rectangle
+                            modifiers={[
+                                foregroundStyle(theme.dark ? 'black' : 'white'),
+                                opacity(0.011),
+                                ...(activation === 'longPress' && onPress ? [onTapGesture(onPress)] : []),
+                            ]}
+                        />
                     </ContextMenu.Trigger>
                 </ContextMenu>
             </Host>
