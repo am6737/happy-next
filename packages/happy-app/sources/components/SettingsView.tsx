@@ -33,8 +33,14 @@ import { t } from '@/text';
 import { useMainTabBottomPadding } from '@/hooks/useMainTabBottomPadding';
 import { openExternalUrl } from '@/utils/tauri';
 import { useOpenTerminal } from '@/hooks/useOpenTerminal';
+import { getMachineCliUpdate } from '@/utils/cliUpdate';
+import { CliUpdateIcon } from '@/components/CliUpdateIndicator';
 
 const machineKey = (machine: Machine) => machine.id;
+// A machine's CLI update icon stands where Item's chevron would be, centered on it
+const chevronSize = Platform.OS === 'ios' ? 17 : 24;
+const cliUpdateIconSize = Platform.OS === 'ios' ? 22 : 24;
+const cliUpdateIconOverhang = (cliUpdateIconSize - chevronSize) / 2;
 
 export const SettingsView = React.memo(function SettingsView() {
     const { theme } = useUnistyles();
@@ -70,6 +76,7 @@ export const SettingsView = React.memo(function SettingsView() {
             subtitle = subtitle ? `${subtitle} • ${platform}` : platform;
         }
         subtitle = subtitle ? `${subtitle} • ${isOnline ? t('status.online') : t('status.offline')}` : (isOnline ? t('status.online') : t('status.offline'));
+        const cliUpdate = getMachineCliUpdate(machine);
 
         return (
             <Item
@@ -94,7 +101,19 @@ export const SettingsView = React.memo(function SettingsView() {
                 showChevron={!reorderHandle}
                 // Reordering rows sit in a list of their own, outside ItemGroup's dividers.
                 showDivider={reorderHandle ? !isLast : undefined}
-                rightElement={reorderHandle}
+                // A CLI update, as in the machine switcher, stands where the chevron would be; tapping
+                // it opens the machine scrolled to its CLI version, as the session list's banner does.
+                rightElement={reorderHandle ?? (cliUpdate.state !== 'none' ? (
+                    <Pressable
+                        onPress={() => router.push(`/machine/${machine.id}?focus=cli`)}
+                        hitSlop={10}
+                        // Centered on the chevron's box (Item's chevron size, 4 to its left), so it lines up with
+                        // the other rows' chevrons; the wider icon spills evenly past both sides of that box.
+                        style={{ marginLeft: 4 - cliUpdateIconOverhang, marginRight: -cliUpdateIconOverhang }}
+                    >
+                        <CliUpdateIcon update={cliUpdate} size={cliUpdateIconSize} />
+                    </Pressable>
+                ) : undefined)}
             />
         );
     };
