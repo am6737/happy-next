@@ -158,6 +158,9 @@ const styles = StyleSheet.create((theme) => ({
         alignItems: 'center',
         justifyContent: 'center',
     },
+    searchButton: {
+        marginRight: 12,
+    },
 }));
 
 // Tab header configuration
@@ -284,6 +287,10 @@ const SessionsHeaderTitle = React.memo(({ scope, onPress }: { scope: SessionList
 // like the chat header's buttons in one glass capsule.
 const CLI_UPDATE_AS_DOT = Platform.OS !== 'ios';
 
+// Android and the phone-sized web open the session search from a button beside the sessions tab's
+// "+"; on iOS the phone list leads with a search field.
+const SEARCH_IN_HEADER = Platform.OS !== 'ios';
+
 // Header right button - varies by tab
 // The sessions "+" starts a new session on a tap and opens its menu on a long press; a tap opens the
 // menu too while a new session cannot start (`onSessionsNewSession` unset) or a CLI update dot is on it.
@@ -307,7 +314,7 @@ const HeaderRight = React.memo(({ activeTab, onDootaskCreate, onSessionsNewSessi
         if (CLI_UPDATE_AS_DOT || !cliUpdate || cliUpdate.state === 'none') {
             // While the dot shows, a tap opens the menu, where its update row is
             const hasDot = !!cliUpdate && cliUpdate.state !== 'none';
-            return (
+            const addButton = (
                 <Pressable
                     ref={webTitle(addLabel)}
                     onPress={hasDot ? onSessionsCreate : onSessionsNewSession ?? onSessionsCreate}
@@ -319,6 +326,22 @@ const HeaderRight = React.memo(({ activeTab, onDootaskCreate, onSessionsNewSessi
                     <Ionicons name="add-outline" size={28} color={theme.colors.header.tint} />
                     {cliUpdate && <CliUpdateDot update={cliUpdate} size={6} style={styles.addDot} />}
                 </Pressable>
+            );
+            if (!SEARCH_IN_HEADER) return addButton;
+            const searchLabel = t('sessionScope.search');
+            return (
+                <View style={styles.headerButtons}>
+                    <Pressable
+                        onPress={() => router.push('/search')}
+                        hitSlop={15}
+                        style={[styles.headerButton, styles.searchButton]}
+                        accessibilityRole="search"
+                        accessibilityLabel={searchLabel}
+                    >
+                        <Ionicons name="search-outline" size={22} color={theme.colors.header.tint} />
+                    </Pressable>
+                    {addButton}
+                </View>
             );
         }
         const cliLabel = cliUpdateLabel(cliUpdate);

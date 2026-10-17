@@ -710,8 +710,9 @@ export function SessionsList() {
         const max = Math.max(-top, contentHeightRef.current + bottom - viewportHeightRef.current);
         return Math.min(Math.max(offset, -top), max);
     }, [getVisibleInsets]);
-    // The phone list leads with a search field; the sidebar has its own.
-    const showsSearchRow = !isTablet;
+    // The iOS phone list leads with a search field; the sidebar has its own, and elsewhere the phone
+    // header has a search button beside its "+".
+    const showsSearchRow = !isTablet && Platform.OS === 'ios';
     const scrollListToTop = React.useCallback(() => {
         listRef.current?.scrollToOffset({ offset: -getVisibleInsets().top, animated: true });
     }, [getVisibleInsets]);
