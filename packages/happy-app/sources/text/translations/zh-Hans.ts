@@ -1199,6 +1199,11 @@ export const zhHans: TranslationStructure = {
             badgeBypassAllPermissions: '特权模式',
             badgeYolo: 'YOLO',
             badgePlanMode: '计划模式',
+            defaultDescription: '执行命令或修改文件前，始终询问',
+            acceptEditsDescription: '修改文件无需询问，其他操作仍会询问',
+            planDescription: '只调研和制定计划，批准计划后才开始修改',
+            autoDescription: '仅在检测到潜在风险时询问',
+            bypassPermissionsDescription: '不再询问，可自由访问你的文件、终端和网络',
         },
         agent: {
             title: 'AI',
@@ -1206,6 +1211,10 @@ export const zhHans: TranslationStructure = {
             codex: 'Codex',
             gemini: 'Gemini',
             qoder: 'Qoder',
+            claudeDescription: 'Anthropic 出品，擅长复杂编程',
+            codexDescription: 'OpenAI 出品，GPT 模型驱动',
+            geminiDescription: 'Google 出品，超长上下文',
+            qoderDescription: '阿里出品，可选多家模型',
             opencode: 'OpenCode',
         },
         model: {
@@ -1217,7 +1226,7 @@ export const zhHans: TranslationStructure = {
             useCliDefaults: '使用档案/CLI 的默认设置',
         },
         codexPermissionMode: {
-            default: '默认权限',
+            default: '默认',
             readOnly: '只读模式',
             onFailure: '帮我批准',
             fullAuto: '完全访问权限',
@@ -1247,6 +1256,10 @@ export const zhHans: TranslationStructure = {
             badgeAutoEdit: '自动编辑',
             badgePlan: '计划模式',
             badgeYolo: 'YOLO',
+            defaultDescription: '执行命令或修改文件前，始终询问',
+            autoEditDescription: '修改文件无需询问，其他操作仍会询问',
+            planDescription: '只调研和制定计划，修改文件前会询问',
+            yoloDescription: '不再询问，可自由访问你的文件、终端和网络',
         },
         qoderPermissionMode: {
             default: '默认',

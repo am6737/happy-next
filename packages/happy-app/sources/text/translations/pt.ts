@@ -1197,6 +1197,11 @@ export const pt: TranslationStructure = {
             badgeBypassAllPermissions: 'Privileged Mode',
             badgeYolo: 'YOLO',
             badgePlanMode: 'Plan Mode',
+            defaultDescription: 'Always asks before running commands or editing files',
+            acceptEditsDescription: 'Edits files without asking; still asks for everything else',
+            planDescription: 'Only researches and plans; starts changing things once you approve the plan',
+            autoDescription: 'Asks only when it detects a potential risk',
+            bypassPermissionsDescription: 'Never asks; free access to your files, terminal and network',
         },
         agent: {
             title: 'AI',
@@ -1204,6 +1209,10 @@ export const pt: TranslationStructure = {
             codex: 'Codex',
             gemini: 'Gemini',
             qoder: 'Qoder',
+            claudeDescription: 'By Anthropic, strong at complex coding',
+            codexDescription: 'By OpenAI, powered by GPT',
+            geminiDescription: 'By Google, long context',
+            qoderDescription: 'By Alibaba, choose from many models',
             opencode: 'OpenCode',
         },
         model: {
@@ -1215,7 +1224,7 @@ export const pt: TranslationStructure = {
             useCliDefaults: 'Padrões do perfil/CLI',
         },
         codexPermissionMode: {
-            default: 'Default Permissions',
+            default: 'Default',
             readOnly: 'Read Only',
             onFailure: 'Approve for Me',
             fullAuto: 'Full Access',
@@ -1245,6 +1254,10 @@ export const pt: TranslationStructure = {
             badgeAutoEdit: 'Auto Edit',
             badgePlan: 'Plan Mode',
             badgeYolo: 'YOLO',
+            defaultDescription: 'Always asks before running commands or editing files',
+            autoEditDescription: 'Edits files without asking; still asks for everything else',
+            planDescription: 'Only researches and plans; asks before editing files',
+            yoloDescription: 'Never asks; free access to your files, terminal and network',
         },
         qoderPermissionMode: {
             default: 'Padrão',

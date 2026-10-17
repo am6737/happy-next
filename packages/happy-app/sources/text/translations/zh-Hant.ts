@@ -1198,6 +1198,11 @@ export const zhHant: TranslationStructure = {
             badgeBypassAllPermissions: '特權模式',
             badgeYolo: 'YOLO',
             badgePlanMode: '計劃模式',
+            defaultDescription: '執行命令或修改檔案前，一律詢問',
+            acceptEditsDescription: '修改檔案無需詢問，其他操作仍會詢問',
+            planDescription: '只調研和制定計劃，批准計劃後才開始修改',
+            autoDescription: '僅在偵測到潛在風險時詢問',
+            bypassPermissionsDescription: '不再詢問，可自由存取你的檔案、終端機和網路',
         },
         agent: {
             title: 'AI',
@@ -1205,6 +1210,10 @@ export const zhHant: TranslationStructure = {
             codex: 'Codex',
             gemini: 'Gemini',
             qoder: 'Qoder',
+            claudeDescription: 'Anthropic 出品，擅長複雜程式設計',
+            codexDescription: 'OpenAI 出品，GPT 模型驅動',
+            geminiDescription: 'Google 出品，超長上下文',
+            qoderDescription: '阿里出品，可選多家模型',
             opencode: 'OpenCode',
         },
         model: {
@@ -1216,7 +1225,7 @@ export const zhHant: TranslationStructure = {
             useCliDefaults: '使用設定檔/CLI 的預設設定',
         },
         codexPermissionMode: {
-            default: '預設權限',
+            default: '預設',
             readOnly: '唯讀模式',
             onFailure: '幫我批准',
             fullAuto: '完全存取權限',
@@ -1246,6 +1255,10 @@ export const zhHant: TranslationStructure = {
             badgeAutoEdit: '自動編輯',
             badgePlan: '計劃模式',
             badgeYolo: 'YOLO',
+            defaultDescription: '執行命令或修改檔案前，一律詢問',
+            autoEditDescription: '修改檔案無需詢問，其他操作仍會詢問',
+            planDescription: '只調研和制定計劃，修改檔案前會詢問',
+            yoloDescription: '不再詢問，可自由存取你的檔案、終端機和網路',
         },
         qoderPermissionMode: {
             default: '預設',

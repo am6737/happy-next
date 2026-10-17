@@ -26,7 +26,7 @@ import { KeyboardEvents, useKeyboardState } from 'react-native-keyboard-controll
 import { ComposerKeyboardOffsetContext } from './composerKeyboardOffset';
 import { useSetting } from '@/sync/storage';
 import { Theme } from '@/theme';
-import { t } from '@/text';
+import { getCurrentLanguage, t } from '@/text';
 import { Metadata } from '@/sync/storageTypes';
 import { log } from '@/log';
 import { ImagePreview, LocalImage } from '@/components/ImagePreview';
@@ -55,6 +55,7 @@ import {
     getCodexReasoningOptions,
     getMaxContextSize,
     getModelFamilyOptions,
+    type ModelOption,
     MODEL_MODE_DEFAULT,
     parseClaudeModelMode,
     parseCodexModelMode,
@@ -724,7 +725,18 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
         'read-only': t('agentInput.codexPermissionMode.readOnlyDescription'),
         'on-failure': t('agentInput.codexPermissionMode.onFailureDescription'),
         'full-auto': t('agentInput.codexPermissionMode.fullAutoDescription'),
-    } : {};
+    } : isGemini ? {
+        default: t('agentInput.geminiPermissionMode.defaultDescription'),
+        auto_edit: t('agentInput.geminiPermissionMode.autoEditDescription'),
+        plan: t('agentInput.geminiPermissionMode.planDescription'),
+        yolo: t('agentInput.geminiPermissionMode.yoloDescription'),
+    } : {
+        default: t('agentInput.permissionMode.defaultDescription'),
+        acceptEdits: t('agentInput.permissionMode.acceptEditsDescription'),
+        plan: t('agentInput.permissionMode.planDescription'),
+        auto: t('agentInput.permissionMode.autoDescription'),
+        bypassPermissions: t('agentInput.permissionMode.bypassPermissionsDescription'),
+    };
     // Qoder's plan mode stands apart from its permission mode and only an approved plan ends it.
     // The badge shows it; the picker keeps the chosen mode, which applies once the plan is approved.
     const isQoderPlanning = isQoder && !!props.metadata?.inPlanMode;
@@ -767,10 +779,11 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
         return parseCodexModelMode(selectedModelMode);
     }, [selectedModelMode, modelCatalog]);
     // The catalog's "use the CLI's model" entry is English-only; every agent shows the translated one.
-    const localizeCliDefault = <T extends { value: string; label: string; description?: string }>(options: readonly T[]): T[] => options.map((option) => option.value === MODEL_MODE_DEFAULT
+    // Catalog descriptions are English, with translations for some languages.
+    const localizeModelOptions = (options: readonly ModelOption[]): ModelOption[] => options.map((option) => option.value === MODEL_MODE_DEFAULT
         ? { ...option, label: t('agentInput.model.useCliConfigured'), description: t('agentInput.model.useCliDefaults') }
-        : option);
-    const codexFamilyOptions = React.useMemo(() => localizeCliDefault(getModelFamilyOptions('codex')), [modelCatalog]);
+        : { ...option, description: option.descriptionTranslations?.[getCurrentLanguage()] ?? option.description });
+    const codexFamilyOptions = React.useMemo(() => localizeModelOptions(getModelFamilyOptions('codex')), [modelCatalog]);
     const codexReasoningOptions = React.useMemo<Array<{ value: CodexReasoningEffort; label: string }>>(() => {
         const options = getCodexReasoningOptions(codexSelection.family);
         return options.map((value) => ({
@@ -797,7 +810,7 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
     const claudeSelection = React.useMemo<{ family: ClaudeModelFamily; effort: ClaudeReasoningEffort | null }>(() => {
         return parseClaudeModelMode(selectedModelMode);
     }, [selectedModelMode, modelCatalog]);
-    const claudeFamilyOptions = React.useMemo(() => localizeCliDefault(getModelFamilyOptions('claude')), [modelCatalog]);
+    const claudeFamilyOptions = React.useMemo(() => localizeModelOptions(getModelFamilyOptions('claude')), [modelCatalog]);
     const claudeReasoningOptions = React.useMemo<Array<{ value: ClaudeReasoningEffort; label: string }>>(() => {
         const options = getClaudeReasoningOptions(claudeSelection.family);
         return options.map((value) => ({
@@ -822,7 +835,7 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
         props.onModelModeChange(buildClaudeModelMode(claudeSelection.family, effort));
     }, [claudeSelection.family, props.onModelModeChange]);
     const modelOptions = React.useMemo<Array<{ value: ModelMode; label: string; shortLabel: string; description: string; trailing?: string }>>(() => {
-        if (isGemini) return localizeCliDefault(getModelFamilyOptions('gemini'));
+        if (isGemini) return localizeModelOptions(getModelFamilyOptions('gemini'));
         const cliDefault = { value: MODEL_MODE_DEFAULT, label: t('agentInput.model.useCliConfigured'), shortLabel: 'CLI', description: t('agentInput.model.useCliDefaults') };
         if (isQoder) {
             // Qoder ends each tag list with the credit multiplier ("Vision · 0.50x Credit"); it is shown on the right as "0.5x".
@@ -1875,13 +1888,23 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                                             tintColor={agent === 'codex' || agent === 'qoder' ? theme.colors.text : undefined}
                                                         />
                                                     </View>
-                                                    <Text style={{
-                                                        fontSize: 14,
-                                                        color: isSelected ? theme.colors.radio.active : theme.colors.text,
-                                                        ...Typography.default()
-                                                    }}>
-                                                        {t(`agentInput.agent.${agent}`)}
-                                                    </Text>
+                                                    <View style={{ flexShrink: 1 }}>
+                                                        <Text style={{
+                                                            fontSize: 14,
+                                                            color: isSelected ? theme.colors.radio.active : theme.colors.text,
+                                                            ...Typography.default()
+                                                        }}>
+                                                            {t(`agentInput.agent.${agent}`)}
+                                                        </Text>
+                                                        <Text style={{
+                                                            fontSize: 11,
+                                                            color: theme.colors.textSecondary,
+                                                            marginTop: 2,
+                                                            ...Typography.default()
+                                                        }}>
+                                                            {t(`agentInput.agent.${agent}Description`)}
+                                                        </Text>
+                                                    </View>
                                                 </Pressable>
                                             );
                                         })}
