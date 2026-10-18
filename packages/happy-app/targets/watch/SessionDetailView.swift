@@ -72,13 +72,14 @@ struct SessionDetailView: View {
         }
 
         ForEach(messages) { message in
-          Button { openMessage = message } label: {
-            MessageRow(message: message, agent: agentLabel)
-          }
-          .buttonStyle(.plain)
-          .simultaneousGesture(LongPressGesture().onEnded { _ in openMessage = message })
-          .listRowBackground(Color.clear)
-          .listRowInsets(EdgeInsets())
+          // Not a button: watchOS draws a button row's platter over the row's own background
+          MessageRow(message: message, agent: agentLabel)
+            .onTapGesture { openMessage = message }
+            .onLongPressGesture { openMessage = message }
+            .listRowBackground(
+              RoundedRectangle(cornerRadius: 10)
+                .fill(message.role == .user ? MessageStyle.userBackground : Color.gray.opacity(0.18))
+            )
           .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { rowFrames.rows[message.id] = $0 }
           .id(message.id)
         }
@@ -297,7 +298,8 @@ private struct PermissionCard: View {
     }
     .disabled(busy)
     .buttonStyle(.bordered)
-    .padding(.vertical, 4)
+    .padding(.top, 4)
+    .padding(.bottom, 12)
   }
 }
 
@@ -315,15 +317,9 @@ private struct MessageRow: View {
         .font(.footnote)
         .lineLimit(4)
     }
+    .padding(.vertical, 4)
     .frame(maxWidth: .infinity, alignment: .leading)
-    .padding(.horizontal, 10)
-    .padding(.vertical, 8)
-    // The card drawn by the row itself: a list row's own background stays under a button's platter
-    .background(
-      RoundedRectangle(cornerRadius: 10)
-        .fill(message.role == .user ? MessageStyle.userBackground : Color.gray.opacity(0.18))
-    )
-    .contentShape(RoundedRectangle(cornerRadius: 10))
+    .contentShape(Rectangle())
   }
 }
 

@@ -79,13 +79,33 @@ struct MessageDetailView: View {
   var body: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: 6) {
-        Text(message.role == .user ? L("Me", "我") : agent)
-          .font(.caption2)
-          .foregroundStyle(.secondary)
+        HStack {
+          Text(message.role == .user ? L("Me", "我") : agent)
+            .lineLimit(1)
+          Spacer(minLength: 4)
+          Text(message.createdAt, format: Self.timeFormat(for: message.createdAt))
+            .lineLimit(1)
+            .fixedSize()
+        }
+        .font(.caption2)
+        .foregroundStyle(.secondary)
         Text(PlainText.from(markdown: message.text))
           .font(.footnote)
           .frame(maxWidth: .infinity, alignment: .leading)
       }
     }
+  }
+
+  /// The time alone for today's messages, with the day before it for older ones and the year for
+  /// another year's
+  private static func timeFormat(for date: Date) -> Date.FormatStyle {
+    let calendar = Calendar.current
+    if calendar.isDateInToday(date) {
+      return .dateTime.hour().minute()
+    }
+    if calendar.isDate(date, equalTo: .now, toGranularity: .year) {
+      return .dateTime.month().day().hour().minute()
+    }
+    return .dateTime.year().month().day().hour().minute()
   }
 }
