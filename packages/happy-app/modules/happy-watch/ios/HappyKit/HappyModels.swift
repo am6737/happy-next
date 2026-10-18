@@ -37,6 +37,8 @@ public struct HappySession: Identifiable, Hashable {
   /// what the app orders its list by
   public let lastMessageAt: Date
   public let requests: [HappyPermissionRequest]
+  /// When the session was pinned to the top of the app's list, if it is
+  public var pinnedAt: Date? = nil
 
   public var status: Status {
     if !requests.isEmpty { return .needsApproval }

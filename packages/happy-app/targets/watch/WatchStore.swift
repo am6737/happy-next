@@ -43,7 +43,7 @@ final class WatchStore: ObservableObject {
   func refresh() async {
     guard let client else { return }
     do {
-      sessions = try await client.activeSessions()
+      sessions = try await client.activeSessions(withPins: true)
       loadFailed = false
     } catch {
       loadFailed = true

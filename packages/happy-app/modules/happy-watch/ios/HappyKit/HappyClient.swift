@@ -18,11 +18,31 @@ public actor HappyClient {
 
   // MARK: Sessions
 
-  /// The sessions active in the last 15 minutes
-  public func activeSessions() async throws -> [HappySession] {
+  /// The sessions active in the last 15 minutes, with the pins the app put on them if asked
+  public func activeSessions(withPins: Bool = false) async throws -> [HappySession] {
+    async let pins = withPins ? sessionPins() : [:]
     let response = try await request("GET", "/v2/sessions/active?limit=50")
     guard let list = response["sessions"] as? [[String: Any]] else { throw HappyError.badResponse }
-    return list.compactMap(session)
+    let sessions = list.compactMap(session)
+    let pinnedAt = await pins
+    return sessions.map { session in
+      var session = session
+      session.pinnedAt = pinnedAt[session.id]
+      return session
+    }
+  }
+
+  /// The sessions pinned in the app (`session-appearance:v1` in the account's key-value store, base64
+  /// JSON with each session's marks), by when each was pinned; none when they can't be read
+  private func sessionPins() async -> [String: Date] {
+    guard let response = try? await request("GET", "/v1/kv/session-appearance:v1"),
+          let value = response["value"] as? String,
+          let data = Data(base64Encoded: value),
+          let document = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+          let sessions = document["sessions"] as? [String: Any] else { return [:] }
+    return sessions.compactMapValues { entry in
+      ((entry as? [String: Any])?["pinnedAt"] as? Double).map { Date(timeIntervalSince1970: $0 / 1000) }
+    }
   }
 
   public func session(id: String) async throws -> HappySession? {
@@ -51,10 +71,14 @@ public actor HappyClient {
       .compactMap { key, value in (value as? [String: Any]).map { HappyPermissionRequest(id: key, record: $0) } }
       .sorted { $0.createdAt < $1.createdAt }
 
-    // `agentModelName`: an ACP agent names its model by a code its `models` list spells out
-    let modelCode = metadata["model"] as? String
-    let model = (metadata["models"] as? [[String: Any]])?
-      .first { $0["code"] as? String == modelCode }?["value"] as? String ?? modelCode
+    // `agentModelName`: an ACP agent names its model by a code its `models` list spells out. Qoder
+    // gives only the code it runs (`currentModelCode`), and its reasoning as a thought level.
+    func name(_ code: String?, in list: String) -> String? {
+      (metadata[list] as? [[String: Any]])?.first { $0["code"] as? String == code }?["value"] as? String ?? code
+    }
+    let model = name(metadata["model"] as? String ?? metadata["currentModelCode"] as? String, in: "models")?
+      .replacingOccurrences(of: " (default)", with: "")
+    let reasoningEffort = metadata["reasoningEffort"] as? String ?? metadata["currentThoughtLevelCode"] as? String
     let machineId = metadata["machineId"] as? String ?? ""
     let avatarId = !machineId.isEmpty && !path.isEmpty ? "\(machineId):\(path)" : id
 
@@ -68,7 +92,7 @@ public actor HappyClient {
       detail: detail,
       flavor: flavor,
       model: model,
-      reasoningEffort: metadata["reasoningEffort"] as? String,
+      reasoningEffort: reasoningEffort,
       avatarId: avatarId,
       sessionIcon: (metadata["sessionIcon"] as? String).flatMap { $0.isEmpty ? nil : $0 },
       thinking: json["thinking"] as? Bool ?? false,

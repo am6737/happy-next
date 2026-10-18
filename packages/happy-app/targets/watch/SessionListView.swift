@@ -1,12 +1,18 @@
 import SwiftUI
 
-/// The active sessions, ordered as the app orders its list: by when their conversation last moved
+/// The active sessions, ordered as the app orders its list: the pinned ones first, the latest pin
+/// at the top, then the rest by when their conversation last moved
 struct SessionListView: View {
   @EnvironmentObject private var store: WatchStore
 
   private var sessions: [HappySession] {
     store.sessions.sorted { a, b in
-      a.lastMessageAt != b.lastMessageAt ? a.lastMessageAt > b.lastMessageAt : a.id < b.id
+      switch (a.pinnedAt, b.pinnedAt) {
+      case let (a?, b?) where a != b: return a > b
+      case (.some, nil): return true
+      case (nil, .some): return false
+      default: return a.lastMessageAt != b.lastMessageAt ? a.lastMessageAt > b.lastMessageAt : a.id < b.id
+      }
     }
   }
 
@@ -21,6 +27,10 @@ struct SessionListView: View {
         NavigationLink(value: session.id) {
           SessionRow(session: session)
         }
+        // A pinned session's card a shade lighter than the rest, as watchOS marks a pinned chat
+        .listRowBackground(
+          session.pinnedAt == nil ? nil : RoundedRectangle(cornerRadius: 12).fill(Color(hex: 0x333335))
+        )
       }
     }
     .navigationTitle("Happy Next")
