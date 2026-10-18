@@ -64,12 +64,12 @@ struct SessionDetailView: View {
         }
 
         if loaded, hasEarlier {
-          // A row of its own while reading, not the button dimmed: a spinner put in a row already
-          // drawn doesn't show, which left the button looking merely off
+          // A row of its own while reading, not the button dimmed, with a spinner of its own: the
+          // system's, put in a row already drawn (the button's, tapped), doesn't show
           if loadingEarlier {
             HStack(spacing: 8) {
-              ProgressView().frame(width: 16, height: 16)
-              Text(L("Loading Earlier Messages…", "正在加载更早的消息…"))
+              Spinner().frame(width: 16, height: 16)
+              Text(L("Loading…", "正在加载…"))
                 .foregroundStyle(.secondary)
             }
             .listRowBackground(Color.clear)
@@ -348,6 +348,18 @@ private struct QuickReplyEditor: View {
     }
     .navigationTitle(L("Quick Reply", "快速回复"))
     .onAppear { focused = true }
+  }
+}
+
+/// A spinner turned by the clock, so it turns wherever it is put
+private struct Spinner: View {
+  var body: some View {
+    TimelineView(.animation) { context in
+      Circle()
+        .trim(from: 0, to: 0.75)
+        .stroke(.secondary, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+        .rotationEffect(.degrees(context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1) * 360))
+    }
   }
 }
 
