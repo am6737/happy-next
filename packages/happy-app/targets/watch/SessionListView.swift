@@ -27,9 +27,9 @@ struct SessionListView: View {
         NavigationLink(value: session.id) {
           SessionRow(session: session)
         }
-        // A pinned session's card a shade lighter than the rest, as watchOS marks a pinned chat
+        // A pinned session's card a shade lighter than the rest's, as watchOS marks a pinned chat
         .listRowBackground(
-          session.pinnedAt == nil ? nil : RoundedRectangle(cornerRadius: 12).fill(Color(hex: 0x333335))
+          RoundedRectangle(cornerRadius: 12).fill(Color(hex: session.pinnedAt == nil ? 0x1F1F21 : 0x333335))
         )
       }
     }

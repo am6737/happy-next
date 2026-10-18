@@ -14,6 +14,13 @@ struct SessionDetailView: View {
   /// stays light
   private static let pagesPerLoad = 4
   private static let maxRecords = 1000
+  /// Sent with a tap, or put in the reply to edit with a long press
+  private static let quickReplies = [
+    L("Continue", "继续"),
+    L("Go with your plan", "按你的方案做"),
+    L("Commit and push", "提交并推送"),
+    L("Summarize what changed", "总结一下改了什么"),
+  ]
 
   let sessionId: String
   @EnvironmentObject private var store: WatchStore
@@ -33,6 +40,8 @@ struct SessionDetailView: View {
   /// Whether the messages were read once, till when a spinner stands in for them
   @State private var loaded = false
   @State private var draft = ""
+  @FocusState private var replyFocused: Bool
+  @State private var confirmingStop = false
   @State private var busy = false
   @State private var failed = false
   /// The permission whose answer didn't reach the session, told on its own card where it was tapped
@@ -94,14 +103,35 @@ struct SessionDetailView: View {
           }
         } else {
           TextField(L("Reply", "回复"), text: $draft)
-            .onSubmit(send)
+            .onSubmit { send(draft) }
+            .focused($replyFocused)
             .disabled(busy)
             .id("reply")
+
+          // Rows, not buttons: a button's tap would still send after a long press
+          Section {
+            ForEach(Self.quickReplies, id: \.self) { reply in
+              Text(reply)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                .onTapGesture { send(reply) }
+                .onLongPressGesture {
+                  draft = reply
+                  proxy.scrollTo("reply", anchor: .bottom)
+                  replyFocused = true
+                }
+                .opacity(busy ? 0.4 : 1)
+                .allowsHitTesting(!busy)
+                .listRowBackground(RoundedRectangle(cornerRadius: 10).fill(Color.gray.opacity(0.24)))
+            }
+          } header: {
+            Text(L("Quick Replies", "快速回复"))
+          }
         }
 
         if let status = session?.status, status != .waiting {
           Button(role: .destructive) {
-            run { try await $0.abort(sessionId: sessionId) }
+            confirmingStop = true
           } label: {
             Label(L("Stop", "中止任务"), systemImage: "stop.circle")
           }
@@ -115,14 +145,22 @@ struct SessionDetailView: View {
         }
       }
       .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { rowFrames.viewport = $0 }
+      .confirmationDialog(L("Stop the current task?", "中止当前任务？"), isPresented: $confirmingStop, titleVisibility: .visible) {
+        Button(L("Stop", "中止任务"), role: .destructive) {
+          run { try await $0.abort(sessionId: sessionId) }
+        }
+        Button(L("Cancel", "取消"), role: .cancel) {}
+      }
       .navigationTitle(session?.title ?? "")
       .navigationDestination(item: $openMessage) { message in
         MessageDetailView(message: message, agent: agentLabel)
       }
       .task {
+        // The messages and the session read side by side, so neither waits on the other
         await poll(every: 4) {
-          await loadMessages()
+          async let messagesRead: Void = loadMessages()
           await store.refresh()
+          await messagesRead
         }
       }
       .onChange(of: messages.last?.id) { scrollToEnd(proxy) }
@@ -157,20 +195,24 @@ struct SessionDetailView: View {
   /// The messages as a copied session's backfill keeps them: each prompt and the reply it ended on
   private var messages: [HappyMessage] { HappyMessage.turns(records) }
 
-  /// Reads the latest page again, keeping the records read before it; the first time, goes back
-  /// till there are messages enough to show
+  /// Reads the latest page again, keeping the records read before it. The first time, the page
+  /// shows as soon as it is read, and the pages before it follow till there are messages enough.
   private func loadMessages() async {
     guard let client = store.client else { return }
-    defer { loaded = true }
-    guard let latest = try? await client.messages(sessionId: sessionId, limit: Self.latestPageSize) else { return }
+    guard let latest = try? await client.messages(sessionId: sessionId, limit: Self.latestPageSize) else {
+      loaded = true
+      return
+    }
     if !loaded {
-      var earlier = Earlier(oldestSeq: latest.oldestSeq, hasMore: latest.hasMore, recordsRead: latest.recordCount)
-      let shown = HappyMessage.turns(latest.messages).count
-      await earlier.read(client: client, sessionId: sessionId, above: latest.messages, adding: Self.messagesPerLoad - shown)
-      records = earlier.messages + latest.messages
-      oldestSeq = earlier.oldestSeq
-      hasEarlier = earlier.hasMore
-      recordsRead = earlier.recordsRead
+      records = latest.messages
+      oldestSeq = latest.oldestSeq
+      hasEarlier = latest.hasMore && latest.oldestSeq != nil
+      recordsRead = latest.recordCount
+      loaded = true
+      let shown = messages.count
+      if shown < Self.messagesPerLoad {
+        await readEarlier(client, adding: Self.messagesPerLoad - shown, failing: false)
+      }
       return
     }
     let start = latest.oldestSeq ?? Int.max
@@ -178,26 +220,30 @@ struct SessionDetailView: View {
     if merged != records { records = merged }
   }
 
-  /// Reads back till it finds messages enough, then puts them in at once above the list, holding
-  /// the message at the top of the screen where it is just then, wherever it was scrolled to meanwhile
   private func loadEarlier() {
-    guard let client = store.client, !loadingEarlier else { return }
+    guard let client = store.client else { return }
+    Task { await readEarlier(client, adding: Self.messagesPerLoad, failing: true) }
+  }
+
+  /// Reads back till it finds `adding` messages more, then puts them in at once above the list,
+  /// holding the message at the top of the screen where it is just then, wherever it was scrolled
+  /// to meanwhile; a failure taps the wrist when the user asked for them
+  private func readEarlier(_ client: HappyClient, adding: Int, failing: Bool) async {
+    guard hasEarlier, !loadingEarlier else { return }
     loadingEarlier = true
-    Task {
-      defer { loadingEarlier = false }
-      var earlier = Earlier(oldestSeq: oldestSeq, hasMore: hasEarlier, recordsRead: recordsRead)
-      await earlier.read(client: client, sessionId: sessionId, above: records, adding: Self.messagesPerLoad)
-      guard !earlier.messages.isEmpty || !earlier.failed else {
-        WKInterfaceDevice.current().play(.failure)
-        return
-      }
-      let known = Set(records.map(\.id))
-      holdInPlace = rowFrames.topVisible(among: messages.map(\.id))
-      records = earlier.messages.filter { !known.contains($0.id) } + records
-      oldestSeq = earlier.oldestSeq
-      hasEarlier = earlier.hasMore
-      recordsRead = earlier.recordsRead
+    defer { loadingEarlier = false }
+    var earlier = Earlier(oldestSeq: oldestSeq, hasMore: hasEarlier, recordsRead: recordsRead)
+    await earlier.read(client: client, sessionId: sessionId, above: records, adding: adding)
+    guard !earlier.messages.isEmpty || !earlier.failed else {
+      if failing { WKInterfaceDevice.current().play(.failure) }
+      return
     }
+    let known = Set(records.map(\.id))
+    holdInPlace = rowFrames.topVisible(among: messages.map(\.id))
+    records = earlier.messages.filter { !known.contains($0.id) } + records
+    oldestSeq = earlier.oldestSeq
+    hasEarlier = earlier.hasMore
+    recordsRead = earlier.recordsRead
   }
 
   /// A load of earlier records: page after page back from `oldestSeq`, till the messages it found
@@ -230,12 +276,15 @@ struct SessionDetailView: View {
     }
   }
 
-  private func send() {
-    let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+  /// Sends a reply: the one typed, or a quick reply as it is (the draft then stays as it was)
+  private func send(_ reply: String) {
+    let text = reply.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !text.isEmpty else { return }
+    let typed = reply == draft
+    WKInterfaceDevice.current().play(.click)
     run { client in
       try await client.send(text: text, sessionId: sessionId)
-      draft = ""
+      if typed { draft = "" }
     }
   }
 
@@ -313,7 +362,7 @@ private struct MessageRow: View {
         .font(.caption2)
         .lineLimit(1)
         .foregroundStyle(.secondary)
-      Text(PlainText.from(markdown: message.text))
+      Text(PlainText.preview(of: message))
         .font(.footnote)
         .lineLimit(4)
     }

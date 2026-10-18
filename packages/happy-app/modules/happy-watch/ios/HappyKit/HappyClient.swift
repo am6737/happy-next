@@ -8,6 +8,10 @@ public actor HappyClient {
   private let urlSession: URLSession
   private var ciphers: [String: SessionCipher] = [:]
   private var flavors: [String: String] = [:]
+  /// What was decrypted before, by its ciphertext: a session's key (opening one is a key agreement),
+  /// and its metadata and state, which the list reads again every few seconds mostly unchanged
+  private var keyCache: [String: SessionCipher] = [:]
+  private var plainCache: [String: [String: Any]] = [:]
 
   public init?(credentials: HappyCredentials, urlSession: URLSession = .shared) {
     guard let keys = HappyAccountKeys(secret: credentials.secret) else { return nil }
@@ -24,6 +28,9 @@ public actor HappyClient {
     let response = try await request("GET", "/v2/sessions/active?limit=50")
     guard let list = response["sessions"] as? [[String: Any]] else { throw HappyError.badResponse }
     let sessions = list.compactMap(session)
+    // Keep only what the sessions listed now are sealed with
+    let current = Set(list.flatMap { [$0["metadata"], $0["agentState"]].compactMap { $0 as? String } })
+    plainCache = plainCache.filter { current.contains($0.key) }
     let pinnedAt = await pins
     return sessions.map { session in
       var session = session
@@ -50,12 +57,21 @@ public actor HappyClient {
   }
 
   private func session(_ json: [String: Any]) -> HappySession? {
+    let sealedKey = json["dataEncryptionKey"] as? String
     guard let id = json["id"] as? String,
-          let cipher = keys.sessionCipher(dataEncryptionKey: json["dataEncryptionKey"] as? String) else { return nil }
+          let cipher = sealedKey.flatMap({ keyCache[$0] }) ?? keys.sessionCipher(dataEncryptionKey: sealedKey) else { return nil }
     ciphers[id] = cipher
+    if let sealedKey { keyCache[sealedKey] = cipher }
 
-    let metadata = (json["metadata"] as? String).flatMap { cipher.decrypt(base64: $0) } as? [String: Any] ?? [:]
-    let agentState = (json["agentState"] as? String).flatMap { cipher.decrypt(base64: $0) } as? [String: Any] ?? [:]
+    func open(_ field: String) -> [String: Any] {
+      guard let sealed = json[field] as? String else { return [:] }
+      if let plain = plainCache[sealed] { return plain }
+      let plain = cipher.decrypt(base64: sealed) as? [String: Any] ?? [:]
+      plainCache[sealed] = plain
+      return plain
+    }
+    let metadata = open("metadata")
+    let agentState = open("agentState")
     let flavor = metadata["flavor"] as? String
     flavors[id] = flavor
 

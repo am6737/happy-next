@@ -3,6 +3,27 @@ import SwiftUI
 /// A message's Markdown as plain text for the watch: the marks taken off and what they marked kept —
 /// headings, emphasis, code, links and images by their text, lists by a bullet, tables by their cells
 enum PlainText {
+  /// Texts made before, by message: a message's row is drawn again whenever the session around it
+  /// is read again, and making one runs a dozen patterns over every line
+  private static let cache = NSCache<NSString, NSString>()
+
+  /// A message's first lines, enough for its row: made from its start only
+  static func preview(of message: HappyMessage) -> String {
+    cached("\(message.id):preview") { from(markdown: String(message.text.prefix(800))) }
+  }
+
+  /// A message in full, for it opened on its own
+  static func full(of message: HappyMessage) -> String {
+    cached("\(message.id):full") { from(markdown: message.text) }
+  }
+
+  private static func cached(_ key: String, _ make: () -> String) -> String {
+    if let text = cache.object(forKey: key as NSString) { return text as String }
+    let text = make()
+    cache.setObject(text as NSString, forKey: key as NSString)
+    return text
+  }
+
   static func from(markdown: String) -> String {
     var lines: [String] = []
     var inFence = false
@@ -89,7 +110,7 @@ struct MessageDetailView: View {
         }
         .font(.caption2)
         .foregroundStyle(.secondary)
-        Text(PlainText.from(markdown: message.text))
+        Text(PlainText.full(of: message))
           .font(.footnote)
           .frame(maxWidth: .infinity, alignment: .leading)
       }
