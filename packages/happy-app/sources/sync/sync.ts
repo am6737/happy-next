@@ -1496,7 +1496,9 @@ class Sync {
                         messages: [{
                             content: encryptedRawRecord,
                             localId,
-                            trackCliDelivery: true
+                            trackCliDelivery: true,
+                            // The user's words, so a reader asking for the conversation alone gets them
+                            kind: 'text'
                         }]
                     })
                 }

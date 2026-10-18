@@ -19,7 +19,7 @@ import {
     type PendingMessageRecord,
 } from "@/app/session/pendingMessageService";
 import { dispatchNextPendingIfPossible } from "@/app/session/pendingMessageAutoDispatch";
-import { dispatchSessionMessage } from "@/app/session/sessionMessageDispatch";
+import { dispatchSessionMessage, sessionMessageKinds } from "@/app/session/sessionMessageDispatch";
 import { db } from "@/storage/db";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
@@ -30,6 +30,8 @@ const getMessagesQuerySchema = z.object({
     after_seq: z.coerce.number().int().min(0).optional(),
     before_seq: z.coerce.number().int().min(1).optional(),
     limit: z.coerce.number().int().min(1).max(500).default(100),
+    /** Only the records of this kind, and those of none said, which a reader then sorts itself */
+    kind: z.enum(sessionMessageKinds).optional(),
 });
 
 const sendMessagesBodySchema = z.object({
@@ -37,6 +39,7 @@ const sendMessagesBodySchema = z.object({
         content: z.string(),
         localId: z.string().min(1),
         trackCliDelivery: z.boolean().optional().default(false),
+        kind: z.enum(sessionMessageKinds).optional(),
     })).min(1).max(200),
 });
 
@@ -222,7 +225,7 @@ export function v3SessionRoutes(app: Fastify) {
     }, async (request, reply) => {
         const userId = request.userId;
         const { sessionId } = request.params;
-        const { after_seq, before_seq, limit } = request.query;
+        const { after_seq, before_seq, limit, kind } = request.query;
 
         if (after_seq !== undefined && before_seq !== undefined) {
             return reply.code(400).send({ error: "Cannot specify both after_seq and before_seq" });
@@ -255,6 +258,7 @@ export function v3SessionRoutes(app: Fastify) {
             where: {
                 sessionId,
                 ...(seqFilter ? { seq: seqFilter } : {}),
+                ...(kind ? { OR: [{ kind }, { kind: null }] } : {}),
             },
             orderBy: { seq: orderBy },
             take: limit + 1,
@@ -288,6 +292,9 @@ export function v3SessionRoutes(app: Fastify) {
             messages: page.map(toResponseMessage),
             hasMore,
             oldestSeq: oldestMessage?.seq ?? null,
+            // Said back so a reader knows the server sorted by it: one before kinds were kept
+            // ignores the parameter and returns every record
+            ...(kind ? { kind } : {}),
         });
     });
 
@@ -315,7 +322,7 @@ export function v3SessionRoutes(app: Fastify) {
 
         const sentByName = await getSenderName(userId);
 
-        const firstMessageByLocalId = new Map<string, { localId: string; content: string; trackCliDelivery: boolean }>();
+        const firstMessageByLocalId = new Map<string, z.infer<typeof sendMessagesBodySchema>["messages"][number]>();
         for (const message of messages) {
             if (!firstMessageByLocalId.has(message.localId)) {
                 firstMessageByLocalId.set(message.localId, message);
@@ -361,6 +368,7 @@ export function v3SessionRoutes(app: Fastify) {
                 sentBy: userId,
                 sentByName,
                 trackCliDelivery: message.trackCliDelivery,
+                kind: message.kind ?? null,
             });
 
             if (dispatched.message.seq === 1 && dispatched.ownerSessionScopedDeliveries === 0) {
@@ -528,6 +536,8 @@ export function v3SessionRoutes(app: Fastify) {
                 sentBy: userId,
                 sentByName,
                 trackCliDelivery,
+                // Sent from the app as the user's words, like a pending message
+                kind: "text",
             });
         } catch (error) {
             // A concurrent request sharing this localId (e.g. hedged retries) may

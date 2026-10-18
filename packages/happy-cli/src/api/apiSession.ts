@@ -21,7 +21,7 @@ import { registerToolImageForCall } from '../modules/common/toolImageStore';
 import { calculateCost } from '@/utils/pricing';
 import { isDebug } from '@/utils/env';
 import { MessageArchiveWriter } from '../modules/common/messageArchive';
-import { extractSearchableMessage, type MessageSearchRole } from 'happy-wire';
+import { extractSearchableMessage, messageKind, type MessageKind, type MessageSearchRole } from 'happy-wire';
 import { openOrchestratorResponse, openOrchestratorTitle, sealOrchestrator, sealTitle, type OrchestratorResumeEnvelope, type OrchestratorTaskEnvelope } from '@/orchestrator/seal';
 
 
@@ -185,7 +185,7 @@ export class ApiSessionClient extends EventEmitter {
     /** Maps tool_use_id → tool name for trimming tool results before sending to App */
     private toolIdToName = new Map<string, string>();
     /** Outbox of encrypted messages awaiting reliable HTTP delivery via v3 API */
-    private pendingOutbox: Array<{ content: string; localId: string }> = [];
+    private pendingOutbox: Array<{ content: string; localId: string; kind: MessageKind }> = [];
     /** Searchable text of outbox messages by localId, archived once the server has given them an id and seq */
     private pendingArchive = new Map<string, { role: MessageSearchRole; text: string }>();
     private messageArchive: MessageArchiveWriter;
@@ -992,7 +992,8 @@ export class ApiSessionClient extends EventEmitter {
         if (searchable) this.pendingArchive.set(localId, searchable);
         this.pendingOutbox.push({
             content: encrypted,
-            localId
+            localId,
+            kind: messageKind(content)
         });
         this.sendSync.invalidate();
     }
@@ -1178,6 +1179,7 @@ export class ApiSessionClient extends EventEmitter {
             return {
                 message: encrypted,
                 localId: item.localId,
+                kind: messageKind(item.content),
             };
         });
 

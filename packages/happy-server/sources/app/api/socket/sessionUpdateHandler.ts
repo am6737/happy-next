@@ -11,6 +11,7 @@ import { randomKeyNaked } from "@/utils/randomKeyNaked";
 import { Socket } from "socket.io";
 import { delay } from "@/utils/delay";
 import { emitSessionCapabilitiesUpdate, updateSessionCapabilitiesAtomic } from "@/app/session/sessionCapabilities";
+import { sessionMessageKinds, type SessionMessageKind } from "@/app/session/sessionMessageDispatch";
 
 /**
  * Check if there's an active CLI (session-scoped) connection for a session.
@@ -405,7 +406,8 @@ export function sessionUpdateHandler(userId: string, socket: Socket, connection:
                     .filter((item: any) => item && typeof item.message === 'string')
                     .map((item: any) => ({
                         message: item.message as string,
-                        localId: typeof item.localId === 'string' ? item.localId : null
+                        localId: typeof item.localId === 'string' ? item.localId : null,
+                        kind: (sessionMessageKinds as readonly unknown[]).includes(item.kind) ? item.kind as SessionMessageKind : null
                     }));
 
                 const count = sanitized.length;
@@ -470,6 +472,7 @@ export function sessionUpdateHandler(userId: string, socket: Socket, connection:
                             c: item.message
                         } as PrismaJson.SessionMessageContent,
                         localId: item.localId,
+                        kind: item.kind,
                         createdAt: new Date(baseTime + index),
                         updatedAt: new Date(baseTime + index)
                     }));

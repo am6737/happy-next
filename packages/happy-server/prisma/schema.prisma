@@ -296,6 +296,9 @@ model SessionMessage {
   content       Json
   sentBy        String?
   sentByName    String?
+  /// What the sender says the record is, in the clear beside its ciphertext: "text" for words the
+  /// user or the agent wrote, "other" for the rest (tool calls, thinking, events); null when unsaid
+  kind          String?
   deliveryIssue SessionMessageDeliveryIssue?
   createdAt     DateTime                     @default(now())
   updatedAt     DateTime                     @updatedAt

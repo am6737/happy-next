@@ -11,7 +11,12 @@ export type DispatchSessionMessageParams = {
     sentBy: string | null;
     sentByName: string | null;
     trackCliDelivery: boolean;
+    /** The record's kind as its sender says, or null when unsaid (see `SessionMessage.kind`) */
+    kind: SessionMessageKind | null;
 };
+
+export const sessionMessageKinds = ['text', 'other'] as const;
+export type SessionMessageKind = typeof sessionMessageKinds[number];
 
 export type DispatchedSessionMessage = {
     id: string;
@@ -56,6 +61,7 @@ export async function dispatchSessionMessage(params: DispatchSessionMessageParam
                 localId: params.localId,
                 sentBy: params.sentBy,
                 sentByName: params.sentByName,
+                kind: params.kind,
             },
             select: {
                 id: true,

@@ -19,6 +19,7 @@ type MessageRecord = {
     content: unknown;
     sentBy: string | null;
     sentByName: string | null;
+    kind?: string | null;
     createdAt: Date;
     updatedAt: Date;
 };
@@ -120,10 +121,12 @@ const {
         content: unknown;
         sentBy?: string | null;
         sentByName?: string | null;
+        kind?: string | null;
     }) => {
         const createdAt = new Date(state.nowMs);
         state.nowMs += 1;
         const msg: MessageRecord = {
+            kind: input.kind ?? null,
             id: `seed-${state.nextMessageId}`,
             sessionId: input.sessionId,
             seq: input.seq,
@@ -266,6 +269,10 @@ const {
             const localIds = new Set(args.where.localId.in);
             rows = rows.filter((message) => localIds.has(message.localId));
         }
+        if (Array.isArray(args?.where?.OR)) {
+            const kinds = new Set(args.where.OR.map((clause: { kind: string | null }) => clause.kind));
+            rows = rows.filter((message) => kinds.has(message.kind ?? null));
+        }
         if (args?.orderBy?.seq === "asc") {
             rows.sort((a, b) => a.seq - b.seq);
         }
@@ -309,6 +316,7 @@ const {
             content: args?.data?.content,
             sentBy: args?.data?.sentBy ?? null,
             sentByName: args?.data?.sentByName ?? null,
+            kind: args?.data?.kind ?? null,
             createdAt,
             updatedAt: createdAt
         };
@@ -748,6 +756,58 @@ describe("v3SessionRoutes", () => {
         const body3 = page3.json();
         expect(body3.messages.map((message: any) => message.seq)).toEqual([5]);
         expect(body3.hasMore).toBe(false);
+    });
+
+    it("filters by kind, keeping the records of none and saying the kind back", async () => {
+        seedSession({ id: "session-1", accountId: "user-1" });
+        seedMessage({ sessionId: "session-1", seq: 1, localId: "l1", content: { t: "encrypted", c: "a" } });
+        seedMessage({ sessionId: "session-1", seq: 2, localId: "l2", content: { t: "encrypted", c: "b" }, kind: "text" });
+        seedMessage({ sessionId: "session-1", seq: 3, localId: "l3", content: { t: "encrypted", c: "c" }, kind: "other" });
+        seedMessage({ sessionId: "session-1", seq: 4, localId: "l4", content: { t: "encrypted", c: "d" }, kind: "text" });
+
+        app = await createApp();
+        const filtered = await app.inject({
+            method: "GET",
+            url: "/v3/sessions/session-1/messages?kind=text",
+            headers: { "x-user-id": "user-1" }
+        });
+        expect(filtered.json().messages.map((message: any) => message.seq)).toEqual([4, 2, 1]);
+        expect(filtered.json().kind).toBe("text");
+
+        const all = await app.inject({
+            method: "GET",
+            url: "/v3/sessions/session-1/messages",
+            headers: { "x-user-id": "user-1" }
+        });
+        expect(all.json().messages.map((message: any) => message.seq)).toEqual([4, 3, 2, 1]);
+        expect(all.json().kind).toBeUndefined();
+
+        const invalid = await app.inject({
+            method: "GET",
+            url: "/v3/sessions/session-1/messages?kind=tool",
+            headers: { "x-user-id": "user-1" }
+        });
+        expect(invalid.statusCode).toBe(400);
+    });
+
+    it("stores the kind a message is sent with, and none when unsaid", async () => {
+        seedSession({ id: "session-1", accountId: "user-1" });
+
+        app = await createApp();
+        const response = await app.inject({
+            method: "POST",
+            url: "/v3/sessions/session-1/messages",
+            headers: { "x-user-id": "user-1" },
+            payload: {
+                messages: [
+                    { localId: "l1", content: "a", kind: "text" },
+                    { localId: "l2", content: "b", kind: "other" },
+                    { localId: "l3", content: "c" },
+                ],
+            },
+        });
+        expect(response.statusCode).toBe(200);
+        expect(state.messages.map((message) => message.kind)).toEqual(["text", "other", null]);
     });
 
     it("supports backward pagination with before_seq", async () => {

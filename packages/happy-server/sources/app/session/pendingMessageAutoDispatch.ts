@@ -70,6 +70,8 @@ export async function dispatchNextPendingIfPossible(params: {
             sentBy: pending.sentBy,
             sentByName: pending.sentByName,
             trackCliDelivery: pending.trackCliDelivery,
+            // A pending message is always the user's words
+            kind: 'text',
         });
 
         markDispatched(params.sessionId);

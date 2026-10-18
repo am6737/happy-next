@@ -121,11 +121,13 @@ public actor HappyClient {
   // MARK: Messages
 
   /// A page of a session's messages that carry text, oldest first: the last `limit` records, or
-  /// those before the record `before`
+  /// those before the record `before`. Asked for the records sent as text alone, which leaves out
+  /// the tool calls and their output where the server keeps what records are; one that doesn't, or
+  /// a record sent before it did, comes as it is and is sorted here.
   public func messages(sessionId: String, before: Int? = nil, limit: Int = 40) async throws -> HappyMessagePage {
     let cipher = try await cipher(for: sessionId)
-    let cursor = before.map { "&before=\($0)" } ?? ""
-    let response = try await request("GET", "/v1/sessions/\(sessionId)/messages?limit=\(limit)\(cursor)")
+    let cursor = before.map { "&before_seq=\($0)" } ?? ""
+    let response = try await request("GET", "/v3/sessions/\(sessionId)/messages?kind=text&limit=\(limit)\(cursor)")
     guard let list = response["messages"] as? [[String: Any]] else { throw HappyError.badResponse }
     let messages = list.compactMap { json -> HappyMessage? in
       guard let id = json["id"] as? String,
@@ -166,6 +168,7 @@ public actor HappyClient {
         "content": try cipher.encrypt(record),
         "localId": UUID().uuidString.lowercased(),
         "trackCliDelivery": true,
+        "kind": "text",
       ]],
     ]
     _ = try await request("POST", "/v3/sessions/\(sessionId)/messages", body: body)
