@@ -84,6 +84,8 @@ export type OrchestratorRunDetail = {
     cancelRequestedAt: string | null;
     summary: OrchestratorRunSummary;
     machines?: string[];
+    /** The providers its tasks use, given by the run list */
+    providers?: OrchestratorProvider[];
     tasks?: OrchestratorTaskRecord[];
 };
 
@@ -120,24 +122,35 @@ async function readErrorMessage(response: Response): Promise<string> {
     }
 }
 
-export type ListOrchestratorRunsQuery = {
+/** The runs of one kind of executor: AI agents, shell commands or file transfers */
+export type OrchestratorRunKindFilter = 'agent' | 'shell' | 'transfer';
+
+/** What narrows both the run list and its counts */
+export type OrchestratorRunListFilters = {
+    controllerSessionId?: string;
+    kind?: OrchestratorRunKindFilter;
+    machineId?: string;
+};
+
+export type ListOrchestratorRunsQuery = OrchestratorRunListFilters & {
     status?: 'active' | 'terminal' | OrchestratorRunStatus;
     limit?: number;
     cursor?: string;
-    controllerSessionId?: string;
 };
 
 export async function listOrchestratorRuns(
     credentials: AuthCredentials,
     encryption: Encryption,
     query: ListOrchestratorRunsQuery = {},
-): Promise<{ items: Array<Pick<OrchestratorRunDetail, 'runId' | 'title' | 'status' | 'createdAt' | 'updatedAt' | 'summary'> & { machines?: string[]; }>; nextCursor?: string; }> {
+): Promise<{ items: Array<Pick<OrchestratorRunDetail, 'runId' | 'title' | 'status' | 'createdAt' | 'updatedAt' | 'summary' | 'machines' | 'providers'>>; nextCursor?: string; }> {
     const API_ENDPOINT = getServerUrl();
     const params = new URLSearchParams();
     if (query.status) params.set('status', query.status);
     if (query.limit) params.set('limit', String(query.limit));
     if (query.cursor) params.set('cursor', query.cursor);
     if (query.controllerSessionId) params.set('controllerSessionId', query.controllerSessionId);
+    if (query.kind) params.set('kind', query.kind);
+    if (query.machineId) params.set('machineId', query.machineId);
     const queryString = params.toString();
 
     return backoff(async () => {
@@ -150,7 +163,7 @@ export async function listOrchestratorRuns(
         const body = await response.json() as {
             ok: true;
             data: {
-                items: Array<Pick<OrchestratorRunDetail, 'runId' | 'title' | 'status' | 'createdAt' | 'updatedAt' | 'summary'> & { machines?: string[]; }>;
+                items: Array<Pick<OrchestratorRunDetail, 'runId' | 'title' | 'status' | 'createdAt' | 'updatedAt' | 'summary' | 'machines' | 'providers'>>;
                 nextCursor?: string;
             };
         };
@@ -165,11 +178,13 @@ export type OrchestratorRunCounts = Record<string, number>;
 
 export async function getOrchestratorRunCounts(
     credentials: AuthCredentials,
-    controllerSessionId?: string,
+    filters: OrchestratorRunListFilters = {},
 ): Promise<OrchestratorRunCounts> {
     const API_ENDPOINT = getServerUrl();
     const params = new URLSearchParams();
-    if (controllerSessionId) params.set('controllerSessionId', controllerSessionId);
+    if (filters.controllerSessionId) params.set('controllerSessionId', filters.controllerSessionId);
+    if (filters.kind) params.set('kind', filters.kind);
+    if (filters.machineId) params.set('machineId', filters.machineId);
     const queryString = params.toString();
 
     return backoff(async () => {

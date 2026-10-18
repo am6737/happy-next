@@ -7,6 +7,7 @@ import {
     resolveMachineName,
     resolveOrchestratorAttemptDisplay,
     resolveOrchestratorExecutionPrompt,
+    resolveOrchestratorRunKind,
     resolveOrchestratorSummaryLineData,
     resolveOrchestratorTaskName,
     resolveRunDurationMs,
@@ -17,6 +18,14 @@ import {
 } from './display';
 
 describe('orchestrator display helpers', () => {
+    it('tells a run kind from the providers of its tasks', () => {
+        expect(resolveOrchestratorRunKind(['claude', 'codex'])).toBe('agent');
+        expect(resolveOrchestratorRunKind(['shell'])).toBe('shell');
+        expect(resolveOrchestratorRunKind(['transfer'])).toBe('transfer');
+        expect(resolveOrchestratorRunKind([])).toBeNull();
+        expect(resolveOrchestratorRunKind(undefined)).toBeNull();
+    });
+
     it('appends model after provider when model exists', () => {
         expect(formatOrchestratorProviderLabel({ provider: 'codex', model: 'gpt-5.3-codex-medium' })).toBe('codex · gpt-5.3-codex-medium');
         expect(formatOrchestratorProviderLabel({ provider: 'claude', model: null })).toBe('claude · default');

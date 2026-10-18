@@ -265,6 +265,15 @@ export const en = {
         orchestratorFilterFailed: 'Failed',
         orchestratorFilterCompleted: 'Completed',
         orchestratorFilterCancelled: 'Cancelled',
+        orchestratorFilter: 'Filter',
+        orchestratorFilterStatus: 'Status',
+        orchestratorFilterKind: 'Executor',
+        orchestratorFilterMachine: 'Machine',
+        orchestratorFilterAllMachines: 'All machines',
+        orchestratorKindAgent: 'Agent',
+        orchestratorKindShell: 'Shell',
+        orchestratorKindTransfer: 'Transfer',
+        orchestratorSearchPlaceholder: 'Search titles...',
         orchestratorOpenRuns: 'Open orchestrator runs',
 
         // Orchestrator status labels

@@ -200,6 +200,11 @@ const {
         if (where.createdAt?.lt && !(run.createdAt < where.createdAt.lt)) {
             return false;
         }
+        if (where.tasks?.some && !state.tasks.some((task) => (
+            task.runId === run.id && matchesTask(task, where.tasks.some)
+        ))) {
+            return false;
+        }
         if (where.executions?.some && !state.executions.some((execution) => (
             execution.runId === run.id && matchesExecution(execution, where.executions.some)
         ))) {
@@ -221,10 +226,13 @@ const {
         if (where.id && task.id !== where.id) {
             return false;
         }
-        if (where.runId && task.runId !== where.runId) {
+        if (typeof where.runId === 'string' && task.runId !== where.runId) {
             return false;
         }
-        if (where.provider && task.provider !== where.provider) {
+        if (typeof where.provider === 'string' && task.provider !== where.provider) {
+            return false;
+        }
+        if (Array.isArray(where.provider?.in) && !where.provider.in.includes(task.provider)) {
             return false;
         }
         if (where.taskKey?.not === null && task.taskKey === null) {
@@ -578,21 +586,18 @@ const {
         groupBy: vi.fn(async (args: any) => {
             const rows = state.tasks.filter((item) => matchesTask(item, args?.where));
             const by: string[] = args?.by ?? [];
-            const map = new Map<string, { runId?: string; status?: string; count: number }>();
+            const map = new Map<string, { fields: Record<string, unknown>; count: number }>();
             for (const row of rows) {
-                const keyParts = by.map((field) => String((row as any)[field]));
-                const key = keyParts.join('|');
+                const key = by.map((field) => String((row as any)[field])).join('|');
                 const current = map.get(key) ?? {
-                    ...(by.includes('runId') ? { runId: row.runId } : {}),
-                    ...(by.includes('status') ? { status: row.status } : {}),
+                    fields: Object.fromEntries(by.map((field) => [field, (row as any)[field]])),
                     count: 0,
                 };
                 current.count += 1;
                 map.set(key, current);
             }
             return [...map.values()].map((item) => ({
-                ...(item.runId ? { runId: item.runId } : {}),
-                ...(item.status ? { status: item.status } : {}),
+                ...item.fields,
                 _count: { _all: item.count },
             }));
         }),
@@ -2022,6 +2027,70 @@ describe('orchestrator integration paths', () => {
         const item = listRuns.json().data.items.find((run: any) => run.runId === runId);
         expect(item).toBeDefined();
         expect(item.machines).toEqual(['machine-1']);
+
+        await app.close();
+    });
+
+    it('includes the providers of its tasks in run list response items', async () => {
+        const app = await createApp();
+        const submit = await app.inject({
+            method: 'POST',
+            url: '/v1/orchestrator/submit',
+            headers: { 'x-user-id': 'user-1' },
+            payload: {
+                title: sealed('list-providers'),
+                tasks: [
+                    { provider: 'claude', prompt: sealed('step a') },
+                    { provider: 'codex', prompt: sealed('step b') },
+                    { provider: 'claude', prompt: sealed('step c') },
+                ],
+            },
+        });
+        expect(submit.statusCode).toBe(200);
+        const runId = submit.json().data.runId as string;
+
+        const listRuns = await app.inject({
+            method: 'GET',
+            url: '/v1/orchestrator/runs',
+            headers: { 'x-user-id': 'user-1' },
+        });
+        expect(listRuns.statusCode).toBe(200);
+
+        const item = listRuns.json().data.items.find((run: any) => run.runId === runId);
+        expect(item.providers).toEqual(['claude', 'codex']);
+
+        await app.close();
+    });
+
+    it('filters the run list and its counts by executor kind and by machine', async () => {
+        const app = await createApp();
+        const submit = await app.inject({
+            method: 'POST',
+            url: '/v1/orchestrator/submit',
+            headers: { 'x-user-id': 'user-1' },
+            payload: { title: sealed('agent run'), tasks: [{ provider: 'claude', prompt: sealed('step a') }] },
+        });
+        expect(submit.statusCode).toBe(200);
+        const agentRunId = submit.json().data.runId as string;
+        await orchestratorSchedulerTick(new Date('2026-03-16T00:00:00.000Z'));
+
+        const list = async (query: string) => {
+            const response = await app.inject({ method: 'GET', url: `/v1/orchestrator/runs?${query}`, headers: { 'x-user-id': 'user-1' } });
+            expect(response.statusCode).toBe(200);
+            return response.json().data.items.map((run: any) => run.runId);
+        };
+        const counts = async (query: string) => {
+            const response = await app.inject({ method: 'GET', url: `/v1/orchestrator/runs/counts?${query}`, headers: { 'x-user-id': 'user-1' } });
+            expect(response.statusCode).toBe(200);
+            return response.json().data;
+        };
+
+        expect(await list('kind=agent')).toEqual([agentRunId]);
+        expect(await list('kind=shell')).toEqual([]);
+        expect(await list('machineId=machine-1')).toEqual([agentRunId]);
+        expect(await list('kind=agent&machineId=machine-2')).toEqual([]);
+        expect(Object.values(await counts('kind=agent')).reduce((sum: number, n: any) => sum + n, 0)).toBe(1);
+        expect(await counts('kind=transfer')).toEqual({});
 
         await app.close();
     });

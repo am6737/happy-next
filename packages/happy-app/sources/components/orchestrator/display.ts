@@ -1,4 +1,4 @@
-import type { OrchestratorExecutionRecord, OrchestratorRunDetail, OrchestratorRunStatus, OrchestratorRunSummary, OrchestratorTaskRecord } from '@/sync/apiOrchestrator';
+import type { OrchestratorRunKindFilter, OrchestratorExecutionRecord, OrchestratorRunDetail, OrchestratorRunStatus, OrchestratorRunSummary, OrchestratorTaskRecord } from '@/sync/apiOrchestrator';
 import { MODEL_MODE_DEFAULT } from 'happy-wire';
 
 function isMarkdownFenceLine(value: string): boolean {
@@ -12,6 +12,20 @@ export function formatOrchestratorProviderLabel(task: Pick<OrchestratorTaskRecor
     }
     const model = task.model?.trim() || MODEL_MODE_DEFAULT;
     return `${task.provider} · ${model}`;
+}
+
+/** The kind of executor a run's tasks use: one run holds AI agents (submit), shell commands (exec) or file transfers (transfer). */
+export function resolveOrchestratorRunKind(providers: string[] | undefined): OrchestratorRunKindFilter | null {
+    if (!providers || providers.length === 0) {
+        return null;
+    }
+    if (providers.includes('shell')) {
+        return 'shell';
+    }
+    if (providers.includes('transfer')) {
+        return 'transfer';
+    }
+    return 'agent';
 }
 
 /** What a transfer task's prompt holds: where the file comes from and where it goes. */

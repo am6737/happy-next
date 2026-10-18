@@ -40,6 +40,8 @@ const PROVIDERS = ['claude', 'codex', 'gemini', 'qoder'] as const;
 const RUN_STATUSES = ['queued', 'running', 'canceling', 'completed', 'failed', 'cancelled'] as const;
 const EXECUTION_FINAL_STATUSES = ['completed', 'failed', 'cancelled', 'timeout'] as const;
 const LIST_RUN_STATUS_FILTERS = ['active', 'terminal', ...RUN_STATUSES] as const;
+// A run holds AI agents (submit), shell commands (exec) or file transfers (transfer), never a mix
+const LIST_RUN_KIND_FILTERS = ['agent', 'shell', 'transfer'] as const;
 const IDEMPOTENCY_RETRY_TIMES = 2;
 const CLI_DETECTION_TIMEOUT_MS = 20_000;
 const IDEMPOTENCY_RETRY_DELAY_MS = 10;
@@ -1746,11 +1748,25 @@ export function orchestratorRoutes(app: Fastify) {
         });
     });
 
+    // The runs of one executor kind, of those dispatched to one machine, or both
+    const runListFilterConditions = (kind: typeof LIST_RUN_KIND_FILTERS[number] | undefined, machineId: string | undefined): any[] => {
+        const conditions: any[] = [];
+        if (kind) {
+            conditions.push({ tasks: { some: { provider: kind === 'agent' ? { in: [...PROVIDERS] } : kind } } });
+        }
+        if (machineId) {
+            conditions.push({ executions: { some: { machineId } } });
+        }
+        return conditions;
+    };
+
     app.get('/v1/orchestrator/runs', {
         preHandler: app.authenticate,
         schema: {
             querystring: z.object({
                 status: z.enum(LIST_RUN_STATUS_FILTERS).optional(),
+                kind: z.enum(LIST_RUN_KIND_FILTERS).optional(),
+                machineId: z.string().min(1).max(128).optional(),
                 controllerSessionId: z.string().min(1).max(128).optional(),
                 limit: z.coerce.number().int().min(1).max(50).default(20),
                 cursor: z.string().optional(),
@@ -1776,7 +1792,7 @@ export function orchestratorRoutes(app: Fastify) {
             accountId: userId,
             ...(resolvedStatuses ? { status: { in: resolvedStatuses } } : {}),
         };
-        const conditions: any[] = [];
+        const conditions: any[] = runListFilterConditions(request.query?.kind, request.query?.machineId);
         if (controllerSessionId) {
             conditions.push(runsOfSessionWhere(controllerSessionId));
         }
@@ -1838,6 +1854,20 @@ export function orchestratorRoutes(app: Fastify) {
             }
         }
 
+        // Which executors a run's tasks use, so a list can tell a shell run from an agent run at a glance
+        const providersByRun = new Map<string, string[]>();
+        if (runIds.length > 0) {
+            const providerGroups = await db.orchestratorTask.groupBy({
+                by: ['runId', 'provider'],
+                where: { runId: { in: runIds } },
+            });
+            for (const row of providerGroups) {
+                const existing = providersByRun.get(row.runId) ?? [];
+                existing.push(row.provider);
+                providersByRun.set(row.runId, existing);
+            }
+        }
+
         const items = page.map((run: any) => ({
             runId: run.id,
             title: run.title,
@@ -1853,6 +1883,7 @@ export function orchestratorRoutes(app: Fastify) {
                 cancelled: 0,
             },
             machines: machinesByRun.get(run.id) ?? [],
+            providers: providersByRun.get(run.id) ?? [],
         }));
 
         let nextCursor: string | undefined;
@@ -1876,17 +1907,21 @@ export function orchestratorRoutes(app: Fastify) {
         schema: {
             querystring: z.object({
                 controllerSessionId: z.string().min(1).max(128).optional(),
+                kind: z.enum(LIST_RUN_KIND_FILTERS).optional(),
+                machineId: z.string().min(1).max(128).optional(),
             }).optional(),
         },
     }, async (request, reply) => {
         const userId = request.userId;
         const controllerSessionId = request.query?.controllerSessionId;
+        const conditions = runListFilterConditions(request.query?.kind, request.query?.machineId);
 
         const grouped = await db.orchestratorRun.groupBy({
             by: ['status'],
             where: {
                 accountId: userId,
                 ...(controllerSessionId ? runsOfSessionWhere(controllerSessionId) : {}),
+                ...(conditions.length > 0 ? { AND: conditions } : {}),
             },
             _count: { _all: true },
         });

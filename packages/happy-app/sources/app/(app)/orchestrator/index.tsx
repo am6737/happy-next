@@ -1,81 +1,98 @@
 import * as React from 'react';
-import { View, FlatList, Pressable, ActivityIndicator, ScrollView, RefreshControl, Platform } from 'react-native';
+import { View, FlatList, Pressable, ActivityIndicator, RefreshControl, Platform, TextInput } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { Text } from '@/components/StyledText';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { layout } from '@/components/layout';
 import { useAuth } from '@/auth/AuthContext';
-import { getOrchestratorRunCounts, listOrchestratorRuns, type ListOrchestratorRunsQuery, type OrchestratorRunCounts, type OrchestratorRunDetail } from '@/sync/apiOrchestrator';
+import { getOrchestratorRunCounts, listOrchestratorRuns, type ListOrchestratorRunsQuery, type OrchestratorRunCounts, type OrchestratorRunDetail, type OrchestratorRunKindFilter } from '@/sync/apiOrchestrator';
+import type { BottomSheetModal } from '@gorhom/bottom-sheet';
+import { OrchestratorRunFilterSheet, ORCHESTRATOR_RUN_KIND_ICONS, ORCHESTRATOR_RUN_STATUS_FILTERS, orchestratorRunKindLabel, useOrchestratorFilterMachines, type OrchestratorRunStatusFilter } from '@/components/orchestrator/OrchestratorRunFilterSheet';
 import { sync } from '@/sync/sync';
 import { OrchestratorStatusBadge } from '@/components/orchestrator/OrchestratorStatusBadge';
 import { OrchestratorProgressBar } from '@/components/orchestrator/OrchestratorProgressBar';
-import { resolveOrchestratorSummaryLineData, resolveMachineName } from '@/components/orchestrator/display';
+import { Ionicons } from '@expo/vector-icons';
+import { resolveOrchestratorSummaryLineData, resolveMachineName, resolveOrchestratorRunKind } from '@/components/orchestrator/display';
 import { useMachineNameMap } from '@/hooks/useMachineNameMap';
 import { formatDate } from '@/utils/formatDate';
 import { Typography } from '@/constants/Typography';
 import { t } from '@/text';
 import { isRunningOnMac } from '@/utils/platform';
 import { softHeaderOptions } from '@/components/navigation/softHeader';
+import { useSession } from '@/sync/storage';
+import { getSessionName } from '@/utils/sessionUtils';
 
-type RunListItem = Pick<OrchestratorRunDetail, 'runId' | 'title' | 'status' | 'createdAt' | 'updatedAt' | 'summary'> & { machines?: string[]; };
-// Each chip is a disjoint slice of the runs, so together they add up to "all"; `active` covers queued, running and canceling.
-type StatusFilter = 'all' | 'active' | 'completed' | 'failed' | 'cancelled';
-
-const FILTERS: Array<{ key: StatusFilter; label: string; }> = [
-    { key: 'all', label: t('settings.orchestratorFilterAll') },
-    { key: 'active', label: t('settings.orchestratorFilterActive') },
-    { key: 'completed', label: t('settings.orchestratorFilterCompleted') },
-    { key: 'failed', label: t('settings.orchestratorFilterFailed') },
-    { key: 'cancelled', label: t('settings.orchestratorFilterCancelled') },
-];
-
+type RunListItem = Pick<OrchestratorRunDetail, 'runId' | 'title' | 'status' | 'createdAt' | 'updatedAt' | 'summary' | 'machines' | 'providers'>;
 const stylesheet = StyleSheet.create((theme) => ({
     container: {
         flex: 1,
         backgroundColor: theme.colors.groupped.background,
     },
     filterBar: {
-        flexGrow: 0,
-        flexShrink: 0,
-        maxWidth: layout.maxWidth,
-        alignSelf: 'center',
-        width: '100%',
-        paddingTop: 12,
-        paddingBottom: 8,
-    },
-    filterInner: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 8,
+        maxWidth: layout.maxWidth,
+        alignSelf: 'center',
+        width: '100%',
         paddingHorizontal: 16,
+        paddingTop: 12,
+        paddingBottom: 16,
+    },
+    // The search box and the filter chip are DooTask's: white on the grouped background, no border
+    searchBox: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        borderRadius: 10,
+        paddingHorizontal: 10,
+        height: 36,
+        gap: 6,
+        backgroundColor: theme.colors.surface,
+    },
+    searchInput: {
+        flex: 1,
+        ...Typography.default(),
+        fontSize: 14,
+        lineHeight: 18,
+        height: 36,
+        textAlignVertical: 'center',
+        includeFontPadding: false,
+        paddingHorizontal: 0,
+        paddingVertical: 0,
+        margin: 0,
+        color: theme.colors.text,
     },
     filterChip: {
-        paddingHorizontal: 10,
-        paddingVertical: 6,
-        borderRadius: 999,
-        borderWidth: 1,
-        borderColor: theme.colors.divider,
+        flexDirection: 'row',
+        alignItems: 'center',
+        maxWidth: '45%',
+        // As tall and as round as the search box beside it
+        height: 36,
+        paddingHorizontal: 12,
+        borderRadius: 10,
+        gap: 4,
         backgroundColor: theme.colors.surface,
     },
     filterChipActive: {
         backgroundColor: theme.colors.button.primary.background,
-        borderColor: theme.colors.button.primary.background,
     },
     filterChipText: {
+        flexShrink: 1,
+        ...Typography.default(),
         fontSize: 13,
-        color: theme.colors.textSecondary,
+        color: theme.colors.text,
     },
     filterChipTextActive: {
         color: theme.colors.button.primary.tint,
-        fontWeight: '600',
     },
     listContent: {
         paddingHorizontal: 16,
         paddingBottom: 24,
     },
     listHeader: {
-        // The filters scroll edge to edge, past the list's side padding.
+        // The filter bar keeps its own side padding, so it undoes the list's.
         marginHorizontal: -16,
     },
     card: {
@@ -140,17 +157,7 @@ const stylesheet = StyleSheet.create((theme) => ({
     },
 }));
 
-function computeFilterCount(counts: OrchestratorRunCounts, filter: StatusFilter): number {
-    if (filter === 'all') {
-        return Object.values(counts).reduce((sum, n) => sum + n, 0);
-    }
-    if (filter === 'active') {
-        return (counts['queued'] ?? 0) + (counts['running'] ?? 0) + (counts['canceling'] ?? 0);
-    }
-    return counts[filter] ?? 0;
-}
-
-function getFilterStatus(statusFilter: StatusFilter): ListOrchestratorRunsQuery['status'] | undefined {
+function getFilterStatus(statusFilter: OrchestratorRunStatusFilter): ListOrchestratorRunsQuery['status'] | undefined {
     if (statusFilter === 'all') {
         return undefined;
     }
@@ -171,6 +178,9 @@ export default function OrchestratorRunsScreen() {
             : searchParams.controllerSessionId
     ), [searchParams.controllerSessionId]);
     const isConversationScoped = !!controllerSessionId;
+    const controllerSession = useSession(controllerSessionId ?? '');
+    // The conversation's name once its session is loaded, the generic subtitle until then
+    const sessionSubtitle = controllerSession ? getSessionName(controllerSession) : t('settings.orchestratorSessionRuns');
     const navigation = useNavigation();
     const useNativeSoftHeader = Platform.OS === 'ios' && !isRunningOnMac();
 
@@ -183,12 +193,12 @@ export default function OrchestratorRunsScreen() {
                         <Text style={[Typography.default('semiBold'), { fontSize: 17, lineHeight: 24, color: theme.colors.header.tint }]}>
                             {t('settings.orchestratorRuns')}
                         </Text>
-                        <Text style={[Typography.default(), { fontSize: 12, color: theme.colors.header.tint, opacity: 0.7, marginTop: -2 }]}>
-                            {t('settings.orchestratorSessionRuns')}
+                        <Text numberOfLines={1} style={[Typography.default(), { fontSize: 12, color: theme.colors.header.tint, opacity: 0.7, marginTop: -2 }]}>
+                            {sessionSubtitle}
                         </Text>
                     </View>
                 ),
-                headerSubtitle: useNativeSoftHeader ? t('settings.orchestratorSessionRuns') : undefined,
+                headerSubtitle: useNativeSoftHeader ? sessionSubtitle : undefined,
             });
         } else {
             navigation.setOptions({
@@ -197,9 +207,14 @@ export default function OrchestratorRunsScreen() {
                 headerSubtitle: undefined,
             });
         }
-    }, [isConversationScoped, navigation, theme, useNativeSoftHeader]);
+    }, [isConversationScoped, navigation, theme, useNativeSoftHeader, sessionSubtitle]);
 
-    const [statusFilter, setStatusFilter] = React.useState<StatusFilter>('all');
+    const [statusFilter, setStatusFilter] = React.useState<OrchestratorRunStatusFilter>('all');
+    const [searchText, setSearchText] = React.useState('');
+    const [kindFilter, setKindFilter] = React.useState<OrchestratorRunKindFilter | undefined>(undefined);
+    const [machineFilter, setMachineFilter] = React.useState<string | undefined>(undefined);
+    const filterSheetRef = React.useRef<BottomSheetModal>(null);
+    const filterMachines = useOrchestratorFilterMachines();
     const [runs, setRuns] = React.useState<RunListItem[]>([]);
     const [nextCursor, setNextCursor] = React.useState<string | undefined>(undefined);
     const [loading, setLoading] = React.useState(true);
@@ -211,12 +226,12 @@ export default function OrchestratorRunsScreen() {
     const fetchCounts = React.useCallback(async () => {
         if (!credentials) return;
         try {
-            const result = await getOrchestratorRunCounts(credentials, controllerSessionId);
+            const result = await getOrchestratorRunCounts(credentials, { controllerSessionId, kind: kindFilter, machineId: machineFilter });
             setCounts(result);
         } catch {
             // non-critical — counts are cosmetic
         }
-    }, [credentials, controllerSessionId]);
+    }, [credentials, controllerSessionId, kindFilter, machineFilter]);
 
     const fetchRuns = React.useCallback(async (opts?: { cursor?: string; append?: boolean; silent?: boolean; }) => {
         if (!credentials) {
@@ -237,6 +252,8 @@ export default function OrchestratorRunsScreen() {
                     limit: 50,
                     cursor: opts?.cursor,
                     controllerSessionId,
+                    kind: kindFilter,
+                    machineId: machineFilter,
                 }),
                 // Refresh counts alongside the first page fetch (not for load-more)
                 ...(!append ? [fetchCounts()] : []),
@@ -253,7 +270,7 @@ export default function OrchestratorRunsScreen() {
             }
             setRefreshing(false);
         }
-    }, [credentials, controllerSessionId, statusFilter, fetchCounts]);
+    }, [credentials, controllerSessionId, statusFilter, kindFilter, machineFilter, fetchCounts]);
 
     const handleRefresh = React.useCallback(() => {
         setRefreshing(true);
@@ -286,6 +303,7 @@ export default function OrchestratorRunsScreen() {
 
     const renderRunItem = React.useCallback(({ item }: { item: RunListItem; }) => {
         const summaryLine = resolveOrchestratorSummaryLineData(item.summary);
+        const kind = resolveOrchestratorRunKind(item.providers);
         return (
             <Pressable
                 style={styles.card}
@@ -298,6 +316,7 @@ export default function OrchestratorRunsScreen() {
                 })}
             >
                 <View style={styles.cardHeader}>
+                    {kind ? <Ionicons name={ORCHESTRATOR_RUN_KIND_ICONS[kind]} size={16} color={theme.colors.textSecondary} /> : null}
                     <Text style={styles.title} numberOfLines={1}>{item.title}</Text>
                     <OrchestratorStatusBadge status={item.status} />
                 </View>
@@ -323,7 +342,7 @@ export default function OrchestratorRunsScreen() {
                 ) : null}
             </Pressable>
         );
-    }, [router, styles]);
+    }, [router, styles, theme, machineNameMap]);
 
     const listEmpty = React.useMemo(() => {
         if (loading) {
@@ -334,47 +353,83 @@ export default function OrchestratorRunsScreen() {
                 </View>
             );
         }
+        const filtered = statusFilter !== 'all' || !!kindFilter || !!machineFilter || searchText.trim().length > 0;
         return (
             <View style={styles.emptyContainer}>
                 <Text style={styles.emptyTitle}>{t('settings.orchestratorNoRuns')}</Text>
                 <Text style={styles.emptySubtitle}>
-                    {isConversationScoped
+                    {isConversationScoped && !filtered
                         ? t('settings.orchestratorSessionRunsEmpty')
                         : t('settings.orchestratorNoRunsMatch')}
                 </Text>
                 {!!error && <Text style={styles.errorText}>{error}</Text>}
             </View>
         );
-    }, [loading, styles, error, isConversationScoped]);
+    }, [loading, styles, error, isConversationScoped, statusFilter, kindFilter, machineFilter, searchText]);
+
+    // Titles are sealed end to end, so the server can't search them: the search narrows the runs loaded so far
+    const searchQuery = searchText.trim().toLowerCase();
+    const visibleRuns = React.useMemo(() => (
+        searchQuery ? runs.filter((run) => run.title.toLowerCase().includes(searchQuery)) : runs
+    ), [runs, searchQuery]);
+
+    // The drawer's filters, as the button that opens it names them once any is set
+    const filterMachine = machineFilter ? filterMachines.find((item) => item.id === machineFilter) : undefined;
+    const sheetFilterLabel = [
+        statusFilter !== 'all' ? ORCHESTRATOR_RUN_STATUS_FILTERS.find((filter) => filter.key === statusFilter)?.label : null,
+        kindFilter ? orchestratorRunKindLabel(kindFilter) : null,
+        machineFilter ? filterMachine?.metadata?.displayName || filterMachine?.metadata?.host || resolveMachineName(machineFilter, machineNameMap) : null,
+    ].filter(Boolean).join(' · ');
+    const hasSheetFilters = sheetFilterLabel.length > 0;
+    const filterTint = hasSheetFilters ? theme.colors.button.primary.tint : theme.colors.textSecondary;
 
     const filterBar = (
-            <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                style={styles.filterBar}
-                contentContainerStyle={styles.filterInner}
+        <View style={styles.filterBar}>
+            <View style={styles.searchBox}>
+                <Ionicons name="search" size={16} color={theme.colors.textSecondary} />
+                <TextInput
+                    style={[styles.searchInput, Platform.OS === 'web' && { outlineStyle: 'none' } as any]}
+                    placeholder={t('settings.orchestratorSearchPlaceholder')}
+                    placeholderTextColor={theme.colors.textSecondary}
+                    value={searchText}
+                    onChangeText={setSearchText}
+                    returnKeyType="search"
+                    autoCorrect={false}
+                    autoCapitalize="none"
+                    underlineColorAndroid="transparent"
+                />
+                {searchText ? (
+                    <Pressable onPress={() => setSearchText('')} hitSlop={8}>
+                        <Ionicons name="close-circle" size={16} color={theme.colors.textSecondary} />
+                    </Pressable>
+                ) : null}
+            </View>
+            <Pressable
+                style={[styles.filterChip, hasSheetFilters && styles.filterChipActive]}
+                onPress={() => filterSheetRef.current?.present()}
             >
-                {FILTERS.map((filter) => {
-                    const count = computeFilterCount(counts, filter.key);
-                    return (
-                        <Pressable
-                            key={filter.key}
-                            style={[styles.filterChip, statusFilter === filter.key && styles.filterChipActive]}
-                            onPress={() => setStatusFilter(filter.key)}
-                        >
-                            <Text style={[styles.filterChipText, statusFilter === filter.key && styles.filterChipTextActive]}>
-                                {filter.label} ({count})
-                            </Text>
-                        </Pressable>
-                    );
-                })}
-            </ScrollView>
+                <Text style={[styles.filterChipText, hasSheetFilters && styles.filterChipTextActive]} numberOfLines={1}>
+                    {hasSheetFilters ? sheetFilterLabel : t('settings.orchestratorFilter')}
+                </Text>
+                <Ionicons name="chevron-down" size={12} color={filterTint} />
+            </Pressable>
+            <OrchestratorRunFilterSheet
+                ref={filterSheetRef}
+                status={statusFilter}
+                counts={counts}
+                onChangeStatus={setStatusFilter}
+                kind={kindFilter}
+                machineId={machineFilter}
+                onChangeKind={setKindFilter}
+                onChangeMachine={setMachineFilter}
+            />
+        </View>
     );
 
     const list = (
             <FlatList
                 contentInsetAdjustmentBehavior="automatic"
-                data={runs}
+                data={visibleRuns}
                 keyExtractor={(item) => item.runId}
                 renderItem={renderRunItem}
                 onEndReached={handleLoadMore}
@@ -388,7 +443,7 @@ export default function OrchestratorRunsScreen() {
                 }
                 contentContainerStyle={[
                     styles.listContent,
-                    runs.length === 0 && { flex: 1 },
+                    visibleRuns.length === 0 && { flex: 1 },
                     { maxWidth: layout.maxWidth, alignSelf: 'center', width: '100%' },
                 ]}
                 ListFooterComponent={loadingMore ? (
