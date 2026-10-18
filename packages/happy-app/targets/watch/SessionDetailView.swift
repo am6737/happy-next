@@ -64,16 +64,17 @@ struct SessionDetailView: View {
         }
 
         if loaded, hasEarlier {
-          if recordsRead < Self.maxRecords {
-            Button(action: loadEarlier) {
-              HStack(spacing: 8) {
-                if loadingEarlier {
-                  ProgressView().frame(width: 16, height: 16)
-                }
-                Text(L("Load Earlier Messages", "加载更早的消息"))
-              }
+          // A row of its own while reading, not the button dimmed: a spinner put in a row already
+          // drawn doesn't show, which left the button looking merely off
+          if loadingEarlier {
+            HStack(spacing: 8) {
+              ProgressView().frame(width: 16, height: 16)
+              Text(L("Loading Earlier Messages…", "正在加载更早的消息…"))
+                .foregroundStyle(.secondary)
             }
-            .disabled(loadingEarlier)
+            .listRowBackground(Color.clear)
+          } else if recordsRead < Self.maxRecords {
+            Button(L("Load Earlier Messages", "加载更早的消息"), action: loadEarlier)
           } else {
             Text(L("Earlier messages are on your iPhone.", "更早的消息请在 iPhone 上查看。"))
               .font(.footnote)
