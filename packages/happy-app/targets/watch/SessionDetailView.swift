@@ -14,10 +14,11 @@ struct SessionDetailView: View {
   /// stays light
   private static let pagesPerLoad = 4
   private static let maxRecords = 1000
-  /// Sent with a tap, or put in the reply to edit with a long press
+  /// Sent with a tap, or opened to edit on a page of its own with a long press
   private static let quickReplies = [
     L("Continue", "继续"),
     L("Go with your plan", "按你的方案做"),
+    L("Commit only", "只提交"),
     L("Commit and push", "提交并推送"),
     L("Summarize what changed", "总结一下改了什么"),
   ]
@@ -40,7 +41,8 @@ struct SessionDetailView: View {
   /// Whether the messages were read once, till when a spinner stands in for them
   @State private var loaded = false
   @State private var draft = ""
-  @FocusState private var replyFocused: Bool
+  /// The quick reply opened to edit, sent from its page or left there
+  @State private var editingReply: String?
   @State private var confirmingStop = false
   @State private var busy = false
   @State private var failed = false
@@ -103,8 +105,7 @@ struct SessionDetailView: View {
           }
         } else {
           TextField(L("Reply", "回复"), text: $draft)
-            .onSubmit { send(draft) }
-            .focused($replyFocused)
+            .onSubmit { send(draft) { draft = "" } }
             .disabled(busy)
             .id("reply")
 
@@ -115,17 +116,14 @@ struct SessionDetailView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
                 .onTapGesture { send(reply) }
-                .onLongPressGesture {
-                  draft = reply
-                  proxy.scrollTo("reply", anchor: .bottom)
-                  replyFocused = true
-                }
+                .onLongPressGesture { editingReply = reply }
                 .opacity(busy ? 0.4 : 1)
                 .allowsHitTesting(!busy)
                 .listRowBackground(RoundedRectangle(cornerRadius: 10).fill(Color.gray.opacity(0.24)))
             }
           } header: {
             Text(L("Quick Replies", "快速回复"))
+              .padding(.bottom, 6)
           }
         }
 
@@ -154,6 +152,11 @@ struct SessionDetailView: View {
       .navigationTitle(session?.title ?? "")
       .navigationDestination(item: $openMessage) { message in
         MessageDetailView(message: message, agent: agentLabel)
+      }
+      .navigationDestination(item: $editingReply) { reply in
+        QuickReplyEditor(text: reply, busy: busy, failed: failed) { text in
+          send(text) { editingReply = nil }
+        }
       }
       .task {
         // The messages and the session read side by side, so neither waits on the other
@@ -276,15 +279,15 @@ struct SessionDetailView: View {
     }
   }
 
-  /// Sends a reply: the one typed, or a quick reply as it is (the draft then stays as it was)
-  private func send(_ reply: String) {
+  /// Sends a reply — the one typed, a quick reply as it is, or one edited — then, once it reached
+  /// the session, `sent`
+  private func send(_ reply: String, sent: @escaping () -> Void = {}) {
     let text = reply.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !text.isEmpty else { return }
-    let typed = reply == draft
     WKInterfaceDevice.current().play(.click)
     run { client in
       try await client.send(text: text, sessionId: sessionId)
-      if typed { draft = "" }
+      sent()
     }
   }
 
@@ -310,6 +313,40 @@ struct SessionDetailView: View {
       await loadMessages()
       busy = false
     }
+  }
+}
+
+/// A quick reply opened to edit before it goes: sent from here, or left behind going back
+private struct QuickReplyEditor: View {
+  @State var text: String
+  let busy: Bool
+  let failed: Bool
+  let send: (String) -> Void
+  @FocusState private var focused: Bool
+
+  var body: some View {
+    List {
+      TextField(L("Reply", "回复"), text: $text, axis: .vertical)
+        .focused($focused)
+        .disabled(busy)
+      Button(action: { send(text) }) {
+        HStack(spacing: 8) {
+          if busy {
+            ProgressView().frame(width: 16, height: 16)
+          }
+          Text(L("Send", "发送"))
+        }
+        .frame(maxWidth: .infinity)
+      }
+      .disabled(busy || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+      if failed {
+        Text(L("Couldn't reach the session.", "无法连接到会话。"))
+          .font(.footnote)
+          .foregroundStyle(.red)
+      }
+    }
+    .navigationTitle(L("Quick Reply", "快速回复"))
+    .onAppear { focused = true }
   }
 }
 
