@@ -132,6 +132,9 @@ public struct HappyMessage: Identifiable, Hashable {
     let entry: (Role, String)?
     switch role {
     case "user":
+      // Claude's summary after compacting the context comes as a prompt of its own
+      let meta = record["meta"] as? [String: Any]
+      guard meta?["isCompactSummary"] as? Bool != true else { return nil }
       entry = (content["text"] as? String).map { (.user, $0) }
     case "agent":
       entry = agentText(content)
@@ -142,10 +145,26 @@ public struct HappyMessage: Identifiable, Hashable {
     }
     guard let entry else { return nil }
     if entry.0 == .user {
-      guard !isInjectedPrompt(entry.1) else { return nil }
+      guard !isInjectedPrompt(entry.1), !isHiddenPrompt(entry.1) else { return nil }
       return (.user, stripAttachments(entry.1))
     }
+    guard !isUsageLimitNotice(entry.1) else { return nil }
     return entry
+  }
+
+  /// What the app's list leaves out of the user's prompts (`shouldHideMessageInChatList`): a local
+  /// command's output, which marks a compaction, and the text Claude Code writes beside an image
+  private static func isHiddenPrompt(_ text: String) -> Bool {
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    return [
+      #"^<local-command-stdout>[\s\S]*</local-command-stdout>$"#,
+      #"^\[Image: original \d+x\d+, displayed at \d+x\d+\. Multiply coordinates by [\d.]+ to map to original image\.\]$"#,
+    ].contains { trimmed.range(of: $0, options: .regularExpression) != nil }
+  }
+
+  /// Claude's usage-limit notice, which the app shows as an event of its own rather than a reply
+  private static func isUsageLimitNotice(_ text: String) -> Bool {
+    text.range(of: #"^Claude AI usage limit reached\|\d+$"#, options: .regularExpression) != nil
   }
 
   private static func agentText(_ content: [String: Any]) -> (Role, String)? {
@@ -164,7 +183,9 @@ public struct HappyMessage: Identifiable, Hashable {
         return nil
       }
     case "codex", "acp":
-      guard data["type"] as? String == "message", let text = data["message"] as? String else { return nil }
+      // A plan update is the agent's todo list, which the app draws as one
+      guard data["type"] as? String == "message", let text = data["message"] as? String,
+            !text.hasPrefix("[Plan Update]") else { return nil }
       return (.agent, text)
     case "session":
       return envelopeText(data)
@@ -227,10 +248,16 @@ public struct HappyMessage: Identifiable, Hashable {
     return kept
   }
 
+  /// A session-protocol envelope's text, as the app reads one: not a subagent's, not the agent's
+  /// thinking, and from the agent only within a turn
   private static func envelopeText(_ envelope: [String: Any]) -> (Role, String)? {
     guard let ev = envelope["ev"] as? [String: Any], ev["t"] as? String == "text",
+          ev["thinking"] as? Bool != true,
+          envelope["subagent"] as? String == nil,
           let text = ev["text"] as? String else { return nil }
-    return (envelope["role"] as? String == "user" ? .user : .agent, text)
+    let role: Role = envelope["role"] as? String == "user" ? .user : .agent
+    guard role == .user || envelope["turn"] as? String != nil else { return nil }
+    return (role, text)
   }
 }
 

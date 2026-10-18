@@ -77,10 +77,8 @@ struct SessionDetailView: View {
           }
           .buttonStyle(.plain)
           .simultaneousGesture(LongPressGesture().onEnded { _ in openMessage = message })
-          .listRowBackground(
-            RoundedRectangle(cornerRadius: 10)
-              .fill(message.role == .user ? MessageStyle.userBackground : Color.gray.opacity(0.18))
-          )
+          .listRowBackground(Color.clear)
+          .listRowInsets(EdgeInsets())
           .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { rowFrames.rows[message.id] = $0 }
           .id(message.id)
         }
@@ -312,13 +310,20 @@ private struct MessageRow: View {
       Text(message.role == .user ? L("Me", "我") : agent)
         .font(.caption2)
         .lineLimit(1)
-        .foregroundStyle(message.role == .user ? MessageStyle.userLabel : .secondary)
+        .foregroundStyle(.secondary)
       Text(PlainText.from(markdown: message.text))
         .font(.footnote)
-        .lineLimit(12)
+        .lineLimit(4)
     }
     .frame(maxWidth: .infinity, alignment: .leading)
-    .contentShape(Rectangle())
+    .padding(.horizontal, 10)
+    .padding(.vertical, 8)
+    // The card drawn by the row itself: a list row's own background stays under a button's platter
+    .background(
+      RoundedRectangle(cornerRadius: 10)
+        .fill(message.role == .user ? MessageStyle.userBackground : Color.gray.opacity(0.18))
+    )
+    .contentShape(RoundedRectangle(cornerRadius: 10))
   }
 }
 
