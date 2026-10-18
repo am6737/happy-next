@@ -10,6 +10,8 @@ struct SessionDetailView: View {
   /// The messages a load looks for, going back until it finds as many: a turn of tool calls can
   /// leave a page without one
   private static let messagesPerLoad = 10
+  /// The messages a session opens on at least, read before it shows; the rest of a load's follow
+  private static let messagesToOpen = 3
   /// The pages one load reads at most, and the records a session reads in all, so a long session
   /// stays light
   private static let pagesPerLoad = 4
@@ -199,8 +201,8 @@ struct SessionDetailView: View {
   /// The messages as a copied session's backfill keeps them: each prompt and the reply it ended on
   private var messages: [HappyMessage] { HappyMessage.turns(records) }
 
-  /// Reads the latest page again, keeping the records read before it. The first time, the page
-  /// shows as soon as it is read, and the pages before it follow till there are messages enough.
+  /// Reads the latest page again, keeping the records read before it. The first time, it shows once
+  /// there are `messagesToOpen` messages, and the pages before them follow till there are a load's.
   private func loadMessages() async {
     guard let client = store.client else { return }
     guard let latest = try? await client.messages(sessionId: sessionId, limit: Self.latestPageSize) else {
@@ -212,10 +214,12 @@ struct SessionDetailView: View {
       oldestSeq = latest.oldestSeq
       hasEarlier = latest.hasMore && latest.oldestSeq != nil
       recordsRead = latest.recordCount
+      if messages.count < Self.messagesToOpen {
+        await readEarlier(client, adding: Self.messagesToOpen - messages.count, failing: false)
+      }
       loaded = true
-      let shown = messages.count
-      if shown < Self.messagesPerLoad {
-        await readEarlier(client, adding: Self.messagesPerLoad - shown, failing: false)
+      if messages.count < Self.messagesPerLoad {
+        await readEarlier(client, adding: Self.messagesPerLoad - messages.count, failing: false)
       }
       return
     }
