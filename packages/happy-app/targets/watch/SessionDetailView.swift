@@ -85,7 +85,8 @@ struct SessionDetailView: View {
           }
         }
 
-        ForEach(messages) { message in
+        // Not before the session opens: till then the messages read show none of them
+        ForEach(loaded ? messages : []) { message in
           // Not a button: watchOS draws a button row's platter over the row's own background
           MessageRow(message: message, agent: agentLabel)
             .onTapGesture { openMessage = message }
@@ -170,6 +171,7 @@ struct SessionDetailView: View {
         }
       }
       .onChange(of: messages.last?.id) { scrollToEnd(proxy) }
+      .onChange(of: loaded) { scrollToEnd(proxy) }
       .onChange(of: session?.requests.first?.id) { scrollToEnd(proxy) }
       .onChange(of: records.count) {
         guard let hold = holdInPlace else { return }
