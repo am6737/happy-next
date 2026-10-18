@@ -10,6 +10,7 @@ vi.mock('expo-secure-store', () => ({
     deleteItemAsync: vi.fn(),
 }));
 vi.mock('react-native', () => ({ Platform: { OS: 'web' } }));
+vi.mock('@/sync/nativeCredentials', () => ({ clearNativeCredentials: vi.fn() }));
 
 import { TokenStorage, type AuthCredentials } from './tokenStorage';
 
