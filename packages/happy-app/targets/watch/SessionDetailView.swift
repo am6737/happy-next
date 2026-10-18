@@ -9,7 +9,7 @@ struct SessionDetailView: View {
   private static let earlierPageSize = 100
   /// The messages a load looks for, going back until it finds as many: a turn of tool calls can
   /// leave a page without one
-  private static let messagesPerLoad = 10
+  private static let messagesPerLoad = 6
   /// The messages a session opens on at least, read before it shows; the rest of a load's follow
   private static let messagesToOpen = 3
   /// The pages one load reads at most, and the records a session reads in all, so a long session
