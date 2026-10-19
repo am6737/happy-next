@@ -136,7 +136,7 @@
                 "zh-Hant": "較早的 Opus"
             },
             "efforts": ["max", "xhigh", "high", "medium", "low"],
-            "contextWindow": 200000,
+            "contextWindow": 1000000,
             "pricing": { "input": 5, "output": 25, "cacheWrite": 6.25, "cacheRead": 0.5 }
         },
         {
@@ -151,7 +151,7 @@
                 "zh-Hant": "較早的 Opus"
             },
             "efforts": ["max", "high", "medium", "low"],
-            "contextWindow": 200000,
+            "contextWindow": 1000000,
             "pricing": { "input": 5, "output": 25, "cacheWrite": 6.25, "cacheRead": 0.5 }
         },
         {
@@ -166,7 +166,7 @@
                 "zh-Hant": "較早的 Sonnet"
             },
             "efforts": ["max", "high", "medium", "low"],
-            "contextWindow": 200000,
+            "contextWindow": 1000000,
             "pricing": { "input": 3, "output": 15, "cacheWrite": 3.75, "cacheRead": 0.3 }
         },
         {
@@ -377,7 +377,7 @@
         {
             "id": "gemini-3.7-flash",
             "agent": "gemini",
-            "status": "active",
+            "status": "retired",
             "label": "3.7 Flash",
             "displayName": "Gemini 3.7 Flash",
             "description": "Previous generation Flash",
@@ -420,7 +420,7 @@
         {
             "id": "gemini-3.5-flash",
             "agent": "gemini",
-            "status": "active",
+            "status": "retired",
             "label": "3.5 Flash",
             "displayName": "Gemini 3.5 Flash",
             "description": "Fast frontier agentic and coding model",

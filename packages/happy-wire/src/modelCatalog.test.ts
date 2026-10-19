@@ -181,7 +181,6 @@ describe('modelCatalog', () => {
     it('keeps gemini free-tier fallback model in catalog', () => {
         expect(getValidModelModesForAgent('gemini')[0]).toBe(MODEL_MODE_DEFAULT);
         expect(getValidModelModesForAgent('gemini')).toContain('gemini-3.8-flash');
-        expect(getValidModelModesForAgent('gemini')).toContain('gemini-3.7-flash');
         expect(getValidModelModesForAgent('gemini')).toContain('gemini-3.6-flash');
         expect(getValidModelModesForAgent('gemini')).toContain('gemini-3.5-flash-lite');
         expect(getValidModelModesForAgent('gemini')).not.toContain('gemini-3.5-pro-preview');
@@ -204,19 +203,19 @@ describe('modelCatalog', () => {
         expect(getMaxContextSize('claude-opus-5-max', 'claude')).toBe(1_000_000);
         expect(getMaxContextSize('claude-sonnet-5-xhigh', 'claude')).toBe(1_000_000);
         expect(getMaxContextSize('claude-opus-4-8-high', 'claude')).toBe(1_000_000);
-        expect(getMaxContextSize('claude-opus-4-6-high', 'claude')).toBe(200_000);
-        expect(getMaxContextSize('claude-opus-4-6-fast', 'claude')).toBe(200_000);
-        expect(getMaxContextSize('claude-opus-4-6', 'claude')).toBe(200_000);
+        expect(getMaxContextSize('claude-opus-4-6-high', 'claude')).toBe(1_000_000);
+        expect(getMaxContextSize('claude-opus-4-6-fast', 'claude')).toBe(1_000_000);
+        expect(getMaxContextSize('claude-opus-4-6', 'claude')).toBe(1_000_000);
     });
 
     it('resolves context window from actualModel when modelMode is default', () => {
         // Exact match
-        expect(getMaxContextSize('default', 'claude', 'claude-sonnet-4-6')).toBe(200_000);
+        expect(getMaxContextSize('default', 'claude', 'claude-sonnet-4-6')).toBe(1_000_000);
         // SDK date-stamped model ID (prefix match)
         expect(getMaxContextSize('default', 'claude', 'claude-opus-4-20250514')).toBe(200_000);
         expect(getMaxContextSize('default', 'claude', 'claude-sonnet-4-1-20250805')).toBe(200_000);
         // -fast suffix
-        expect(getMaxContextSize('default', 'claude', 'claude-sonnet-4-6-fast')).toBe(200_000);
+        expect(getMaxContextSize('default', 'claude', 'claude-sonnet-4-6-fast')).toBe(1_000_000);
         // Codex actual model
         expect(getMaxContextSize('default', 'codex', 'gpt-6-astra')).toBe(1_050_000);
         expect(getMaxContextSize('default', 'codex', 'gpt-5.2')).toBe(272_000);
@@ -236,11 +235,11 @@ describe('modelCatalog', () => {
     it('infers a 1M window when actual context usage already exceeds the computed window', () => {
         // A 200K window can't hold >200K tokens — so the session must be on 1M,
         // even when modelMode is default and nothing reports the real window.
-        expect(getMaxContextSize('default', 'claude', 'claude-opus-4-7', 250_000)).toBe(1_000_000);
+        expect(getMaxContextSize('default', 'claude', 'claude-haiku-4-5', 250_000)).toBe(1_000_000);
         expect(getMaxContextSize('default', 'claude', undefined, 300_000)).toBe(1_000_000);
         // Usage within the computed window leaves it unchanged.
-        expect(getMaxContextSize('default', 'claude', 'claude-opus-4-7', 150_000)).toBe(200_000);
-        expect(getMaxContextSize('default', 'claude', 'claude-opus-4-7')).toBe(200_000);
+        expect(getMaxContextSize('default', 'claude', 'claude-haiku-4-5', 150_000)).toBe(200_000);
+        expect(getMaxContextSize('default', 'claude', 'claude-haiku-4-5')).toBe(200_000);
         // Never shrinks an already-larger window.
         expect(getMaxContextSize('claude-fable-5-high', 'claude', undefined, 5_000)).toBe(1_000_000);
     });
