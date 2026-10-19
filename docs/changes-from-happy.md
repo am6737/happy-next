@@ -9,6 +9,7 @@ This document summarizes what changed in Happy Next compared to the original Hap
 | Area | What changed |
 |---|---|
 | Desktop apps | Direct-download macOS 12+ Universal and Windows x64/ARM64 clients with native windows, tray residency, notifications, shortcuts, diagnostics, and signed automatic updates |
+| Apple Watch | Permission notifications you can act on, a watch app with your sessions, messages and dictated or quick replies, and a complication counting the sessions that need you |
 | Orchestrator | Multi-agent DAG task scheduling with per-task model, working directory, real-time monitoring, execution history, and linked run navigation |
 | Pending queue | Server-side message queue with auto-dispatch, queue panel UI, send-now, plus edit and pause/draft of queued messages |
 | Multi-agent | Claude Code, Codex, Gemini, and Qoder are all first-class agents |
@@ -50,6 +51,12 @@ Happy Next now ships as a native-feeling desktop client instead of requiring a b
 - **Direct local terminals**: terminals on this computer are reached directly through the local daemon rather than the server — typing is immediate, an open terminal keeps working while the server is down, and it falls back to the server when the daemon can't be reached; a tab's tooltip adds "(direct)" when connected directly
 - **Compact macOS title bar**: the macOS title bar is a compact toolbar
 
+## Apple Watch
+
+- **Actionable notifications**: allow, allow for this session, deny, stop or reply straight from a permission notification on iPhone or the watch
+- **Watch app**: sessions in the app's order with their avatars and pinned ones first; a session opens on its latest messages with earlier ones a tap away, and you reply by dictation or a quick reply; stopping a task asks first
+- **Complication**: a watch face complication counts the sessions waiting for approval and those working
+
 ## Orchestrator
 
 A multi-agent orchestration system that lets you define task dependency graphs and execute them automatically.
@@ -75,6 +82,7 @@ A multi-agent orchestration system that lets you define task dependency graphs a
 - **`orchestrator_exec`**: run shell commands on one or every online machine; long output is saved on the machine
 - **Encrypted tasks**: a task's title, prompt, command, working directory and target machines are end-to-end encrypted, so the server never sees them, and tasks only go to machines whose CLI can open them
 - **`orchestrator_transfer`**: copy files and directories between machines — send from this one, fetch to it, or relay between two others — streamed end-to-end encrypted
+- **Run search and filters**: search runs by title and filter them by status, agent and machine, each run showing its agent's icon
 
 ## Pending Message Queue
 
@@ -104,8 +112,10 @@ The original Happy only supported Claude Code. Happy Next treats Claude Code, Co
 - **Claude Opus 4.8** added to the model catalog
 - **Claude Fable 5.1 and Fable 5** added to the model catalog, with 1M context and low / medium / high / xhigh / max reasoning effort presets
 - **Claude Opus 5 and Claude Sonnet 5** added with 1M context, current reasoning-effort presets, fast-mode capability detection, and updated cost tracking
-- **Refreshed Gemini catalog** adds Gemini 3.8 Flash and Gemini 3.7 Flash alongside the existing Gemini models
+- **Refreshed Gemini catalog** adds Gemini 3.8 Flash alongside the existing Gemini models
 - **Remote model catalog**: models are served by the server, so new ones show up without an app update — now with Claude Opus 5.5, Claude Sonnet 5.5, GPT-6.1-Sol, GPT-6-Sol, and GPT-6-Luna
+- **Explained settings**: the settings popover explains each permission mode and AI vendor, and model descriptions follow the app language, including Simplified and Traditional Chinese
+- **Codex "Approve for Me"**: Codex's approval mode routes approvals to Codex's own reviewer, and orchestrator tools that act — running commands, sending messages, transferring files, cancelling tasks — ask for permission under every agent
 - **Streamlined model picker**: one entry per Claude model at its full context window; reasoning-effort presets show side by side on wide screens and Claude defaults to High effort
 - **Claude context window**: the context bar follows the window Claude Code actually uses, and Qoder and Gemini sessions show context usage
 - **Qoder over ACP**: the account's models and reasoning efforts, Qoder's permission modes, and its plan mode shown apart from them
@@ -399,6 +409,10 @@ Extensive improvements to the chat and session management experience.
 - **Resumed read-aloud**: speech cut off by a flaky network picks up where it stopped, retrying through an outage of up to 30 seconds
 - **Schedule from a usage-limit notice**: the reset time in a Claude usage-limit notice opens the schedule sheet
 - **Calmer session list**: rows tell when a session last moved, a project's header opens its card, and machines fold in the all machines view
+- **Search page**: on phones the session list opens a search page over sessions, machines, pages, actions and messages, with recent searches, and every search field shares the iOS system look on every platform
+- **Quicker "+"**: the session list's "+" starts a new session on a tap and opens its menu on a long press, and menus show an icon on each row
+- **Finer scheduling**: scheduled messages offer relative times from 10 minutes to 5 hours
+- **Copied context**: a copied Claude session's context bar reads right from the start
 
 ## CLI Improvements
 
@@ -459,6 +473,10 @@ The CLI (`happy-next-cli`) received substantial upgrades.
 - **Happy CLI v0.13.0**: adds Qoder, checks for new releases on its own and installs them when you ask from the app, upgrades a root-owned global install through passwordless sudo, archives each session's messages for search, and sends Gemini's and Qoder's reasoning as one thinking message
 
 - **Happy CLI v0.14.0 with Codex v0.163.0**: adds `orchestrator_transfer` and encrypted orchestrator tasks, forks archived Codex sessions, keeps Qoder's model list cached, and a daemon started from inside a session no longer makes new sessions resume it
+
+- **Happy CLI v0.15.0**: serves terminals to the desktop app on the same computer over a local, token-protected connection
+
+- **Happy CLI v0.16.0**: fixes Codex's "Approve for Me" mode, asks before orchestrator tools act, carries a copied session's context window, and marks each message as text or other so the watch loads only text
 
 ## Server
 

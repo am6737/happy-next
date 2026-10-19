@@ -1,6 +1,31 @@
 {
   "entries": [
     {
+      "version": 34,
+      "date": "2026-10-19",
+      "summary": "Happy Next v2.19.0 brings Happy to the Apple Watch — answer permission requests from a notification or the watch app, read a session's latest messages and reply by dictation or a quick reply, with a complication counting the sessions that need you. Phones get a search page in the session list, every search field shares one look, and orchestrator runs can be searched and filtered. Happy CLI is updated to v0.16.0.",
+      "changes": [
+        "Apple Watch: allow, allow for this session, deny, stop or reply straight from a permission notification on iPhone or the watch",
+        "Apple Watch: a watch app lists your sessions in the app's order with their avatars and pinned ones first, opens a session on its latest messages with earlier ones a tap away, and replies by dictation or a quick reply (long-press one to edit it first); stopping a task asks first",
+        "Apple Watch: a watch face complication counts the sessions waiting for approval and those working",
+        "Search: on phones the session list opens a search page over sessions, machines, pages, actions and messages, with your recent searches; on Android and phone-sized web it opens from a button beside \"+\"",
+        "Search: every search field shares the iOS system look on every platform, and GitHub's filter moves to a button beside its field",
+        "Orchestrator: search runs by title and filter them by status, agent and machine, each run showing its agent's icon",
+        "Session list: tap \"+\" to start a new session, long-press it for the menu (new session, add machine, CLI update), and menus show an icon on each row",
+        "Composer: scheduled messages offer finer relative times (10–55 minutes, 1–5 hours), and the settings tabs keep one height whether labels are English or Chinese",
+        "Settings: each permission mode and AI vendor has a line explaining it, and model descriptions follow the app language, including Simplified and Traditional Chinese",
+        "Codex: Auto Review is now \"Approve for Me\" and works again with the current Codex (needs Happy CLI v0.16.0)",
+        "Permissions: orchestrator tools that run commands, send messages, transfer files or cancel tasks ask for permission again under Claude and Codex (needs Happy CLI v0.16.0)",
+        "Machines: a machine with a CLI update shows an update icon in the settings list, opening it at its CLI version",
+        "Sessions: a copied Claude session's context bar reads right from the start",
+        "Read aloud: long messages no longer stop partway or jump back to the start on iOS",
+        "Android: the logo shows again on the welcome screen and a tablet's empty pane, the keyboard covers the bottom tab bar instead of pushing it up, and the session list sits as far below the header as other pages",
+        "Session list: the time under a session's name follows the theme's secondary text color again",
+        "CLI: Happy CLI v0.16.0 fixes Codex's Approve for Me mode, asks before orchestrator tools act, carries a copied session's context window, and marks each message as text or other so the watch loads only text"
+      ],
+      "rawMarkdown": "## Version 34 - 2026-10-19\n\n\nHappy Next v2.19.0 brings Happy to the Apple Watch — answer permission requests from a notification or the watch app, read a session's latest messages and reply by dictation or a quick reply, with a complication counting the sessions that need you. Phones get a search page in the session list, every search field shares one look, and orchestrator runs can be searched and filtered. Happy CLI is updated to v0.16.0.\n\n- Apple Watch: allow, allow for this session, deny, stop or reply straight from a permission notification on iPhone or the watch\n- Apple Watch: a watch app lists your sessions in the app's order with their avatars and pinned ones first, opens a session on its latest messages with earlier ones a tap away, and replies by dictation or a quick reply (long-press one to edit it first); stopping a task asks first\n- Apple Watch: a watch face complication counts the sessions waiting for approval and those working\n- Search: on phones the session list opens a search page over sessions, machines, pages, actions and messages, with your recent searches; on Android and phone-sized web it opens from a button beside \"+\"\n- Search: every search field shares the iOS system look on every platform, and GitHub's filter moves to a button beside its field\n- Orchestrator: search runs by title and filter them by status, agent and machine, each run showing its agent's icon\n- Session list: tap \"+\" to start a new session, long-press it for the menu (new session, add machine, CLI update), and menus show an icon on each row\n- Composer: scheduled messages offer finer relative times (10–55 minutes, 1–5 hours), and the settings tabs keep one height whether labels are English or Chinese\n- Settings: each permission mode and AI vendor has a line explaining it, and model descriptions follow the app language, including Simplified and Traditional Chinese\n- Codex: Auto Review is now \"Approve for Me\" and works again with the current Codex (needs Happy CLI v0.16.0)\n- Permissions: orchestrator tools that run commands, send messages, transfer files or cancel tasks ask for permission again under Claude and Codex (needs Happy CLI v0.16.0)\n- Machines: a machine with a CLI update shows an update icon in the settings list, opening it at its CLI version\n- Sessions: a copied Claude session's context bar reads right from the start\n- Read aloud: long messages no longer stop partway or jump back to the start on iOS\n- Android: the logo shows again on the welcome screen and a tablet's empty pane, the keyboard covers the bottom tab bar instead of pushing it up, and the session list sits as far below the header as other pages\n- Session list: the time under a session's name follows the theme's secondary text color again\n- CLI: Happy CLI v0.16.0 fixes Codex's Approve for Me mode, asks before orchestrator tools act, carries a copied session's context window, and marks each message as text or other so the watch loads only text"
+    },
+    {
       "version": 33,
       "date": "2026-10-16",
       "summary": "Happy Next v2.18.0 lets the desktop app reach terminals on its own computer directly instead of through the server, so typing is immediate and an open terminal keeps working while the server is down. Read aloud starts speaking sooner, and a key pressed during another no longer gets lost with an input method on. Happy CLI is updated to v0.15.0.",
@@ -623,5 +648,5 @@
       "rawMarkdown": "## Version 1 - 2025-05-12\n\n\nWelcome to Happy - your secure, encrypted mobile companion for Claude Code. This inaugural release establishes the foundation for private, powerful AI interactions on the go.\n\n- Implemented end-to-end encrypted session management ensuring complete privacy\n- Integrated intelligent voice assistant with natural conversation capabilities\n- Added experimental file manager with syntax highlighting and tree navigation\n- Built seamless real-time synchronization across all your devices\n- Established native support for iOS, Android, and responsive web interfaces"
     }
   ],
-  "latestVersion": 33
+  "latestVersion": 34
 }
