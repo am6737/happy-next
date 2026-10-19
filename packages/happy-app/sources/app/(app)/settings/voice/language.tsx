@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { View, TextInput, FlatList, Platform } from 'react-native';
+import { View, FlatList, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Item } from '@/components/Item';
@@ -10,6 +10,7 @@ import { useUnistyles } from 'react-native-unistyles';
 import { LANGUAGES, getLanguageDisplayName } from '@/constants/Languages';
 import { t } from '@/text';
 import { layout } from '@/components/layout';
+import { SearchField } from '@/components/SearchField';
 
 export default function LanguageSelectionScreen() {
     const { theme } = useUnistyles();
@@ -49,46 +50,12 @@ export default function LanguageSelectionScreen() {
                     maxWidth: layout.maxWidth,
                     paddingHorizontal: Platform.select({ ios: 0, default: 4 }),
                 }}>
-                    <View style={{
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        backgroundColor: theme.colors.surface,
-                        borderRadius: 10,
-                        paddingHorizontal: 12,
-                        paddingVertical: 8,
-                        marginHorizontal: Platform.select({ ios: 16, default: 12 }),
-                    }}>
-                        <Ionicons 
-                            name="search-outline" 
-                            size={20} 
-                            color={theme.colors.textSecondary} 
-                            style={{ marginRight: 8 }}
-                        />
-                        <TextInput
-                            style={{
-                                flex: 1,
-                                fontSize: 16,
-                                color: theme.colors.input.text,
-                                padding: 0,
-                                ...(Platform.OS === 'android' ? { includeFontPadding: false } : null),
-                            }}
-                            placeholder={t('settingsVoice.language.searchPlaceholder')}
-                            placeholderTextColor={theme.colors.input.placeholder}
-                            value={searchQuery}
-                            onChangeText={setSearchQuery}
-                            autoCapitalize="none"
-                            autoCorrect={false}
-                        />
-                        {searchQuery.length > 0 && (
-                            <Ionicons 
-                                name="close-circle" 
-                                size={20} 
-                                color={theme.colors.textSecondary}
-                                onPress={() => setSearchQuery('')}
-                                style={{ marginLeft: 8 }}
-                            />
-                        )}
-                    </View>
+                    <SearchField
+                        value={searchQuery}
+                        onChangeText={setSearchQuery}
+                        placeholder={t('settingsVoice.language.searchPlaceholder')}
+                        style={{ marginHorizontal: Platform.select({ ios: 16, default: 12 }) }}
+                    />
                 </View>
             </View>
 

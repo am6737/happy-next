@@ -1,7 +1,8 @@
 import * as React from 'react';
-import { View, Pressable, TextInput, Platform, type LayoutChangeEvent } from 'react-native';
-import { BottomSheetModal, BottomSheetScrollView, BottomSheetTextInput } from '@gorhom/bottom-sheet';
+import { View, Pressable, type LayoutChangeEvent } from 'react-native';
+import { BottomSheetModal, BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { AppBottomSheet } from '@/components/AppBottomSheet';
+import { SearchField } from '@/components/SearchField';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
@@ -18,7 +19,6 @@ import { getMachineCliUpdate } from '@/utils/cliUpdate';
 import { CliUpdateIcon } from './CliUpdateIndicator';
 import { filterMachineGroups, type SessionListSelection, type SessionScopeDot as Dot } from './sessionListScope';
 
-const SheetTextInput = Platform.OS === 'web' ? TextInput : BottomSheetTextInput;
 
 type SwitcherItemProps = {
     icon: React.ComponentProps<typeof Ionicons>['name'];
@@ -169,26 +169,13 @@ export const MachineSwitcherSheet = React.memo(React.forwardRef<BottomSheetModal
                 </View>
 
                 {searchable && (
-                    <View style={styles.search}>
-                        <Ionicons name="search" size={16} color={theme.colors.textSecondary} />
-                        <SheetTextInput
-                            style={[
-                                styles.searchInput,
-                                Platform.OS === 'web' && { outlineStyle: 'none', outline: 'none', outlineWidth: 0 } as any,
-                            ]}
-                            placeholder={t('sessionScope.searchMachines')}
-                            placeholderTextColor={theme.colors.textSecondary}
-                            value={search}
-                            onChangeText={setSearch}
-                            autoCapitalize="none"
-                            autoCorrect={false}
-                        />
-                        {search.length > 0 && (
-                            <Pressable onPress={() => setSearch('')} hitSlop={8} accessibilityLabel={t('common.clear')}>
-                                <Ionicons name="close-circle" size={16} color={theme.colors.textSecondary} />
-                            </Pressable>
-                        )}
-                    </View>
+                    <SearchField
+                        inSheet
+                        value={search}
+                        onChangeText={setSearch}
+                        placeholder={t('sessionScope.searchMachines')}
+                        style={styles.search}
+                    />
                 )}
                 <Text style={styles.summary}>{summary}</Text>
 
@@ -313,22 +300,8 @@ const stylesheet = StyleSheet.create((theme) => ({
         backgroundColor: theme.colors.surface,
     },
     search: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
         marginHorizontal: 16,
         marginBottom: 8,
-        paddingHorizontal: 12,
-        height: 40,
-        borderRadius: 11,
-        backgroundColor: theme.colors.surface,
-    },
-    searchInput: {
-        flex: 1,
-        fontSize: 15,
-        paddingVertical: 0,
-        color: theme.colors.text,
-        ...Typography.default(),
     },
     summary: {
         paddingHorizontal: 18,

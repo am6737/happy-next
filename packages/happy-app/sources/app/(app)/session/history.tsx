@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, ActivityIndicator, NativeScrollEvent, NativeSyntheticEvent, Pressable, TextInput } from 'react-native';
+import { View, ActivityIndicator, NativeScrollEvent, NativeSyntheticEvent, Pressable } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -38,6 +38,7 @@ import { formatPathRelativeToHome, formatSessionTime } from '@/utils/sessionUtil
 import { MMKV } from 'react-native-mmkv';
 import { NativeMenu } from '@/components/NativeMenu';
 import type { ActionMenuItem } from '@/components/ActionMenu';
+import { SearchField } from '@/components/SearchField';
 
 const mmkv = new MMKV();
 const SELECTED_MACHINE_KEY = 'agent-history-selected-machine';
@@ -71,24 +72,6 @@ const filterStyles = StyleSheet.create((theme) => ({
         paddingHorizontal: 16,
         paddingTop: 8,
         paddingBottom: 4,
-    },
-    searchInputWrapper: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: theme.colors.surface,
-        borderRadius: 10,
-        paddingHorizontal: 10,
-        height: 36,
-    },
-    searchInput: {
-        flex: 1,
-        fontSize: 15,
-        lineHeight: 20,
-        color: theme.colors.text,
-        ...Typography.default(),
-    },
-    clearButton: {
-        padding: 4,
     },
     filterRow: {
         flexDirection: 'row',
@@ -561,33 +544,21 @@ export default function AgentHistoryPage() {
             <View style={{ maxWidth: layout.maxWidth, alignSelf: 'center', width: '100%' }}>
                 {/* Search box */}
                 <View style={filterStyles.searchContainer}>
-                    <View style={filterStyles.searchInputWrapper}>
-                        <Ionicons name="search" size={16} color={theme.colors.textSecondary} style={{ marginRight: 6 }} />
-                        <TextInput
-                            style={filterStyles.searchInput}
-                            placeholder={t('agentHistory.searchPlaceholder')}
-                            placeholderTextColor={theme.colors.textSecondary}
-                            value={searchQuery}
-                            onChangeText={(text) => {
-                                setSearchQuery(text);
-                                if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
-                                searchDebounceRef.current = setTimeout(() => {
-                                    setSearchTrigger(prev => prev + 1);
-                                }, 300);
-                            }}
-                            returnKeyType="search"
-                            autoCapitalize="none"
-                            autoCorrect={false}
-                        />
-                        {searchQuery.length > 0 && (
-                            <Pressable style={filterStyles.clearButton} onPress={() => {
-                                setSearchQuery('');
+                    <SearchField
+                        value={searchQuery}
+                        onChangeText={(text) => {
+                            setSearchQuery(text);
+                            if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+                            searchDebounceRef.current = setTimeout(() => {
                                 setSearchTrigger(prev => prev + 1);
-                            }}>
-                                <Ionicons name="close-circle" size={18} color={theme.colors.textSecondary} />
-                            </Pressable>
-                        )}
-                    </View>
+                            }, 300);
+                        }}
+                        onClear={() => {
+                            setSearchQuery('');
+                            setSearchTrigger(prev => prev + 1);
+                        }}
+                        placeholder={t('agentHistory.searchPlaceholder')}
+                    />
                 </View>
 
                 {/* Device & Agent filter triggers */}

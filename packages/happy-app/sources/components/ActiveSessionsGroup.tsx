@@ -80,6 +80,10 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
         justifyContent: 'space-between',
         alignItems: 'center',
     },
+    // The pinned card opening the list under the header (see `underHeader`).
+    pinnedHeaderUnderHeader: {
+        paddingTop: 8,
+    },
     // The project's header is the first row of its card. The padding is even so the title stays
     // centred when the project is collapsed and the header is the whole card.
     projectHeader: {
@@ -336,12 +340,15 @@ interface ActiveSessionsGroupProps {
     shared?: boolean;
     // The pinned sessions: one card, in the order given.
     pinned?: boolean;
+    // The pinned card opens the list right under the header: its title sits as far below it as the
+    // inbox's section titles.
+    underHeader?: boolean;
 }
 
-function PinnedSessionsHeader() {
+function PinnedSessionsHeader({ underHeader }: { underHeader?: boolean }) {
     const styles = stylesheet;
     return (
-        <View style={styles.sectionHeader}>
+        <View style={[styles.sectionHeader, underHeader && styles.pinnedHeaderUnderHeader]}>
             <View style={styles.sectionHeaderLeft}>
                 <Text style={styles.sectionHeaderPath} numberOfLines={1}>{t('sessionScope.pinnedSessions')}</Text>
             </View>
@@ -490,7 +497,7 @@ function ProjectSectionHeader({
 }
 
 
-export function ActiveSessionsGroup({ sessions, selectedSessionId, registerSessionRowRef, shared, pinned }: ActiveSessionsGroupProps) {
+export function ActiveSessionsGroup({ sessions, selectedSessionId, registerSessionRowRef, shared, pinned, underHeader }: ActiveSessionsGroupProps) {
     const styles = stylesheet;
     const router = useRouter();
     const projectGroups = useSessionProjectGroups(sessions);
@@ -499,7 +506,7 @@ export function ActiveSessionsGroup({ sessions, selectedSessionId, registerSessi
     if (pinned) {
         return (
             <View style={styles.container}>
-                <PinnedSessionsHeader />
+                <PinnedSessionsHeader underHeader={underHeader} />
                 <View style={styles.projectCard}>
                     {sessions.map((session, index) => (
                         <CompactSessionRow

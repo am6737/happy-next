@@ -7,6 +7,7 @@ import { Text } from '@/components/StyledText';
 import { Item } from '@/components/Item';
 import { ItemList } from '@/components/ItemList';
 import { Typography } from '@/constants/Typography';
+import { SearchField } from '@/components/SearchField';
 import { sessionListDirectory, sessionBash } from '@/sync/ops';
 import { getSession } from '@/sync/storage';
 import { useUnistyles, StyleSheet } from 'react-native-unistyles';
@@ -255,37 +256,14 @@ export default function BrowserScreen() {
                     borderBottomColor: theme.colors.divider,
                     backgroundColor: theme.colors.surfaceHigh,
                 }}>
-                    <View style={{
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        backgroundColor: theme.colors.input.background,
-                        borderRadius: 10,
-                        paddingHorizontal: 12,
-                        paddingVertical: 8,
-                    }}>
-                        <Ionicons name="search" size={16} color={theme.colors.textSecondary} style={{ marginRight: 8 }} />
-                        <TextInput
-                            ref={searchInputRef}
-                            value={searchQuery}
-                            onChangeText={setSearchQuery}
-                            placeholder={t('browser.searchPlaceholder')}
-                            style={{
-                                flex: 1,
-                                fontSize: 16,
-                                color: theme.colors.text,
-                                ...Typography.default(),
-                            }}
-                            placeholderTextColor={theme.colors.input.placeholder}
-                            autoCapitalize="none"
-                            autoCorrect={false}
-                            returnKeyType="search"
-                        />
-                        {searchQuery.length > 0 && (
-                            <Pressable onPress={() => setSearchQuery('')}>
-                                <Ionicons name="close-circle" size={18} color={theme.colors.textSecondary} />
-                            </Pressable>
-                        )}
-                    </View>
+                    {/* On the band's light grey it takes the inputs' fill, not the cards' white */}
+                    <SearchField
+                        inputRef={searchInputRef}
+                        value={searchQuery}
+                        onChangeText={setSearchQuery}
+                        placeholder={t('browser.searchPlaceholder')}
+                        style={{ backgroundColor: theme.colors.input.background }}
+                    />
                 </View>
             )}
 

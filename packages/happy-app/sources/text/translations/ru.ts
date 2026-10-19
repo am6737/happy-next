@@ -2296,7 +2296,6 @@ export const ru: TranslationStructure = {
         addFriend: 'Добавить в друзья',
         alreadyFriends: 'Уже в друзьях',
         requestPending: 'Запрос отправлен',
-        searchInstructions: 'Введите имя пользователя для поиска друзей',
         searchPlaceholder: 'Введите имя пользователя...',
         searching: 'Поиск...',
         userNotFound: 'Пользователь не найден',

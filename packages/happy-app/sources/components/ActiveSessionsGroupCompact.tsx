@@ -81,6 +81,13 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
         justifyContent: 'space-between',
         alignItems: 'center',
     },
+    // The pinned card opening the list under the header (see `underHeader`).
+    pinnedHeaderUnderHeader: {
+        paddingTop: 8,
+    },
+    pinnedCardUnderHeader: {
+        marginTop: 0,
+    },
     // The project's header is the first row of its card, as tall as a session row.
     projectHeader: {
         paddingVertical: 10,
@@ -302,12 +309,15 @@ interface ActiveSessionsGroupProps {
     shared?: boolean;
     // The pinned sessions: one card, in the order given.
     pinned?: boolean;
+    // The pinned card opens the list right under the header: its title sits as far below it as the
+    // inbox's section titles.
+    underHeader?: boolean;
 }
 
-function PinnedSessionsHeader() {
+function PinnedSessionsHeader({ underHeader }: { underHeader?: boolean }) {
     const styles = stylesheet;
     return (
-        <View style={styles.sectionHeader}>
+        <View style={[styles.sectionHeader, underHeader && styles.pinnedHeaderUnderHeader]}>
             <View style={styles.sectionHeaderLeft}>
                 <Text style={styles.sectionHeaderPath} numberOfLines={1}>{t('sessionScope.pinnedSessions')}</Text>
             </View>
@@ -452,7 +462,7 @@ function ProjectSectionHeader({
 }
 
 
-export function ActiveSessionsGroupCompact({ sessions, selectedSessionId, registerSessionRowRef, shared, pinned }: ActiveSessionsGroupProps) {
+export function ActiveSessionsGroupCompact({ sessions, selectedSessionId, registerSessionRowRef, shared, pinned, underHeader }: ActiveSessionsGroupProps) {
     const styles = stylesheet;
     const projectGroups = useSessionProjectGroups(sessions);
     const { collapsedGroups, toggleGroup } = useCollapsedSessionProjectGroups(projectGroups, selectedSessionId);
@@ -464,8 +474,8 @@ export function ActiveSessionsGroupCompact({ sessions, selectedSessionId, regist
     if (pinned) {
         return (
             <View style={styles.container}>
-                <PinnedSessionsHeader />
-                <View style={styles.projectCard}>
+                <PinnedSessionsHeader underHeader={underHeader} />
+                <View style={[styles.projectCard, underHeader && styles.pinnedCardUnderHeader]}>
                     {sessions.map((session, index) => (
                         <CompactSessionRow
                             key={session.id}

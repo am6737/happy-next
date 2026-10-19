@@ -1,12 +1,10 @@
 import * as React from 'react';
-import { View, Text, TextInput, ActivityIndicator, Platform } from 'react-native';
+import { View, Text, ActivityIndicator } from 'react-native';
 import { Image } from 'expo-image';
-import { BottomSheetModal, BottomSheetFlatList, BottomSheetTextInput } from '@gorhom/bottom-sheet';
+import { BottomSheetModal, BottomSheetFlatList } from '@gorhom/bottom-sheet';
 import { AppBottomSheet } from '@/components/AppBottomSheet';
-
-const SheetTextInput = Platform.OS === 'web' ? TextInput : BottomSheetTextInput;
+import { SearchField } from '@/components/SearchField';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
-import { Ionicons } from '@expo/vector-icons';
 import { Typography } from '@/constants/Typography';
 import { t } from '@/text';
 import type { DooTaskDialogUser } from '@/sync/dootask/types';
@@ -110,16 +108,13 @@ export const DialogDetailModal = React.memo(React.forwardRef<BottomSheetModal, D
             </View>
 
             {/* Search */}
-            <View style={[sheetStyles.searchContainer, { backgroundColor: theme.colors.surface, borderColor: theme.colors.divider }]}>
-                <Ionicons name="search" size={18} color={theme.colors.textSecondary} />
-                <SheetTextInput
-                    style={[sheetStyles.searchInput, { color: theme.colors.text }, Platform.OS === 'web' && { outlineStyle: 'none', outline: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
-                    placeholder={t('dootask.searchMembers')}
-                    placeholderTextColor={theme.colors.textSecondary}
-                    value={search}
-                    onChangeText={setSearch}
-                />
-            </View>
+            <SearchField
+                inSheet
+                value={search}
+                onChangeText={setSearch}
+                placeholder={t('dootask.searchMembers')}
+                style={sheetStyles.searchField}
+            />
         </>
     ), [theme, dialogName, dialogId, groupTypeLabel, search, setSearch]);
 
@@ -162,23 +157,9 @@ const sheetStyles = StyleSheet.create((theme) => ({
         fontSize: 15,
         marginTop: 2,
     },
-    searchContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
+    searchField: {
         marginHorizontal: theme.margins.lg,
         marginVertical: theme.margins.md,
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        borderRadius: 8,
-        borderWidth: 1,
-        gap: 8,
-    },
-    searchInput: {
-        ...Typography.default(),
-        flex: 1,
-        fontSize: 15,
-        lineHeight: 20,
-        padding: 0,
     },
 }));
 

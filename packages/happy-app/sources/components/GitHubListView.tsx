@@ -1,11 +1,11 @@
 import * as React from 'react';
-import { View, FlatList, Pressable, RefreshControl, TextInput, Platform, Linking, AppState, Modal, ActivityIndicator } from 'react-native';
+import { View, FlatList, Pressable, RefreshControl, Platform, Linking, AppState, Modal, ActivityIndicator } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import { Text } from '@/components/StyledText';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
-import { BottomSheetModal, BottomSheetFlatList, BottomSheetTextInput } from '@gorhom/bottom-sheet';
+import { BottomSheetModal, BottomSheetFlatList } from '@gorhom/bottom-sheet';
 import { AppBottomSheet } from '@/components/AppBottomSheet';
 import { t } from '@/text';
 import { Typography } from '@/constants/Typography';
@@ -23,9 +23,8 @@ import { useSoftHeaderInset } from '@/components/navigation/softHeader';
 import { FilterChipRow, IssueIcon, PullRequestIcon } from '@/components/repos';
 import type { GithubIssueScope, GithubPullScope } from '@/sync/apiGithubData';
 import { NativeMenu } from '@/components/NativeMenu';
+import { SearchField, searchFieldMetrics } from '@/components/SearchField';
 import type { ActionMenuItem } from '@/components/ActionMenu';
-
-const SheetTextInput = Platform.OS === 'web' ? TextInput : BottomSheetTextInput;
 
 type ActiveTab = 'issues' | 'pulls';
 
@@ -513,48 +512,29 @@ export const GitHubListView = React.memo(({ onRepoChange, repoPickerTriggerRef }
             </View>
 
             <View style={styles.searchContainer}>
-                <View style={[styles.searchBox, { backgroundColor: theme.colors.surface }]}>
-                    <Ionicons name="search" size={15} color={theme.colors.textSecondary} />
-                    <TextInput
-                        value={searchQuery}
-                        onChangeText={setSearchQuery}
-                        placeholder={activeTab === 'issues' ? t('github.searchIssues') : t('github.searchPullRequests')}
-                        placeholderTextColor={theme.colors.textSecondary}
-                        style={[styles.searchTextInput, { color: theme.colors.text }, Platform.OS === 'web' && { outlineStyle: 'none', outline: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
-                        returnKeyType="search"
-                        autoCorrect={false}
-                        underlineColorAndroid="transparent"
-                    />
-                    {searchQuery.length > 0 && (
-                        <Pressable onPress={() => setSearchQuery('')} hitSlop={8}>
-                            <Ionicons name="close-circle" size={16} color={theme.colors.textSecondary} />
-                        </Pressable>
-                    )}
-                    <NativeMenu
-                        items={filterMenuItems}
-                        style={[
-                            styles.filterButton,
-                            currentFilter === 'all'
-                                ? { backgroundColor: theme.colors.surfaceHigh }
-                                : { backgroundColor: theme.colors.text },
-                        ]}
-                        onFallbackOpen={() => setFilterPopoverVisible(true)}
+                <SearchField
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                    placeholder={activeTab === 'issues' ? t('github.searchIssues') : t('github.searchPullRequests')}
+                    style={styles.searchField}
+                />
+                <NativeMenu
+                    items={filterMenuItems}
+                    style={[styles.filterButton, currentFilter !== 'all' && { backgroundColor: theme.colors.button.primary.background }]}
+                    onFallbackOpen={() => setFilterPopoverVisible(true)}
+                >
+                    <Text
+                        style={[styles.filterButtonText, { color: currentFilter === 'all' ? theme.colors.text : theme.colors.button.primary.tint }]}
+                        numberOfLines={1}
                     >
-                        <Ionicons
-                            name="filter"
-                            size={13}
-                            color={currentFilter === 'all' ? theme.colors.text : theme.colors.groupped.background}
-                        />
-                        <Text style={[
-                            styles.filterButtonText,
-                            currentFilter === 'all'
-                                ? { color: theme.colors.text }
-                                : { color: theme.colors.groupped.background },
-                        ]}>
-                            {filterLabels[currentFilter]}
-                        </Text>
-                    </NativeMenu>
-                </View>
+                        {filterLabels[currentFilter]}
+                    </Text>
+                    <Ionicons
+                        name="chevron-down"
+                        size={12}
+                        color={currentFilter === 'all' ? theme.colors.textSecondary : theme.colors.button.primary.tint}
+                    />
+                </NativeMenu>
             </View>
 
             {isGlobal && (
@@ -670,16 +650,12 @@ export const GitHubListView = React.memo(({ onRepoChange, repoPickerTriggerRef }
                     </Pressable>
                 </View>
                 <View style={styles.sheetSearchContainer}>
-                    <View style={[styles.sheetSearchBox, { backgroundColor: theme.colors.surface }]}>
-                        <Ionicons name="search" size={14} color={theme.colors.textSecondary} />
-                        <SheetTextInput
-                            value={repoSearch}
-                            onChangeText={setRepoSearch}
-                            placeholder={t('github.findRepo')}
-                            placeholderTextColor={theme.colors.textSecondary}
-                            style={[styles.searchTextInput, { color: theme.colors.text }]}
-                        />
-                    </View>
+                    <SearchField
+                        inSheet
+                        value={repoSearch}
+                        onChangeText={setRepoSearch}
+                        placeholder={t('github.findRepo')}
+                    />
                 </View>
                 {repos.length > 0 && (
                     <View style={styles.sheetCountRow}>
@@ -799,47 +775,35 @@ const styles = StyleSheet.create((theme) => ({
         marginLeft: 2,
     },
 
-    // Search bar with integrated filter
+    // The search field, and beside it the filter, as tall and as round as the field
     searchContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
         paddingHorizontal: 16,
         paddingBottom: 10,
+    },
+    searchField: {
+        flex: 1,
     },
     scopeFilters: {
         marginTop: -4,
         marginBottom: 2,
     },
-    searchBox: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        borderRadius: 14,
-        paddingLeft: 14,
-        paddingRight: 6,
-        height: 44,
-        gap: 8,
-    },
-    searchTextInput: {
-        flex: 1,
-        ...Typography.default(),
-        fontSize: 14,
-        lineHeight: 18,
-        height: 44,
-        textAlignVertical: 'center',
-        includeFontPadding: false,
-        paddingHorizontal: 0,
-        paddingVertical: 0,
-        margin: 0,
-    },
     filterButton: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 5,
-        paddingHorizontal: 10,
-        paddingVertical: 7,
-        borderRadius: 10,
+        gap: 4,
+        maxWidth: '40%',
+        height: searchFieldMetrics.height,
+        paddingHorizontal: 12,
+        borderRadius: searchFieldMetrics.borderRadius,
+        backgroundColor: theme.colors.surface,
     },
     filterButtonText: {
-        ...Typography.default('semiBold'),
-        fontSize: 12,
+        flexShrink: 1,
+        ...Typography.default(),
+        fontSize: 13,
     },
 
     // Filter popover
@@ -967,14 +931,6 @@ const styles = StyleSheet.create((theme) => ({
     sheetSearchContainer: {
         paddingHorizontal: 16,
         paddingBottom: 10,
-    },
-    sheetSearchBox: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        borderRadius: 12,
-        paddingHorizontal: 14,
-        height: 40,
-        gap: 8,
     },
     repoItem: {
         flexDirection: 'row',

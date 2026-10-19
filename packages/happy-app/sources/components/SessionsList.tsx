@@ -713,10 +713,12 @@ export function SessionsList() {
     // The iOS phone list leads with a search field; the sidebar has its own, and elsewhere the phone
     // header has a search button beside its "+".
     const showsSearchRow = !isTablet && Platform.OS === 'ios';
-    // Without the search field the first card sits under the header, as far from it as from the
-    // sides: the groups' own top padding (8) and this make the cards' side margin (12). The compact
-    // cards already sit further down, on their vertical margin.
-    const listTopPadding = !isTablet && !showsSearchRow && !compactSessionView ? 4 : 0;
+    // Without the search field the list opens right under the header, as the other tabs do: a first
+    // card 16 below it like the settings' first one, the pinned title 16 below it like the inbox's
+    // section titles. The groups bring their own top padding (8), and the pinned one, told it opens
+    // the list, trims its title's to make up the rest.
+    const opensUnderHeader = !isTablet && !showsSearchRow;
+    const listTopPadding = opensUnderHeader && dataWithSelected?.[0]?.type !== 'pinned-sessions' ? 8 : 0;
     const scrollListToTop = React.useCallback(() => {
         listRef.current?.scrollToOffset({ offset: -getVisibleInsets().top, animated: true });
     }, [getVisibleInsets]);
@@ -1034,6 +1036,7 @@ export function SessionsList() {
                         selectedSessionId={selectedId}
                         registerSessionRowRef={registerSessionRowRef}
                         pinned
+                        underHeader={opensUnderHeader}
                     />
                 );
 
@@ -1088,7 +1091,7 @@ export function SessionsList() {
                     />
                 );
         }
-    }, [isTablet, selectedSessionId, dataWithSelected, compactSessionView, registerSessionRowRef, collapsedMachineSections, toggleMachineSection]);
+    }, [isTablet, selectedSessionId, dataWithSelected, compactSessionView, opensUnderHeader, registerSessionRowRef, collapsedMachineSections, toggleMachineSection]);
 
     const isDisconnected = socketStatus.status === 'disconnected' || socketStatus.status === 'error';
     const canStartAnywhere = !isDisconnected && machineGroups.some(group => group.online);

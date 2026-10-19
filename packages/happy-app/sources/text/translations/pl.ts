@@ -2297,7 +2297,6 @@ export const pl: TranslationStructure = {
         addFriend: 'Dodaj do znajomych',
         alreadyFriends: 'Już jesteście znajomymi',
         requestPending: 'Zaproszenie oczekuje',
-        searchInstructions: 'Wprowadź nazwę użytkownika, aby znaleźć przyjaciół',
         searchPlaceholder: 'Wprowadź nazwę użytkownika...',
         searching: 'Szukanie...',
         userNotFound: 'Nie znaleziono użytkownika',

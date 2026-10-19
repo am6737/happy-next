@@ -2275,7 +2275,6 @@ export const zhHans: TranslationStructure = {
         addFriend: '添加好友',
         alreadyFriends: '已是好友',
         requestPending: '请求待处理',
-        searchInstructions: '输入用户名搜索好友',
         searchPlaceholder: '输入用户名...',
         searching: '搜索中...',
         userNotFound: '未找到用户',

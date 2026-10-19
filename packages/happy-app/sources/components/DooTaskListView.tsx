@@ -1,13 +1,11 @@
 import * as React from 'react';
-import { View, Text, FlatList, Pressable, ActivityIndicator, RefreshControl, TextInput, Platform } from 'react-native';
+import { View, Text, FlatList, Pressable, ActivityIndicator, RefreshControl, Platform } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
-import { BottomSheetModal, BottomSheetFlatList, BottomSheetTextInput } from '@gorhom/bottom-sheet';
+import { BottomSheetModal, BottomSheetFlatList } from '@gorhom/bottom-sheet';
 import { AppBottomSheet } from '@/components/AppBottomSheet';
-
-const SheetTextInput = Platform.OS === 'web' ? TextInput : BottomSheetTextInput;
 import { t } from '@/text';
 import { Typography } from '@/constants/Typography';
 import { storage, useDootaskTasks, useDootaskFilters, useDootaskProfile, useDootaskProjects, useDootaskUserCache } from '@/sync/storage';
@@ -17,6 +15,7 @@ import type { DooTaskItem, DooTaskProject } from '@/sync/dootask/types';
 import { useShallow } from 'zustand/react/shallow';
 import { useMainTabBottomPadding } from '@/hooks/useMainTabBottomPadding';
 import { PressHighlight } from '@/components/PressHighlight';
+import { SearchField } from '@/components/SearchField';
 
 /**
  * Format end_at date as countdown or short date (matches DooTask dashboard logic).
@@ -257,16 +256,11 @@ const FilterPanelModal = React.memo(React.forwardRef<BottomSheetModal, FilterPan
             </View>
             {showSearch ? (
                 <View style={styles.pickerSearch}>
-                    <SheetTextInput
-                        style={[styles.pickerSearchInput, {
-                            color: theme.colors.text,
-                            backgroundColor: theme.colors.surface,
-                        }, Platform.OS === 'web' && { outlineStyle: 'none', outline: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
-                        placeholder={t('dootask.searchProjects')}
-                        placeholderTextColor={theme.colors.textSecondary}
+                    <SearchField
+                        inSheet
                         value={searchQuery}
                         onChangeText={handleSearchChange}
-                        autoCorrect={false}
+                        placeholder={t('dootask.searchProjects')}
                     />
                 </View>
             ) : null}
@@ -348,26 +342,14 @@ const FilterBar = React.memo(({ onRefreshTasks }: FilterBarProps) => {
 
     return (
         <View style={styles.filterBar}>
-            <View style={[styles.searchBox, { backgroundColor: theme.colors.surface }]}>
-                <Ionicons name="search" size={16} color={theme.colors.textSecondary} />
-                <TextInput
-                    style={[styles.searchInput, { color: theme.colors.text }, Platform.OS === 'web' && { outlineStyle: 'none', outline: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any]}
-                    placeholder={t('dootask.searchPlaceholder')}
-                    placeholderTextColor={theme.colors.textSecondary}
-                    value={searchText}
-                    onChangeText={handleSearchChange}
-                    onSubmitEditing={() => applySearch(searchText)}
-                    onEndEditing={() => applySearch(searchText)}
-                    returnKeyType="search"
-                    autoCorrect={false}
-                    underlineColorAndroid="transparent"
-                />
-                {searchText ? (
-                    <Pressable onPress={handleClearSearch} hitSlop={8}>
-                        <Ionicons name="close-circle" size={16} color={theme.colors.textSecondary} />
-                    </Pressable>
-                ) : null}
-            </View>
+            <SearchField
+                value={searchText}
+                onChangeText={handleSearchChange}
+                onClear={handleClearSearch}
+                onSubmitEditing={() => applySearch(searchText)}
+                onEndEditing={() => applySearch(searchText)}
+                placeholder={t('dootask.searchPlaceholder')}
+            />
             <View style={styles.filterRow}>
                 {statusOptions.map((opt) => (
                     <Pressable
@@ -664,27 +646,9 @@ export const DooTaskListView = React.memo(() => {
 const ERROR_BANNER_TAB_GAP = 64;
 
 const styles = StyleSheet.create((_theme) => ({
-    filterBar: { paddingVertical: 8, gap: 12 },
-    searchBox: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        borderRadius: 10,
-        paddingHorizontal: 10,
-        height: 36,
-        gap: 6,
-    },
-    searchInput: {
-        flex: 1,
-        ...Typography.default(),
-        fontSize: 14,
-        lineHeight: 18,
-        height: 36,
-        textAlignVertical: 'center',
-        includeFontPadding: false,
-        paddingHorizontal: 0,
-        paddingVertical: 0,
-        margin: 0,
-    },
+    // Its search field sits as far under the header as the session list's does on iOS; elsewhere as
+    // far as the settings' first card.
+    filterBar: { paddingTop: Platform.select({ ios: 12, default: 16 }), paddingBottom: 8, gap: 12 },
     filterRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
     chip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, gap: 4 },
     chipText: { ...Typography.default(), fontSize: 13 },
@@ -748,14 +712,6 @@ const styles = StyleSheet.create((_theme) => ({
     pickerSearch: {
         paddingHorizontal: 20,
         paddingVertical: 8,
-    },
-    pickerSearchInput: {
-        borderRadius: 8,
-        paddingHorizontal: 10,
-        height: 32,
-        fontSize: 14,
-        ...Typography.default(),
-        padding: 0,
     },
     pickerItem: {
         flexDirection: 'row',

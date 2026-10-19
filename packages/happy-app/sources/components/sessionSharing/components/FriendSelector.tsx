@@ -1,7 +1,8 @@
 import * as React from 'react';
-import { View, TextInput, Platform, Pressable } from 'react-native';
-import { BottomSheetModal, BottomSheetFlatList, BottomSheetTextInput } from '@gorhom/bottom-sheet';
+import { View, Pressable } from 'react-native';
+import { BottomSheetModal, BottomSheetFlatList } from '@gorhom/bottom-sheet';
 import { AppBottomSheet } from '@/components/AppBottomSheet';
+import { SearchField } from '@/components/SearchField';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { UserProfile, getDisplayName, getUsernameLabel } from '@/sync/friendTypes';
@@ -13,8 +14,6 @@ import { Text } from '@/components/StyledText';
 import { t } from '@/text';
 import { Typography } from '@/constants/Typography';
 import { layout } from '@/components/layout';
-
-const SheetTextInput = Platform.OS === 'web' ? TextInput : BottomSheetTextInput;
 
 export interface FriendSelectorProps {
     friends: UserProfile[];
@@ -98,19 +97,15 @@ export const FriendSelector = React.memo(React.forwardRef<BottomSheetModal, Frie
 
     const ListHeaderComponent = React.useMemo(() => (
         <View style={styles.alignedWrapper}>
-            <View style={[styles.searchContainer, { backgroundColor: theme.colors.surfaceHigh, borderColor: theme.colors.divider }]}>
-                <SheetTextInput
-                    style={[styles.searchInput, { color: theme.colors.text }, Platform.OS === 'web' && { outlineStyle: 'none' } as any]}
-                    placeholder={t('friends.searchPlaceholder')}
-                    placeholderTextColor={theme.colors.textSecondary}
-                    value={searchQuery}
-                    onChangeText={setSearchQuery}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                />
-            </View>
+            <SearchField
+                inSheet
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                placeholder={t('friends.searchPlaceholder')}
+                style={styles.searchField}
+            />
         </View>
-    ), [searchQuery, theme]);
+    ), [searchQuery]);
 
     const ListFooterComponent = React.useMemo(() => {
         if (!selectedUserId) return null;
@@ -219,21 +214,8 @@ const styles = StyleSheet.create((theme) => ({
         paddingHorizontal: 16,
         alignSelf: 'center',
     },
-    searchContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
+    searchField: {
         marginVertical: 8,
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        borderRadius: 8,
-        borderWidth: 1,
-    },
-    searchInput: {
-        ...Typography.default(),
-        flex: 1,
-        fontSize: 15,
-        lineHeight: 20,
-        padding: 0,
     },
     friendRowContainer: {
         borderRadius: 16,

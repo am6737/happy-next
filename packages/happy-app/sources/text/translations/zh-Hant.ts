@@ -2274,7 +2274,6 @@ export const zhHant: TranslationStructure = {
         addFriend: '新增好友',
         alreadyFriends: '已是好友',
         requestPending: '請求待處理',
-        searchInstructions: '輸入使用者名稱搜尋好友',
         searchPlaceholder: '輸入使用者名稱...',
         searching: '搜尋中...',
         userNotFound: '未找到使用者',

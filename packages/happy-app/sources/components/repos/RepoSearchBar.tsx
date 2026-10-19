@@ -5,10 +5,11 @@ import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { Typography } from '@/constants/Typography';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming } from 'react-native-reanimated';
 import { isRunningOnMac } from '@/utils/platform';
+import { SearchField, searchFieldMetrics } from '@/components/SearchField';
 
 // Under the see-through iOS header the bar sits on the page's grouped background (scrolling with the
-// list, or just below the header), so it draws no band of its own: only the field, a capsule like the
-// filter chips beside it.
+// list, or just below the header), so it draws no band of its own: only the field, as the other
+// pages' search fields sit on theirs.
 const onGroupedBackground = Platform.OS === 'ios' && !isRunningOnMac();
 
 interface RepoSearchBarProps {
@@ -50,25 +51,13 @@ export const RepoSearchBar = React.memo<RepoSearchBarProps>(({ value, onChange, 
 
     return (
         <Animated.View style={[styles.container, onGroupedBackground && styles.containerGrouped, animatedStyle]}>
-            <View style={[styles.inputWrap, onGroupedBackground && styles.inputWrapGrouped]}>
-                <Ionicons name="search" size={15} color={theme.colors.textSecondary} />
-                <TextInput
-                    ref={inputRef}
-                    style={styles.input}
-                    placeholder={placeholder}
-                    placeholderTextColor={theme.colors.input.placeholder}
-                    value={value}
-                    onChangeText={onChange}
-                    autoCorrect={false}
-                    autoCapitalize="none"
-                    returnKeyType="search"
-                />
-                {value.length > 0 ? (
-                    <Pressable onPress={() => onChange('')} hitSlop={8}>
-                        <Ionicons name="close-circle" size={16} color={theme.colors.textSecondary} />
-                    </Pressable>
-                ) : null}
-            </View>
+            <SearchField
+                inputRef={inputRef}
+                value={value}
+                onChangeText={onChange}
+                placeholder={placeholder}
+                style={[styles.field, !onGroupedBackground && styles.fieldOnHeader]}
+            />
             <Pressable
                 onPress={() => {
                     onChange('');
@@ -102,36 +91,18 @@ const stylesheet = StyleSheet.create((theme) => ({
         paddingBottom: 0,
         backgroundColor: 'transparent',
     },
-    inputWrap: {
+    field: {
         flex: 1,
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        paddingHorizontal: 10,
-        paddingVertical: Platform.select({ ios: 7, default: 4 }),
-        borderRadius: 10,
+    },
+    // In the header's band it takes a fill, the header being the cards' colour.
+    fieldOnHeader: {
         backgroundColor: theme.colors.surfaceHighest,
-    },
-    inputWrapGrouped: {
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        borderRadius: 999,
-        borderWidth: 1,
-        borderColor: theme.colors.divider,
-        backgroundColor: theme.colors.surface,
-    },
-    input: {
-        flex: 1,
-        fontSize: 15,
-        color: theme.colors.text,
-        padding: 0,
-        ...Typography.default('regular'),
     },
     cancelBtn: {
         paddingHorizontal: 4,
     },
     cancelText: {
-        fontSize: 15,
+        fontSize: searchFieldMetrics.fontSize,
         color: theme.colors.textLink,
         ...Typography.default('regular'),
     },

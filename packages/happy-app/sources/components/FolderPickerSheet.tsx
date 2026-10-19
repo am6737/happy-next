@@ -1,7 +1,8 @@
 import * as React from 'react';
-import { View, Text, TextInput, ActivityIndicator, Platform, Pressable } from 'react-native';
-import { BottomSheetModal, BottomSheetFlatList, BottomSheetTextInput } from '@gorhom/bottom-sheet';
+import { View, Text, ActivityIndicator, Pressable } from 'react-native';
+import { BottomSheetModal, BottomSheetFlatList } from '@gorhom/bottom-sheet';
 import { AppBottomSheet } from '@/components/AppBottomSheet';
+import { SearchField } from '@/components/SearchField';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { Ionicons } from '@expo/vector-icons';
 import { Typography } from '@/constants/Typography';
@@ -10,8 +11,6 @@ import { machineBash } from '@/sync/ops';
 import * as Clipboard from 'expo-clipboard';
 import { hapticsLight } from '@/components/haptics';
 import { showCopiedToast } from '@/components/Toast';
-
-const SheetTextInput = Platform.OS === 'web' ? TextInput : BottomSheetTextInput;
 
 interface FolderPickerSheetProps {
     machineId: string;
@@ -414,29 +413,16 @@ export const FolderPickerSheet = React.memo(React.forwardRef<BottomSheetModal, F
                 </View>
 
                 {/* Pinned search / path input */}
-                <View style={[headerStyles.searchContainer, { backgroundColor: theme.colors.surface, borderColor: theme.colors.divider }]}>
-                    <Ionicons name="search" size={18} color={theme.colors.textSecondary} />
-                    <SheetTextInput
-                        style={[
-                            headerStyles.searchInput,
-                            { color: theme.colors.text },
-                            Platform.OS === 'web' && { outlineStyle: 'none', outline: 'none', outlineWidth: 0, outlineColor: 'transparent' } as any,
-                        ]}
-                        placeholder={t('newSession.repos.folderPicker.searchPlaceholder')}
-                        placeholderTextColor={theme.colors.textSecondary}
-                        value={search}
-                        onChangeText={setSearch}
-                        onSubmitEditing={handleSearchSubmit}
-                        returnKeyType="go"
-                        autoCapitalize="none"
-                        autoCorrect={false}
-                    />
-                    {search.length > 0 && (
-                        <Pressable onPress={clearSearch} hitSlop={8}>
-                            <Ionicons name="close-circle" size={18} color={theme.colors.textSecondary} />
-                        </Pressable>
-                    )}
-                </View>
+                <SearchField
+                    inSheet
+                    value={search}
+                    onChangeText={setSearch}
+                    onClear={clearSearch}
+                    onSubmitEditing={handleSearchSubmit}
+                    returnKeyType="go"
+                    placeholder={t('newSession.repos.folderPicker.searchPlaceholder')}
+                    style={headerStyles.searchField}
+                />
 
                 <BottomSheetFlatList
                     data={filtered}
@@ -477,23 +463,9 @@ const headerStyles = StyleSheet.create((theme) => ({
         fontSize: 13,
         textAlign: 'center',
     },
-    searchContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
+    searchField: {
         marginHorizontal: theme.margins.lg,
         marginVertical: theme.margins.md,
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        borderRadius: theme.borderRadius.md,
-        borderWidth: 1,
-        gap: 8,
-    },
-    searchInput: {
-        ...Typography.default(),
-        flex: 1,
-        fontSize: 15,
-        lineHeight: 20,
-        padding: 0,
     },
 }));
 

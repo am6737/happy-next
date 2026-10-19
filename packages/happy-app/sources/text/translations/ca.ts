@@ -2273,7 +2273,6 @@ export const ca: TranslationStructure = {
         addFriend: 'Afegir amic',
         alreadyFriends: 'Ja sou amics',
         requestPending: 'Sol·licitud pendent',
-        searchInstructions: 'Introdueix un nom d\'usuari per buscar amics',
         searchPlaceholder: 'Introdueix nom d\'usuari...',
         searching: 'Buscant...',
         userNotFound: 'Usuari no trobat',

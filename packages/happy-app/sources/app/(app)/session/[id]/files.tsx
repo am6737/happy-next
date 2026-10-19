@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { View, ActivityIndicator, Platform, TextInput, Pressable } from 'react-native';
+import { View, ActivityIndicator, Platform, Pressable } from 'react-native';
 import { t } from '@/text';
 import { useRoute } from '@react-navigation/native';
 import { useRouter, Stack } from 'expo-router';
@@ -9,6 +9,7 @@ import { Text } from '@/components/StyledText';
 import { Item } from '@/components/Item';
 import { ItemList } from '@/components/ItemList';
 import { Typography } from '@/constants/Typography';
+import { SearchField } from '@/components/SearchField';
 import { getGitStatusFiles, GitFileStatus, GitStatusFiles } from '@/sync/gitStatusFiles';
 import { useSession, getSession } from '@/sync/storage';
 import { sessionBash } from '@/sync/ops';
@@ -419,33 +420,14 @@ export default function FilesScreen() {
                     borderBottomWidth: Platform.select({ ios: StyleSheet.hairlineWidth, default: 1 }),
                     borderBottomColor: theme.colors.divider
                 }}>
-                    <View style={{
-                        flexDirection: 'row',
-                        alignItems: 'center',
+                    <SearchField
+                        value={searchQuery}
+                        onChangeText={setSearchQuery}
+                        placeholder={t('files.searchChangesPlaceholder')}
                         // In the list (iOS) it sits on the grouped background, which the input colour
                         // barely differs from; it takes the cards' colour there instead.
-                        backgroundColor: useNativeSoftHeader ? theme.colors.surface : theme.colors.input.background,
-                        borderRadius: 10,
-                        paddingHorizontal: 12,
-                        paddingVertical: 8
-                    }}>
-                        <Octicons name="search" size={16} color={theme.colors.textSecondary} style={{ marginRight: 8 }} />
-                        <TextInput
-                            value={searchQuery}
-                            onChangeText={setSearchQuery}
-                            placeholder={t('files.searchChangesPlaceholder')}
-                            style={{
-                                flex: 1,
-                                fontSize: 16,
-                                height: 24,
-                                color: theme.colors.text,
-                                ...Typography.default()
-                            }}
-                            placeholderTextColor={theme.colors.input.placeholder}
-                            autoCapitalize="none"
-                            autoCorrect={false}
-                        />
-                    </View>
+                        style={!useNativeSoftHeader && { backgroundColor: theme.colors.input.background }}
+                    />
                 </View>
             )}
 

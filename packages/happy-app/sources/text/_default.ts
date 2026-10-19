@@ -2288,7 +2288,6 @@ export const en = {
         addFriend: 'Add Friend',
         alreadyFriends: 'Already Friends',
         requestPending: 'Request Pending',
-        searchInstructions: 'Enter a username to search for friends',
         searchPlaceholder: 'Enter username...',
         searching: 'Searching...',
         userNotFound: 'User not found',

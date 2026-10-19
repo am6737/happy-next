@@ -6,11 +6,10 @@ import { Text } from '@/components/StyledText';
 import { Typography } from '@/constants/Typography';
 import { t } from '@/text';
 import { useRouter } from 'expo-router';
+import { searchFieldMetrics } from './SearchField';
 
-const FIELD_HEIGHT = Platform.select({ ios: 36, default: 40 });
-
-// A search field at the top of the phone session list. Not an input: a tap opens the search page,
-// the phone's counterpart of the sidebar's command palette.
+// A search field at the top of the phone session list, drawn as `SearchField`. Not an input: a tap
+// opens the search page, the phone's counterpart of the sidebar's command palette.
 export const SessionsSearchField = React.memo(() => {
     const styles = stylesheet;
     const { theme } = useUnistyles();
@@ -24,7 +23,7 @@ export const SessionsSearchField = React.memo(() => {
                 onPress={() => router.push('/search')}
                 style={({ pressed }) => [styles.field, pressed && styles.fieldPressed]}
             >
-                <Ionicons name="search" size={17} color={theme.colors.textSecondary} />
+                <Ionicons name="search" size={searchFieldMetrics.iconSize} color={theme.colors.textSecondary} />
                 <Text style={styles.placeholder} numberOfLines={1}>{t('sessionScope.search')}</Text>
             </Pressable>
         </View>
@@ -41,12 +40,12 @@ const stylesheet = StyleSheet.create((theme) => ({
         backgroundColor: theme.colors.groupped.background,
     },
     field: {
-        height: FIELD_HEIGHT,
+        height: searchFieldMetrics.height,
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 6,
-        paddingHorizontal: Platform.select({ ios: 8, default: 16 }),
-        borderRadius: Platform.select({ ios: 10, default: FIELD_HEIGHT / 2 }),
+        gap: searchFieldMetrics.gap,
+        paddingHorizontal: searchFieldMetrics.paddingHorizontal,
+        borderRadius: searchFieldMetrics.borderRadius,
         backgroundColor: theme.colors.surface,
     },
     fieldPressed: {
@@ -54,7 +53,7 @@ const stylesheet = StyleSheet.create((theme) => ({
     },
     placeholder: {
         flex: 1,
-        fontSize: Platform.select({ ios: 17, default: 15 }),
+        fontSize: searchFieldMetrics.fontSize,
         color: theme.colors.textSecondary,
         ...Typography.default(),
     },

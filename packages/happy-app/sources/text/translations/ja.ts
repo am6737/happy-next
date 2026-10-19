@@ -2276,7 +2276,6 @@ export const ja: TranslationStructure = {
         addFriend: '友達を追加',
         alreadyFriends: '既に友達です',
         requestPending: 'リクエスト保留中',
-        searchInstructions: '友達を検索するにはユーザー名を入力してください',
         searchPlaceholder: 'ユーザー名を入力...',
         searching: '検索中...',
         userNotFound: 'ユーザーが見つかりません',

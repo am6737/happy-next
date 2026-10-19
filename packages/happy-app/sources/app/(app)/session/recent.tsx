@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, FlatList, Pressable, ActivityIndicator, TextInput } from 'react-native';
+import { View, FlatList, Pressable, ActivityIndicator } from 'react-native';
 import { Image } from 'expo-image';
 import { Text } from '@/components/StyledText';
 import { useAllSessions, useAllMachines, storage } from '@/sync/storage';
@@ -22,6 +22,7 @@ import { useLocalSearchParams } from 'expo-router';
 import { SessionHistoryCard } from '@/components/SessionHistoryCard';
 import { useSessionFork } from '@/hooks/useSessionFork';
 import { compareSessionsByLastMessage, sessionLastMessageAt } from '@/utils/sessionLastMessageAt';
+import { SearchField } from '@/components/SearchField';
 
 const mmkv = new MMKV();
 const SELECTED_MACHINE_KEY = 'session-history-selected-machine';
@@ -97,24 +98,6 @@ const styles = StyleSheet.create((theme) => ({
         paddingHorizontal: 16,
         paddingTop: 8,
         paddingBottom: 4,
-    },
-    searchInputWrapper: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: theme.colors.surface,
-        borderRadius: 10,
-        paddingHorizontal: 10,
-    },
-    searchInput: {
-        flex: 1,
-        fontSize: 15,
-        lineHeight: 20,
-        height: 36,
-        color: theme.colors.text,
-        ...Typography.default(),
-    },
-    clearButton: {
-        padding: 4,
     },
     filterRow: {
         flexDirection: 'row',
@@ -446,23 +429,11 @@ function SessionHistory() {
     const searchHeader = React.useMemo(() => (
         <View>
             <View style={styles.searchContainer}>
-                <View style={styles.searchInputWrapper}>
-                    <Ionicons name="search" size={16} color={theme.colors.textSecondary} style={{ marginRight: 6 }} />
-                    <TextInput
-                        style={styles.searchInput}
-                        placeholder={t('sessionHistory.searchPlaceholder')}
-                        placeholderTextColor={theme.colors.textSecondary}
-                        value={searchQuery}
-                        onChangeText={setSearchQuery}
-                        autoCorrect={false}
-                        autoCapitalize="none"
-                    />
-                    {searchQuery.length > 0 && (
-                        <Pressable style={styles.clearButton} onPress={() => setSearchQuery('')}>
-                            <Ionicons name="close-circle" size={18} color={theme.colors.textSecondary} />
-                        </Pressable>
-                    )}
-                </View>
+                <SearchField
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                    placeholder={t('sessionHistory.searchPlaceholder')}
+                />
             </View>
             <View style={styles.filterRow}>
                 <NativeMenu

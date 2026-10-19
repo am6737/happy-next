@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { View, Text, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform, FlatList } from 'react-native';
+import { View, Text, ActivityIndicator, KeyboardAvoidingView, Platform, FlatList } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
 import { UserSearchResult } from '@/components/UserSearchResult';
 import { searchUsersByUsername, sendFriendRequest } from '@/sync/apiFriends';
@@ -15,6 +15,8 @@ import { useSearch } from '@/hooks/useSearch';
 import { useProfile } from '@/sync/storage';
 import { sync } from '@/sync/sync';
 import { isRunningOnMac } from '@/utils/platform';
+import { SearchField } from '@/components/SearchField';
+import { layout } from '@/components/layout';
 
 export default function SearchFriendsScreen() {
     const { credentials } = useAuth();
@@ -99,30 +101,15 @@ export default function SearchFriendsScreen() {
                     </ItemGroup>
                 ) : (
                     <>
-                        <ItemGroup
-                            title={t('friends.searchInstructions')}
-                            style={styles.searchSection}
-                        >
-                            <View style={styles.searchContainer}>
-                                <TextInput
-                                    style={styles.searchInput}
-                                    placeholder={t('friends.searchPlaceholder')}
-                                    placeholderTextColor="#999999"
-                                    value={searchQuery}
-                                    onChangeText={setSearchQuery}
-                                    autoCapitalize="none"
-                                    autoCorrect={false}
-                                    returnKeyType="search"
-                                    editable={!processingUserId}
-                                />
-
-                                {isSearching && (
-                                    <View style={styles.searchingIndicator}>
-                                        <ActivityIndicator size="small" color="#2BACCC" />
-                                    </View>
-                                )}
-                            </View>
-                        </ItemGroup>
+                        <View style={styles.searchSection}>
+                            <SearchField
+                                value={searchQuery}
+                                onChangeText={setSearchQuery}
+                                placeholder={t('friends.searchPlaceholder')}
+                                editable={!processingUserId}
+                                loading={isSearching}
+                            />
+                        </View>
 
                         <ItemGroup
                             style={styles.resultsGroup}
@@ -175,30 +162,14 @@ const styles = StyleSheet.create((theme) => ({
         flex: 1,
         backgroundColor: theme.colors.groupped.background,
     },
+    // The field heads the page, as on the other searchable pages, its instructions under it as a
+    // group's footer would be.
     searchSection: {
-        marginBottom: 16,
-    },
-    searchContainer: {
+        width: '100%',
+        maxWidth: layout.maxWidth,
+        alignSelf: 'center',
+        paddingTop: Platform.select({ ios: 12, default: 16 }),
         paddingHorizontal: 16,
-        paddingVertical: 8,
-        position: 'relative',
-    },
-    searchInput: {
-        backgroundColor: theme.colors.surface,
-        borderWidth: 1,
-        borderColor: theme.colors.divider,
-        borderRadius: 12,
-        paddingHorizontal: 16,
-        paddingVertical: 16,
-        fontSize: 16,
-        color: theme.colors.text,
-    },
-    searchingIndicator: {
-        position: 'absolute',
-        right: 32,
-        top: 0,
-        bottom: 0,
-        justifyContent: 'center',
     },
     resultsGroup: {
         marginBottom: 16,

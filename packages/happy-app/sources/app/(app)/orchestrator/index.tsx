@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { View, FlatList, Pressable, ActivityIndicator, RefreshControl, Platform, TextInput } from 'react-native';
+import { View, FlatList, Pressable, ActivityIndicator, RefreshControl, Platform } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { Text } from '@/components/StyledText';
@@ -20,6 +20,7 @@ import { Typography } from '@/constants/Typography';
 import { t } from '@/text';
 import { isRunningOnMac } from '@/utils/platform';
 import { softHeaderOptions } from '@/components/navigation/softHeader';
+import { SearchField, searchFieldMetrics } from '@/components/SearchField';
 import { useSession } from '@/sync/storage';
 import { getSessionName } from '@/utils/sessionUtils';
 
@@ -41,37 +42,17 @@ const stylesheet = StyleSheet.create((theme) => ({
         paddingBottom: 16,
     },
     // The search box and the filter chip are DooTask's: white on the grouped background, no border
-    searchBox: {
+    searchField: {
         flex: 1,
-        flexDirection: 'row',
-        alignItems: 'center',
-        borderRadius: 10,
-        paddingHorizontal: 10,
-        height: 36,
-        gap: 6,
-        backgroundColor: theme.colors.surface,
-    },
-    searchInput: {
-        flex: 1,
-        ...Typography.default(),
-        fontSize: 14,
-        lineHeight: 18,
-        height: 36,
-        textAlignVertical: 'center',
-        includeFontPadding: false,
-        paddingHorizontal: 0,
-        paddingVertical: 0,
-        margin: 0,
-        color: theme.colors.text,
     },
     filterChip: {
         flexDirection: 'row',
         alignItems: 'center',
         maxWidth: '45%',
-        // As tall and as round as the search box beside it
-        height: 36,
+        // As tall and as round as the search field beside it
+        height: searchFieldMetrics.height,
         paddingHorizontal: 12,
-        borderRadius: 10,
+        borderRadius: searchFieldMetrics.borderRadius,
         gap: 4,
         backgroundColor: theme.colors.surface,
     },
@@ -385,25 +366,12 @@ export default function OrchestratorRunsScreen() {
 
     const filterBar = (
         <View style={styles.filterBar}>
-            <View style={styles.searchBox}>
-                <Ionicons name="search" size={16} color={theme.colors.textSecondary} />
-                <TextInput
-                    style={[styles.searchInput, Platform.OS === 'web' && { outlineStyle: 'none' } as any]}
-                    placeholder={t('settings.orchestratorSearchPlaceholder')}
-                    placeholderTextColor={theme.colors.textSecondary}
-                    value={searchText}
-                    onChangeText={setSearchText}
-                    returnKeyType="search"
-                    autoCorrect={false}
-                    autoCapitalize="none"
-                    underlineColorAndroid="transparent"
-                />
-                {searchText ? (
-                    <Pressable onPress={() => setSearchText('')} hitSlop={8}>
-                        <Ionicons name="close-circle" size={16} color={theme.colors.textSecondary} />
-                    </Pressable>
-                ) : null}
-            </View>
+            <SearchField
+                value={searchText}
+                onChangeText={setSearchText}
+                placeholder={t('settings.orchestratorSearchPlaceholder')}
+                style={styles.searchField}
+            />
             <Pressable
                 style={[styles.filterChip, hasSheetFilters && styles.filterChipActive]}
                 onPress={() => filterSheetRef.current?.present()}
