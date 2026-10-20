@@ -14,6 +14,8 @@ export type ChatScrollViewProps = ScrollViewProps & {
     composerInset?: SharedValue<number>;
     /** The list scrolling in it, told how much of its bottom the composer and the keyboard cover. */
     listRef: React.RefObject<Pick<LegendListRef, 'reportContentInset'> | null>;
+    /** Called after each bottom inset the list is told of, once the list has taken it in. */
+    onBottomInsetReported?: () => void;
 };
 
 /** How much of the keyboard's height `ChatScrollView` leaves out of the lift (the part below the composer's padding). */
@@ -27,7 +29,7 @@ function keyboardOffset(bottomInset: number): number {
  * drawn over it) stays put while the composer rides the keyboard.
  */
 export const ChatScrollView = React.forwardRef<React.ElementRef<typeof KeyboardChatScrollView>, ChatScrollViewProps>(
-    ({ bottomInset, topInset = 0, composerInset, listRef, ...props }, ref) => {
+    ({ bottomInset, topInset = 0, composerInset, listRef, onBottomInsetReported, ...props }, ref) => {
         // The list only reads the insets off scroll events otherwise, so until the first one it
         // measures its end as if the composer took no room, and the last message ends under it.
         // The reported inset replaces the native one, so it has to take in the keyboard too, or
@@ -46,8 +48,11 @@ export const ChatScrollView = React.forwardRef<React.ElementRef<typeof KeyboardC
             [offset],
         );
         const reportBottomInset = React.useCallback(
-            (bottom: number) => listRef.current?.reportContentInset({ bottom }),
-            [listRef],
+            (bottom: number) => {
+                listRef.current?.reportContentInset({ bottom });
+                onBottomInsetReported?.();
+            },
+            [listRef, onBottomInsetReported],
         );
         useAnimatedReaction(
             () => (composerInset?.value ?? 0) + keyboardLift.value,

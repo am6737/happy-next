@@ -740,7 +740,31 @@ const ChatListInternal = React.memo((props: {
     // row keeps its height meanwhile: showing it later must not move the rows under it.
     const [readySessionId, setReadySessionId] = useState<string | null>(null);
     const listReady = readySessionId === props.sessionId;
-    const handleListReady = useCallback(() => setReadySessionId(props.sessionId), [props.sessionId]);
+
+    // The end can move after the list has landed on it without anything making the list follow: once
+    // its initial scroll is done, a changed bottom inset (the composer measuring in) moves the end but
+    // not the scroll, and the follow only runs when content changes. A reply streaming in hides that,
+    // since every line it grows re-follows; a chat ending on a folded running line never grows, and was
+    // left with its last row under the composer. So while the reader holds on to the end, a new inset
+    // (and the list becoming ready) lands it there again — a no-op when it is already, as it is after
+    // the keyboard's native lift.
+    // Not before the list is ready: until then its own initial scroll to the end is in charge.
+    const listReadyRef = useRef(false);
+    const followEndIfStuck = useCallback(() => {
+        if (!listReadyRef.current) return;
+        requestAnimationFrame(() => {
+            const list = listRef.current;
+            if (!list || !stickToEnd.isStuck()) return;
+            const state = list.getState();
+            if (state.scrollLength <= 0 || state.contentLength - state.scroll - state.scrollLength <= 1) return;
+            void list.scrollToEnd(chatScrollToEndOptions(state));
+        });
+    }, [stickToEnd.isStuck]);
+    const handleListReady = useCallback(() => {
+        listReadyRef.current = true;
+        setReadySessionId(props.sessionId);
+        followEndIfStuck();
+    }, [props.sessionId, followEndIfStuck]);
 
     // A prompt landing as the newest message — sent from here, an option tapped, or another device —
     // lands at the end for a reader following it, and for one resting near it even if their last drag
@@ -775,8 +799,8 @@ const ChatListInternal = React.memo((props: {
     const listHeaderSize = listTopInset + LIST_TOP_GAP + (showLoadOlder ? LOAD_OLDER_ROW_HEIGHT : 0);
 
     const renderScrollComponent = React.useCallback(
-        (scrollProps: ScrollViewProps) => <ChatScrollView {...scrollProps} bottomInset={keyboardBottomInset} topInset={listTopInset} composerInset={props.composerInset} listRef={listRef} />,
-        [keyboardBottomInset, listTopInset, props.composerInset],
+        (scrollProps: ScrollViewProps) => <ChatScrollView {...scrollProps} bottomInset={keyboardBottomInset} topInset={listTopInset} composerInset={props.composerInset} listRef={listRef} onBottomInsetReported={followEndIfStuck} />,
+        [keyboardBottomInset, listTopInset, props.composerInset, followEndIfStuck],
     );
 
     // Keeps the controls floating over the list's bottom edge above the keyboard and the composer.

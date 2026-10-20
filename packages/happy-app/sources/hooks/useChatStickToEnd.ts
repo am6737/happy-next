@@ -75,6 +75,8 @@ export function useChatStickToEnd(thresholdPx: number) {
     }, [settle]);
 
     const stick = useCallback(() => update(true), [update]);
+    // Read in callbacks that run outside a render, where `stuck` may be a commit behind.
+    const isStuck = useCallback(() => stuckRef.current, []);
     const release = useCallback(() => update(false), [update]);
     // Takes hold again only if the list rests within the threshold — for events (a prompt being
     // sent) that should follow a reader who drifted a little, but not one reading history.
@@ -84,5 +86,5 @@ export function useChatStickToEnd(thresholdPx: number) {
         return true;
     }, [thresholdPx, update]);
 
-    return { stuck, onScroll, onScrollBeginDrag, onScrollEndDrag, onMomentumScrollBegin, onMomentumScrollEnd, stick, release, stickIfNear };
+    return { stuck, isStuck, onScroll, onScrollBeginDrag, onScrollEndDrag, onMomentumScrollBegin, onMomentumScrollEnd, stick, release, stickIfNear };
 }
