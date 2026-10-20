@@ -33,9 +33,6 @@ const styles = StyleSheet.create((theme) => ({
         alignItems: 'center',
         padding: 24,
     },
-    emptyIcon: {
-        marginBottom: 16,
-    },
     emptyTitle: {
         fontSize: 20,
         ...Typography.default('semiBold'),
@@ -290,7 +287,7 @@ export const InboxView = React.memo(({}: InboxViewProps) => {
                         <Image
                             source={require('@/assets/images/brutalist/Brutalism 10.png')}
                             contentFit="contain"
-                            style={[{ width: 64, height: 64 }, styles.emptyIcon]}
+                            style={{ width: 64, height: 64, marginBottom: 16 }}
                             tintColor={theme.colors.textSecondary}
                         />
                         <Text style={styles.emptyTitle}>{t('inbox.emptyTitle')}</Text>

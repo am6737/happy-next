@@ -59,7 +59,7 @@ function NotAuthenticated() {
                 <Image
                     source={theme.dark ? require('@/assets/images/logotype-light.svg') : require('@/assets/images/logotype-dark.svg')}
                     contentFit="contain"
-                    style={styles.logo}
+                    style={{ width: 250, height: 75 }}
                 />
                 <Text style={styles.title}>
                     {welcomeTitle}
@@ -119,7 +119,7 @@ function NotAuthenticated() {
                     <Image
                         source={theme.dark ? require('@/assets/images/logotype-light.svg') : require('@/assets/images/logotype-dark.svg')}
                         contentFit="contain"
-                        style={styles.logo}
+                        style={{ width: 250, height: 75 }}
                     />
                 </View>
                 <View style={styles.landscapeContentSection}>
@@ -194,10 +194,6 @@ const styles = StyleSheet.create((theme) => ({
         maxWidth: 360,
         paddingHorizontal: 32,
         alignItems: 'center',
-    },
-    logo: {
-        width: 250,
-        height: 75,
     },
     title: {
         marginTop: 24,

@@ -105,11 +105,6 @@ const styles = StyleSheet.create((theme) => ({
         alignItems: 'center',
         justifyContent: 'center',
     },
-    emptyDetailLogo: {
-        width: 92,
-        height: 92,
-        opacity: 0.11,
-    },
     titleContainer: {
         alignItems: 'center',
         justifyContent: 'center',
@@ -649,7 +644,7 @@ export const MainView = React.memo(({ variant }: MainViewProps) => {
                             ? require('@/assets/images/logo-white.svg')
                             : require('@/assets/images/logo-black.svg')}
                         contentFit="contain"
-                        style={styles.emptyDetailLogo}
+                        style={{ width: 92, height: 92, opacity: 0.11 }}
                     />
                 </View>
             </>
