@@ -343,6 +343,8 @@ interface ActiveSessionsGroupProps {
     // The pinned card opens the list right under the header: its title sits as far below it as the
     // inbox's section titles.
     underHeader?: boolean;
+    // The phone's "All machines" view: a project on each machine is a card of its own, naming it.
+    byMachine?: boolean;
 }
 
 function PinnedSessionsHeader({ underHeader }: { underHeader?: boolean }) {
@@ -497,10 +499,10 @@ function ProjectSectionHeader({
 }
 
 
-export function ActiveSessionsGroup({ sessions, selectedSessionId, registerSessionRowRef, shared, pinned, underHeader }: ActiveSessionsGroupProps) {
+export function ActiveSessionsGroup({ sessions, selectedSessionId, registerSessionRowRef, shared, pinned, underHeader, byMachine }: ActiveSessionsGroupProps) {
     const styles = stylesheet;
     const router = useRouter();
-    const projectGroups = useSessionProjectGroups(sessions);
+    const projectGroups = useSessionProjectGroups(sessions, { byMachine });
     const { collapsedGroups, toggleGroup } = useCollapsedSessionProjectGroups(projectGroups, selectedSessionId);
 
     if (pinned) {
@@ -557,7 +559,7 @@ export function ActiveSessionsGroup({ sessions, selectedSessionId, registerSessi
                 } : undefined;
 
                 return (
-                    <View key={projectPath} style={[styles.projectCard, styles.projectCardWithHeader]}>
+                    <View key={collapseKey} style={[styles.projectCard, styles.projectCardWithHeader]}>
                         <ProjectSectionHeader
                             projectGroup={projectGroup}
                             collapsed={!!collapsedGroups[collapseKey]}

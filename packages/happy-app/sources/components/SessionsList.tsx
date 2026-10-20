@@ -550,6 +550,8 @@ export function SessionsList() {
     // The sidebar (tablet / desktop / wide web) switches machines from the rail at its left edge
     // (see SidebarView); there "All machines" lists every machine with sessions as its own section.
     const groupByMachine = isTablet && switchable && activeTab === 'all';
+    // The phone's "All machines" view mixes the machines' projects, so each card names its machine.
+    const projectsByMachine = !isTablet && switchable && activeTab === 'all';
     const compactSessionView = useCompactSessionView();
     const router = useRouter();
     const { theme } = useUnistyles();
@@ -1016,6 +1018,7 @@ export function SessionsList() {
                         sessions={item.sessions}
                         selectedSessionId={selectedId}
                         registerSessionRowRef={registerSessionRowRef}
+                        byMachine={projectsByMachine}
                     />
                 );
 
@@ -1091,7 +1094,7 @@ export function SessionsList() {
                     />
                 );
         }
-    }, [isTablet, selectedSessionId, dataWithSelected, compactSessionView, opensUnderHeader, registerSessionRowRef, collapsedMachineSections, toggleMachineSection]);
+    }, [isTablet, selectedSessionId, dataWithSelected, compactSessionView, opensUnderHeader, registerSessionRowRef, collapsedMachineSections, toggleMachineSection, projectsByMachine]);
 
     const isDisconnected = socketStatus.status === 'disconnected' || socketStatus.status === 'error';
     const canStartAnywhere = !isDisconnected && machineGroups.some(group => group.online);

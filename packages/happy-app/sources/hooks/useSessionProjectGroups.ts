@@ -27,14 +27,15 @@ export function getSessionProjectCollapseKey(projectPath: string, machineId?: st
     return machineId ? `machine:${encodeURIComponent(machineId)}:${path}` : path;
 }
 
-export function useSessionProjectGroups(sessions: Session[]): SessionProjectGroup[] {
+// By machine (the phone's "All machines" view), the same path on two machines is two projects.
+export function useSessionProjectGroups(sessions: Session[], { byMachine = false }: { byMachine?: boolean } = {}): SessionProjectGroup[] {
     const machines = useAllMachines();
     const machinesMap = React.useMemo(() => {
         const map: Record<string, Machine> = {};
         for (const machine of machines) map[machine.id] = machine;
         return map;
     }, [machines]);
-    const projectLabel = useSessionProjectLabels(sessions);
+    const projectLabel = useSessionProjectLabels(sessions, { byMachine });
 
     return React.useMemo(() => {
         const groups = new Map<string, SessionProjectGroup>();
@@ -48,7 +49,8 @@ export function useSessionProjectGroups(sessions: Session[]): SessionProjectGrou
                 || machine?.metadata?.host
                 || (machineId !== unknownText ? machineId : `<${unknownText}>`);
 
-            let projectGroup = groups.get(projectPath);
+            const groupKey = byMachine ? `${projectPath}\0${machineId}` : projectPath;
+            let projectGroup = groups.get(groupKey);
             if (!projectGroup) {
                 projectGroup = {
                     path: projectPath,
@@ -57,7 +59,7 @@ export function useSessionProjectGroups(sessions: Session[]): SessionProjectGrou
                     machines: new Map(),
                     sessions: [],
                 };
-                groups.set(projectPath, projectGroup);
+                groups.set(groupKey, projectGroup);
             }
 
             let machineGroup = projectGroup.machines.get(machineId);
@@ -82,10 +84,13 @@ export function useSessionProjectGroups(sessions: Session[]): SessionProjectGrou
         }
 
         // By name, whether full paths are shown or not, so switching between them leaves the order be.
-        const names = projectLabels(Array.from(groups.keys()));
+        // By machine, the same project on several machines sits together, its machines by name.
+        const names = projectLabels(Array.from(groups.values(), group => group.path));
+        const machineName = (group: SessionProjectGroup) => group.machines.values().next().value?.machineName ?? '';
         return Array.from(groups.values()).sort((a, b) => names.get(a.path)!.name
-            .localeCompare(names.get(b.path)!.name, undefined, { sensitivity: 'base' }) || a.path.localeCompare(b.path));
-    }, [sessions, machinesMap, projectLabel]);
+            .localeCompare(names.get(b.path)!.name, undefined, { sensitivity: 'base' }) || a.path.localeCompare(b.path)
+            || machineName(a).localeCompare(machineName(b)));
+    }, [sessions, machinesMap, projectLabel, byMachine]);
 }
 
 export function useCollapsedSessionProjectGroups(

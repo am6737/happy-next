@@ -11,6 +11,9 @@ import { t } from '@/text';
  * has, what tells them apart: their machine if each is on another one, else their parent directory. Only the list's own sessions count, so a name grows a
  * detail only next to the one it could be mistaken for. With the "show full project paths" setting,
  * the full path instead.
+ *
+ * By machine (the phone's "All machines" view), each project on each machine is one of its own and
+ * always names its machine; the parent directory then tells apart only same-named projects on one machine.
  */
 
 export type SessionProjectLabel = {
@@ -21,7 +24,7 @@ export type SessionProjectLabel = {
 export type SessionProjectLabeler = (session: Session) => SessionProjectLabel;
 
 /** Labels for the projects of these sessions, the list they're shown in. */
-export function useSessionProjectLabels(sessions: readonly Session[]): SessionProjectLabeler {
+export function useSessionProjectLabels(sessions: readonly Session[], { byMachine = false }: { byMachine?: boolean } = {}): SessionProjectLabeler {
     const showFullPath = useSetting('showFullProjectPath');
     const machines = useAllMachines();
 
@@ -44,7 +47,32 @@ export function useSessionProjectLabels(sessions: readonly Session[]): SessionPr
         }
 
         const labels = new Map<string, SessionProjectLabel>();
-        if (showFullPath) {
+        if (byMachine) {
+            const machineNames = new Map(machineNamesKey.split('\n').map(line => line.split('\0') as [string, string]));
+            const displaysByMachine = new Map<string, string[]>();
+            for (const project of projects.values()) {
+                for (const machineId of project.machineIds.size ? project.machineIds : ['']) {
+                    displaysByMachine.set(machineId, [...(displaysByMachine.get(machineId) ?? []), project.display]);
+                }
+            }
+            const byDisplayOnMachine = new Map(Array.from(displaysByMachine, ([machineId, displays]) => [machineId, projectLabels(displays)]));
+            for (const [path, project] of projects) {
+                for (const machineId of project.machineIds.size ? project.machineIds : ['']) {
+                    const label = byDisplayOnMachine.get(machineId)!.get(project.display)!;
+                    const detail = showFullPath
+                        ? [machineId && (machineNames.get(machineId) ?? machineId)]
+                        : [
+                            label.worktree && `${t('sessionInfo.worktree.title')} ${label.worktree}`,
+                            label.parent,
+                            machineId && (machineNames.get(machineId) ?? machineId),
+                        ];
+                    labels.set(`${path}\0${machineId}`, {
+                        name: showFullPath ? project.display : label.name,
+                        detail: detail.filter(Boolean).join(' · ') || undefined,
+                    });
+                }
+            }
+        } else if (showFullPath) {
             for (const [path, project] of projects) labels.set(path, { name: project.display });
         } else {
             const machineNames = new Map(machineNamesKey.split('\n').map(line => line.split('\0') as [string, string]));
@@ -80,8 +108,10 @@ export function useSessionProjectLabels(sessions: readonly Session[]): SessionPr
             }
         }
 
-        return (session: Session) => labels.get(session.metadata?.path ?? '') ?? { name: getSessionSubtitle(session) };
-    }, [projectsKey, machineNamesKey, showFullPath]);
+        return (session: Session) => labels.get(byMachine
+            ? `${session.metadata?.path ?? ''}\0${session.metadata?.machineId ?? ''}`
+            : session.metadata?.path ?? '') ?? { name: getSessionSubtitle(session) };
+    }, [projectsKey, machineNamesKey, showFullPath, byMachine]);
 }
 
 /** The labeler of the list a row is in; one alone names a project by itself. */

@@ -312,6 +312,8 @@ interface ActiveSessionsGroupProps {
     // The pinned card opens the list right under the header: its title sits as far below it as the
     // inbox's section titles.
     underHeader?: boolean;
+    // The phone's "All machines" view: a project on each machine is a card of its own, naming it.
+    byMachine?: boolean;
 }
 
 function PinnedSessionsHeader({ underHeader }: { underHeader?: boolean }) {
@@ -462,9 +464,9 @@ function ProjectSectionHeader({
 }
 
 
-export function ActiveSessionsGroupCompact({ sessions, selectedSessionId, registerSessionRowRef, shared, pinned, underHeader }: ActiveSessionsGroupProps) {
+export function ActiveSessionsGroupCompact({ sessions, selectedSessionId, registerSessionRowRef, shared, pinned, underHeader, byMachine }: ActiveSessionsGroupProps) {
     const styles = stylesheet;
-    const projectGroups = useSessionProjectGroups(sessions);
+    const projectGroups = useSessionProjectGroups(sessions, { byMachine });
     const { collapsedGroups, toggleGroup } = useCollapsedSessionProjectGroups(projectGroups, selectedSessionId);
     // Stable, so folding one project does not re-render the others.
     const toggleGroupRef = React.useRef(toggleGroup);
@@ -496,7 +498,7 @@ export function ActiveSessionsGroupCompact({ sessions, selectedSessionId, regist
         <View style={styles.container}>
             {projectGroups.map((projectGroup) => (
                 <ProjectSection
-                    key={projectGroup.path}
+                    key={projectGroup.collapseKey}
                     projectGroup={projectGroup}
                     collapsed={!!collapsedGroups[projectGroup.collapseKey]}
                     onToggle={handleToggleGroup}
