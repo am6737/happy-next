@@ -51,6 +51,15 @@ const MODEL_MODES_BY_PROVIDER: Record<string, readonly string[]> = {
     codex: CODEX_MODEL_MODES,
     gemini: GEMINI_MODEL_MODES,
 };
+const MODEL_PROVIDER_PREFIXES: Record<ProviderName, readonly string[]> = {
+    claude: ['gpt-', 'gemini-'],
+    codex: ['claude-', 'gemini-'],
+    gemini: ['claude-', 'gpt-'],
+};
+
+function isObviouslyIncompatibleModel(provider: ProviderName, model: string): boolean {
+    return MODEL_PROVIDER_PREFIXES[provider].some((prefix) => model.startsWith(prefix));
+}
 const IDEMPOTENCY_RETRY_DELAY_MS = 10;
 const DEFAULT_CONTEXT_MAX_CONCURRENCY = 2;
 const DEFAULT_CONTEXT_WAIT_TIMEOUT_MS = 120_000;
@@ -933,7 +942,7 @@ export function orchestratorRoutes(app: Fastify) {
                 normalizedTaskModels.push(undefined);
                 continue;
             }
-            if (isModelMode(model) && !isModelModeForAgent(task.provider, model)) {
+            if ((isModelMode(model) && !isModelModeForAgent(task.provider, model)) || isObviouslyIncompatibleModel(task.provider, model)) {
                 return sendError(reply, 400, 'INVALID_ARGUMENT', `Task seq ${index + 1} has invalid model "${model}" for provider "${task.provider}"`);
             }
             normalizedTaskModels.push(model);
