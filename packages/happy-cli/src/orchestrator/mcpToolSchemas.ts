@@ -11,12 +11,12 @@ const orchestratorTaskSchema = z.object({
   provider: z.enum(['claude', 'codex', 'gemini', 'qoder'])
     .describe('AI agent provider to execute the task.'),
   model: z.string().min(1).max(128).optional()
-    .describe('Model mode for this provider; prefer orchestrator_get_context.data.modelModes[provider]. Use "default" for CLI default. Codex only: append "-fast" (e.g. "gpt-5.5-high-fast") to run in fast mode, which uses more quota — off unless the user asks for it.'),
+    .describe('Model mode for this provider; prefer orchestrator_get_context.data.modelModes[provider] (for another machine, its machines[].modelModes). Use "default" for CLI default. Codex only: append "-fast" (e.g. "gpt-5.5-high-fast") to run in fast mode, which uses more quota — off unless the user asks for it.'),
   prompt: z.string().min(1).max(65536),
   workingDirectory: z.string().max(512).optional()
-    .describe('Absolute path for task execution. Defaults to the controller session working directory from get_context.'),
+    .describe('Absolute path for task execution. Defaults to the controller session working directory on its machine, or the home directory on other machines.'),
   dependsOn: z.array(z.string().min(1).max(128)).max(31).optional()
-    .describe('Prerequisite taskKeys, not taskIds. Ordering only; no output/context is passed.'),
+    .describe('Prerequisite taskKeys, not taskIds. The task waits for them and ends as dependency_failed if one fails, is cancelled or is missing; no output/context is passed.'),
   retry: z.object({
     maxAttempts: z.number().int().min(1).max(10).optional()
       .describe('Maximum attempts for this task (including first run).'),
@@ -61,7 +61,7 @@ export const ORCHESTRATOR_EXEC_TOOL_SCHEMA = {
     allOnline: z.boolean().optional()
       .describe('Run on every online machine with shellReady: true instead of machineIds.'),
     workingDirectory: z.string().max(512).optional()
-      .describe('Working directory on each machine; "~" expands. Defaults to the home directory when omitted.'),
+      .describe('Working directory on each machine; use an absolute or "~" path. Defaults to the home directory when omitted.'),
     timeoutMs: z.number().int().min(1000).max(2 ** 31 - 1).optional()
       .describe('Kill the command and everything it started after this many ms. No timeout when omitted.'),
     waitMs: z.number().int().min(0).max(50_000).optional()
