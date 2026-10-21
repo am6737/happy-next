@@ -11,6 +11,11 @@ import { Platform } from 'react-native';
 import { t } from '@/text';
 import { openExternalUrl } from '@/utils/tauri';
 
+// As far from the inbox's first section title as one section's last row is from the next's.
+const BANNER_STYLE = { marginBottom: 12 };
+// The inbox already pads its top, so the group's space for a missing title is dropped.
+const NO_HEADER_SPACE = { paddingTop: 0 };
+
 export const UpdateBanner = React.memo(() => {
     const { theme } = useUnistyles();
     const { updateAvailable, reloadApp } = useUpdates();
@@ -29,7 +34,7 @@ export const UpdateBanner = React.memo(() => {
         };
 
         return (
-            <ItemGroup>
+            <ItemGroup style={BANNER_STYLE} headerStyle={NO_HEADER_SPACE}>
                 <Item
                     title={t('updateBanner.nativeUpdateAvailable')}
                     subtitle={Platform.OS === 'ios' ? t('updateBanner.tapToUpdateAppStore') : t('updateBanner.tapToUpdatePlayStore')}
@@ -44,7 +49,7 @@ export const UpdateBanner = React.memo(() => {
     // Show OTA update banner if available (second priority)
     if (updateAvailable) {
         return (
-            <ItemGroup>
+            <ItemGroup style={BANNER_STYLE} headerStyle={NO_HEADER_SPACE}>
                 <Item
                     title={t('updateBanner.updateAvailable')}
                     subtitle={t('updateBanner.pressToApply')}
@@ -59,7 +64,7 @@ export const UpdateBanner = React.memo(() => {
     // Show changelog banner if there are unread changelog entries (lowest priority)
     if (hasUnread) {
         return (
-            <ItemGroup>
+            <ItemGroup style={BANNER_STYLE} headerStyle={NO_HEADER_SPACE}>
                 <Item
                     title={t('updateBanner.whatsNew')}
                     subtitle={t('updateBanner.seeLatest')}
