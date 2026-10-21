@@ -57,7 +57,10 @@ function sessionSubtitle(session: Session): string {
     return [...new Set(parts)].join(' · ');
 }
 
-function sessionBadge(session: Session, hasDraft: boolean): Pick<Command, 'badge' | 'badgeTone'> {
+function sessionBadge(session: Session, archived: boolean, hasDraft: boolean): Pick<Command, 'badge' | 'badgeTone'> {
+    if (archived) {
+        return { badge: t('commandPalette.statusArchived'), badgeTone: 'neutral' };
+    }
     if (session.thinking || session.awaitingResponseSince) {
         return { badge: t('commandPalette.statusRunning'), badgeTone: 'accent' };
     }
@@ -224,26 +227,28 @@ export function buildCommandPaletteCommands(options: CommandPaletteCommandOption
 
     const sortedSessions = [...options.sessions].sort(compareSessionsByLastMessage);
     sortedSessions.forEach((session, index) => {
-        const hasDraft = !!options.drafts[session.id];
+        // An archived session is read-only, so a draft left in it can't be sent and earns it no place up top
+        const archived = session.metadata?.lifecycleState === 'archived';
+        const hasDraft = !archived && !!options.drafts[session.id];
         commands.push({
             id: `session-${session.id}`,
             sessionId: session.id,
             title: sessionTitle(session),
             subtitle: sessionSubtitle(session),
             timestamp: sessionLastMessageAt(session),
-            icon: session.thinking || session.awaitingResponseSince ? 'sparkles-outline' : 'chatbubble-outline',
+            icon: archived ? 'archive-outline' : session.thinking || session.awaitingResponseSince ? 'sparkles-outline' : 'chatbubble-outline',
             category: t('commandPalette.categorySessions'),
             categoryOrder: CATEGORY_ORDER.sessions,
             priority: (session.thinking || session.awaitingResponseSince ? 500 : 0) + (hasDraft ? 250 : 0) + Math.max(0, 120 - index),
             showWhenIdle: index < 6 || session.thinking || !!session.awaitingResponseSince || hasDraft,
             keywords: [
                 ...sessionKeywords(session),
-                session.active ? 'active' : 'inactive archived',
+                archived ? 'archived' : session.active ? 'active' : 'inactive',
                 session.thinking || session.awaitingResponseSince ? 'running thinking processing' : '',
                 hasDraft ? 'draft' : '',
                 session.isShared ? 'shared' : '',
             ],
-            ...sessionBadge(session, hasDraft),
+            ...sessionBadge(session, archived, hasDraft),
             action: () => options.navigateToSession(session.id),
         });
     });

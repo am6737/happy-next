@@ -1008,6 +1008,7 @@ export const zhHans: TranslationStructure = {
         newDootaskProject: '新建 DooTask 项目',
         statusRunning: '运行中',
         statusDraft: '草稿',
+        statusArchived: '已归档',
         gitStatus: 'Git 状态',
         commits: '提交记录',
         browser: '浏览器',

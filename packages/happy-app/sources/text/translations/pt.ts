@@ -1006,6 +1006,7 @@ export const pt: TranslationStructure = {
         newDootaskProject: 'New DooTask Project',
         statusRunning: 'Running',
         statusDraft: 'Draft',
+        statusArchived: 'Archived',
         gitStatus: 'Git Status',
         commits: 'Commits',
         browser: 'Browser',

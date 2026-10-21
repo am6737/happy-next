@@ -69,6 +69,21 @@ describe('command palette command registry', () => {
             .toContain('session-session-8');
     });
 
+    it('marks archived sessions and gives their drafts no boost', () => {
+        const archived = session(1, { active: false, metadata: { name: 'Old', path: '/work/old', host: 'm', lifecycleState: 'archived' } });
+        const live = session(2);
+        const commands = build({
+            sessions: [archived, live],
+            drafts: { [archived.id]: { text: 'unsent' } as any },
+        });
+        const archivedCommand = commands.find((item) => item.id === `session-${archived.id}`)!;
+        const liveCommand = commands.find((item) => item.id === `session-${live.id}`)!;
+
+        expect(archivedCommand.badge).toBe('commandPalette.statusArchived');
+        expect(archivedCommand.icon).toBe('archive-outline');
+        expect(archivedCommand.priority).toBeLessThan(liveCommand.priority!);
+    });
+
     it('adds integration and feature commands only when available', () => {
         const minimalIds = build().map((item) => item.id);
         expect(minimalIds).not.toContain('new-artifact');

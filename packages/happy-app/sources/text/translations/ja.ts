@@ -1008,6 +1008,7 @@ export const ja: TranslationStructure = {
         newDootaskProject: 'New DooTask Project',
         statusRunning: 'Running',
         statusDraft: 'Draft',
+        statusArchived: 'アーカイブ済み',
         gitStatus: 'Git Status',
         commits: 'Commits',
         browser: 'Browser',
