@@ -3,6 +3,8 @@ import { View, Text, ScrollView, RefreshControl, Platform } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { useAcceptedFriends, useFriendRequests, useRequestedFriends, useFeedItems, useFeedLoaded, useFriendsLoaded, useRealtimeStatus, useDootaskProfile } from '@/sync/storage';
 import { UserCard } from '@/components/UserCard';
+import type { UserProfile } from '@/sync/friendTypes';
+import { useFriendActions } from '@/hooks/useFriendActions';
 import { t } from '@/text';
 import { trackFriendsProfileView } from '@/track';
 import { Item } from '@/components/Item';
@@ -85,6 +87,24 @@ function InboxSection({ title, children }: { title: string; children: React.Reac
                 </View>
             ))}
         </View>
+    );
+}
+
+// A person in the inbox, whose relationship's actions are its long-press (or right-click) menu.
+function InboxUserRow({ user, showDivider, flat }: { user: UserProfile; showDivider?: boolean; flat?: boolean }) {
+    const router = useRouter();
+    const { menuItems } = useFriendActions(user);
+    return (
+        <UserCard
+            user={user}
+            showDivider={showDivider}
+            flat={flat}
+            menuItems={menuItems}
+            onPress={() => {
+                trackFriendsProfileView();
+                router.push(`/user/${user.id}`);
+            }}
+        />
     );
 }
 
@@ -366,14 +386,7 @@ export const InboxView = React.memo(({}: InboxViewProps) => {
                     <>
                         <InboxSection title={t('friends.pendingRequests')}>
                             {friendRequests.map((friend) => (
-                                <UserCard
-                                    key={friend.id}
-                                    user={friend}
-                                    onPress={() => {
-                                        trackFriendsProfileView();
-                                        router.push(`/user/${friend.id}`);
-                                    }}
-                                />
+                                <InboxUserRow key={friend.id} user={friend} />
                             ))}
                         </InboxSection>
                     </>
@@ -383,14 +396,7 @@ export const InboxView = React.memo(({}: InboxViewProps) => {
                     <>
                         <InboxSection title={t('friends.requestPending')}>
                             {requestedFriends.map((friend) => (
-                                <UserCard
-                                    key={friend.id}
-                                    user={friend}
-                                    onPress={() => {
-                                        trackFriendsProfileView();
-                                        router.push(`/user/${friend.id}`);
-                                    }}
-                                />
+                                <InboxUserRow key={friend.id} user={friend} />
                             ))}
                         </InboxSection>
                     </>
@@ -400,14 +406,7 @@ export const InboxView = React.memo(({}: InboxViewProps) => {
                     <>
                         <InboxSection title={t('friends.myFriends')}>
                             {friends.map((friend) => (
-                                <UserCard
-                                    key={friend.id}
-                                    user={friend}
-                                    onPress={() => {
-                                        trackFriendsProfileView();
-                                        router.push(`/user/${friend.id}`);
-                                    }}
-                                />
+                                <InboxUserRow key={friend.id} user={friend} />
                             ))}
                         </InboxSection>
                     </>

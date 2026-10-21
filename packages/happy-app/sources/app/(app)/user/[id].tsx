@@ -3,7 +3,7 @@ import { View, ActivityIndicator, Pressable, Platform, ActionSheetIOS, RefreshCo
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Text } from '@/components/StyledText';
 import { useAuth } from '@/auth/AuthContext';
-import { getUserProfile, sendFriendRequest, removeFriend } from '@/sync/apiFriends';
+import { getUserProfile } from '@/sync/apiFriends';
 import { UserProfile, getDisplayName, getUsernameLabel } from '@/sync/friendTypes';
 import { Avatar } from '@/components/Avatar';
 import { ItemList } from '@/components/ItemList';
@@ -11,14 +11,10 @@ import { ItemGroup } from '@/components/ItemGroup';
 import { Item } from '@/components/Item';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { layout } from '@/components/layout';
-import { useHappyAction } from '@/hooks/useHappyAction';
 import { Modal } from '@/modal';
 import { t } from '@/text';
-import { trackFriendsConnect } from '@/track';
-import { showToast } from '@/components/Toast';
 import { Ionicons } from '@expo/vector-icons';
 import { useSharedSessions, storage } from '@/sync/storage';
-import { sync } from '@/sync/sync';
 import { fetchSessionsSharedByMe, SharedByMeSession } from '@/sync/apiSharing';
 import { getSessionName, useSessionStatus, getSessionAvatarId } from '@/utils/sessionUtils';
 import { SessionProjectLabelsContext, useSessionProjectLabel, useSessionProjectLabels } from '@/hooks/useSessionProjectLabel';
@@ -27,10 +23,10 @@ import { StatusDot } from '@/components/StatusDot';
 import { Typography } from '@/constants/Typography';
 import { Session } from '@/sync/storageTypes';
 import { ActionMenuModal } from '@/components/ActionMenuModal';
-import type { ActionMenuItem } from '@/components/ActionMenu';
 import { loadSharedByMeCache, saveSharedByMeCache } from '@/sync/persistence';
 import { openExternalUrl } from '@/utils/tauri';
 import { headerMenuOptions } from '@/components/navigation/headerMenu';
+import { useFriendActions } from '@/hooks/useFriendActions';
 
 function getAccessLevelLabel(accessLevel?: 'view' | 'edit' | 'admin') {
     switch (accessLevel) {
@@ -120,153 +116,62 @@ export default function UserProfileScreen() {
         setIsRefreshing(false);
     }, [loadData]);
 
-    // Add friend / Accept request action
-    const [addingFriend, addFriend] = useHappyAction(async () => {
-        if (!credentials || !userProfile) return;
+    // Accept / deny / withdraw / remove, shared with the inbox's rows
+    const { accept: addFriend, accepting: addingFriend, remove: handleRemoveFriend, removing: removingFriend, menuItems } = useFriendActions(userProfile, setUserProfile);
 
-        const updatedProfile = await sendFriendRequest(credentials, userProfile.id);
-        if (updatedProfile) {
-            trackFriendsConnect();
-            setUserProfile(updatedProfile);
-            sync.refreshFriends();
-            showToast(updatedProfile.status === 'friend'
-                ? t('friends.requestAccepted')
-                : t('friends.requestSent'));
-        } else {
-            Modal.alert(t('friends.bothMustHaveGithub'));
-        }
-    });
-
-    // Remove friend / Cancel request / Reject request action
-    const [removingFriend, handleRemoveFriend] = useHappyAction(async () => {
-        if (!credentials || !userProfile) return;
-
-        const previousStatus = userProfile.status;
-
-        if (previousStatus === 'friend') {
-            // Removing a friend
-            const confirmed = await Modal.confirm(
-                t('friends.removeFriend'),
-                t('friends.removeFriendConfirm', { name: getDisplayName(userProfile) }),
-                { confirmText: t('friends.remove'), destructive: true }
-            );
-
-            if (!confirmed) return;
-        } else if (previousStatus === 'requested') {
-            // Canceling a sent request
-            const confirmed = await Modal.confirm(
-                t('friends.cancelRequest'),
-                t('friends.cancelRequestConfirm', { name: getDisplayName(userProfile) }),
-                { confirmText: t('common.yes'), destructive: false }
-            );
-
-            if (!confirmed) return;
-        }
-
-        const updatedProfile = await removeFriend(credentials, userProfile.id);
-        if (updatedProfile) {
-            setUserProfile(updatedProfile);
-            sync.refreshFriends();
-
-            // Remove related feed item (friend_request/friend_accepted) from local state
-            const feedItems = storage.getState().feedItems;
-            const itemToRemove = feedItems.find(item =>
-                (item.body.kind === 'friend_request' || item.body.kind === 'friend_accepted')
-                && item.body.uid === userProfile.id
-            );
-            if (itemToRemove) {
-                storage.getState().removeFeedItem(itemToRemove.id);
-            }
-
-            showToast(previousStatus === 'friend'
-                ? t('friends.friendRemoved')
-                : t('friends.requestRejected'));
-        }
-    });
-
-    // Compute actions based on user status (must be before early returns for hooks ordering)
-    const { primaryActions, destructiveActions } = useMemo(() => {
-        const status = userProfile?.status;
-        switch (status) {
-            case 'friend':
-                return {
-                    primaryActions: [] as { title: string; icon: React.ReactNode; onPress: () => void; loading: boolean }[],
-                    destructiveActions: [{
-                        title: t('friends.removeFriend'),
-                        onPress: handleRemoveFriend,
-                        destructive: true,
-                    }],
-                };
+    // The page's prominent buttons; the header menu carries the relationship's actions as well
+    const primaryActions = useMemo(() => {
+        switch (userProfile?.status) {
             case 'pending':
-                return {
-                    primaryActions: [
-                        {
-                            title: t('friends.acceptRequest'),
-                            icon: <Ionicons name="checkmark-circle-outline" size={29} color="#34C759" />,
-                            onPress: addFriend,
-                            loading: addingFriend,
-                        },
-                        {
-                            title: t('friends.denyRequest'),
-                            icon: <Ionicons name="close-circle-outline" size={29} color="#FF3B30" />,
-                            onPress: handleRemoveFriend,
-                            loading: removingFriend,
-                        },
-                    ],
-                    destructiveActions: [] as { title: string; onPress: () => void; destructive: boolean }[],
-                };
-            case 'requested':
-                return {
-                    primaryActions: [] as { title: string; icon: React.ReactNode; onPress: () => void; loading: boolean }[],
-                    destructiveActions: [{
-                        title: t('friends.cancelRequest'),
-                        onPress: handleRemoveFriend,
-                        destructive: false,
-                    }],
-                };
-            default:
-                return {
-                    primaryActions: [{
-                        title: t('friends.requestFriendship'),
-                        icon: <Ionicons name="person-add-outline" size={29} color="#007AFF" />,
+                return [
+                    {
+                        title: t('friends.acceptRequest'),
+                        icon: <Ionicons name="checkmark-circle-outline" size={29} color="#34C759" />,
                         onPress: addFriend,
                         loading: addingFriend,
-                    }],
-                    destructiveActions: [] as { title: string; onPress: () => void; destructive: boolean }[],
-                };
+                    },
+                    {
+                        title: t('friends.denyRequest'),
+                        icon: <Ionicons name="close-circle-outline" size={29} color="#FF3B30" />,
+                        onPress: handleRemoveFriend,
+                        loading: removingFriend,
+                    },
+                ];
+            case 'friend':
+            case 'requested':
+                return [];
+            default:
+                return [{
+                    title: t('friends.requestFriendship'),
+                    icon: <Ionicons name="person-add-outline" size={29} color="#007AFF" />,
+                    onPress: addFriend,
+                    loading: addingFriend,
+                }];
         }
     }, [userProfile?.status, handleRemoveFriend, addFriend, addingFriend, removingFriend]);
 
-    // Show action menu (ActionSheetIOS on iOS, ActionMenuModal on Android/Web)
+    // Show action menu (ActionSheetIOS on Catalyst, ActionMenuModal on Android/Web; iOS has it natively)
     const handleShowMenu = useCallback(() => {
         if (Platform.OS === 'ios') {
-            const options = destructiveActions.map(a => a.title);
+            const options = menuItems.map(item => item.label);
             options.push(t('common.cancel'));
+            const destructiveIndex = menuItems.findIndex(item => item.destructive);
             ActionSheetIOS.showActionSheetWithOptions(
                 {
                     options,
-                    destructiveButtonIndex: destructiveActions.findIndex(a => a.destructive) ?? undefined,
+                    destructiveButtonIndex: destructiveIndex >= 0 ? destructiveIndex : undefined,
                     cancelButtonIndex: options.length - 1,
                 },
                 (buttonIndex) => {
-                    if (buttonIndex < destructiveActions.length) {
-                        destructiveActions[buttonIndex].onPress();
+                    if (buttonIndex < menuItems.length) {
+                        menuItems[buttonIndex].onPress();
                     }
                 }
             );
         } else {
             setMenuVisible(true);
         }
-    }, [destructiveActions]);
-
-    // Menu items for ActionMenuModal (Android/Web)
-    const menuItems: ActionMenuItem[] = useMemo(() => {
-        return destructiveActions.map(a => ({
-            label: a.title,
-            onPress: a.onPress,
-            destructive: a.destructive,
-        }));
-    }, [destructiveActions]);
+    }, [menuItems]);
 
     if (isLoading) {
         return (
@@ -295,7 +200,7 @@ export default function UserProfileScreen() {
                 <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />
             }
         >
-            {destructiveActions.length > 0 && (
+            {menuItems.length > 0 && (
                 <Stack.Screen
                     options={{
                         headerRight: () => (
