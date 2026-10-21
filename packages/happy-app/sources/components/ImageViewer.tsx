@@ -93,6 +93,29 @@ export function ImageViewer({ images, visible, initialIndex = 0, onClose }: Prop
     }
   }, []);
 
+  const goTo = React.useCallback((index: number) => {
+    const next = clampImageViewerIndex(index, images.length);
+    setIsZoomed(false);
+    setCurrentIndex(next);
+    flatListRef.current?.scrollToIndex({ index: next, animated: true });
+  }, [images.length]);
+
+  // Arrow keys step through the images on the web and desktop
+  React.useEffect(() => {
+    if (!IS_WEB || !modalVisible || images.length < 2) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+      event.preventDefault();
+      event.stopPropagation();
+      goTo(currentIndex + (event.key === "ArrowLeft" ? -1 : 1));
+    };
+
+    window.addEventListener("keydown", handleKeyDown, { capture: true });
+    return () => window.removeEventListener("keydown", handleKeyDown, { capture: true });
+  }, [modalVisible, images.length, currentIndex, goTo]);
+
   const viewabilityConfig = React.useMemo(() => ({
     itemVisiblePercentThreshold: 50,
   }), []);
@@ -156,12 +179,35 @@ export function ImageViewer({ images, visible, initialIndex = 0, onClose }: Prop
             style={styles.flex}
           />
 
+          {/* Previous / next buttons - web only */}
+          {IS_WEB && currentIndex > 0 && (
+            <Pressable
+              style={[styles.navButton, styles.navButtonLeft]}
+              onPress={() => goTo(currentIndex - 1)}
+            >
+              <Ionicons name="chevron-back" size={28} color="white" />
+            </Pressable>
+          )}
+          {IS_WEB && currentIndex < images.length - 1 && (
+            <Pressable
+              style={[styles.navButton, styles.navButtonRight]}
+              onPress={() => goTo(currentIndex + 1)}
+            >
+              <Ionicons name="chevron-forward" size={28} color="white" />
+            </Pressable>
+          )}
+
           {/* Pagination dots */}
           {images.length > 1 && (
-            <View style={[styles.pagination, { bottom: insets.bottom + 24 }]}>
+            <View
+              style={[styles.pagination, { bottom: insets.bottom + 24 }]}
+              pointerEvents="box-none"
+            >
               {images.map((_, index) => (
-                <View
+                <Pressable
                   key={index}
+                  hitSlop={8}
+                  onPress={() => goTo(index)}
                   style={[
                     styles.dot,
                     index === currentIndex && styles.dotActive,
@@ -470,6 +516,24 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255, 255, 255, 0.2)",
     alignItems: "center",
     justifyContent: "center",
+  },
+  navButton: {
+    position: "absolute",
+    top: "50%",
+    marginTop: -22,
+    zIndex: 10,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  navButtonLeft: {
+    left: 16,
+  },
+  navButtonRight: {
+    right: 16,
   },
   imageContainer: {
     justifyContent: "center",
