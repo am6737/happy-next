@@ -1,0 +1,34 @@
+diff --git a/node_modules/expo-asset/build/AssetSources.js b/node_modules/expo-asset/build/AssetSources.js
+index c64a7d5..5485e62 100644
+--- a/node_modules/expo-asset/build/AssetSources.js
++++ b/node_modules/expo-asset/build/AssetSources.js
+@@ -34,8 +34,11 @@ export function selectAssetSource(meta) {
+     }
+     // For assets during development using manifest2, we use the development server's URL origin
+     const manifest2 = getManifest2();
++    // Patched: take the scheme the bundle was served over, so a dev server behind an HTTPS proxy
++    // (EXPO_PACKAGER_PROXY_URL=https://…) gets HTTPS asset URLs instead of plain HTTP ones.
++    const devServerScheme = manifest2?.launchAsset?.url?.startsWith('https:') ? 'https://' : 'http://';
+     const devServerUrl = manifest2?.extra?.expoGo?.developer
+-        ? 'http://' + manifest2.extra.expoGo.debuggerHost
++        ? devServerScheme + manifest2.extra.expoGo.debuggerHost
+         : null;
+     if (devServerUrl) {
+         const baseUrl = new URL(meta.httpServerLocation + suffix, devServerUrl);
+diff --git a/node_modules/expo-asset/src/AssetSources.ts b/node_modules/expo-asset/src/AssetSources.ts
+index d724e42..3abad41 100644
+--- a/node_modules/expo-asset/src/AssetSources.ts
++++ b/node_modules/expo-asset/src/AssetSources.ts
+@@ -57,8 +57,11 @@ export function selectAssetSource(meta: AssetMetadata): AssetSource {
+   // For assets during development using manifest2, we use the development server's URL origin
+   const manifest2 = getManifest2();
+ 
++  // Patched: take the scheme the bundle was served over, so a dev server behind an HTTPS proxy
++  // (EXPO_PACKAGER_PROXY_URL=https://…) gets HTTPS asset URLs instead of plain HTTP ones.
++  const devServerScheme = manifest2?.launchAsset?.url?.startsWith('https:') ? 'https://' : 'http://';
+   const devServerUrl = manifest2?.extra?.expoGo?.developer
+-    ? 'http://' + manifest2.extra.expoGo.debuggerHost
++    ? devServerScheme + manifest2.extra.expoGo.debuggerHost
+     : null;
+   if (devServerUrl) {
+     const baseUrl = new URL(meta.httpServerLocation + suffix, devServerUrl);
