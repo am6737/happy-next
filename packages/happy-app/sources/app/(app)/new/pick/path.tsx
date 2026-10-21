@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef } from 'react';
-import { View, Text, ScrollView, Pressable, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, Pressable, ActivityIndicator, Platform } from 'react-native';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { CommonActions, useNavigation } from '@react-navigation/native';
 import { ItemGroup } from '@/components/ItemGroup';
@@ -14,6 +14,7 @@ import { MultiTextInput, MultiTextInputHandle } from '@/components/MultiTextInpu
 import { formatPathRelativeToHome } from '@/utils/sessionUtils';
 import { resolveAbsolutePath } from '@/utils/pathUtils';
 import { useDirectoryCompletions } from '@/utils/pathCompletion';
+import { useKeyboardState } from 'react-native-keyboard-controller';
 
 const MAX_COMPLETIONS = 8;
 
@@ -44,22 +45,28 @@ const stylesheet = StyleSheet.create((theme) => ({
         textAlign: 'center',
         ...Typography.default(),
     },
-    pathInputContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 16,
-        paddingVertical: 16,
+    // The field stands on the background by itself, no card around it: its edges are the list
+    // card's below, and it takes the card's surface so it still reads as a field on the grey.
+    // Its title's centre stands as far under the header as the inbox's first section title's: 34, its
+    // 12 top padding plus the middle of a 44 row.
+    pathInputHeader: {
+        paddingTop: 34 - Platform.select({ ios: 18, default: 20 }) / 2,
+    },
+    pathInputGroup: {
+        backgroundColor: 'transparent',
+        shadowOpacity: 0,
+        elevation: 0,
+        overflow: 'visible',
     },
     pathInput: {
-        flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: theme.colors.input.background,
-        borderRadius: 10,
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        minHeight: 36,
-        borderWidth: 0.5,
+        backgroundColor: theme.colors.surface,
+        borderRadius: Platform.select({ ios: 10, default: 16 }),
+        paddingHorizontal: 16,
+        paddingVertical: 7,
+        minHeight: 52,
+        borderWidth: StyleSheet.hairlineWidth,
         borderColor: theme.colors.divider,
     },
     pathInputField: {
@@ -87,6 +94,10 @@ export default function PathPickerScreen() {
     const sessions = useSessions();
     const inputRef = useRef<MultiTextInputHandle>(null);
     const recentMachinePaths = useSetting('recentMachinePaths');
+    // The list makes room for the keyboard by an inset of its own: iOS's automatic keyboard insets
+    // also move the scroll offset, and under the soft header they leave the field behind it.
+    const keyboardHeight = useKeyboardState((state) => state.height);
+    const keyboardInset = React.useMemo(() => ({ bottom: Platform.OS === 'ios' ? keyboardHeight : 0 }), [keyboardHeight]);
 
     const [customPath, setCustomPath] = useState(() => {
         if (!params.selectedPath) return '';
@@ -332,34 +343,33 @@ export default function PathPickerScreen() {
                     contentInsetAdjustmentBehavior="automatic"
                     contentContainerStyle={styles.scrollContent}
                     keyboardShouldPersistTaps="handled"
-                    automaticallyAdjustKeyboardInsets
+                    contentInset={keyboardInset}
+                    scrollIndicatorInsets={keyboardInset}
                 >
                     <View style={styles.contentWrapper}>
-                        <ItemGroup title={t('wizard.enterPath')}>
-                            <View style={styles.pathInputContainer}>
-                                <View style={styles.pathInput}>
-                                    <View style={styles.pathInputField}>
-                                        <MultiTextInput
-                                            ref={inputRef}
-                                            value={customPath}
-                                            onChangeText={setCustomPath}
-                                            onFocus={() => setIsInputFocused(true)}
-                                            placeholder={t('wizard.enterPathPlaceholder')}
-                                            maxHeight={76}
-                                            paddingTop={8}
-                                            paddingBottom={8}
-                                            autoCapitalize="none"
-                                            autoCorrect={false}
-                                        />
-                                    </View>
-                                    {isLoadingCompletions && (
-                                        <ActivityIndicator
-                                            size="small"
-                                            color={theme.colors.textSecondary}
-                                            style={styles.pathInputSpinner}
-                                        />
-                                    )}
+                        <ItemGroup title={t('wizard.enterPath')} headerStyle={styles.pathInputHeader} containerStyle={styles.pathInputGroup}>
+                            <View style={styles.pathInput}>
+                                <View style={styles.pathInputField}>
+                                    <MultiTextInput
+                                        ref={inputRef}
+                                        value={customPath}
+                                        onChangeText={setCustomPath}
+                                        onFocus={() => setIsInputFocused(true)}
+                                        placeholder={t('wizard.enterPathPlaceholder')}
+                                        maxHeight={76}
+                                        paddingTop={8}
+                                        paddingBottom={8}
+                                        autoCapitalize="none"
+                                        autoCorrect={false}
+                                    />
                                 </View>
+                                {isLoadingCompletions && (
+                                    <ActivityIndicator
+                                        size="small"
+                                        color={theme.colors.textSecondary}
+                                        style={styles.pathInputSpinner}
+                                    />
+                                )}
                             </View>
                         </ItemGroup>
 

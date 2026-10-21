@@ -59,7 +59,7 @@ const styles = StyleSheet.create((theme) => ({
     },
     sectionHeaderText: {
         fontSize: 13,
-        ...Typography.default('semiBold'),
+        ...Typography.default('medium'),
         color: theme.colors.textSecondary,
         textTransform: 'uppercase',
     },
