@@ -101,6 +101,7 @@ export const en = {
         emptyTitle: 'Empty Inbox',
         emptyDescription: 'Connect with friends to start sharing sessions',
         updates: 'Updates',
+        deleteNotification: 'Delete Notification',
     },
 
     common: {

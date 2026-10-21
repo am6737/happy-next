@@ -112,6 +112,7 @@ export const pl: TranslationStructure = {
         emptyTitle: 'Pusta skrzynka',
         emptyDescription: 'Połącz się z przyjaciółmi, aby zacząć udostępniać sesje',
         updates: 'Aktualizacje',
+        deleteNotification: 'Usuń powiadomienie',
     },
 
     common: {

@@ -101,6 +101,7 @@ export const ca: TranslationStructure = {
         emptyTitle: 'Safata buida',
         emptyDescription: 'Connecta\'t amb amics per començar a compartir sessions',
         updates: 'Actualitzacions',
+        deleteNotification: 'Elimina la notificació',
     },
 
     common: {

@@ -103,6 +103,7 @@ export const zhHans: TranslationStructure = {
         emptyTitle: '收件箱为空',
         emptyDescription: '与好友建立连接，开始共享会话',
         updates: '更新',
+        deleteNotification: '删除通知',
     },
 
     common: {

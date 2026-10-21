@@ -112,6 +112,7 @@ export const ru: TranslationStructure = {
         emptyTitle: 'Входящие пусты',
         emptyDescription: 'Подключитесь к друзьям, чтобы начать делиться сессиями',
         updates: 'Обновления',
+        deleteNotification: 'Удалить уведомление',
     },
 
     common: {

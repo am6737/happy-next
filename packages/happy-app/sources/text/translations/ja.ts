@@ -104,6 +104,7 @@ export const ja: TranslationStructure = {
         emptyTitle: '受信トレイは空です',
         emptyDescription: '友達と接続してセッションを共有しましょう',
         updates: '更新',
+        deleteNotification: '通知を削除',
     },
 
     common: {

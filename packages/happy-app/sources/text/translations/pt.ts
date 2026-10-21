@@ -101,6 +101,7 @@ export const pt: TranslationStructure = {
         emptyTitle: 'Caixa de entrada vazia',
         emptyDescription: 'Conecte-se com amigos para começar a compartilhar sessões',
         updates: 'Atualizações',
+        deleteNotification: 'Excluir notificação',
     },
 
     common: {

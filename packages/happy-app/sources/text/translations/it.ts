@@ -101,6 +101,7 @@ export const it: TranslationStructure = {
         emptyTitle: 'Posta vuota',
         emptyDescription: 'Connettiti con amici per iniziare a condividere sessioni',
         updates: 'Aggiornamenti',
+        deleteNotification: 'Elimina notifica',
     },
 
     common: {

@@ -58,7 +58,7 @@ export const FeedItemCard = React.memo(({ item, showDivider, flat }: FeedItemCar
     }, [item.id, credentials]);
 
     const menuItems = React.useMemo<ActionMenuItem[]>(() => [{
-        label: t('common.delete'),
+        label: t('inbox.deleteNotification'),
         destructive: true,
         icon: { ionicon: 'trash-outline', sfSymbol: 'trash' },
         onPress: handleDelete,

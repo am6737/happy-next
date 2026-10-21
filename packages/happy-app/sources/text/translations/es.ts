@@ -101,6 +101,7 @@ export const es: TranslationStructure = {
         emptyTitle: 'Bandeja vacía',
         emptyDescription: 'Conéctate con amigos para empezar a compartir sesiones',
         updates: 'Actualizaciones',
+        deleteNotification: 'Eliminar notificación',
     },
 
     common: {
