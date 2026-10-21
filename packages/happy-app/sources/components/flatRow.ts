@@ -6,6 +6,8 @@ import { Typography } from '@/constants/Typography';
 // than the session list's standard rows since it carries less; the row itself is inset and rounded
 // by its list.
 export const FLAT_ROW_AVATAR_SIZE = 40;
+// The rounding its list insets it with.
+export const FLAT_ROW_RADIUS = 6;
 
 export const flatRowItemStyle: ViewStyle = {
     minHeight: 64,

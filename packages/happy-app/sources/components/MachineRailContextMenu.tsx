@@ -18,6 +18,7 @@ export type MachineRailMenuItem = {
     label: string;
     icon: React.ComponentProps<typeof Ionicons>['name'];
     onPress: () => void;
+    destructive?: boolean;
     disabled?: boolean;
 };
 
@@ -114,8 +115,8 @@ export function MachineRailContextMenu({ menu, onClose }: { menu: MachineRailMen
                             item.disabled && styles.disabled,
                         ]}
                     >
-                        <Ionicons name={item.icon} size={ICON_SIZE} color={theme.colors.textSecondary} />
-                        <Text style={styles.itemText} numberOfLines={1}>{item.label}</Text>
+                        <Ionicons name={item.icon} size={ICON_SIZE} color={item.destructive ? theme.colors.textDestructive : theme.colors.textSecondary} />
+                        <Text style={[styles.itemText, item.destructive && styles.destructiveText]} numberOfLines={1}>{item.label}</Text>
                     </Pressable>
                 ))}
             </View>
@@ -151,6 +152,9 @@ const styles = StyleSheet.create((theme) => ({
         fontSize: 14,
         color: theme.colors.text,
         ...Typography.default(),
+    },
+    destructiveText: {
+        color: theme.colors.textDestructive,
     },
     disabled: {
         opacity: 0.45,

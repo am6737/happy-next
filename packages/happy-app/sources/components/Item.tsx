@@ -27,6 +27,7 @@ export interface ItemProps {
     iconContainerStyle?: StyleProp<ViewStyle>;
     onPress?: () => void;
     onLongPress?: () => void;
+    delayLongPress?: number;
     disabled?: boolean;
     loading?: boolean;
     selected?: boolean;
@@ -137,6 +138,7 @@ export const Item = React.memo<ItemProps>((props) => {
         iconContainerStyle,
         onPress,
         onLongPress,
+        delayLongPress,
         disabled,
         loading,
         selected,
@@ -306,6 +308,7 @@ export const Item = React.memo<ItemProps>((props) => {
             <Pressable
                 onPress={handlePress}
                 onLongPress={onLongPress}
+                delayLongPress={delayLongPress}
                 onPressIn={handlePressIn}
                 onPressOut={handlePressOut}
                 disabled={disabled || loading}

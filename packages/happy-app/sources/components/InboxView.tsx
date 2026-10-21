@@ -20,7 +20,7 @@ import type { DooTaskProfile, DooTaskUser, DooTaskDialogListItem } from '@/sync/
 import { showToast } from './Toast';
 import { useMainTabBottomPadding } from '@/hooks/useMainTabBottomPadding';
 import { loadDooTaskInboxUsersCache, saveDooTaskInboxUsersCache } from '@/sync/persistence';
-import { FLAT_ROW_AVATAR_SIZE, flatRowIconContainerStyle, flatRowItemStyle, flatRowSubtitleStyle, flatRowTitleStyle } from './flatRow';
+import { FLAT_ROW_AVATAR_SIZE, FLAT_ROW_RADIUS, flatRowIconContainerStyle, flatRowItemStyle, flatRowSubtitleStyle, flatRowTitleStyle } from './flatRow';
 
 const styles = StyleSheet.create((theme) => ({
     container: {
@@ -66,7 +66,7 @@ const styles = StyleSheet.create((theme) => ({
     row: {
         marginHorizontal: 8,
         marginBottom: 4,
-        borderRadius: 6,
+        borderRadius: FLAT_ROW_RADIUS,
         overflow: 'hidden',
     },
 }));

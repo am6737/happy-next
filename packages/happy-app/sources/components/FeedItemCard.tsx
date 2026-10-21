@@ -1,6 +1,5 @@
 import * as React from 'react';
-import { View, Platform, Pressable } from 'react-native';
-import { Swipeable } from 'react-native-gesture-handler';
+import { View, Platform } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { FeedItem } from '@/sync/feedTypes';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,13 +9,13 @@ import { useUser, storage } from '@/sync/storage';
 import { useAuth } from '@/auth/AuthContext';
 import { Avatar } from './Avatar';
 import { Item } from './Item';
-import { Text } from './StyledText';
 import { deleteFeedItem } from '@/sync/apiFeed';
-import { Typography } from '@/constants/Typography';
 import { getDisplayName } from '@/sync/friendTypes';
-import { FLAT_ROW_AVATAR_SIZE, flatRowIconContainerStyle, flatRowItemStyle, flatRowSubtitleStyle, flatRowTitleStyle } from './flatRow';
-
-const SWIPE_ACTION_WIDTH = 80;
+import { ActionMenuItem } from './ActionMenu';
+import { ActionMenuModal } from './ActionMenuModal';
+import { actionMenuSection, ContextMenuView, nativeContextMenuAvailable } from './ContextMenuView';
+import { MachineRailContextMenu, menuAt, type ContextMenuEvent, type MachineRailMenu } from './MachineRailContextMenu';
+import { FLAT_ROW_AVATAR_SIZE, FLAT_ROW_RADIUS, flatRowIconContainerStyle, flatRowItemStyle, flatRowSubtitleStyle, flatRowTitleStyle } from './flatRow';
 
 interface FeedItemCardProps {
     item: FeedItem;
@@ -29,8 +28,9 @@ export const FeedItemCard = React.memo(({ item, showDivider, flat }: FeedItemCar
     const { theme } = useUnistyles();
     const router = useRouter();
     const { credentials } = useAuth();
-    const swipeableRef = React.useRef<Swipeable | null>(null);
-    const swipeEnabled = Platform.OS !== 'web';
+    const [menuVisible, setMenuVisible] = React.useState(false);
+    const [webMenu, setWebMenu] = React.useState<MachineRailMenu | null>(null);
+    const closeWebMenu = React.useCallback(() => setWebMenu(null), []);
 
     // Get user profile from global users cache for friend-related items
     // User MUST exist for friend-related items or they would have been filtered out
@@ -54,7 +54,6 @@ export const FeedItemCard = React.memo(({ item, showDivider, flat }: FeedItemCar
     };
 
     const handleDelete = React.useCallback(() => {
-        swipeableRef.current?.close();
         // Optimistic removal
         storage.getState().removeFeedItem(item.id);
         // Fire and forget server deletion
@@ -62,6 +61,26 @@ export const FeedItemCard = React.memo(({ item, showDivider, flat }: FeedItemCar
             deleteFeedItem(credentials, item.id).catch(console.error);
         }
     }, [item.id, credentials]);
+
+    const menuItems = React.useMemo<ActionMenuItem[]>(() => [{
+        label: t('common.delete'),
+        destructive: true,
+        icon: { ionicon: 'trash-outline', sfSymbol: 'trash' },
+        onPress: handleDelete,
+    }], [handleDelete]);
+    // On iOS the row's actions are its native context menu, elsewhere a long press opens the sheet; on
+    // the web a right-click opens them at the cursor, the way the machine rail's do.
+    //
+    // The system's menu does not cancel React Native's touch handling, so a finger lifted just as
+    // the menu lifts the row still reaches it as a tap. Pressability drops the `onPress` of a press
+    // it has reported as a long press, so the row is given one to report, shorter than the roughly
+    // half second the system takes to lift it — as `SessionContextMenu` does for a session row.
+    const longPressProps = nativeContextMenuAvailable
+        ? { onLongPress: () => {}, delayLongPress: 350 }
+        : { onLongPress: Platform.OS === 'web' ? undefined : () => setMenuVisible(true) };
+    const openWebMenu = (event: ContextMenuEvent) => setWebMenu(menuAt(event, [
+        { label: t('common.delete'), icon: 'trash-outline', destructive: true, onPress: handleDelete },
+    ]));
 
     const renderContent = () => {
         switch (item.body.kind) {
@@ -88,6 +107,7 @@ export const FeedItemCard = React.memo(({ item, showDivider, flat }: FeedItemCar
                         onPress={() => router.push(`/user/${user!.id}`)}
                         showChevron={true}
                         showDivider={showDivider}
+                        {...longPressProps}
                     />
                 );
             }
@@ -115,6 +135,7 @@ export const FeedItemCard = React.memo(({ item, showDivider, flat }: FeedItemCar
                         onPress={() => router.push(`/user/${user!.id}`)}
                         showChevron={true}
                         showDivider={showDivider}
+                        {...longPressProps}
                     />
                 );
             }
@@ -131,6 +152,7 @@ export const FeedItemCard = React.memo(({ item, showDivider, flat }: FeedItemCar
                         iconContainerStyle={flat ? flatRowIconContainerStyle : { marginRight: 20 }}
                         showChevron={false}
                         showDivider={showDivider}
+                        {...longPressProps}
                     />
                 );
 
@@ -152,6 +174,7 @@ export const FeedItemCard = React.memo(({ item, showDivider, flat }: FeedItemCar
                         onPress={() => router.push({ pathname: '/inbox/notice/[id]', params: { id: item.id } })}
                         showChevron={true}
                         showDivider={showDivider}
+                        {...longPressProps}
                     />
                 );
 
@@ -160,46 +183,35 @@ export const FeedItemCard = React.memo(({ item, showDivider, flat }: FeedItemCar
         }
     };
 
-    if (!swipeEnabled) {
-        return renderContent();
+    if (nativeContextMenuAvailable) {
+        return (
+            <ContextMenuView sections={[actionMenuSection(menuItems)]} previewShape={flat ? styles.flatRowShape : undefined}>
+                {/* Opaque for the lifted preview; a flat row takes the page's colour, a card's the card's. */}
+                <View style={{ backgroundColor: flat ? theme.colors.groupped.background : theme.colors.surface }}>
+                    {renderContent()}
+                </View>
+            </ContextMenuView>
+        );
     }
 
-    const renderRightActions = () => (
-        <Pressable onPress={handleDelete} style={styles.swipeAction}>
-            <Ionicons name="trash-outline" size={20} color="#FFFFFF" />
-            <Text style={styles.swipeActionText}>{t('common.delete')}</Text>
-        </Pressable>
-    );
-
     return (
-        <Swipeable
-            ref={swipeableRef}
-            renderRightActions={renderRightActions}
-            overshootRight={false}
-            friction={2}
-            rightThreshold={40}
-        >
-            {/* Opaque over the delete action; a flat row takes the page's colour, a card's the card's. */}
-            <View style={{ backgroundColor: flat ? theme.colors.groupped.background : theme.colors.surface }}>
+        <>
+            <View
+                // Spread rather than written inline: `onContextMenu` is a DOM prop the React Native types do not carry.
+                {...(Platform.OS === 'web' ? { onContextMenu: openWebMenu } : {})}
+            >
                 {renderContent()}
             </View>
-        </Swipeable>
+            <ActionMenuModal visible={menuVisible} items={menuItems} onClose={() => setMenuVisible(false)} />
+            <MachineRailContextMenu menu={webMenu} onClose={closeWebMenu} />
+        </>
     );
 });
 
 const styles = StyleSheet.create((theme) => ({
-    swipeAction: {
-        width: SWIPE_ACTION_WIDTH,
-        height: '100%',
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: theme.colors.status.error,
-    },
-    swipeActionText: {
-        marginTop: 4,
-        fontSize: 12,
-        color: '#FFFFFF',
-        ...Typography.default('semiBold'),
+    // The lifted preview is rounded as the inbox rounds the row.
+    flatRowShape: {
+        borderRadius: FLAT_ROW_RADIUS,
     },
     badgeDot: {
         position: 'absolute',
