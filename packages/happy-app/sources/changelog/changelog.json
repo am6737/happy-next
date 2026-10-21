@@ -1,6 +1,28 @@
 {
   "entries": [
     {
+      "version": 35,
+      "date": "2026-10-21",
+      "summary": "Happy Next v2.20.0 lays the session list, inbox, DooTask and GitHub lists flat on the background, sets text in the system font so Chinese and Latin share the same weights, and moves deleting and friend actions from swipes into long-press and right-click menus. The image viewer steps through images with the keyboard, arrows and dots. Happy CLI is updated to v0.16.1.",
+      "changes": [
+        "Session list: projects lose their cards; in \"All machines\" each machine heads its sessions with a pinned full-width band, rows are inset and rounded, a session marked with a colour is tinted with it, and the selected one gets a bar at the list's edge",
+        "Session list: on a phone's \"All machines\" view the same project on two machines shows as two, each with its own git status and \"+\"",
+        "Session list: rows no longer swipe — archive and delete stay in the long-press and right-click menu",
+        "Inbox, DooTask and GitHub: lists lie flat like the session list, with headed sections, larger rows and a priority pill on DooTask tasks",
+        "Inbox: an update is deleted from its long-press or right-click menu (\"Delete Notification\") instead of a swipe",
+        "Inbox: long-press or right-click a person to accept, deny or withdraw a friend request or remove a friend; the person's page menu has the same actions",
+        "Text: the app uses the system font (SF and PingFang on iOS, Roboto and Noto Sans CJK on Android, the system stack on the web), so Chinese takes the same weights as Latin",
+        "Image viewer: arrow keys move between images on web and desktop, the web shows previous and next buttons, and tapping a pagination dot jumps to that image",
+        "Path picker: the field stands on the background without a card, and no longer slips under the header when the iOS keyboard shows or hides",
+        "Command palette: archived sessions show an Archived badge, and a draft left in one no longer lifts it to the top",
+        "Chat: a chat opened on a running step lands on its end",
+        "Web: the logo shows again on the welcome screen and in the empty detail pane",
+        "Android: a project's machine in \"All machines\" is easier to tell apart from the project's name",
+        "CLI: Happy CLI v0.16.1 describes the orchestrator and `preview_html` tools more accurately, so agents pick the right working directory and prefer passing a file path for HTML previews"
+      ],
+      "rawMarkdown": "## Version 35 - 2026-10-21\n\n\nHappy Next v2.20.0 lays the session list, inbox, DooTask and GitHub lists flat on the background, sets text in the system font so Chinese and Latin share the same weights, and moves deleting and friend actions from swipes into long-press and right-click menus. The image viewer steps through images with the keyboard, arrows and dots. Happy CLI is updated to v0.16.1.\n\n- Session list: projects lose their cards; in \"All machines\" each machine heads its sessions with a pinned full-width band, rows are inset and rounded, a session marked with a colour is tinted with it, and the selected one gets a bar at the list's edge\n- Session list: on a phone's \"All machines\" view the same project on two machines shows as two, each with its own git status and \"+\"\n- Session list: rows no longer swipe — archive and delete stay in the long-press and right-click menu\n- Inbox, DooTask and GitHub: lists lie flat like the session list, with headed sections, larger rows and a priority pill on DooTask tasks\n- Inbox: an update is deleted from its long-press or right-click menu (\"Delete Notification\") instead of a swipe\n- Inbox: long-press or right-click a person to accept, deny or withdraw a friend request or remove a friend; the person's page menu has the same actions\n- Text: the app uses the system font (SF and PingFang on iOS, Roboto and Noto Sans CJK on Android, the system stack on the web), so Chinese takes the same weights as Latin\n- Image viewer: arrow keys move between images on web and desktop, the web shows previous and next buttons, and tapping a pagination dot jumps to that image\n- Path picker: the field stands on the background without a card, and no longer slips under the header when the iOS keyboard shows or hides\n- Command palette: archived sessions show an Archived badge, and a draft left in one no longer lifts it to the top\n- Chat: a chat opened on a running step lands on its end\n- Web: the logo shows again on the welcome screen and in the empty detail pane\n- Android: a project's machine in \"All machines\" is easier to tell apart from the project's name\n- CLI: Happy CLI v0.16.1 describes the orchestrator and `preview_html` tools more accurately, so agents pick the right working directory and prefer passing a file path for HTML previews"
+    },
+    {
       "version": 34,
       "date": "2026-10-19",
       "summary": "Happy Next v2.19.0 brings Happy to the Apple Watch — answer permission requests from a notification or the watch app, read a session's latest messages and reply by dictation or a quick reply, with a complication counting the sessions that need you. Phones get a search page in the session list, every search field shares one look, and orchestrator runs can be searched and filtered. Happy CLI is updated to v0.16.0.",
@@ -648,5 +670,5 @@
       "rawMarkdown": "## Version 1 - 2025-05-12\n\n\nWelcome to Happy - your secure, encrypted mobile companion for Claude Code. This inaugural release establishes the foundation for private, powerful AI interactions on the go.\n\n- Implemented end-to-end encrypted session management ensuring complete privacy\n- Integrated intelligent voice assistant with natural conversation capabilities\n- Added experimental file manager with syntax highlighting and tree navigation\n- Built seamless real-time synchronization across all your devices\n- Established native support for iOS, Android, and responsive web interfaces"
     }
   ],
-  "latestVersion": 34
+  "latestVersion": 35
 }

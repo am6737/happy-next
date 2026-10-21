@@ -313,7 +313,7 @@ Extensive improvements to the chat and session management experience.
 - **AskUserQuestion** supports choices, custom "Other" values, free-form text, masked sensitive answers, and markdown preview
 - **In-memory SWR cache** and search for agent session history
 - **Real-time friend request updates** via socket events
-- **Swipe-to-delete** for feed notifications
+- **Inbox menus**: a long press or right-click deletes an update, and accepts, denies or withdraws a friend request or removes a friend; the person's page menu has the same actions
 - **Friend search** with flat layout, GitHub connect prompt for users without username
 - **Conversation minimap**: a minimap panel for jumping to any part of a long conversation at a glance, now populated from the offline message cache so the overview is available even before messages finish loading or while offline
 - **Virtualized web conversation list**: the web chat list is rebuilt as a model-driven virtualized list — jumping to a message centers instantly (with a subtle shake when you're already there) and history loads on demand as you scroll; scrolling is stabilized so gestures don't jump, scroll-to-bottom lands on the true bottom, and a proxy scrollbar replaces the distorted native one for an honest scroll position
@@ -384,7 +384,8 @@ Extensive improvements to the chat and session management experience.
 - **File attachments**: attach files to a message from the add menu; the agent reads them on the session's machine, and they show as cards with typed, colored file icons that open in the file viewer
 - **Pinned sessions**: pin sessions to the top of the list, including in the shared-with-me and shared-by-me views
 - **Session hover card**: hover a session on web to rename it, find its project in the list, pin it or archive it
-- **Machine dividers**: the all machines view shows plain machine dividers, and double-tapping a divider folds or unfolds its projects
+- **Flat session list**: projects lie on the background, each machine in the all machines view heads its sessions with a pinned band, rows are inset and rounded, a session marked with a colour is tinted with it, and the selected one gets a bar at the list's edge
+- **Menus instead of swipes**: session rows no longer swipe; archive and delete stay in the long-press and right-click menu
 - **Jump to sessions that want a look**: double-tap the sessions tab, or tap the shown machine on the rail
 - **Whole replies**: copy, read aloud and long-press take a reply split across several blocks as one whole
 - **Translated wizard**: the new session wizard and the remaining English strings follow the app language
@@ -413,6 +414,8 @@ Extensive improvements to the chat and session management experience.
 - **Quicker "+"**: the session list's "+" starts a new session on a tap and opens its menu on a long press, and menus show an icon on each row
 - **Finer scheduling**: scheduled messages offer relative times from 10 minutes to 5 hours
 - **Copied context**: a copied Claude session's context bar reads right from the start
+- **Image viewer navigation**: arrow keys on web and desktop, previous and next buttons on the web, and a tap on a pagination dot move between images
+- **Archived in the palette**: the command palette marks archived sessions with an Archived badge
 
 ## CLI Improvements
 
@@ -478,6 +481,8 @@ The CLI (`happy-next-cli`) received substantial upgrades.
 
 - **Happy CLI v0.16.0**: fixes Codex's "Approve for Me" mode, asks before orchestrator tools act, carries a copied session's context window, and marks each message as text or other so the watch loads only text
 
+- **Happy CLI v0.16.1**: describes the orchestrator and `preview_html` tools more accurately, so agents pick the right working directory and prefer a file path for HTML previews
+
 ## Server
 
 - **v3 messages API** with batch seq allocation and cursor pagination
@@ -505,6 +510,8 @@ The CLI (`happy-next-cli`) received substantial upgrades.
 - **Header alignment**: unified back buttons and aligned header actions across session and machine screens
 - **Image handling**: compression, MIME preservation, gallery viewer with zoom/gestures
 - **Status bar**: expanded model/permission display, auto-collapse timeout, mobile mic button
+- **System font**: text is set in the system font, so Chinese takes the same weights as Latin
+- **Flat lists**: the inbox, DooTask and GitHub lists lie flat like the session list
 
 - **Vendor mark**: a small logo derived from the session's flavor — the same source the model list uses — sits in front of the model's short label, so a session's vendor no longer needs the model list opened to be known
 - **SVG wordmark**: the desktop sidebar, the welcome screen and the settings logo view draw the brand wordmark from the outlined SVG exports instead of rasterised PNGs

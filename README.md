@@ -309,7 +309,7 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 
 - Attach files to a message from the add menu; the agent reads them on the session's machine, and they show as cards with typed, colored file icons that open in the file viewer
 - Pin sessions to the top of the list, including in the sharing views, and hover a session on web for a card to rename, locate, pin or archive it
-- The all machines view shows plain machine dividers, and double-tapping a divider folds or unfolds its projects
+- The session list lies flat on the background: in the all machines view each machine heads its sessions with a pinned band, rows are inset and rounded, a session marked with a colour is tinted with it, and the selected one gets a bar at the list's edge
 - Double-tap the sessions tab, or tap the shown machine on the rail, to jump to the next session that wants a look
 - Copy, read aloud and long-press take a reply split across several blocks as one whole
 - The new session wizard and the remaining English strings follow the app language
@@ -335,6 +335,10 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - The session list's "+" starts a new session on a tap and opens its menu on a long press, and menus show an icon on each row
 - Scheduled messages offer finer relative times, from 10 minutes to 5 hours
 - A copied Claude session's context bar reads right from the start
+
+- Session rows no longer swipe; archive and delete stay in the long-press and right-click menu, and the inbox deletes an update and handles friend requests and friends from the same kind of menu
+- The image viewer moves between images with the arrow keys on web and desktop, previous and next buttons on the web, and a tap on a pagination dot
+- The command palette marks archived sessions with an Archived badge
 
 ### CLI
 - `happy update` self-upgrade, `happy --version` with all agent versions
@@ -375,6 +379,8 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 
 - Happy CLI v0.16.0 fixes Codex's "Approve for Me" mode, asks before orchestrator tools act, carries a copied session's context window, and marks each message as text or other so the watch loads only text
 
+- Happy CLI v0.16.1 describes the orchestrator and `preview_html` tools more accurately, so agents pick the right working directory and prefer a file path for HTML previews
+
 ### Bug Fixes & Stability
 - 255+ bug fixes: message sending reliability, session lifecycle, Markdown rendering, navigation, voice, DooTask, sharing
 - Push tokens remain bound to only the active account and are cleaned up reliably during logout
@@ -397,6 +403,7 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - i18n improvements (Chinese Simplified/Traditional, CJK input handling)
 - Markdown rendering: tables, inline code, nested fences, clickable file paths
 - Keyboard handling, loading states, navigation stability, icon font preloading
+- Text is set in the system font, so Chinese takes the same weights as Latin, and the inbox, DooTask and GitHub lists lie flat like the session list
 
 Full changelog: [docs/changes-from-happy.md](docs/changes-from-happy.md)
 
