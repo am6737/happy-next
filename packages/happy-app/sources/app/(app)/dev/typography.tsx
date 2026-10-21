@@ -24,9 +24,9 @@ export default function TypographyScreen() {
     return (
         <ScrollView style={styles.container} contentInsetAdjustmentBehavior="automatic">
             <View style={styles.content}>
-                {/* IBM Plex Sans (Default) */}
+                {/* System font (Default) */}
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>IBM Plex Sans (Default)</Text>
+                    <Text style={styles.sectionTitle}>System font (Default)</Text>
                     
                     <TextSample 
                         title="Regular (400)" 
@@ -120,7 +120,7 @@ export default function TypographyScreen() {
                     
                     <View style={styles.codeBlock}>
                         <Text style={{ ...Typography.mono(), fontSize: 12 }}>
-{`// Default typography (IBM Plex Sans)
+{`// Default typography (system font)
 <Text style={{ fontSize: 16, ...Typography.default() }}>Regular</Text>
 <Text style={{ fontSize: 16, ...Typography.default('semiBold') }}>Bold</Text>
 

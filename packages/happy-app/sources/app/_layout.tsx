@@ -181,9 +181,6 @@ let loaded = false;
 
 const allFonts = {
     SpaceMono: require('@/assets/fonts/SpaceMono-Regular.ttf'),
-    'IBMPlexSans-Regular': require('@/assets/fonts/IBMPlexSans-Regular.ttf'),
-    'IBMPlexSans-Italic': require('@/assets/fonts/IBMPlexSans-Italic.ttf'),
-    'IBMPlexSans-SemiBold': require('@/assets/fonts/IBMPlexSans-SemiBold.ttf'),
     'IBMPlexMono-Regular': require('@/assets/fonts/IBMPlexMono-Regular.ttf'),
     'IBMPlexMono-Italic': require('@/assets/fonts/IBMPlexMono-Italic.ttf'),
     'IBMPlexMono-SemiBold': require('@/assets/fonts/IBMPlexMono-SemiBold.ttf'),
