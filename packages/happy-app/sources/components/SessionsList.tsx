@@ -310,8 +310,7 @@ const stylesheet = StyleSheet.create((theme) => ({
         flexShrink: 1,
         fontSize: 12,
         color: theme.colors.textSecondary,
-        ...Typography.default(),
-        fontWeight: '500',
+        ...Typography.default('medium'),
     },
     sectionDividerCount: {
         marginLeft: 6,
@@ -727,10 +726,11 @@ export function SessionsList() {
     // The iOS phone list leads with a search field; the sidebar has its own, and elsewhere the phone
     // header has a search button beside its "+".
     const showsSearchRow = !isTablet && Platform.OS === 'ios';
-    // The first row starts 16 down in "All machines" — under the sidebar's search field, whose own 8
-    // below it makes 24 — and 12 down in one machine's list. The iOS phone's search field heads the
+    // The first row starts 16 down where machines head their sessions with bands — under the sidebar's
+    // search field, whose own 8 below it makes 24 — and 12 down in any other list, the phone's "All
+    // machines" included. The iOS phone's search field heads the
     // list itself, so padding here would push it down from the header too; it spaces the rows itself.
-    const listTopPadding = showsSearchRow ? 0 : (switchable && activeTab === 'all' ? 16 : 12);
+    const listTopPadding = showsSearchRow ? 0 : (groupByMachine ? 16 : 12);
     const scrollListToTop = React.useCallback(() => {
         listRef.current?.scrollToOffset({ offset: -getVisibleInsets().top, animated: true });
     }, [getVisibleInsets]);

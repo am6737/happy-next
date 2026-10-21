@@ -35,6 +35,8 @@ export const FontFamilies = {
   default: {
     regular: 'IBMPlexSans-Regular',
     italic: 'IBMPlexSans-Italic', 
+    // The list titles' weight. Plex is bundled without a medium face, so it falls back to semibold.
+    medium: 'IBMPlexSans-SemiBold',
     semiBold: 'IBMPlexSans-SemiBold',
   },
   
@@ -58,7 +60,7 @@ export const FontFamilies = {
 };
 
 // Helper functions for easy access to font families
-export const getDefaultFont = (weight: 'regular' | 'italic' | 'semiBold' = 'regular') => {
+export const getDefaultFont = (weight: 'regular' | 'italic' | 'medium' | 'semiBold' = 'regular') => {
   return FontFamilies.default[weight];
 };
 
@@ -73,6 +75,7 @@ export const getLogoFont = () => {
 // Font weight mappings for the font families
 export const FontWeights = {
   regular: '400',
+  medium: '500',
   semiBold: '600', 
   bold: '700',
 } as const;
@@ -80,7 +83,7 @@ export const FontWeights = {
 // Style utilities for easy inline usage
 export const Typography = {
   // Default font styles (IBM Plex Sans)
-  default: (weight: 'regular' | 'italic' | 'semiBold' = 'regular') => ({
+  default: (weight: 'regular' | 'italic' | 'medium' | 'semiBold' = 'regular') => ({
     fontFamily: getDefaultFont(weight),
   }),
   

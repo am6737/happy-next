@@ -82,11 +82,12 @@ export const lightTheme = {
             chevron: Platform.select({ ios: '#C7C7CC', default: '#49454F' }),
             sectionTitle: Platform.select({ ios: '#8E8E93', default: '#49454F' }),
         },
-        // The session list: a band per machine, and rows lit under the pointer.
+        // The session list: a band per machine, and rows lit under the pointer. Its title colour is
+        // every flat list's — sessions, inbox, DooTask, GitHub — softened off black.
         sessionList: {
             machineBand: '#FFFFFF',
             rowHover: 'rgba(0, 0, 0, 0.05)',
-            text: '#000000',
+            text: '#2C2C2E',
         },
         header: {
             background: '#ffffff',

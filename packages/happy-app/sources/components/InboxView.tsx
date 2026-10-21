@@ -5,7 +5,6 @@ import { useAcceptedFriends, useFriendRequests, useRequestedFriends, useFeedItem
 import { UserCard } from '@/components/UserCard';
 import { t } from '@/text';
 import { trackFriendsProfileView } from '@/track';
-import { ItemGroup } from '@/components/ItemGroup';
 import { Item } from '@/components/Item';
 import { UpdateBanner } from './UpdateBanner';
 import { Typography } from '@/constants/Typography';
@@ -21,6 +20,7 @@ import type { DooTaskProfile, DooTaskUser, DooTaskDialogListItem } from '@/sync/
 import { showToast } from './Toast';
 import { useMainTabBottomPadding } from '@/hooks/useMainTabBottomPadding';
 import { loadDooTaskInboxUsersCache, saveDooTaskInboxUsersCache } from '@/sync/persistence';
+import { FLAT_ROW_AVATAR_SIZE, flatRowIconContainerStyle, flatRowItemStyle, flatRowSubtitleStyle, flatRowTitleStyle } from './flatRow';
 
 const styles = StyleSheet.create((theme) => ({
     container: {
@@ -47,16 +47,50 @@ const styles = StyleSheet.create((theme) => ({
         textAlign: 'center',
         lineHeight: 22,
     },
+    // Sections lie flat on the background like the session list's projects: a header, then rows
+    // inset and rounded, without a card or dividers.
+    section: {
+        marginBottom: 8,
+    },
     sectionHeader: {
-        fontSize: 14,
+        height: 32,
+        justifyContent: 'center',
+        paddingHorizontal: 16,
+    },
+    sectionHeaderText: {
+        fontSize: 13,
         ...Typography.default('semiBold'),
         color: theme.colors.textSecondary,
-        paddingHorizontal: 16,
-        paddingTop: 24,
-        paddingBottom: 8,
         textTransform: 'uppercase',
     },
+    row: {
+        marginHorizontal: 8,
+        marginBottom: 4,
+        borderRadius: 6,
+        overflow: 'hidden',
+    },
 }));
+
+function InboxSection({ title, children }: { title: string; children: React.ReactNode }) {
+    return (
+        <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+                <Text style={styles.sectionHeaderText}>{title}</Text>
+            </View>
+            {React.Children.map(children, (child) => (
+                <View style={styles.row}>
+                    {React.isValidElement(child)
+                        ? React.cloneElement(child as React.ReactElement<{ showDivider?: boolean; flat?: boolean }>, { showDivider: false, flat: true })
+                        : child}
+                </View>
+            ))}
+        </View>
+    );
+}
+
+// The first section's title stands as far under the header as the session list's first project name
+// (its 12 of top padding and half its 44 header, against half this list's 32).
+const INBOX_TOP_PADDING = 12 + 44 / 2 - 32 / 2;
 
 interface InboxViewProps {
 }
@@ -308,6 +342,7 @@ export const InboxView = React.memo(({}: InboxViewProps) => {
                     maxWidth: layout.maxWidth,
                     alignSelf: 'center',
                     width: '100%',
+                    paddingTop: INBOX_TOP_PADDING,
                     paddingBottom: tabBottomPadding,
                 }}
                 refreshControl={refreshControl}
@@ -316,20 +351,20 @@ export const InboxView = React.memo(({}: InboxViewProps) => {
 
                 {feedItems.length > 0 && (
                     <>
-                        <ItemGroup title={t('inbox.updates')}>
+                        <InboxSection title={t('inbox.updates')}>
                             {feedItems.map((item) => (
                                 <FeedItemCard
                                     key={item.id}
                                     item={item}
                                 />
                             ))}
-                        </ItemGroup>
+                        </InboxSection>
                     </>
                 )}
 
                 {friendRequests.length > 0 && (
                     <>
-                        <ItemGroup title={t('friends.pendingRequests')}>
+                        <InboxSection title={t('friends.pendingRequests')}>
                             {friendRequests.map((friend) => (
                                 <UserCard
                                     key={friend.id}
@@ -340,13 +375,13 @@ export const InboxView = React.memo(({}: InboxViewProps) => {
                                     }}
                                 />
                             ))}
-                        </ItemGroup>
+                        </InboxSection>
                     </>
                 )}
 
                 {requestedFriends.length > 0 && (
                     <>
-                        <ItemGroup title={t('friends.requestPending')}>
+                        <InboxSection title={t('friends.requestPending')}>
                             {requestedFriends.map((friend) => (
                                 <UserCard
                                     key={friend.id}
@@ -357,13 +392,13 @@ export const InboxView = React.memo(({}: InboxViewProps) => {
                                     }}
                                 />
                             ))}
-                        </ItemGroup>
+                        </InboxSection>
                     </>
                 )}
 
                 {friends.length > 0 && (
                     <>
-                        <ItemGroup title={t('friends.myFriends')}>
+                        <InboxSection title={t('friends.myFriends')}>
                             {friends.map((friend) => (
                                 <UserCard
                                     key={friend.id}
@@ -374,12 +409,12 @@ export const InboxView = React.memo(({}: InboxViewProps) => {
                                     }}
                                 />
                             ))}
-                        </ItemGroup>
+                        </InboxSection>
                     </>
                 )}
 
                 {dootaskUsers.length > 0 && dootaskProfile && (
-                    <ItemGroup title={t('dootask.title')}>
+                    <InboxSection title={t('dootask.title')}>
                         {dootaskUsers.map((user) => (
                             <DooTaskUserCard
                                 key={user.userid}
@@ -389,18 +424,20 @@ export const InboxView = React.memo(({}: InboxViewProps) => {
                                 onPress={() => openDootaskForUser(user)}
                             />
                         ))}
-                    </ItemGroup>
+                    </InboxSection>
                 )}
             </ScrollView>
         </View>
     );
 });
 
-function DooTaskUserCard({ user, profile, onPress, loading }: {
+function DooTaskUserCard({ user, profile, onPress, loading, showDivider, flat }: {
     user: DootaskMergedUser;
     profile: DooTaskProfile;
     onPress: () => void;
     loading?: boolean;
+    showDivider?: boolean;
+    flat?: boolean;
 }) {
     const displayName = user.nickname || user.email || `#${user.userid}`;
     const subtitle = user.profession || user.email || `#${user.userid}`;
@@ -415,13 +452,19 @@ function DooTaskUserCard({ user, profile, onPress, loading }: {
                 <Image
                     source={avatarUrl ? { uri: avatarUrl } : require('@/assets/images/icon-dootask.png')}
                     contentFit="cover"
-                    style={{ width: 40, height: 40, borderRadius: 20 }}
+                    style={flat
+                        ? { width: FLAT_ROW_AVATAR_SIZE, height: FLAT_ROW_AVATAR_SIZE, borderRadius: FLAT_ROW_AVATAR_SIZE / 2 }
+                        : { width: 40, height: 40, borderRadius: 20 }}
                 />
             }
-            iconContainerStyle={{ marginRight: 20 }}
+            style={flat ? flatRowItemStyle : undefined}
+            titleStyle={flat ? flatRowTitleStyle : undefined}
+            subtitleStyle={flat ? flatRowSubtitleStyle : undefined}
+            iconContainerStyle={flat ? flatRowIconContainerStyle : { marginRight: 20 }}
             onPress={onPress}
             loading={loading}
             showChevron
+            showDivider={showDivider}
         />
     );
 }

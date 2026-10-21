@@ -400,7 +400,7 @@ const FilterBar = React.memo(({ onRefreshTasks }: FilterBarProps) => {
 });
 
 // --- Task Card ---
-const TaskCard = React.memo(({ item, projectName, columnName, userCache, flavors, onPress }: { item: DooTaskItem; projectName: string; columnName?: string; userCache: Record<number, string>; flavors?: string[]; onPress: () => void }) => {
+const TaskCard = React.memo(({ item, projectName, columnName, userCache, flavors, showDivider, onPress }: { item: DooTaskItem; projectName: string; columnName?: string; userCache: Record<number, string>; flavors?: string[]; showDivider: boolean; onPress: () => void }) => {
     const { theme } = useUnistyles();
     const isCompleted = !!item.complete_at;
     const flow = item.flow_item_name ? parseFlowItem(item.flow_item_name) : null;
@@ -416,12 +416,15 @@ const TaskCard = React.memo(({ item, projectName, columnName, userCache, flavors
     const hasAssignees = owners.length > 0;
 
     return (
-        <Pressable style={[styles.card, { backgroundColor: theme.colors.surface }]} onPress={onPress}>
+        <Pressable
+            style={({ hovered }: any) => [styles.card, Platform.OS === 'web' && hovered && { backgroundColor: theme.colors.sessionList.rowHover }]}
+            onPress={onPress}
+        >
             {({ pressed }) => (<>
             {pressed && <PressHighlight style={styles.cardHighlight} />}
             <View style={styles.cardHeader}>
                 <View style={[styles.priorityBar, { backgroundColor: item.p_color || theme.colors.textSecondary }]} />
-                <Text style={[styles.cardTitle, { color: theme.colors.text }]} numberOfLines={2}>
+                <Text style={[styles.cardTitle, { color: theme.colors.sessionList.text }]} numberOfLines={2}>
                     {item.name}
                 </Text>
             </View>
@@ -440,7 +443,7 @@ const TaskCard = React.memo(({ item, projectName, columnName, userCache, flavors
                     </View>
                 )}
                 {projectName ? (
-                    <Text style={[styles.metaText, { color: theme.colors.textSecondary }]} numberOfLines={1}>
+                    <Text style={[styles.metaText, styles.cardProject, { color: theme.colors.textSecondary }]} numberOfLines={1}>
                         {projectName}{columnName ? ` · ${columnName}` : ''}
                     </Text>
                 ) : null}
@@ -460,9 +463,18 @@ const TaskCard = React.memo(({ item, projectName, columnName, userCache, flavors
                         </Text>
                     </View>
                 ) : null}
+                {/* The assignees sit at the end of the project's line, not on a line of their own. */}
+                <View style={styles.cardAssignees}>
+                    {hasAssignees ? (
+                        <Text style={[styles.metaText, styles.cardProject, { color: theme.colors.textSecondary }]} numberOfLines={1}>
+                            {assigneeText}
+                        </Text>
+                    ) : null}
+                    {flavors && flavors.length > 0 ? <FlavorBadges flavors={flavors} /> : null}
+                </View>
             </View>
-            <View style={styles.cardBottom}>
-                {hasTime ? (
+            {hasTime ? (
+                <View style={styles.cardBottom}>
                     <Text style={[
                         styles.metaText,
                         { color: item.overdue ? theme.colors.deleteAction : theme.colors.textSecondary },
@@ -470,16 +482,9 @@ const TaskCard = React.memo(({ item, projectName, columnName, userCache, flavors
                         {formatEndAt(item.end_at!)}
                         {item.overdue ? ` (${t('dootask.overdue')})` : ''}
                     </Text>
-                ) : <View />}
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    {hasAssignees ? (
-                        <Text style={[styles.metaText, { color: theme.colors.textSecondary }]} numberOfLines={1}>
-                            {assigneeText}
-                        </Text>
-                    ) : null}
-                    {flavors && flavors.length > 0 ? <FlavorBadges flavors={flavors} /> : null}
                 </View>
-            </View>
+            ) : null}
+            {showDivider ? <View pointerEvents="none" style={[styles.cardDivider, { backgroundColor: theme.colors.divider }]} /> : null}
             </>)}
         </Pressable>
     );
@@ -584,13 +589,14 @@ export const DooTaskListView = React.memo(() => {
                     contentInsetAdjustmentBehavior={Platform.OS === 'ios' ? 'automatic' : undefined}
                     data={tasks}
                     keyExtractor={(item) => String(item.id)}
-                    renderItem={({ item }) => (
+                    renderItem={({ item, index }) => (
                         <TaskCard
                             item={item}
                             projectName={item.project_name || ''}
                             columnName={item.column_name}
                             userCache={userCache}
                             flavors={taskFlavorsMap[String(item.id)]}
+                            showDivider={index < tasks.length - 1}
                             onPress={() => router.push(`/dootask/${item.id}`)}
                         />
                     )}
@@ -645,31 +651,56 @@ export const DooTaskListView = React.memo(() => {
 // useMainTabBottomPadding leaves 128pt of scroll room; the tab bar itself only covers ~56pt of it.
 const ERROR_BANNER_TAB_GAP = 64;
 
+// The priority marker's width plus its gap to the title.
+const CARD_TEXT_INSET = 3 + 8;
+const CARD_TITLE_LINE_HEIGHT = 22;
+const PRIORITY_BAR_HEIGHT = 14;
+
 const styles = StyleSheet.create((_theme) => ({
     // Its search field sits as far under the header as the session list's does on iOS; elsewhere as
     // far as the settings' first card.
-    filterBar: { paddingTop: Platform.select({ ios: 12, default: 16 }), paddingBottom: 8, gap: 12 },
+    // Its filters stand as far above the first task as the GitHub list's scope filters do.
+    filterBar: { paddingTop: Platform.select({ ios: 12, default: 16 }), paddingBottom: 12, gap: 12 },
     filterRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
     chip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, gap: 4 },
     chipText: { ...Typography.default(), fontSize: 13 },
     list: { paddingHorizontal: 16 },
+    // Tasks lie flat on the background like the session list's rows: inset by half the list's
+    // padding, so the priority marker lines up with the search field.
     card: {
-        padding: 14,
-        borderRadius: 10,
-        marginTop: 8,
+        marginHorizontal: -8,
+        paddingHorizontal: 8,
+        paddingVertical: 12,
+        borderRadius: 6,
+        overflow: 'hidden',
+    },
+    // A hairline between tasks, as GitHub's lists have, from where the title starts.
+    cardDivider: {
+        position: 'absolute',
+        left: 8 + CARD_TEXT_INSET,
+        right: 8,
+        bottom: 0,
+        height: StyleSheet.hairlineWidth,
     },
     cardHighlight: {
-        borderRadius: 10,
+        borderRadius: 6,
     },
     cardHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
-    priorityBar: { width: 3, alignSelf: 'stretch' as const, borderRadius: 1.5 },
-    cardTitle: { ...Typography.default('semiBold'), fontSize: 15, flex: 1 },
-    cardMeta: { flexDirection: 'row', gap: 8, marginTop: 6, flexWrap: 'wrap', alignItems: 'center' },
-    statusBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+    // A pill as tall as the title's first line, like the session list's marker.
+    priorityBar: { width: 3, height: PRIORITY_BAR_HEIGHT, marginTop: (CARD_TITLE_LINE_HEIGHT - PRIORITY_BAR_HEIGHT) / 2, borderRadius: 1.5 },
+    // As the GitHub list's and the session list's titles are: 16. Its line height is set, so the
+    // priority marker can stand centred on its first line.
+    cardTitle: { ...Typography.default('medium'), fontSize: 16, lineHeight: CARD_TITLE_LINE_HEIGHT, flex: 1 },
+    // The lines under the title start where the title does, past the priority marker; the project
+    // gives way when the line runs out, so the assignees keep their place at its end.
+    cardMeta: { flexDirection: 'row', gap: 8, marginTop: 4, marginLeft: CARD_TEXT_INSET, alignItems: 'center' },
+    cardProject: { flexShrink: 1 },
+    statusBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, flexShrink: 0 },
     statusBadgeText: { ...Typography.default(), fontSize: 11 },
     metaText: { ...Typography.default(), fontSize: 12, lineHeight: 18 },
-    subCountBadge: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-    cardBottom: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4, minHeight: 20 },
+    subCountBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, flexShrink: 0 },
+    cardAssignees: { flexDirection: 'row', alignItems: 'center', gap: 6, marginLeft: 'auto', paddingLeft: 4, flexShrink: 0, maxWidth: '40%' },
+    cardBottom: { flexDirection: 'row', alignItems: 'center', marginTop: 4, marginLeft: CARD_TEXT_INSET },
     empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
     emptyTitle: { ...Typography.default('semiBold'), fontSize: 16 },
     emptyText: { ...Typography.default(), fontSize: 14, textAlign: 'center', marginTop: 4 },

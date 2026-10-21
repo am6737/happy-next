@@ -14,15 +14,18 @@ import { Text } from './StyledText';
 import { deleteFeedItem } from '@/sync/apiFeed';
 import { Typography } from '@/constants/Typography';
 import { getDisplayName } from '@/sync/friendTypes';
+import { FLAT_ROW_AVATAR_SIZE, flatRowIconContainerStyle, flatRowItemStyle, flatRowSubtitleStyle, flatRowTitleStyle } from './flatRow';
 
 const SWIPE_ACTION_WIDTH = 80;
 
 interface FeedItemCardProps {
     item: FeedItem;
     showDivider?: boolean;
+    // Laid flat on the background, as the inbox lists it.
+    flat?: boolean;
 }
 
-export const FeedItemCard = React.memo(({ item, showDivider }: FeedItemCardProps) => {
+export const FeedItemCard = React.memo(({ item, showDivider, flat }: FeedItemCardProps) => {
     const { theme } = useUnistyles();
     const router = useRouter();
     const { credentials } = useAuth();
@@ -67,7 +70,7 @@ export const FeedItemCard = React.memo(({ item, showDivider }: FeedItemCardProps
                     <Avatar
                         id={user!.id}
                         imageUrl={user!.avatar.url}
-                        size={40}
+                        size={flat ? FLAT_ROW_AVATAR_SIZE : 40}
                     />
                 ) : (
                     <Ionicons name="person" size={20} color={theme.colors.textSecondary} />
@@ -78,7 +81,10 @@ export const FeedItemCard = React.memo(({ item, showDivider }: FeedItemCardProps
                         title={t('feed.friendRequestFrom', { name: getDisplayName(user!) })}
                         subtitle={getTimeAgo(item.createdAt)}
                         leftElement={avatarElement}
-                        iconContainerStyle={{ marginRight: 20 }}
+                        style={flat ? flatRowItemStyle : undefined}
+                        titleStyle={flat ? flatRowTitleStyle : undefined}
+                        subtitleStyle={flat ? flatRowSubtitleStyle : undefined}
+                        iconContainerStyle={flat ? flatRowIconContainerStyle : { marginRight: 20 }}
                         onPress={() => router.push(`/user/${user!.id}`)}
                         showChevron={true}
                         showDivider={showDivider}
@@ -91,7 +97,7 @@ export const FeedItemCard = React.memo(({ item, showDivider }: FeedItemCardProps
                     <Avatar
                         id={user!.id}
                         imageUrl={user!.avatar.url}
-                        size={40}
+                        size={flat ? FLAT_ROW_AVATAR_SIZE : 40}
                     />
                 ) : (
                     <Ionicons name="checkmark-circle" size={20} color={theme.colors.status.connected} />
@@ -102,7 +108,10 @@ export const FeedItemCard = React.memo(({ item, showDivider }: FeedItemCardProps
                         title={t('feed.friendAccepted', { name: getDisplayName(user!) })}
                         subtitle={getTimeAgo(item.createdAt)}
                         leftElement={avatarElement}
-                        iconContainerStyle={{ marginRight: 20 }}
+                        style={flat ? flatRowItemStyle : undefined}
+                        titleStyle={flat ? flatRowTitleStyle : undefined}
+                        subtitleStyle={flat ? flatRowSubtitleStyle : undefined}
+                        iconContainerStyle={flat ? flatRowIconContainerStyle : { marginRight: 20 }}
                         onPress={() => router.push(`/user/${user!.id}`)}
                         showChevron={true}
                         showDivider={showDivider}
@@ -116,7 +125,10 @@ export const FeedItemCard = React.memo(({ item, showDivider }: FeedItemCardProps
                         title={item.body.text}
                         subtitle={getTimeAgo(item.createdAt)}
                         icon={<Ionicons name="information-circle" size={20} color={theme.colors.textSecondary} />}
-                        iconContainerStyle={{ marginRight: 20 }}
+                        style={flat ? flatRowItemStyle : undefined}
+                        titleStyle={flat ? flatRowTitleStyle : undefined}
+                        subtitleStyle={flat ? flatRowSubtitleStyle : undefined}
+                        iconContainerStyle={flat ? flatRowIconContainerStyle : { marginRight: 20 }}
                         showChevron={false}
                         showDivider={showDivider}
                     />
@@ -133,7 +145,10 @@ export const FeedItemCard = React.memo(({ item, showDivider }: FeedItemCardProps
                                 {item.badge && <View style={styles.badgeDot} />}
                             </View>
                         }
-                        iconContainerStyle={{ marginRight: 20 }}
+                        style={flat ? flatRowItemStyle : undefined}
+                        titleStyle={flat ? flatRowTitleStyle : undefined}
+                        subtitleStyle={flat ? flatRowSubtitleStyle : undefined}
+                        iconContainerStyle={flat ? flatRowIconContainerStyle : { marginRight: 20 }}
                         onPress={() => router.push({ pathname: '/inbox/notice/[id]', params: { id: item.id } })}
                         showChevron={true}
                         showDivider={showDivider}
@@ -164,7 +179,8 @@ export const FeedItemCard = React.memo(({ item, showDivider }: FeedItemCardProps
             friction={2}
             rightThreshold={40}
         >
-            <View style={{ backgroundColor: theme.colors.surface }}>
+            {/* Opaque over the delete action; a flat row takes the page's colour, a card's the card's. */}
+            <View style={{ backgroundColor: flat ? theme.colors.groupped.background : theme.colors.surface }}>
                 {renderContent()}
             </View>
         </Swipeable>

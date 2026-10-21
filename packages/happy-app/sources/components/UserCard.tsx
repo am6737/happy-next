@@ -2,17 +2,21 @@ import React from 'react';
 import { UserProfile, getDisplayName, getUsernameLabel } from '@/sync/friendTypes';
 import { Item } from '@/components/Item';
 import { Avatar } from '@/components/Avatar';
+import { FLAT_ROW_AVATAR_SIZE, flatRowIconContainerStyle, flatRowItemStyle, flatRowSubtitleStyle, flatRowTitleStyle } from '@/components/flatRow';
 
 interface UserCardProps {
     user: UserProfile;
     onPress?: () => void;
     showDivider?: boolean;
+    // Laid flat on the background, as the inbox lists it.
+    flat?: boolean;
 }
 
 export function UserCard({
     user,
     onPress,
     showDivider,
+    flat,
 }: UserCardProps) {
     const displayName = getDisplayName(user);
     const avatarUrl = user.avatar?.url || user.avatar?.path;
@@ -21,7 +25,7 @@ export function UserCard({
     const avatarElement = (
         <Avatar
             id={user.id}
-            size={40}
+            size={flat ? FLAT_ROW_AVATAR_SIZE : 40}
             imageUrl={avatarUrl}
             thumbhash={user.avatar?.thumbhash}
         />
@@ -35,7 +39,10 @@ export function UserCard({
             subtitle={subtitle}
             subtitleLines={1}
             leftElement={avatarElement}
-            iconContainerStyle={{ marginRight: 20 }}
+            style={flat ? flatRowItemStyle : undefined}
+            titleStyle={flat ? flatRowTitleStyle : undefined}
+            subtitleStyle={flat ? flatRowSubtitleStyle : undefined}
+            iconContainerStyle={flat ? flatRowIconContainerStyle : { marginRight: 20 }}
             onPress={onPress}
             showChevron={!!onPress}
             showDivider={showDivider}

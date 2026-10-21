@@ -1007,15 +1007,18 @@ const issueStyles = StyleSheet.create((theme) => ({
     icon: {
         width: 18,
         alignItems: 'center',
-        marginTop: 1,
+        marginTop: 2,
     },
     content: {
         flex: 1,
     },
+    // As the session list's titles are.
     title: {
-        ...Typography.default('semiBold'),
-        fontSize: 14,
-        color: theme.colors.text,
+        ...Typography.default('medium'),
+        fontSize: 16,
+        // Set, so the state icon (18, 2 down) stands centred on the first line.
+        lineHeight: 22,
+        color: theme.colors.sessionList.text,
     },
     meta: {
         ...Typography.default(),

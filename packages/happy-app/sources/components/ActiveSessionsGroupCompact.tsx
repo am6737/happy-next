@@ -105,10 +105,10 @@ const stylesheet = StyleSheet.create((theme) => ({
     },
     // The project's name in the text colour; its path follows in the section-title grey.
     projectHeaderName: {
-        ...Typography.default('semiBold'),
+        ...Typography.default('medium'),
         color: theme.colors.sessionList.text,
-        fontSize: 15,
-        lineHeight: 20,
+        fontSize: 16,
+        lineHeight: 22,
         flexShrink: 1,
     },
     projectHeaderDetail: {
@@ -219,7 +219,7 @@ const stylesheet = StyleSheet.create((theme) => ({
         alignItems: 'center',
     },
     sessionTitle: {
-        fontSize: 15,
+        fontSize: 16,
         flex: 1,
         ...Typography.default('regular'),
     },
