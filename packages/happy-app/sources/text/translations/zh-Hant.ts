@@ -1069,7 +1069,7 @@ export const zhHant: TranslationStructure = {
         markerGreen: '綠色標記',
         markerBlue: '藍色標記',
         markerPurple: '紫色標記',
-        markerGray: '灰色標記',
+        markerTeal: '青色標記',
         connectionStatus: '連線狀態',
         created: '建立時間',
         lastUpdated: '最後更新',

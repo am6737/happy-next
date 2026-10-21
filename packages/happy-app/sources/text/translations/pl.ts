@@ -1079,7 +1079,7 @@ export const pl: TranslationStructure = {
         markerGreen: 'Zielony znacznik',
         markerBlue: 'Niebieski znacznik',
         markerPurple: 'Fioletowy znacznik',
-        markerGray: 'Szary znacznik',
+        markerTeal: 'Turkusowy znacznik',
         connectionStatus: 'Status połączenia',
         created: 'Utworzono',
         lastUpdated: 'Ostatnia aktualizacja',

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, View } from 'react-native';
+import { Pressable, StyleProp, View, ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { t } from '@/text';
@@ -14,8 +14,28 @@ export const SESSION_MARKER_COLOR_VALUES: Record<SessionMarkerColor, string> = {
     green: '#30C759',
     blue: '#0A84FF',
     purple: '#BF5AF2',
-    gray: '#8E8E93',
+    teal: '#40C8E0',
 };
+
+// The bar beside a selected row that carries no colour of its own.
+export const SESSION_SELECTION_BAR_GRAY = '#8E8E93';
+
+// A row marked with a colour is tinted with it: lightly at rest, more under the pointer, most while
+// selected. A dark background takes a little more of the colour to show it as clearly.
+const MARKER_TINT_ALPHA = {
+    light: { rest: 0.12, hover: 0.18, selected: 0.26 },
+    dark: { rest: 0.14, hover: 0.2, selected: 0.28 },
+};
+
+export type SessionMarkerTintLevel = keyof typeof MARKER_TINT_ALPHA.light;
+
+export function sessionMarkerTint(color: SessionMarkerColor, level: SessionMarkerTintLevel, dark: boolean): string {
+    const hex = SESSION_MARKER_COLOR_VALUES[color];
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return `rgba(${r}, ${g}, ${b}, ${MARKER_TINT_ALPHA[dark ? 'dark' : 'light'][level]})`;
+}
 
 const styles = StyleSheet.create((theme) => ({
     // The marker as a bar down the row's leading edge. Full row height, so the parent must clip
@@ -75,7 +95,7 @@ export const sessionMarkerColorLabels: Record<SessionMarkerColor, () => string> 
     green: () => t('sessionInfo.markerGreen'),
     blue: () => t('sessionInfo.markerBlue'),
     purple: () => t('sessionInfo.markerPurple'),
-    gray: () => t('sessionInfo.markerGray'),
+    teal: () => t('sessionInfo.markerTeal'),
 };
 
 /**
@@ -85,13 +105,13 @@ export const sessionMarkerColorLabels: Record<SessionMarkerColor, () => string> 
  * or removed. It also holds still: a trailing dot rides the end of a `flex: 1` title, so its
  * horizontal position drifts with the title's length and a column of them can't be scanned.
  */
-export function SessionMarkerBar({ sessionId }: { sessionId: string }) {
+export function SessionMarkerBar({ sessionId, style }: { sessionId: string; style?: StyleProp<ViewStyle> }) {
     const color = useSessionMarkerColor(sessionId);
     if (!color) return null;
     return (
         <View
             pointerEvents="none"
-            style={[styles.markerBar, { backgroundColor: SESSION_MARKER_COLOR_VALUES[color] }]}
+            style={[styles.markerBar, style, { backgroundColor: SESSION_MARKER_COLOR_VALUES[color] }]}
         />
     );
 }

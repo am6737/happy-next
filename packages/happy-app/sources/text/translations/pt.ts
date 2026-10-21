@@ -1068,7 +1068,7 @@ export const pt: TranslationStructure = {
         markerGreen: 'Marcador verde',
         markerBlue: 'Marcador azul',
         markerPurple: 'Marcador roxo',
-        markerGray: 'Marcador cinzento',
+        markerTeal: 'Marcador turquesa',
         connectionStatus: 'Status da conexão',
         created: 'Criado',
         lastUpdated: 'Última atualização',

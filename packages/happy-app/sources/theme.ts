@@ -82,6 +82,12 @@ export const lightTheme = {
             chevron: Platform.select({ ios: '#C7C7CC', default: '#49454F' }),
             sectionTitle: Platform.select({ ios: '#8E8E93', default: '#49454F' }),
         },
+        // The session list: a band per machine, and rows lit under the pointer.
+        sessionList: {
+            machineBand: '#FFFFFF',
+            rowHover: 'rgba(0, 0, 0, 0.05)',
+            text: '#000000',
+        },
         header: {
             background: '#ffffff',
             tint: '#18171C'
@@ -381,6 +387,11 @@ export const darkTheme = {
             background: Platform.select({ ios: '#1C1C1E', default: '#1e1e1e' }),
             chevron: Platform.select({ ios: '#48484A', default: '#CAC4D0' }),
             sectionTitle: Platform.select({ ios: '#8E8E93', default: '#CAC4D0' }),
+        },
+        sessionList: {
+            machineBand: '#28282A',
+            rowHover: 'rgba(255, 255, 255, 0.06)',
+            text: '#EDEDEF',
         },
         fab: {
             background: '#FFFFFF',

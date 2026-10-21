@@ -1077,7 +1077,7 @@ export const en = {
         markerGreen: 'Green marker',
         markerBlue: 'Blue marker',
         markerPurple: 'Purple marker',
-        markerGray: 'Gray marker',
+        markerTeal: 'Teal marker',
         connectionStatus: 'Connection Status',
         created: 'Created',
         lastUpdated: 'Last Updated',

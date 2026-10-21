@@ -864,7 +864,7 @@ export const ru: TranslationStructure = {
         markerGreen: 'Зелёная метка',
         markerBlue: 'Синяя метка',
         markerPurple: 'Фиолетовая метка',
-        markerGray: 'Серая метка',
+        markerTeal: 'Бирюзовая метка',
         connectionStatus: 'Статус подключения',
         created: 'Создано',
         lastUpdated: 'Последнее обновление',

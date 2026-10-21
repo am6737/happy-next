@@ -298,40 +298,52 @@ const stylesheet = StyleSheet.create((theme) => ({
         color: theme.colors.button.primary.tint,
         ...Typography.default('semiBold'),
     },
+    // A full-width band per machine, stuck to the top while its sessions scroll under it.
     sectionDividerHeader: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 6,
-        paddingTop: 14,
-        paddingBottom: 4,
-        paddingHorizontal: Platform.select({ ios: 20, default: 16 }),
-        backgroundColor: theme.colors.groupped.background,
+        height: 34,
+        paddingHorizontal: 16,
+        backgroundColor: theme.colors.sessionList.machineBand,
     },
     sectionDividerName: {
         flexShrink: 1,
-        fontSize: 15,
-        color: theme.colors.textSecondary,
-        ...Typography.default('semiBold'),
-        fontWeight: '700',
-    },
-    sectionDividerCount: {
         fontSize: 12,
         color: theme.colors.textSecondary,
-        opacity: 0.7,
+        ...Typography.default(),
+        fontWeight: '500',
+    },
+    sectionDividerCount: {
+        marginLeft: 6,
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+        opacity: 0.6,
         ...Typography.default(),
     },
-    // Pushed to the far end, square so it turns on its own centre.
+    // Pushed to the far end, square so it turns on its own centre; the negative margin puts the
+    // glyph, not its box, on the band's padding.
     sectionDividerChevron: {
         marginLeft: 'auto',
+        marginRight: -4,
         width: 24,
         height: 24,
         alignItems: 'center',
         justifyContent: 'center',
     },
     machineOnlineDot: {
-        width: 7,
-        height: 7,
-        borderRadius: 3.5,
+        width: 6,
+        height: 6,
+        borderRadius: 3,
+        marginRight: 8,
+    },
+    // A machine's projects sit a little below its band, and the next band 24 below them: the
+    // projects bring 16 of it themselves.
+    machineSessions: {
+        paddingTop: 12,
+        paddingBottom: 8,
+    },
+    machineSessionsCollapsed: {
+        height: 24,
     },
 }));
 
@@ -715,12 +727,10 @@ export function SessionsList() {
     // The iOS phone list leads with a search field; the sidebar has its own, and elsewhere the phone
     // header has a search button beside its "+".
     const showsSearchRow = !isTablet && Platform.OS === 'ios';
-    // Without the search field the list opens right under the header, as the other tabs do: a first
-    // card 16 below it like the settings' first one, the pinned title 16 below it like the inbox's
-    // section titles. The groups bring their own top padding (8), and the pinned one, told it opens
-    // the list, trims its title's to make up the rest.
-    const opensUnderHeader = !isTablet && !showsSearchRow;
-    const listTopPadding = opensUnderHeader && dataWithSelected?.[0]?.type !== 'pinned-sessions' ? 8 : 0;
+    // The first row starts 16 down in "All machines" — under the sidebar's search field, whose own 8
+    // below it makes 24 — and 12 down in one machine's list. The iOS phone's search field heads the
+    // list itself, so padding here would push it down from the header too; it spaces the rows itself.
+    const listTopPadding = showsSearchRow ? 0 : (switchable && activeTab === 'all' ? 16 : 12);
     const scrollListToTop = React.useCallback(() => {
         listRef.current?.scrollToOffset({ offset: -getVisibleInsets().top, animated: true });
     }, [getVisibleInsets]);
@@ -1039,7 +1049,6 @@ export function SessionsList() {
                         selectedSessionId={selectedId}
                         registerSessionRowRef={registerSessionRowRef}
                         pinned
-                        underHeader={opensUnderHeader}
                     />
                 );
 
@@ -1053,13 +1062,15 @@ export function SessionsList() {
                 );
 
             case 'machine-sessions':
-                if (collapsedMachineSections[item.section.id]) return null;
+                if (collapsedMachineSections[item.section.id]) return <View style={styles.machineSessionsCollapsed} />;
                 return (
-                    <ActiveComponent
-                        sessions={item.section.sessions}
-                        selectedSessionId={selectedId}
-                        registerSessionRowRef={registerSessionRowRef}
-                    />
+                    <View style={styles.machineSessions}>
+                        <ActiveComponent
+                            sessions={item.section.sessions}
+                            selectedSessionId={selectedId}
+                            registerSessionRowRef={registerSessionRowRef}
+                        />
+                    </View>
                 );
 
             case 'project-group':
@@ -1094,7 +1105,7 @@ export function SessionsList() {
                     />
                 );
         }
-    }, [isTablet, selectedSessionId, dataWithSelected, compactSessionView, opensUnderHeader, registerSessionRowRef, collapsedMachineSections, toggleMachineSection, projectsByMachine]);
+    }, [isTablet, selectedSessionId, dataWithSelected, compactSessionView, registerSessionRowRef, collapsedMachineSections, toggleMachineSection, projectsByMachine]);
 
     const isDisconnected = socketStatus.status === 'disconnected' || socketStatus.status === 'error';
     const canStartAnywhere = !isDisconnected && machineGroups.some(group => group.online);

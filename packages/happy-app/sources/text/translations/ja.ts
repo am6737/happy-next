@@ -1070,7 +1070,7 @@ export const ja: TranslationStructure = {
         markerGreen: '緑のマーカー',
         markerBlue: '青のマーカー',
         markerPurple: '紫のマーカー',
-        markerGray: 'グレーのマーカー',
+        markerTeal: 'ティールのマーカー',
         connectionStatus: '接続状態',
         created: '作成日時',
         lastUpdated: '最終更新',

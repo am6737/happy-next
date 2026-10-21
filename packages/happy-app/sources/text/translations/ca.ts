@@ -1068,7 +1068,7 @@ export const ca: TranslationStructure = {
         markerGreen: 'Marcador verd',
         markerBlue: 'Marcador blau',
         markerPurple: 'Marcador porpra',
-        markerGray: 'Marcador gris',
+        markerTeal: 'Marcador turquesa',
         connectionStatus: 'Estat de la connexió',
         created: 'Creat',
         lastUpdated: 'Última actualització',

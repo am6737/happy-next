@@ -1070,7 +1070,7 @@ export const zhHans: TranslationStructure = {
         markerGreen: '绿色标记',
         markerBlue: '蓝色标记',
         markerPurple: '紫色标记',
-        markerGray: '灰色标记',
+        markerTeal: '青色标记',
         connectionStatus: '连接状态',
         created: '创建时间',
         lastUpdated: '最后更新',

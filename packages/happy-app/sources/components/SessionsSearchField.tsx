@@ -32,8 +32,8 @@ export const SessionsSearchField = React.memo(() => {
 
 const stylesheet = StyleSheet.create((theme) => ({
     row: {
+        // As far under the header as the DooTask list's search field is.
         paddingTop: 12,
-        // With the list's own top padding, the gap to the first card is the 16 between cards.
         paddingBottom: 8,
         // In line with the session cards below.
         paddingHorizontal: Platform.select({ ios: 16, default: 12 }),

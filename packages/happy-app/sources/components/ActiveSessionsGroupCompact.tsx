@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Pressable, Platform, ActivityIndicator, Animated } from 'react-native';
+import { View, Pressable, Platform, Animated } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { Text } from '@/components/StyledText';
 import { router, useRouter } from 'expo-router';
@@ -11,7 +11,7 @@ import { Typography } from '@/constants/Typography';
 import { StatusDot } from './StatusDot';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { sessionArchive } from '@/sync/ops';
-import { storage, useOrchestratorRunningTaskCount, useSessionHasDraft, useSessionHasScheduled } from '@/sync/storage';
+import { storage, useOrchestratorRunningTaskCount, useSessionHasDraft, useSessionHasScheduled, useSessionMarkerColor } from '@/sync/storage';
 import { Modal } from '@/modal';
 import { t } from '@/text';
 import { useNavigateToSession } from '@/hooks/useNavigateToSession';
@@ -31,76 +31,47 @@ import { SessionRowFlash } from './SessionRowFlash';
 import { PressHighlight } from './PressHighlight';
 import { getProjectHeaderFlashId, registerProjectHeader } from './sessionProjectLocate';
 import { ProjectLabelText } from './ProjectLabelText';
-import { SessionMarkerBar } from './SessionColorMarker';
+import { SESSION_MARKER_COLOR_VALUES, SESSION_SELECTION_BAR_GRAY, sessionMarkerTint } from './SessionColorMarker';
 import { SessionProjectGroup, useCollapsedSessionProjectGroups, useSessionProjectGroups } from '@/hooks/useSessionProjectGroups';
 
-// Rounds the project card, and with it the first and last row inside it.
-const CARD_RADIUS = Platform.select({ ios: 10, default: 16 });
+// The list sits flat on the background: no cards, just headers and rows. A row is inset from the
+// list's edges and rounded, so its hover and selection read as a pill.
+const ROW_INSET = 8;
+const ROW_RADIUS = 6;
+const SESSION_ROW_HEIGHT = 48;
+// The colour marker is a short pill, centred on the row: a tag, not a selection.
+const MARKER_HEIGHT = 20;
+const MARKER_INSET = (SESSION_ROW_HEIGHT - MARKER_HEIGHT) / 2;
 
 // A project's sessions start where its header's name does: past the header's inset and the avatar
 // with its gap.
-const PROJECT_HEADER_INSET = 12;
-const SESSION_ROW_INDENT = PROJECT_HEADER_INSET + 24 + 8;
+const PROJECT_HEADER_INSET = 16;
+const PROJECT_AVATAR_SIZE = 24;
+const SESSION_TITLE_START = PROJECT_HEADER_INSET + PROJECT_AVATAR_SIZE + 8;
 
-const stylesheet = StyleSheet.create((theme, runtime) => ({
-    container: {
-        backgroundColor: theme.colors.groupped.background,
-        paddingTop: 8,
-    },
-    projectCard: {
-        backgroundColor: theme.colors.surface,
-        marginVertical: 10,
-        marginHorizontal: Platform.select({ ios: 16, default: 12 }),
-        borderRadius: CARD_RADIUS,
-        overflow: 'hidden',
-        shadowColor: theme.colors.shadow.color,
-        shadowOffset: { width: 0, height: 0.33 },
-        shadowOpacity: theme.colors.shadow.opacity,
-        shadowRadius: 0,
-        elevation: 1,
-    },
-    // The card clips its own rounded corners, so its first and last rows carry the same radius: the
-    // context-menu ring is drawn on the row, and a square ring there loses its corners to the clip.
-    // Middle rows are square-edged and need nothing.
-    cardRowFirst: {
-        borderTopLeftRadius: CARD_RADIUS,
-        borderTopRightRadius: CARD_RADIUS,
-    },
-    cardRowLast: {
-        borderBottomLeftRadius: CARD_RADIUS,
-        borderBottomRightRadius: CARD_RADIUS,
-    },
-    cardRowSingle: {
-        borderRadius: CARD_RADIUS,
-    },
-    sectionHeader: {
-        paddingTop: 12,
-        paddingBottom: Platform.select({ ios: 6, default: 8 }),
-        paddingHorizontal: Platform.select({ ios: 32, default: 24 }),
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-    },
-    // The pinned card opening the list under the header (see `underHeader`).
-    pinnedHeaderUnderHeader: {
-        paddingTop: 8,
-    },
-    pinnedCardUnderHeader: {
-        marginTop: 0,
-    },
-    // The project's header is the first row of its card, as tall as a session row.
-    projectHeader: {
-        paddingVertical: 10,
-        paddingLeft: PROJECT_HEADER_INSET,
-        paddingRight: 16,
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-    },
-    // A project's card opens with its header, so it needs only the gap to the next card.
-    projectCardWithHeader: {
-        marginTop: 0,
+const stylesheet = StyleSheet.create((theme) => ({
+    // Projects stand 16 apart; the first one starts where its group does.
+    projectSection: {
         marginBottom: 16,
+    },
+    pinnedSection: {
+        marginBottom: 16,
+    },
+    // The pinned group's title, laid out like a project's header.
+    sectionHeader: {
+        height: 44,
+        paddingHorizontal: PROJECT_HEADER_INSET,
+        marginBottom: 2,
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    projectHeader: {
+        height: 44,
+        paddingHorizontal: PROJECT_HEADER_INSET,
+        marginBottom: 2,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
     },
     sectionHeaderRight: {
         flexDirection: 'row',
@@ -127,15 +98,15 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
     },
     // As wide as the avatar it stands in for.
     sectionHeaderSharedIcon: {
-        width: 24,
-        height: 24,
+        width: PROJECT_AVATAR_SIZE,
+        height: PROJECT_AVATAR_SIZE,
         alignItems: 'center',
         justifyContent: 'center',
     },
-    // The project's name leads its card in the text colour; its path follows in the section-title grey.
+    // The project's name in the text colour; its path follows in the section-title grey.
     projectHeaderName: {
         ...Typography.default('semiBold'),
-        color: theme.colors.text,
+        color: theme.colors.sessionList.text,
         fontSize: 15,
         lineHeight: 20,
         flexShrink: 1,
@@ -174,8 +145,8 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
     },
     sectionHeaderActionSlot: {
         position: 'relative',
-        minWidth: 28,
-        minHeight: 28,
+        minWidth: 24,
+        minHeight: 24,
         alignItems: 'flex-end',
         justifyContent: 'center',
     },
@@ -195,24 +166,49 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
         overflow: 'hidden',
         alignItems: 'flex-end',
     },
+    // Puts the chevron's glyph, not its box, on the header's padding.
+    sectionHeaderChevronEdge: {
+        marginRight: -4,
+    },
+    // Full width, so the selection's bar can stand at the list's edge beside the inset row.
+    sessionRowOuter: {
+        position: 'relative',
+    },
+    sessionRowFrame: {
+        marginHorizontal: ROW_INSET,
+        marginBottom: 2,
+    },
+    rowShape: {
+        borderRadius: ROW_RADIUS,
+    },
     sessionRow: {
-        height: 48,
+        height: SESSION_ROW_HEIGHT,
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: 16,
-        paddingInlineStart: SESSION_ROW_INDENT,
-        backgroundColor: theme.colors.surface,
+        borderRadius: ROW_RADIUS,
+        overflow: 'hidden',
+        paddingRight: PROJECT_HEADER_INSET - ROW_INSET,
+        paddingLeft: SESSION_TITLE_START - ROW_INSET,
     },
+    // Not under a project header (the pinned group): the title starts where a header's would.
     sessionRowUnindented: {
-        paddingInlineStart: 16,
+        paddingLeft: PROJECT_HEADER_INSET - ROW_INSET,
     },
-    sessionDivider: {
-        height: StyleSheet.hairlineWidth,
-        backgroundColor: theme.colors.divider,
-        marginLeft: 16,
+    sessionRowHovered: {
+        backgroundColor: theme.colors.sessionList.rowHover,
     },
     sessionRowSelected: {
         backgroundColor: theme.colors.surfaceSelected,
+    },
+    // The selected row's bar, at the list's own edge rather than the row's: in the row's colour, or
+    // grey when it has none. The row's bottom margin is under the wrapper too, hence the 2.
+    selectionBar: {
+        position: 'absolute',
+        left: 0,
+        top: MARKER_INSET,
+        bottom: MARKER_INSET + 2,
+        width: 3,
+        borderRadius: 1.5,
     },
     sessionContent: {
         flex: 1,
@@ -228,38 +224,10 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
         ...Typography.default('regular'),
     },
     sessionTitleConnected: {
-        color: theme.colors.text,
+        color: theme.colors.sessionList.text,
     },
     sessionTitleDisconnected: {
         color: theme.colors.textSecondary,
-    },
-    newSessionButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'flex-start',
-        height: 56,
-        paddingHorizontal: 16,
-        borderTopWidth: StyleSheet.hairlineWidth,
-        borderTopColor: theme.colors.divider,
-        backgroundColor: theme.colors.surface,
-    },
-    newSessionButtonDisabled: {
-        opacity: 0.4,
-    },
-    newSessionButtonContent: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    newSessionButtonIcon: {
-        marginRight: 8,
-        width: 16,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    newSessionButtonText: {
-        fontSize: 15,
-        color: theme.colors.textSecondary,
-        ...Typography.default('regular'),
     },
     swipeAction: {
         width: 112,
@@ -307,19 +275,16 @@ interface ActiveSessionsGroupProps {
     registerSessionRowRef?: (sessionId: string, ref: View | null) => void;
     // Sessions shared with me: their projects are marked as such rather than by a session's avatar.
     shared?: boolean;
-    // The pinned sessions: one card, in the order given.
+    // The pinned sessions: one group, in the order given.
     pinned?: boolean;
-    // The pinned card opens the list right under the header: its title sits as far below it as the
-    // inbox's section titles.
-    underHeader?: boolean;
-    // The phone's "All machines" view: a project on each machine is a card of its own, naming it.
+    // The phone's "All machines" view: a project on each machine is a group of its own, naming it.
     byMachine?: boolean;
 }
 
-function PinnedSessionsHeader({ underHeader }: { underHeader?: boolean }) {
+function PinnedSessionsHeader() {
     const styles = stylesheet;
     return (
-        <View style={[styles.sectionHeader, underHeader && styles.pinnedHeaderUnderHeader]}>
+        <View style={styles.sectionHeader}>
             <View style={styles.sectionHeaderLeft}>
                 <Text style={styles.sectionHeaderPath} numberOfLines={1}>{t('sessionScope.pinnedSessions')}</Text>
             </View>
@@ -440,6 +405,7 @@ function ProjectSectionHeader({
                                     styles.sectionHeaderChevronReveal,
                                     {
                                         width: chevronReveal.interpolate({ inputRange: [0, 1], outputRange: [0, 24] }),
+                                        marginRight: chevronReveal.interpolate({ inputRange: [0, 1], outputRange: [0, styles.sectionHeaderChevronEdge.marginRight] }),
                                         opacity: chevronReveal,
                                     },
                                 ]}
@@ -452,7 +418,7 @@ function ProjectSectionHeader({
                             <View style={styles.sectionHeaderActionSlot}>
                                 {rightContent}
                             </View>
-                            <View style={[styles.sectionHeaderChevronReveal, { width: 24 }]}>
+                            <View style={[styles.sectionHeaderChevronReveal, styles.sectionHeaderChevronEdge, { width: 24 }]}>
                                 {chevron}
                             </View>
                         </>
@@ -464,7 +430,7 @@ function ProjectSectionHeader({
 }
 
 
-export function ActiveSessionsGroupCompact({ sessions, selectedSessionId, registerSessionRowRef, shared, pinned, underHeader, byMachine }: ActiveSessionsGroupProps) {
+export function ActiveSessionsGroupCompact({ sessions, selectedSessionId, registerSessionRowRef, shared, pinned, byMachine }: ActiveSessionsGroupProps) {
     const styles = stylesheet;
     const projectGroups = useSessionProjectGroups(sessions, { byMachine });
     const { collapsedGroups, toggleGroup } = useCollapsedSessionProjectGroups(projectGroups, selectedSessionId);
@@ -475,27 +441,23 @@ export function ActiveSessionsGroupCompact({ sessions, selectedSessionId, regist
 
     if (pinned) {
         return (
-            <View style={styles.container}>
-                <PinnedSessionsHeader underHeader={underHeader} />
-                <View style={[styles.projectCard, underHeader && styles.pinnedCardUnderHeader]}>
-                    {sessions.map((session, index) => (
-                        <CompactSessionRow
-                            key={session.id}
-                            session={session}
-                            selected={selectedSessionId === session.id}
-                            registerSessionRowRef={registerSessionRowRef}
-                            isCardFirst={index === 0}
-                            isCardLast={index === sessions.length - 1}
-                            unindented
-                        />
-                    ))}
-                </View>
+            <View style={styles.pinnedSection}>
+                <PinnedSessionsHeader />
+                {sessions.map((session) => (
+                    <CompactSessionRow
+                        key={session.id}
+                        session={session}
+                        selected={selectedSessionId === session.id}
+                        registerSessionRowRef={registerSessionRowRef}
+                        unindented
+                    />
+                ))}
             </View>
         );
     }
 
     return (
-        <View style={styles.container}>
+        <View>
             {projectGroups.map((projectGroup) => (
                 <ProjectSection
                     key={projectGroup.collapseKey}
@@ -529,8 +491,7 @@ const ProjectSection = React.memo(function ProjectSection({ projectGroup, collap
     const handleToggle = React.useCallback(() => onToggle(collapseKey), [onToggle, collapseKey]);
     const projectPath = projectGroup.path;
     const machineEntries = Array.from(projectGroup.machines.entries());
-    // The card is one rounded box opening with the header and spanning every machine in the
-    // project, so the only row it rounds is the last overall — see `cardRowLast`.
+    // Every machine in the project lists under the one header, in name order.
     const cardMachines = [...machineEntries]
         .sort(([, machineA], [, machineB]) => machineA.machineName.localeCompare(machineB.machineName));
     const firstSession = machineEntries[0]?.[1]?.sessions[0];
@@ -552,7 +513,7 @@ const ProjectSection = React.memo(function ProjectSection({ projectGroup, collap
     } : undefined;
 
     return (
-        <View style={[styles.projectCard, styles.projectCardWithHeader]}>
+        <View style={styles.projectSection}>
             <ProjectSectionHeader
                 projectGroup={projectGroup}
                 collapsed={collapsed}
@@ -565,7 +526,7 @@ const ProjectSection = React.memo(function ProjectSection({ projectGroup, collap
                 ) : avatarId && firstSession ? (
                     // No flavor badge here: the header marks a directory, and the vendor of
                     // whichever session happens to sort first is not the directory's identity.
-                    <Avatar id={avatarId} size={24} hideFlavorBadge sessionIcon={firstSession.metadata?.sessionIcon} />
+                    <Avatar id={avatarId} size={PROJECT_AVATAR_SIZE} hideFlavorBadge sessionIcon={firstSession.metadata?.sessionIcon} />
                 ) : null}
                 rightContent={(
                     <>
@@ -587,16 +548,14 @@ const ProjectSection = React.memo(function ProjectSection({ projectGroup, collap
 
             {/* Sessions grouped by machine under the header */}
             {!collapsed && <View>
-                {cardMachines.map(([machineId, machineGroup], machineIndex) => (
+                {cardMachines.map(([machineId, machineGroup]) => (
                     <View key={`${projectPath}-${machineId}`}>
-                        {machineGroup.sessions.map((session, index) => (
+                        {machineGroup.sessions.map((session) => (
                             <CompactSessionRow
                                 key={session.id}
                                 session={session}
                                 selected={selectedSessionId === session.id}
                                 registerSessionRowRef={registerSessionRowRef}
-                                isCardLast={machineIndex === cardMachines.length - 1
-                                    && index === machineGroup.sessions.length - 1}
                             />
                         ))}
                     </View>
@@ -640,26 +599,21 @@ function sameProjectSection(prev: ProjectSectionProps, next: ProjectSectionProps
 }
 
 // Compact session row component with status line
-const CompactSessionRow = React.memo(({ session, selected, showBorder, isCardFirst, isCardLast, registerSessionRowRef, unindented }: {
+const CompactSessionRow = React.memo(({ session, selected, registerSessionRowRef, unindented }: {
     session: Session;
     selected?: boolean;
-    // Not under a project header (the pinned card), so not indented under one.
+    // Not under a project header (the pinned group), so not indented under one.
     unindented?: boolean;
-    showBorder?: boolean;
-    isCardFirst?: boolean;
-    isCardLast?: boolean;
     registerSessionRowRef?: (sessionId: string, ref: View | null) => void;
 }) => {
     const styles = stylesheet;
-    // Both, when the card holds this row alone.
-    const cardRowShape = isCardFirst && isCardLast ? styles.cardRowSingle :
-        isCardFirst ? styles.cardRowFirst :
-            isCardLast ? styles.cardRowLast : undefined;
+    const rowShape = styles.rowShape;
     const sessionStatus = useSessionStatus(session);
     const { theme } = useUnistyles();
     const hasDraft = useSessionHasDraft(session.id);
     const hasScheduled = useSessionHasScheduled(session.id);
     const forking = useSessionForking(session.id);
+    const markerColor = useSessionMarkerColor(session.id);
     const runningTaskCount = useOrchestratorRunningTaskCount(session.id);
     const sessionName = getSessionName(session);
     const navigateToSession = useNavigateToSession();
@@ -746,14 +700,22 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder, isCardFir
     }, [performArchive, session.metadata]);
 
     const itemContent = (
-        <SessionContextMenu session={session} highlightShape={cardRowShape}>
+        <View style={styles.sessionRowFrame}>
+        <SessionContextMenu session={session} highlightShape={rowShape}>
             <Pressable
-                // On web, selected, hovered and pressed rows share one background. In the app a press
-                // tints the row like an Item (inbox, settings) does: an overlay on iOS, a ripple on Android.
+                // On web a row lights under the pointer, and the selected one stays lit. In the app a
+                // press tints the row like an Item (inbox, settings) does: an overlay on iOS, a ripple
+                // on Android.
                 style={({ hovered, pressed }: any) => [
                 styles.sessionRow,
                 unindented && styles.sessionRowUnindented,
-                (selected || (Platform.OS === 'web' && (hovered || pressed))) && styles.sessionRowSelected
+                // A marked row is tinted with its colour, deeper under the pointer and while selected.
+                markerColor
+                    ? { backgroundColor: sessionMarkerTint(markerColor, selected ? 'selected' : Platform.OS === 'web' && (hovered || pressed) ? 'hover' : 'rest', theme.dark) }
+                    : [
+                        Platform.OS === 'web' && (hovered || pressed) && styles.sessionRowHovered,
+                        selected && styles.sessionRowSelected,
+                    ],
             ]}
             android_ripple={Platform.OS === 'android' ? { color: theme.colors.surfaceRipple, borderless: false, foreground: true } : undefined}
             onPress={() => {
@@ -761,11 +723,8 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder, isCardFir
             }}
         >
             {({ pressed }) => (<>
-            {pressed && Platform.OS === 'ios' && <PressHighlight style={cardRowShape} />}
-            <SessionRowFlash sessionId={session.id} style={cardRowShape} />
-            {/* The session's colour marker, down the leading edge — out of flow, so an
-                unmarked row costs nothing and nothing shifts. See SessionMarkerBar. */}
-            <SessionMarkerBar sessionId={session.id} />
+            {pressed && Platform.OS === 'ios' && <PressHighlight style={rowShape} />}
+            <SessionRowFlash sessionId={session.id} style={rowShape} />
             <View style={styles.sessionContent}>
                 {/* Title line with status */}
                 <View style={styles.sessionTitleRow}>
@@ -847,7 +806,14 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder, isCardFir
             </>)}
             </Pressable>
         </SessionContextMenu>
+        </View>
     );
+    const selectionBar = selected ? (
+        <View
+            pointerEvents="none"
+            style={[styles.selectionBar, { backgroundColor: markerColor ? SESSION_MARKER_COLOR_VALUES[markerColor] : SESSION_SELECTION_BAR_GRAY }]}
+        />
+    ) : null;
 
     const archiveModal = (
         <ActionMenuModal
@@ -860,9 +826,9 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder, isCardFir
 
     if (!swipeEnabled) {
         return (
-            <View ref={setRowRef}>
+            <View ref={setRowRef} style={styles.sessionRowOuter}>
                 {itemContent}
-                {showBorder && <View style={styles.sessionDivider} />}
+                {selectionBar}
                 {archiveModal}
             </View>
         );
@@ -882,7 +848,7 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder, isCardFir
     );
 
     return (
-        <View ref={setRowRef}>
+        <View ref={setRowRef} style={styles.sessionRowOuter}>
             <Swipeable
                 ref={swipeableRef}
                 renderRightActions={renderRightActions}
@@ -891,7 +857,7 @@ const CompactSessionRow = React.memo(({ session, selected, showBorder, isCardFir
             >
                 {itemContent}
             </Swipeable>
-            {showBorder && <View style={styles.sessionDivider} />}
+            {selectionBar}
             {archiveModal}
         </View>
     );

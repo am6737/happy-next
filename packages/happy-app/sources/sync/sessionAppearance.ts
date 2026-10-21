@@ -8,7 +8,7 @@ export const SESSION_MARKER_COLORS = [
     'green',
     'blue',
     'purple',
-    'gray',
+    'teal',
 ] as const;
 
 export type SessionMarkerColor = typeof SESSION_MARKER_COLORS[number];
