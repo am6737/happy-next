@@ -83,11 +83,14 @@ export const lightTheme = {
             sectionTitle: Platform.select({ ios: '#8E8E93', default: '#49454F' }),
         },
         // The session list: a band per machine, and rows lit under the pointer. Its title colour is
-        // every flat list's — sessions, inbox, DooTask, GitHub — softened off black.
+        // every flat list's — sessions, inbox, DooTask, GitHub — softened off black; a
+        // project's detail, its machine, is a faint grey of its own on every platform, well below the
+        // title, since Android's section grey is nearly as dark as it.
         sessionList: {
             machineBand: '#FFFFFF',
             rowHover: 'rgba(0, 0, 0, 0.05)',
             text: '#2C2C2E',
+            projectDetail: '#9E9EA2',
         },
         header: {
             background: '#ffffff',
@@ -393,6 +396,7 @@ export const darkTheme = {
             machineBand: '#28282A',
             rowHover: 'rgba(255, 255, 255, 0.06)',
             text: '#EDEDEF',
+            projectDetail: '#7D7D81',
         },
         fab: {
             background: '#FFFFFF',

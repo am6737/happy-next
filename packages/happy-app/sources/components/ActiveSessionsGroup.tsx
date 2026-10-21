@@ -108,7 +108,7 @@ const stylesheet = StyleSheet.create((theme) => ({
     },
     projectHeaderDetail: {
         ...Typography.default(),
-        color: theme.colors.groupped.sectionTitle,
+        color: theme.colors.sessionList.projectDetail,
         fontSize: 13,
         opacity: 1,
     },
