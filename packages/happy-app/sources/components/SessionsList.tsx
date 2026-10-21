@@ -1,6 +1,5 @@
 import React from 'react';
 import { View, Pressable, FlatList, Platform, RefreshControl, NativeScrollEvent, NativeSyntheticEvent, Animated } from 'react-native';
-import { Swipeable } from 'react-native-gesture-handler';
 import { Text } from '@/components/StyledText';
 import { usePathname } from 'expo-router';
 import { SessionListViewItem, storage, useOrchestratorRunningTaskCount, useSessionAppearanceLoaded, useSessionHasDraft, useSessionHasScheduled, useSessionPins, useSocketStatus } from '@/sync/storage';
@@ -18,7 +17,6 @@ import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-cont
 import { useSessionListScope, collectListSessions } from '@/hooks/useSessionListScope';
 import { isSharingSelection, type SessionListSelection, type SessionMachineGroup } from './sessionListScope';
 import { sortPinnedSessions, splitPinnedListItems, splitPinnedSessions } from './pinnedSessions';
-import { canDeleteSessionFromList } from './sessionQuickActions';
 import { useLocalSettingMutable } from '@/sync/storage';
 import { useMachineNameMap } from '@/hooks/useMachineNameMap';
 import { Typography } from '@/constants/Typography';
@@ -33,10 +31,6 @@ import { t } from '@/text';
 import { useRouter } from 'expo-router';
 import { Item } from './Item';
 import { ItemGroup } from './ItemGroup';
-import { useHappyAction } from '@/hooks/useHappyAction';
-import { sessionDelete } from '@/sync/ops';
-import { HappyError } from '@/utils/errors';
-import { Modal } from '@/modal';
 import { sync } from '@/sync/sync';
 import { SessionContextMenu } from './SessionContextMenu';
 import { SessionForkSpinner } from './SessionForkSpinner';
@@ -236,20 +230,6 @@ const stylesheet = StyleSheet.create((theme) => ({
         paddingHorizontal: 16,
         paddingBottom: 12,
         backgroundColor: theme.colors.groupped.background,
-    },
-    swipeAction: {
-        width: 112,
-        height: '100%',
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: theme.colors.status.error,
-    },
-    swipeActionText: {
-        marginTop: 4,
-        fontSize: 12,
-        color: '#FFFFFF',
-        textAlign: 'center',
-        ...Typography.default('semiBold'),
     },
     unreadDot: {
         width: 8,
@@ -1232,35 +1212,9 @@ const SessionItem = React.memo(({ session, selected, isFirst, isLast, isSingle, 
     const compactSessionView = useCompactSessionView();
     const runningTaskCount = useOrchestratorRunningTaskCount(session.id);
     const navigateToSession = useNavigateToSession();
-    const swipeableRef = React.useRef<Swipeable | null>(null);
-    // The sharing views list sessions shared with me here too, which only their owner deletes.
-    const swipeEnabled = Platform.OS !== 'web' && canDeleteSessionFromList(session, sessionStatus.isConnected);
     const setRowRef = React.useCallback((ref: View | null) => {
         registerSessionRowRef?.(session.id, ref);
     }, [registerSessionRowRef, session.id]);
-
-    const [deletingSession, performDelete] = useHappyAction(async () => {
-        const result = await sessionDelete(session.id);
-        if (!result.success) {
-            throw new HappyError(result.message || t('sessionInfo.failedToDeleteSession'), false);
-        }
-    });
-
-    const handleDelete = React.useCallback(() => {
-        swipeableRef.current?.close();
-        Modal.alert(
-            t('sessionInfo.deleteSession'),
-            t('sessionInfo.deleteSessionWarning'),
-            [
-                { text: t('common.cancel'), style: 'cancel' },
-                {
-                    text: t('sessionInfo.deleteSession'),
-                    style: 'destructive',
-                    onPress: performDelete
-                }
-            ]
-        );
-    }, [performDelete]);
 
     const avatarId = React.useMemo(() => {
         return getSessionAvatarId(session);
@@ -1412,38 +1366,9 @@ const SessionItem = React.memo(({ session, selected, isFirst, isLast, isSingle, 
         ? [styles.sessionDivider, { marginLeft: 16 }]
         : styles.sessionDivider;
 
-    if (!swipeEnabled) {
-        return (
-            <View ref={setRowRef} style={containerStyles}>
-                {itemContent}
-                {showDivider && <View style={dividerStyle} />}
-            </View>
-        );
-    }
-
-    const renderRightActions = () => (
-        <Pressable
-            style={styles.swipeAction}
-            onPress={handleDelete}
-            disabled={deletingSession}
-        >
-            <Ionicons name="trash-outline" size={20} color="#FFFFFF" />
-            <Text style={styles.swipeActionText} numberOfLines={2}>
-                {t('sessionInfo.deleteSession')}
-            </Text>
-        </Pressable>
-    );
-
     return (
         <View ref={setRowRef} style={containerStyles}>
-            <Swipeable
-                ref={swipeableRef}
-                renderRightActions={renderRightActions}
-                overshootRight={false}
-                enabled={!deletingSession}
-            >
-                {itemContent}
-            </Swipeable>
+            {itemContent}
             {showDivider && <View style={dividerStyle} />}
         </View>
     );

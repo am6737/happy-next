@@ -1,6 +1,5 @@
 import React from 'react';
 import { View, Pressable, Platform, Animated } from 'react-native';
-import { Swipeable } from 'react-native-gesture-handler';
 import { Text } from '@/components/StyledText';
 import { useRouter } from 'expo-router';
 import { Session } from '@/sync/storageTypes';
@@ -13,23 +12,13 @@ import { StatusDot } from './StatusDot';
 import { useOrchestratorRunningTaskCount, useSetting, useSessionHasDraft, useSessionHasScheduled, useSessionMarkerColor } from '@/sync/storage';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { isMachineOnline } from '@/utils/machineUtils';
-import { machineSpawnNewSession, sessionArchive } from '@/sync/ops';
-import { storage } from '@/sync/storage';
-import { Modal } from '@/modal';
+import { machineSpawnNewSession } from '@/sync/ops';
 import { ProjectGitStatus } from './ProjectGitStatus';
 import { t } from '@/text';
 import { useNavigateToSession } from '@/hooks/useNavigateToSession';
-import { useDismissToHomeIfViewing } from '@/hooks/useDismissToHome';
-import { useHappyAction } from '@/hooks/useHappyAction';
-import { HappyError } from '@/utils/errors';
-import { getWorktreeInfo, cleanupWorktree } from '@/utils/worktreeOps';
-import { ActionMenuModal } from '@/components/ActionMenuModal';
-import { ActionMenuItem } from '@/components/ActionMenu';
-import { sync } from '@/sync/sync';
 import { SessionContextMenu } from './SessionContextMenu';
 import { SessionForkSpinner } from './SessionForkSpinner';
 import { useSessionForking } from '@/utils/sessionForkProgress';
-import { canArchiveSession } from '@/utils/sessionLifecycle';
 import { sessionLastMessageAt } from '@/utils/sessionLastMessageAt';
 import { SessionRowFlash } from './SessionRowFlash';
 import { PressHighlight } from './PressHighlight';
@@ -275,20 +264,6 @@ const stylesheet = StyleSheet.create((theme) => ({
         fontWeight: '500',
         color: theme.colors.textSecondary,
         ...Typography.default(),
-    },
-    swipeAction: {
-        width: 112,
-        height: '100%',
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: theme.colors.status.error,
-    },
-    swipeActionText: {
-        marginTop: 4,
-        fontSize: 12,
-        color: '#FFFFFF',
-        textAlign: 'center',
-        ...Typography.default('semiBold'),
     },
     unreadDot: {
         width: 8,
@@ -588,87 +563,9 @@ const CompactSessionRow = React.memo(({ session, selected, registerSessionRowRef
     const sessionName = getSessionName(session);
     const runningTaskCount = useOrchestratorRunningTaskCount(session.id);
     const navigateToSession = useNavigateToSession();
-    const dismissIfViewing = useDismissToHomeIfViewing(session.id);
-    const swipeableRef = React.useRef<Swipeable | null>(null);
-    // The pinned card can hold offline, archived or shared sessions, which the menu does not archive either.
-    const swipeEnabled = Platform.OS !== 'web' && canArchiveSession(session, sessionStatus.isConnected);
     const setRowRef = React.useCallback((ref: View | null) => {
         registerSessionRowRef?.(session.id, ref);
     }, [registerSessionRowRef, session.id]);
-
-    const [archivingSession, performArchive] = useHappyAction(async () => {
-        // Home first: the flip to inactive empties the composer on the session's own screen, so
-        // archiving it would reflow that screen for the whole archive round trip before it pops.
-        dismissIfViewing();
-        const previousActive = storage.getState().sessions[session.id]?.active ?? session.active;
-        storage.getState().updateSessionActivity(session.id, false);
-
-        const result = await sessionArchive(session.id);
-        const errorMessage = result.message || t('sessionInfo.failedToArchiveSession');
-
-        // Archiving is idempotent: if RPC target is gone, session is effectively already archived.
-        if (!result.success && /RPC method not available/i.test(errorMessage)) {
-            await sync.clearSessionMessageCache(session.id);
-            return;
-        }
-
-        if (!result.success) {
-            storage.getState().updateSessionActivity(session.id, previousActive);
-            throw new HappyError(errorMessage, false);
-        }
-
-        await sync.clearSessionMessageCache(session.id);
-        if (result.nativeArchiveError) throw new HappyError(t('sessionInfo.codexArchiveFailed') + ': ' + result.nativeArchiveError, false);
-    });
-
-    const [archiveMenuVisible, setArchiveMenuVisible] = React.useState(false);
-    const [archiveMenuItems, setArchiveMenuItems] = React.useState<ActionMenuItem[]>([]);
-
-    const handleArchive = React.useCallback(() => {
-        swipeableRef.current?.close();
-        const worktreeInfo = getWorktreeInfo(session.metadata);
-        if (worktreeInfo && session.metadata?.machineId) {
-            const machineId = session.metadata.machineId;
-            const { basePath, branchName } = worktreeInfo;
-            setArchiveMenuItems([
-                {
-                    label: t('sessionInfo.worktree.archiveKeepWorktree'),
-                    onPress: () => { setArchiveMenuVisible(false); performArchive(); },
-                },
-                {
-                    label: t('sessionInfo.worktree.archiveCleanupKeepBranch'),
-                    onPress: async () => {
-                        setArchiveMenuVisible(false);
-                        try { await cleanupWorktree(machineId, basePath, branchName, false); } catch (e) { console.warn('Worktree cleanup failed:', e); }
-                        await performArchive();
-                    },
-                },
-                {
-                    label: t('sessionInfo.worktree.archiveCleanupDeleteBranch'),
-                    destructive: true,
-                    onPress: async () => {
-                        setArchiveMenuVisible(false);
-                        try { await cleanupWorktree(machineId, basePath, branchName, true); } catch (e) { console.warn('Worktree cleanup failed:', e); }
-                        await performArchive();
-                    },
-                },
-            ]);
-            setArchiveMenuVisible(true);
-        } else {
-            Modal.alert(
-                t('sessionInfo.archiveSession'),
-                t('sessionInfo.archiveSessionConfirm'),
-                [
-                    { text: t('common.cancel'), style: 'cancel' },
-                    {
-                        text: t('sessionInfo.archiveSession'),
-                        style: 'destructive',
-                        onPress: performArchive
-                    }
-                ]
-            );
-        }
-    }, [performArchive, session.metadata]);
 
     const avatarId = React.useMemo(() => {
         return getSessionAvatarId(session);
@@ -815,50 +712,10 @@ const CompactSessionRow = React.memo(({ session, selected, registerSessionRowRef
         />
     ) : null;
 
-    const archiveModal = (
-        <ActionMenuModal
-            visible={archiveMenuVisible}
-            title={t('sessionInfo.worktree.archiveWorktreeConfirm')}
-            items={archiveMenuItems}
-            onClose={() => setArchiveMenuVisible(false)}
-        />
-    );
-
-    if (!swipeEnabled) {
-        return (
-            <View ref={setRowRef} style={styles.sessionRowOuter}>
-                {itemContent}
-                {selectionBar}
-                {archiveModal}
-            </View>
-        );
-    }
-
-    const renderRightActions = () => (
-        <Pressable
-            style={styles.swipeAction}
-            onPress={handleArchive}
-            disabled={archivingSession}
-        >
-            <Ionicons name="archive-outline" size={20} color="#FFFFFF" />
-            <Text style={styles.swipeActionText} numberOfLines={2}>
-                {t('sessionInfo.archiveSession')}
-            </Text>
-        </Pressable>
-    );
-
     return (
         <View ref={setRowRef} style={styles.sessionRowOuter}>
-            <Swipeable
-                ref={swipeableRef}
-                renderRightActions={renderRightActions}
-                overshootRight={false}
-                enabled={!archivingSession}
-            >
-                {itemContent}
-            </Swipeable>
+            {itemContent}
             {selectionBar}
-            {archiveModal}
         </View>
     );
 });
