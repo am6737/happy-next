@@ -183,6 +183,48 @@ index f7251d4..3e2f9bc 100644
 +    }
 +  }
  }
+diff --git a/node_modules/react-native-keyboard-controller/ios/KeyboardControllerModuleImpl.swift b/node_modules/react-native-keyboard-controller/ios/KeyboardControllerModuleImpl.swift
+index 39cd165..440793f 100644
+--- a/node_modules/react-native-keyboard-controller/ios/KeyboardControllerModuleImpl.swift
++++ b/node_modules/react-native-keyboard-controller/ios/KeyboardControllerModuleImpl.swift
+@@ -24,6 +24,8 @@ public class KeyboardControllerModuleImpl: NSObject {
+ 
+       if keepFocus {
+         guard let input = responder as? TextInput else { return }
++        // Dismissed again before it was revealed: start over rather than stack a second gesture.
++        cleanup(input)
+         let tapGesture = UITapGestureRecognizer(target: self, action: #selector(onTextInputTapped(_:)))
+         tapGesture.name = keyboardRevealGestureName
+         input.addGestureRecognizer(tapGesture)
+@@ -31,12 +33,15 @@ public class KeyboardControllerModuleImpl: NSObject {
+         input.inputView = UIView()
+         input.reloadInputViews()
+ 
+-        NotificationCenter.default.addObserver(
+-          self,
+-          selector: #selector(onResponderResigned(_:)),
+-          name: UITextField.textDidEndEditingNotification,
+-          object: input
+-        )
++        // A multiline input is a UITextView, which posts its own notification, not UITextField's.
++        for name in [UITextField.textDidEndEditingNotification, UITextView.textDidEndEditingNotification] {
++          NotificationCenter.default.addObserver(
++            self,
++            selector: #selector(onResponderResigned(_:)),
++            name: name,
++            object: input
++          )
++        }
+       } else {
+         responder?.resignFirstResponder()
+       }
+@@ -78,5 +83,6 @@ public class KeyboardControllerModuleImpl: NSObject {
+     }
+ 
+     NotificationCenter.default.removeObserver(self, name: UITextField.textDidEndEditingNotification, object: input)
++    NotificationCenter.default.removeObserver(self, name: UITextView.textDidEndEditingNotification, object: input)
+   }
+ }
 diff --git a/node_modules/react-native-keyboard-controller/ios/observers/movement/observer/KeyboardMovementObserver+Listeners.swift b/node_modules/react-native-keyboard-controller/ios/observers/movement/observer/KeyboardMovementObserver+Listeners.swift
 index 60ae5de..bf603ea 100644
 --- a/node_modules/react-native-keyboard-controller/ios/observers/movement/observer/KeyboardMovementObserver+Listeners.swift
@@ -239,6 +281,25 @@ index 60ae5de..bf603ea 100644
 +    return min(raw, visibleHeight + visualOffsetY)
 +  }
  }
+diff --git a/node_modules/react-native-keyboard-controller/ios/traversal/ViewHierarchyNavigator.swift b/node_modules/react-native-keyboard-controller/ios/traversal/ViewHierarchyNavigator.swift
+index 29164a8..8ed06a5 100644
+--- a/node_modules/react-native-keyboard-controller/ios/traversal/ViewHierarchyNavigator.swift
++++ b/node_modules/react-native-keyboard-controller/ios/traversal/ViewHierarchyNavigator.swift
+@@ -16,10 +16,10 @@ public class ViewHierarchyNavigator: NSObject {
+   @objc public static func setFocusTo(direction: String) {
+     DispatchQueue.main.async {
+       if direction == "current" {
+-        let input = FocusedInputHolder.shared.get()
+-        input?.inputView = nil
+-        input?.reloadInputViews()
+-        input?.focus()
++        guard let input = FocusedInputHolder.shared.get() else { return }
++        // Also takes off the tap gesture `dismiss(keepFocus)` put on the input, which was left on it.
++        KeyboardControllerModuleImpl.cleanup(input)
++        input.focus()
+         return
+       }
+ 
 diff --git a/node_modules/react-native-keyboard-controller/src/components/KeyboardChatScrollView/index.tsx b/node_modules/react-native-keyboard-controller/src/components/KeyboardChatScrollView/index.tsx
 index 935bc71..b5adbd2 100644
 --- a/node_modules/react-native-keyboard-controller/src/components/KeyboardChatScrollView/index.tsx
