@@ -1058,7 +1058,7 @@ export const ru: TranslationStructure = {
             resume: 'Возобновить',
         },
         takePhoto: 'Камера',
-        chooseFromLibrary: 'Фото',
+        chooseFromLibrary: 'Галерея',
         files: {
             menu: 'Файлы',
             cliTooOld: 'CLI этой сессии слишком старый и не может принимать файлы. Обновите happy-next на той машине и повторите попытку.',

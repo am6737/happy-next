@@ -372,7 +372,7 @@ function NewSessionWizard() {
 
     // Files are only staged here; they upload to the new session's machine once it exists
     const fileAttachments = useFileAttachments(null);
-    const { uploadStaged, pickFiles } = fileAttachments;
+    const { uploadStaged, pickFiles, addVideos } = fileAttachments;
     const [scheduleSheetVisible, setScheduleSheetVisible] = React.useState(false);
 
     // Restore images from persisted draft on mount
@@ -399,19 +399,12 @@ function NewSessionWizard() {
         {
             label: t('session.chooseFromLibrary'),
             icon: { ionicon: 'images-outline', sfSymbol: 'photo.on.rectangle' },
-            onPress: Platform.OS === 'web' ? () => fileInputRef.current?.click() : pickFromGallery,
+            onPress: Platform.OS === 'web' ? () => fileInputRef.current?.click() : () => void pickFromGallery({ onVideos: addVideos }),
             disabled: !supportsImages,
         },
         { label: t('session.files.menu'), icon: { ionicon: 'document-outline', sfSymbol: 'doc' }, onPress: () => void pickFiles() },
         { label: t('session.scheduleMessage'), icon: { ionicon: 'time-outline', sfSymbol: 'clock' }, onPress: () => setScheduleSheetVisible(true) },
-    ], [pickFromCamera, pickFromGallery, supportsImages, pickFiles]);
-
-    const handleFileInputChange = React.useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-        const files = event.target.files;
-        if (!files || files.length === 0) return;
-        void addImagesFromFiles(Array.from(files));
-        event.target.value = '';
-    }, [addImagesFromFiles]);
+    ], [pickFromCamera, pickFromGallery, addVideos, supportsImages, pickFiles]);
 
     // Files dropped or pasted into the composer (web): images the AI can see go as images, the
     // rest upload to the machine as files.
@@ -426,6 +419,13 @@ function NewSessionWizard() {
         if (split.files.length > 0) addFiles(split.files);
         if (split.images.length > 0) await addImagesFromFiles(split.images);
     }, [splitIncomingFiles, addFiles, addImagesFromFiles]);
+
+    const handleFileInputChange = React.useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+        const files = event.target.files;
+        if (!files || files.length === 0) return;
+        void addIncomingFiles(Array.from(files));
+        event.target.value = '';
+    }, [addIncomingFiles]);
 
     const handlePaste = React.useCallback(async (event: ClipboardEvent) => {
         await handleFilePasteEvent(event, {
@@ -1137,7 +1137,7 @@ function NewSessionWizard() {
                 <input
                     ref={fileInputRef as any}
                     type="file"
-                    accept="image/jpeg,image/png"
+                    accept="image/jpeg,image/png,video/*"
                     multiple
                     style={{ display: 'none' }}
                     onChange={handleFileInputChange as any}

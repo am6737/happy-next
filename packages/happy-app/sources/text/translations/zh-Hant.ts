@@ -869,7 +869,7 @@ export const zhHant: TranslationStructure = {
             resume: '恢復會話',
         },
         takePhoto: '相機',
-        chooseFromLibrary: '照片',
+        chooseFromLibrary: '相簿',
         files: {
             menu: '檔案',
             cliTooOld: '此工作階段所在機器的 CLI 版本過舊，無法接收檔案。請在那台機器上更新 happy-next 後重試。',

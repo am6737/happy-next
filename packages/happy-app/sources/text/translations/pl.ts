@@ -879,7 +879,7 @@ export const pl: TranslationStructure = {
             resume: 'Wznów',
         },
         takePhoto: 'Aparat',
-        chooseFromLibrary: 'Zdjęcia',
+        chooseFromLibrary: 'Galeria',
         files: {
             menu: 'Pliki',
             cliTooOld: 'CLI tej sesji jest zbyt stare, by odbierać pliki. Zaktualizuj happy-next na tej maszynie i spróbuj ponownie.',

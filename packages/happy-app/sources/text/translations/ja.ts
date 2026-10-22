@@ -870,7 +870,7 @@ export const ja: TranslationStructure = {
             resume: '再開',
         },
         takePhoto: 'カメラ',
-        chooseFromLibrary: '写真',
+        chooseFromLibrary: 'アルバム',
         files: {
             menu: 'ファイル',
             cliTooOld: 'このセッションの CLI が古いため、ファイルを受け取れません。そのマシンで happy-next を更新してから再試行してください。',

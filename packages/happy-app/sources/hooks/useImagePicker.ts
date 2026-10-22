@@ -27,7 +27,8 @@ interface UseImagePickerOptions {
 
 interface UseImagePickerReturn {
     images: LocalImage[];
-    pickFromGallery: () => Promise<void>;
+    /** With `onVideos`, the library also offers videos, which are handed to it rather than added as images. */
+    pickFromGallery: (options?: { onVideos?: (videos: ImagePicker.ImagePickerAsset[]) => void }) => Promise<void>;
     pickFromCamera: () => Promise<void>;
     addImageFromUri: (uri: string, mimeType: string) => Promise<void>;
     addImagesFromFiles: (files: File[]) => Promise<void>;
@@ -172,8 +173,9 @@ export function useImagePicker(options: UseImagePickerOptions = {}): UseImagePic
         setImages((previous) => appendWithinLimit(previous, processed, maxImages));
     }, [images.length, maxImages, allowedTypes]);
 
-    const pickFromGallery = React.useCallback(async () => {
-        if (!canAddMore) {
+    const pickFromGallery = React.useCallback(async ({ onVideos }: { onVideos?: (videos: ImagePicker.ImagePickerAsset[]) => void } = {}) => {
+        // Videos have their own limit, so a full set of images only stops an images-only pick
+        if (!canAddMore && !onVideos) {
             Modal.alert('Limit Reached', `Maximum ${maxImages} images allowed`);
             return;
         }
@@ -186,14 +188,20 @@ export function useImagePicker(options: UseImagePickerOptions = {}): UseImagePic
             }
 
             const result = await ImagePicker.launchImageLibraryAsync({
-                mediaTypes: ['images'],
+                mediaTypes: onVideos ? ['images', 'videos'] : ['images'],
                 allowsMultipleSelection: true,
-                selectionLimit: maxImages - images.length,
+                selectionLimit: onVideos ? 0 : maxImages - images.length,
                 quality: 0.8,
             });
 
             if (!result.canceled && result.assets.length > 0) {
-                await addImages(result.assets);
+                const videos = result.assets.filter((asset) => asset.type === 'video');
+                const picked = result.assets.filter((asset) => asset.type !== 'video');
+                if (videos.length > 0) onVideos?.(videos);
+                if (picked.length > maxImages - images.length) {
+                    Modal.alert('Limit Reached', `Maximum ${maxImages} images allowed`);
+                }
+                if (picked.length > 0) await addImages(picked);
             }
         } catch (error) {
             console.error('[ImagePicker] Gallery pick failed:', error);

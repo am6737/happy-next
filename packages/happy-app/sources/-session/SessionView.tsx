@@ -1023,6 +1023,7 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
     // scheduling stays reachable. Web has no camera and opens the file picker for the library.
     // Files write to the owner's machine, which a shared session's guests may not do.
     const pickFiles = fileAttachments.pickFiles;
+    const addVideos = fileAttachments.addVideos;
     const canAttachFiles = !session.accessLevel;
     const handleCloseImagePickerSheet = React.useCallback(() => setImagePickerSheetVisible(false), []);
     const handleCloseScheduleSheet = React.useCallback(() => setScheduleSheet((current) => ({ ...current, visible: false })), []);
@@ -1033,23 +1034,12 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
         {
             label: t('session.chooseFromLibrary'),
             icon: { ionicon: 'images-outline', sfSymbol: 'photo.on.rectangle' },
-            onPress: Platform.OS === 'web' ? () => fileInputRef.current?.click() : pickFromGallery,
+            onPress: Platform.OS === 'web' ? () => fileInputRef.current?.click() : () => void pickFromGallery(canAttachFiles ? { onVideos: addVideos } : undefined),
             disabled: !supportsImages,
         },
         ...(canAttachFiles ? [{ label: t('session.files.menu'), icon: { ionicon: 'document-outline', sfSymbol: 'doc' }, onPress: () => void pickFiles() } satisfies ActionMenuItem] : []),
         { label: t('session.scheduleMessage'), icon: { ionicon: 'time-outline', sfSymbol: 'clock' }, onPress: () => handleOpenScheduleSheet() },
-    ], [pickFromCamera, pickFromGallery, supportsImages, canAttachFiles, pickFiles, handleOpenScheduleSheet]);
-
-    // Handle file input change (web only)
-    const handleFileInputChange = React.useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-        const files = event.target.files;
-        if (!files || files.length === 0) return;
-
-        void addImagesFromFiles(Array.from(files));
-
-        // Reset input so same file can be selected again
-        event.target.value = '';
-    }, [addImagesFromFiles]);
+    ], [pickFromCamera, pickFromGallery, addVideos, supportsImages, canAttachFiles, pickFiles, handleOpenScheduleSheet]);
 
     // Files dropped or pasted into the composer (web): images the AI can see go as images, the
     // rest upload to the machine as files.
@@ -1064,6 +1054,17 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
         if (split.files.length > 0) addFiles(split.files);
         if (split.images.length > 0) await addImagesFromFiles(split.images);
     }, [splitIncomingFiles, addFiles, addImagesFromFiles]);
+
+    // Handle file input change (web only)
+    const handleFileInputChange = React.useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+        const files = event.target.files;
+        if (!files || files.length === 0) return;
+
+        void addIncomingFiles(Array.from(files));
+
+        // Reset input so same file can be selected again
+        event.target.value = '';
+    }, [addIncomingFiles]);
 
     const handlePaste = React.useCallback(async (event: ClipboardEvent) => {
         await handleFilePasteEvent(event, {
@@ -1505,7 +1506,7 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
                 <input
                     ref={fileInputRef as any}
                     type="file"
-                    accept="image/jpeg,image/png"
+                    accept={canAttachFiles ? 'image/jpeg,image/png,video/*' : 'image/jpeg,image/png'}
                     multiple
                     style={{ display: 'none' }}
                     onChange={handleFileInputChange as any}

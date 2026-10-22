@@ -870,7 +870,7 @@ export const zhHans: TranslationStructure = {
             resume: '恢复会话',
         },
         takePhoto: '相机',
-        chooseFromLibrary: '照片',
+        chooseFromLibrary: '相册',
         files: {
             menu: '文件',
             cliTooOld: '该会话所在机器的 CLI 版本过旧，无法接收文件。请在那台机器上更新 happy-next 后重试。',

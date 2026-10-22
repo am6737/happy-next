@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { Platform } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
+import type { ImagePickerAsset } from 'expo-image-picker';
 import { File as FsFile } from 'expo-file-system';
 import { randomUUID } from 'expo-crypto';
 import { FILE_UPLOAD_LIMIT, type MessageAttachment } from 'happy-wire';
@@ -173,6 +174,25 @@ export function useFileAttachments(sessionId: string | null) {
         addPicked(assets);
     }, [addPicked]);
 
+    /** Adds videos picked from the photo library; they go to the machine like any other file. */
+    const addVideos = React.useCallback((videos: ImagePickerAsset[]) => {
+        if (filesRef.current.length >= MAX_FILE_ATTACHMENTS) {
+            Modal.alert(t('common.error'), t('session.files.limitReached', { count: MAX_FILE_ATTACHMENTS }));
+            for (const video of videos) discardCopy(video);
+            return;
+        }
+        const assets: Picked[] = [];
+        for (const video of videos) {
+            const size = video.file?.size ?? video.fileSize ?? (() => {
+                try { return new FsFile(video.uri).size; } catch { return null; }
+            })();
+            if (size === null || size === undefined) continue;
+            const name = video.fileName ?? video.file?.name ?? video.uri.split('/').pop() ?? 'video.mp4';
+            assets.push({ name, size, mimeType: video.mimeType, uri: video.uri, file: video.file });
+        }
+        addPicked(assets);
+    }, [addPicked]);
+
     /** Adds files dropped or pasted into the composer (web). */
     const addFiles = React.useCallback((files: File[]) => {
         if (filesRef.current.length >= MAX_FILE_ATTACHMENTS) {
@@ -231,6 +251,7 @@ export function useFileAttachments(sessionId: string | null) {
         isUploading: files.some((file) => file.status === 'uploading'),
         hasFailed: files.some((file) => file.status === 'failed'),
         pickFiles,
+        addVideos,
         addFiles,
         uploadStaged,
         retryFile,

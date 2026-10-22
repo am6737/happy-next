@@ -868,7 +868,7 @@ export const ca: TranslationStructure = {
             resume: 'Reprèn',
         },
         takePhoto: 'Càmera',
-        chooseFromLibrary: 'Fotos',
+        chooseFromLibrary: 'Galeria',
         files: {
             menu: 'Fitxers',
             cliTooOld: 'La CLI d\'aquesta sessió és massa antiga per rebre fitxers. Actualitza happy-next en aquella màquina i torna-ho a provar.',

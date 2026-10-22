@@ -884,7 +884,7 @@ export const en: TranslationStructure = {
             resume: 'Resume',
         },
         takePhoto: 'Camera',
-        chooseFromLibrary: 'Photos',
+        chooseFromLibrary: 'Library',
         files: {
             menu: 'Files',
             cliTooOld: 'This session\'s CLI is too old to receive files. Update happy-next on that machine and try again.',
