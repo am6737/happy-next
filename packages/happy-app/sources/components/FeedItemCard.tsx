@@ -13,7 +13,7 @@ import { deleteFeedItem } from '@/sync/apiFeed';
 import { getDisplayName } from '@/sync/friendTypes';
 import { ActionMenuItem } from './ActionMenu';
 import { RowContextMenu, type RowLongPressProps } from './RowContextMenu';
-import { FLAT_ROW_AVATAR_SIZE, flatRowIconContainerStyle, flatRowItemStyle, flatRowSubtitleStyle, flatRowTitleStyle } from './flatRow';
+import { FLAT_ROW_AVATAR_SIZE, flatRowIconContainerStyle, flatRowItemStyle, flatRowSubtitleStyle, useFlatRowTitleStyle } from './flatRow';
 
 interface FeedItemCardProps {
     item: FeedItem;
@@ -24,6 +24,7 @@ interface FeedItemCardProps {
 
 export const FeedItemCard = React.memo(({ item, showDivider, flat }: FeedItemCardProps) => {
     const { theme } = useUnistyles();
+    const flatRowTitleStyle = useFlatRowTitleStyle();
     const router = useRouter();
     const { credentials } = useAuth();
 

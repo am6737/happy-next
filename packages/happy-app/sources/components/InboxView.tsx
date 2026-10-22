@@ -22,7 +22,7 @@ import type { DooTaskProfile, DooTaskUser, DooTaskDialogListItem } from '@/sync/
 import { showToast } from './Toast';
 import { useMainTabBottomPadding } from '@/hooks/useMainTabBottomPadding';
 import { loadDooTaskInboxUsersCache, saveDooTaskInboxUsersCache } from '@/sync/persistence';
-import { FLAT_ROW_AVATAR_SIZE, FLAT_ROW_RADIUS, flatRowIconContainerStyle, flatRowItemStyle, flatRowSubtitleStyle, flatRowTitleStyle } from './flatRow';
+import { FLAT_ROW_AVATAR_SIZE, FLAT_ROW_RADIUS, flatRowIconContainerStyle, flatRowItemStyle, flatRowSubtitleStyle, useFlatRowTitleStyle } from './flatRow';
 
 const styles = StyleSheet.create((theme) => ({
     container: {
@@ -438,6 +438,7 @@ function DooTaskUserCard({ user, profile, onPress, loading, showDivider, flat }:
     showDivider?: boolean;
     flat?: boolean;
 }) {
+    const flatRowTitleStyle = useFlatRowTitleStyle();
     const displayName = user.nickname || user.email || `#${user.userid}`;
     const subtitle = user.profession || user.email || `#${user.userid}`;
     const avatarUrl = resolveDootaskUrl(profile.serverUrl, user.userimg);

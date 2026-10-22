@@ -4,7 +4,7 @@ import { Item } from '@/components/Item';
 import { Avatar } from '@/components/Avatar';
 import type { ActionMenuItem } from '@/components/ActionMenu';
 import { RowContextMenu } from '@/components/RowContextMenu';
-import { FLAT_ROW_AVATAR_SIZE, flatRowIconContainerStyle, flatRowItemStyle, flatRowSubtitleStyle, flatRowTitleStyle } from '@/components/flatRow';
+import { FLAT_ROW_AVATAR_SIZE, flatRowIconContainerStyle, flatRowItemStyle, flatRowSubtitleStyle, useFlatRowTitleStyle } from '@/components/flatRow';
 
 interface UserCardProps {
     user: UserProfile;
@@ -23,6 +23,7 @@ export function UserCard({
     flat,
     menuItems,
 }: UserCardProps) {
+    const flatRowTitleStyle = useFlatRowTitleStyle();
     const displayName = getDisplayName(user);
     const avatarUrl = user.avatar?.url || user.avatar?.path;
 
