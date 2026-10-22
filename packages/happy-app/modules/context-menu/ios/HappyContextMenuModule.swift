@@ -8,8 +8,9 @@ import UIKit
  *
  * The menu is described from JavaScript as plain data (`menu`): actions and groups of them, which
  * can be inline sections or a palette (a row of swatches). Choosing an action sends its `id` back
- * through `onSelectAction`, once the menu has finished closing, so what the action presents next
- * (a confirmation, a sheet) is not presented while the menu is still on screen.
+ * through `onSelectAction` as soon as the menu starts closing, so what the action presents next
+ * (a confirmation, a sheet) comes up while the menu fades out, as in the system's own apps, rather
+ * than after the whole dismissal animation.
  */
 public class HappyContextMenuModule: Module {
   public func definition() -> ModuleDefinition {
@@ -100,21 +101,14 @@ public final class HappyContextMenuView: ExpoView, UIContextMenuInteractionDeleg
     willEndFor configuration: UIContextMenuConfiguration,
     animator: UIContextMenuInteractionAnimating?
   ) {
-    guard let animator else {
-      menuShown = false
-      flushPendingAction()
-      return
-    }
-    animator.addCompletion { [weak self] in
-      self?.menuShown = false
-      self?.flushPendingAction()
-    }
+    menuShown = false
+    flushPendingAction()
   }
 
   // MARK: - Actions
 
-  // Depending on the iOS version the action's handler runs before or after the menu has closed;
-  // either way the event goes out once it has.
+  // Depending on the iOS version the action's handler runs before or after the menu has started
+  // closing; either way the event goes out once it has.
   private func select(_ id: String) {
     pendingActionId = id
     if !menuShown {
