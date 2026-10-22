@@ -82,7 +82,10 @@ $PB -c "Add :application-identifier string $TEAM.$BUNDLE_ID" \
     -c "Add :keychain-access-groups array" \
     -c "Add :keychain-access-groups:0 string $TEAM.$BUNDLE_ID" "$ENT"
 
-for f in "$A"/Frameworks/*.framework "$A"/Frameworks/*.dylib; do
+# A Debug build puts the app's own code in HappyNextdev.debug.dylib (and __preview.dylib) next to
+# the executable. `codesign --verify --deep` does not count them as nested code, but dyld refuses
+# to load them unsigned and the app dies at launch.
+for f in "$A"/Frameworks/*.framework "$A"/Frameworks/*.dylib "$A"/*.dylib; do
     [ -e "$f" ] || continue
     codesign --force --sign "$IDENTITY" --timestamp=none --preserve-metadata=identifier "$f" > /dev/null 2>&1 \
         || die "codesign failed: $f"

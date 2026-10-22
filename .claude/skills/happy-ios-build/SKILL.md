@@ -98,6 +98,7 @@ waitMs=0
 12. **`ios/` 不受 git 跟踪。** `git status` 干净不代表开发工程已经还原，所以脚本会单独检查 `ios/HappyNextdev.xcworkspace` 是否存在。
 13. **开发版什么时候重新 prebuild：** `ios/` 不存在、没有上次的构建记录（`~/.happy-ios-build/dev-commit`），或者从上次构建到现在改动了 `yarn.lock`、`patches/`、`packages/happy-app/{package.json,app.config.js,plugins,modules,targets,patches}` 中的任何一个。Debug 构建的中间产物缓存在 `/tmp/hn-dd`，用来做增量构建。
 14. **设备范围：** 正式版的 Ad Hoc 描述文件只包含 `00008130-001E38501406001C` 和 `00008101-000C686902BA001E` 两台设备，iPad 装不了。开发版的团队描述文件包含全部已注册设备。
+15. **开发版 `.app` 顶层的 `HappyNextdev.debug.dylib` / `__preview.dylib` 也要签名。** Debug 构建把 App 自己的代码放在这里；`codesign --verify --deep` 不检查它们，所以校验能过，但 dyld 拒绝加载未签名的库，App 一打开就退出（`Library not loaded ... missing code signature`），而且不会留下崩溃报告。
 
 ## 状态文件（Mac mini）
 
