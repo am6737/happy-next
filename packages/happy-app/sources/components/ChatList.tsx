@@ -750,9 +750,12 @@ const ChatListInternal = React.memo((props: {
     // the keyboard's native lift.
     // Not before the list is ready: until then its own initial scroll to the end is in charge.
     const listReadyRef = useRef(false);
-    // Not animated: the distance is a few lines, and a slide reads as the list moving on its own.
-    // Checked at once, so a gap already there is closed before it is drawn, and again a frame later
-    // for an inset the list takes in only after this call.
+    // While a chat opens it is not animated: the distance is a few lines, and a slide reads as the
+    // list moving on its own. It is checked at once, so a gap already there is closed before it is
+    // drawn, and again a frame later for an inset the list takes in only after this call. Once the
+    // chat is showing it slides: the composer shrinking back after a send changes the inset while
+    // the list is sliding to the sent prompt, and landing at once would cut that slide short.
+    const settledRef = useRef(false);
     const followEndIfStuck = useCallback(() => {
         if (!listReadyRef.current) return;
         const land = () => {
@@ -760,10 +763,10 @@ const ChatListInternal = React.memo((props: {
             if (!list || !stickToEnd.isStuck()) return;
             const state = list.getState();
             if (state.scrollLength <= 0 || state.contentLength - state.scroll - state.scrollLength <= 1) return;
-            void list.scrollToEnd({ animated: false });
+            void list.scrollToEnd(settledRef.current ? chatScrollToEndOptions(state) : { animated: false });
         };
         land();
-        requestAnimationFrame(land);
+        if (!settledRef.current) requestAnimationFrame(land);
     }, [stickToEnd.isStuck]);
     // The list stays transparent for the two frames that landing takes, so a chat opened short of its
     // end is never drawn there first: LegendList reveals its rows the moment it calls `onReady`, and
@@ -773,7 +776,10 @@ const ChatListInternal = React.memo((props: {
         listReadyRef.current = true;
         setReadySessionId(props.sessionId);
         followEndIfStuck();
-        requestAnimationFrame(() => requestAnimationFrame(() => setSettled(true)));
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+            settledRef.current = true;
+            setSettled(true);
+        }));
     }, [props.sessionId, followEndIfStuck]);
 
     // A prompt landing as the newest message — sent from here, an option tapped, or another device —
