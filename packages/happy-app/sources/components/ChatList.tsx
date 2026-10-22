@@ -750,20 +750,30 @@ const ChatListInternal = React.memo((props: {
     // the keyboard's native lift.
     // Not before the list is ready: until then its own initial scroll to the end is in charge.
     const listReadyRef = useRef(false);
+    // Not animated: the distance is a few lines, and a slide reads as the list moving on its own.
+    // Checked at once, so a gap already there is closed before it is drawn, and again a frame later
+    // for an inset the list takes in only after this call.
     const followEndIfStuck = useCallback(() => {
         if (!listReadyRef.current) return;
-        requestAnimationFrame(() => {
+        const land = () => {
             const list = listRef.current;
             if (!list || !stickToEnd.isStuck()) return;
             const state = list.getState();
             if (state.scrollLength <= 0 || state.contentLength - state.scroll - state.scrollLength <= 1) return;
-            void list.scrollToEnd(chatScrollToEndOptions(state));
-        });
+            void list.scrollToEnd({ animated: false });
+        };
+        land();
+        requestAnimationFrame(land);
     }, [stickToEnd.isStuck]);
+    // The list stays transparent for the two frames that landing takes, so a chat opened short of its
+    // end is never drawn there first: LegendList reveals its rows the moment it calls `onReady`, and
+    // the inset that moves the end can arrive a frame after. The third frame shows it on its end.
+    const [settled, setSettled] = useState(false);
     const handleListReady = useCallback(() => {
         listReadyRef.current = true;
         setReadySessionId(props.sessionId);
         followEndIfStuck();
+        requestAnimationFrame(() => requestAnimationFrame(() => setSettled(true)));
     }, [props.sessionId, followEndIfStuck]);
 
     // A prompt landing as the newest message — sent from here, an option tapped, or another device —
@@ -823,7 +833,7 @@ const ChatListInternal = React.memo((props: {
                 // A different conversation is a different dataset: measured heights belong to the
                 // session they were read in, so they are not carried across.
                 dataKey={props.sessionId}
-                style={{ flex: 1 }}
+                style={settled ? styles.list : styles.listSettling}
                 estimatedItemSize={ESTIMATED_ITEM_SIZE}
                 estimatedHeaderSize={listHeaderSize}
                 drawDistance={DRAW_DISTANCE}
@@ -941,4 +951,9 @@ const ChatListInternal = React.memo((props: {
             </Animated.View>
         </View>
     )
+});
+
+const styles = StyleSheet.create({
+    list: { flex: 1 },
+    listSettling: { flex: 1, opacity: 0 },
 });
