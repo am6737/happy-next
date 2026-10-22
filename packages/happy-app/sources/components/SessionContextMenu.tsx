@@ -680,7 +680,7 @@ export function SessionContextMenu({ session, children, highlightShape }: {
                 </View>
                 <ActionMenuModal
                     visible={nativeMenuVisible}
-                    title={t('sessionInfo.quickActions')}
+                    title={getSessionName(session)}
                     items={nativeItems}
                     onClose={() => setNativeMenuVisible(false)}
                     maxHeight={nativeQuickActionsMaxHeight}

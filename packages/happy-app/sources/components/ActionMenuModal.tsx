@@ -10,9 +10,9 @@ import {
     View,
     Modal,
     TouchableWithoutFeedback,
-    Animated,
     Platform,
 } from 'react-native';
+import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { StyleSheet } from 'react-native-unistyles';
 import { ActionMenu, ActionMenuItem } from './ActionMenu';
 import { ActionMenuOverlayContext } from './ActionMenuOverlayProvider';
@@ -104,58 +104,49 @@ function IOSActionMenuOverlay({ visible, items, onClose, deferItemPress, title, 
 function NativeActionMenuModal({ visible, items, onClose, deferItemPress, title, headerContent, footerContent, maxHeight }: ActionMenuModalProps) {
     // Track actual modal visibility (delayed hide for animation)
     const [modalVisible, setModalVisible] = useState(false);
-    const fadeAnim = useRef(new Animated.Value(0)).current;
-    const slideAnim = useRef(new Animated.Value(100)).current;
+    // Reanimated rather than Animated's native driver: a native-driven slide never reaches the
+    // shadow tree, which then keeps the sheet 100 lower than it is drawn, and Android drops the
+    // first tap on a row as having slid off it. Reanimated commits each frame to the shadow tree.
+    const fade = useSharedValue(0);
+    const slide = useSharedValue(100);
     // Store pending action to execute after modal closes
     const pendingActionRef = useRef<(() => void) | null>(null);
+
+    const handleHidden = () => {
+        setModalVisible(false);
+        // Execute pending action after modal is fully closed
+        if (pendingActionRef.current) {
+            // Add small delay to ensure modal is truly dismissed on iOS
+            setTimeout(() => {
+                pendingActionRef.current?.();
+                pendingActionRef.current = null;
+            }, 50);
+        }
+    };
 
     useEffect(() => {
         if (visible) {
             // Show modal immediately, then animate in
             setModalVisible(true);
-            // Reset animations to initial state
-            fadeAnim.setValue(0);
-            slideAnim.setValue(100);
-            // Animate in
-            Animated.parallel([
-                Animated.timing(fadeAnim, {
-                    toValue: 1,
-                    duration: ANIMATION_DURATION,
-                    useNativeDriver: true,
-                }),
-                Animated.spring(slideAnim, {
-                    toValue: 0,
-                    damping: 20,
-                    stiffness: 300,
-                    useNativeDriver: true,
-                }),
-            ]).start();
+            // Reset animations to initial state, then animate in
+            fade.value = 0;
+            slide.value = 100;
+            fade.value = withTiming(1, { duration: ANIMATION_DURATION });
+            slide.value = withTiming(0, { duration: ANIMATION_DURATION, easing: Easing.out(Easing.cubic) });
         } else if (modalVisible) {
             // Animate out, then hide modal
-            Animated.parallel([
-                Animated.timing(fadeAnim, {
-                    toValue: 0,
-                    duration: ANIMATION_DURATION,
-                    useNativeDriver: true,
-                }),
-                Animated.timing(slideAnim, {
-                    toValue: 100,
-                    duration: ANIMATION_DURATION,
-                    useNativeDriver: true,
-                }),
-            ]).start(() => {
-                setModalVisible(false);
-                // Execute pending action after modal is fully closed
-                if (pendingActionRef.current) {
-                    // Add small delay to ensure modal is truly dismissed on iOS
-                    setTimeout(() => {
-                        pendingActionRef.current?.();
-                        pendingActionRef.current = null;
-                    }, 50);
-                }
+            fade.value = withTiming(0, { duration: ANIMATION_DURATION });
+            slide.value = withTiming(100, { duration: ANIMATION_DURATION, easing: Easing.in(Easing.cubic) }, (finished) => {
+                if (finished) runOnJS(handleHidden)();
             });
         }
     }, [visible]);
+
+    const backdropStyle = useAnimatedStyle(() => ({ opacity: fade.value * 0.5 }));
+    const contentStyle = useAnimatedStyle(() => ({
+        opacity: fade.value,
+        transform: [{ translateY: slide.value }],
+    }));
 
     const handleClose = () => {
         onClose();
@@ -186,28 +177,10 @@ function NativeActionMenuModal({ visible, items, onClose, deferItemPress, title,
         >
             <View style={styles.container} {...webEventHandlers}>
                 <TouchableWithoutFeedback onPress={handleClose}>
-                    <Animated.View
-                        style={[
-                            styles.backdrop,
-                            {
-                                opacity: fadeAnim.interpolate({
-                                    inputRange: [0, 1],
-                                    outputRange: [0, 0.5],
-                                }),
-                            },
-                        ]}
-                    />
+                    <Animated.View style={[styles.backdrop, backdropStyle]} />
                 </TouchableWithoutFeedback>
 
-                <Animated.View
-                    style={[
-                        styles.content,
-                        {
-                            opacity: fadeAnim,
-                            transform: [{ translateY: slideAnim }],
-                        },
-                    ]}
-                >
+                <Animated.View style={[styles.content, contentStyle]}>
                     <ActionMenu
                         items={wrappedItems}
                         onClose={handleClose}
