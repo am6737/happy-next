@@ -20,6 +20,17 @@ export interface ComposerInputHeight {
     target: SharedValue<number>;
     /** The height the field was last laid out at (0 once it unmounts). */
     onLayout: (height: number) => void;
+    /**
+     * Keeps the list's scroll view from moving its scroll for the composer while the field shrinks
+     * after a send: the list is scrolling to the sent prompt then, and the scroll view following
+     * the composer down at once would knock it back.
+     */
+    freeze: SharedValue<boolean>;
+    /**
+     * Called as a send clears the field. Returns whether the composer's dock animates the field's
+     * shrink natively, in which case the field takes its new height at once.
+     */
+    prepareSendShrink: () => boolean;
 }
 
 export const ComposerInputHeightContext = React.createContext<ComposerInputHeight | null>(null);

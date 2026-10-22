@@ -4,6 +4,7 @@ import { KeyboardChatScrollView, useKeyboardHandler } from 'react-native-keyboar
 import { runOnJS, useAnimatedReaction, useSharedValue, type SharedValue } from 'react-native-reanimated';
 import type { LegendListRef } from '@legendapp/list/react-native';
 import { COMPOSER_MARGIN } from './floatingComposer';
+import { ComposerInputHeightContext } from './composerInputHeight';
 
 export type ChatScrollViewProps = ScrollViewProps & {
     /** Where the composer's padding ends above the bottom of the screen, which the keyboard offset is measured from. */
@@ -37,6 +38,7 @@ export const ChatScrollView = React.forwardRef<React.ElementRef<typeof KeyboardC
         // keyboard's share is only reported once it settles: it changes every frame while the
         // keyboard moves, and the list re-aligning to it from JS fights the native lift.
         const offset = keyboardOffset(bottomInset);
+        const composerInputHeight = React.useContext(ComposerInputHeightContext);
         const keyboardLift = useSharedValue(0);
         useKeyboardHandler(
             {
@@ -67,6 +69,8 @@ export const ChatScrollView = React.forwardRef<React.ElementRef<typeof KeyboardC
             <KeyboardChatScrollView
                 ref={ref}
                 extraContentPadding={composerInset}
+                // Set while the composer's field shrinks after a send (see `ComposerInputHeight.freeze`).
+                freeze={composerInputHeight?.freeze}
                 // A chat that fits does not move under the finger.
                 alwaysBounceVertical={false}
                 automaticallyAdjustContentInsets={false}

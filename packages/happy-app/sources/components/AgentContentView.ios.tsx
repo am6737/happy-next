@@ -3,7 +3,7 @@ import { View, StyleSheet, type LayoutChangeEvent } from 'react-native';
 import { KeyboardStickyView, useReanimatedKeyboardAnimation } from 'react-native-keyboard-controller';
 import Animated, { useAnimatedReaction, useAnimatedStyle, useSharedValue, type SharedValue } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { KeyboardDock } from './KeyboardDock';
+import { KeyboardDock, type KeyboardDockRef } from './KeyboardDock';
 import { COMPOSER_MARGIN, floatingComposerBottomInset } from './floatingComposer';
 import { ComposerKeyboardOffsetContext } from './composerKeyboardOffset';
 import { ComposerInputHeightContext, type ComposerInputHeight } from './composerInputHeight';
@@ -47,6 +47,8 @@ export const AgentContentView: React.FC<AgentContentViewProps> = React.memo(({ i
     const inputLaidOutHeight = useSharedValue(0);
     const inputHeight = useSharedValue(0);
     const inputTargetHeight = useSharedValue(0);
+    const freeze = useSharedValue(false);
+    const dockRef = React.useRef<KeyboardDockRef>(null);
     const composerInputHeight = React.useMemo<ComposerInputHeight>(() => ({
         height: inputHeight,
         target: inputTargetHeight,
@@ -55,7 +57,14 @@ export const AgentContentView: React.FC<AgentContentViewProps> = React.memo(({ i
             composerBaseHeight.value = laidOut.current.composer - height;
             inputLaidOutHeight.value = height;
         },
-    }), [composerBaseHeight, inputLaidOutHeight, inputHeight, inputTargetHeight]);
+        freeze,
+        prepareSendShrink: () => {
+            const dock = dockRef.current;
+            if (typeof dock?.prepareSendShrink !== 'function') return false;
+            dock.prepareSendShrink().catch(() => {});
+            return true;
+        },
+    }), [composerBaseHeight, inputLaidOutHeight, inputHeight, inputTargetHeight, freeze]);
     useAnimatedReaction(
         () => composerBaseHeight.value + (inputHeight.value > 0
             ? Math.min(inputHeight.value, inputTargetHeight.value)
@@ -96,6 +105,7 @@ export const AgentContentView: React.FC<AgentContentViewProps> = React.memo(({ i
                 {/* UIKit lifts the dock over the keyboard itself, so the soft edge under it moves with it. */}
                 {KeyboardDock ? (
                     <KeyboardDock
+                        ref={dockRef}
                         keyboardOffset={Math.max(0, bottomInset - COMPOSER_MARGIN)}
                         style={[styles.floatingComposer, { paddingBottom: bottomInset }]}
                         onLayout={onComposerLayout}

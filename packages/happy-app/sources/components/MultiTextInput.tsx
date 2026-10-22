@@ -63,7 +63,7 @@ export const MultiTextInput = React.forwardRef<MultiTextInputHandle, MultiTextIn
     } = props;
 
     const { theme } = useUnistyles();
-    const animatedHeight = useAnimatedInputHeight(props.animateHeight ?? false);
+    const animatedHeight = useAnimatedInputHeight(props.animateHeight ?? false, value);
     // Track latest selection in a ref
     const selectionRef = React.useRef({ start: 0, end: 0 });
     const inputRef = React.useRef<TextInput>(null);
