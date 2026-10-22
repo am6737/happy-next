@@ -407,17 +407,22 @@ export default function StatusScreen() {
                                     }}>
                                         {t('files.stagedChanges', { count: gitStatus.stagedFiles.length })}
                                     </Text>
-                                    {operatingAction === 'unstageAll' ? (
-                                        <ActivityIndicator size="small" color={theme.colors.header.tint} />
-                                    ) : (
+                                    {/* The label stays laid out under the spinner so the bar keeps its height */}
+                                    <View>
                                         <Text style={{
                                             fontSize: 13,
                                             color: theme.colors.header.tint,
+                                            opacity: operatingAction === 'unstageAll' ? 0 : 1,
                                             ...Typography.default(),
                                         }}>
                                             {t('status.unstageAll')}
                                         </Text>
-                                    )}
+                                        {operatingAction === 'unstageAll' && (
+                                            <View style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, alignItems: 'center', justifyContent: 'center' }}>
+                                                <ActivityIndicator size="small" color={theme.colors.header.tint} />
+                                            </View>
+                                        )}
+                                    </View>
                                 </Pressable>
                                 {gitStatus.stagedFiles.map((file, index) => (
                                     withFileMenu(file, true, <Item
@@ -460,17 +465,22 @@ export default function StatusScreen() {
                                     }}>
                                         {t('files.unstagedChanges', { count: gitStatus.unstagedFiles.length })}
                                     </Text>
-                                    {operatingAction === 'stageAll' ? (
-                                        <ActivityIndicator size="small" color={theme.colors.header.tint} />
-                                    ) : (
+                                    {/* The label stays laid out under the spinner so the bar keeps its height */}
+                                    <View>
                                         <Text style={{
                                             fontSize: 13,
                                             color: theme.colors.header.tint,
+                                            opacity: operatingAction === 'stageAll' ? 0 : 1,
                                             ...Typography.default(),
                                         }}>
                                             {t('status.stageAll')}
                                         </Text>
-                                    )}
+                                        {operatingAction === 'stageAll' && (
+                                            <View style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, alignItems: 'center', justifyContent: 'center' }}>
+                                                <ActivityIndicator size="small" color={theme.colors.header.tint} />
+                                            </View>
+                                        )}
+                                    </View>
                                 </Pressable>
                                 {gitStatus.unstagedFiles.map((file, index) => (
                                     withFileMenu(file, false, <Item
