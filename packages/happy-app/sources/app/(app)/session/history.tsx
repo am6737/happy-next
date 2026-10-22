@@ -165,6 +165,94 @@ function getSessionTitle(entry: AgentSessionIndexEntry): string {
     return t('machine.untitledSession');
 }
 
+// Memoized: the menus opening and closing, and every machine heartbeat, re-render the page, and
+// with a long history re-rendering all of its rows each time held up the menus.
+const HistorySessionList = React.memo(function HistorySessionList({ groups, homeDir, resumingSessionId, onOpenPreview, onResume }: {
+    groups: HistoryGroup[];
+    homeDir: string | undefined;
+    resumingSessionId: string | null;
+    onOpenPreview: (entry: AgentSessionIndexEntry) => void;
+    onResume: (entry: AgentSessionIndexEntry) => void;
+}) {
+    const { theme } = useUnistyles();
+    return (
+        <>
+            {groups.map((group) => (
+                <ItemGroup key={`date-${group.key}`} title={group.label}>
+                    {group.entries.map((entry, entryIndex) => {
+                        const time = formatSessionTime(entry.updatedAt);
+                        const displayPath = entry.originalPath
+                            ? formatPathRelativeToHome(entry.originalPath, homeDir)
+                            : t('claudeHistory.pathUnavailable');
+                        const shortHash = entry.sessionId.substring(0, 6);
+                        const msgCount = entry.messageCount ? `${entry.messageCount} messages` : null;
+                        const line2Parts = [time, msgCount, shortHash, entry.gitBranch].filter(Boolean);
+                        const line2 = line2Parts.join(' \u2022 ');
+                        const subtitle = line2 ? `${displayPath}\n${line2}` : displayPath;
+                        const title = getSessionTitle(entry);
+
+                        const isResuming = resumingSessionId === entry.sessionId;
+                        return (
+                            <Item
+                                key={`${entry.agent}-${entry.sessionId}-${entryIndex}`}
+                                title={title}
+                                subtitle={subtitle}
+                                subtitleLines={2}
+                                disabled={!entry.originalPath || resumingSessionId !== null}
+                                showChevron={false}
+                                titleStyle={{
+                                    fontSize: 15,
+                                    fontWeight: '500',
+                                }}
+                                subtitleStyle={{
+                                    fontSize: 13,
+                                    lineHeight: 16,
+                                }}
+                                iconContainerStyle={{
+                                    width: 48,
+                                    height: 48,
+                                    marginRight: 16
+                                }}
+                                icon={(
+                                    <Image
+                                        source={agentIcons[entry.agent]}
+                                        style={[
+                                            { width: 48, height: 48 },
+                                            entry.agent === 'codex' && { transform: [{ scale: 0.92 }] }
+                                        ]}
+                                        contentFit="contain"
+                                        tintColor={entry.agent === 'codex' || entry.agent === 'qoder' ? theme.colors.text : undefined}
+                                    />
+                                )}
+                                rightElement={!isResuming ? (
+                                    <Pressable
+                                        style={rightIconStyle}
+                                        onPress={(event) => {
+                                            event.stopPropagation?.();
+                                            onResume(entry);
+                                        }}
+                                    >
+                                        <Ionicons
+                                            name="play-circle-outline"
+                                            size={29}
+                                            color={theme.colors.groupped.chevron}
+                                        />
+                                    </Pressable>
+                                ) : (
+                                    <View style={rightIconStyle}>
+                                        <ActivityIndicator size="small" color={theme.colors.textSecondary} />
+                                    </View>
+                                )}
+                                onPress={() => onOpenPreview(entry)}
+                            />
+                        );
+                    })}
+                </ItemGroup>
+            ))}
+        </>
+    );
+});
+
 export default function AgentHistoryPage() {
     const { theme } = useUnistyles();
     const router = useRouter();
@@ -539,6 +627,9 @@ export default function AgentHistoryPage() {
         onPress: () => { setActiveTab(tab.key); setSearchQuery(''); },
     })), [activeTab]);
 
+    const closeMachineMenu = React.useCallback(() => setMachineMenuVisible(false), []);
+    const closeAgentMenu = React.useCallback(() => setAgentMenuVisible(false), []);
+
     return (
         <ItemList style={{ paddingTop: 0 }} onScroll={handleScroll} scrollEventThrottle={200}>
             <View style={{ maxWidth: layout.maxWidth, alignSelf: 'center', width: '100%' }}>
@@ -614,78 +705,15 @@ export default function AgentHistoryPage() {
                 )}
 
                 {/* Session list grouped by date */}
-                {!loading && groupedSessions.map((group) => (
-                    <ItemGroup key={`date-${group.key}`} title={group.label}>
-                        {group.entries.map((entry, entryIndex) => {
-                            const time = formatSessionTime(entry.updatedAt);
-                            const displayPath = entry.originalPath
-                                ? formatPathRelativeToHome(entry.originalPath, selectedMachine?.metadata?.homeDir)
-                                : t('claudeHistory.pathUnavailable');
-                            const shortHash = entry.sessionId.substring(0, 6);
-                            const msgCount = entry.messageCount ? `${entry.messageCount} messages` : null;
-                            const line2Parts = [time, msgCount, shortHash, entry.gitBranch].filter(Boolean);
-                            const line2 = line2Parts.join(' \u2022 ');
-                            const subtitle = line2 ? `${displayPath}\n${line2}` : displayPath;
-                            const title = getSessionTitle(entry);
-
-                            const isResuming = resumingSessionId === entry.sessionId;
-                            return (
-                                <Item
-                                    key={`${entry.agent}-${entry.sessionId}-${entryIndex}`}
-                                    title={title}
-                                    subtitle={subtitle}
-                                    subtitleLines={2}
-                                    disabled={!entry.originalPath || resumingSessionId !== null}
-                                    showChevron={false}
-                                    titleStyle={{
-                                        fontSize: 15,
-                                        fontWeight: '500',
-                                    }}
-                                    subtitleStyle={{
-                                        fontSize: 13,
-                                        lineHeight: 16,
-                                    }}
-                                    iconContainerStyle={{
-                                        width: 48,
-                                        height: 48,
-                                        marginRight: 16
-                                    }}
-                                    icon={(
-                                        <Image
-                                            source={agentIcons[entry.agent]}
-                                            style={[
-                                                { width: 48, height: 48 },
-                                                entry.agent === 'codex' && { transform: [{ scale: 0.92 }] }
-                                            ]}
-                                            contentFit="contain"
-                                            tintColor={entry.agent === 'codex' || entry.agent === 'qoder' ? theme.colors.text : undefined}
-                                        />
-                                    )}
-                                    rightElement={!isResuming ? (
-                                        <Pressable
-                                            style={rightIconStyle}
-                                            onPress={(event) => {
-                                                event.stopPropagation?.();
-                                                handleResume(entry);
-                                            }}
-                                        >
-                                            <Ionicons
-                                                name="play-circle-outline"
-                                                size={29}
-                                                color={theme.colors.groupped.chevron}
-                                            />
-                                        </Pressable>
-                                    ) : (
-                                        <View style={rightIconStyle}>
-                                            <ActivityIndicator size="small" color={theme.colors.textSecondary} />
-                                        </View>
-                                    )}
-                                    onPress={() => handleOpenPreview(entry)}
-                                />
-                            );
-                        })}
-                    </ItemGroup>
-                ))}
+                {!loading && (
+                    <HistorySessionList
+                        groups={groupedSessions}
+                        homeDir={selectedMachine?.metadata?.homeDir}
+                        resumingSessionId={resumingSessionId}
+                        onOpenPreview={handleOpenPreview}
+                        onResume={handleResume}
+                    />
+                )}
                 {loadingMore && (
                     <View style={{ paddingVertical: 16, alignItems: 'center' }}>
                         <ActivityIndicator size="small" color={theme.colors.textSecondary} />
@@ -706,14 +734,14 @@ export default function AgentHistoryPage() {
                 visible={machineMenuVisible}
                 title={t('settings.machines')}
                 items={machineMenuItems}
-                onClose={() => setMachineMenuVisible(false)}
+                onClose={closeMachineMenu}
             />
 
             <ActionMenuModal
                 visible={agentMenuVisible}
                 title={t('agentHistory.title')}
                 items={agentMenuItems}
-                onClose={() => setAgentMenuVisible(false)}
+                onClose={closeAgentMenu}
             />
         </ItemList>
     );

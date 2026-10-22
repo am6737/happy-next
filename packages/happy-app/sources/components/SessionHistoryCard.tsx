@@ -23,7 +23,8 @@ export const SessionHistoryCard = React.memo(({ session, isFirst, isLast, isSing
     isLast?: boolean;
     isSingle?: boolean;
     isResuming: boolean;
-    onPress: () => void;
+    // Given the session, so a list can pass one callback for every row and keep the memo.
+    onPress: (session: Session) => void;
     onFork: (session: Session, mode: SessionForkMode) => void;
     style?: StyleProp<ViewStyle>;
 }) => {
@@ -44,7 +45,7 @@ export const SessionHistoryCard = React.memo(({ session, isFirst, isLast, isSing
                 isLast ? styles.sessionCardLast : {},
                 style,
             ]}
-            onPress={onPress}
+            onPress={() => onPress(session)}
         >
             <Avatar id={avatarId} size={48} monochrome={!sessionStatus.isConnected} flavor={session.metadata?.flavor} sessionIcon={session.metadata?.sessionIcon} />
             <View style={styles.sessionContent}>

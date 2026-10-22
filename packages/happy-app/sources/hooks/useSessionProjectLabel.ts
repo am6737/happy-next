@@ -1,5 +1,6 @@
 import * as React from 'react';
-import { useAllMachines, useSetting } from '@/sync/storage';
+import { storage, useSetting } from '@/sync/storage';
+import { sortMachines } from '@/utils/machineOrder';
 import type { Session } from '@/sync/storageTypes';
 import { projectLabels } from '@/utils/projectLabels';
 import { formatPathRelativeToHome, getSessionSubtitle } from '@/utils/sessionUtils';
@@ -26,16 +27,19 @@ export type SessionProjectLabeler = (session: Session) => SessionProjectLabel;
 /** Labels for the projects of these sessions, the list they're shown in. */
 export function useSessionProjectLabels(sessions: readonly Session[], { byMachine = false }: { byMachine?: boolean } = {}): SessionProjectLabeler {
     const showFullPath = useSetting('showFullProjectPath');
-    const machines = useAllMachines();
 
     // Sessions change with every message, their projects hardly ever: work on these only when the
     // projects do, so the labeler — and the rows using it — stay the same in between.
     const projectsKey = Array.from(new Set(sessions.flatMap(session => session.metadata
         ? [`${session.metadata.path}\0${session.metadata.homeDir ?? ''}\0${session.metadata.machineId ?? ''}`]
         : []))).sort().join('\n');
-    const machineNamesKey = machines
-        .map(machine => `${machine.id}\0${machine.metadata?.displayName || machine.metadata?.host || machine.id}`)
-        .join('\n');
+    // Only the machines' names, not the machines: every session row runs this hook, and the machine
+    // objects change on each heartbeat, which re-rendered all of the rows.
+    const machineNamesKey = storage((state) => state.isDataReady
+        ? sortMachines(Object.values(state.machines).filter((machine) => machine.active), state.settings.machineOrder)
+            .map(machine => `${machine.id}\0${machine.metadata?.displayName || machine.metadata?.host || machine.id}`)
+            .join('\n')
+        : '');
 
     return React.useMemo(() => {
         const projects = new Map<string, { display: string; machineIds: Set<string> }>();

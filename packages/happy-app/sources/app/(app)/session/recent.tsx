@@ -50,6 +50,9 @@ interface SessionHistoryItem {
     type: 'session' | 'date-header';
     session?: Session;
     date?: string;
+    // Where a session row sits in its date group, for its corners.
+    isFirst?: boolean;
+    isLast?: boolean;
 }
 
 const styles = StyleSheet.create((theme) => ({
@@ -196,6 +199,12 @@ function groupSessionsByDate(sessions: Session[]): SessionHistoryItem[] {
             items.push({ type: 'session', session: sess });
         });
     }
+
+    items.forEach((item, index) => {
+        if (item.type !== 'session') return;
+        item.isFirst = items[index - 1]?.type === 'date-header';
+        item.isLast = items[index + 1] == null || items[index + 1].type === 'date-header';
+    });
 
     return items;
 }
@@ -361,7 +370,9 @@ function SessionHistory() {
         navigateToSession(session.id);
     }, [navigateToSession]);
 
-    const renderItem = React.useCallback(({ item, index }: { item: SessionHistoryItem, index: number }) => {
+    // Depends on nothing that changes with the sessions, so an update re-renders only the rows whose
+    // session changed instead of every row in the list.
+    const renderItem = React.useCallback(({ item }: { item: SessionHistoryItem }) => {
         if (item.type === 'date-header') {
             return (
                 <View style={styles.dateHeader}>
@@ -373,29 +384,21 @@ function SessionHistory() {
         }
 
         if (item.type === 'session' && item.session) {
-            // Determine card styling based on position within date group
-            const prevItem = index > 0 ? groupedItems[index - 1] : null;
-            const nextItem = index < groupedItems.length - 1 ? groupedItems[index + 1] : null;
-
-            const isFirst = prevItem?.type === 'date-header';
-            const isLast = nextItem?.type === 'date-header' || nextItem == null;
-            const isSingle = isFirst && isLast;
-
             return (
                 <SessionHistoryCard
                     session={item.session}
-                    isFirst={isFirst}
-                    isLast={isLast}
-                    isSingle={isSingle}
+                    isFirst={item.isFirst}
+                    isLast={item.isLast}
+                    isSingle={item.isFirst && item.isLast}
                     isResuming={resumingSessionId === item.session.id}
-                    onPress={() => handleNavigateToSession(item.session!)}
+                    onPress={handleNavigateToSession}
                     onFork={handleForkSession}
                 />
             );
         }
 
         return null;
-    }, [groupedItems, handleNavigateToSession, handleForkSession, resumingSessionId]);
+    }, [handleNavigateToSession, handleForkSession, resumingSessionId]);
     
     const keyExtractor = React.useCallback((item: SessionHistoryItem, index: number) => {
         if (item.type === 'date-header') {
@@ -476,7 +479,10 @@ function SessionHistory() {
                 </NativeMenu>
             </View>
         </View>
-    ), [searchQuery, theme, selectedMachine, selectedAgent, machineMenuItems, agentMenuItems]);
+    ), [searchQuery, theme.colors.textSecondary, theme.colors.text, selectedMachine, selectedAgent, machineMenuItems, agentMenuItems]);
+
+    const closeMachineMenu = React.useCallback(() => setMachineMenuVisible(false), []);
+    const closeAgentMenu = React.useCallback(() => setAgentMenuVisible(false), []);
 
     if (!allSessions) {
         return (
@@ -545,13 +551,13 @@ function SessionHistory() {
                 visible={machineMenuVisible}
                 title={t('sessionHistory.allDevices')}
                 items={machineMenuItems}
-                onClose={() => setMachineMenuVisible(false)}
+                onClose={closeMachineMenu}
             />
             <ActionMenuModal
                 visible={agentMenuVisible}
                 title={t('sessionHistory.allAgents')}
                 items={agentMenuItems}
-                onClose={() => setAgentMenuVisible(false)}
+                onClose={closeAgentMenu}
             />
         </View>
     );
