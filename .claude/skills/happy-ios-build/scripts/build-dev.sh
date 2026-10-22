@@ -65,9 +65,10 @@ security cms -D -i "$PROFILE" > "$WORK/profile.plist"
 mkdir -p "$WORK/Payload"
 A="$WORK/Payload/HappyNextdev.app"
 ditto "$DD/Build/Products/Debug-iphoneos/HappyNextdev.app" "$A"
-if [ -d "$A/Watch" ] || [ -d "$A/PlugIns" ]; then
-    die "the app embeds Watch/ or PlugIns/, which need their own profiles; this script does not sign them"
-fi
+# The watch widget (…dev.watchkitapp.widget) has no profile, so the dev IPA ships without the
+# watch app, like the prod one.
+rm -rf "$A/Watch"
+[ -d "$A/PlugIns" ] && die "the app embeds PlugIns/, which need their own profiles; this script does not sign them"
 
 # Entitlements: the project's file plus the identity keys a device build needs.
 ENT="$WORK/entitlements.plist"

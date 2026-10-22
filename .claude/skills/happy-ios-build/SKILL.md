@@ -10,7 +10,7 @@ description: Builds a happy-app iOS IPA on the Mac mini and drops it into appdow
 | 模式 | 用户说法 | 产物 | 签名 / 推送 |
 |---|---|---|---|
 | `prod` | 正式版、生产版、能收推送的 | `HappyNext-<版本>-<构建号>-<sha>-<标签>-<时间>.ipa`，`com.hitosea.happy`，不含 Watch App | EAS 上现有的 Ad Hoc 证书，`aps-environment=production`，只能装在 Ad Hoc 描述文件里的设备上 |
-| `dev` | 开发版、调试版、dev client | `HappyNextdev-<版本>-<sha>-<标签>-<时间>.ipa`，`com.hitosea.happy.dev`，Debug 开发客户端，打开后要连 Metro | Apple Development 证书 + 团队描述文件 `com.hitosea.happy.dev`，`aps-environment=development` |
+| `dev` | 开发版、调试版、dev client | `HappyNextdev-<版本>-<sha>-<标签>-<时间>.ipa`，`com.hitosea.happy.dev`，Debug 开发客户端，打开后要连 Metro，不含 Watch App | Apple Development 证书 + 团队描述文件 `com.hitosea.happy.dev`，`aps-environment=development` |
 
 真正的构建由仓库里的脚本完成，它们在 Mac mini 上运行：
 
@@ -84,7 +84,7 @@ waitMs=0
 
 ## 坑（脚本已处理，排错时对照）
 
-1. **Watch target 没有 Ad Hoc 凭证。** EAS 会报 `Some of the build targets don't have credentials ... HappyWatch`。必须在 `eas credentials` 之前把 `targets/watch*` 移出去，因此正式版不含 Watch App。开发版的 `.app` 里如果出现 `Watch/` 或 `PlugIns/`，脚本会直接停下，因为这些需要各自的描述文件。
+1. **Watch target 没有 Ad Hoc 凭证。** EAS 会报 `Some of the build targets don't have credentials ... HappyWatch`。必须在 `eas credentials` 之前把 `targets/watch*` 移出去，因此正式版不含 Watch App。开发版 prebuild 后 `.app` 里会带 `Watch/HappyWatch.app`，其中的 Widget 扩展（`com.hitosea.happy.dev.watchkitapp.widget`）没有描述文件，所以脚本签名前会删掉 `Watch/`，开发版也不含 Watch App；如果顶层出现 `PlugIns/`，脚本会直接停下。
 2. **`eas credentials` 没有非交互的下载方式**（eas-cli 18.x）。只能用 `eas-creds.exp` 模拟按键选菜单：先按 `ARROWS` 次下箭头选中临时 profile（这个 profile 追加在 `eas.json` 的最后），再按 3 次下箭头选「credentials.json」，然后选「Download」。脚本会检查文件是否真的写到了磁盘上。EAS 菜单变了就调整这个 exp。
 3. **Expo 生成的 `Info.plist` 把 `CFBundleVersion` 写死成 1**，`CURRENT_PROJECT_VERSION` 改不动它，必须在 archive 之前用 `plutil` 改。构建号取三者最大值再加 1：EAS 远端值、builds 目录里最大的本地包号、`~/.happy-ios-build/prod-build-number`。
 4. **Mac mini 只有已经过期的 WWDR G1**，分发证书是 G3 签发的，所以要把 G3 导入临时钥匙串，否则会出现「0 valid identities」。
