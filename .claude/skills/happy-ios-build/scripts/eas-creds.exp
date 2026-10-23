@@ -60,12 +60,23 @@ expect {
 }
 sleep 0.3
 send -- "\r"
-expect {
-  -re "Which type of internal distribution" { send -- "\r"; exp_continue }
-  -re "Some of the build targets" { puts "EAS_TARGET_ERROR"; exit 3 }
-  -re "credentials.json is synced|synced|success|What do you want to do" { }
-  timeout { puts "TIMEOUT waiting for the download"; exit 2 }
+# Done when credentials.json is on disk: the menu's own echo of the pick ("✔ What do you want to
+# do? › Download ...") looks like any text that could mean done, and quitting on it killed eas
+# before it wrote the file
+set timeout 2
+set waited 0
+while {![file exists credentials.json]} {
+  if {$waited >= 150} { puts "TIMEOUT waiting for the download"; exit 2 }
+  expect {
+    -re "Which type of internal distribution" { send -- "\r" }
+    -re "Some of the build targets" { puts "EAS_TARGET_ERROR"; exit 3 }
+    -re "Delete one from|Add a new one" { puts "WRONG_MENU a credentials-changing menu came up"; exit 4 }
+    eof { break }
+    timeout { }
+  }
+  incr waited
 }
-sleep 2
+# credentials/ios/ is written with it; give eas the time to finish
+sleep 3
 puts "DOWNLOAD DONE"
 exit 0
