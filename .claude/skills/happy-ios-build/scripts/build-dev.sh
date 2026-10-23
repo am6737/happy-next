@@ -137,7 +137,7 @@ echo "RESULT_COMMIT=$SHA"
 echo "RESULT_APS=$(codesign -d --entitlements :- "$A" 2>/dev/null | plutil -extract aps-environment raw - 2>/dev/null || echo none)"
 echo "RESULT_PROFILE=$($PB -c 'Print :Name' "$WORK/profile.plist"), expires $(plutil -extract ExpirationDate raw "$WORK/profile.plist"), $($PB -c 'Print :ProvisionedDevices' "$WORK/profile.plist" | grep -c '^ ') devices"
 echo "RESULT_EXT_PROFILE=$($PB -c 'Print :Name' "$WORK/ext-profile.plist"), expires $(plutil -extract ExpirationDate raw "$WORK/ext-profile.plist"), $($PB -c 'Print :ProvisionedDevices' "$WORK/ext-profile.plist" | grep -c '^ ') devices"
-echo "RESULT_SHARE_EXTENSION=$($PB -c 'Print :CFBundleIdentifier' "$X/Info.plist"), app group $(codesign -d --entitlements :- "$X" 2>/dev/null | plutil -extract com.apple.security.application-groups.0 raw - 2>/dev/null || echo NONE)"
+echo "RESULT_SHARE_EXTENSION=$($PB -c 'Print :CFBundleIdentifier' "$X/Info.plist"), app group $(codesign -d --entitlements :- "$X" 2>/dev/null | grep -qF "<string>$APP_GROUP</string>" && echo "$APP_GROUP" || echo NONE)"
 echo "RESULT_PREBUILD=$NEED_PREBUILD"
 
 rm -rf "$WORK/Payload" "$WORK/$NAME"

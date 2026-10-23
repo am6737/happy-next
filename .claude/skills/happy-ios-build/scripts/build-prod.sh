@@ -230,7 +230,8 @@ X="$A/PlugIns/ShareExtension.appex"
 [ "$($PB -c 'Print :CFBundleIdentifier' "$X/Info.plist")" = "$EXT_ID" ] || die "share extension has the wrong bundle id"
 [ "$($PB -c 'Print :CFBundleVersion' "$X/Info.plist")" = "$BUILD" ] || die "share extension's CFBundleVersion differs from the app's"
 for b in "$A" "$X"; do
-    [ "$(codesign -d --entitlements :- "$b" 2>/dev/null | plutil -extract com.apple.security.application-groups.0 raw - 2>/dev/null || true)" = "$APP_GROUP" ] \
+    # plutil -extract can't read this key: it takes the dots in its name for a key path
+    codesign -d --entitlements :- "$b" 2>/dev/null | grep -qF "<string>$APP_GROUP</string>" \
         || die "$(basename "$b") is not signed with the App Group $APP_GROUP"
 done
 python3 - "$WORK/prod.env" "$A/EXConstants.bundle/app.config" <<'EOF' || die "DooPush config in the IPA doesn't match the EAS production environment"
