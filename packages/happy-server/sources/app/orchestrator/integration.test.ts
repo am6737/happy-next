@@ -2768,6 +2768,59 @@ describe('orchestrator integration paths', () => {
             await app.close();
         });
 
+        it('exec gets no callback when the run finishes during a scheduler tick that read it as running', async () => {
+            const app = await createApp();
+            const pending = app.inject({
+                method: 'POST',
+                url: '/v1/orchestrator/exec',
+                headers: { 'x-user-id': 'user-1' },
+                payload: {
+                    prompt: sealed('hostname'),
+                    title: sealed('$ hostname'),
+                    machineIds: ['machine-1'],
+                    controllerSessionId: 'controller-session-1',
+                    waitMs: 10_000,
+                },
+            });
+            await vi.waitFor(() => expect(state.runs).toHaveLength(1));
+            await orchestratorSchedulerTick(new Date('2026-03-16T00:00:00.000Z'));
+            const execution = state.executions[0];
+
+            // The daemon's finish commits after the tick's transaction has read the run as running
+            const findRun = dbMock.orchestratorRun.findUnique.getMockImplementation()!;
+            let raced = false;
+            dbMock.orchestratorRun.findUnique.mockImplementation(async (args: any) => {
+                const row = await findRun(args);
+                if (!raced && args?.select?.maxConcurrency) {
+                    raced = true;
+                    await app.inject({
+                        method: 'POST',
+                        url: `/v1/orchestrator/executions/${execution.id}/finish`,
+                        headers: { 'x-user-id': 'user-1' },
+                        payload: {
+                            dispatchToken: execution.dispatchToken,
+                            status: 'completed',
+                            exitCode: 0,
+                            sealedResult: sealed('host-1'),
+                        },
+                    });
+                }
+                return row;
+            });
+            try {
+                await orchestratorSchedulerTick(new Date('2026-03-16T00:00:01.000Z'));
+            } finally {
+                dbMock.orchestratorRun.findUnique.mockImplementation(findRun);
+            }
+            expect(raced).toBe(true);
+
+            const exec = await pending;
+            expect(exec.json().data.terminal).toBe(true);
+            expect(state.runs[0].status).toBe('completed');
+            expect(terminalCallbacks()).toHaveLength(0);
+            await app.close();
+        });
+
         it('pend returns shell tasks the way exec does, with the sealed result in place of the output', async () => {
             const app = await createApp();
             const exec = await app.inject({

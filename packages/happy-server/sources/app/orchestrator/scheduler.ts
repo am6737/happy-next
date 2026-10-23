@@ -786,8 +786,11 @@ async function buildRunActions(run: {
                 completedAt: true,
             },
         });
+        // A run already terminal here was finished by another transaction (a daemon's finish
+        // committing during this tick), which sends its terminal notice itself
         if (refreshedRun) {
-            finished = isRunTerminal(await recomputeRunStatusTx(tx, currentRun.id, refreshedRun.status, refreshedRun.completedAt, now));
+            const nextStatus = await recomputeRunStatusTx(tx, currentRun.id, refreshedRun.status, refreshedRun.completedAt, now);
+            finished = !isRunTerminal(refreshedRun.status) && isRunTerminal(nextStatus);
         }
     });
 
