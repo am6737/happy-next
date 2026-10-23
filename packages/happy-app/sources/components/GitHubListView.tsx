@@ -25,6 +25,7 @@ import type { GithubIssueScope, GithubPullScope } from '@/sync/apiGithubData';
 import { NativeMenu } from '@/components/NativeMenu';
 import { SearchField, searchFieldMetrics } from '@/components/SearchField';
 import type { ActionMenuItem } from '@/components/ActionMenu';
+import { PressHighlight } from '@/components/PressHighlight';
 
 type ActiveTab = 'issues' | 'pulls';
 
@@ -49,56 +50,64 @@ function getStateColor(state: string, theme: ReturnType<typeof useUnistyles>['th
 }
 
 const IssueRow = React.memo(({ item, onPress, theme }: { item: RepoIssue; onPress: () => void; theme: any }) => (
-    <View style={issueStyles.item}>
-        <Pressable style={({ pressed }) => [issueStyles.row, pressed && { backgroundColor: theme.colors.surfaceRipple }]} onPress={onPress}>
-            <View style={issueStyles.icon}>
-                <IssueIcon size={18} color={getStateColor(item.state, theme)} state={item.state} />
-            </View>
-            <View style={issueStyles.content}>
-                <Text style={[issueStyles.title, item.state === 'closed' && { color: theme.colors.textSecondary }]}>
-                    {item.title}
+    <Pressable
+        style={({ hovered }: any) => [issueStyles.row, Platform.OS === 'web' && hovered && { backgroundColor: theme.colors.sessionList.rowHover }]}
+        onPress={onPress}
+    >
+        {({ pressed }) => (<>
+        {pressed && <PressHighlight style={issueStyles.highlight} />}
+        <View style={issueStyles.icon}>
+            <IssueIcon size={18} color={getStateColor(item.state, theme)} state={item.state} />
+        </View>
+        <View style={issueStyles.content}>
+            <Text style={[issueStyles.title, item.state === 'closed' && { color: theme.colors.textSecondary }]}>
+                {item.title}
+            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                <Text style={[issueStyles.meta, { color: theme.colors.textSecondary, marginTop: 0 }]}>
+                    {item.repositoryFullName ? `${item.repositoryFullName} · ` : ''}#{item.number} · {formatTimeAgo(item.createdAt)} · @{item.author}
                 </Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}>
-                    <Text style={[issueStyles.meta, { color: theme.colors.textSecondary, marginTop: 0 }]}>
-                        {item.repositoryFullName ? `${item.repositoryFullName} · ` : ''}#{item.number} · {formatTimeAgo(item.createdAt)} · @{item.author}
-                    </Text>
-                </View>
-                {item.labels.length > 0 && (
-                    <View style={issueStyles.labelsRow}>
-                        {item.labels.map((label) => {
-                            const lc = labelColors(label.color);
-                            return (
-                                <View key={label.name} style={[issueStyles.labelPill, { backgroundColor: lc.bg }]}>
-                                    <Text style={[issueStyles.labelText, { color: lc.text }]}>{label.name}</Text>
-                                </View>
-                            );
-                        })}
-                    </View>
-                )}
             </View>
-        </Pressable>
-        <View style={issueStyles.divider} />
-    </View>
+            {item.labels.length > 0 && (
+                <View style={issueStyles.labelsRow}>
+                    {item.labels.map((label) => {
+                        const lc = labelColors(label.color);
+                        return (
+                            <View key={label.name} style={[issueStyles.labelPill, { backgroundColor: lc.bg }]}>
+                                <Text style={[issueStyles.labelText, { color: lc.text }]}>{label.name}</Text>
+                            </View>
+                        );
+                    })}
+                </View>
+            )}
+        </View>
+        <View pointerEvents="none" style={issueStyles.divider} />
+        </>)}
+    </Pressable>
 ));
 
 const PRRow = React.memo(({ item, onPress, theme }: { item: RepoPR; onPress: () => void; theme: any }) => (
-    <View style={issueStyles.item}>
-        <Pressable style={({ pressed }) => [issueStyles.row, pressed && { backgroundColor: theme.colors.surfaceRipple }]} onPress={onPress}>
-            <View style={issueStyles.icon}>
-                <PullRequestIcon state={item.status} size={18} color={getStateColor(item.status, theme)} />
-            </View>
-            <View style={issueStyles.content}>
-                <Text style={[issueStyles.title, item.status !== 'open' && { color: theme.colors.textSecondary }]}>
-                    {item.title}
-                </Text>
-                <Text style={[issueStyles.meta, { color: theme.colors.textSecondary }]}>
-                    {item.repositoryFullName ? `${item.repositoryFullName} · ` : ''}#{item.number} · {formatTimeAgo(item.createdAt)} · @{item.author}
-                    {item.headRefName ? ` → ${item.headRefName}` : ''}
-                </Text>
-            </View>
-        </Pressable>
-        <View style={issueStyles.divider} />
-    </View>
+    <Pressable
+        style={({ hovered }: any) => [issueStyles.row, Platform.OS === 'web' && hovered && { backgroundColor: theme.colors.sessionList.rowHover }]}
+        onPress={onPress}
+    >
+        {({ pressed }) => (<>
+        {pressed && <PressHighlight style={issueStyles.highlight} />}
+        <View style={issueStyles.icon}>
+            <PullRequestIcon state={item.status} size={18} color={getStateColor(item.status, theme)} />
+        </View>
+        <View style={issueStyles.content}>
+            <Text style={[issueStyles.title, item.status !== 'open' && { color: theme.colors.textSecondary }]}>
+                {item.title}
+            </Text>
+            <Text style={[issueStyles.meta, { color: theme.colors.textSecondary }]}>
+                {item.repositoryFullName ? `${item.repositoryFullName} · ` : ''}#{item.number} · {formatTimeAgo(item.createdAt)} · @{item.author}
+                {item.headRefName ? ` → ${item.headRefName}` : ''}
+            </Text>
+        </View>
+        <View pointerEvents="none" style={issueStyles.divider} />
+        </>)}
+    </Pressable>
 ));
 
 const TokenExpiredCard = React.memo(({ onReconnect, loading }: { onReconnect: () => void; loading: boolean }) => {
@@ -710,13 +719,14 @@ const styles = StyleSheet.create((theme) => ({
     },
 
     // Editorial headline
+    // No set height: the title's line and the swap pill are both 32, so the paddings are the
+    // distances to the header above and to the search field below.
     headlineRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        height: 64,
         paddingHorizontal: 20,
-        paddingTop: 14,
-        paddingBottom: 14,
+        paddingTop: Platform.select({ ios: 14, default: 16 }),
+        paddingBottom: 16,
         gap: 8,
     },
     headlineLabelGroup: {
@@ -989,19 +999,28 @@ const styles = StyleSheet.create((theme) => ({
 }));
 
 const issueStyles = StyleSheet.create((theme) => ({
-    item: {
-        marginHorizontal: -16,
-    },
+    // As DooTask's tasks are: inset by half the list's padding, so the pressed and hovered
+    // background stays off the screen's edges.
     row: {
         flexDirection: 'row',
         alignItems: 'flex-start',
         gap: 10,
-        paddingVertical: 12,
-        paddingHorizontal: 16,
+        marginHorizontal: -8,
+        paddingVertical: 14,
+        paddingHorizontal: 8,
+        borderRadius: 6,
+        overflow: 'hidden',
     },
+    highlight: {
+        borderRadius: 6,
+    },
+    // From where the title starts (past the 18 icon and the 10 gap) to the content's edge.
     divider: {
+        position: 'absolute',
+        left: 8 + 28,
+        right: 8,
+        bottom: 0,
         height: StyleSheet.hairlineWidth,
-        marginLeft: 44,
         backgroundColor: theme.colors.divider,
     },
     icon: {

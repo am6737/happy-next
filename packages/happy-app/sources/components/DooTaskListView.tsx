@@ -240,7 +240,8 @@ const FilterPanelModal = React.memo(React.forwardRef<BottomSheetModal, FilterPan
                     >
                         <Text style={[
                             styles.chipText,
-                            { color: currentRole === opt.key ? theme.colors.button.primary.tint : theme.colors.text },
+                            currentRole === opt.key && styles.chipTextActive,
+                            { color: currentRole === opt.key ? theme.colors.button.primary.tint : theme.colors.textSecondary },
                         ]}>
                             {opt.label}
                         </Text>
@@ -365,7 +366,8 @@ const FilterBar = React.memo(({ onRefreshTasks }: FilterBarProps) => {
                     >
                         <Text style={[
                             styles.chipText,
-                            { color: filters.status === opt.key ? theme.colors.button.primary.tint : theme.colors.text },
+                            filters.status === opt.key && styles.chipTextActive,
+                            { color: filters.status === opt.key ? theme.colors.button.primary.tint : theme.colors.textSecondary },
                         ]}>
                             {opt.label}
                         </Text>
@@ -381,7 +383,8 @@ const FilterBar = React.memo(({ onRefreshTasks }: FilterBarProps) => {
                     <Text
                         style={[
                             styles.chipText,
-                            { color: hasActiveFilters ? theme.colors.button.primary.tint : theme.colors.text },
+                            hasActiveFilters && styles.chipTextActive,
+                            { color: hasActiveFilters ? theme.colors.button.primary.tint : theme.colors.textSecondary },
                         ]}
                         numberOfLines={1}
                     >
@@ -659,18 +662,21 @@ const PRIORITY_BAR_HEIGHT = 14;
 const styles = StyleSheet.create((_theme) => ({
     // Its search field sits as far under the header as the session list's does on iOS; elsewhere as
     // far as the settings' first card.
-    // Its filters stand as far above the first task as the GitHub list's scope filters do.
-    filterBar: { paddingTop: Platform.select({ ios: 12, default: 16 }), paddingBottom: 12, gap: 12 },
+    // Its filters stand as far under the search field, and as far above the first task, as the
+    // GitHub list's scope filters do.
+    filterBar: { paddingTop: Platform.select({ ios: 12, default: 16 }), paddingBottom: 12, gap: 16 },
     filterRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
-    chip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, gap: 4 },
-    chipText: { ...Typography.default(), fontSize: 13 },
+    // As the GitHub list's scope chips are.
+    chip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 13, paddingVertical: 7, borderRadius: 16, gap: 4 },
+    chipText: { ...Typography.default('medium'), fontSize: 13 },
+    chipTextActive: { ...Typography.default('semiBold') },
     list: { paddingHorizontal: 16 },
     // Tasks lie flat on the background like the session list's rows: inset by half the list's
     // padding, so the priority marker lines up with the search field.
     card: {
         marginHorizontal: -8,
         paddingHorizontal: 8,
-        paddingVertical: 12,
+        paddingVertical: 14,
         borderRadius: 6,
         overflow: 'hidden',
     },
