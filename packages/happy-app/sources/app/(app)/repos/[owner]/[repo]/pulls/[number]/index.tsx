@@ -542,9 +542,12 @@ const stylesheet = StyleSheet.create((theme) => ({
         ...Typography.default(),
         fontSize: 12,
     },
+    // Android pads text above and below for the font's ascent; the header's lines drop it, so they
+    // stand as close as on iOS.
     headerTitle: {
         ...Typography.default('semiBold'),
         fontSize: 17,
+        includeFontPadding: false,
         color: theme.colors.text,
     },
     headerSubtitle: {
@@ -552,6 +555,7 @@ const stylesheet = StyleSheet.create((theme) => ({
         fontSize: 12,
         lineHeight: 16,
         marginTop: -2,
+        includeFontPadding: false,
         color: theme.colors.textSecondary,
     },
 }));

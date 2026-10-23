@@ -111,7 +111,11 @@ export const Header = React.memo((props: HeaderProps) => {
                             } as any : {})}
                             style={[styles.selectableTitle, leftAligned && styles.selectableTitleLeft]}
                         >
-                            {title}
+                            {subtitle ? (
+                                <View style={[styles.titleLine, leftAligned && styles.selectableTitleLeft]}>
+                                    {title}
+                                </View>
+                            ) : title}
                             {subtitle && <Text style={subtitleStyle} numberOfLines={1}>{subtitle}</Text>}
                         </View>
                     </View>
@@ -182,12 +186,14 @@ const NavigationHeaderComponent: React.FC<NativeStackHeaderProps> = React.memo((
     }, [isAuthenticated, isTablet, navigation]);
 
     // Extract title - handle both string and function types
+    // A string title gets as tall a line as the sessions tab's picker title, so a subtitle stands
+    // as far under either.
     let title: React.ReactNode | null = null;
     if (options.headerTitle) {
         if (typeof options.headerTitle === 'string') {
             title = (
                 <Text numberOfLines={1} style={[
-                    { fontSize: 17, fontWeight: '600', textAlign: Platform.OS === 'ios' ? 'center' : 'left', color: options.headerTintColor || '#000' },
+                    { fontSize: 17, lineHeight: 24, fontWeight: '600', textAlign: Platform.OS === 'ios' ? 'center' : 'left', color: options.headerTintColor || '#000', includeFontPadding: false },
                     Typography.default('semiBold'),
                     options.headerTitleStyle
                 ]}>
@@ -201,7 +207,7 @@ const NavigationHeaderComponent: React.FC<NativeStackHeaderProps> = React.memo((
     } else if (typeof options.title === 'string') {
         title = (
             <Text numberOfLines={1} style={[
-                { fontSize: 17, fontWeight: '600', textAlign: Platform.OS === 'ios' ? 'center' : 'left', color: options.headerTintColor || '#000' },
+                { fontSize: 17, lineHeight: 24, fontWeight: '600', textAlign: Platform.OS === 'ios' ? 'center' : 'left', color: options.headerTintColor || '#000', includeFontPadding: false },
                 Typography.default('semiBold'),
                 options.headerTitleStyle
             ]}>
@@ -326,6 +332,15 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
     selectableTitleLeft: {
         alignItems: 'flex-start',
     },
+    // Above a subtitle the title gets a line of its own of a set height, so the subtitle stands
+    // equally far under a plain title and under a picker title with a chevron, and switching tabs
+    // doesn't move it.
+    titleLine: {
+        height: 24,
+        maxWidth: '100%',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
     rightContainer: {
         flexGrow: 1,
         flexBasis: 0,
@@ -338,11 +353,15 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
         fontSize: 17,
         fontWeight: '600',
         textAlign: 'center',
+        includeFontPadding: false,
         color: theme.colors.header.tint,
         ...Typography.default('semiBold'),
     },
+    // Android pads text above and below for the font's ascent; the title and subtitle drop it, so
+    // the two lines stand as close as on iOS.
     subtitle: {
         fontSize: 13,
+        includeFontPadding: false,
         fontWeight: '400',
         textAlign: Platform.OS === 'ios' ? 'center' : 'left',
         marginTop: 2,

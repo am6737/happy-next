@@ -915,8 +915,10 @@ const styles = StyleSheet.create((_theme) => ({
     container: { padding: 20, gap: 16 },
     empty: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     title: { ...Typography.default('semiBold'), fontSize: 20 },
-    headerTitle: { ...Typography.default('semiBold'), fontSize: 17 },
-    headerSubtitle: { ...Typography.default(), fontSize: 12, lineHeight: 16, marginTop: -2 },
+    // Android pads text above and below for the font's ascent; the header's lines drop it, so they
+    // stand as close as on iOS.
+    headerTitle: { ...Typography.default('semiBold'), fontSize: 17, includeFontPadding: false },
+    headerSubtitle: { ...Typography.default(), fontSize: 12, lineHeight: 16, marginTop: -2, includeFontPadding: false },
     fieldGroup: { gap: 12 },
     field: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
     fieldLabel: { ...Typography.default(), fontSize: 14, flexShrink: 0, marginRight: 12 },

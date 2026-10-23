@@ -27,6 +27,9 @@ export const ChatHeaderTitle = React.memo((props: { title: string; subtitle?: st
                 ellipsizeMode="tail"
                 style={{
                     fontSize: 17,
+                    // Android pads text above and below for the font's ascent; the title and
+                    // subtitle drop it, so the two lines stand as close as on iOS.
+                    includeFontPadding: false,
                     color: theme.colors.header.tint,
                     ...textAlignStyle,
                     ...Typography.default('semiBold'),
@@ -41,6 +44,7 @@ export const ChatHeaderTitle = React.memo((props: { title: string; subtitle?: st
                     style={{
                         fontSize: 12,
                         lineHeight: 14,
+                        includeFontPadding: false,
                         opacity: 0.7,
                         color: theme.colors.header.tint,
                         ...textAlignStyle,

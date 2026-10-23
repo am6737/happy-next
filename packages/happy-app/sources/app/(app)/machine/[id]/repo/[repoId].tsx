@@ -466,6 +466,8 @@ export default React.memo(function RepoEditScreen() {
 });
 
 const repoStyles = StyleSheet.create((_theme) => ({
-    headerTitle: { ...Typography.default('semiBold'), fontSize: 17 },
-    headerSubtitle: { ...Typography.default(), fontSize: 12, lineHeight: 16, marginTop: -2 },
+    // Android pads text above and below for the font's ascent; the header's lines drop it, so they
+    // stand as close as on iOS.
+    headerTitle: { ...Typography.default('semiBold'), fontSize: 17, includeFontPadding: false },
+    headerSubtitle: { ...Typography.default(), fontSize: 12, lineHeight: 16, marginTop: -2, includeFontPadding: false },
 }));

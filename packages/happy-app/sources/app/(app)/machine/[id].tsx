@@ -757,7 +757,7 @@ export default function MachineDetailScreen() {
                                 <Text
                                     numberOfLines={1}
                                     ellipsizeMode="tail"
-                                    style={[Typography.default('semiBold'), { fontSize: 17, lineHeight: 24, color: theme.colors.header.tint, flexShrink: 1 }]}
+                                    style={[Typography.default('semiBold'), { fontSize: 17, lineHeight: 24, color: theme.colors.header.tint, flexShrink: 1, includeFontPadding: false }]}
                                 >
                                     {machineName}
                                 </Text>
@@ -772,7 +772,7 @@ export default function MachineDetailScreen() {
                                 }} />
                                 <Text
                                     numberOfLines={1}
-                                    style={[Typography.default(), { fontSize: 12, color: isMachineOnline(machine) ? '#34C759' : '#999' }]}
+                                    style={[Typography.default(), { fontSize: 12, color: isMachineOnline(machine) ? '#34C759' : '#999', includeFontPadding: false }]}
                                 >
                                     {isMachineOnline(machine) ? t('status.online') : t('status.offline')}
                                 </Text>

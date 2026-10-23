@@ -171,10 +171,10 @@ export default function OrchestratorRunsScreen() {
                 ...softHeaderOptions,
                 headerTitle: useNativeSoftHeader ? t('settings.orchestratorRuns') : () => (
                     <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-                        <Text style={[Typography.default('semiBold'), { fontSize: 17, lineHeight: 24, color: theme.colors.header.tint }]}>
+                        <Text style={[Typography.default('semiBold'), { fontSize: 17, lineHeight: 24, color: theme.colors.header.tint, includeFontPadding: false }]}>
                             {t('settings.orchestratorRuns')}
                         </Text>
-                        <Text numberOfLines={1} style={[Typography.default(), { fontSize: 12, color: theme.colors.header.tint, opacity: 0.7, marginTop: -2 }]}>
+                        <Text numberOfLines={1} style={[Typography.default(), { fontSize: 12, color: theme.colors.header.tint, opacity: 0.7, marginTop: -2, includeFontPadding: false }]}>
                             {sessionSubtitle}
                         </Text>
                     </View>

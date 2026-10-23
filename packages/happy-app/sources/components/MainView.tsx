@@ -105,6 +105,8 @@ const styles = StyleSheet.create((theme) => ({
         alignItems: 'center',
         justifyContent: 'center',
     },
+    // On iOS the connection status is the system's subtitle, laid right under the title view, whose
+    // 24 line (taller than the system's title label) sets it a little further down.
     titleContainer: {
         alignItems: 'center',
         justifyContent: 'center',
@@ -113,9 +115,11 @@ const styles = StyleSheet.create((theme) => ({
         flexDirection: 'row',
         alignItems: 'center',
     },
+    // As tall a line as createHeader's titles, without Android's font padding.
     titleText: {
         fontSize: 17,
         lineHeight: 24,
+        includeFontPadding: false,
         color: theme.colors.header.tint,
         fontWeight: '600',
         ...Typography.default('semiBold'),
@@ -243,6 +247,17 @@ const HeaderPickerTitle = React.memo(({ title, dot = 'none', onPress }: {
         </Pressable>
     );
 });
+
+// Header title of the other tabs on iOS: a title view like the pickers' rather than the system's
+// title label, so the subtitle under it stands as far down on every tab and doesn't jump when
+// switching between them.
+const HeaderPlainTitle = React.memo(({ title }: { title: string }) => (
+    <View style={styles.titleContainer}>
+        <Text style={[styles.titleText, { maxWidth: 200 }]} numberOfLines={1} ellipsizeMode="tail">
+            {title}
+        </Text>
+    </View>
+));
 
 // Header title of the github tab — the repository picker.
 const GitHubHeaderTitle = React.memo(({ githubRepo, onGithubRepoPress }: { githubRepo?: string | null; onGithubRepoPress?: () => void }) => {
@@ -661,7 +676,9 @@ export const MainView = React.memo(({ variant }: MainViewProps) => {
                     ? () => <GitHubHeaderTitle githubRepo={githubRepo} onGithubRepoPress={handleOpenRepoPicker} />
                     : activeTab === 'sessions'
                         ? () => <SessionsHeaderTitle scope={sessionScope} onPress={handleOpenMachineSwitcher} />
-                        : t(TAB_TITLES[activeTab as ActiveTabType]),
+                        : Platform.OS === 'ios'
+                            ? () => <HeaderPlainTitle title={t(TAB_TITLES[activeTab as ActiveTabType])} />
+                            : t(TAB_TITLES[activeTab as ActiveTabType]),
                 headerSubtitle: connectionStatus.text || undefined,
                 headerSubtitleColor: connectionStatus.color,
                 headerLeft: () => <HeaderLogo />,
