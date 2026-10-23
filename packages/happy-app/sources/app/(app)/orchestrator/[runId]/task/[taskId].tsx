@@ -28,6 +28,10 @@ import { formatDate } from '@/utils/formatDate';
 import { t } from '@/text';
 
 import { softHeaderOptions } from '@/components/navigation/softHeader';
+import { hasWebTextSelection } from '@/components/webTextSelection';
+
+// Mouse users copy what they select here (the desktop app is web too); a drag-select must not count as a tap on the card it is in
+const IS_WEB = Platform.OS === 'web';
 
 const stylesheet = StyleSheet.create((theme) => ({
     container: {
@@ -173,14 +177,14 @@ function TransferExecutionResult({ execution }: { execution: OrchestratorExecuti
     const styles = stylesheet;
     return (
         <>
-            <Text style={styles.detailLabel}>{t('settings.orchestratorResultTitle')}</Text>
+            <Text selectable={IS_WEB} style={styles.detailLabel}>{t('settings.orchestratorResultTitle')}</Text>
             {execution.status === 'running'
-                ? <Text style={styles.row}>{t('settings.orchestratorTransferRunningHint')}</Text>
+                ? <Text selectable={IS_WEB} style={styles.row}>{t('settings.orchestratorTransferRunningHint')}</Text>
                 : (
                     <>
-                        {!!execution.errorCode && <Text style={styles.row}>{t('settings.orchestratorLabelErrorCode')}: {execution.errorCode}</Text>}
+                        {!!execution.errorCode && <Text selectable={IS_WEB} style={styles.row}>{t('settings.orchestratorLabelErrorCode')}: {execution.errorCode}</Text>}
                         {execution.errorMessage
-                            ? <Text style={styles.row}>{t('settings.orchestratorLabelErrorMessage')}: {execution.errorMessage}</Text>
+                            ? <Text selectable={IS_WEB} style={styles.row}>{t('settings.orchestratorLabelErrorMessage')}: {execution.errorMessage}</Text>
                             : <Text style={styles.monoText} selectable>{execution.outputSummary || '-'}</Text>}
                     </>
                 )}
@@ -197,18 +201,18 @@ function ShellExecutionResult({ execution }: { execution: OrchestratorExecutionR
     if (execution.status === 'running') {
         return (
             <>
-                <Text style={styles.detailLabel}>{t('settings.orchestratorResultTitle')}</Text>
-                <Text style={styles.row}>{t('settings.orchestratorShellRunningHint')}</Text>
+                <Text selectable={IS_WEB} style={styles.detailLabel}>{t('settings.orchestratorResultTitle')}</Text>
+                <Text selectable={IS_WEB} style={styles.row}>{t('settings.orchestratorShellRunningHint')}</Text>
             </>
         );
     }
     return (
         <>
-            {!!execution.errorCode && <Text style={styles.row}>{t('settings.orchestratorLabelErrorCode')}: {execution.errorCode}</Text>}
-            {!!execution.errorMessage && <Text style={styles.row}>{t('settings.orchestratorLabelErrorMessage')}: {execution.errorMessage}</Text>}
-            <Text style={styles.detailLabel}>{t('settings.orchestratorStdoutTitle')}</Text>
+            {!!execution.errorCode && <Text selectable={IS_WEB} style={styles.row}>{t('settings.orchestratorLabelErrorCode')}: {execution.errorCode}</Text>}
+            {!!execution.errorMessage && <Text selectable={IS_WEB} style={styles.row}>{t('settings.orchestratorLabelErrorMessage')}: {execution.errorMessage}</Text>}
+            <Text selectable={IS_WEB} style={styles.detailLabel}>{t('settings.orchestratorStdoutTitle')}</Text>
             <Text style={styles.monoText} selectable>{execution.outputText || '-'}</Text>
-            <Text style={styles.detailLabel}>{t('settings.orchestratorStderrTitle')}</Text>
+            <Text selectable={IS_WEB} style={styles.detailLabel}>{t('settings.orchestratorStderrTitle')}</Text>
             <Text style={styles.monoText} selectable>{execution.stderrText || '-'}</Text>
         </>
     );
@@ -240,9 +244,9 @@ function AgentExecutionResult({ execution, provider }: { execution: Orchestrator
 
     return (
         <>
-            <Text style={styles.detailLabel}>{title}</Text>
-            {!!execution.errorCode && <Text style={styles.row}>{t('settings.orchestratorLabelErrorCode')}: {execution.errorCode}</Text>}
-            {!!execution.errorMessage && <Text style={styles.row}>{t('settings.orchestratorLabelErrorMessage')}: {execution.errorMessage}</Text>}
+            <Text selectable={IS_WEB} style={styles.detailLabel}>{title}</Text>
+            {!!execution.errorCode && <Text selectable={IS_WEB} style={styles.row}>{t('settings.orchestratorLabelErrorCode')}: {execution.errorCode}</Text>}
+            {!!execution.errorMessage && <Text selectable={IS_WEB} style={styles.row}>{t('settings.orchestratorLabelErrorMessage')}: {execution.errorMessage}</Text>}
             <Text style={styles.monoText} selectable>{text || '-'}</Text>
         </>
     );
@@ -314,7 +318,7 @@ export default function OrchestratorTaskDetailScreen() {
             <View style={styles.center}>
                 <Stack.Screen options={{ ...softHeaderOptions, headerTitle: t('settings.orchestratorTaskDetails') }} />
                 <ActivityIndicator size="large" />
-                <Text style={styles.hint}>{t('settings.orchestratorLoadingTask')}</Text>
+                <Text selectable={IS_WEB} style={styles.hint}>{t('settings.orchestratorLoadingTask')}</Text>
             </View>
         );
     }
@@ -323,8 +327,8 @@ export default function OrchestratorTaskDetailScreen() {
         return (
             <View style={styles.center}>
                 <Stack.Screen options={{ ...softHeaderOptions, headerTitle: t('settings.orchestratorTaskDetails') }} />
-                <Text style={styles.sectionTitle}>{t('settings.orchestratorTaskNotFound')}</Text>
-                {!!error && <Text style={styles.errorText}>{error}</Text>}
+                <Text selectable={IS_WEB} style={styles.sectionTitle}>{t('settings.orchestratorTaskNotFound')}</Text>
+                {!!error && <Text selectable={IS_WEB} style={styles.errorText}>{error}</Text>}
             </View>
         );
     }
@@ -384,22 +388,22 @@ export default function OrchestratorTaskDetailScreen() {
                     <>
                         <View style={styles.card}>
                             <View style={styles.header}>
-                                <Text style={styles.title} numberOfLines={1}>{buildTaskTitle(task)}</Text>
+                                <Text selectable={IS_WEB} style={styles.title} numberOfLines={1}>{buildTaskTitle(task)}</Text>
                                 <OrchestratorStatusBadge status={task.status} />
                             </View>
-                            <Text style={styles.row}>{t('settings.orchestratorLabelRun')}: {run?.title || run?.runId || runId}</Text>
-                            <Text style={styles.row}>{t('settings.orchestratorLabelProvider')}: {providerLabel}</Text>
-                            <Text style={styles.row}>{t('settings.orchestratorLabelMachine')}: {(() => {
+                            <Text selectable={IS_WEB} style={styles.row}>{t('settings.orchestratorLabelRun')}: {run?.title || run?.runId || runId}</Text>
+                            <Text selectable={IS_WEB} style={styles.row}>{t('settings.orchestratorLabelProvider')}: {providerLabel}</Text>
+                            <Text selectable={IS_WEB} style={styles.row}>{t('settings.orchestratorLabelMachine')}: {(() => {
                                 const machineId = resolveTaskMachineId(task);
                                 return machineId ? resolveMachineName(machineId, machineNameMap) : '-';
                             })()}</Text>
-                            {!!task.taskKey && <Text style={styles.row}>{t('settings.orchestratorLabelTaskKey')}: {task.taskKey}</Text>}
-                            <Text style={styles.row}>{t('settings.orchestratorLabelWorkingDir')}: {task.workingDirectory || '-'}</Text>
-                            {task.dependsOn.length > 0 && <Text style={styles.row}>{t('settings.orchestratorLabelDependsOn')}: {task.dependsOn.join(', ')}</Text>}
-                            {(task.retry.maxAttempts > 1 || task.retry.backoffMs > 0) && <Text style={styles.row}>{t('settings.orchestratorLabelRetryPolicy')}: {t('settings.orchestratorRetryPolicyValue', { maxAttempts: task.retry.maxAttempts, backoffMs: task.retry.backoffMs })}</Text>}
-                            {!!task.nextAttemptAt && <Text style={styles.row}>{t('settings.orchestratorLabelNextAttempt')}: {formatDate(task.nextAttemptAt)}</Text>}
+                            {!!task.taskKey && <Text selectable={IS_WEB} style={styles.row}>{t('settings.orchestratorLabelTaskKey')}: {task.taskKey}</Text>}
+                            <Text selectable={IS_WEB} style={styles.row}>{t('settings.orchestratorLabelWorkingDir')}: {task.workingDirectory || '-'}</Text>
+                            {task.dependsOn.length > 0 && <Text selectable={IS_WEB} style={styles.row}>{t('settings.orchestratorLabelDependsOn')}: {task.dependsOn.join(', ')}</Text>}
+                            {(task.retry.maxAttempts > 1 || task.retry.backoffMs > 0) && <Text selectable={IS_WEB} style={styles.row}>{t('settings.orchestratorLabelRetryPolicy')}: {t('settings.orchestratorRetryPolicyValue', { maxAttempts: task.retry.maxAttempts, backoffMs: task.retry.backoffMs })}</Text>}
+                            {!!task.nextAttemptAt && <Text selectable={IS_WEB} style={styles.row}>{t('settings.orchestratorLabelNextAttempt')}: {formatDate(task.nextAttemptAt)}</Text>}
                         </View>
-                        <Text style={styles.sectionLabel}>{t('settings.orchestratorExecutionHistoryTitle')}</Text>
+                        <Text selectable={IS_WEB} style={styles.sectionLabel}>{t('settings.orchestratorExecutionHistoryTitle')}</Text>
                     </>
                 )}
                 renderSectionHeader={({ section }) => {
@@ -417,10 +421,10 @@ export default function OrchestratorTaskDetailScreen() {
                         <View style={styles.executionStickyHeader}>
                             <Pressable
                                 style={[styles.card, styles.executionHeaderCardExpanded]}
-                                onPress={() => toggleExecution(executionId)}
+                                onPress={() => !hasWebTextSelection() && toggleExecution(executionId)}
                             >
                                 <View style={styles.executionHeader}>
-                                    <Text style={styles.executionTitle}>
+                                    <Text selectable={IS_WEB} style={styles.executionTitle}>
                                         {t('settings.orchestratorAttemptTitle', { attempt, machineId })}
                                     </Text>
                                     <View style={styles.executionHeaderStatus}>
@@ -444,9 +448,9 @@ export default function OrchestratorTaskDetailScreen() {
                         const status = execution?.status ?? task.status;
                         const summary = execution ? sanitizeOrchestratorOutputSummary(execution.outputSummary) : null;
                         return (
-                            <Pressable style={styles.card} onPress={() => toggleExecution(section.key)}>
+                            <Pressable style={styles.card} onPress={() => !hasWebTextSelection() && toggleExecution(section.key)}>
                                 <View style={styles.executionHeader}>
-                                    <Text style={styles.executionTitle}>
+                                    <Text selectable={IS_WEB} style={styles.executionTitle}>
                                         {t('settings.orchestratorAttemptTitle', { attempt, machineId })}
                                     </Text>
                                     <View style={styles.executionHeaderStatus}>
@@ -465,7 +469,7 @@ export default function OrchestratorTaskDetailScreen() {
                                         />
                                     </View>
                                 </View>
-                                {summary ? <Text style={styles.summaryPreview} numberOfLines={2}>{summary}</Text> : null}
+                                {summary ? <Text selectable={IS_WEB} style={styles.summaryPreview} numberOfLines={2}>{summary}</Text> : null}
                             </Pressable>
                         );
                     }
@@ -474,7 +478,7 @@ export default function OrchestratorTaskDetailScreen() {
                         return (
                             <View style={[styles.card, styles.executionDetailsCard]}>
                                 <View style={styles.executionDetails}>
-                                    <Text style={[styles.detailLabel, { marginTop: 0 }]}>{promptLabel}</Text>
+                                    <Text selectable={IS_WEB} style={[styles.detailLabel, { marginTop: 0 }]}>{promptLabel}</Text>
                                     <Text style={styles.monoText} selectable>{taskPrompt || '-'}</Text>
                                 </View>
                             </View>
@@ -485,18 +489,18 @@ export default function OrchestratorTaskDetailScreen() {
                     return (
                         <View style={[styles.card, styles.executionDetailsCard]}>
                             <View style={styles.executionDetails}>
-                                <Text style={styles.row}>{t('settings.orchestratorLabelStarted')}: {formatDate(execution.startedAt)}</Text>
-                                <Text style={styles.row}>{t('settings.orchestratorLabelFinished')}: {formatDate(execution.finishedAt)}</Text>
+                                <Text selectable={IS_WEB} style={styles.row}>{t('settings.orchestratorLabelStarted')}: {formatDate(execution.startedAt)}</Text>
+                                <Text selectable={IS_WEB} style={styles.row}>{t('settings.orchestratorLabelFinished')}: {formatDate(execution.finishedAt)}</Text>
                                 <OrchestratorDuration
                                     style={styles.row}
                                     label={t('settings.orchestratorLabelDuration')}
                                     live={execution.status === 'running'}
                                     resolve={(now) => resolveExecutionDurationMs(execution, now)}
                                 />
-                                <Text style={styles.row}>{t('settings.orchestratorLabelExitCode')}: {execution.exitCode ?? '-'}</Text>
-                                {!!execution.signal && <Text style={styles.row}>{t('settings.orchestratorLabelSignal')}: {execution.signal}</Text>}
+                                <Text selectable={IS_WEB} style={styles.row}>{t('settings.orchestratorLabelExitCode')}: {execution.exitCode ?? '-'}</Text>
+                                {!!execution.signal && <Text selectable={IS_WEB} style={styles.row}>{t('settings.orchestratorLabelSignal')}: {execution.signal}</Text>}
 
-                                <Text style={styles.detailLabel}>{promptLabel}</Text>
+                                <Text selectable={IS_WEB} style={styles.detailLabel}>{promptLabel}</Text>
                                 <Text style={styles.monoText} selectable>{executionPrompt || '-'}</Text>
 
                                 <ExecutionResult execution={execution} />
@@ -505,7 +509,7 @@ export default function OrchestratorTaskDetailScreen() {
                     );
                 }}
                 renderSectionFooter={() => <View style={styles.executionSectionGap} />}
-                ListFooterComponent={error ? <Text style={styles.errorText}>{error}</Text> : null}
+                ListFooterComponent={error ? <Text selectable={IS_WEB} style={styles.errorText}>{error}</Text> : null}
             />
         </View>
     );

@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { Platform } from 'react-native';
 import { Text } from '@/components/StyledText';
 import { useTickingNow } from '@/hooks/useTickingNow';
 import { formatCompactDuration } from '@/utils/messageTime';
@@ -19,5 +20,5 @@ export function OrchestratorDuration({ resolve, live, label, style }: Props) {
     if (duration === null) {
         return null;
     }
-    return <Text style={style}>{label ? `${label}: ` : ''}{formatCompactDuration(duration)}</Text>;
+    return <Text selectable={Platform.OS === 'web'} style={style}>{label ? `${label}: ` : ''}{formatCompactDuration(duration)}</Text>;
 }

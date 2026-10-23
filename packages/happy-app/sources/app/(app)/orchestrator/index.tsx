@@ -23,6 +23,10 @@ import { softHeaderOptions } from '@/components/navigation/softHeader';
 import { SearchField, searchFieldMetrics } from '@/components/SearchField';
 import { useSession } from '@/sync/storage';
 import { getSessionName } from '@/utils/sessionUtils';
+import { hasWebTextSelection } from '@/components/webTextSelection';
+
+// Mouse users copy what they select here (the desktop app is web too); a drag-select must not count as a tap on the card it is in
+const IS_WEB = Platform.OS === 'web';
 
 type RunListItem = Pick<OrchestratorRunDetail, 'runId' | 'title' | 'status' | 'createdAt' | 'updatedAt' | 'summary' | 'machines' | 'providers'>;
 const stylesheet = StyleSheet.create((theme) => ({
@@ -288,7 +292,7 @@ export default function OrchestratorRunsScreen() {
         return (
             <Pressable
                 style={styles.card}
-                onPress={() => router.push({
+                onPress={() => !hasWebTextSelection() && router.push({
                     pathname: '/orchestrator/[runId]',
                     params: {
                         runId: item.runId,
@@ -298,15 +302,15 @@ export default function OrchestratorRunsScreen() {
             >
                 <View style={styles.cardHeader}>
                     {kind ? <Ionicons name={ORCHESTRATOR_RUN_KIND_ICONS[kind]} size={16} color={theme.colors.textSecondary} /> : null}
-                    <Text style={styles.title} numberOfLines={1}>{item.title}</Text>
+                    <Text selectable={IS_WEB} style={styles.title} numberOfLines={1}>{item.title}</Text>
                     <OrchestratorStatusBadge status={item.status} />
                 </View>
-                <Text style={styles.meta}>
+                <Text selectable={IS_WEB} style={styles.meta}>
                     {t('settings.orchestratorUpdatedTime', { time: formatDate(item.updatedAt) })}
                 </Text>
                 <View style={styles.progressRow}>
                     <OrchestratorProgressBar summary={item.summary} />
-                    <Text style={styles.summary}>
+                    <Text selectable={IS_WEB} style={styles.summary}>
                         {t('settings.orchestratorSummaryLine', {
                             total: summaryLine.total,
                             running: summaryLine.running,
@@ -317,7 +321,7 @@ export default function OrchestratorRunsScreen() {
                     </Text>
                 </View>
                 {item.machines && item.machines.length > 0 ? (
-                    <Text style={styles.meta}>
+                    <Text selectable={IS_WEB} style={styles.meta}>
                         {t('settings.orchestratorRunMachines')}: {item.machines.map((id) => resolveMachineName(id, machineNameMap)).join(', ')}
                     </Text>
                 ) : null}
@@ -330,20 +334,20 @@ export default function OrchestratorRunsScreen() {
             return (
                 <View style={styles.emptyContainer}>
                     <ActivityIndicator size="large" />
-                    <Text style={styles.emptySubtitle}>{t('settings.orchestratorLoading')}</Text>
+                    <Text selectable={IS_WEB} style={styles.emptySubtitle}>{t('settings.orchestratorLoading')}</Text>
                 </View>
             );
         }
         const filtered = statusFilter !== 'all' || !!kindFilter || !!machineFilter || searchText.trim().length > 0;
         return (
             <View style={styles.emptyContainer}>
-                <Text style={styles.emptyTitle}>{t('settings.orchestratorNoRuns')}</Text>
-                <Text style={styles.emptySubtitle}>
+                <Text selectable={IS_WEB} style={styles.emptyTitle}>{t('settings.orchestratorNoRuns')}</Text>
+                <Text selectable={IS_WEB} style={styles.emptySubtitle}>
                     {isConversationScoped && !filtered
                         ? t('settings.orchestratorSessionRunsEmpty')
                         : t('settings.orchestratorNoRunsMatch')}
                 </Text>
-                {!!error && <Text style={styles.errorText}>{error}</Text>}
+                {!!error && <Text selectable={IS_WEB} style={styles.errorText}>{error}</Text>}
             </View>
         );
     }, [loading, styles, error, isConversationScoped, statusFilter, kindFilter, machineFilter, searchText]);
