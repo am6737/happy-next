@@ -536,7 +536,9 @@ export const DuplicateSheet = React.memo(function DuplicateSheet({
                                                 )}
                                             </View>
                                             {selectedUuid === msg.uuid ? (
-                                                <Ionicons name="checkmark-circle" size={24} color={theme.colors.status.connected} />
+                                                <View style={[styles.radioSelected as ViewStyle, { backgroundColor: theme.colors.status.connected }]}>
+                                                    <Ionicons name="checkmark" size={16} color="#fff" />
+                                                </View>
                                             ) : (
                                                 <View style={styles.radioUnselected as ViewStyle} />
                                             )}
@@ -794,6 +796,14 @@ const styles = StyleSheet.create((theme) => ({
     messageContent: {
         flex: 1,
         minWidth: 0,
+    },
+    // Drawn, not the checkmark-circle glyph: that circle is inset in its box and looked smaller
+    radioSelected: {
+        width: 24,
+        height: 24,
+        borderRadius: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     radioUnselected: {
         width: 24,
