@@ -1,5 +1,5 @@
 diff --git a/node_modules/expo-share-intent/plugin/build/ios/ShareExtensionViewController.swift b/node_modules/expo-share-intent/plugin/build/ios/ShareExtensionViewController.swift
-index 0911a9e..9ead192 100644
+index 0911a9e..f309874 100644
 --- a/node_modules/expo-share-intent/plugin/build/ios/ShareExtensionViewController.swift
 +++ b/node_modules/expo-share-intent/plugin/build/ios/ShareExtensionViewController.swift
 @@ -7,6 +7,7 @@
@@ -362,7 +362,7 @@ index 0911a9e..9ead192 100644
 +        LazyVStack(alignment: .leading, spacing: 0) {
 +          searchField
 +            .padding(.horizontal, 16)
-+            .padding(.top, 4)
++            .padding(.top, 8)
 +            .padding(.bottom, 8)
 +          if !searching {
 +            newSessionRow
