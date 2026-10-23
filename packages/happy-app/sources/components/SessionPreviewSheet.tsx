@@ -26,7 +26,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from './StyledText';
-import { layout } from './layout';
 import { t } from '@/text';
 import * as Clipboard from 'expo-clipboard';
 import { handleCopyMenuContextMenu } from './copyMenuContextMenu';
@@ -41,7 +40,7 @@ import { hasWebTextSelection } from './webTextSelection';
 import { formatMessageTime } from '@/utils/messageTime';
 import type { ClaudeSessionPreviewMessage, ClaudeSessionIndexEntry, AgentSessionIndexEntry } from '@/sync/ops';
 import { GlassSurface, liquidGlassAvailable } from './GlassSurface';
-import { GLASS_SHEET_FILL, GLASS_SHEET_RADIUS, glassSheetFramePadding, SHEET_BACKDROP_OPACITY, SHEET_SLIDE_SPRING } from './glassSheet';
+import { GLASS_SHEET_FILL, GLASS_SHEET_RADIUS, glassSheetFramePadding, SHEET_BACKDROP_OPACITY, SHEET_MAX_WIDTH, SHEET_SLIDE_SPRING } from './glassSheet';
 
 // On web, stop events from propagating to expo-router's modal overlay
 const stopPropagation = (e: { stopPropagation: () => void }) => e.stopPropagation();
@@ -721,7 +720,7 @@ const styles = StyleSheet.create((theme) => ({
     },
     sheetFrame: {
         width: '100%',
-        maxWidth: Math.min(layout.maxWidth, 768),
+        maxWidth: SHEET_MAX_WIDTH,
     },
     sheet: {
         overflow: 'hidden',

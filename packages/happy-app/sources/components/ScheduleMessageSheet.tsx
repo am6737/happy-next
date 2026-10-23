@@ -12,7 +12,7 @@ import { Typography } from '@/constants/Typography';
 import { t } from '@/text';
 import { DatePickerPopover } from './dootask/DatePickerPopover';
 import { liquidGlassAvailable } from './GlassSurface';
-import { GLASS_SHEET_FILL, GLASS_SHEET_MARGIN, GLASS_SHEET_RADIUS, glassSheetFramePadding } from './glassSheet';
+import { GLASS_SHEET_FILL, GLASS_SHEET_MARGIN, GLASS_SHEET_RADIUS, glassSheetFramePadding, sheetSideMargin } from './glassSheet';
 
 export type ScheduleMessageSheetProps = {
     visible: boolean;
@@ -109,7 +109,7 @@ export const ScheduleMessageSheet = React.memo(function ScheduleMessageSheet({
 }: ScheduleMessageSheetProps) {
     const { theme } = useUnistyles();
     const safeArea = useSafeAreaInsets();
-    const { height: windowHeight } = useWindowDimensions();
+    const { height: windowHeight, width: windowWidth } = useWindowDimensions();
     // Keyboard height as it animates, negative upwards.
     const { height: keyboardHeight } = useReanimatedKeyboardAnimation();
     const [text, setText] = React.useState(initialText);
@@ -254,10 +254,10 @@ export const ScheduleMessageSheet = React.memo(function ScheduleMessageSheet({
 
     // On iOS 26 the keyboard is a floating rounded panel, so the sheet floats too: a Liquid Glass
     // card with the system sheets' corners, clear of the screen's sides and of the keyboard by a
-    // margin, like the other bottom sheets (see `glassSheet`).
+    // margin, like the other bottom sheets (see `glassSheet`). A wide window centers it.
     const sheetFrame = liquidGlassAvailable
-        ? [styles.sheetFloating, { marginHorizontal: GLASS_SHEET_MARGIN }]
-        : Platform.OS === 'ios' ? null : { paddingBottom: restingBottom };
+        ? [styles.sheetFloating, { marginHorizontal: sheetSideMargin(windowWidth, GLASS_SHEET_MARGIN) }]
+        : [{ marginHorizontal: sheetSideMargin(windowWidth) }, Platform.OS !== 'ios' && { paddingBottom: restingBottom }];
 
     const content = (
         <View style={styles.container}>

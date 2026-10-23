@@ -24,3 +24,11 @@ export function glassSheetFramePadding(safeAreaBottom: number) {
         paddingBottom: Math.max(GLASS_SHEET_MARGIN, safeAreaBottom - GLASS_SHEET_MARGIN),
     };
 }
+
+/** The widest a bottom sheet gets: on a wider window (desktop, tablet) it is centered at this width. */
+export const SHEET_MAX_WIDTH = 768;
+
+/** The side margin that centers a sheet at `SHEET_MAX_WIDTH` on a wider window, never under `min`. */
+export function sheetSideMargin(windowWidth: number, min = 0) {
+    return Math.max(min, (windowWidth - SHEET_MAX_WIDTH) / 2);
+}
