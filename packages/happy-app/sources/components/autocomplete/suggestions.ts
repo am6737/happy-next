@@ -2,7 +2,7 @@ import { CommandSuggestion, FileMentionSuggestion, SkillSuggestion } from '@/com
 import * as React from 'react';
 import { searchFiles, FileItem } from '@/sync/suggestionFile';
 import { searchCommands, CommandItem } from '@/sync/suggestionCommands';
-import { searchSkills, SkillItem } from '@/sync/suggestionSkills';
+import { searchSkills, SkillItem, sortSkillsByScope } from '@/sync/suggestionSkills';
 import { sync } from '@/sync/sync';
 import { storage } from '@/sync/storage';
 
@@ -72,8 +72,11 @@ export async function getSkillSuggestions(
     try {
         await ensureSessionCapabilities(sessionId);
         const skills = searchSkills(sessionId, searchTerm);
+        // Dollar completion follows Codex's project → personal → global
+        // grouping. Slash completion keeps its existing relevance ordering.
+        const orderedSkills = options.showSkillCategory ? skills : sortSkillsByScope(skills);
 
-        return skills.map((skill: SkillItem) => ({
+        return orderedSkills.map((skill: SkillItem) => ({
             key: `skill-${skill.scope}-${skill.path}`,
             text: `$${skill.name}`,
             component: () => React.createElement(SkillSuggestion, {

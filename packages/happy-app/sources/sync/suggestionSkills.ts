@@ -12,6 +12,32 @@ export interface SkillItem {
     shortDescription?: string;
 }
 
+/**
+ * Codex presents skills in installation scope order. Keep the wire scopes
+ * (`REPO`, `USER`, `ADMIN`, `SYSTEM`) intact, but normalize their ordering so
+ * project skills are followed by personal skills and then global skills.
+ */
+const SKILL_SCOPE_ORDER: Record<SkillScope, number> = {
+    REPO: 0,
+    USER: 1,
+    ADMIN: 2,
+    SYSTEM: 2,
+};
+
+export function sortSkillsByScope(skills: SkillItem[]): SkillItem[] {
+    return skills
+        .map((skill, index) => ({ skill, index }))
+        .sort((a, b) => {
+            const scopeOrder = SKILL_SCOPE_ORDER[a.skill.scope] - SKILL_SCOPE_ORDER[b.skill.scope];
+            if (scopeOrder !== 0) return scopeOrder;
+
+            // Preserve discovery/search order within a scope. This keeps Fuse's
+            // relevance ordering while making the three scope groups contiguous.
+            return a.index - b.index;
+        })
+        .map(({ skill }) => skill);
+}
+
 interface SearchOptions {
     limit?: number;
     threshold?: number;

@@ -1,8 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { searchCommands, searchSkills } = vi.hoisted(() => ({
+const { searchCommands, searchSkills, searchFiles, sortSkillsByScope } = vi.hoisted(() => ({
     searchCommands: vi.fn(),
     searchSkills: vi.fn(),
+    searchFiles: vi.fn(),
+    sortSkillsByScope: vi.fn((skills: Array<{ scope: string }>) => {
+        const order: Record<string, number> = { REPO: 0, USER: 1, ADMIN: 2, SYSTEM: 2 };
+        return skills
+            .map((skill, index) => ({ skill, index }))
+            .sort((a, b) => order[a.skill.scope] - order[b.skill.scope] || a.index - b.index)
+            .map(({ skill }) => skill);
+    }),
 }));
 
 vi.mock('@/components/AgentInputSuggestionView', () => ({
@@ -12,8 +20,8 @@ vi.mock('@/components/AgentInputSuggestionView', () => ({
 }));
 
 vi.mock('@/sync/suggestionCommands', () => ({ searchCommands }));
-vi.mock('@/sync/suggestionSkills', () => ({ searchSkills }));
-vi.mock('@/sync/suggestionFile', () => ({ searchFiles: vi.fn() }));
+vi.mock('@/sync/suggestionSkills', () => ({ searchSkills, sortSkillsByScope }));
+vi.mock('@/sync/suggestionFile', () => ({ searchFiles }));
 vi.mock('@/sync/sync', () => ({
     sync: { fetchSessionCapabilities: vi.fn() },
 }));
@@ -33,8 +41,10 @@ describe('getSuggestions', () => {
     beforeEach(() => {
         searchCommands.mockReset();
         searchSkills.mockReset();
+        searchFiles.mockReset();
         searchCommands.mockResolvedValue([]);
         searchSkills.mockReturnValue([]);
+        searchFiles.mockResolvedValue([]);
     });
 
     it('includes commands and skills when completing a slash query', async () => {
@@ -109,5 +119,38 @@ describe('getSuggestions', () => {
 
         const skillElement = (suggestions[0].component as unknown as () => { props: Record<string, unknown> })();
         expect(skillElement.props.showSkillCategory).toBeUndefined();
+    });
+
+    it('keeps project, personal, and global skill scopes attached to dollar suggestions', async () => {
+        searchSkills.mockReturnValue([
+            { name: 'global-skill', description: 'Global skill', scope: 'SYSTEM', path: '/system/SKILL.md' },
+            { name: 'personal-skill', description: 'Personal skill', scope: 'USER', path: '/user/SKILL.md' },
+            { name: 'project-skill', description: 'Project skill', scope: 'REPO', path: '/repo/SKILL.md' },
+        ]);
+
+        const suggestions = await getSuggestions('session', '$');
+
+        expect(suggestions.map((suggestion) => suggestion.text)).toEqual([
+            '$project-skill',
+            '$personal-skill',
+            '$global-skill',
+        ]);
+        expect(suggestions.map((suggestion) => {
+            const element = (suggestion.component as unknown as () => { props: Record<string, unknown> })();
+            return element.props.scope;
+        })).toEqual(['REPO', 'USER', 'SYSTEM']);
+    });
+
+    it('keeps at-sign file mentions routed to file search', async () => {
+        searchFiles.mockResolvedValue([
+            { fileName: 'README.md', filePath: 'docs/', fullPath: 'docs/README.md', fileType: 'file' },
+        ]);
+
+        const suggestions = await getSuggestions('session', '@docs/');
+
+        expect(searchFiles).toHaveBeenCalledWith('session', 'docs/', { limit: 50 });
+        expect(suggestions.map((suggestion) => suggestion.text)).toEqual(['@docs/README.md']);
+        expect(searchCommands).not.toHaveBeenCalled();
+        expect(searchSkills).not.toHaveBeenCalled();
     });
 });

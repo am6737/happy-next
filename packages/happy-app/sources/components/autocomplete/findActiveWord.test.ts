@@ -181,6 +181,13 @@ describe('findActiveWord', () => {
     });
 
     describe('custom prefixes', () => {
+        it('detects a Codex dollar skill at the cursor', () => {
+            const content = 'Use $review';
+            const selection = { start: content.length, end: content.length };
+            const result = findActiveWord(content, selection, ['@', '/', '$']);
+            expect(result?.activeWord).toBe('$review');
+        });
+
         it('should work with custom prefix array', () => {
             const content = 'Hello $user';
             const selection = { start: 11, end: 11 };
