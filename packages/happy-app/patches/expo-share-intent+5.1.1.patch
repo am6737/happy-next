@@ -1,5 +1,5 @@
 diff --git a/node_modules/expo-share-intent/plugin/build/ios/ShareExtensionViewController.swift b/node_modules/expo-share-intent/plugin/build/ios/ShareExtensionViewController.swift
-index 0911a9e..a07c409 100644
+index 0911a9e..9ead192 100644
 --- a/node_modules/expo-share-intent/plugin/build/ios/ShareExtensionViewController.swift
 +++ b/node_modules/expo-share-intent/plugin/build/ios/ShareExtensionViewController.swift
 @@ -7,6 +7,7 @@
@@ -44,7 +44,7 @@ index 0911a9e..a07c409 100644
      Task {
        guard let extensionContext = self.extensionContext,
          let content = extensionContext.inputItems.first as? NSExtensionItem,
-@@ -781,3 +803,477 @@ extension Array {
+@@ -781,3 +803,478 @@ extension Array {
      return Int(index) < count ? self[Int(index)] : nil
    }
  }
@@ -320,8 +320,8 @@ index 0911a9e..a07c409 100644
 +  }
 +}
 +
-+/// The sheet: cancel and the title (what's shared under it), the app's search field, then a new
-+/// session and the online ones; while searching only the sessions that match.
++/// The sheet: cancel and the title (what's shared under it) in the navigation bar, then the app's
++/// search field, a new session and the online ones; while searching only the sessions that match.
 +struct SharePickerView: View {
 +  let snapshot: ShareSnapshot
 +  @ObservedObject var model: SharePickerModel
@@ -354,14 +354,16 @@ index 0911a9e..a07c409 100644
 +    }
 +  }
 +
++  // The system's navigation bar, clear at the top and translucent once the list scrolls under
++  // it; the search field scrolls with the list
 +  var body: some View {
-+    VStack(spacing: 0) {
-+      header
-+      searchField
-+        .padding(.horizontal, 16)
-+        .padding(.bottom, 8)
++    NavigationView {
 +      ScrollView {
 +        LazyVStack(alignment: .leading, spacing: 0) {
++          searchField
++            .padding(.horizontal, 16)
++            .padding(.top, 4)
++            .padding(.bottom, 8)
 +          if !searching {
 +            newSessionRow
 +            Text(snapshot.strings.activeSessions)
@@ -386,36 +388,35 @@ index 0911a9e..a07c409 100644
 +        }
 +        .padding(.bottom, 16)
 +      }
++      .background(palette.background.ignoresSafeArea())
++      .navigationBarTitleDisplayMode(.inline)
++      .toolbar {
++        ToolbarItem(placement: .cancellationAction) {
++          Button(snapshot.strings.cancel, action: onCancel)
++            .foregroundColor(palette.tint)
++        }
++        ToolbarItem(placement: .principal) {
++          title
++        }
++      }
 +    }
-+    .background(palette.background.ignoresSafeArea())
++    .navigationViewStyle(.stack)
 +    .overlay(sending)
 +    .disabled(model.sending)
 +  }
 +
-+  private var header: some View {
-+    ZStack {
-+      VStack(spacing: 1) {
-+        Text(snapshot.strings.title)
-+          .font(.system(size: 17, weight: .semibold))
-+          .foregroundColor(palette.text)
-+        if !model.subtitle.isEmpty {
-+          Text(model.subtitle)
-+            .font(.system(size: 12))
-+            .foregroundColor(palette.textSecondary)
-+        }
-+      }
-+      .lineLimit(1)
-+      .padding(.horizontal, 80)
-+      HStack {
-+        Button(snapshot.strings.cancel, action: onCancel)
-+          .font(.system(size: 17))
-+          .foregroundColor(palette.tint)
-+        Spacer()
++  private var title: some View {
++    VStack(spacing: 1) {
++      Text(snapshot.strings.title)
++        .font(.system(size: 17, weight: .semibold))
++        .foregroundColor(palette.text)
++      if !model.subtitle.isEmpty {
++        Text(model.subtitle)
++          .font(.system(size: 12))
++          .foregroundColor(palette.textSecondary)
 +      }
 +    }
-+    .padding(.horizontal, 16)
-+    .padding(.top, 16)
-+    .padding(.bottom, 12)
++    .lineLimit(1)
 +  }
 +
 +  // The app's SearchField: 36 tall, corners of 10, a search glyph, text at 16 and a clear button
