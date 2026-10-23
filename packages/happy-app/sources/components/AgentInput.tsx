@@ -1793,9 +1793,13 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
             >
                 {/* Autocomplete suggestions overlay */}
                 {suggestions.length > 0 && (
-                    <View style={[
+                    <Animated.View style={[
                         styles.autocompleteOverlay,
-                        { paddingHorizontal: screenWidth > 700 ? panelHorizontalInset : 8 }
+                        { paddingHorizontal: screenWidth > 700 ? panelHorizontalInset : 8 },
+                        // Like the settings overlay, it opens right above the input card, covering
+                        // the machine/path card rather than sitting over it.
+                        settingsOverlayBottomStyle,
+                        hasContextCard && { marginBottom: contextCardMarginBottom },
                     ]}>
                         <AgentInputAutocomplete
                             suggestions={suggestions.map(s => {
@@ -1806,7 +1810,7 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                             onSelect={handleSuggestionSelect}
                             itemHeight={48}
                         />
-                    </View>
+                    </Animated.View>
                 )}
 
                 {/* Settings overlay */}
