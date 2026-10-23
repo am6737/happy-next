@@ -7,30 +7,16 @@ import { useAllMachines, useAllSessions, useSetting } from '@/sync/storage';
 import { loadThemePreference } from '@/sync/persistence';
 import { darkTheme, lightTheme } from '@/theme';
 import { getSessionAvatarId, getSessionName } from '@/utils/sessionUtils';
+import { compareSessionsByLastMessage } from '@/utils/sessionLastMessageAt';
 import { brutalistAvatar } from '@/components/AvatarBrutalist';
 import { gradientAvatar } from '@/components/AvatarGradient';
 import { pixelAvatarColors } from '@/components/AvatarSkia';
 import { setShareExtensionSnapshot } from '@/share/shareExtension';
+import { machineNames, shareSessionSubtitle } from '@/share/shareSessionSubtitle';
 import { t } from '@/text';
 
 // The extension's sheet takes up to 10 of each (iosActivationRules in app.config.js)
 const MAX_SHARED = 10;
-
-// The agent's name under a session, as the new-session page names it
-const AGENTS: Record<string, 'claude' | 'codex' | 'gemini' | 'qoder'> = {
-    claude: 'claude',
-    codex: 'codex',
-    openai: 'codex',
-    gpt: 'codex',
-    gemini: 'gemini',
-    qoder: 'qoder',
-};
-
-function agentName(flavor: string | null | undefined): string {
-    const agent = AGENTS[flavor ?? 'claude'];
-    if (agent) return t(`agentInput.agent.${agent}`);
-    return flavor ? flavor[0].toUpperCase() + flavor.slice(1) : '';
-}
 
 // Where the avatars' images go in the App Group, for the extension to read
 const AVATARS_DIR = 'share-avatars';
@@ -127,22 +113,18 @@ export function useShareExtensionSnapshot(enabled: boolean) {
     const snapshot = React.useMemo(() => {
         if (Platform.OS !== 'ios' || !enabled) return null;
         const images = new Map<string, number>();
-        const machineNames = new Map(machines.map((machine) => [
-            machine.id,
-            machine.metadata?.displayName || machine.metadata?.host || '',
-        ]));
+        const names = machineNames(machines);
         const sessions = allSessions
             .filter((session) => session.active && !session.accessLevel)
+            // In the session list's order
+            .sort(compareSessionsByLastMessage)
             .map((session) => {
-                const path = session.metadata?.path ?? '';
-                const project = path.split(/[\\/]/).filter(Boolean).pop() ?? '';
-                const machine = machineNames.get(session.metadata?.machineId ?? '');
                 const avatar = avatarSpec(getSessionAvatarId(session), avatarStyle);
                 if (avatar.image) images.set(avatar.image.name, avatar.image.source);
                 return {
                     id: session.id,
                     name: getSessionName(session),
-                    subtitle: [project, agentName(session.metadata?.flavor), machine].filter(Boolean).join(' · '),
+                    subtitle: shareSessionSubtitle(session, names),
                     avatar: avatar.spec,
                 };
             });

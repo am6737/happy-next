@@ -1,4 +1,5 @@
 import { Stack } from 'expo-router';
+import Constants from 'expo-constants';
 import 'react-native-reanimated';
 import * as React from 'react';
 import { Typography } from '@/constants/Typography';
@@ -675,7 +676,7 @@ export default function RootLayout() {
                 options={{
                     ...softHeaderOptions,
                     headerShown: true,
-                    headerTitle: t('shareTarget.title'),
+                    headerTitle: t('shareTarget.sheetTitle', { app: Constants.expoConfig?.name ?? 'Happy' }),
                 }}
             />
             <Stack.Screen
