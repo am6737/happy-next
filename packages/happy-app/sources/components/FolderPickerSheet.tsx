@@ -27,6 +27,9 @@ interface FolderPickerSheetProps {
     initialSelection?: string[];
 }
 
+/** Separates the directory list from the git repos in one command's output. */
+const GIT_MARKER = '---happy-git-repos---';
+
 interface DirEntry {
     name: string;
     isGitRepo: boolean;
@@ -42,7 +45,7 @@ interface DirEntry {
  *  - Search field filters entries by name; typing an absolute or ~/… path
  *    and pressing Enter navigates to that path.
  *  - "Select" button in nav bar confirms the current directory.
- *  - ".." entry navigates to parent directory.
+ *  - Back button in nav bar navigates to the parent directory.
  */
 export const FolderPickerSheet = React.memo(React.forwardRef<BottomSheetModal, FolderPickerSheetProps>(({
     machineId,
@@ -78,18 +81,27 @@ export const FolderPickerSheet = React.memo(React.forwardRef<BottomSheetModal, F
         return path;
     }, [homeDir]);
 
+    /**
+     * Loads `dirPath` and, once it has loaded, shows it: the path, the list and
+     * the back button change in one render, so the old list never sits under
+     * the new path while the machine answers.
+     */
     const fetchDirectory = React.useCallback(async (dirPath: string) => {
         const id = ++fetchIdRef.current;
         setLoading(true);
-        setError(null);
+        const show = (next: DirEntry[], nextError: string | null) => {
+            setCurrentPath(dirPath);
+            setEntries(next);
+            setError(nextError);
+            setSearch('');
+        };
         try {
             if (isFileMode) {
                 // File mode: list files and directories
                 const lsResult = await machineBash(machineId, "ls -1ap", dirPath);
                 if (id !== fetchIdRef.current) return;
                 if (!lsResult.success) {
-                    setError(t('newSession.repos.folderPicker.loadError'));
-                    setEntries([]);
+                    show([], t('newSession.repos.folderPicker.loadError'));
                     return;
                 }
                 const lines = lsResult.stdout.split('\n').map(s => s.trim()).filter(s => s.length > 0 && !s.startsWith('.'));
@@ -104,42 +116,31 @@ export const FolderPickerSheet = React.memo(React.forwardRef<BottomSheetModal, F
                 }
                 dirs.sort((a, b) => a.name.localeCompare(b.name));
                 files.sort((a, b) => a.name.localeCompare(b.name));
-                setEntries([...dirs, ...files]);
+                show([...dirs, ...files], null);
             } else {
-                // Directory mode: list only directories
-                const lsResult = await machineBash(
+                // Directory mode: list only directories, and in the same round
+                // trip the ones that are git repos (up to 2 levels deep)
+                const result = await machineBash(
                     machineId,
-                    "ls -1ap | grep '/$' | sed 's/\\/$//'",
-                    dirPath,
-                );
-                if (id !== fetchIdRef.current) return;
-                if (!lsResult.success) {
-                    setError(t('newSession.repos.folderPicker.loadError'));
-                    setEntries([]);
-                    return;
-                }
-
-                const dirNames = lsResult.stdout
-                    .split('\n')
-                    .map(s => s.trim())
-                    .filter(s => s.length > 0 && !s.startsWith('.'));
-
-                // Batch git-repo detection
-                const gitResult = await machineBash(
-                    machineId,
+                    "dirs=$(ls -1ap) || exit 1; " +
+                    "printf '%s\\n' \"$dirs\" | grep '/$' | sed 's/\\/$//'; " +
+                    `echo '${GIT_MARKER}'; ` +
                     "find . -maxdepth 2 -name '.git' -type d 2>/dev/null | sed 's|^\\./||' | sed 's|/\\.git$||'",
                     dirPath,
                 );
                 if (id !== fetchIdRef.current) return;
-                const gitSet = new Set<string>();
-                if (gitResult.success && gitResult.stdout.trim().length > 0) {
-                    for (const line of gitResult.stdout.split('\n')) {
-                        const trimmed = line.trim();
-                        if (trimmed.length > 0) {
-                            gitSet.add(trimmed);
-                        }
-                    }
+                if (!result.success) {
+                    show([], t('newSession.repos.folderPicker.loadError'));
+                    return;
                 }
+
+                const lines = result.stdout.split('\n').map(s => s.trim());
+                const marker = lines.indexOf(GIT_MARKER);
+                const dirNames = (marker === -1 ? lines : lines.slice(0, marker))
+                    .filter(s => s.length > 0 && !s.startsWith('.'));
+                const gitSet = new Set(
+                    marker === -1 ? [] : lines.slice(marker + 1).filter(s => s.length > 0),
+                );
 
                 const parsed: DirEntry[] = dirNames.map(name => ({
                     name,
@@ -152,29 +153,34 @@ export const FolderPickerSheet = React.memo(React.forwardRef<BottomSheetModal, F
                     return a.name.localeCompare(b.name);
                 });
 
-                setEntries(parsed);
+                show(parsed, null);
             }
         } catch {
             if (id !== fetchIdRef.current) return;
-            setError(t('newSession.repos.folderPicker.loadError'));
-            setEntries([]);
+            show([], t('newSession.repos.folderPicker.loadError'));
         } finally {
             if (id === fetchIdRef.current) setLoading(false);
         }
     }, [machineId, isFileMode]);
 
-    // Navigate to a new directory
-    const navigateTo = React.useCallback((path: string) => {
-        setSearch('');
-        setCurrentPath(path);
-        fetchDirectory(path);
-    }, [fetchDirectory]);
+    // Navigate to a new directory; the current one stays on screen until it loads
+    const navigateTo = fetchDirectory;
+
+    // A newly shown directory starts at its top
+    const listRef = React.useRef<React.ElementRef<typeof BottomSheetFlatList>>(null);
+    React.useLayoutEffect(() => {
+        listRef.current?.scrollToOffset({ offset: 0, animated: false });
+    }, [currentPath]);
 
     // ---- sheet lifecycle ----
 
     const handleAnimate = React.useCallback((from: number, to: number) => {
         if (from === -1 && to === 0) {
             setSelectedFiles(initialSelection?.length ? new Set(initialSelection) : new Set());
+            // Opening starts clean rather than on what was listed last time
+            setCurrentPath(startPath);
+            setEntries([]);
+            setError(null);
             navigateTo(startPath);
         }
     }, [initialSelection, navigateTo, startPath]);
@@ -281,7 +287,8 @@ export const FolderPickerSheet = React.memo(React.forwardRef<BottomSheetModal, F
         return '...' + display.slice(-37);
     }, [currentPath, homeDir]);
 
-    const isAtRoot = currentPath === '/' || currentPath === homeDir;
+    const isAtHome = currentPath === homeDir;
+    const isAtRoot = currentPath === '/' || isAtHome;
 
     const renderItem = React.useCallback(({ item }: { item: DirEntry }) => {
         const fullPath = currentPath === '/'
@@ -326,21 +333,6 @@ export const FolderPickerSheet = React.memo(React.forwardRef<BottomSheetModal, F
 
     const keyExtractor = React.useCallback((item: DirEntry) => item.name, []);
 
-    const ListHeaderComponent = React.useMemo(() => {
-        if (isAtRoot) return null;
-        return (
-            <Pressable
-                style={({ pressed }) => [
-                    itemStyles.row,
-                    pressed && { backgroundColor: sheetFill(theme.colors.surface) },
-                ]}
-                onPress={goUp}
-            >
-                <Text style={{ fontSize: 18, color: theme.colors.textSecondary, fontWeight: '600', width: 20, textAlign: 'center' }}>..</Text>
-            </Pressable>
-        );
-    }, [theme, isAtRoot, goUp]);
-
     const ListEmptyComponent = React.useMemo(() => {
         if (loading) return null;
         return (
@@ -368,48 +360,67 @@ export const FolderPickerSheet = React.memo(React.forwardRef<BottomSheetModal, F
 
                 {/* Pinned navigation bar */}
                 <View style={[headerStyles.navBar, { borderBottomColor: theme.colors.divider }]}>
-                    <Pressable onPress={goHome} hitSlop={8} style={headerStyles.navButton}>
-                        <Ionicons name="home" size={20} color={theme.colors.textLink} />
-                    </Pressable>
+                    {/* Up a level lives here rather than as a row atop the list, so the list never shifts */}
+                    <View style={headerStyles.navSide}>
+                        <Pressable onPress={goUp} disabled={isAtRoot} hitSlop={8} style={headerStyles.navButton}>
+                            <Ionicons
+                                name="chevron-back"
+                                size={22}
+                                color={isAtRoot ? theme.colors.textSecondary : theme.colors.textLink}
+                                style={isAtRoot && { opacity: 0.4 }}
+                            />
+                        </Pressable>
+                        <Pressable onPress={goHome} disabled={isAtHome} hitSlop={8} style={headerStyles.navButton}>
+                            <Ionicons
+                                name="home"
+                                size={20}
+                                color={isAtHome ? theme.colors.textSecondary : theme.colors.textLink}
+                                style={isAtHome && { opacity: 0.4 }}
+                            />
+                        </Pressable>
+                    </View>
                     <Pressable onLongPress={handleCopyPath} style={{ flex: 1 }}>
                         <Text style={[headerStyles.pathText, { color: theme.colors.text }]} numberOfLines={1}>
                             {displayPath}
                         </Text>
                     </Pressable>
-                    <View style={{ width: 32, height: 32, alignItems: 'center', justifyContent: 'center' }}>
-                        {loading ? (
-                            <ActivityIndicator size="small" color={theme.colors.textSecondary} />
-                        ) : !isFileMode ? (
-                            <Pressable onPress={handleSelect} hitSlop={8}>
-                                <Ionicons name="checkmark-circle" size={24} color={theme.colors.textLink} />
-                            </Pressable>
-                        ) : onFileSelect ? (
-                            <Pressable
-                                onPress={handleConfirmFiles}
-                                disabled={selectedFiles.size === 0}
-                                hitSlop={8}
-                                style={{ position: 'relative' }}
-                            >
-                                <Ionicons
-                                    name="checkmark-circle"
-                                    size={24}
-                                    color={selectedFiles.size > 0 ? theme.colors.textLink : theme.colors.textSecondary}
-                                />
-                                {selectedFiles.size > 0 && (
-                                    <View style={{
-                                        position: 'absolute', top: -6, right: -8,
-                                        backgroundColor: theme.colors.button.primary.background,
-                                        borderRadius: 8, minWidth: 16, height: 16,
-                                        alignItems: 'center', justifyContent: 'center',
-                                        paddingHorizontal: 4,
-                                    }}>
-                                        <Text style={{ fontSize: 10, color: theme.colors.button.primary.tint, fontWeight: '700' }}>
-                                            {selectedFiles.size}
-                                        </Text>
-                                    </View>
-                                )}
-                            </Pressable>
-                        ) : null}
+                    {/* As wide as the left side, so the path sits in the middle */}
+                    <View style={[headerStyles.navSide, { justifyContent: 'flex-end' }]}>
+                        <View style={headerStyles.navButton}>
+                            {loading ? (
+                                <ActivityIndicator size="small" color={theme.colors.textSecondary} />
+                            ) : !isFileMode ? (
+                                <Pressable onPress={handleSelect} hitSlop={8}>
+                                    <Ionicons name="checkmark-circle" size={24} color={theme.colors.textLink} />
+                                </Pressable>
+                            ) : onFileSelect ? (
+                                <Pressable
+                                    onPress={handleConfirmFiles}
+                                    disabled={selectedFiles.size === 0}
+                                    hitSlop={8}
+                                    style={{ position: 'relative' }}
+                                >
+                                    <Ionicons
+                                        name="checkmark-circle"
+                                        size={24}
+                                        color={selectedFiles.size > 0 ? theme.colors.textLink : theme.colors.textSecondary}
+                                    />
+                                    {selectedFiles.size > 0 && (
+                                        <View style={{
+                                            position: 'absolute', top: -6, right: -8,
+                                            backgroundColor: theme.colors.button.primary.background,
+                                            borderRadius: 8, minWidth: 16, height: 16,
+                                            alignItems: 'center', justifyContent: 'center',
+                                            paddingHorizontal: 4,
+                                        }}>
+                                            <Text style={{ fontSize: 10, color: theme.colors.button.primary.tint, fontWeight: '700' }}>
+                                                {selectedFiles.size}
+                                            </Text>
+                                        </View>
+                                    )}
+                                </Pressable>
+                            ) : null}
+                        </View>
                     </View>
                 </View>
 
@@ -426,10 +437,10 @@ export const FolderPickerSheet = React.memo(React.forwardRef<BottomSheetModal, F
                 />
 
                 <BottomSheetFlatList
+                    ref={listRef}
                     data={filtered}
                     keyExtractor={keyExtractor}
                     renderItem={renderItem}
-                    ListHeaderComponent={ListHeaderComponent}
                     ListEmptyComponent={ListEmptyComponent}
                     contentContainerStyle={{ paddingBottom: 20 }}
                     keyboardShouldPersistTaps="handled"
@@ -440,6 +451,9 @@ export const FolderPickerSheet = React.memo(React.forwardRef<BottomSheetModal, F
 }));
 
 // ---- Styles ----
+
+const NAV_BUTTON_SIZE = 32;
+const NAV_SIDE_GAP = 4;
 
 const headerStyles = StyleSheet.create((theme) => ({
     title: {
@@ -456,8 +470,17 @@ const headerStyles = StyleSheet.create((theme) => ({
         borderBottomWidth: 1,
         gap: theme.margins.sm,
     },
+    navSide: {
+        width: NAV_BUTTON_SIZE * 2 + NAV_SIDE_GAP,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: NAV_SIDE_GAP,
+    },
     navButton: {
-        padding: 4,
+        width: NAV_BUTTON_SIZE,
+        height: NAV_BUTTON_SIZE,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     pathText: {
         ...Typography.mono(),
