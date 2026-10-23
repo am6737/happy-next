@@ -31,11 +31,13 @@ interface HeaderProps {
 export const Header = React.memo((props: HeaderProps) => {
     const styles = stylesheet;
     const { isAuthenticated } = useAuth();
-    const desktopPlatform = getDesktopPlatform();
-    const needsMacOSWindowControlsInset = desktopPlatform === 'macos' && !isAuthenticated;
-    const desktopDragProps = desktopPlatform ? {
+    // Signed out on macOS there is no title bar drawn above the page (see DesktopWindowFrame): the
+    // traffic lights sit over this header, so it makes room for them and moves the window. Everywhere
+    // else the desktop title bar does that.
+    const isMacOSUnauthenticatedHeader = getDesktopPlatform() === 'macos' && !isAuthenticated;
+    const desktopDragProps = isMacOSUnauthenticatedHeader ? {
         onMouseDown: (event: any) => {
-            handleDesktopTitleBarMouseDown(event, { allowMaximize: isAuthenticated });
+            handleDesktopTitleBarMouseDown(event, { allowMaximize: false });
         },
     } as any : {};
 
@@ -93,7 +95,7 @@ export const Header = React.memo((props: HeaderProps) => {
                     <View style={[
                         styles.leftContainer,
                         leftAligned && styles.sideContainerHug,
-                        needsMacOSWindowControlsInset && styles.macOSWindowControlsInset,
+                        isMacOSUnauthenticatedHeader && styles.macOSWindowControlsInset,
                         !leftAligned && { minWidth: sideMinWidth },
                     ]}>
                         <View style={styles.sideContent} onLayout={handleLeftLayout}>
@@ -103,7 +105,7 @@ export const Header = React.memo((props: HeaderProps) => {
 
                     <View style={[styles.centerContainer, leftAligned && styles.centerContainerLeft]}>
                         <View
-                            {...(desktopPlatform ? {
+                            {...(isMacOSUnauthenticatedHeader ? {
                                 'data-desktop-no-drag': true,
                                 onMouseDown: (event: any) => {
                                     event.stopPropagation?.();
