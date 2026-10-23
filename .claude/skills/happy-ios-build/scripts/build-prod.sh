@@ -7,6 +7,8 @@ source "$(dirname "$0")/common.sh"
 
 LABEL=$(slug "${1:-prod}")
 BUNDLE_ID=com.hitosea.happy
+EXT_ID=$BUNDLE_ID.share-extension   # expo-share-intent's ShareExtension target
+APP_GROUP=group.$BUNDLE_ID
 TMP_PROFILE=production-adhoc
 KEYCHAIN=/tmp/happy-build.keychain-db
 LOGIN_KC="$HOME/Library/Keychains/login.keychain-db"
@@ -29,7 +31,7 @@ cd "$APP"
 [ ! -e credentials.json ] && [ ! -e credentials ] || die "credentials.json / credentials/ already exist in $APP; look at them before building"
 
 # --- restore everything on any exit ----------------------------------------------
-IOS_MOVED=0; WATCH_MOVED=""; EAS_BACKED=0; KC_MADE=0; PROFILE_INSTALLED=""
+IOS_MOVED=0; WATCH_MOVED=""; EAS_BACKED=0; KC_MADE=0; PROFILES_INSTALLED=""
 cleanup() {
     set +e
     cd "$APP"
@@ -38,7 +40,7 @@ cleanup() {
     [ "$EAS_BACKED" = 1 ] && cp "$WORK/eas.json" eas.json
     rm -rf credentials.json credentials
     rm -f "$WORK/prod.env" "$WORK/kc-pass"
-    [ -n "$PROFILE_INSTALLED" ] && rm -f "$PROFILE_INSTALLED"
+    for f in $PROFILES_INSTALLED; do rm -f "$f"; done
     if [ "$KC_MADE" = 1 ]; then
         security list-keychains -d user -s "$LOGIN_KC" "$SYSTEM_KC"
         security delete-keychain "$KEYCHAIN"
@@ -89,20 +91,43 @@ for t in $(ls targets 2>/dev/null | grep -i watch || true); do
     mv "targets/$t" "$WORK/targets/$t"; WATCH_MOVED="$WATCH_MOVED $t"
 done
 
-# --- 5. download the existing Ad Hoc cert + profile ---------------------------------------
+# --- 5. download the existing Ad Hoc cert + profiles (the app's and the share extension's) ------
 log "download Ad Hoc credentials from EAS"
 ARROWS=$ARROWS expect "$SCRIPTS/eas-creds.exp" > "$WORK/eas-creds.log" 2>&1 || {
-    tail -30 "$WORK/eas-creds.log"; die "eas credentials download failed"; }
-[ -f credentials.json ] && [ -f credentials/ios/dist-cert.p12 ] && [ -f credentials/ios/profile.mobileprovision ] || {
-    tail -30 "$WORK/eas-creds.log"; die "eas credentials did not write credentials.json + credentials/ios/*"; }
+    tail -30 "$WORK/eas-creds.log"
+    grep -q EAS_TARGET_ERROR "$WORK/eas-creds.log" \
+        && die "a build target has no Ad Hoc credentials on EAS (the share extension $EXT_ID needs its own)"
+    die "eas credentials download failed"; }
+[ -f credentials.json ] || { tail -30 "$WORK/eas-creds.log"; die "eas credentials did not write credentials.json"; }
 
-security cms -D -i credentials/ios/profile.mobileprovision > "$WORK/profile.plist"
+python3 "$SCRIPTS/adhoc-creds.py" credentials.json > "$WORK/creds.txt" || die "could not read credentials.json"
+# creds <bundle id> <field>: 2 profile, 3 p12, 4 p12 password
+creds() { awk -v b="$1" -v f="$2" '$1 == b { print $f }' "$WORK/creds.txt"; }
+APP_PROFILE_FILE=$(creds "$BUNDLE_ID" 2); EXT_PROFILE_FILE=$(creds "$EXT_ID" 2)
+P12=$(creds "$BUNDLE_ID" 3); P12PASS=$(creds "$BUNDLE_ID" 4)
+[ -n "$APP_PROFILE_FILE" ] && [ -f "$P12" ] || die "credentials.json has no Ad Hoc profile + certificate for $BUNDLE_ID"
+[ -n "$EXT_PROFILE_FILE" ] || die "credentials.json has no Ad Hoc profile for $EXT_ID (set up the share extension's credentials on EAS)"
+
+security cms -D -i "$APP_PROFILE_FILE" > "$WORK/profile.plist"
+security cms -D -i "$EXT_PROFILE_FILE" > "$WORK/ext-profile.plist"
 PROFILE_UUID=$($PB -c 'Print :UUID' "$WORK/profile.plist")
 PROFILE_NAME=$($PB -c 'Print :Name' "$WORK/profile.plist")
 PROFILE_EXP=$(plutil -extract ExpirationDate raw "$WORK/profile.plist")
-[ "$($PB -c 'Print :Entitlements:application-identifier' "$WORK/profile.plist")" = "$TEAM.$BUNDLE_ID" ] || die "profile is not for $BUNDLE_ID"
+EXT_PROFILE_UUID=$($PB -c 'Print :UUID' "$WORK/ext-profile.plist")
+EXT_PROFILE_NAME=$($PB -c 'Print :Name' "$WORK/ext-profile.plist")
+EXT_PROFILE_EXP=$(plutil -extract ExpirationDate raw "$WORK/ext-profile.plist")
 [ "$($PB -c 'Print :Entitlements:aps-environment' "$WORK/profile.plist")" = production ] || die "profile has no production push"
-[[ "$PROFILE_EXP" > "$(date -u +%Y-%m-%dT%H:%M:%SZ)" ]] || die "Ad Hoc profile expired on $PROFILE_EXP"
+NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+[[ "$PROFILE_EXP" > "$NOW" ]] || die "Ad Hoc profile expired on $PROFILE_EXP"
+[[ "$EXT_PROFILE_EXP" > "$NOW" ]] || die "share extension's Ad Hoc profile expired on $EXT_PROFILE_EXP"
+# The share extension hands what was shared to the app through the App Group
+for f in "$WORK/profile.plist" "$WORK/ext-profile.plist"; do
+    $PB -c 'Print :Entitlements:com.apple.security.application-groups' "$f" 2>/dev/null | grep -qx "    $APP_GROUP" \
+        || die "$($PB -c 'Print :Name' "$f") lacks the App Group $APP_GROUP (regenerate it on EAS once the App ID has it)"
+done
+# Both targets' profiles must list the same devices, or the IPA won't install where only one does
+cmp -s <($PB -c 'Print :ProvisionedDevices' "$WORK/profile.plist" | sort) <($PB -c 'Print :ProvisionedDevices' "$WORK/ext-profile.plist" | sort) \
+    || die "the app's and the share extension's Ad Hoc profiles list different devices"
 
 # --- 6. temporary keychain with the cert and the WWDR G3 intermediate -----------------------
 log "temporary keychain"
@@ -112,8 +137,7 @@ security delete-keychain "$KEYCHAIN" 2>/dev/null || true
 security create-keychain -p "$KP" "$KEYCHAIN"; KC_MADE=1
 security set-keychain-settings -lut 21600 "$KEYCHAIN"
 security unlock-keychain -p "$KP" "$KEYCHAIN"
-P12PASS=$(python3 -c "import json;print(json.load(open('credentials.json'))['ios']['distributionCertificate']['password'])")
-security import credentials/ios/dist-cert.p12 -k "$KEYCHAIN" -P "$P12PASS" -T /usr/bin/codesign -T /usr/bin/security > /dev/null
+security import "$P12" -k "$KEYCHAIN" -P "$P12PASS" -T /usr/bin/codesign -T /usr/bin/security > /dev/null
 # The Mac mini only has the expired WWDR G1; the distribution cert chains to G3.
 curl -fsSL https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer -o "$WORK/wwdrg3.cer"
 security import "$WORK/wwdrg3.cer" -k "$KEYCHAIN" -T /usr/bin/codesign -T /usr/bin/security > /dev/null
@@ -123,11 +147,13 @@ security list-keychains -d user -s "$LOGIN_KC" "$KEYCHAIN" "$SYSTEM_KC"
 SIGN_ID=$(security find-identity -v -p codesigning "$KEYCHAIN" | awk -F'"' '/Distribution/ {print $2; exit}')
 [ -n "$SIGN_ID" ] || die "no valid distribution identity in the temporary keychain"
 
-if [ ! -f "$PROFILES_DIR/$PROFILE_UUID.mobileprovision" ]; then
-    mkdir -p "$PROFILES_DIR"
-    cp credentials/ios/profile.mobileprovision "$PROFILES_DIR/$PROFILE_UUID.mobileprovision"
-    PROFILE_INSTALLED="$PROFILES_DIR/$PROFILE_UUID.mobileprovision"
-fi
+mkdir -p "$PROFILES_DIR"
+for pair in "$PROFILE_UUID:$APP_PROFILE_FILE" "$EXT_PROFILE_UUID:$EXT_PROFILE_FILE"; do
+    uuid=${pair%%:*}; file=${pair#*:}
+    [ -f "$PROFILES_DIR/$uuid.mobileprovision" ] && continue
+    cp "$file" "$PROFILES_DIR/$uuid.mobileprovision"
+    PROFILES_INSTALLED="$PROFILES_INSTALLED $PROFILES_DIR/$uuid.mobileprovision"
+done
 
 # --- 7. production prebuild ---------------------------------------------------------------
 # APP_ENV is not in prod.env (it comes from the eas.json profile). Don't run yarn install here.
@@ -135,6 +161,11 @@ log "APP_ENV=production expo prebuild --clean"
 prod_env() { set -a; . "$WORK/prod.env"; set +a; export APP_ENV=production NODE_ENV=production CI=1; }
 ( prod_env; run_logged "$WORK/prebuild.log" npx expo prebuild -p ios --clean )
 [ -d ios/HappyNext.xcworkspace ] || die "prebuild did not produce ios/HappyNext.xcworkspace"
+[ -f ios/ShareExtension/ShareExtension.entitlements ] || die "prebuild did not produce the ShareExtension target"
+# Each target signs with its own profile, so the profiles go into the targets' build settings
+# rather than onto the xcodebuild command line.
+python3 "$SCRIPTS/set-profiles.py" ios/HappyNext.xcodeproj/project.pbxproj \
+    "$BUNDLE_ID=$PROFILE_UUID" "$EXT_ID=$EXT_PROFILE_UUID" || die "could not set the targets' provisioning profiles"
 
 # --- 8. build number: max(EAS remote, last local IPA, last recorded) + 1 -----------------------
 # Expo's Info.plist hardcodes CFBundleVersion=1 and CURRENT_PROJECT_VERSION doesn't override it.
@@ -153,7 +184,7 @@ log "xcodebuild archive (takes ~10 min)"
     -workspace ios/HappyNext.xcworkspace -scheme HappyNext -configuration Release \
     -destination 'generic/platform=iOS' -archivePath "$WORK/HappyNext.xcarchive" \
     DEVELOPMENT_TEAM=$TEAM CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="$SIGN_ID" \
-    PROVISIONING_PROFILE_SPECIFIER="$PROFILE_UUID" CURRENT_PROJECT_VERSION="$BUILD" \
+    CURRENT_PROJECT_VERSION="$BUILD" \
     OTHER_CODE_SIGN_FLAGS="--keychain $KEYCHAIN" archive )
 [ "$($PB -c 'Print :ApplicationProperties:CFBundleVersion' "$WORK/HappyNext.xcarchive/Info.plist")" = "$BUILD" ] \
     || die "archive has the wrong CFBundleVersion"
@@ -171,7 +202,10 @@ cat > "$WORK/ExportOptions.plist" <<EOF
   <key>teamID</key><string>$TEAM</string>
   <key>signingCertificate</key><string>$SIGN_ID</string>
   <key>provisioningProfiles</key>
-  <dict><key>$BUNDLE_ID</key><string>$PROFILE_NAME</string></dict>
+  <dict>
+    <key>$BUNDLE_ID</key><string>$PROFILE_NAME</string>
+    <key>$EXT_ID</key><string>$EXT_PROFILE_NAME</string>
+  </dict>
   <key>manageAppVersionAndBuildNumber</key><false/>
   <key>stripSwiftSymbols</key><true/>
   <key>compileBitcode</key><false/>
@@ -191,6 +225,14 @@ codesign --verify --deep --strict "$A" || die "codesign verify failed"
 APS=$(codesign -d --entitlements :- "$A" 2>/dev/null | plutil -extract aps-environment raw - 2>/dev/null || true)
 [ "$APS" = production ] || die "aps-environment is '$APS', not production"
 [ "$($PB -c 'Print :CFBundleIdentifier' "$A/Info.plist")" = "$BUNDLE_ID" ] || die "wrong bundle id"
+X="$A/PlugIns/ShareExtension.appex"
+[ -d "$X" ] || die "the IPA has no share extension"
+[ "$($PB -c 'Print :CFBundleIdentifier' "$X/Info.plist")" = "$EXT_ID" ] || die "share extension has the wrong bundle id"
+[ "$($PB -c 'Print :CFBundleVersion' "$X/Info.plist")" = "$BUILD" ] || die "share extension's CFBundleVersion differs from the app's"
+for b in "$A" "$X"; do
+    [ "$(codesign -d --entitlements :- "$b" 2>/dev/null | plutil -extract com.apple.security.application-groups.0 raw - 2>/dev/null || true)" = "$APP_GROUP" ] \
+        || die "$(basename "$b") is not signed with the App Group $APP_GROUP"
+done
 python3 - "$WORK/prod.env" "$A/EXConstants.bundle/app.config" <<'EOF' || die "DooPush config in the IPA doesn't match the EAS production environment"
 import json, sys
 env = {}
@@ -214,5 +256,7 @@ echo "RESULT_VERSION=$VERSION ($BUILD)"
 echo "RESULT_COMMIT=$SHA"
 echo "RESULT_APS=$APS"
 echo "RESULT_PROFILE=$PROFILE_NAME, expires $PROFILE_EXP"
+echo "RESULT_EXT_PROFILE=$EXT_PROFILE_NAME, expires $EXT_PROFILE_EXP"
+echo "RESULT_SHARE_EXTENSION=$EXT_ID, app group $APP_GROUP"
 echo "RESULT_DEVICES=$($PB -c 'Print :ProvisionedDevices' "$WORK/profile.plist" | grep '^ ' | tr -d ' ' | tr '\n' ' ')"
 echo "RESULT_LOGS=$WORK"

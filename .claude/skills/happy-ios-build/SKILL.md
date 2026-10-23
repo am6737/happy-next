@@ -9,8 +9,8 @@ description: Builds a happy-app iOS IPA on the Mac mini and drops it into appdow
 
 | 模式 | 用户说法 | 产物 | 签名 / 推送 |
 |---|---|---|---|
-| `prod` | 正式版、生产版、能收推送的 | `HappyNext-<版本>-<构建号>-<sha>-<标签>-<时间>.ipa`，`com.hitosea.happy`，不含 Watch App | EAS 上现有的 Ad Hoc 证书，`aps-environment=production`，只能装在 Ad Hoc 描述文件里的设备上 |
-| `dev` | 开发版、调试版、dev client | `HappyNextdev-<版本>-<sha>-<标签>-<时间>.ipa`，`com.hitosea.happy.dev`，Debug 开发客户端，打开后要连 Metro，不含 Watch App | Apple Development 证书 + 团队描述文件 `com.hitosea.happy.dev`，`aps-environment=development` |
+| `prod` | 正式版、生产版、能收推送的 | `HappyNext-<版本>-<构建号>-<sha>-<标签>-<时间>.ipa`，`com.hitosea.happy`，不含 Watch App | EAS 上现有的 Ad Hoc 证书，主 App 和分享扩展各一个描述文件，`aps-environment=production`，只能装在 Ad Hoc 描述文件里的设备上 |
+| `dev` | 开发版、调试版、dev client | `HappyNextdev-<版本>-<sha>-<标签>-<时间>.ipa`，`com.hitosea.happy.dev`，Debug 开发客户端，打开后要连 Metro，不含 Watch App | Apple Development 证书 + 团队描述文件 `com.hitosea.happy.dev` 和 `com.hitosea.happy.dev.share-extension`，`aps-environment=development` |
 
 真正的构建由仓库里的脚本完成，它们在 Mac mini 上运行：
 
@@ -69,8 +69,8 @@ waitMs=0
 用中文汇报，以 `RESULT_*` 行为准：
 
 - 文件名、大小、版本（构建号）、对应提交，以及下载页 `RESULT_PAGE` 是否列出了它。
-- 正式版：推送环境是否为 production，DooPush 配置是否和 EAS 一致，描述文件的有效期，能装的设备（`RESULT_DEVICES`），不含 Watch App，`RESULT_REPO` 和 `RESULT_DEV_PROJECT` 是否都已还原。
-- 开发版：说明它是 Debug 开发客户端，打开后要连 Metro。
+- 正式版：推送环境是否为 production，DooPush 配置是否和 EAS 一致，两个描述文件（`RESULT_PROFILE`、`RESULT_EXT_PROFILE`）的有效期，能装的设备（`RESULT_DEVICES`），不含 Watch App，`RESULT_REPO` 和 `RESULT_DEV_PROJECT` 是否都已还原。
+- 开发版：说明它是 Debug 开发客户端，打开后要连 Metro；分享扩展的描述文件见 `RESULT_EXT_PROFILE`。
 - 如果第 3 步做了 stash，告诉用户 stash 的名字。
 
 失败时：把脚本输出的 `ERROR:` 和其上方的报错原样给用户，对照下面的「坑」判断原因。正式版脚本已经自动还原了 Mac mini 的状态，汇报 `RESULT_REPO` 和 `RESULT_DEV_PROJECT` 即可。不要盲目重试；需要改脚本时，先改仓库里的脚本，再走一遍第 2–4 步。
@@ -84,7 +84,7 @@ waitMs=0
 
 ## 坑（脚本已处理，排错时对照）
 
-1. **Watch target 没有 Ad Hoc 凭证。** EAS 会报 `Some of the build targets don't have credentials ... HappyWatch`。必须在 `eas credentials` 之前把 `targets/watch*` 移出去，因此正式版不含 Watch App。开发版 prebuild 后 `.app` 里会带 `Watch/HappyWatch.app`，其中的 Widget 扩展（`com.hitosea.happy.dev.watchkitapp.widget`）没有描述文件，所以脚本签名前会删掉 `Watch/`，开发版也不含 Watch App；如果顶层出现 `PlugIns/`，脚本会直接停下。
+1. **Watch target 没有 Ad Hoc 凭证。** EAS 会报 `Some of the build targets don't have credentials ... HappyWatch`。必须在 `eas credentials` 之前把 `targets/watch*` 移出去，因此正式版不含 Watch App。开发版 prebuild 后 `.app` 里会带 `Watch/HappyWatch.app`，其中的 Widget 扩展（`com.hitosea.happy.dev.watchkitapp.widget`）没有描述文件，所以脚本签名前会删掉 `Watch/`，开发版也不含 Watch App。
 2. **`eas credentials` 没有非交互的下载方式**（eas-cli 18.x）。只能用 `eas-creds.exp` 模拟按键选菜单：先按 `ARROWS` 次下箭头选中临时 profile（这个 profile 追加在 `eas.json` 的最后），再按 3 次下箭头选「credentials.json」，然后选「Download」。脚本会检查文件是否真的写到了磁盘上。EAS 菜单变了就调整这个 exp。
 3. **Expo 生成的 `Info.plist` 把 `CFBundleVersion` 写死成 1**，`CURRENT_PROJECT_VERSION` 改不动它，必须在 archive 之前用 `plutil` 改。构建号取三者最大值再加 1：EAS 远端值、builds 目录里最大的本地包号、`~/.happy-ios-build/prod-build-number`。
 4. **Mac mini 只有已经过期的 WWDR G1**，分发证书是 G3 签发的，所以要把 G3 导入临时钥匙串，否则会出现「0 valid identities」。
@@ -98,7 +98,12 @@ waitMs=0
 12. **`ios/` 不受 git 跟踪。** `git status` 干净不代表开发工程已经还原，所以脚本会单独检查 `ios/HappyNextdev.xcworkspace` 是否存在。
 13. **开发版什么时候重新 prebuild：** `ios/` 不存在、没有上次的构建记录（`~/.happy-ios-build/dev-commit`），或者从上次构建到现在改动了 `yarn.lock`、`patches/`、`packages/happy-app/{package.json,app.config.js,plugins,modules,targets,patches}` 中的任何一个。Debug 构建的中间产物缓存在 `/tmp/hn-dd`，用来做增量构建。
 14. **设备范围：** 正式版的 Ad Hoc 描述文件只包含 `00008130-001E38501406001C` 和 `00008101-000C686902BA001E` 两台设备，iPad 装不了。开发版的团队描述文件包含全部已注册设备。
-15. **开发版 `.app` 顶层的 `HappyNextdev.debug.dylib` / `__preview.dylib` 也要签名。** Debug 构建把 App 自己的代码放在这里；`codesign --verify --deep` 不检查它们，所以校验能过，但 dyld 拒绝加载未签名的库，App 一打开就退出（`Library not loaded ... missing code signature`），而且不会留下崩溃报告。
+15. **分享扩展（expo-share-intent 生成的 `ShareExtension` target）要单独签名。** 它在 `PlugIns/ShareExtension.appex`，bundle id 是 `<主 App>.share-extension`，和主 App 一样带 App Group `group.<主 App>`，靠它把分享的内容交给 App。所以：
+    - 两个描述文件都必须带这个 App Group，脚本会检查，缺了就停下。
+    - 正式版：EAS 上要有扩展的 Ad Hoc 凭证。此时 `credentials.json` 每个 target 各占一项，由 `adhoc-creds.py` 按描述文件里的 bundle id 认出来；两个描述文件的设备列表必须一致。描述文件不能放在 xcodebuild 命令行上（会同时套到两个 target 上），由 `set-profiles.py` 写进各 target 的 build settings。扩展的 `CFBundleVersion` 必须和主 App 一致，脚本会校验。
+    - 开发版：扩展用 Xcode 团队描述文件 `iOS Team Provisioning Profile: com.hitosea.happy.dev.share-extension`，在 Xcode 里给 ShareExtension target 签一次名就会生成。签名时由内向外：先签扩展里的代码和扩展，再签 App。`PlugIns/` 里出现别的扩展时脚本会停下。
+    - 这些凭证和描述文件由用户自己创建，本技能不创建（见「禁止」）。
+16. **开发版 `.app` 顶层的 `HappyNextdev.debug.dylib` / `__preview.dylib` 也要签名。** Debug 构建把 App 自己的代码放在这里；`codesign --verify --deep` 不检查它们，所以校验能过，但 dyld 拒绝加载未签名的库，App 一打开就退出（`Library not loaded ... missing code signature`），而且不会留下崩溃报告。
 
 ## 状态文件（Mac mini）
 
