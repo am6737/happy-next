@@ -2626,8 +2626,24 @@ class Sync {
             }
         }
 
-        // Replace entire machine state with fetched machines
-        storage.getState().applyMachines(decryptedMachines, true);
+        // Replace entire machine state with fetched machines, keeping metadata and daemon state that
+        // update-machine brought in while the fetch was in flight (newer than what it returned)
+        const current = storage.getState().machines;
+        const mergedMachines = decryptedMachines.map((machine) => {
+            const local = current[machine.id];
+            if (!local) return machine;
+            const merged = { ...machine };
+            if (local.metadataVersion > machine.metadataVersion) {
+                merged.metadata = local.metadata;
+                merged.metadataVersion = local.metadataVersion;
+            }
+            if (local.daemonStateVersion > machine.daemonStateVersion) {
+                merged.daemonState = local.daemonState;
+                merged.daemonStateVersion = local.daemonStateVersion;
+            }
+            return merged;
+        });
+        storage.getState().applyMachines(mergedMachines, true);
         log.log(`🖥️ fetchMachines completed - processed ${decryptedMachines.length} machines`);
     }
 
@@ -4483,6 +4499,38 @@ class Sync {
         } else if (updateData.body.t === 'update-machine') {
             const machineUpdate = updateData.body;
             const machineId = machineUpdate.machineId;  // Changed from .id to .machineId
+
+            // Get machine-specific encryption (might not exist if machine wasn't initialized)
+            const machineEncryption = this.encryption.getMachineEncryption(machineId);
+            if (!machineEncryption) {
+                // Machine encryption not initialized yet (e.g. machine just registered,
+                // fetchMachines still in progress). Re-fetch to pick up the full state.
+                this.machinesSync.invalidate();
+                return;
+            }
+
+            // Decrypt before reading the stored machine: decryption is async, and a daemon sends its
+            // metadata and daemon state updates together (e.g. on restart after a CLI update), so a
+            // machine read before it would be stale and undo the other update
+            const metadataUpdate = machineUpdate.metadata;
+            let metadata: Machine['metadata'] | undefined;
+            if (metadataUpdate) {
+                try {
+                    metadata = await machineEncryption.decryptMetadata(metadataUpdate.version, metadataUpdate.value);
+                } catch (error) {
+                    console.error(`Failed to decrypt machine metadata for ${machineId}:`, error);
+                }
+            }
+            const daemonStateUpdate = machineUpdate.daemonState;
+            let daemonState: Machine['daemonState'] | undefined;
+            if (daemonStateUpdate) {
+                try {
+                    daemonState = await machineEncryption.decryptDaemonState(daemonStateUpdate.version, daemonStateUpdate.value);
+                } catch (error) {
+                    console.error(`Failed to decrypt machine daemonState for ${machineId}:`, error);
+                }
+            }
+
             const machine = storage.getState().machines[machineId];
 
             // Create or update machine with all required fields
@@ -4498,38 +4546,14 @@ class Sync {
                 daemonState: machine?.daemonState ?? null,
                 daemonStateVersion: machine?.daemonStateVersion ?? 0
             };
-
-            // Get machine-specific encryption (might not exist if machine wasn't initialized)
-            const machineEncryption = this.encryption.getMachineEncryption(machineId);
-            if (!machineEncryption) {
-                // Machine encryption not initialized yet (e.g. machine just registered,
-                // fetchMachines still in progress). Re-fetch to pick up the full state.
-                this.machinesSync.invalidate();
-                return;
+            // An update that arrives after a newer one is dropped
+            if (metadataUpdate && metadata !== undefined && (!machine || metadataUpdate.version > machine.metadataVersion)) {
+                updatedMachine.metadata = metadata;
+                updatedMachine.metadataVersion = metadataUpdate.version;
             }
-
-            // If metadata is provided, decrypt and update it
-            const metadataUpdate = machineUpdate.metadata;
-            if (metadataUpdate) {
-                try {
-                    const metadata = await machineEncryption.decryptMetadata(metadataUpdate.version, metadataUpdate.value);
-                    updatedMachine.metadata = metadata;
-                    updatedMachine.metadataVersion = metadataUpdate.version;
-                } catch (error) {
-                    console.error(`Failed to decrypt machine metadata for ${machineId}:`, error);
-                }
-            }
-
-            // If daemonState is provided, decrypt and update it
-            const daemonStateUpdate = machineUpdate.daemonState;
-            if (daemonStateUpdate) {
-                try {
-                    const daemonState = await machineEncryption.decryptDaemonState(daemonStateUpdate.version, daemonStateUpdate.value);
-                    updatedMachine.daemonState = daemonState;
-                    updatedMachine.daemonStateVersion = daemonStateUpdate.version;
-                } catch (error) {
-                    console.error(`Failed to decrypt machine daemonState for ${machineId}:`, error);
-                }
+            if (daemonStateUpdate && daemonState !== undefined && (!machine || daemonStateUpdate.version > machine.daemonStateVersion)) {
+                updatedMachine.daemonState = daemonState;
+                updatedMachine.daemonStateVersion = daemonStateUpdate.version;
             }
 
             // Update storage using applyMachines which rebuilds sessionListViewData
