@@ -1379,7 +1379,13 @@ export class ApiSessionClient extends EventEmitter {
     updateMetadata(handler: (metadata: Metadata) => Metadata) {
         this.metadataLock.inLock(async () => {
             await backoff(async () => {
-                let updated = stripCapabilitiesFromMetadata(handler(this.metadata!)); // Weird state if metadata is null - should never happen but here we are
+                const next = handler(this.metadata!); // Weird state if metadata is null - should never happen but here we are
+                // A handler that changes nothing returns the metadata as it is: skip the round trip, so a
+                // run of no-op updates (one per backfilled message) doesn't hold up the ones behind it
+                if (next === this.metadata) {
+                    return;
+                }
+                let updated = stripCapabilitiesFromMetadata(next);
                 recordSessionBinding(this.sessionId, updated);
                 const answer = await this.socket.emitWithAck('update-metadata', { sid: this.sessionId, expectedVersion: this.metadataVersion, metadata: encodeBase64(encrypt(this.encryptionKey, this.encryptionVariant, updated)) });
                 if (answer.result === 'success') {
