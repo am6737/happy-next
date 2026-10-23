@@ -124,6 +124,7 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Orchestrator tasks are end-to-end encrypted — the server never sees a task's title, prompt, command, working directory or target machines — and only go to machines whose CLI can open them
 - `orchestrator_transfer` copies files and directories between machines, streamed end-to-end encrypted
 - Search runs by title and filter them by status, agent and machine, each run showing its agent's icon
+- Text on the orchestrator pages can be selected and copied on web and desktop
 
 ### Pending Message Queue
 - Messages sent while the CLI is busy are queued server-side and auto-dispatched
@@ -191,6 +192,7 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Copy the current browser breadcrumb path directly from the navigation bar
 - Loading feedback for bulk git actions while the operation runs
 - Opening Files from git status focuses the relevant changed files
+- The folder picker holds still when going into or out of a folder, with a back button beside home
 
 ### Session Sharing
 - Share sessions with friends via direct invite or public link
@@ -213,6 +215,8 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Empty chats show a consistently centered empty state
 - DooTask devices are identified as Happy Next, with a simpler connection login and cross-device connection sync
 - The task list is cached per filter and refreshed in the background
+- Tap any image in a chat to browse every image in it; messages offer select-copy, and copy takes a long message's full text
+- A one-to-one chat's details show the other person's card — avatar, online status, title, department and email
 
 ### Self-Hosting
 - One-command `docker-compose up` (Web + API + Voice + Postgres + Redis + MinIO)
@@ -340,6 +344,10 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - The image viewer moves between images with the arrow keys on web and desktop, previous and next buttons on the web, and a tap on a pagination dot
 - The command palette marks archived sessions with an Archived badge
 
+- Photos, videos, files, text and links shared from another app open in a new or online session's composer, nothing sent; on iOS you pick the session right in the share sheet
+- Long text in the composer opens on a full page of its own, with a send button at the bottom
+- The Library entry takes videos too, uploaded to the session's machine as files
+
 ### CLI
 - `happy update` self-upgrade, `happy --version` with all agent versions
 - Daemon auto-start on boot (`happy daemon enable/disable`), restart command
@@ -410,7 +418,7 @@ Full changelog: [docs/changes-from-happy.md](docs/changes-from-happy.md)
 - The status row marks the session's vendor with a small logo in front of the model label, derived from the same source as the model list
 - The desktop sidebar, welcome screen and settings draw the brand wordmark from the outlined SVG logos
 
-- iOS 26: floating buttons, the action menu, and bottom sheets use Liquid Glass; header, row, long-press, picker, filter, and attachment menus open as native iOS menus; and every screen sits under the soft scroll-edge header with connection status in its subtitle
+- iOS 26: floating buttons and the action menu use Liquid Glass, and every bottom sheet floats as a Liquid Glass card, centered at a readable width in wide windows; header, row, long-press, picker, filter, and attachment menus open as native iOS menus; and every screen sits under the soft scroll-edge header with connection status in its subtitle
 - Pressed session rows, task cards, and GitHub rows highlight like the other lists
 - Terminals open from the Features group in Settings, and the HTML preview takes the page's own title
 - Terminals also open from a session's quick actions, are drawn with xterm.js on the web with CJK text, spaces and styled runs kept on their cells, open in a popup window in desktop browsers, stay mounted while recently shown, and show a hollow cursor when unfocused

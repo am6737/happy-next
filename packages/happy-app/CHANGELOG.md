@@ -1,5 +1,27 @@
 # Changelog
 
+## Version 36 - 2026-10-23
+
+Happy Next v2.21.0 opens what you share from other apps in Happy — photos, videos, files, text and links go straight into a session's composer, picked right in the iOS share sheet. Long prompts get a page of their own, every bottom sheet turns to Liquid Glass on iOS 26, and DooTask chats gain an image gallery, select-copy and a person card. Happy CLI is updated to v0.16.2.
+
+- Sharing: photos, videos, files, text and links shared from another app open in Happy — pick a new session or an online one (searchable) and its composer opens with the content filled in, nothing sent; on iOS you pick right in the share sheet, with each session's avatar
+- Composer: long text gets an expand button that opens it on a full page, with a send button at the bottom
+- Composer: Photos becomes Library and takes videos too, uploaded to the session's machine as files
+- Composer: / and $ suggestions open right above the input card, like the model picker
+- iOS 26: every bottom sheet, including the machine switcher and folder picker, floats as a Liquid Glass card
+- Bottom sheets stay centered at a readable width in wide windows
+- DooTask: tap any image in a chat to browse every image in it; messages gain select-copy, and copy takes a long message's full text
+- DooTask: a one-to-one chat's details show the other person's card — avatar, online status, title, department and email
+- Folder picker: no longer jumps when going into or out of a folder, and going up is a back button beside home
+- Orchestrator: text on its pages can be selected and copied on web and desktop, and a run no longer sends a second finish notice
+- Chat: a chat opens already at its end, and the list holds still while the composer shrinks after a send
+- Sessions: a copied or resumed session shows loading… until its history arrives (needs Happy CLI v0.16.2)
+- Machines: a machine's CLI update icon no longer comes back after updating
+- Desktop: a space typed with an input method in English mode no longer comes out twice in the terminal, and the page header no longer drags the window
+- Headers: page buttons show from the first frame, and subtitles sit at the same height on every tab
+- Android: prompt inputs no longer cut off their text, and the session menu shows the session's name and responds to the first tap
+- CLI: Happy CLI v0.16.2 lists only the prompts you sent in /duplicate, copied sessions and the message archive
+
 ## Version 35 - 2026-10-21
 
 Happy Next v2.20.0 lays the session list, inbox, DooTask and GitHub lists flat on the background, sets text in the system font so Chinese and Latin share the same weights, and moves deleting and friend actions from swipes into long-press and right-click menus. The image viewer steps through images with the keyboard, arrows and dots. Happy CLI is updated to v0.16.1.

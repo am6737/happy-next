@@ -83,6 +83,7 @@ A multi-agent orchestration system that lets you define task dependency graphs a
 - **Encrypted tasks**: a task's title, prompt, command, working directory and target machines are end-to-end encrypted, so the server never sees them, and tasks only go to machines whose CLI can open them
 - **`orchestrator_transfer`**: copy files and directories between machines — send from this one, fetch to it, or relay between two others — streamed end-to-end encrypted
 - **Run search and filters**: search runs by title and filter them by status, agent and machine, each run showing its agent's icon
+- **Selectable text**: text on the orchestrator pages can be selected and copied on web and desktop
 
 ## Pending Message Queue
 
@@ -203,6 +204,7 @@ The app now includes a full code browsing and git management experience.
 - **Breadcrumb path copy**: copy the current browser breadcrumb path directly from the navigation bar
 - **Bulk git action feedback**: loading indicator shown while bulk git operations run
 - **Git status file focus**: opening Files from git status focuses the relevant changed files
+- **Steady folder picker**: the folder picker holds still when going into or out of a folder, with a back button beside home
 
 ## Session Sharing
 
@@ -247,6 +249,9 @@ Deep integration with DooTask project management, from browsing tasks to launchi
 - **Simple status badge**: tasks without workflow show a simple status badge
 - **Centered empty chats**: the empty state stays centered consistently when a chat has no messages
 - **Cached task list**: the task list is cached per filter and refreshed in the background
+- **Chat image gallery**: tap any image in a chat to browse every image in it
+- **Select-copy**: messages offer select-copy, and copy takes a long message's full text
+- **Person card**: a one-to-one chat's details show the other person's avatar, online status, title, department and email
 
 ## Self-Hosting
 
@@ -416,6 +421,9 @@ Extensive improvements to the chat and session management experience.
 - **Copied context**: a copied Claude session's context bar reads right from the start
 - **Image viewer navigation**: arrow keys on web and desktop, previous and next buttons on the web, and a tap on a pagination dot move between images
 - **Archived in the palette**: the command palette marks archived sessions with an Archived badge
+- **Share into Happy**: photos, videos, files, text and links shared from another app open in a new or online session's composer, nothing sent; on iOS you pick the session right in the share sheet
+- **Full-page composer**: long text opens on a page of its own, with a send button at the bottom
+- **Videos from the library**: the Library entry takes videos too, uploaded to the session's machine as files
 
 ## CLI Improvements
 
@@ -516,7 +524,7 @@ The CLI (`happy-next-cli`) received substantial upgrades.
 - **Vendor mark**: a small logo derived from the session's flavor — the same source the model list uses — sits in front of the model's short label, so a session's vendor no longer needs the model list opened to be known
 - **SVG wordmark**: the desktop sidebar, the welcome screen and the settings logo view draw the brand wordmark from the outlined SVG exports instead of rasterised PNGs
 
-- **iOS 26 Liquid Glass**: floating buttons, the action menu, and bottom sheets use Liquid Glass
+- **iOS 26 Liquid Glass**: floating buttons and the action menu use Liquid Glass, and every bottom sheet floats as a Liquid Glass card, centered at a readable width in wide windows
 - **Native iOS menus**: header, row, long-press, picker, filter, and attachment menus open as native iOS menus
 - **Soft header everywhere**: every screen sits under the soft scroll-edge header, with connection status in its subtitle
 - **Pressed-row highlight**: session rows, task cards, and GitHub rows highlight when pressed, like the other lists
