@@ -457,8 +457,9 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
     // be new each time and re-render the composer with every streamed message.
     const { statusText, statusColor, statusDotColor, isPulsing: statusPulsing, state: statusState } = sessionStatus;
     // A resumed or copied session whose CLI is still sending its history in reads "loading…" where
-    // it would read "online", rather than passing for an empty new session.
-    const historyLoading = session.metadata?.historyBackfill === 'pending';
+    // it would read "online", rather than passing for an empty new session. It reads "online" as
+    // soon as the history shows, without waiting on the CLI's own "done" round trip.
+    const historyLoading = session.metadata?.historyBackfill === 'pending' && messages.length === 0;
     const inputConnectionStatus = React.useMemo(() => {
         if (isListRefreshing) {
             return {
