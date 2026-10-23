@@ -453,6 +453,7 @@ export const ja: TranslationStructure = {
         typeMessage: 'メッセージを入力...',
         reply: '返信',
         copyMessage: 'コピー',
+        selectCopy: 'テキストを選択',
         cancelReply: 'キャンセル',
         loadingChat: 'チャットを読み込み中...',
         errorLoadChat: 'チャットの読み込みに失敗しました',

@@ -325,6 +325,16 @@ export async function dootaskFetchDialogUsers(serverUrl: string, token: string, 
     return response.json();
 }
 
+/** A message's detail; a longtext message's comes with its full text in `content` ({ type: 'md' | 'htm', content }). */
+export async function dootaskFetchMsgDetail(serverUrl: string, token: string, msgId: number): Promise<DooTaskResponse> {
+    const url = validateServerUrl(serverUrl);
+    const response = await fetch(`${url}/api/dialog/msg/detail?msg_id=${msgId}`, {
+        method: 'GET',
+        headers: buildHeaders(token),
+    });
+    return response.json();
+}
+
 export async function dootaskOpenUserDialog(serverUrl: string, token: string, userId: number): Promise<DooTaskResponse> {
     const url = validateServerUrl(serverUrl);
     const response = await fetch(`${url}/api/dialog/open/user?userid=${userId}`, {

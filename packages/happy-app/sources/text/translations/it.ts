@@ -450,6 +450,7 @@ export const it: TranslationStructure = {
         typeMessage: 'Type a message...',
         reply: 'Reply',
         copyMessage: 'Copia',
+        selectCopy: 'Seleziona testo',
         cancelReply: 'Cancel',
         loadingChat: 'Loading chat...',
         errorLoadChat: 'Failed to load chat',

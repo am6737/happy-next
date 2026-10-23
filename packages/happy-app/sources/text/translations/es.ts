@@ -451,6 +451,7 @@ export const es: TranslationStructure = {
         typeMessage: 'Type a message...',
         reply: 'Reply',
         copyMessage: 'Copiar',
+        selectCopy: 'Seleccionar texto',
         cancelReply: 'Cancel',
         loadingChat: 'Loading chat...',
         errorLoadChat: 'Failed to load chat',

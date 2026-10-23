@@ -100,6 +100,8 @@ export const HtmlContent = React.memo(({ html, theme, cacheKey, selectable, maxI
 body { margin: 0; padding: 0; color: ${theme.colors.text}; font-size: 14px; line-height: 1.6; background: transparent; font-family: -apple-system, BlinkMacSystemFont, sans-serif; word-break: break-word;${isSelf ? ' text-align: right;' : ''}${selectable ? '' : ' -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;'} }
 p { margin: 0.3em 0; }
 pre, code, blockquote, ul, ol, table { text-align: left; }
+/* The WebView spans the bubble's width: a self message's content hugs the right edge, as on web, but reads left to right. */
+.content { display: inline-block; max-width: 100%; text-align: left; vertical-align: top; }
 img { max-width: ${maxImageWidth ? `${maxImageWidth}px` : '100%'}; height: auto; border-radius: 4px; cursor: pointer; }
 a { color: #0A84FF; }
 pre, code { background: ${theme.colors.surfaceHighest || '#2a2a2a'}; border-radius: 4px; padding: 2px 4px; font-size: 13px; }
@@ -116,7 +118,7 @@ th, td { border: 1px solid ${theme.colors.divider || '#333'}; padding: 6px 8px; 
 .tox-checklist li::before { content: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Crect x='1' y='1' width='14' height='14' rx='2' fill='none' stroke='%23888' stroke-width='1.5'/%3E%3C/svg%3E"); margin-left: -24px; margin-right: 8px; vertical-align: middle; }
 .tox-checklist li.tox-checklist--checked::before { content: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Crect x='1' y='1' width='14' height='14' rx='2' fill='%234099ff' stroke='%234099ff' stroke-width='1.5'/%3E%3Cpath d='M4.5 8l2.5 2.5 4.5-5' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); }
 </style>
-</head><body>${html}
+</head><body><div class="content">${html}</div>
 <script>
 function sendHeight() { window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'height', height: document.body.scrollHeight })); }
 function sendImages() {

@@ -9,12 +9,13 @@ import { ChatHeaderTitle } from '@/components/ChatHeaderTitle';
 import { AgentContentView } from '@/components/AgentContentView';
 import { storage, useDootaskProfile, useDootaskUserCache, useDootaskUserAvatars, useDootaskUserDisabledAt } from '@/sync/storage';
 import { useShallow } from 'zustand/react/shallow';
-import { dootaskFetchDialogMessages, dootaskSendTextMessage, dootaskSendFileMessage, dootaskSendFileByUri, dootaskToggleEmoji, dootaskFetchDialogOne, dootaskFetchDialogUsers, dootaskFetchUsersBasic } from '@/sync/dootask/api';
+import { dootaskFetchDialogMessages, dootaskSendTextMessage, dootaskSendFileMessage, dootaskSendFileByUri, dootaskToggleEmoji, dootaskFetchDialogOne, dootaskFetchDialogUsers, dootaskFetchUsersBasic, dootaskFetchMsgDetail } from '@/sync/dootask/api';
 import { BottomSheetModal } from '@gorhom/bottom-sheet';
 import { DialogDetailModal } from '@/components/dootask/DialogDetailModal';
+import { storeTempText } from '@/sync/persistence';
 import { useDootaskWebSocket } from '@/hooks/useDootaskWebSocket';
 import { ChatMessageList } from '@/components/dootask/ChatMessageList';
-import { thumbRestore } from '@/components/dootask/ChatBubble';
+import { thumbRestore, stripHtml, getMsgImageUrls } from '@/components/dootask/ChatBubble';
 import { ChatInput } from '@/components/dootask/ChatInput';
 import { ImageViewer } from '@/components/ImageViewer';
 import { MessageContextMenu, ContextMenuAction, MessagePreview } from '@/components/dootask/MessageContextMenu';
@@ -132,24 +133,22 @@ export default React.memo(function DooTaskChat() {
     const [imageViewerIndex, setImageViewerIndex] = React.useState(0);
     const [viewerImages, setViewerImages] = React.useState<{ uri: string }[]>([]);
 
-    // Pre-collect file-upload image URLs (type='image' with path) for gallery browsing.
-    // Uses a ref so handleImagePress doesn't depend on the array identity.
-    const fileImageUrlsRef = React.useRef<{ uri: string }[]>([]);
-    React.useMemo(() => {
-        const urls: { uri: string }[] = [];
-        const base = (profile?.serverUrl || '').replace(/\/+$/, '') + '/';
-        for (const msg of messages) {
-            if (msg.type === 'image') {
-                const path = msg.msg?.path || msg.msg?.url || msg.msg?.thumb;
-                if (path) {
-                    const resolved = path.replace(/\{\{RemoteURL\}\}/g, base);
-                    const url = resolved.startsWith('http') ? resolved : base + resolved.replace(/^\/+/, '');
-                    urls.push({ uri: thumbRestore(url) });
-                }
+    // Every image in the loaded messages, oldest first, so tapping any one opens a gallery
+    // of them all. A ref keeps handleImagePress from depending on the array identity.
+    const chatImagesRef = React.useRef<{ uri: string }[]>([]);
+    chatImagesRef.current = React.useMemo(() => {
+        const serverUrl = profile?.serverUrl || '';
+        const seen = new Set<string>();
+        const images: { uri: string }[] = [];
+        // messages is newest-first
+        for (let i = messages.length - 1; i >= 0; i--) {
+            for (const uri of getMsgImageUrls(messages[i], serverUrl)) {
+                if (seen.has(uri)) continue;
+                seen.add(uri);
+                images.push({ uri });
             }
         }
-        fileImageUrlsRef.current = urls;
-        return urls;
+        return images;
     }, [messages, profile?.serverUrl]);
 
     // Keep the API's newest-first order; ChatMessageList reverses it for LegendList.
@@ -498,6 +497,35 @@ export default React.memo(function DooTaskChat() {
         if (fn) fn();
     }, []);
 
+    // A longtext message carries only an excerpt: copying it, or selecting from it, uses its full
+    // text, falling back to the excerpt. A Markdown message is kept as written, for selection as Markdown.
+    const loadMessageText = React.useCallback(async (msg: DooTaskDialogMsg, rawText: string, plainText: string) => {
+        let isMd = typeof msg.msg === 'object' && msg.msg?.type === 'md';
+        let text = isMd ? rawText : plainText;
+        if (msg.type === 'longtext' && profile) {
+            try {
+                const res = await dootaskFetchMsgDetail(profile.serverUrl, profile.token, msg.id);
+                const content = res.ret === 1 ? res.data?.content : null;
+                if (typeof content?.content === 'string' && content.content) {
+                    isMd = content.type === 'md';
+                    text = isMd ? content.content : stripHtml(content.content);
+                }
+            } catch {}
+        }
+        return { text, isMd };
+    }, [profile]);
+
+    const copyMessageText = React.useCallback(async (msg: DooTaskDialogMsg, rawText: string, plainText: string) => {
+        const { text } = msg.type === 'longtext' ? await loadMessageText(msg, rawText, plainText) : { text: plainText };
+        await Clipboard.setStringAsync(text);
+    }, [loadMessageText]);
+
+    const openTextSelection = React.useCallback(async (msg: DooTaskDialogMsg, rawText: string, plainText: string) => {
+        const { text, isMd } = await loadMessageText(msg, rawText, plainText);
+        const textId = storeTempText(text);
+        router.push({ pathname: '/text-selection', params: { textId, format: isMd ? 'markdown' : 'plain' } });
+    }, [loadMessageText, router]);
+
     // Long press context menu -> reply / copy / emoji
     const handleMessageLongPress = React.useCallback((msg: DooTaskDialogMsg, layout?: { y: number; height: number }) => {
         const isSelf = msg.userid === (profile?.userId || 0);
@@ -510,23 +538,18 @@ export default React.memo(function DooTaskChat() {
             },
         ];
         const rawText = typeof msg.msg === 'string' ? msg.msg : (msg.msg?.text || '');
-        let plainText = '';
-        if (rawText) {
-            plainText = rawText
-                .replace(/<br\s*\/?>/gi, '\n')
-                .replace(/<\/p>/gi, '\n')
-                .replace(/<[^>]+>/g, '')
-                .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
-                .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, ' ')
-                .replace(/\n{3,}/g, '\n\n')
-                .trim();
-            if (plainText) {
-                actions.push({
-                    label: t('dootask.copyMessage'),
-                    icon: 'copy-outline',
-                    onPress: () => { Clipboard.setStringAsync(plainText); },
-                });
-            }
+        const plainText = rawText ? stripHtml(rawText) : '';
+        if (plainText) {
+            actions.push({
+                label: t('dootask.copyMessage'),
+                icon: 'copy-outline',
+                onPress: () => { void copyMessageText(msg, rawText, plainText); },
+            });
+            actions.push({
+                label: t('dootask.selectCopy'),
+                icon: 'text-outline',
+                onPress: () => { void openTextSelection(msg, rawText, plainText); },
+            });
         }
 
         // Build preview content — always plain text to avoid WebView layout issues
@@ -554,7 +577,7 @@ export default React.memo(function DooTaskChat() {
             y: layout?.y ?? 200,
             height: layout?.height ?? 60,
         });
-    }, [userCache, profile?.userId, theme]);
+    }, [userCache, profile?.userId, theme, copyMessageText, openTextSelection]);
 
     // Emoji toggle handler
     const handleEmojiToggle = React.useCallback(async (msgId: number, symbol: string) => {
@@ -673,18 +696,19 @@ export default React.memo(function DooTaskChat() {
         </Pressable>
     ), [styles.headerIconButton, handleOpenDetail, resolvedDialogAvatar]);
 
-    // Image press -> open viewer
-    // For file-upload images: show all file images as a gallery
-    // For HTML-embedded images: show just the clicked image
+    // Image press -> open the chat's gallery at the tapped image
     const handleImagePress = React.useCallback((url: string) => {
         const original = thumbRestore(url);
-        const fileImages = fileImageUrlsRef.current;
-        const idx = fileImages.findIndex(img => img.uri === original);
+        const images = chatImagesRef.current;
+        // A WebView reports img.src percent-encoded (e.g. Chinese file names), so compare decoded
+        const decode = (u: string) => { try { return decodeURI(u); } catch { return u; } };
+        const target = decode(original);
+        const idx = images.findIndex(img => img.uri === original || decode(img.uri) === target);
         if (idx >= 0) {
-            setViewerImages(fileImages);
+            setViewerImages(images);
             setImageViewerIndex(idx);
         } else {
-            // Image from HTML content — not in the pre-collected gallery
+            // e.g. an emoticon, which the gallery leaves out
             setViewerImages([{ uri: original }]);
             setImageViewerIndex(0);
         }

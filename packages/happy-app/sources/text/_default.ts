@@ -461,6 +461,7 @@ export const en = {
         typeMessage: 'Type a message...',
         reply: 'Reply',
         copyMessage: 'Copy',
+        selectCopy: 'Select Text',
         cancelReply: 'Cancel',
         loadingChat: 'Loading chat...',
         errorLoadChat: 'Failed to load chat',

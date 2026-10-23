@@ -411,6 +411,7 @@ export const ru: TranslationStructure = {
         typeMessage: 'Type a message...',
         reply: 'Reply',
         copyMessage: 'Копировать',
+        selectCopy: 'Выделить текст',
         cancelReply: 'Cancel',
         loadingChat: 'Loading chat...',
         errorLoadChat: 'Failed to load chat',

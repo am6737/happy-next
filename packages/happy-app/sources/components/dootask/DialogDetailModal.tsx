@@ -1,10 +1,11 @@
 import * as React from 'react';
-import { View, Text, ActivityIndicator } from 'react-native';
+import { View, Text, ActivityIndicator, Pressable } from 'react-native';
 import { Image } from 'expo-image';
 import { BottomSheetModal, BottomSheetFlatList, BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppBottomSheet } from '@/components/AppBottomSheet';
 import { SearchField } from '@/components/SearchField';
+import { ImageViewer } from '@/components/ImageViewer';
 import { Item } from '@/components/Item';
 import { ItemGroup } from '@/components/ItemGroup';
 import { SHEET_ITEM_GROUP_STYLE, sheetFill, sheetSafeAreaBottom } from '@/components/glassSheet';
@@ -113,12 +114,16 @@ const UserDialogDetail = React.memo(function UserDialogDetail({
     const profession = peerProfile?.profession || member?.profession;
     const department = peerProfile?.department_name;
     const mail = email || peerProfile?.email;
+    const [avatarViewerVisible, setAvatarViewerVisible] = React.useState(false);
+    const avatarImages = React.useMemo(() => (avatar ? [{ uri: avatar }] : []), [avatar]);
 
     return (
         <BottomSheetScrollView contentContainerStyle={{ paddingBottom: sheetSafeAreaBottom(insets.bottom) + 16 }}>
             <View style={cardStyles.header}>
                 {avatar ? (
-                    <Image source={{ uri: avatar }} style={{ width: HEADER_AVATAR_SIZE, height: HEADER_AVATAR_SIZE, borderRadius: HEADER_AVATAR_SIZE / 2 }} contentFit="cover" />
+                    <Pressable onPress={() => setAvatarViewerVisible(true)}>
+                        <Image source={{ uri: avatar }} style={{ width: HEADER_AVATAR_SIZE, height: HEADER_AVATAR_SIZE, borderRadius: HEADER_AVATAR_SIZE / 2 }} contentFit="cover" />
+                    </Pressable>
                 ) : (
                     <View style={cardStyles.avatarPlaceholder}>
                         <Text style={cardStyles.avatarInitial}>{(name || '?')[0].toUpperCase()}</Text>
@@ -141,6 +146,7 @@ const UserDialogDetail = React.memo(function UserDialogDetail({
                 <Item title={t('dootask.department')} detail={department || '-'} copy={department || false} showChevron={false} />
                 <Item title={t('dootask.email')} detail={mail || '-'} copy={mail || false} showChevron={false} />
             </ItemGroup>
+            <ImageViewer images={avatarImages} visible={avatarViewerVisible} onClose={() => setAvatarViewerVisible(false)} />
         </BottomSheetScrollView>
     );
 });
@@ -267,6 +273,7 @@ const cardStyles = StyleSheet.create((theme) => ({
         flexDirection: 'row',
         alignItems: 'center',
         gap: 6,
+        marginTop: 4,
     },
     statusDot: {
         width: 8,
@@ -285,7 +292,7 @@ const cardStyles = StyleSheet.create((theme) => ({
         color: theme.colors.textSecondary,
     },
     tag: {
-        marginTop: 2,
+        marginTop: 4,
         paddingHorizontal: 8,
         paddingVertical: 2,
         borderRadius: 4,

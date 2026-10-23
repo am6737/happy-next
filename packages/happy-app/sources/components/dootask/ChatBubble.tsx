@@ -58,7 +58,7 @@ function getMsgSimpleDesc(data: any): string {
 }
 
 /** Strip HTML tags from chat message text, converting block elements to newlines. */
-function stripHtml(html: string): string {
+export function stripHtml(html: string): string {
     return html
         .replace(/<br\s*\/?>/gi, '\n')
         .replace(/<\/p>/gi, '\n')
@@ -547,6 +547,47 @@ function getMsgImageUrl(msg: DooTaskDialogMsg, serverUrl: string): string | null
     const path = msg.msg?.path || msg.msg?.url || msg.msg?.thumb || null;
     if (!path) return null;
     return resolveUrl(path, serverUrl);
+}
+
+/**
+ * Original-size URLs of every image a message shows, in the order they render — the
+ * same URLs its bubble hands to onImagePress (after thumbRestore), so the chat can
+ * gather them into one gallery. Emoticons are left out.
+ */
+export function getMsgImageUrls(msg: DooTaskDialogMsg, serverUrl: string): string[] {
+    const urls: string[] = [];
+    const push = (url: string) => {
+        if (url.indexOf('emoticon') > -1) return;
+        urls.push(thumbRestore(url));
+    };
+    if (msg.type === 'image') {
+        const imageUrl = getMsgImageUrl(msg, serverUrl);
+        if (imageUrl) {
+            push(imageUrl);
+            return urls;
+        }
+    } else if (msg.type === 'file') {
+        const filePath = msg.msg?.path || msg.msg?.url;
+        if (msg.msg?.type === 'img' && filePath) push(resolveUrl(filePath, serverUrl));
+        return urls;
+    } else if (msg.type !== 'text' && msg.type !== 'longtext') {
+        return urls;
+    }
+    const text = getMsgText(msg);
+    if (!text) return urls;
+    if (typeof msg.msg === 'object' && msg.msg?.type === 'md') {
+        for (const line of text.split('\n')) {
+            const img = line.match(/^!\[([^\]]*)\]\(([^)]+)\)\s*$/);
+            if (img) push(resolveUrl(img[2], serverUrl));
+        }
+        return urls;
+    }
+    const html = resolveContentUrls(text, serverUrl);
+    for (const match of html.matchAll(/<img\b[^>]*?\ssrc=(["'])([^'"]*)\1/gi)) {
+        // The WebView reports img.src, where the entity is already decoded
+        if (match[2]) push(match[2].replace(/&amp;/g, '&'));
+    }
+    return urls;
 }
 
 function formatFileSize(bytes: number): string {

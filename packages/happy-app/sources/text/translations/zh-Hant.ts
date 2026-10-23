@@ -452,6 +452,7 @@ export const zhHant: TranslationStructure = {
         typeMessage: '輸入訊息...',
         reply: '回覆',
         copyMessage: '複製',
+        selectCopy: '選擇複製',
         cancelReply: '取消',
         loadingChat: '載入聊天中...',
         errorLoadChat: '載入聊天失敗',

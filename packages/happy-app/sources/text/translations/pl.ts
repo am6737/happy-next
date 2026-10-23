@@ -462,6 +462,7 @@ export const pl: TranslationStructure = {
         typeMessage: 'Type a message...',
         reply: 'Reply',
         copyMessage: 'Kopiuj',
+        selectCopy: 'Zaznacz tekst',
         cancelReply: 'Cancel',
         loadingChat: 'Loading chat...',
         errorLoadChat: 'Failed to load chat',

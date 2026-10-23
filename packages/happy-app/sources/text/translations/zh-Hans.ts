@@ -453,6 +453,7 @@ export const zhHans: TranslationStructure = {
         typeMessage: '输入消息...',
         reply: '回复',
         copyMessage: '复制',
+        selectCopy: '选择复制',
         cancelReply: '取消',
         loadingChat: '加载聊天中...',
         errorLoadChat: '加载聊天失败',
