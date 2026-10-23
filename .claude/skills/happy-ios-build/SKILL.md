@@ -90,7 +90,7 @@ waitMs=0
 4. **Mac mini 只有已经过期的 WWDR G1**，分发证书是 G3 签发的，所以要把 G3 导入临时钥匙串，否则会出现「0 valid identities」。
 5. **钥匙串搜索列表要写死路径**（login、临时钥匙串、System），不要解析 `security list-keychains` 的输出。还原时要先恢复搜索列表，再删除钥匙串。
 6. **生产环境变量要在 prebuild 和 archive 时各 source 一次。** `EXPO_PUBLIC_*` 是在 archive 的打包 JS 阶段才内联进去的。`APP_ENV=production` 不在 prod.env 里，要单独 export。`CI=1` 用来避免 prebuild 停下来问问题。
-7. **正式版流程中不要跑 `yarn install`**，它会清掉 `react-native-audio-api` 的 iOS 预编译库（之后要靠 pod install 重新下载）。开发版只在 `yarn.lock` 变化时跑一次 yarn install，并且之后一定会跑 pod install。
+7. **正式版流程中不要跑 `yarn install`**，它会清掉 `react-native-audio-api` 的 iOS 预编译库（之后要靠 pod install 重新下载）。开发版只在 `yarn.lock` 变化时跑一次 yarn install，并且之后一定会跑 pod install。只改了 patch 时 yarn install 不会跑，所以两个脚本都会先执行 `sync_patches`（common.sh）：按 `~/.happy-ios-build/patches-commit` 记录的提交，把改过的 patch 的旧版本用 `patch -R` 撤掉，再跑 patch-package 套上新版本。
 8. **`eas env:pull` 拿不到两个仅 Android 用的 secret 文件变量**（HMS / Honor）。这对 iOS 没有影响。
 9. **appdown 的路由使用去掉 `.ipa` 的文件名**：`/b/<名字>/manifest.plist`。
 10. **exportArchive 日志里的 `missing Xcode-Username` 警告无害**，以退出码为准。
@@ -107,4 +107,4 @@ waitMs=0
 
 ## 状态文件（Mac mini）
 
-`~/.happy-ios-build/` 下保存这些文件：`lock`（构建锁）、`prod-build-number`、`dev-commit`、`yarn.lock.sha`。每次构建的日志放在 `RESULT_LOGS` 指向的目录里。
+`~/.happy-ios-build/` 下保存这些文件：`lock`（构建锁）、`prod-build-number`、`dev-commit`、`yarn.lock.sha`、`patches-commit`（node_modules 里套的是哪个提交的 patch）。每次构建的日志放在 `RESULT_LOGS` 指向的目录里。

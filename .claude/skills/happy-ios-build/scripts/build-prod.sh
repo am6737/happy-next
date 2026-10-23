@@ -26,6 +26,7 @@ WORK=/tmp/happy-prod-$TS
 mkdir -p "$WORK"
 git status --porcelain -uall > "$WORK/git-before.txt"
 echo "commit $SHA, work dir $WORK"
+sync_patches "$WORK/patches.log"
 
 cd "$APP"
 [ ! -e credentials.json ] && [ ! -e credentials ] || die "credentials.json / credentials/ already exist in $APP; look at them before building"

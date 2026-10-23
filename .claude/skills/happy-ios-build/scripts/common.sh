@@ -72,3 +72,28 @@ publish_ipa() {
     fi
     echo "RESULT_INSTALL_URL=$APPDOWN_URL/?platform=ios"
 }
+
+# patch-package applies a patch only to the package as installed: a changed patch fails on top of
+# its old version, and yarn install runs only when yarn.lock changes. So the commit whose patches
+# node_modules carries is kept in $STATE/patches-commit; each patch changed since is taken back in
+# its old version, and patch-package applies what HEAD has. Patches live in patches/ (applied at the
+# repo root) and packages/happy-app/patches/ (applied in the app). Run in $REPO.
+sync_patches() {
+    local logfile="$1" prev changed f dir
+    prev=$(cat "$STATE/patches-commit" 2>/dev/null || cat "$STATE/dev-commit" 2>/dev/null || true)
+    [ -n "$prev" ] && git cat-file -e "$prev^{commit}" 2>/dev/null \
+        || die "no record of the patches in node_modules; delete $STATE/yarn.lock.sha so the dev build runs yarn install"
+    changed=$(git diff --name-only "$prev" HEAD -- patches packages/happy-app/patches)
+    if [ -n "$changed" ]; then
+        log "patches changed → re-apply"
+        for f in $changed; do
+            dir="$REPO/$(dirname "$(dirname "$f")")"
+            if git cat-file -e "$prev:$f" 2>/dev/null; then
+                git show "$prev:$f" | patch -p1 -R -s -f -d "$dir" > /dev/null || die "could not take back the old $f"
+            fi
+        done
+        (cd "$REPO" && run_logged "$logfile" npx patch-package)
+        (cd "$APP" && run_logged "$logfile.app" npx patch-package)
+    fi
+    git rev-parse HEAD > "$STATE/patches-commit"
+}

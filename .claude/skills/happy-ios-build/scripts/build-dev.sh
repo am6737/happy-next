@@ -29,8 +29,10 @@ if [ "$(cat "$STATE/yarn.lock.sha" 2>/dev/null || true)" != "$LOCK_SHA" ]; then
     log "yarn.lock changed → yarn install"
     run_logged "$WORK/yarn.log" yarn install --frozen-lockfile
     echo "$LOCK_SHA" > "$STATE/yarn.lock.sha"
+    git rev-parse HEAD > "$STATE/patches-commit"   # its postinstall applied HEAD's patches
     NEED_POD=1   # yarn install drops prebuilt binaries that pod install fetches again
 fi
+sync_patches "$WORK/patches.log"
 
 NEED_PREBUILD=0
 LAST=$(cat "$STATE/dev-commit" 2>/dev/null || true)
