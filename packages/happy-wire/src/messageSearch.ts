@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { userPromptText } from './userPrompt';
 
 // Message search, shared by the app (over its local message cache) and the CLI (over the per-session
 // message archive it keeps under ~/.happy-next/messages), so both find and quote the same messages.
@@ -44,9 +45,9 @@ export function messageSearchSnippet(text: string, rawQuery: string, maxLength =
 
 /**
  * The searchable text of a message as the CLI sends it (before encryption): what the user typed and
- * what the agent replied in prose. Tool calls, tool output, thinking, subagent traffic, plan updates
- * and Claude's post-compaction summary are left out — the summary repeats the whole conversation,
- * so it would match nearly every query.
+ * what the agent replied in prose. Prompts the user never sent (see userPromptText), tool calls,
+ * tool output, thinking, subagent traffic, plan updates and Claude's post-compaction summary are
+ * left out — the summary repeats the whole conversation, so it would match nearly every query.
  */
 export function extractSearchableMessage(message: unknown): { role: MessageSearchRole; text: string } | null {
     const record = message as { role?: unknown; content?: any; meta?: any } | null;
@@ -54,7 +55,7 @@ export function extractSearchableMessage(message: unknown): { role: MessageSearc
 
     if (record.role === 'user') {
         if (record.meta?.isCompactSummary) return null;
-        const text = typeof record.content?.text === 'string' ? record.content.text.trim() : '';
+        const text = typeof record.content?.text === 'string' ? userPromptText(record.content.text)?.trim() : null;
         return text ? { role: 'user', text } : null;
     }
     if (record.role !== 'agent') return null;

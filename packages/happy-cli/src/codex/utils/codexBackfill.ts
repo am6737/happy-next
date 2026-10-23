@@ -8,12 +8,11 @@
 
 import { basename, isAbsolute } from 'node:path';
 import { logger } from '@/ui/logger';
-import { isInjectedPrompt, selectBackfillTurns, withForkedHistoryNotices } from '@/modules/common/backfillTurns';
-import { stripAttachmentsFromPrompt } from '@/modules/common/fileUpload';
+import { userPromptText } from 'happy-wire';
+import { selectBackfillTurns, withForkedHistoryNotices } from '@/modules/common/backfillTurns';
 import {
     findCodexSessionFile,
     extractUserText,
-    isSystemMessage,
     generateStableUuid,
     readCodexSessionContent,
 } from './codexSessionReader';
@@ -127,12 +126,12 @@ export async function backfillCodexSessionHistory(opts: CodexBackfillOptions): P
         const timestamp = parsed.timestamp || '';
 
         if (payload?.role === 'user') {
-            const text = extractUserText(payload);
-            if (!text || isSystemMessage(text) || isInjectedPrompt(text)) continue;
+            const text = userPromptText(extractUserText(payload) ?? '');
+            if (!text) continue;
 
             allMessages.push({
                 role: 'user',
-                text: stripAttachmentsFromPrompt(text),
+                text,
                 timestamp,
                 index: msgIndex++,
             });

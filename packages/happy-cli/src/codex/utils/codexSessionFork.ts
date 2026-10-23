@@ -9,7 +9,8 @@ import { codexPackage } from '@/codex/package';
 import { CODEX_INITIALIZE_TIMEOUT_MS, resolveCodexRuntime } from '@/codex/codexRuntime';
 import { CodexJsonRpcPeer } from '../appserver/CodexJsonRpcPeer';
 import { Methods, type InitializeParams, type ThreadForkParams, type ThreadForkResponse, type ThreadTurnsListResponse } from '../appserver/types';
-import { findCodexSessionFile, generateStableUuid, extractUserText, isSystemMessage, readCodexSessionContent } from './codexSessionReader';
+import { userPromptText } from 'happy-wire';
+import { findCodexSessionFile, generateStableUuid, extractUserText, readCodexSessionContent } from './codexSessionReader';
 
 export interface CodexForkResult {
   success: boolean;
@@ -50,7 +51,7 @@ function readForkSource(content: string, truncateBeforeUuid?: string) {
 
     if (type !== 'response_item' || payload.role !== 'user') continue;
     const text = extractUserText(payload);
-    if (!text || isSystemMessage(text)) continue;
+    if (!text || userPromptText(text) === null) continue;
     if (generateStableUuid(timestamp ?? '', userIndex) === truncateBeforeUuid) {
       if (!currentTurnId) throw new Error('Cannot resolve the selected message to a Codex turn');
       if (turnsWithUserMessages.has(currentTurnId)) {

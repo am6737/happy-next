@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { isInjectedPrompt, selectBackfillTurns, withForkedHistoryNotices } from './backfillTurns';
-import { appendAttachmentsToPrompt, stripAttachmentsFromPrompt } from './fileUpload';
+import { stripAttachmentsFromPrompt } from 'happy-wire';
+import { selectBackfillTurns, withForkedHistoryNotices } from './backfillTurns';
+import { appendAttachmentsToPrompt } from './fileUpload';
 
 type Item = { role: 'prompt' | 'reply' | null; id: string };
 const item = (role: Item['role'], id: string): Item => ({ role, id });
@@ -18,14 +19,6 @@ describe('selectBackfillTurns', () => {
         const { selected, omittedTurns } = selectBackfillTurns(items, (i) => i.role, 2);
         expect(selected.map((i) => i.id)).toEqual(['p2', 'r2', 'p3', 'r3']);
         expect(omittedTurns).toBe(1);
-    });
-});
-
-describe('isInjectedPrompt', () => {
-    it('recognizes callbacks and task notifications, not prompts that mention them', () => {
-        expect(isInjectedPrompt('<orchestrator-callback>\nRun "x" reached terminal state: completed.\n</orchestrator-callback>')).toBe(true);
-        expect(isInjectedPrompt('<task-notification>done</task-notification>')).toBe(true);
-        expect(isInjectedPrompt('Why does <orchestrator-callback> show up?')).toBe(false);
     });
 });
 

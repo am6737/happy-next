@@ -9,8 +9,8 @@
 import { logger } from '@/ui/logger';
 import { readGeminiSessionLog } from './sessionReader';
 import type { GeminiSessionLine } from './sessionTypes';
-import { isInjectedPrompt, selectBackfillTurns, withForkedHistoryNotices } from '@/modules/common/backfillTurns';
-import { stripAttachmentsFromPrompt } from '@/modules/common/fileUpload';
+import { userPromptText } from 'happy-wire';
+import { selectBackfillTurns, withForkedHistoryNotices } from '@/modules/common/backfillTurns';
 
 export interface GeminiBackfillOptions {
     /** Gemini session ID (used to locate the JSONL file) */
@@ -27,7 +27,7 @@ function buildMessageContent(line: TextLine): unknown {
     if (line.type === 'user') {
         return {
             role: 'user',
-            content: { type: 'text', text: stripAttachmentsFromPrompt(line.message) },
+            content: { type: 'text', text: userPromptText(line.message) ?? line.message },
             meta: { sentFrom: 'cli' },
         };
     }
@@ -45,7 +45,7 @@ function buildMessageContent(line: TextLine): unknown {
 export async function backfillGeminiSessionHistory(opts: GeminiBackfillOptions): Promise<void> {
     const allLines = await readGeminiSessionLog(opts.sessionId);
     const textLines = allLines.filter((line): line is TextLine =>
-        (line.type === 'user' && !isInjectedPrompt(line.message)) || (line.type === 'assistant' && line.message.trim().length > 0));
+        (line.type === 'user' && userPromptText(line.message) !== null) || (line.type === 'assistant' && line.message.trim().length > 0));
 
     const { selected, omittedTurns } = selectBackfillTurns(textLines, (line) => line.type === 'user' ? 'prompt' : 'reply', opts.maxTurns ?? 20);
     const localIdPrefix = `gemini-log:${opts.sessionId}:`;

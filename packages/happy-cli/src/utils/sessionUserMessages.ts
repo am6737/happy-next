@@ -1,3 +1,5 @@
+import { userPromptText } from 'happy-wire';
+
 export interface SessionUserMessage {
     uuid: string;
     content: string;
@@ -40,12 +42,18 @@ export function paginateSessionUserMessages<T extends SessionUserMessage>(
     };
 }
 
+/**
+ * The message a chat row shows. The row holds the text as it reached the app — a slash command as
+ * Claude Code's markup, a prompt sent from the terminal with its attached-files block — so it is
+ * read by the same rule as the messages.
+ */
 export function resolveSessionUserMessage<T extends SessionUserMessage>(
     messages: T[],
     target: { text: string; createdAt?: number },
 ): T | null {
-    if (!target.text) return null;
-    const matches = messages.filter((message) => message.content === target.text);
+    const text = userPromptText(target.text) ?? target.text;
+    if (!text) return null;
+    const matches = messages.filter((message) => message.content === text);
     if (matches.length === 0) return null;
     if (matches.length === 1 || target.createdAt == null) return matches[0];
 

@@ -38,4 +38,13 @@ describe('sessionUserMessages', () => {
         expect(resolveSessionUserMessage(candidates, { text: 'before compact', createdAt: 1000 })?.uuid).toBe('before');
         expect(resolveSessionUserMessage(candidates, { text: 'after compact', createdAt: 3000 })?.uuid).toBe('after');
     });
+
+    it('resolves a chat row by the text the user typed', () => {
+        const candidates = [
+            { uuid: 'command', content: '/model opus', timestamp: new Date(1000).toISOString(), index: 0 },
+            { uuid: 'files', content: 'Look at this', timestamp: new Date(2000).toISOString(), index: 1 },
+        ];
+        expect(resolveSessionUserMessage(candidates, { text: '<command-name>/model</command-name>\n<command-args>opus</command-args>' })?.uuid).toBe('command');
+        expect(resolveSessionUserMessage(candidates, { text: 'Look at this\n\n<attached-files>\n- /tmp/a.png\n</attached-files>' })?.uuid).toBe('files');
+    });
 });

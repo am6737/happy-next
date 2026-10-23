@@ -7,15 +7,6 @@
 
 import { randomUUID } from 'node:crypto';
 
-// Texts Happy or the agent hands the agent as a prompt of its own: a run's terminal callback, a
-// background task's report. The user never sent them and a live session never shows them.
-const INJECTED_PROMPT_TAGS = ['task-notification', 'orchestrator-callback'];
-
-export function isInjectedPrompt(text: string): boolean {
-    const trimmed = text.trim();
-    return INJECTED_PROMPT_TAGS.some((tag) => trimmed.startsWith(`<${tag}>`) && trimmed.includes(`</${tag}>`));
-}
-
 /** A history entry's part in a turn: the prompt that opens it, a reply, or neither. */
 export type BackfillRole = 'prompt' | 'reply' | null;
 

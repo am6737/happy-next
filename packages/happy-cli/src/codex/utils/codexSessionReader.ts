@@ -18,6 +18,7 @@ import { basename, join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { createInterface } from 'node:readline';
 import { z } from 'zod';
+import { userPromptText } from 'happy-wire';
 import { logger } from '@/ui/logger';
 import {
   loadSessionMetadataCache,
@@ -173,20 +174,6 @@ export function extractUserText(payload: any): string | null {
 }
 
 /**
- * Detect system/environment messages that shouldn't appear in the user message picker.
- * Exported for use by codexSessionFork.ts truncation logic.
- */
-export function isSystemMessage(text: string): boolean {
-  const trimmed = text.trimStart();
-  return (
-    trimmed.startsWith('# AGENTS.md') ||
-    trimmed.startsWith('<environment_context') ||
-    trimmed.startsWith('<INSTRUCTIONS>') ||
-    trimmed.startsWith('# System instructions')
-  );
-}
-
-/**
  * Read user messages from a Codex session's native JSONL file.
  *
  * Codex JSONL uses response_item lines with payload.role === 'user'.
@@ -231,11 +218,10 @@ export async function readAllCodexSessionUserMessages(
       const parsed = JSON.parse(line);
 
       if (parsed.type === 'response_item' && parsed.payload?.role === 'user') {
-        const text = extractUserText(parsed.payload);
+        // Instructions, environment context and other prompts the user never sent are skipped —
+        // codexSessionFork counts the same messages, since the uuid carries the index
+        const text = userPromptText(extractUserText(parsed.payload) ?? '');
         if (!text) continue;
-
-        // Skip system messages
-        if (isSystemMessage(text)) continue;
 
         const timestamp = parsed.timestamp || '';
         messages.push({
@@ -349,8 +335,8 @@ async function parseCodexSessionMetadata(filePath: string): Promise<Omit<CodexSe
         }
 
         if (parsed.type === 'response_item' && parsed.payload?.role === 'user') {
-          const text = extractUserText(parsed.payload);
-          if (text && !isSystemMessage(text)) {
+          const text = userPromptText(extractUserText(parsed.payload) ?? '');
+          if (text) {
             messageCount++;
             if (!title) {
               title = normalizeSessionTitle(text);
@@ -543,8 +529,8 @@ export async function getCodexSessionPreview(
 
       const payload = parsed.payload;
       if (payload?.role === 'user') {
-        const text = extractUserText(payload);
-        if (text && !isSystemMessage(text)) {
+        const text = userPromptText(extractUserText(payload) ?? '');
+        if (text) {
           messages.push({
             role: 'user',
             content: text,

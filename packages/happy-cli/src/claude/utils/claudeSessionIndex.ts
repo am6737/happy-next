@@ -11,6 +11,7 @@ import {
     updateSessionMetadataCacheDiagnostics
 } from '@/cache/sessionMetadataCache';
 import type { SessionCacheRuntimeStats } from '@/cache/SessionCache';
+import { userPromptText } from 'happy-wire';
 
 export interface ClaudeSessionIndexEntry {
     sessionId: string;
@@ -752,6 +753,22 @@ function extractTextContent(message: any): string {
 }
 
 /**
+ * The prompt a transcript entry holds, as the user sent it — '' for one that was only images — or
+ * null when the user never sent it: a tool result, a subagent's prompt, the records Claude Code
+ * writes beside a prompt (meta, the compaction summary, command output, an interruption), or a
+ * prompt Happy handed the agent. The duplicate sheet and a copied session's backfill both go by it.
+ */
+export function claudePromptText(entry: any, cleanUserText: TranscriptStore['cleanUserText'] = (text) => text): string | null {
+    if (entry?.type !== 'user' || entry.isSidechain || entry.isMeta || entry.isCompactSummary) return null;
+    const content = entry.message?.content;
+    const blocks: any[] = typeof content === 'string' ? [{ type: 'text', text: content }] : Array.isArray(content) ? content : [];
+    if (blocks.some((block) => block?.type === 'tool_result')) return null;
+    const texts = blocks.flatMap((block) => block?.type === 'text' && typeof block.text === 'string' ? [block.text] : []);
+    if (texts.length === 0) return blocks.some((block) => block?.type === 'image') ? '' : null;
+    return userPromptText(cleanUserText(texts.join('\n')));
+}
+
+/**
  * Read last N messages from a Claude session JSONL file
  * Returns messages in chronological order (oldest first)
  */
@@ -904,7 +921,7 @@ export async function readAllClaudeSessionUserMessages(
                     }
                     seenUuids.add(entry.uuid);
 
-                    const text = store.cleanUserText(extractTextContent(entry.message));
+                    const text = claudePromptText(entry, store.cleanUserText);
                     if (text) {
                         allUserMessages.push({
                             uuid: entry.uuid,

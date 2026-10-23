@@ -4,8 +4,9 @@ import { join } from 'node:path';
 import { RawJSONLines, RawJSONLinesSchema } from '@/claude/types';
 import { getProjectPath } from './path';
 import { logger } from '@/ui/logger';
-import { isInjectedPrompt, selectBackfillTurns, type BackfillRole, withForkedHistoryNotices } from '@/modules/common/backfillTurns';
-import { stripAttachmentsFromPrompt } from '@/modules/common/fileUpload';
+import { userPromptText } from 'happy-wire';
+import { selectBackfillTurns, type BackfillRole, withForkedHistoryNotices } from '@/modules/common/backfillTurns';
+import { claudePromptText } from './claudeSessionIndex';
 
 /** A transcript record to convert and send, or a message already built (the backfill's notice). */
 export type ClaudeBackfillItem = { message: RawJSONLines; localId: string } | { content: unknown; localId: string };
@@ -23,25 +24,6 @@ function messageKey(message: RawJSONLines): string {
     return message.uuid;
 }
 
-const LOCAL_COMMAND_OUTPUT_PREFIX = '<local-command-stdout>';
-const INTERRUPTED_PREFIX = '[Request interrupted';
-
-/**
- * A prompt the user sent: typed text, a slash command, or a prompt with images. Not tool results,
- * the records Claude Code writes beside them (meta, compaction summaries, command output, an
- * interruption), or a prompt Happy handed it.
- */
-function isPrompt(message: RawJSONLines): boolean {
-    if (message.type !== 'user' || message.isSidechain || message.isMeta || message.isCompactSummary) return false;
-    const content = message.message.content;
-    if (typeof content === 'string') {
-        return !isInjectedPrompt(content) && !content.trim().startsWith(LOCAL_COMMAND_OUTPUT_PREFIX);
-    }
-    return Array.isArray(content) && content.some((block: any) =>
-        block?.type === 'image' || (block?.type === 'text' && typeof block.text === 'string' && !block.text.startsWith(INTERRUPTED_PREFIX)))
-        && !content.some((block: any) => block?.type === 'tool_result');
-}
-
 function assistantTextBlocks(message: RawJSONLines): any[] {
     if (message.type !== 'assistant' || (message as any).isSidechain) return [];
     const content = message.message?.content;
@@ -49,7 +31,7 @@ function assistantTextBlocks(message: RawJSONLines): any[] {
 }
 
 function backfillRole(message: RawJSONLines): BackfillRole {
-    if (isPrompt(message)) return 'prompt';
+    if (claudePromptText(message) !== null) return 'prompt';
     return assistantTextBlocks(message).length > 0 ? 'reply' : null;
 }
 
@@ -65,8 +47,8 @@ function displayed(message: RawJSONLines): RawJSONLines {
         message: {
             ...message.message,
             content: typeof content === 'string'
-                ? stripAttachmentsFromPrompt(content)
-                : content.map((block: any) => block?.type === 'text' && typeof block.text === 'string' ? { ...block, text: stripAttachmentsFromPrompt(block.text) } : block),
+                ? userPromptText(content) ?? content
+                : content.map((block: any) => block?.type === 'text' && typeof block.text === 'string' ? { ...block, text: userPromptText(block.text) ?? block.text } : block),
         },
     };
 }

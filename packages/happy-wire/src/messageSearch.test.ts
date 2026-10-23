@@ -7,8 +7,9 @@ describe('extractSearchableMessage', () => {
             .toEqual({ role: 'user', text: 'hello\nworld' });
     });
 
-    it('leaves out the post-compaction summary', () => {
+    it('leaves out the post-compaction summary and the prompts the user never sent', () => {
         expect(extractSearchableMessage({ role: 'user', content: { type: 'text', text: 'summary' }, meta: { isCompactSummary: true } })).toBeNull();
+        expect(extractSearchableMessage({ role: 'user', content: { type: 'text', text: '[Request interrupted by user]' }, meta: { sentFrom: 'cli' } })).toBeNull();
     });
 
     it('joins the text blocks of a Claude reply and drops the rest', () => {

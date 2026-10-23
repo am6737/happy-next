@@ -104,6 +104,36 @@ describe('listClaudeSessionsFromIndex', () => {
         expect(messages.map((message) => message.uuid)).toEqual(['before', 'after']);
     });
 
+    it('lists only the prompts the user sent, as they typed them', async () => {
+        const projectId = 'project-prompts';
+        const projectDir = join(claudeConfigDir, 'projects', projectId);
+        mkdirSync(projectDir, { recursive: true });
+        const user = (uuid: string, content: unknown, extra: object = {}) => ({ type: 'user', uuid, timestamp: '2026-03-10T10:00:00.000Z', message: { role: 'user', content }, ...extra });
+        const lines = [
+            user('typed', 'Fix the build\n\n<attached-files>\nThe user attached these files to this message. Read them as needed:\n- /tmp/a.png\n</attached-files>'),
+            user('image-note', [{ type: 'text', text: '[Image: source: /tmp/claude/images/1.png]' }], { isMeta: true }),
+            user('callback', '<orchestrator-callback>\nRun "x" reached terminal state: completed.\n</orchestrator-callback>'),
+            user('notification', '<task-notification>done</task-notification>'),
+            user('interrupted', [{ type: 'text', text: '[Request interrupted by user]' }]),
+            user('summary', 'This session is being continued from a previous conversation.', { isCompactSummary: true }),
+            user('skill', [{ type: 'text', text: 'Base directory for this skill: /skills/run' }]),
+            user('tool', [{ type: 'tool_result', tool_use_id: 't1', content: 'ok' }]),
+            user('subagent', 'Explore the repo', { isSidechain: true }),
+            user('command', '<command-name>/model</command-name>\n            <command-message>model</command-message>\n            <command-args>opus</command-args>'),
+            user('caveat', '<local-command-caveat>The command below was run directly in Claude Code.</local-command-caveat>', { isMeta: true }),
+            user('output', '<local-command-stdout>Set model to opus</local-command-stdout>'),
+        ];
+        writeFileSync(join(projectDir, 'session-prompts.jsonl'), lines.map((line) => JSON.stringify(line)).join('\n') + '\n');
+
+        vi.resetModules();
+        const { readAllClaudeSessionUserMessages } = await import('./claudeSessionIndex');
+        const messages = await readAllClaudeSessionUserMessages(projectId, 'session-prompts');
+        expect(messages.map(({ uuid, content, index }) => ({ uuid, content, index }))).toEqual([
+            { uuid: 'typed', content: 'Fix the build', index: 0 },
+            { uuid: 'command', content: '/model opus', index: 1 },
+        ]);
+    });
+
     it('falls back to first meaningful user message when no summary exists', async () => {
         const projectId = 'project-fallback';
         const projectDir = join(claudeConfigDir, 'projects', projectId);

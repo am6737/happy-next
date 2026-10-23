@@ -11,4 +11,5 @@ export * from './toolImagePreview';
 export * from './bashPermission';
 export * from './terminal';
 export * from './messageSearch';
+export * from './userPrompt';
 export * from './messageKind';

@@ -11,7 +11,7 @@ import { MachineMetadata, DaemonState, Machine, Update, UpdateMachineBody } from
 import { registerCommonHandlers, SpawnSessionOptions, SpawnSessionResult } from '../modules/common/registerCommonHandlers';
 import { registerTerminalHandlers } from '../modules/terminal/registerTerminalHandlers';
 import type { TerminalManager } from '../modules/terminal/terminalManager';
-import { searchMessagesRequestSchema, type TerminalFrame } from 'happy-wire';
+import { searchMessagesRequestSchema, userPromptText, type TerminalFrame } from 'happy-wire';
 import { searchMessageArchive } from '../modules/common/messageArchive';
 import { listClaudeSessionsFromIndex, getClaudeSessionPreview, findClaudeProjectId, readAllClaudeSessionUserMessages, saveClaudeSessionCacheStats } from '@/claude/utils/claudeSessionIndex';
 import { forkAndTruncateSession, forkSession } from '@/claude/utils/claudeSessionFork';
@@ -750,14 +750,11 @@ export class ApiMachineClient {
             const messageLimit = typeof limit === 'number' && limit > 0 ? Math.min(Math.floor(limit), 100) : 100;
             const lines = await readGeminiSessionLog(sessionId);
             let userIndex = 0;
-            const allMessages: SessionUserMessage[] = lines
-                .filter(l => l.type === 'user')
-                .map(l => ({
-                    uuid: l.uuid,
-                    content: l.message,
-                    timestamp: new Date(l.timestamp).toISOString(),
-                    index: userIndex++,
-                }));
+            const allMessages: SessionUserMessage[] = lines.flatMap((l) => {
+                if (l.type !== 'user') return [];
+                const content = userPromptText(l.message);
+                return content ? [{ uuid: l.uuid, content, timestamp: new Date(l.timestamp).toISOString(), index: userIndex++ }] : [];
+            });
             return paginateSessionUserMessages(allMessages, messageLimit, beforeIndex);
         });
 

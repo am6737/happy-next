@@ -9,8 +9,8 @@
 
 import type { SessionNotification } from '@agentclientprotocol/sdk';
 import { stripQoderSessionInstructions } from '@/qoder/prompt';
-import { isInjectedPrompt, selectBackfillTurns, withForkedHistoryNotices } from '@/modules/common/backfillTurns';
-import { stripAttachmentsFromPrompt } from '@/modules/common/fileUpload';
+import { userPromptText } from 'happy-wire';
+import { selectBackfillTurns, withForkedHistoryNotices } from '@/modules/common/backfillTurns';
 
 type BackfillMessage = { content: unknown; localId: string };
 
@@ -36,10 +36,12 @@ export function buildQoderBackfillMessages(updates: SessionNotification['update'
     continues = true;
   }
 
-  const texts = entries
-    .map((entry) => ({ ...entry, text: entry.role === 'user' ? stripAttachmentsFromPrompt(stripQoderSessionInstructions(entry.text)) : entry.text }))
-    .filter((entry) => entry.text.trim().length > 0);
-  const { selected, omittedTurns } = selectBackfillTurns(texts, (entry) => entry.role === 'agent' ? 'reply' : isInjectedPrompt(entry.text) ? null : 'prompt', maxTurns);
+  // A prompt the user never sent is left out, so the reply after it still ends the turn before
+  const texts = entries.flatMap((entry) => {
+    const text = entry.role === 'user' ? userPromptText(stripQoderSessionInstructions(entry.text)) : entry.text;
+    return text?.trim() ? [{ ...entry, text }] : [];
+  });
+  const { selected, omittedTurns } = selectBackfillTurns(texts, (entry) => entry.role === 'agent' ? 'reply' : 'prompt', maxTurns);
   const localIdPrefix = `qoder-log:${sessionId}:`;
   return withForkedHistoryNotices(localIdPrefix, omittedTurns, selected.map((entry) => ({
     localId: `${localIdPrefix}${entry.index}`,
