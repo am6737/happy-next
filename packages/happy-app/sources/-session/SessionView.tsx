@@ -456,6 +456,9 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
     // useSessionStatus builds a new object on every render; keyed on it, the composer's status would
     // be new each time and re-render the composer with every streamed message.
     const { statusText, statusColor, statusDotColor, isPulsing: statusPulsing, state: statusState } = sessionStatus;
+    // A resumed or copied session whose CLI is still sending its history in reads "loading…" where
+    // it would read "online", rather than passing for an empty new session.
+    const historyLoading = session.metadata?.historyBackfill === 'pending';
     const inputConnectionStatus = React.useMemo(() => {
         if (isListRefreshing) {
             return {
@@ -482,6 +485,14 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
                 isPulsing: true
             };
         }
+        if (historyLoading && statusState === 'waiting') {
+            return {
+                text: t('status.loading'),
+                color: theme.colors.status.connecting,
+                dotColor: theme.colors.status.connecting,
+                isPulsing: true
+            };
+        }
         return {
             text: statusText,
             color: statusColor,
@@ -489,7 +500,7 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
             isPulsing: statusPulsing,
             ...(statusState === 'permission_required' && { action: 'openPermission' as const }),
         };
-    }, [isListRefreshing, silentRefreshPhase, isRefreshingStatus, statusText, statusColor, statusDotColor, statusPulsing, statusState, theme.colors.status.connecting, theme.colors.status.error, handleRetryStatusRefresh]);
+    }, [isListRefreshing, silentRefreshPhase, isRefreshingStatus, historyLoading, statusText, statusColor, statusDotColor, statusPulsing, statusState, theme.colors.status.connecting, theme.colors.status.error, handleRetryStatusRefresh]);
 
     // Ref for the input component (used for web auto-focus)
     const inputRef = React.useRef<MultiTextInputHandle>(null);

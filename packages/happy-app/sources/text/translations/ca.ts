@@ -160,6 +160,7 @@ export const ca: TranslationStructure = {
         disconnected: 'desconnectat',
         error: 'error',
         online: 'en línia',
+        loading: 'carregant…',
         refreshing: 'actualitzant...',
         refreshFailed: 'actualització fallida',
         offline: 'fora de línia',

@@ -162,6 +162,7 @@ export const zhHans: TranslationStructure = {
         disconnected: '已断开',
         error: '错误',
         online: '在线',
+        loading: '加载中…',
         refreshing: '刷新中...',
         refreshFailed: '刷新失败',
         offline: '离线',

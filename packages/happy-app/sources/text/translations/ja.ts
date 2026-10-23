@@ -162,6 +162,7 @@ export const ja: TranslationStructure = {
         disconnected: '切断済み',
         error: 'エラー',
         online: 'オンライン',
+        loading: '読み込み中…',
         refreshing: '更新中...',
         refreshFailed: '更新失敗',
         offline: 'オフライン',

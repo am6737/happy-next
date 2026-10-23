@@ -93,7 +93,9 @@ export async function runQoder(opts: {
   // Happy session
   //
 
-  const { state, metadata } = createSessionMetadata({ flavor: 'qoder', machineId, startedBy: opts.startedBy });
+  // A resumed session's history is backfilled into the app once qodercli has restored it
+  const resumeSessionId = process.env[QODER_RESUME_SESSION_ID_ENV]?.trim() || undefined;
+  const { state, metadata } = createSessionMetadata({ flavor: 'qoder', machineId, startedBy: opts.startedBy, historyBackfill: !!resumeSessionId });
   const response = await api.getOrCreateSession({ tag: sessionTag, metadata, state });
 
   let session: ApiSessionClient;
@@ -520,13 +522,12 @@ export async function runQoder(opts: {
   // in. A new session takes the first message at once and the main loop waits here.
   //
 
-  const resumeSessionId = process.env[QODER_RESUME_SESSION_ID_ENV]?.trim() || undefined;
   try {
     setThinking(!!resumeSessionId);
     const replayed = await startBackend(resumeSessionId);
     const restored = !!resumeSessionId && qoderBackend!.getSessionId() === resumeSessionId;
     if (restored) {
-      for (let i = 0; i < 15 && !session.isConnected(); i++) {
+      for (let i = 0; i < 150 && !session.isConnected(); i++) {
         await new Promise((resolve) => setTimeout(resolve, 200));
       }
       await session.sendBackfillBatch(buildQoderBackfillMessages(replayed, resumeSessionId), 'replace');
@@ -540,6 +541,9 @@ export async function runQoder(opts: {
     sendAgentText(describeError(error));
   } finally {
     setThinking(false);
+    if (resumeSessionId) {
+      session.updateMetadata((current) => ({ ...current, historyBackfill: 'done' }));
+    }
   }
 
   //

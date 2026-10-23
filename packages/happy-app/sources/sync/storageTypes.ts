@@ -38,6 +38,9 @@ export const MetadataSchema = z.object({
     }).optional(),
     summaryPinned: z.boolean().optional(),
     machineId: z.string().optional(),
+    // A resumed or copied session's history, sent in by the CLI after the session starts: pending
+    // until the backfill has ended, while the composer reads "loading…" instead of "online"
+    historyBackfill: z.enum(['pending', 'done']).optional(),
     claudeSessionId: z.string().optional(), // Claude Code session ID
     codexSessionId: z.string().optional(), // Codex CLI conversation ID
     qoderSessionId: z.string().optional(), // Qoder CLI (ACP) session ID

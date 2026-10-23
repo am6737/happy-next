@@ -135,10 +135,14 @@ export async function runGemini(opts: {
   // Create session
   //
 
+  // A resumed or copied session whose history is backfilled into the app once it starts
+  const geminiResumeSessionId = process.env.HAPPY_GEMINI_RESUME_SESSION_ID?.trim();
+  const shouldBackfill = !!geminiResumeSessionId && ['1', 'true', 'yes'].includes(String(process.env.HAPPY_GEMINI_BACKFILL).toLowerCase());
   const { state, metadata } = createSessionMetadata({
     flavor: 'gemini',
     machineId,
-    startedBy: opts.startedBy
+    startedBy: opts.startedBy,
+    historyBackfill: shouldBackfill,
   });
   const response = await api.getOrCreateSession({ tag: sessionTag, metadata, state });
 
@@ -1052,7 +1056,6 @@ export async function runGemini(opts: {
   // This allows us to support model changes by recreating the backend
 
   // Resume support: load session history from disk if env var is set
-  const geminiResumeSessionId = process.env.HAPPY_GEMINI_RESUME_SESSION_ID?.trim();
   let resumeContextPrefix = '';
   if (geminiResumeSessionId) {
     try {
@@ -1069,10 +1072,10 @@ export async function runGemini(opts: {
 
   // Backfill history from previous session to app (if resuming/copying)
   // Awaited so that replace-mode batch completes before the main loop processes new messages
-  if (geminiResumeSessionId && ['1', 'true', 'yes'].includes(String(process.env.HAPPY_GEMINI_BACKFILL).toLowerCase())) {
+  if (geminiResumeSessionId && shouldBackfill) {
     try {
-      // Wait briefly for socket connection to avoid dropping backfill messages
-      for (let i = 0; i < 15 && !session.isConnected(); i++) {
+      // Wait up to 30s for socket connection to avoid dropping backfill messages
+      for (let i = 0; i < 150 && !session.isConnected(); i++) {
         await new Promise((resolve) => setTimeout(resolve, 200));
       }
       if (session.isConnected()) {
@@ -1088,6 +1091,7 @@ export async function runGemini(opts: {
     } catch (error) {
       logger.debug('[gemini] Backfill failed:', error);
     }
+    session.updateMetadata((current) => ({ ...current, historyBackfill: 'done' }));
   }
 
   let first = true;

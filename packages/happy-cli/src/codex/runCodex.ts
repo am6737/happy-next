@@ -206,10 +206,16 @@ export async function runCodex(opts: {
     syncOrchestratorAssets();
     syncBuiltinCommands();
     let skills = discoverCodexSkills();
+    // Resume file from the CLI or App-side resume/duplicate (passed via daemon env var), whose
+    // history is backfilled into the app once the session starts
+    const initialResumeFile = opts.resumeFile || process.env.HAPPY_CODEX_RESUME_FILE || null;
+    const shouldBackfillResume = !!opts.resumeFile
+        || ['1', 'true', 'yes'].includes(String(process.env.HAPPY_CODEX_BACKFILL).toLowerCase());
     const { state, metadata } = createSessionMetadata({
         flavor: 'codex',
         machineId,
         startedBy: opts.startedBy,
+        historyBackfill: !!initialResumeFile && shouldBackfillResume,
     });
     const response = await api.getOrCreateSession({ tag: sessionTag, metadata, state });
 
@@ -470,8 +476,6 @@ export async function runCodex(opts: {
     let abortFeedbackSent = false;
     let storedSessionIdForResume: string | null = null;
 
-    // Resume file from the CLI or App-side resume/duplicate (passed via daemon env var)
-    const initialResumeFile = opts.resumeFile || process.env.HAPPY_CODEX_RESUME_FILE || null;
     // Current backend instance (re-created on mode change)
     // Typed as any to prevent TS narrowing issues (assigned inside createBackend())
     let backend: any = null;
@@ -1119,12 +1123,10 @@ Tokens used: ${goal.tokensUsed}${goal.tokenBudget ? ` / ${goal.tokenBudget}` : '
 
     // Backfill history from previous session (if resuming/copying)
     // Awaited so that replace-mode batch completes before the main loop processes new messages
-    const shouldBackfillResume = !!opts.resumeFile
-        || ['1', 'true', 'yes'].includes(String(process.env.HAPPY_CODEX_BACKFILL).toLowerCase());
     if (initialResumeFile && shouldBackfillResume) {
         try {
-            // Wait briefly for socket connection to avoid dropping backfill messages
-            for (let i = 0; i < 15 && !session.isConnected(); i++) {
+            // Wait up to 30s for socket connection to avoid dropping backfill messages
+            for (let i = 0; i < 150 && !session.isConnected(); i++) {
                 await new Promise((resolve) => setTimeout(resolve, 200));
             }
             if (session.isConnected()) {
@@ -1140,6 +1142,7 @@ Tokens used: ${goal.tokensUsed}${goal.tokenBudget ? ` / ${goal.tokenBudget}` : '
         } catch (error) {
             logger.debug('[Codex] Backfill failed:', error);
         }
+        session.updateMetadata((current) => ({ ...current, historyBackfill: 'done' }));
     }
 
     try {

@@ -388,6 +388,9 @@ export type Metadata = {
   },
   summaryPinned?: boolean,
   machineId?: string,
+  // A resumed or copied session's history, sent in after the session is created: pending until the
+  // backfill has ended, while the app's composer reads "loading…" instead of "online"
+  historyBackfill?: 'pending' | 'done',
   claudeSessionId?: string, // Claude Code session ID
   codexSessionId?: string,
   qoderSessionId?: string, // Qoder ACP session id, restored with session/load

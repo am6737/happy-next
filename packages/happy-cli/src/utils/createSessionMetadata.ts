@@ -32,6 +32,8 @@ export interface CreateSessionMetadataOptions {
     machineId: string;
     /** How the session was started */
     startedBy?: 'daemon' | 'terminal';
+    /** A resumed or copied session whose history is sent in once it starts */
+    historyBackfill?: boolean;
 }
 
 /**
@@ -158,6 +160,7 @@ export function createSessionMetadata(opts: CreateSessionMetadataOptions): Sessi
         lifecycleState: 'running',
         lifecycleStateSince: Date.now(),
         flavor: opts.flavor,
+        ...(opts.historyBackfill && { historyBackfill: 'pending' as const }),
         // Worktree metadata: env vars from daemon take priority, otherwise detect via git
         ...detectWorktreeMetadata(),
     };

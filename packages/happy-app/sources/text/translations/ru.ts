@@ -1006,6 +1006,7 @@ export const ru: TranslationStructure = {
         disconnected: 'отключено',
         error: 'ошибка',
         online: 'online',
+        loading: 'загрузка…',
         refreshing: 'обновление...',
         refreshFailed: 'обновление не удалось',
         offline: 'offline',

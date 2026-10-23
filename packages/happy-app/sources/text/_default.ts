@@ -159,6 +159,8 @@ export const en = {
         disconnected: 'disconnected',
         error: 'error',
         online: 'online',
+        // A resumed or copied session whose history is still being sent in
+        loading: 'loading…',
         refreshing: 'refreshing',
         refreshFailed: 'refresh failed',
         offline: 'offline',

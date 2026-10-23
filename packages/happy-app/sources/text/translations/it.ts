@@ -159,6 +159,7 @@ export const it: TranslationStructure = {
         disconnected: 'disconnesso',
         error: 'errore',
         online: 'online',
+        loading: 'caricamento…',
         refreshing: 'aggiornando...',
         refreshFailed: 'aggiornamento non riuscito',
         offline: 'offline',

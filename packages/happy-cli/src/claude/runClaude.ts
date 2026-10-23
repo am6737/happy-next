@@ -170,6 +170,10 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
         metadata: initialMachineMetadata
     });
 
+    // A resumed or copied session sends its history in once it starts (see runBackfill below)
+    const shouldBackfill = ['1', 'true', 'yes'].includes(String(process.env.HAPPY_CLAUDE_BACKFILL).toLowerCase());
+    const resumeSessionId = process.env.HAPPY_CLAUDE_RESUME_SESSION_ID || undefined;
+
     let metadata: Metadata = {
         path: workingDirectory,
         host: os.hostname(),
@@ -187,6 +191,7 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
         lifecycleState: 'running',
         lifecycleStateSince: Date.now(),
         flavor: 'claude',
+        ...(shouldBackfill && resumeSessionId && { historyBackfill: 'pending' as const }),
         // Worktree metadata: env vars from daemon take priority, otherwise detect via git
         ...detectWorktreeMetadata(workingDirectory),
     };
@@ -300,11 +305,7 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
     // Used by hook server to notify Session when Claude changes session ID
     let currentSession: Session | null = null;
 
-    const shouldBackfill = ['1', 'true', 'yes'].includes(String(process.env.HAPPY_CLAUDE_BACKFILL).toLowerCase());
     const backfillMaxTurns = Number(process.env.HAPPY_CLAUDE_BACKFILL_MAX_USER_MESSAGES) || 20;
-    const resumeSessionId = process.env.HAPPY_CLAUDE_RESUME_SESSION_ID || undefined;
-    const backfilledSessions = new Set<string>();
-    const backfillInFlight = new Set<string>();
 
     const ensureResumeSessionFileAvailable = async (sessionId: string) => {
         const claudeConfigDir = process.env.CLAUDE_CONFIG_DIR || join(os.homedir(), '.claude');
@@ -346,42 +347,35 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
         }
     };
 
+    // Backfill the resumed session's history once, at start, as every agent does
     const runBackfill = async (sessionId: string) => {
         if (!shouldBackfill) return;
-        if (backfilledSessions.has(sessionId)) return;
-        if (backfillInFlight.has(sessionId)) return;
-        backfillInFlight.add(sessionId);
 
-        // Wait briefly for socket connection to avoid dropping backfill messages
-        for (let i = 0; i < 15 && !session.isConnected(); i++) {
+        // Wait up to 30s for socket connection to avoid dropping backfill messages
+        for (let i = 0; i < 150 && !session.isConnected(); i++) {
             await new Promise((resolve) => setTimeout(resolve, 200));
         }
         if (!session.isConnected()) {
             logger.debug('[START] Backfill skipped: session socket not connected');
-            backfillInFlight.delete(sessionId);
             return;
         }
 
-        try {
-            await backfillClaudeSessionHistory({
-                workingDirectory,
-                sessionId,
-                sendBatch: async (messages) => {
-                    await session.sendClaudeSessionMessageBatch(messages, 'replace');
-                },
-                maxTurns: backfillMaxTurns
-            });
-            backfilledSessions.add(sessionId);
-        } finally {
-            backfillInFlight.delete(sessionId);
-        }
+        await backfillClaudeSessionHistory({
+            workingDirectory,
+            sessionId,
+            sendBatch: async (messages) => {
+                await session.sendClaudeSessionMessageBatch(messages, 'replace');
+            },
+            maxTurns: backfillMaxTurns
+        });
     };
 
-    // If we already know the resume session ID, backfill immediately (don't wait for hook)
     if (resumeSessionId) {
         await ensureResumeSessionFileAvailable(resumeSessionId);
         runBackfill(resumeSessionId).catch((error) => {
             logger.debug('[START] Backfill failed:', error);
+        }).finally(() => {
+            session.updateMetadata((current) => ({ ...current, historyBackfill: 'done' }));
         });
     }
 
@@ -399,10 +393,6 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
                 }
             }
 
-            // Backfill history for resumed sessions (once per session ID)
-            runBackfill(sessionId).catch((error) => {
-                logger.debug('[START] Backfill failed:', error);
-            });
         }
     });
     logger.debug(`[START] Hook server started on port ${hookServer.port}`);

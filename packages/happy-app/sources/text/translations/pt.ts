@@ -160,6 +160,7 @@ export const pt: TranslationStructure = {
         disconnected: 'desconectado',
         error: 'erro',
         online: 'online',
+        loading: 'carregando…',
         refreshing: 'atualizando...',
         refreshFailed: 'falha ao atualizar',
         offline: 'offline',
