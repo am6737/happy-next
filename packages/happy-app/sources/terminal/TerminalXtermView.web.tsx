@@ -100,8 +100,20 @@ export const TerminalXtermView = memo(({ xtermTheme, active, autoFocus = true, o
     // container so xterm's own input handler on the textarea does not see it a second time.
     let imeKeysPending = 0;
     terminal.attachCustomKeyEventHandler((event) => {
-      if (event.type === "keydown" && event.keyCode === 229 && !event.isComposing) {
-        imeKeysPending += 1;
+      if (event.type === "keydown") {
+        if (event.keyCode === 229 && !event.isComposing) {
+          imeKeysPending += 1;
+          return false;
+        }
+        // A key the input method passed through means none of the earlier ones still has text on
+        // the way — Shift switching the method to English reports 229 and never inserts anything.
+        imeKeysPending = 0;
+        return true;
+      }
+      // An input method in English mode reports space as 229 but still lets its keypress through.
+      // xterm would send that keypress and skip the input event after it, while the listener below
+      // takes the input event too — so the space came out twice. The input event sends it alone.
+      if (event.type === "keypress" && imeKeysPending > 0) {
         return false;
       }
       return true;
