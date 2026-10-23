@@ -65,7 +65,14 @@ interface SkillSuggestionProps {
 }
 
 export const SkillSuggestion = React.memo(({ name, description, scope, displayName, showSkillCategory }: SkillSuggestionProps) => {
-    const scopeLabel = getScopeLabel(scope === 'ADMIN' ? 'SYSTEM' : scope);
+    // Codex groups skills into project, personal, and global scopes. ADMIN and
+    // SYSTEM are both global installations; keep their wire values distinct
+    // while presenting the same user-facing group.
+    const scopeLabel = scope === 'REPO'
+        ? t('agentInput.suggestion.skillScopeProject')
+        : scope === 'USER'
+            ? t('agentInput.suggestion.skillScopePersonal')
+            : t('agentInput.suggestion.skillScopeGlobal');
     const label = showSkillCategory ? t('agentInput.suggestion.skillLabel') : scopeLabel;
     const title = displayName || name;
 
