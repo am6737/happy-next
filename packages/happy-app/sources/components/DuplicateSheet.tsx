@@ -799,8 +799,8 @@ const styles = StyleSheet.create((theme) => ({
         width: 24,
         height: 24,
         borderRadius: 12,
-        borderWidth: 2,
-        borderColor: theme.colors.divider,
+        borderWidth: 1.5,
+        borderColor: theme.colors.radio.inactive,
     },
     messageText: {
         fontSize: 15,
