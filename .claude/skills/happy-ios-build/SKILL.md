@@ -1,6 +1,6 @@
 ---
 name: happy-ios-build
-description: Builds a happy-app iOS IPA on the Mac mini and drops it into appdown for OTA install — 正式版 (production, Ad Hoc, receives production push) or 开发版 (HappyNextdev Debug dev client). Pushes the current commit to origin/dev first. Use when the user asks to build/package an iOS 正式版 or 开发版 for testing on their phone.
+description: Builds a happy-app iOS IPA on the Mac mini and drops it into appdown for OTA install — 正式版 (production, Ad Hoc, receives production push, with the Apple Watch app) or 开发版 (HappyNextdev Debug dev client). Pushes the current commit to origin/dev first. Use when the user asks to build/package an iOS 正式版 or 开发版 for testing on their phone.
 ---
 
 # happy-app iOS 测试包构建
@@ -9,12 +9,12 @@ description: Builds a happy-app iOS IPA on the Mac mini and drops it into appdow
 
 | 模式 | 用户说法 | 产物 | 签名 / 推送 |
 |---|---|---|---|
-| `prod` | 正式版、生产版、能收推送的 | `HappyNext-<版本>-<构建号>-<sha>-<标签>-<时间>.ipa`，`com.hitosea.happy`，不含 Watch App | EAS 上现有的 Ad Hoc 证书，主 App 和分享扩展各一个描述文件，`aps-environment=production`，只能装在 Ad Hoc 描述文件里的设备上 |
+| `prod` | 正式版、生产版、能收推送的 | `HappyNext-<版本>-<构建号>-<sha>-<标签>-<时间>.ipa`，`com.hitosea.happy`，带 Watch App | EAS 上现有的 Ad Hoc 证书；主 App 和分享扩展用 EAS 上的描述文件，Watch App 和表盘组件用 `~/.happy-ios-build/profiles/` 里的描述文件；`aps-environment=production`，只能装在 Ad Hoc 描述文件里的设备上 |
 | `dev` | 开发版、调试版、dev client | `HappyNextdev-<版本>-<sha>-<标签>-<时间>.ipa`，`com.hitosea.happy.dev`，Debug 开发客户端，打开后要连 Metro，不含 Watch App | Apple Development 证书 + 团队描述文件 `com.hitosea.happy.dev` 和 `com.hitosea.happy.dev.share-extension`，`aps-environment=development` |
 
 真正的构建由仓库里的脚本完成，它们在 Mac mini 上运行：
 
-- `scripts/build-prod.sh [标签]`：正式版。从 EAS 拉 production 环境变量和 Ad Hoc 凭证，生产 prebuild，archive，导出，校验，发布。不管成功还是失败，都会还原开发用的 iOS 工程、Watch target、`eas.json`，并删除临时凭证、钥匙串和描述文件。
+- `scripts/build-prod.sh [标签]`：正式版。从 EAS 拉 production 环境变量和 Ad Hoc 凭证，生产 prebuild，archive，导出，校验，发布。不管成功还是失败，都会还原开发用的 iOS 工程和 `eas.json`，并删除临时凭证、钥匙串和描述文件。
 - `scripts/build-dev.sh [标签]`：开发版。按需执行 yarn install、prebuild、pod install，然后不签名做 Debug 构建，再手动签名、打成 IPA 并发布。
 - 两个脚本最后都会输出 `RESULT_*=` 行，汇报就以这些行为准。两个脚本共用一把锁，同时只能跑一个。
 
@@ -69,7 +69,7 @@ waitMs=0
 用中文汇报，以 `RESULT_*` 行为准：
 
 - 文件名、大小、版本（构建号）、对应提交，以及下载页 `RESULT_PAGE` 是否列出了它。
-- 正式版：推送环境是否为 production，DooPush 配置是否和 EAS 一致，两个描述文件（`RESULT_PROFILE`、`RESULT_EXT_PROFILE`）的有效期，能装的设备（`RESULT_DEVICES`），不含 Watch App，`RESULT_REPO` 和 `RESULT_DEV_PROJECT` 是否都已还原。
+- 正式版：推送环境是否为 production，DooPush 配置是否和 EAS 一致，四个描述文件（`RESULT_PROFILE`、`RESULT_EXT_PROFILE`、`RESULT_WATCH_PROFILE`、`RESULT_WIDGET_PROFILE`）的有效期，能装的设备（`RESULT_DEVICES`）和手表（`RESULT_WATCHES`），`RESULT_REPO` 和 `RESULT_DEV_PROJECT` 是否都已还原。
 - 开发版：说明它是 Debug 开发客户端，打开后要连 Metro；分享扩展的描述文件见 `RESULT_EXT_PROFILE`。
 - 如果第 3 步做了 stash，告诉用户 stash 的名字。
 
@@ -84,7 +84,13 @@ waitMs=0
 
 ## 坑（脚本已处理，排错时对照）
 
-1. **Watch target 没有 Ad Hoc 凭证。** EAS 会报 `Some of the build targets don't have credentials ... HappyWatch`。必须在 `eas credentials` 之前把 `targets/watch*` 移出去，因此正式版不含 Watch App。开发版 prebuild 后 `.app` 里会带 `Watch/HappyWatch.app`，其中的 Widget 扩展（`com.hitosea.happy.dev.watchkitapp.widget`）没有描述文件，所以脚本签名前会删掉 `Watch/`，开发版也不含 Watch App。
+1. **Watch App 的描述文件不能从 EAS 拿。** EAS 的设备列表只收 iPhone、iPad 和 Mac，从 Apple 后台导入时会跳过 Apple Watch，所以它生成的描述文件永远不含手表，Watch App 装不到手表上。正式版的做法：
+    - EAS 上仍然要有 `com.hitosea.happy.watchkitapp` 和 `.watchkitapp.widget` 的 Ad Hoc 凭证（缺了 EAS 会报 `Some of the build targets don't have credentials ... HappyWatch`，下载不了），但不用它们的描述文件。
+    - 用户在 Apple 开发者后台为这两个 bundle id 各建一个 Ad Hoc 描述文件（证书选 EAS 的那张分发证书，设备勾上手表和 iPhone），放进 Mac mini 的 `~/.happy-ios-build/profiles/`。`local-profile.py` 按 bundle id 和证书从里面挑出最新的、未过期的那份。
+    - 脚本校验：两份都带 App Group `group.com.hitosea.happy.watch`，设备列表一致，并且包含主 App 描述文件之外的设备（手表）；IPA 里 `Watch/HappyWatch.app` 和表盘组件的 bundle id、版本号、构建号都和主 App 对得上。
+    - 加新手表或新 iPhone 时，这两份要在 Apple 后台重新编辑并下载替换。
+
+    开发版 prebuild 后 `.app` 里会带 `Watch/HappyWatch.app`，其中的 Widget 扩展（`com.hitosea.happy.dev.watchkitapp.widget`）没有描述文件，所以脚本签名前会删掉 `Watch/`，开发版也不含 Watch App。
 2. **`eas credentials` 没有非交互的下载方式**（eas-cli 18.x）。只能用 `eas-creds.exp` 模拟按键选菜单：先按 `ARROWS` 次下箭头选中临时 profile（这个 profile 追加在 `eas.json` 的最后），再按 3 次下箭头选「credentials.json」，然后选「Download」。脚本会检查文件是否真的写到了磁盘上。每次回车前 exp 都会核对高亮的是不是要选的那一项，一出现「Delete one from / Add a new one」这类会改凭证的菜单就直接退出：「登录 Apple 账号」的 Y/n 提示按 n 就确认了，曾经多发的回车落到下一个菜单，把后面的按键带进了删除发布证书的菜单。EAS 菜单变了就调整这个 exp。
 3. **Expo 生成的 `Info.plist` 把 `CFBundleVersion` 写死成 1**，`CURRENT_PROJECT_VERSION` 改不动它，必须在 archive 之前用 `plutil` 改。构建号取三者最大值再加 1：EAS 远端值、builds 目录里最大的本地包号、`~/.happy-ios-build/prod-build-number`。
 4. **Mac mini 只有已经过期的 WWDR G1**，分发证书是 G3 签发的，所以要把 G3 导入临时钥匙串，否则会出现「0 valid identities」。
@@ -97,7 +103,7 @@ waitMs=0
 11. **全局 `eas` 在 `/usr/local/bin/eas`**，`npx eas` 找不到它。
 12. **`ios/` 不受 git 跟踪。** `git status` 干净不代表开发工程已经还原，所以脚本会单独检查 `ios/HappyNextdev.xcworkspace` 是否存在。
 13. **开发版什么时候重新 prebuild：** `ios/` 不存在、没有上次的构建记录（`~/.happy-ios-build/dev-commit`），或者从上次构建到现在改动了 `yarn.lock`、`patches/`、`packages/happy-app/{package.json,app.config.js,plugins,modules,targets,patches}` 中的任何一个。Debug 构建的中间产物缓存在 `/tmp/hn-dd`，用来做增量构建。
-14. **设备范围：** 正式版的 Ad Hoc 描述文件只包含 `00008130-001E38501406001C` 和 `00008101-000C686902BA001E` 两台设备，iPad 装不了。开发版的团队描述文件包含全部已注册设备。
+14. **设备范围：** 正式版的 Ad Hoc 描述文件只包含 `00008130-001E38501406001C` 和 `00008101-000C686902BA001E` 两台 iPhone，iPad 装不了；Watch 的两份另外包含手表 `00008301-108249523C40202E`。开发版的团队描述文件包含全部已注册设备。
 15. **分享扩展（expo-share-intent 生成的 `ShareExtension` target）要单独签名。** 它在 `PlugIns/ShareExtension.appex`，bundle id 是 `<主 App>.share-extension`，和主 App 一样带 App Group `group.<主 App>`，靠它把分享的内容交给 App。所以：
     - 两个描述文件都必须带这个 App Group，脚本会检查，缺了就停下。
     - 正式版：EAS 上要有扩展的 Ad Hoc 凭证。此时 `credentials.json` 每个 target 各占一项，由 `adhoc-creds.py` 按描述文件里的 bundle id 认出来；两个描述文件的设备列表必须一致。描述文件不能放在 xcodebuild 命令行上（会同时套到两个 target 上），由 `set-profiles.py` 写进各 target 的 build settings。扩展的 `CFBundleVersion` 必须和主 App 一致，脚本会校验。
@@ -107,4 +113,4 @@ waitMs=0
 
 ## 状态文件（Mac mini）
 
-`~/.happy-ios-build/` 下保存这些文件：`lock`（构建锁）、`prod-build-number`、`dev-commit`、`yarn.lock.sha`、`patches-commit`（node_modules 里套的是哪个提交的 patch）。每次构建的日志放在 `RESULT_LOGS` 指向的目录里。
+`~/.happy-ios-build/` 下保存这些文件：`lock`（构建锁）、`prod-build-number`、`dev-commit`、`yarn.lock.sha`、`patches-commit`（node_modules 里套的是哪个提交的 patch）、`profiles/`（用户建的 Watch Ad Hoc 描述文件，脚本只读不删）。每次构建的日志放在 `RESULT_LOGS` 指向的目录里。
