@@ -1234,6 +1234,8 @@ export const en = {
     },
 
     agentInput: {
+        expand: 'Expand editor',
+        collapse: 'Collapse editor',
         permissionMode: {
             title: 'PERMISSION MODE',
             default: 'Default',

@@ -1221,6 +1221,8 @@ export const zhHant: TranslationStructure = {
     },
 
     agentInput: {
+        expand: '展開輸入框',
+        collapse: '收起輸入框',
         permissionMode: {
             title: '權限模式',
             default: '預設',

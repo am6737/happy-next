@@ -1222,6 +1222,8 @@ export const zhHans: TranslationStructure = {
     },
 
     agentInput: {
+        expand: '展开输入框',
+        collapse: '收起输入框',
         permissionMode: {
             title: '权限模式',
             default: '默认',

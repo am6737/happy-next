@@ -31,6 +31,7 @@ import { Metadata } from '@/sync/storageTypes';
 import { log } from '@/log';
 import { ImagePreview, LocalImage } from '@/components/ImagePreview';
 import { ComposerFiles } from '@/components/FileAttachments';
+import { ExpandedComposerModal } from './ExpandedComposerModal';
 import type { ComposerFile } from '@/hooks/useFileAttachments';
 import { Switch } from '@/components/Switch';
 import { Modal } from '@/modal';
@@ -63,6 +64,9 @@ import {
     parseQoderModelMode,
 } from 'happy-wire';
 import type { QoderPickerModel } from '@/hooks/useQoderModels';
+
+// Room the text keeps clear on its right for the expand button over the field's corner.
+const EXPAND_BUTTON_TEXT_INSET = Platform.OS === 'web' ? 24 : 32;
 
 interface AgentInputProps {
     value: string;
@@ -263,6 +267,25 @@ const stylesheet = StyleSheet.create((theme, runtime) => ({
     },
     inputContainerCompact: {
         minHeight: 34,
+    },
+    // Native fields show a scroll indicator at their right edge: the field reaches nearer the
+    // panel's edge so the indicator runs clear of the expand button.
+    inputContainerOverflowing: {
+        paddingRight: Platform.OS === 'web' ? 8 : 2,
+    },
+    expandButton: {
+        position: 'absolute',
+        top: 8,
+        right: Platform.OS === 'web' ? 6 : 8,
+        width: 24,
+        height: 24,
+        borderRadius: 6,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    // Hides the text scrolling under it.
+    expandButtonFilled: {
+        backgroundColor: theme.colors.input.background,
     },
 
     // Overlay styles
@@ -1092,6 +1115,12 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
             return sameSelection && prev.text === newState.text ? prev : newState;
         });
     }, []);
+
+    // Long text gets a button in the field's corner that opens it on a page of its own.
+    const [isInputOverflowing, setIsInputOverflowing] = React.useState(false);
+    const [isExpanded, setIsExpanded] = React.useState(false);
+    const openExpanded = React.useCallback(() => setIsExpanded(true), []);
+    const closeExpanded = React.useCallback(() => setIsExpanded(false), []);
 
     const resolveSendSnapshot = React.useCallback((): string => {
         const candidates = [latestTextRef.current, inputState.text, props.value];
@@ -2328,7 +2357,7 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                     )}
 
                     {/* Input field */}
-                    <View style={[styles.inputContainer, statusInPanel && styles.inputContainerCompact, props.minHeight ? { minHeight: props.minHeight } : undefined]}>
+                    <View style={[styles.inputContainer, statusInPanel && styles.inputContainerCompact, props.minHeight ? { minHeight: props.minHeight } : undefined, isInputOverflowing && styles.inputContainerOverflowing]}>
                         <MultiTextInput
                             ref={inputRef}
                             value={props.value}
@@ -2338,10 +2367,33 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                             placeholder={props.placeholder}
                             onKeyPress={handleKeyPress}
                             onStateChange={handleInputStateChange}
+                            onOverflowChange={setIsInputOverflowing}
+                            paddingRight={isInputOverflowing ? EXPAND_BUTTON_TEXT_INSET : undefined}
                             maxHeight={120}
                             animateHeight
                         />
+                        {isInputOverflowing && (
+                            <Pressable
+                                onPress={openExpanded}
+                                hitSlop={8}
+                                style={(p) => [styles.expandButton, !useGlassPanel && styles.expandButtonFilled, p.pressed && styles.actionButtonPressed]}
+                                accessibilityRole="button"
+                                accessibilityLabel={t('agentInput.expand')}
+                            >
+                                <MaterialCommunityIcons name="arrow-expand" size={16} color={theme.colors.textSecondary} />
+                            </Pressable>
+                        )}
                     </View>
+                    <ExpandedComposerModal
+                        visible={isExpanded}
+                        value={props.value}
+                        placeholder={props.placeholder}
+                        onChangeText={handleTextChange}
+                        onClose={closeExpanded}
+                        onSend={(text) => props.onSend(text)}
+                        canSend={!props.isSendDisabled && (props.value.trim().length > 0 || hasAttachments || !!props.allowEmptySend)}
+                        isSending={props.isSending}
+                    />
 
                     {/* Action buttons below input */}
                     <View style={styles.actionButtonsContainer}>

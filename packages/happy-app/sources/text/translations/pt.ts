@@ -1220,6 +1220,8 @@ export const pt: TranslationStructure = {
     },
 
     agentInput: {
+        expand: 'Expandir editor',
+        collapse: 'Recolher editor',
         permissionMode: {
             title: 'PERMISSION MODE',
             default: 'Default',

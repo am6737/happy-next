@@ -1230,6 +1230,8 @@ export const ru: TranslationStructure = {
     },
 
     agentInput: {
+        expand: 'Развернуть редактор',
+        collapse: 'Свернуть редактор',
         permissionMode: {
             title: 'PERMISSION MODE',
             default: 'Default',

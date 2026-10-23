@@ -46,6 +46,8 @@ interface MultiTextInputProps {
     onStateChange?: (state: TextInputState) => void;
     autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
     autoCorrect?: boolean;
+    /** Called when the text grows past maxHeight and starts scrolling, and again when it fits once more. */
+    onOverflowChange?: (overflowing: boolean) => void;
     /** Native only: the field's height is not animated on web. */
     animateHeight?: boolean;
 }
@@ -58,7 +60,8 @@ export const MultiTextInput = React.forwardRef<MultiTextInputHandle, MultiTextIn
         maxHeight = 120,
         onKeyPress,
         onSelectionChange,
-        onStateChange
+        onStateChange,
+        onOverflowChange
     } = props;
     
     const { theme } = useUnistyles();
@@ -156,6 +159,19 @@ export const MultiTextInput = React.forwardRef<MultiTextInputHandle, MultiTextIn
             onStateChange({ text: valueRef.current, selection });
         }
     }, [onSelectionChange, onStateChange]);
+
+    // Checked after every render: the textarea has resized itself to the text by then (its own
+    // layout effect runs first), and stops growing at maxRows, where it starts to scroll.
+    const overflowingRef = React.useRef(false);
+    React.useLayoutEffect(() => {
+        const el = textareaRef.current;
+        if (!onOverflowChange || !el) return;
+        const overflowing = el.scrollHeight > el.clientHeight + 1;
+        if (overflowing !== overflowingRef.current) {
+            overflowingRef.current = overflowing;
+            onOverflowChange(overflowing);
+        }
+    });
 
     // Imperative handle for direct control
     React.useImperativeHandle(ref, () => ({

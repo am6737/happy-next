@@ -1220,6 +1220,8 @@ export const es: TranslationStructure = {
     },
 
     agentInput: {
+        expand: 'Ampliar editor',
+        collapse: 'Reducir editor',
         permissionMode: {
             title: 'PERMISSION MODE',
             default: 'Default',

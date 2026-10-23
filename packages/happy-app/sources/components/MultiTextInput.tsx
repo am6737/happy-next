@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { TextInput, Platform, StyleSheet, View, NativeSyntheticEvent, TextInputKeyPressEventData, TextInputSelectionChangeEventData, type StyleProp, type ViewStyle } from 'react-native';
+import { TextInput, Platform, StyleSheet, View, NativeSyntheticEvent, TextInputKeyPressEventData, TextInputSelectionChangeEventData, TextInputContentSizeChangeEventData, type StyleProp, type ViewStyle } from 'react-native';
 import { useUnistyles } from 'react-native-unistyles';
 import Animated from 'react-native-reanimated';
 import { Typography } from '@/constants/Typography';
@@ -47,6 +47,8 @@ interface MultiTextInputProps {
     onStateChange?: (state: TextInputState) => void;
     autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
     autoCorrect?: boolean;
+    /** Called when the text grows past maxHeight and starts scrolling, and again when it fits once more. */
+    onOverflowChange?: (overflowing: boolean) => void;
     /** Animate height changes (a line added, the text cleared) when inside a floating composer. */
     animateHeight?: boolean;
 }
@@ -59,7 +61,8 @@ export const MultiTextInput = React.forwardRef<MultiTextInputHandle, MultiTextIn
         maxHeight = 120,
         onKeyPress,
         onSelectionChange,
-        onStateChange
+        onStateChange,
+        onOverflowChange
     } = props;
 
     const { theme } = useUnistyles();
@@ -72,6 +75,10 @@ export const MultiTextInput = React.forwardRef<MultiTextInputHandle, MultiTextIn
     // Without this, onSelectionChange fires with the old useCallback closure (stale `value`),
     // which can overwrite the correct text with an outdated value.
     const valueRef = React.useRef(value);
+    const textEditsRef = React.useRef(0);
+    if (valueRef.current !== value) {
+        textEditsRef.current++;
+    }
     valueRef.current = value;
 
     const handleKeyPress = React.useCallback((e: NativeSyntheticEvent<TextInputKeyPressEventData>) => {
@@ -128,6 +135,7 @@ export const MultiTextInput = React.forwardRef<MultiTextInputHandle, MultiTextIn
         // When text changes, assume cursor moves to end
         const selection = { start: text.length, end: text.length };
         selectionRef.current = selection;
+        textEditsRef.current++;
 
         onChangeText(text);
         
@@ -161,6 +169,21 @@ export const MultiTextInput = React.forwardRef<MultiTextInputHandle, MultiTextIn
             }
         }
     }, [onSelectionChange, onStateChange]);
+
+    // The content height includes the field's padding, as does maxHeight. The parent may make room
+    // for a button when the text overflows, which rewraps it and reports sizes on the way that can
+    // say the opposite: only a change of the text itself may flip the state, or it would flicker.
+    // Text edits are counted as they are typed, since the size event can come before the new value
+    // is rendered, and when the value is set from outside (a send clearing it).
+    const overflowingRef = React.useRef(false);
+    const overflowEditRef = React.useRef(-1);
+    const handleContentSizeChange = React.useCallback((e: NativeSyntheticEvent<TextInputContentSizeChangeEventData>) => {
+        const overflowing = e.nativeEvent.contentSize.height > maxHeight + 1;
+        if (overflowing === overflowingRef.current || overflowEditRef.current === textEditsRef.current) return;
+        overflowingRef.current = overflowing;
+        overflowEditRef.current = textEditsRef.current;
+        onOverflowChange?.(overflowing);
+    }, [maxHeight, onOverflowChange]);
 
     // Imperative handle for direct control
     React.useImperativeHandle(ref, () => ({
@@ -225,6 +248,7 @@ export const MultiTextInput = React.forwardRef<MultiTextInputHandle, MultiTextIn
                     onFocus={props.onFocus}
                     onBlur={props.onBlur}
                     onSelectionChange={handleSelectionChange}
+                    onContentSizeChange={onOverflowChange ? handleContentSizeChange : undefined}
                     multiline={true}
                     autoCapitalize={props.autoCapitalize ?? 'sentences'}
                     autoCorrect={props.autoCorrect ?? true}

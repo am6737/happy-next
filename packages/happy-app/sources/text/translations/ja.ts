@@ -1222,6 +1222,8 @@ export const ja: TranslationStructure = {
     },
 
     agentInput: {
+        expand: '入力欄を拡大',
+        collapse: '入力欄を縮小',
         permissionMode: {
             title: 'PERMISSION MODE',
             default: 'Default',

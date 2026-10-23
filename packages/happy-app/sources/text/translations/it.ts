@@ -1219,6 +1219,8 @@ export const it: TranslationStructure = {
     },
 
     agentInput: {
+        expand: 'Espandi editor',
+        collapse: 'Riduci editor',
         permissionMode: {
             title: 'PERMISSION MODE',
             default: 'Default',
