@@ -147,8 +147,11 @@ export type DooTaskUser = {
     userimg: string | null;
     profession: string | null;
     department: string | null;
+    /** Department names, from `users/basic` (`department` holds their ids). */
+    department_name?: string | null;
     bot: number;
     online?: boolean;
+    line_at?: string | null;
     disable_at: string | null;
 };
 

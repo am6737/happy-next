@@ -1,16 +1,21 @@
 import * as React from 'react';
 import { View, Text, ActivityIndicator } from 'react-native';
 import { Image } from 'expo-image';
-import { BottomSheetModal, BottomSheetFlatList } from '@gorhom/bottom-sheet';
+import { BottomSheetModal, BottomSheetFlatList, BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppBottomSheet } from '@/components/AppBottomSheet';
 import { SearchField } from '@/components/SearchField';
-import { sheetFill } from '@/components/glassSheet';
+import { Item } from '@/components/Item';
+import { ItemGroup } from '@/components/ItemGroup';
+import { SHEET_ITEM_GROUP_STYLE, sheetFill, sheetSafeAreaBottom } from '@/components/glassSheet';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { Typography } from '@/constants/Typography';
 import { t } from '@/text';
-import type { DooTaskDialogUser } from '@/sync/dootask/types';
+import { formatLastSeen } from '@/utils/sessionUtils';
+import type { DooTaskDialogUser, DooTaskUser } from '@/sync/dootask/types';
 
 const AVATAR_SIZE = 40;
+const HEADER_AVATAR_SIZE = 72;
 
 function resolveAvatarUrl(avatarPath: string | null | undefined, serverUrl: string): string | null {
     if (!avatarPath) return null;
@@ -33,33 +38,124 @@ function getGroupTypeLabel(groupType: string): string {
     }
 }
 
+/** DooTask's "YYYY-MM-DD HH:mm:ss", read as local time; null when there is none. */
+function parseDootaskTime(value: string | null | undefined): number | null {
+    if (!value) return null;
+    const parsed = Date.parse(value.includes('T') ? value : value.replace(' ', 'T'));
+    return Number.isFinite(parsed) ? parsed : null;
+}
+
 type DialogDetailModalProps = {
+    /** A one-to-one chat shows the other person's card; a group shows its info and members. */
+    isUserDialog: boolean;
     dialogName: string;
     dialogId: number;
+    /** The other person's avatar in a one-to-one chat, already resolved. */
+    dialogAvatar: string | null;
     groupType: string;
     ownerId: number;
+    /** The other person in a one-to-one chat, when known. */
+    peerUserId: number | null;
+    /** The other person's `users/basic`, which has what the member list lacks: department, last online. */
+    peerProfile: DooTaskUser | null;
+    currentUserId: number;
+    email: string | null;
+    isBot: boolean;
     members: DooTaskDialogUser[];
     loading: boolean;
     serverUrl: string;
 };
 
-export const DialogDetailModal = React.memo(React.forwardRef<BottomSheetModal, DialogDetailModalProps>(({
-    dialogName, dialogId, groupType, ownerId, members, loading, serverUrl,
-}, ref) => {
-    const { theme } = useUnistyles();
+export const DialogDetailModal = React.memo(React.forwardRef<BottomSheetModal, DialogDetailModalProps>((props, ref) => {
     const [search, setSearch] = React.useState('');
-
-    const filtered = React.useMemo(() => {
-        if (!search.trim()) return members;
-        const q = search.toLowerCase();
-        return members.filter(u => u.nickname?.toLowerCase().includes(q));
-    }, [members, search]);
 
     // Reset search when sheet dismisses
     const handleDismiss = React.useCallback(() => {
         setSearch('');
     }, []);
 
+    return (
+        <AppBottomSheet
+            ref={ref}
+            snapPoints={props.isUserDialog ? undefined : ['60%', '80%']}
+            enableDynamicSizing={props.isUserDialog}
+            onDismiss={handleDismiss}
+        >
+            {props.isUserDialog
+                ? <UserDialogDetail {...props} />
+                : <GroupDialogDetail {...props} search={search} onSearchChange={setSearch} />}
+        </AppBottomSheet>
+    );
+}));
+
+/** The other person's card: who they are, whether they are around, and how to reach them. */
+const UserDialogDetail = React.memo(function UserDialogDetail({
+    dialogName, dialogAvatar, peerUserId, peerProfile, currentUserId, email, isBot, members, serverUrl,
+}: DialogDetailModalProps) {
+    const insets = useSafeAreaInsets();
+    const member = React.useMemo(() => (
+        members.find(u => u.userid === peerUserId)
+        ?? members.find(u => u.userid !== currentUserId)
+        ?? null
+    ), [members, peerUserId, currentUserId]);
+
+    const name = peerProfile?.nickname || member?.nickname || dialogName;
+    const avatar = resolveAvatarUrl(peerProfile?.userimg || member?.userimg, serverUrl) || dialogAvatar;
+    const bot = isBot || !!peerProfile?.bot || !!member?.bot;
+    const online = peerProfile?.online ?? member?.online;
+    const lastOnlineAt = parseDootaskTime(peerProfile?.line_at);
+    const status = online
+        ? t('status.online')
+        : lastOnlineAt !== null
+            ? t('dootask.lastOnline', { time: formatLastSeen(lastOnlineAt) })
+            : online === false ? t('status.offline') : null;
+
+    const profession = peerProfile?.profession || member?.profession;
+    const department = peerProfile?.department_name;
+    const mail = email || peerProfile?.email;
+
+    return (
+        <BottomSheetScrollView contentContainerStyle={{ paddingBottom: sheetSafeAreaBottom(insets.bottom) + 16 }}>
+            <View style={cardStyles.header}>
+                {avatar ? (
+                    <Image source={{ uri: avatar }} style={{ width: HEADER_AVATAR_SIZE, height: HEADER_AVATAR_SIZE, borderRadius: HEADER_AVATAR_SIZE / 2 }} contentFit="cover" />
+                ) : (
+                    <View style={cardStyles.avatarPlaceholder}>
+                        <Text style={cardStyles.avatarInitial}>{(name || '?')[0].toUpperCase()}</Text>
+                    </View>
+                )}
+                <Text style={cardStyles.name} numberOfLines={2}>{name}</Text>
+                {bot ? (
+                    <View style={cardStyles.tag}>
+                        <Text style={cardStyles.tagText}>{t('dootask.bot')}</Text>
+                    </View>
+                ) : status ? (
+                    <View style={cardStyles.statusRow}>
+                        <View style={[cardStyles.statusDot, online ? cardStyles.statusDotOnline : cardStyles.statusDotOffline]} />
+                        <Text style={cardStyles.status}>{status}</Text>
+                    </View>
+                ) : null}
+            </View>
+            <ItemGroup containerStyle={SHEET_ITEM_GROUP_STYLE}>
+                <Item title={t('dootask.profession')} detail={profession || '-'} copy={profession || false} showChevron={false} />
+                <Item title={t('dootask.department')} detail={department || '-'} copy={department || false} showChevron={false} />
+                <Item title={t('dootask.email')} detail={mail || '-'} copy={mail || false} showChevron={false} />
+            </ItemGroup>
+        </BottomSheetScrollView>
+    );
+});
+
+/** A group's name, id and kind, then its searchable members. */
+const GroupDialogDetail = React.memo(function GroupDialogDetail({
+    dialogName, dialogId, groupType, ownerId, members, loading, serverUrl, search, onSearchChange,
+}: DialogDetailModalProps & { search: string; onSearchChange: (text: string) => void }) {
+    const { theme } = useUnistyles();
+
+    const filtered = React.useMemo(() => {
+        if (!search.trim()) return members;
+        const q = search.toLowerCase();
+        return members.filter(u => u.nickname?.toLowerCase().includes(q));
+    }, [members, search]);
 
     const renderMember = React.useCallback(({ item }: { item: DooTaskDialogUser }) => {
         const avatarUrl = resolveAvatarUrl(item.userimg, serverUrl);
@@ -112,36 +208,94 @@ export const DialogDetailModal = React.memo(React.forwardRef<BottomSheetModal, D
             <SearchField
                 inSheet
                 value={search}
-                onChangeText={setSearch}
+                onChangeText={onSearchChange}
                 placeholder={t('dootask.searchMembers')}
                 style={sheetStyles.searchField}
             />
         </>
-    ), [theme, dialogName, dialogId, groupTypeLabel, search, setSearch]);
+    ), [theme, dialogName, dialogId, groupTypeLabel, search, onSearchChange]);
+
+    if (loading && members.length === 0) {
+        return (
+            <View style={{ flex: 1, alignItems: 'center', paddingTop: 40 }}>
+                <ActivityIndicator size="small" color={theme.colors.textSecondary} />
+            </View>
+        );
+    }
 
     return (
-        <AppBottomSheet
-            ref={ref}
-            snapPoints={['60%', '80%']}
-            enableDynamicSizing={false}
-            onDismiss={handleDismiss}
-        >
-            {loading && members.length === 0 ? (
-                <View style={{ flex: 1, alignItems: 'center', paddingTop: 40 }}>
-                    <ActivityIndicator size="small" color={theme.colors.textSecondary} />
-                </View>
-            ) : (
-                <BottomSheetFlatList
-                    data={filtered}
-                    keyExtractor={(item: DooTaskDialogUser) => String(item.userid)}
-                    renderItem={renderMember}
-                    ListHeaderComponent={ListHeaderComponent}
-                    contentContainerStyle={{ paddingBottom: 20 }}
-                    keyboardShouldPersistTaps="handled"
-                />
-            )}
-        </AppBottomSheet>
+        <BottomSheetFlatList
+            data={filtered}
+            keyExtractor={(item: DooTaskDialogUser) => String(item.userid)}
+            renderItem={renderMember}
+            ListHeaderComponent={ListHeaderComponent}
+            contentContainerStyle={{ paddingBottom: 20 }}
+            keyboardShouldPersistTaps="handled"
+        />
     );
+});
+
+const cardStyles = StyleSheet.create((theme) => ({
+    header: {
+        alignItems: 'center',
+        paddingHorizontal: theme.margins.lg,
+        paddingTop: theme.margins.md,
+        paddingBottom: theme.margins.sm,
+        gap: 4,
+    },
+    avatarPlaceholder: {
+        width: HEADER_AVATAR_SIZE,
+        height: HEADER_AVATAR_SIZE,
+        borderRadius: HEADER_AVATAR_SIZE / 2,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: sheetFill(theme.colors.surfaceHighest),
+    },
+    avatarInitial: {
+        ...Typography.default('semiBold'),
+        fontSize: 28,
+        color: theme.colors.text,
+    },
+    name: {
+        ...Typography.default('semiBold'),
+        fontSize: 20,
+        color: theme.colors.text,
+        textAlign: 'center',
+        marginTop: 8,
+    },
+    statusRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+    },
+    statusDot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+    },
+    statusDotOnline: {
+        backgroundColor: theme.colors.status.connected,
+    },
+    statusDotOffline: {
+        backgroundColor: theme.colors.status.disconnected,
+    },
+    status: {
+        ...Typography.default(),
+        fontSize: 14,
+        color: theme.colors.textSecondary,
+    },
+    tag: {
+        marginTop: 2,
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        borderRadius: 4,
+        backgroundColor: sheetFill(theme.colors.surfaceHighest),
+    },
+    tagText: {
+        ...Typography.default('semiBold'),
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+    },
 }));
 
 const sheetStyles = StyleSheet.create((theme) => ({

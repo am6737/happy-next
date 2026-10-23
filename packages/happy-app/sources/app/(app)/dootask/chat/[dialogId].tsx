@@ -9,7 +9,7 @@ import { ChatHeaderTitle } from '@/components/ChatHeaderTitle';
 import { AgentContentView } from '@/components/AgentContentView';
 import { storage, useDootaskProfile, useDootaskUserCache, useDootaskUserAvatars, useDootaskUserDisabledAt } from '@/sync/storage';
 import { useShallow } from 'zustand/react/shallow';
-import { dootaskFetchDialogMessages, dootaskSendTextMessage, dootaskSendFileMessage, dootaskSendFileByUri, dootaskToggleEmoji, dootaskFetchDialogOne, dootaskFetchDialogUsers } from '@/sync/dootask/api';
+import { dootaskFetchDialogMessages, dootaskSendTextMessage, dootaskSendFileMessage, dootaskSendFileByUri, dootaskToggleEmoji, dootaskFetchDialogOne, dootaskFetchDialogUsers, dootaskFetchUsersBasic } from '@/sync/dootask/api';
 import { BottomSheetModal } from '@gorhom/bottom-sheet';
 import { DialogDetailModal } from '@/components/dootask/DialogDetailModal';
 import { useDootaskWebSocket } from '@/hooks/useDootaskWebSocket';
@@ -23,7 +23,7 @@ import { getNativeHeaderTitleWidth } from '@/utils/nativeHeaderTitleWidth';
 import { isRunningOnMac } from '@/utils/platform';
 import { softHeaderOptions } from '@/components/navigation/softHeader';
 import { useIsTablet } from '@/utils/responsive';
-import type { DooTaskDialogMsg, PendingMessage, DisplayMessage, DooTaskDialog, DooTaskDialogUser } from '@/sync/dootask/types';
+import type { DooTaskDialogMsg, PendingMessage, DisplayMessage, DooTaskDialog, DooTaskDialogUser, DooTaskUser } from '@/sync/dootask/types';
 import { generateMockMessages, MOCK_USER_NAMES, MOCK_USER_AVATARS } from '@/components/dootask/__dev__/mockChatMessages';
 import { KeyboardCenteredEmpty } from '@/components/KeyboardCenteredEmpty';
 import { floatingComposerAvailable, floatingComposerScreenOptions } from '@/components/floatingComposer';
@@ -87,12 +87,14 @@ export default React.memo(function DooTaskChat() {
     const [dialogInfo, setDialogInfo] = React.useState<DooTaskDialog | null>(null);
     const [dialogMembers, setDialogMembers] = React.useState<DooTaskDialogUser[]>([]);
     const [dialogMembersLoading, setDialogMembersLoading] = React.useState(false);
+    const [peerProfile, setPeerProfile] = React.useState<DooTaskUser | null>(null);
     const detailModalRef = React.useRef<BottomSheetModal>(null);
 
     React.useEffect(() => {
         setDialogInfo(null);
         setDialogMembers([]);
         setDialogMembersLoading(false);
+        setPeerProfile(null);
         detailModalRef.current?.dismiss();
     }, [id]);
 
@@ -235,6 +237,22 @@ export default React.memo(function DooTaskChat() {
         }).catch(() => {});
         return () => { stale = true; };
     }, [profile, id, isMock]);
+
+    // The other person in a one-to-one chat: department, title and last online for the detail sheet
+    const peerUserId = dialogInfo?.type === 'user'
+        ? (dialogInfo.dialog_user?.userid || (userId ? Number(userId) : null))
+        : null;
+    React.useEffect(() => {
+        if (!profile || isMock || !peerUserId) return;
+        let stale = false;
+        dootaskFetchUsersBasic(profile.serverUrl, profile.token, [peerUserId]).then(res => {
+            if (stale) return;
+            if (res.ret === 1 && Array.isArray(res.data)) {
+                setPeerProfile(res.data.find((u: DooTaskUser) => u.userid === peerUserId) || null);
+            }
+        }).catch(() => {});
+        return () => { stale = true; };
+    }, [profile, isMock, peerUserId]);
 
     // Load older messages
     const handleLoadMore = React.useCallback(async () => {
@@ -755,10 +773,17 @@ export default React.memo(function DooTaskChat() {
             />
             <DialogDetailModal
                 ref={detailModalRef}
-                dialogName={headerSubtitleText || dialogInfo?.name || headerTitleText}
+                isUserDialog={isUserDialog}
+                dialogName={isUserDialog ? (dialogInfo?.name || headerTitleText) : (headerSubtitleText || dialogInfo?.name || headerTitleText)}
                 dialogId={id}
+                dialogAvatar={resolvedDialogAvatar}
                 groupType={dialogInfo?.group_type || ''}
                 ownerId={dialogInfo?.owner_id || 0}
+                peerUserId={peerUserId}
+                peerProfile={peerProfile}
+                currentUserId={profile?.userId || 0}
+                email={dialogInfo?.email || null}
+                isBot={!!dialogInfo?.bot}
                 members={dialogMembers}
                 loading={dialogMembersLoading}
                 serverUrl={profile?.serverUrl || ''}
