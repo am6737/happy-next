@@ -753,6 +753,7 @@ export const ja: TranslationStructure = {
     shareTarget: {
         // The page another app's share sheet opens: where what was shared goes
         title: '共有先',
+        sheetTitle: ({ app }: { app: string }) => `${app} に共有`,
         newSession: '新しいセッション',
         activeSessions: 'アクティブなセッション',
         noActiveSessions: 'オンラインのセッションはありません',

@@ -3,19 +3,25 @@ import { Platform } from 'react-native';
 import { useRootNavigationState, useRouter } from 'expo-router';
 import { useShareIntent } from 'expo-share-intent';
 import { useAuth } from '@/auth/AuthContext';
+import { useNavigateToSession } from '@/hooks/useNavigateToSession';
+import { useShareExtensionSnapshot } from '@/hooks/useShareExtensionSnapshot';
 import { Modal } from '@/modal';
 import { t } from '@/text';
 import { discardSharedFiles, receiveSharedContent, toSharedContent, useSharedContentStore } from './sharedContent';
+import { takeShareExtensionTarget } from './shareExtension';
 
 /**
- * Takes what another app shared through the system share sheet and opens the share-target page,
- * where it is sent to a new session or an active one. On iOS the share extension opens the app
- * with a link that already leads to that page (+native-intent); Android hands over an intent, so
- * the page is opened here.
+ * Takes what another app shared through the system share sheet to where it goes. On iOS the share
+ * extension's sheet has the user pick a new session or an active one (from the snapshot kept up
+ * to date here), so that composer opens right away; Android, and iOS without a snapshot, open the
+ * share-target page to pick there.
  */
 export const ShareIntentReceiver = React.memo(() => {
     const router = useRouter();
     const { isAuthenticated } = useAuth();
+    const navigateToSession = useNavigateToSession();
+    useShareExtensionSnapshot(isAuthenticated);
+    const lastShare = React.useRef<{ signature: string; at: number } | null>(null);
     // On a cold start the share arrives before the navigator can take a page
     const navigationReady = !!useRootNavigationState()?.key;
     const { hasShareIntent, shareIntent, resetShareIntent, error } = useShareIntent({
@@ -27,15 +33,26 @@ export const ShareIntentReceiver = React.memo(() => {
     React.useEffect(() => {
         if (!hasShareIntent || !navigationReady) return;
         const content = toSharedContent(shareIntent);
+        const target = takeShareExtensionTarget();
         resetShareIntent();
         if (!content) return;
+        // iOS can hand the same share over twice (the link and the app coming to the front both
+        // read it) before it is cleared; the second has no target left and the same files
+        const signature = JSON.stringify(content);
+        const now = Date.now();
+        if (lastShare.current?.signature === signature && now - lastShare.current.at < 10_000) return;
+        lastShare.current = { signature, at: now };
         if (!isAuthenticated) {
             discardSharedFiles(content.files);
             Modal.alert(t('shareTarget.title'), t('shareTarget.loginRequired'));
             return;
         }
-        receiveSharedContent(content);
-        if (!useSharedContentStore.getState().pageOpen) {
+        receiveSharedContent(content, target);
+        if (target?.type === 'new') {
+            router.navigate('/new', { dangerouslySingular: () => 'new' });
+        } else if (target) {
+            navigateToSession(target.sessionId);
+        } else if (!useSharedContentStore.getState().pageOpen) {
             router.push('/share-target');
         }
         // Runs once per share; the intent is reset right away

@@ -750,6 +750,7 @@ export const it: TranslationStructure = {
     shareTarget: {
         // The page another app's share sheet opens: where what was shared goes
         title: 'Condividi in',
+        sheetTitle: ({ app }: { app: string }) => `Condividi in ${app}`,
         newSession: 'Nuova sessione',
         activeSessions: 'Sessioni attive',
         noActiveSessions: 'Nessuna sessione online',

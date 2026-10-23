@@ -1,3 +1,460 @@
+diff --git a/node_modules/expo-share-intent/plugin/build/ios/ShareExtensionViewController.swift b/node_modules/expo-share-intent/plugin/build/ios/ShareExtensionViewController.swift
+index 0911a9e..5a643e3 100644
+--- a/node_modules/expo-share-intent/plugin/build/ios/ShareExtensionViewController.swift
++++ b/node_modules/expo-share-intent/plugin/build/ios/ShareExtensionViewController.swift
+@@ -7,6 +7,7 @@
+ import MobileCoreServices
+ import Photos
+ import Social
++import SwiftUI
+ import UIKit
+ 
+ class ShareViewController: UIViewController {
+@@ -26,12 +27,33 @@ class ShareViewController: UIViewController {
+   let pdfContentType: String = UTType.pdf.identifier
+   let vcardContentType: String = "public.vcard"
+ 
++  // Happy: the sheet lists where the content can go (SharePicker below) and only takes it in once
++  // the user has picked; without the app's snapshot it opens the app right away, as before.
++  let snapshotKey = "happyShareSnapshot"
++  let targetKey = "happyShareTarget"
++  var picking = false
++
+   override func viewDidLoad() {
+     super.viewDidLoad()
++    let defaults = UserDefaults(suiteName: hostAppGroupIdentifier)
++    defaults?.removeObject(forKey: targetKey)
++    guard let json = defaults?.string(forKey: snapshotKey),
++      let snapshot = try? JSONDecoder().decode(ShareSnapshot.self, from: Data(json.utf8)),
++      let attachments = (extensionContext?.inputItems.first as? NSExtensionItem)?.attachments,
++      !attachments.isEmpty
++    else { return }
++    picking = true
++    showPicker(snapshot: snapshot, attachments: attachments)
+   }
+ 
+   override func viewDidAppear(_ animated: Bool) {
+     super.viewDidAppear(animated)
++    if !picking {
++      handleAttachments()
++    }
++  }
++
++  func handleAttachments() {
+     Task {
+       guard let extensionContext = self.extensionContext,
+         let content = extensionContext.inputItems.first as? NSExtensionItem,
+@@ -781,3 +803,410 @@ extension Array {
+     return Int(index) < count ? self[Int(index)] : nil
+   }
+ }
++
++// MARK: - Happy: where the shared content goes
++
++/// What the app leaves in the App Group for the sheet (modules/share-extension): its online
++/// sessions, its strings in the app's language and its colours.
++struct ShareSnapshot: Decodable {
++  struct Session: Decodable {
++    let id: String
++    let name: String
++    let subtitle: String
++    let letter: String
++    let color: String
++  }
++  struct Palette: Decodable {
++    let background: String
++    let field: String
++    let text: String
++    let textSecondary: String
++    let divider: String
++    let pressed: String
++    let tint: String
++    let accent: String
++    let accentTint: String
++    let online: String
++  }
++  struct Strings: Decodable {
++    let title: String
++    let cancel: String
++    let searchPlaceholder: String
++    let newSession: String
++    let activeSessions: String
++    let noActiveSessions: String
++    let noResults: String
++    let text: String
++    // Indexed by count - 1
++    let images: [String]
++    let videos: [String]
++    let files: [String]
++  }
++  // light, dark or adaptive (the system's)
++  let appearance: String
++  let light: Palette
++  let dark: Palette
++  let strings: Strings
++  let sessions: [Session]
++}
++
++final class SharePickerModel: ObservableObject {
++  @Published var query = ""
++  @Published var subtitle = ""
++  @Published var sending = false
++}
++
++extension ShareViewController {
++  func showPicker(snapshot: ShareSnapshot, attachments: [NSItemProvider]) {
++    let model = SharePickerModel()
++    let picker = SharePickerView(
++      snapshot: snapshot, model: model,
++      onCancel: { [weak self] in
++        self?.extensionContext?.cancelRequest(
++          withError: NSError(domain: NSCocoaErrorDomain, code: NSUserCancelledError))
++      },
++      onPick: { [weak self] target in
++        guard let self, !model.sending else { return }
++        model.sending = true
++        let defaults = UserDefaults(suiteName: self.hostAppGroupIdentifier)
++        defaults?.set(target, forKey: self.targetKey)
++        defaults?.synchronize()
++        self.handleAttachments()
++      })
++    let host = UIHostingController(rootView: picker)
++    if snapshot.appearance == "light" {
++      overrideUserInterfaceStyle = .light
++    } else if snapshot.appearance == "dark" {
++      overrideUserInterfaceStyle = .dark
++    }
++    addChild(host)
++    host.view.translatesAutoresizingMaskIntoConstraints = false
++    view.addSubview(host.view)
++    NSLayoutConstraint.activate([
++      host.view.topAnchor.constraint(equalTo: view.topAnchor),
++      host.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
++      host.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
++      host.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
++    ])
++    host.didMove(toParent: self)
++    describe(attachments: attachments, strings: snapshot.strings, model: model)
++  }
++
++  /// The subtitle: how many images, videos and files, the name of a lone file, or the start of
++  /// the text. Read off the attachments in the order handleAttachments takes them.
++  private func describe(attachments: [NSItemProvider], strings: ShareSnapshot.Strings, model: SharePickerModel) {
++    var images = 0
++    var videos = 0
++    var files: [NSItemProvider] = []
++    var texts: [NSItemProvider] = []
++    for attachment in attachments {
++      if attachment.hasItemConformingToTypeIdentifier(imageContentType) {
++        images += 1
++      } else if attachment.hasItemConformingToTypeIdentifier(videoContentType) {
++        videos += 1
++      } else if [vcardContentType, fileURLType, pkpassContentType, pdfContentType].contains(where: {
++        attachment.hasItemConformingToTypeIdentifier($0)
++      }) {
++        files.append(attachment)
++      } else {
++        texts.append(attachment)
++      }
++    }
++    func counted(_ forms: [String], _ count: Int) -> String? {
++      count > 0 && !forms.isEmpty ? forms[min(count, forms.count) - 1] : nil
++    }
++    var parts: [String] = []
++    if !texts.isEmpty { parts.append(strings.text) }
++    if let part = counted(strings.images, images) { parts.append(part) }
++    if let part = counted(strings.videos, videos) { parts.append(part) }
++    if files.count == 1, images + videos == 0, let name = files[0].suggestedName, !name.isEmpty {
++      parts.append(name)
++    } else if let part = counted(strings.files, files.count) {
++      parts.append(part)
++    }
++    model.subtitle = parts.joined(separator: " · ")
++
++    // Text alone: show how it starts
++    guard images + videos + files.count == 0, let provider = texts.first else { return }
++    let type = provider.hasItemConformingToTypeIdentifier(urlContentType) ? urlContentType : textContentType
++    guard provider.hasItemConformingToTypeIdentifier(type) else { return }
++    provider.loadItem(forTypeIdentifier: type, options: nil) { item, _ in
++      var text: String?
++      if let url = item as? URL {
++        text = url.absoluteString
++      } else if let string = item as? String {
++        text = string
++      } else if let data = item as? Data {
++        text = String(data: data, encoding: .utf8)
++      }
++      let line = text?.split(whereSeparator: \.isNewline).first.map {
++        $0.trimmingCharacters(in: .whitespaces)
++      }
++      guard let line, !line.isEmpty else { return }
++      DispatchQueue.main.async {
++        model.subtitle = "\(strings.text) · “\(line)”"
++      }
++    }
++  }
++}
++
++extension Color {
++  /// The app's palette, light or dark as the sheet's appearance goes. Colours come as #RRGGBB or
++  /// #RRGGBBAA.
++  init(light: String, dark: String) {
++    self.init(
++      UIColor { traits in
++        UIColor(hex: traits.userInterfaceStyle == .dark ? dark : light)
++      })
++  }
++}
++
++extension UIColor {
++  convenience init(hex: String) {
++    var value: UInt64 = 0
++    let digits = hex.hasPrefix("#") ? String(hex.dropFirst()) : hex
++    Scanner(string: digits).scanHexInt64(&value)
++    if digits.count == 8 {
++      self.init(
++        red: CGFloat((value >> 24) & 0xFF) / 255, green: CGFloat((value >> 16) & 0xFF) / 255,
++        blue: CGFloat((value >> 8) & 0xFF) / 255, alpha: CGFloat(value & 0xFF) / 255)
++    } else {
++      self.init(
++        red: CGFloat((value >> 16) & 0xFF) / 255, green: CGFloat((value >> 8) & 0xFF) / 255,
++        blue: CGFloat(value & 0xFF) / 255, alpha: 1)
++    }
++  }
++}
++
++struct SharePalette {
++  let background, field, text, textSecondary, divider, pressed, tint, accent, accentTint, online: Color
++
++  init(_ light: ShareSnapshot.Palette, _ dark: ShareSnapshot.Palette) {
++    background = Color(light: light.background, dark: dark.background)
++    field = Color(light: light.field, dark: dark.field)
++    text = Color(light: light.text, dark: dark.text)
++    textSecondary = Color(light: light.textSecondary, dark: dark.textSecondary)
++    divider = Color(light: light.divider, dark: dark.divider)
++    pressed = Color(light: light.pressed, dark: dark.pressed)
++    tint = Color(light: light.tint, dark: dark.tint)
++    accent = Color(light: light.accent, dark: dark.accent)
++    accentTint = Color(light: light.accentTint, dark: dark.accentTint)
++    online = Color(light: light.online, dark: dark.online)
++  }
++}
++
++/// A row lit while pressed, as the app's session list does.
++struct ShareRowStyle: ButtonStyle {
++  let pressed: Color
++
++  func makeBody(configuration: Configuration) -> some View {
++    configuration.label
++      .contentShape(Rectangle())
++      .background(configuration.isPressed ? pressed : Color.clear)
++  }
++}
++
++/// The sheet: cancel and the title (what's shared under it), the app's search field, then a new
++/// session and the online ones; while searching only the sessions that match.
++struct SharePickerView: View {
++  let snapshot: ShareSnapshot
++  @ObservedObject var model: SharePickerModel
++  let onCancel: () -> Void
++  let onPick: (String) -> Void
++  let palette: SharePalette
++
++  init(
++    snapshot: ShareSnapshot, model: SharePickerModel, onCancel: @escaping () -> Void,
++    onPick: @escaping (String) -> Void
++  ) {
++    self.snapshot = snapshot
++    self.model = model
++    self.onCancel = onCancel
++    self.onPick = onPick
++    self.palette = SharePalette(snapshot.light, snapshot.dark)
++  }
++
++  private var searching: Bool {
++    !model.query.trimmingCharacters(in: .whitespaces).isEmpty
++  }
++
++  private var sessions: [ShareSnapshot.Session] {
++    let query = model.query.trimmingCharacters(in: .whitespaces)
++    guard !query.isEmpty else { return snapshot.sessions }
++    return snapshot.sessions.filter {
++      $0.name.localizedCaseInsensitiveContains(query) || $0.subtitle.localizedCaseInsensitiveContains(query)
++    }
++  }
++
++  var body: some View {
++    VStack(spacing: 0) {
++      header
++      searchField
++        .padding(.horizontal, 16)
++        .padding(.bottom, 8)
++      ScrollView {
++        LazyVStack(alignment: .leading, spacing: 0) {
++          if !searching {
++            newSessionRow
++            Text(snapshot.strings.activeSessions)
++              .font(.system(size: 13, weight: .semibold))
++              .foregroundColor(palette.textSecondary)
++              .padding(.horizontal, 16)
++              .padding(.top, 16)
++              .padding(.bottom, 4)
++          }
++          let list = sessions
++          if list.isEmpty {
++            Text(searching ? snapshot.strings.noResults : snapshot.strings.noActiveSessions)
++              .font(.system(size: 15))
++              .foregroundColor(palette.textSecondary)
++              .frame(maxWidth: .infinity)
++              .padding(.top, 24)
++          }
++          ForEach(Array(list.enumerated()), id: \.element.id) { index, session in
++            if index > 0 { divider }
++            sessionRow(session)
++          }
++        }
++        .padding(.bottom, 16)
++      }
++    }
++    .background(palette.background.ignoresSafeArea())
++    .overlay(sending)
++    .disabled(model.sending)
++  }
++
++  private var header: some View {
++    ZStack {
++      VStack(spacing: 1) {
++        Text(snapshot.strings.title)
++          .font(.system(size: 17, weight: .semibold))
++          .foregroundColor(palette.text)
++        if !model.subtitle.isEmpty {
++          Text(model.subtitle)
++            .font(.system(size: 12))
++            .foregroundColor(palette.textSecondary)
++        }
++      }
++      .lineLimit(1)
++      .padding(.horizontal, 80)
++      HStack {
++        Button(snapshot.strings.cancel, action: onCancel)
++          .font(.system(size: 17))
++          .foregroundColor(palette.tint)
++        Spacer()
++      }
++    }
++    .padding(.horizontal, 16)
++    .padding(.top, 16)
++    .padding(.bottom, 12)
++  }
++
++  // The app's SearchField: 36 tall, corners of 10, a search glyph, text at 16 and a clear button
++  private var searchField: some View {
++    HStack(spacing: 6) {
++      Image(systemName: "magnifyingglass")
++        .font(.system(size: 15, weight: .medium))
++        .foregroundColor(palette.textSecondary)
++      TextField("", text: $model.query)
++        .font(.system(size: 16))
++        .foregroundColor(palette.text)
++        .disableAutocorrection(true)
++        .textInputAutocapitalization(.never)
++        .submitLabel(.search)
++        .overlay(alignment: .leading) {
++          if model.query.isEmpty {
++            Text(snapshot.strings.searchPlaceholder)
++              .font(.system(size: 16))
++              .foregroundColor(palette.textSecondary)
++              .allowsHitTesting(false)
++          }
++        }
++      if !model.query.isEmpty {
++        Button {
++          model.query = ""
++        } label: {
++          Image(systemName: "xmark.circle.fill")
++            .font(.system(size: 16))
++            .foregroundColor(palette.textSecondary)
++        }
++        .buttonStyle(.plain)
++      }
++    }
++    .padding(.horizontal, 8)
++    .frame(height: 36)
++    .background(palette.field)
++    .cornerRadius(10)
++  }
++
++  private var divider: some View {
++    Rectangle()
++      .fill(palette.divider)
++      .frame(height: 1 / UIScreen.main.scale)
++      .padding(.leading, 16 + 40 + 12)
++  }
++
++  private var newSessionRow: some View {
++    Button {
++      onPick("new")
++    } label: {
++      HStack(spacing: 12) {
++        Image(systemName: "plus")
++          .font(.system(size: 20, weight: .medium))
++          .foregroundColor(palette.accentTint)
++          .frame(width: 40, height: 40)
++          .background(Circle().fill(palette.accent))
++        Text(snapshot.strings.newSession)
++          .font(.system(size: 16, weight: .semibold))
++          .foregroundColor(palette.text)
++        Spacer(minLength: 8)
++        Image(systemName: "chevron.right")
++          .font(.system(size: 14, weight: .semibold))
++          .foregroundColor(palette.textSecondary)
++      }
++      .padding(.horizontal, 16)
++      .padding(.vertical, 10)
++    }
++    .buttonStyle(ShareRowStyle(pressed: palette.pressed))
++  }
++
++  private func sessionRow(_ session: ShareSnapshot.Session) -> some View {
++    Button {
++      onPick("session:\(session.id)")
++    } label: {
++      HStack(spacing: 12) {
++        Text(session.letter)
++          .font(.system(size: 15, weight: .semibold))
++          .foregroundColor(.white)
++          .frame(width: 40, height: 40)
++          .background(Circle().fill(Color(UIColor(hex: session.color))))
++        VStack(alignment: .leading, spacing: 2) {
++          Text(session.name)
++            .font(.system(size: 16, weight: .medium))
++            .foregroundColor(palette.text)
++          Text(session.subtitle)
++            .font(.system(size: 13))
++            .foregroundColor(palette.textSecondary)
++        }
++        .lineLimit(1)
++        Spacer(minLength: 8)
++        Circle()
++          .fill(palette.online)
++          .frame(width: 8, height: 8)
++      }
++      .padding(.horizontal, 16)
++      .padding(.vertical, 10)
++    }
++    .buttonStyle(ShareRowStyle(pressed: palette.pressed))
++  }
++
++  // Copying the files over can take a moment for videos
++  @ViewBuilder private var sending: some View {
++    if model.sending {
++      ZStack {
++        palette.background.opacity(0.6).ignoresSafeArea()
++        ProgressView()
++      }
++    }
++  }
++}
 diff --git a/node_modules/expo-share-intent/plugin/build/ios/writeIosShareExtensionFiles.js b/node_modules/expo-share-intent/plugin/build/ios/writeIosShareExtensionFiles.js
 index c40060d..750cf73 100644
 --- a/node_modules/expo-share-intent/plugin/build/ios/writeIosShareExtensionFiles.js

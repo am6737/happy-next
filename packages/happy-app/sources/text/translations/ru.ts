@@ -711,6 +711,7 @@ export const ru: TranslationStructure = {
     shareTarget: {
         // The page another app's share sheet opens: where what was shared goes
         title: 'Поделиться в',
+        sheetTitle: ({ app }: { app: string }) => `Поделиться в ${app}`,
         newSession: 'Новая сессия',
         activeSessions: 'Активные сессии',
         noActiveSessions: 'Нет сессий в сети',

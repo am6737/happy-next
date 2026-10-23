@@ -18,7 +18,7 @@ export type SharedContent = {
     files: SharedFile[];
 };
 
-/** Where it goes, picked on the share-target page: a new session or one of the active ones. */
+/** Where it goes, picked on the share-target page (or the iOS share extension's sheet): a new session or one of the active ones. */
 export type ShareTarget = { type: 'new' } | { type: 'session'; sessionId: string };
 
 type SharedContentState = {
@@ -74,10 +74,11 @@ export function discardSharedFiles(files: SharedFile[]) {
     }
 }
 
-export function receiveSharedContent(content: SharedContent) {
+/** Takes in what was shared, sent already when the iOS share extension's sheet picked where. */
+export function receiveSharedContent(content: SharedContent, target: ShareTarget | null = null) {
     const previous = useSharedContentStore.getState().content;
     if (previous) discardSharedFiles(previous.files);
-    useSharedContentStore.setState({ content, target: null });
+    useSharedContentStore.setState({ content, target });
 }
 
 export function sendSharedContentTo(target: ShareTarget) {

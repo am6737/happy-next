@@ -753,6 +753,7 @@ export const zhHans: TranslationStructure = {
     shareTarget: {
         // The page another app's share sheet opens: where what was shared goes
         title: '分享到',
+        sheetTitle: ({ app }: { app: string }) => `分享到 ${app}`,
         newSession: '新建会话',
         activeSessions: '活跃会话',
         noActiveSessions: '没有在线的会话',

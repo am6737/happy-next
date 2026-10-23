@@ -760,6 +760,8 @@ export const en = {
     shareTarget: {
         // The page another app's share sheet opens: where what was shared goes
         title: 'Share to',
+        // The iOS share extension's sheet, naming the app
+        sheetTitle: ({ app }: { app: string }) => `Share to ${app}`,
         newSession: 'New session',
         activeSessions: 'Active sessions',
         noActiveSessions: 'No sessions are online',

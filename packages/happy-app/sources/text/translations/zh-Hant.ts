@@ -752,6 +752,7 @@ export const zhHant: TranslationStructure = {
     shareTarget: {
         // The page another app's share sheet opens: where what was shared goes
         title: '分享到',
+        sheetTitle: ({ app }: { app: string }) => `分享到 ${app}`,
         newSession: '新增工作階段',
         activeSessions: '活躍工作階段',
         noActiveSessions: '沒有在線的工作階段',

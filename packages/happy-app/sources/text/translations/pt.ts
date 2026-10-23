@@ -751,6 +751,7 @@ export const pt: TranslationStructure = {
     shareTarget: {
         // The page another app's share sheet opens: where what was shared goes
         title: 'Compartilhar em',
+        sheetTitle: ({ app }: { app: string }) => `Compartilhar em ${app}`,
         newSession: 'Nova sessão',
         activeSessions: 'Sessões ativas',
         noActiveSessions: 'Nenhuma sessão online',
