@@ -43,8 +43,14 @@ export default function UserProfileScreen() {
     const router = useRouter();
     const { theme } = useUnistyles();
     const sharedSessions = useSharedSessions();
-    const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
+    // Start from the profile the inbox or friends list already holds, so the page and its header
+    // menu are there on the first frame; the fetch below refreshes it.
+    const [userProfile, setUserProfile] = useState<UserProfile | null>(() => {
+        if (!id) return null;
+        const state = storage.getState();
+        return state.friends[id] ?? state.users[id] ?? null;
+    });
+    const [isLoading, setIsLoading] = useState(() => userProfile === null);
     const [sharedByMeData, setSharedByMeData] = useState<SharedByMeSession[]>([]);
     const [menuVisible, setMenuVisible] = useState(false);
     const [isRefreshing, setIsRefreshing] = useState(false);
@@ -105,7 +111,6 @@ export default function UserProfileScreen() {
     // Load user profile on mount
     useEffect(() => {
         if (!credentials || !id) return;
-        setIsLoading(true);
         loadData().finally(() => setIsLoading(false));
     }, [loadData]);
 

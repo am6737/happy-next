@@ -303,10 +303,36 @@ export default function EditScreen() {
         });
     }, [navigation, hasChanges]);
 
+    // The save button is there, greyed out, while the file loads, rather than appearing once it has.
+    const headerScreen = (
+        <Stack.Screen
+            options={{
+                headerTitle: fileName,
+                headerRight: () => (
+                    <Pressable
+                        onPress={handleSave}
+                        disabled={!hasChanges || isSaving}
+                        style={{ width: 38, height: 38, alignItems: 'center', justifyContent: 'center' }}
+                    >
+                        {isSaving ? (
+                            <ActivityIndicator size="small" color={theme.colors.header.tint} />
+                        ) : (
+                            <Ionicons
+                                name="save-outline"
+                                size={22}
+                                color={hasChanges ? theme.colors.header.tint : theme.colors.textSecondary}
+                            />
+                        )}
+                    </Pressable>
+                ),
+            }}
+        />
+    );
+
     if (isLoading) {
         return (
             <View style={[styles.container, { backgroundColor: theme.colors.surface, justifyContent: 'center', alignItems: 'center' }]}>
-                <Stack.Screen options={{ headerTitle: fileName }} />
+                {headerScreen}
                 <ActivityIndicator size="small" color={theme.colors.textSecondary} />
             </View>
         );
@@ -315,7 +341,7 @@ export default function EditScreen() {
     if (error) {
         return (
             <View style={[styles.container, { backgroundColor: theme.colors.surface, justifyContent: 'center', alignItems: 'center', padding: 20 }]}>
-                <Stack.Screen options={{ headerTitle: fileName }} />
+                {headerScreen}
                 <Ionicons name="alert-circle-outline" size={48} color={theme.colors.textSecondary} />
                 <Text style={{ fontSize: 16, color: theme.colors.textSecondary, textAlign: 'center', marginTop: 16, ...Typography.default() }}>
                     {error}
@@ -326,28 +352,7 @@ export default function EditScreen() {
 
     return (
         <View style={[styles.container, { backgroundColor: theme.colors.surface }]}>
-            <Stack.Screen
-                options={{
-                    headerTitle: fileName,
-                    headerRight: () => (
-                        <Pressable
-                            onPress={handleSave}
-                            disabled={!hasChanges || isSaving}
-                            style={{ width: 38, height: 38, alignItems: 'center', justifyContent: 'center' }}
-                        >
-                            {isSaving ? (
-                                <ActivityIndicator size="small" color={theme.colors.header.tint} />
-                            ) : (
-                                <Ionicons
-                                    name="save-outline"
-                                    size={22}
-                                    color={hasChanges ? theme.colors.header.tint : theme.colors.textSecondary}
-                                />
-                            )}
-                        </Pressable>
-                    ),
-                }}
-            />
+            {headerScreen}
             {Platform.OS === 'ios' ? (
                 <KeyboardAvoidingView behavior="padding" keyboardVerticalOffset={0} style={{ flex: 1 }}>
                     <View style={{

@@ -6,7 +6,7 @@ import { Ionicons, Octicons } from '@expo/vector-icons';
 import { Text } from '@/components/StyledText';
 import { Typography } from '@/constants/Typography';
 import { sessionBash } from '@/sync/ops';
-import { getSession } from '@/sync/storage';
+import { getSession, storage } from '@/sync/storage';
 import { getWorkspaceRepos } from '@/utils/workspaceRepos';
 import { RepoSelector } from '@/components/RepoSelector';
 import { useUnistyles, StyleSheet } from 'react-native-unistyles';
@@ -85,8 +85,17 @@ export default function CommitsScreen() {
     const [hasMore, setHasMore] = React.useState(true);
     const [error, setError] = React.useState<string | null>(null);
 
-    // Diff stats for headerRight badge
-    const [diffStats, setDiffStats] = React.useState<{ insertions: number; deletions: number } | null>(null);
+    // Diff stats for headerRight badge. The session's git status already counts them for its own
+    // repo, so on its current branch the badge starts from those and the header doesn't widen when
+    // `git diff` answers; a workspace's status sums every repo, and other branches have none.
+    const statusRepoPath = workspaceRepos.length > 1 ? null : (workspaceRepos[0]?.path || sessionPath);
+    const cachedDiffStats = React.useCallback((cwd: string | null) => {
+        if (!statusRepoPath || cwd !== statusRepoPath) return null;
+        const status = storage.getState().sessionGitStatus[sessionId];
+        if (!status || (status.linesAdded === 0 && status.linesRemoved === 0)) return null;
+        return { insertions: status.linesAdded, deletions: status.linesRemoved };
+    }, [statusRepoPath, sessionId]);
+    const [diffStats, setDiffStats] = React.useState<{ insertions: number; deletions: number } | null>(() => cachedDiffStats(repoBaseCwd));
 
     // Branch selector state
     const [localBranches, setLocalBranches] = React.useState<string[]>([]);
@@ -177,7 +186,7 @@ export default function CommitsScreen() {
 
     // Load diff stats when active branch/worktree changes
     React.useEffect(() => {
-        setDiffStats(null);
+        setDiffStats(cachedDiffStats(activeCwd));
         if (!activeCwd) return;
         let cancelled = false;
         (async () => {
@@ -188,19 +197,17 @@ export default function CommitsScreen() {
                     timeout: 10000,
                 });
                 if (cancelled) return;
-                if (result.success && result.stdout) {
-                    const ins = result.stdout.match(/(\d+) insertion/);
-                    const del = result.stdout.match(/(\d+) deletion/);
+                if (result.success) {
+                    const ins = result.stdout?.match(/(\d+) insertion/);
+                    const del = result.stdout?.match(/(\d+) deletion/);
                     const insertions = ins ? parseInt(ins[1], 10) : 0;
                     const deletions = del ? parseInt(del[1], 10) : 0;
-                    if (insertions > 0 || deletions > 0) {
-                        setDiffStats({ insertions, deletions });
-                    }
+                    setDiffStats(insertions > 0 || deletions > 0 ? { insertions, deletions } : null);
                 }
             } catch { /* ignore */ }
         })();
         return () => { cancelled = true; };
-    }, [sessionId, activeCwd]);
+    }, [sessionId, activeCwd, cachedDiffStats]);
 
     // Resolve the upstream tracking branch + its tip commit, so we can mark
     // which commits have already been pushed to the remote ("online").
@@ -417,9 +424,45 @@ export default function CommitsScreen() {
         );
     }, [commits.length, theme, handleCommitPress, upstreamHead, upstreamLabel]);
 
+    // The header's button opens the status page, which needs none of the commits; it is there
+    // while they load as well.
+    const headerScreen = (
+        <Stack.Screen
+            options={{
+                ...softHeaderOptions,
+                ...(fileFilter ? { headerTitle: fileFilter.split('/').pop() || t('commits.title') } : {}),
+                headerRight: () => (
+                    <Pressable
+                        onPress={() => router.push(activeCwd && activeCwd !== sessionPath
+                            ? `/session/${sessionId}/status?cwd=${encodeURIComponent(activeCwd)}`
+                            : `/session/${sessionId}/status`
+                        )}
+                        style={diffStats
+                            ? { flexDirection: 'row', alignItems: 'center', paddingLeft: 8, paddingRight: 10, paddingVertical: 4, gap: 6 }
+                            : { paddingHorizontal: 8, paddingVertical: 4 }
+                        }
+                    >
+                        <Ionicons name="git-compare-outline" size={22} color={theme.colors.header.tint} />
+                        {diffStats ? (
+                            <View style={{ flexDirection: 'row', gap: 2 }}>
+                                <Text style={{ fontSize: 11, color: '#34C759', fontWeight: '700', ...Typography.mono() }}>
+                                    +{diffStats.insertions}
+                                </Text>
+                                <Text style={{ fontSize: 11, color: '#FF3B30', fontWeight: '700', ...Typography.mono() }}>
+                                    -{diffStats.deletions}
+                                </Text>
+                            </View>
+                        ) : null}
+                    </Pressable>
+                ),
+            }}
+        />
+    );
+
     if (isLoading && commits.length === 0) {
         return (
             <View style={[styles.container, { backgroundColor: theme.colors.surface, justifyContent: 'center', alignItems: 'center' }]}>
+                {headerScreen}
                 <ActivityIndicator size="small" color={theme.colors.textSecondary} />
             </View>
         );
@@ -428,6 +471,7 @@ export default function CommitsScreen() {
     if (error && commits.length === 0) {
         return (
             <View style={[styles.container, { backgroundColor: theme.colors.surface, justifyContent: 'center', alignItems: 'center', padding: 20 }]}>
+                {headerScreen}
                 <Ionicons name="alert-circle-outline" size={48} color={theme.colors.textSecondary} />
                 <Text style={{ fontSize: 16, color: theme.colors.textSecondary, textAlign: 'center', marginTop: 16, ...Typography.default() }}>
                     {error}
@@ -439,6 +483,7 @@ export default function CommitsScreen() {
     if (!isLoading && commits.length === 0) {
         return (
             <View style={[styles.container, { backgroundColor: theme.colors.surface, justifyContent: 'center', alignItems: 'center', padding: 20 }]}>
+                {headerScreen}
                 <Ionicons name="git-commit-outline" size={48} color={theme.colors.textSecondary} />
                 <Text style={{ fontSize: 16, color: theme.colors.textSecondary, textAlign: 'center', marginTop: 16, ...Typography.default() }}>
                     {t('commits.noCommits')}
@@ -449,36 +494,7 @@ export default function CommitsScreen() {
 
     return (
         <View style={[styles.container, { backgroundColor: theme.colors.surface }]}>
-            <Stack.Screen
-                options={{
-                    ...softHeaderOptions,
-                    ...(fileFilter ? { headerTitle: fileFilter.split('/').pop() || t('commits.title') } : {}),
-                    headerRight: () => (
-                        <Pressable
-                            onPress={() => router.push(activeCwd && activeCwd !== sessionPath
-                                ? `/session/${sessionId}/status?cwd=${encodeURIComponent(activeCwd)}`
-                                : `/session/${sessionId}/status`
-                            )}
-                            style={diffStats
-                                ? { flexDirection: 'row', alignItems: 'center', paddingLeft: 8, paddingRight: 10, paddingVertical: 4, gap: 6 }
-                                : { paddingHorizontal: 8, paddingVertical: 4 }
-                            }
-                        >
-                            <Ionicons name="git-compare-outline" size={22} color={theme.colors.header.tint} />
-                            {diffStats ? (
-                                <View style={{ flexDirection: 'row', gap: 2 }}>
-                                    <Text style={{ fontSize: 11, color: '#34C759', fontWeight: '700', ...Typography.mono() }}>
-                                        +{diffStats.insertions}
-                                    </Text>
-                                    <Text style={{ fontSize: 11, color: '#FF3B30', fontWeight: '700', ...Typography.mono() }}>
-                                        -{diffStats.deletions}
-                                    </Text>
-                                </View>
-                            ) : null}
-                        </Pressable>
-                    ),
-                }}
-            />
+            {headerScreen}
             <FlatList
                 data={commits}
                 contentInsetAdjustmentBehavior="automatic"

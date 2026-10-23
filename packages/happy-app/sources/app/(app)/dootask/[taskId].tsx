@@ -80,9 +80,12 @@ export default function DooTaskDetail() {
     const linkedSessions = useLinkedSessions('dootask', String(id), 'task', profile?.serverUrl);
     const navigateToSession = useNavigateToSession();
 
-    const [task, setTask] = React.useState<DooTaskItem | null>(cached?.task ?? null);
+    // Opened from the task list for the first time, the page starts from the list's copy of the
+    // task, so it and its header menu are there at once; the detail fetch fills in the rest.
+    const [listTask] = React.useState(() => cached ? null : storage.getState().dootaskTasks.find((item) => item.id === id) ?? null);
+    const [task, setTask] = React.useState<DooTaskItem | null>(cached?.task ?? listTask);
     const [taskContent, setTaskContent] = React.useState<string | null>(cached?.content ?? null);
-    const [loading, setLoading] = React.useState(!cached);
+    const [loading, setLoading] = React.useState(!cached && !listTask);
     const [refreshing, setRefreshing] = React.useState(false);
     const [error, setError] = React.useState<string | null>(null);
 
@@ -185,7 +188,7 @@ export default function DooTaskDetail() {
 
     React.useEffect(() => {
         if (!profile || !taskId) return;
-        if (!cached) setLoading(true);
+        if (!cached && !listTask) setLoading(true);
         fetchData()
             .catch((e) => setError(e.message))
             .finally(() => setLoading(false));

@@ -154,16 +154,19 @@ export default function CommitScreen() {
 
     // Action menu
     const [menuVisible, setMenuVisible] = React.useState(false);
+    // Copying the hash needs only the route's, so the menu is there while the commit loads; copying
+    // its message joins once it has.
     const menuItems: ActionMenuItem[] = React.useMemo(() => {
-        if (!commitDetail) return [];
-        return [
-            {
-                label: t('commits.copyHash'),
-                onPress: async () => {
-                    await Clipboard.setStringAsync(commitDetail.hash);
-                    hapticsLight(); showCopiedToast();
-                },
+        const copyHash: ActionMenuItem = {
+            label: t('commits.copyHash'),
+            onPress: async () => {
+                await Clipboard.setStringAsync(commitDetail?.hash || hash);
+                hapticsLight(); showCopiedToast();
             },
+        };
+        if (!commitDetail) return [copyHash];
+        return [
+            copyHash,
             {
                 label: t('commits.copyMessage'),
                 onPress: async () => {
@@ -175,33 +178,14 @@ export default function CommitScreen() {
                 },
             },
         ];
-    }, [commitDetail]);
+    }, [commitDetail, hash]);
 
     // Calculate totals
     const totalAdditions = files.reduce((sum, f) => sum + f.additions, 0);
     const totalDeletions = files.reduce((sum, f) => sum + f.deletions, 0);
 
-    if (isLoading) {
-        return (
-            <View style={[styles.container, { backgroundColor: theme.colors.surface, justifyContent: 'center', alignItems: 'center' }]}>
-                <ActivityIndicator size="small" color={theme.colors.textSecondary} />
-            </View>
-        );
-    }
-
-    if (error || !commitDetail) {
-        return (
-            <View style={[styles.container, { backgroundColor: theme.colors.surface, justifyContent: 'center', alignItems: 'center', padding: 20 }]}>
-                <Ionicons name="alert-circle-outline" size={48} color={theme.colors.textSecondary} />
-                <Text style={{ fontSize: 16, color: theme.colors.textSecondary, textAlign: 'center', marginTop: 16, ...Typography.default() }}>
-                    {error || 'Failed to load commit'}
-                </Text>
-            </View>
-        );
-    }
-
-    return (
-        <View style={[styles.container, { backgroundColor: theme.colors.groupped?.background || theme.colors.surface }]}>
+    const headerActions = (
+        <>
             <Stack.Screen
                 options={{
                     headerRight: () => (
@@ -220,6 +204,33 @@ export default function CommitScreen() {
                 items={menuItems}
                 onClose={() => setMenuVisible(false)}
             />
+        </>
+    );
+
+    if (isLoading) {
+        return (
+            <View style={[styles.container, { backgroundColor: theme.colors.surface, justifyContent: 'center', alignItems: 'center' }]}>
+                {headerActions}
+                <ActivityIndicator size="small" color={theme.colors.textSecondary} />
+            </View>
+        );
+    }
+
+    if (error || !commitDetail) {
+        return (
+            <View style={[styles.container, { backgroundColor: theme.colors.surface, justifyContent: 'center', alignItems: 'center', padding: 20 }]}>
+                {headerActions}
+                <Ionicons name="alert-circle-outline" size={48} color={theme.colors.textSecondary} />
+                <Text style={{ fontSize: 16, color: theme.colors.textSecondary, textAlign: 'center', marginTop: 16, ...Typography.default() }}>
+                    {error || 'Failed to load commit'}
+                </Text>
+            </View>
+        );
+    }
+
+    return (
+        <View style={[styles.container, { backgroundColor: theme.colors.groupped?.background || theme.colors.surface }]}>
+            {headerActions}
             <ItemList style={{ flex: 1 }}>
                 {/* Commit message */}
                 <ItemGroup>
