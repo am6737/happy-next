@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { Typography } from '@/constants/Typography';
 import { t } from '@/text';
+import { sheetFill } from './glassSheet';
 
 // The app's search field, on every platform the iOS system one: 36 tall, corners of 10, its text
 // a size down from the system's 17, at 16.
@@ -42,7 +43,7 @@ export const SearchField = React.memo(({ value, onChangeText, placeholder, onCle
     const Input = inSheet && Platform.OS !== 'web' ? BottomSheetTextInput : TextInput;
 
     return (
-        <View style={[styles.field, style]}>
+        <View style={[styles.field, inSheet && styles.fieldInSheet, style]}>
             <Ionicons name="search" size={searchFieldMetrics.iconSize} color={theme.colors.textSecondary} />
             <Input
                 ref={inputRef as any}
@@ -85,6 +86,9 @@ const stylesheet = StyleSheet.create((theme) => ({
         paddingHorizontal: searchFieldMetrics.paddingHorizontal,
         borderRadius: searchFieldMetrics.borderRadius,
         backgroundColor: theme.colors.surface,
+    },
+    fieldInSheet: {
+        backgroundColor: sheetFill(theme.colors.surface),
     },
     input: {
         flex: 1,

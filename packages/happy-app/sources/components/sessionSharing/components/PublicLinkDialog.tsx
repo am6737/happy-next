@@ -2,6 +2,7 @@ import * as React from 'react';
 import { View, Switch, Pressable } from 'react-native';
 import { BottomSheetModal, BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { AppBottomSheet } from '@/components/AppBottomSheet';
+import { SHEET_ITEM_GROUP_STYLE, sheetSafeAreaBottom } from '@/components/glassSheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useUnistyles } from 'react-native-unistyles';
 import { StyleSheet } from 'react-native-unistyles';
@@ -70,14 +71,14 @@ export const PublicLinkDialog = React.memo(React.forwardRef<BottomSheetModal, Pu
             ref={ref}
             enableDynamicSizing={true}
         >
-            <BottomSheetScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 16 }}>
+            <BottomSheetScrollView contentContainerStyle={{ paddingBottom: sheetSafeAreaBottom(insets.bottom) + 16 }}>
                 <Text style={[styles.title, { color: theme.colors.text }]}>
                     {t('session.sharing.publicLink')}
                 </Text>
 
                 {publicShare ? (
                     <>
-                        <ItemGroup>
+                        <ItemGroup containerStyle={SHEET_ITEM_GROUP_STYLE}>
                             <Item
                                 title={t('session.sharing.publicLinkActive')}
                                 showChevron={false}
@@ -105,14 +106,14 @@ export const PublicLinkDialog = React.memo(React.forwardRef<BottomSheetModal, Pu
                             />
                         </ItemGroup>
                         {publicShareUrl && (
-                            <ItemGroup>
+                            <ItemGroup containerStyle={SHEET_ITEM_GROUP_STYLE}>
                                 <Item
                                     title={t('session.sharing.copyLink')}
                                     onPress={handleCopyLink}
                                 />
                             </ItemGroup>
                         )}
-                        <ItemGroup>
+                        <ItemGroup containerStyle={SHEET_ITEM_GROUP_STYLE}>
                             <Item
                                 title={t('session.sharing.deletePublicLink')}
                                 onPress={handleDelete}
@@ -122,7 +123,7 @@ export const PublicLinkDialog = React.memo(React.forwardRef<BottomSheetModal, Pu
                     </>
                 ) : (
                     <>
-                        <ItemGroup title={t('session.sharing.expiresIn')}>
+                        <ItemGroup containerStyle={SHEET_ITEM_GROUP_STYLE} title={t('session.sharing.expiresIn')}>
                             <Item
                                 title={t('session.sharing.days7')}
                                 onPress={() => setExpiresInDays(7)}
@@ -164,7 +165,7 @@ export const PublicLinkDialog = React.memo(React.forwardRef<BottomSheetModal, Pu
                             />
                         </ItemGroup>
 
-                        <ItemGroup title={t('session.sharing.maxUsesLabel')}>
+                        <ItemGroup containerStyle={SHEET_ITEM_GROUP_STYLE} title={t('session.sharing.maxUsesLabel')}>
                             <Item
                                 title={t('session.sharing.unlimited')}
                                 onPress={() => setMaxUses(undefined)}
@@ -206,7 +207,7 @@ export const PublicLinkDialog = React.memo(React.forwardRef<BottomSheetModal, Pu
                             />
                         </ItemGroup>
 
-                        <ItemGroup>
+                        <ItemGroup containerStyle={SHEET_ITEM_GROUP_STYLE}>
                             <Item
                                 title={t('session.sharing.requireConsent')}
                                 subtitle={t('session.sharing.requireConsentDescription')}

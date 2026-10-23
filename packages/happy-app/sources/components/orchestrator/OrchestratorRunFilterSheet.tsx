@@ -6,6 +6,8 @@ import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { useShallow } from 'zustand/react/shallow';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppBottomSheet } from '@/components/AppBottomSheet';
+import { sheetFill, sheetSafeAreaBottom } from '@/components/glassSheet';
+import { liquidGlassAvailable } from '@/components/GlassSurface';
 import { Text } from '@/components/StyledText';
 import { Typography } from '@/constants/Typography';
 import { storage, useSetting } from '@/sync/storage';
@@ -103,7 +105,7 @@ export const OrchestratorRunFilterSheet = React.memo(React.forwardRef<BottomShee
                 <Text style={[styles.titleText, { color: theme.colors.textSecondary }]}>{t('settings.orchestratorFilter')}</Text>
             </View>
             {/* The last machine scrolls up clear of the home indicator */}
-            <BottomSheetScrollView contentContainerStyle={{ paddingBottom: safeArea.bottom + 24 }}>
+            <BottomSheetScrollView contentContainerStyle={{ paddingBottom: sheetSafeAreaBottom(safeArea.bottom) + 24 }}>
                 <Text style={[styles.sectionTitle, { color: theme.colors.textSecondary }]}>{t('settings.orchestratorFilterStatus')}</Text>
                 <View style={styles.chipRow}>
                     {ORCHESTRATOR_RUN_STATUS_FILTERS.map((option) => {
@@ -111,7 +113,7 @@ export const OrchestratorRunFilterSheet = React.memo(React.forwardRef<BottomShee
                         return (
                             <Pressable
                                 key={option.key}
-                                style={[styles.chip, { backgroundColor: selected ? theme.colors.button.primary.background : theme.colors.surface }]}
+                                style={[styles.chip, { backgroundColor: selected ? theme.colors.button.primary.background : sheetFill(theme.colors.surface) }]}
                                 onPress={() => onChangeStatus(option.key)}
                             >
                                 <Text style={[styles.chipText, { color: selected ? theme.colors.button.primary.tint : theme.colors.text }]}>
@@ -129,7 +131,7 @@ export const OrchestratorRunFilterSheet = React.memo(React.forwardRef<BottomShee
                         return (
                             <Pressable
                                 key={option ?? 'all'}
-                                style={[styles.chip, { backgroundColor: selected ? theme.colors.button.primary.background : theme.colors.surface }]}
+                                style={[styles.chip, { backgroundColor: selected ? theme.colors.button.primary.background : sheetFill(theme.colors.surface) }]}
                                 onPress={() => onChangeKind(option)}
                             >
                                 {option ? <Ionicons name={ORCHESTRATOR_RUN_KIND_ICONS[option]} size={14} color={color} /> : null}
@@ -146,10 +148,10 @@ export const OrchestratorRunFilterSheet = React.memo(React.forwardRef<BottomShee
                     return (
                         <Pressable
                             key={row.id ?? '__all__'}
-                            style={({ pressed }) => [styles.row, pressed && !selected && { backgroundColor: theme.colors.surface }]}
+                            style={({ pressed }) => [styles.row, pressed && !selected && { backgroundColor: sheetFill(theme.colors.surface) }]}
                             onPress={() => !selected && onChangeMachine(row.id)}
                         >
-                            <View style={[styles.rowIcon, { backgroundColor: row.tint ?? theme.colors.surfaceHighest }]}>
+                            <View style={[styles.rowIcon, { backgroundColor: row.tint ?? sheetFill(theme.colors.surfaceHighest) }]}>
                                 <Ionicons name={row.icon} size={18} color={row.tint !== undefined ? '#FFFFFF' : theme.colors.textSecondary} />
                                 {row.online !== undefined ? (
                                     <View
@@ -218,7 +220,8 @@ const styles = StyleSheet.create(() => ({
         width: 10,
         height: 10,
         borderRadius: 5,
-        borderWidth: 2,
+        // The ring is the sheet's color, cut out of the tile; glass has no color to cut it in.
+        borderWidth: liquidGlassAvailable ? 0 : 2,
     },
     rowCopy: { flex: 1, minWidth: 0 },
     rowText: { fontSize: 15, ...Typography.default() },

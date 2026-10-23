@@ -359,7 +359,6 @@ export const FolderPickerSheet = React.memo(React.forwardRef<BottomSheetModal, F
             enableDynamicSizing={false}
             onAnimate={handleAnimate}
             onDismiss={handleDismiss}
-            glass
         >
             <View style={{ flex: 1 }}>
                 {/* Title */}
@@ -468,7 +467,6 @@ const headerStyles = StyleSheet.create((theme) => ({
     searchField: {
         marginHorizontal: theme.margins.lg,
         marginVertical: theme.margins.md,
-        backgroundColor: sheetFill(theme.colors.surface),
     },
 }));
 

@@ -2,6 +2,7 @@ import * as React from 'react';
 import { View, Pressable } from 'react-native';
 import { BottomSheetModal, BottomSheetFlatList } from '@gorhom/bottom-sheet';
 import { AppBottomSheet } from '@/components/AppBottomSheet';
+import { SHEET_ITEM_GROUP_STYLE, sheetFill, sheetFillStrong, sheetSafeAreaBottom } from '@/components/glassSheet';
 import { SearchField } from '@/components/SearchField';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
@@ -69,7 +70,7 @@ export const FriendSelector = React.memo(React.forwardRef<BottomSheetModal, Frie
         const usernameLabel = getUsernameLabel(item);
         return (
             <View style={styles.alignedWrapper}>
-                <View style={[styles.friendRowContainer, { backgroundColor: isSelected ? theme.colors.surfaceHigh : theme.colors.surface }]}>
+                <View style={[styles.friendRowContainer, { backgroundColor: isSelected ? sheetFillStrong(theme.colors.surfaceHigh) : sheetFill(theme.colors.surface) }]}>
                     <Item
                         title={getDisplayName(item)}
                         subtitle={hasKeys ? usernameLabel : t('session.sharing.recipientMissingKeys')}
@@ -111,7 +112,7 @@ export const FriendSelector = React.memo(React.forwardRef<BottomSheetModal, Frie
         if (!selectedUserId) return null;
         return (
             <View style={{ marginTop: 8 }}>
-                <ItemGroup title={t('session.sharing.accessLevel')}>
+                <ItemGroup containerStyle={SHEET_ITEM_GROUP_STYLE} title={t('session.sharing.accessLevel')}>
                     <Item
                         title={t('session.sharing.viewOnly')}
                         subtitle={t('session.sharing.viewOnlyDescription')}
@@ -193,7 +194,7 @@ export const FriendSelector = React.memo(React.forwardRef<BottomSheetModal, Frie
                     ListHeaderComponent={ListHeaderComponent}
                     ListFooterComponent={ListFooterComponent}
                     ListEmptyComponent={ListEmptyComponent}
-                    contentContainerStyle={{ paddingBottom: insets.bottom + 16 }}
+                    contentContainerStyle={{ paddingBottom: sheetSafeAreaBottom(insets.bottom) + 16 }}
                     keyboardShouldPersistTaps="handled"
                 />
             </View>

@@ -9,6 +9,7 @@ import { Typography } from '@/constants/Typography';
 import { isMachineOnline } from '@/utils/machineUtils';
 import type { Machine } from '@/sync/storageTypes';
 import { t } from '@/text';
+import { sheetFill } from '@/components/glassSheet';
 
 /**
  * Which machine a new terminal should run on.
@@ -64,7 +65,7 @@ export const NewTerminalSheet = React.memo(
                                 onPress={() => onSelect(machine.id)}
                                 style={({ pressed }) => [
                                     styles.row,
-                                    pressed && { backgroundColor: theme.colors.surface },
+                                    pressed && { backgroundColor: sheetFill(theme.colors.surface) },
                                 ]}
                             >
                                 <View style={styles.rowMain}>

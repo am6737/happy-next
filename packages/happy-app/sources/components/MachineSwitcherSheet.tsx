@@ -18,7 +18,7 @@ import { useMachine, useSetting } from '@/sync/storage';
 import { getMachineCliUpdate } from '@/utils/cliUpdate';
 import { CliUpdateIcon } from './CliUpdateIndicator';
 import { liquidGlassAvailable } from './GlassSurface';
-import { sheetFill } from './glassSheet';
+import { sheetFill, sheetSafeAreaBottom } from './glassSheet';
 import { filterMachineGroups, type SessionListSelection, type SessionScopeDot as Dot } from './sessionListScope';
 
 
@@ -155,7 +155,6 @@ export const MachineSwitcherSheet = React.memo(React.forwardRef<BottomSheetModal
             snapPoints={[searchable || hasShares ? '70%' : '42%']}
             enableDynamicSizing={false}
             onDismiss={handleDismiss}
-            glass
         >
             <View style={styles.container}>
                 <View style={styles.heading}>
@@ -263,7 +262,7 @@ export const MachineSwitcherSheet = React.memo(React.forwardRef<BottomSheetModal
                     )}
                 </BottomSheetScrollView>
 
-                <View style={[styles.footer, { paddingBottom: liquidGlassAvailable ? 12 : Math.max(safeArea.bottom, 12) }]}>
+                <View style={[styles.footer, { paddingBottom: Math.max(sheetSafeAreaBottom(safeArea.bottom), 12) }]}>
                     <Pressable
                         onPress={addMachine}
                         accessibilityRole="button"
@@ -305,7 +304,6 @@ const stylesheet = StyleSheet.create((theme) => ({
     search: {
         marginHorizontal: 16,
         marginBottom: 8,
-        backgroundColor: sheetFill(theme.colors.surface),
     },
     summary: {
         paddingHorizontal: 18,

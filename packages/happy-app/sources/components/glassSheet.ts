@@ -22,6 +22,21 @@ export function sheetFill(color: string) {
     return liquidGlassAvailable ? GLASS_SHEET_FILL : color;
 }
 
+/** The fill of what stands out among the filled controls, such as the selected card in a list of them. */
+export function sheetFillStrong(color: string) {
+    return liquidGlassAvailable ? 'rgba(120, 120, 128, 0.32)' : color;
+}
+
+/** An `ItemGroup`'s card on a sheet, as its `containerStyle`: on the glass, a tint without the shadow. */
+export const SHEET_ITEM_GROUP_STYLE = liquidGlassAvailable
+    ? { backgroundColor: GLASS_SHEET_FILL, shadowOpacity: 0, elevation: 0 }
+    : undefined;
+
+/** The room a sheet's content leaves for the home indicator: none on the glass card, which sits above it. */
+export function sheetSafeAreaBottom(safeAreaBottom: number) {
+    return liquidGlassAvailable ? 0 : safeAreaBottom;
+}
+
 /** Padding of the frame around the card, which sits into the home-indicator area by the margin. */
 export function glassSheetFramePadding(safeAreaBottom: number) {
     return {

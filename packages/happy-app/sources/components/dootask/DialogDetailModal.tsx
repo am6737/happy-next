@@ -4,6 +4,7 @@ import { Image } from 'expo-image';
 import { BottomSheetModal, BottomSheetFlatList } from '@gorhom/bottom-sheet';
 import { AppBottomSheet } from '@/components/AppBottomSheet';
 import { SearchField } from '@/components/SearchField';
+import { sheetFill } from '@/components/glassSheet';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { Typography } from '@/constants/Typography';
 import { t } from '@/text';
@@ -72,7 +73,7 @@ export const DialogDetailModal = React.memo(React.forwardRef<BottomSheetModal, D
                             style={{ width: AVATAR_SIZE, height: AVATAR_SIZE, borderRadius: AVATAR_SIZE / 2, opacity: isDisabled ? 0.4 : 1 }}
                         />
                     ) : (
-                        <View style={[memberStyles.avatarPlaceholder, { backgroundColor: theme.colors.surface, opacity: isDisabled ? 0.4 : 1 }]}>
+                        <View style={[memberStyles.avatarPlaceholder, { backgroundColor: sheetFill(theme.colors.surface), opacity: isDisabled ? 0.4 : 1 }]}>
                             <Text style={{ color: theme.colors.text, fontSize: 16, fontWeight: '600' }}>
                                 {(item.nickname || '?')[0].toUpperCase()}
                             </Text>
@@ -121,7 +122,7 @@ export const DialogDetailModal = React.memo(React.forwardRef<BottomSheetModal, D
     return (
         <AppBottomSheet
             ref={ref}
-            snapPoints={['90%']}
+            snapPoints={['60%', '80%']}
             enableDynamicSizing={false}
             onDismiss={handleDismiss}
         >

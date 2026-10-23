@@ -6,6 +6,7 @@ import { useRouter } from 'expo-router';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { BottomSheetModal, BottomSheetFlatList } from '@gorhom/bottom-sheet';
 import { AppBottomSheet } from '@/components/AppBottomSheet';
+import { sheetFill } from '@/components/glassSheet';
 import { t } from '@/text';
 import { Typography } from '@/constants/Typography';
 import { storage, useDootaskTasks, useDootaskFilters, useDootaskProfile, useDootaskProjects, useDootaskUserCache } from '@/sync/storage';
@@ -198,7 +199,7 @@ const FilterPanelModal = React.memo(React.forwardRef<BottomSheetModal, FilterPan
             <Pressable
                 style={({ pressed }) => [
                     styles.pickerItem,
-                    pressed && !isSelected && { backgroundColor: theme.colors.surface },
+                    pressed && !isSelected && { backgroundColor: sheetFill(theme.colors.surface) },
                 ]}
                 onPress={() => !isSelected && selectProject(isAll ? undefined : item!.id)}
             >
@@ -234,7 +235,7 @@ const FilterPanelModal = React.memo(React.forwardRef<BottomSheetModal, FilterPan
                         key={opt.key}
                         style={[
                             styles.chip,
-                            { backgroundColor: currentRole === opt.key ? theme.colors.button.primary.background : theme.colors.surface },
+                            { backgroundColor: currentRole === opt.key ? theme.colors.button.primary.background : sheetFill(theme.colors.surface) },
                         ]}
                         onPress={() => selectRole(opt.key)}
                     >
@@ -271,7 +272,7 @@ const FilterPanelModal = React.memo(React.forwardRef<BottomSheetModal, FilterPan
     return (
         <AppBottomSheet
             ref={ref}
-            snapPoints={['60%']}
+            snapPoints={['60%', '80%']}
             enableDynamicSizing={false}
             onDismiss={handleDismiss}
         >

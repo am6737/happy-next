@@ -7,6 +7,7 @@ import { useRouter } from 'expo-router';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { BottomSheetModal, BottomSheetFlatList } from '@gorhom/bottom-sheet';
 import { AppBottomSheet } from '@/components/AppBottomSheet';
+import { sheetFill } from '@/components/glassSheet';
 import { t } from '@/text';
 import { Typography } from '@/constants/Typography';
 import { useGithubRepos, useGithubIssues, useGithubPulls, useGithubWorkIssues, useGithubWorkPulls, clearGithubCache } from '@/hooks/useGithubData';
@@ -140,7 +141,7 @@ const RepoPickerRow = React.memo(({ item, isSelected, onPress, theme }: {
     const langColor = getLanguageColor(theme, item.language);
     return (
         <Pressable
-            style={[styles.repoItem, isSelected && { backgroundColor: theme.colors.surfaceHigh }]}
+            style={[styles.repoItem, isSelected && { backgroundColor: sheetFill(theme.colors.surfaceHigh) }]}
             onPress={onPress}
         >
             {item.ownerAvatarUrl ? (
@@ -149,7 +150,7 @@ const RepoPickerRow = React.memo(({ item, isSelected, onPress, theme }: {
                     style={{ width: 32, height: 32, borderRadius: 8 }}
                 />
             ) : (
-                <View style={[styles.repoAvatar, { backgroundColor: theme.colors.surfaceHigh }]}>
+                <View style={[styles.repoAvatar, { backgroundColor: sheetFill(theme.colors.surfaceHigh) }]}>
                     <Text style={[styles.repoAvatarText, { color: theme.colors.text }]}>
                         {(item.name || item.fullName)[0].toUpperCase()}
                     </Text>
@@ -645,14 +646,14 @@ export const GitHubListView = React.memo(({ onRepoChange, repoPickerTriggerRef }
 
             <AppBottomSheet
                 ref={repoPickerRef}
-                snapPoints={['50%', '80%']}
+                snapPoints={['60%', '80%']}
                 enableDynamicSizing={false}
             >
                 <View style={styles.sheetHeader}>
                     <Text style={[styles.sheetTitle, { color: theme.colors.text }]}>{t('github.switchRepo')}</Text>
                     <View style={{ flex: 1 }} />
                     <Pressable
-                        style={[styles.sheetCloseButton, { backgroundColor: theme.colors.surfaceHigh }]}
+                        style={[styles.sheetCloseButton, { backgroundColor: sheetFill(theme.colors.surfaceHigh) }]}
                         onPress={() => repoPickerRef.current?.dismiss()}
                     >
                         <Ionicons name="close" size={14} color={theme.colors.text} />
@@ -674,10 +675,10 @@ export const GitHubListView = React.memo(({ onRepoChange, repoPickerTriggerRef }
                     </View>
                 )}
                 <Pressable
-                    style={[styles.repoItem, selectedRepo === null && { backgroundColor: theme.colors.surfaceHigh }]}
+                    style={[styles.repoItem, selectedRepo === null && { backgroundColor: sheetFill(theme.colors.surfaceHigh) }]}
                     onPress={() => handleSelectRepo(null)}
                 >
-                    <View style={[styles.repoAvatar, { backgroundColor: theme.colors.surfaceHigh }]}>
+                    <View style={[styles.repoAvatar, { backgroundColor: sheetFill(theme.colors.surfaceHigh) }]}>
                         <Ionicons name="git-network-outline" size={17} color={theme.colors.text} />
                     </View>
                     <View style={styles.repoItemContent}>

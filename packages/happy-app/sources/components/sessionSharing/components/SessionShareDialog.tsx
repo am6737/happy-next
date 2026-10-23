@@ -2,6 +2,7 @@ import * as React from 'react';
 import { View } from 'react-native';
 import { BottomSheetModal, BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { AppBottomSheet } from '@/components/AppBottomSheet';
+import { SHEET_ITEM_GROUP_STYLE, sheetFillStrong, sheetSafeAreaBottom } from '@/components/glassSheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { Ionicons } from '@expo/vector-icons';
@@ -62,13 +63,13 @@ export const SessionShareDialog = React.memo(React.forwardRef<BottomSheetModal, 
             ref={ref}
             enableDynamicSizing={true}
         >
-            <BottomSheetScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 16 }}>
+            <BottomSheetScrollView contentContainerStyle={{ paddingBottom: sheetSafeAreaBottom(insets.bottom) + 16 }}>
                 <Text style={[styles.title, { color: theme.colors.text }]}>
                     {t('session.sharing.title')}
                 </Text>
 
                 {canManage && (
-                    <ItemGroup>
+                    <ItemGroup containerStyle={SHEET_ITEM_GROUP_STYLE}>
                         <Item
                             title={t('session.sharing.shareWith')}
                             icon={<Ionicons name="person-add-outline" size={29} color="#007AFF" />}
@@ -78,7 +79,7 @@ export const SessionShareDialog = React.memo(React.forwardRef<BottomSheetModal, 
                 )}
 
                 {shares.length > 0 && (
-                    <ItemGroup title={t('session.sharing.sharedWith')}>
+                    <ItemGroup containerStyle={SHEET_ITEM_GROUP_STYLE} title={t('session.sharing.sharedWith')}>
                         {shares.map(share => (
                             <ShareItem
                                 key={share.id}
@@ -146,7 +147,7 @@ const ShareItem = React.memo(function ShareItem({
                 showDivider={showDivider}
             />
             {isSelected && canManage && (
-                <View style={{ paddingLeft: 24, backgroundColor: theme.colors.surfaceHigh }}>
+                <View style={{ paddingLeft: 24, backgroundColor: sheetFillStrong(theme.colors.surfaceHigh) }}>
                     <Item
                         title={t('session.sharing.viewOnly')}
                         subtitle={t('session.sharing.viewOnlyDescription')}
