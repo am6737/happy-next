@@ -891,9 +891,11 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
     const contextDetailsAnchorRef = React.useRef<View>(null);
     const composerKeyboardOffset = React.useContext(ComposerKeyboardOffsetContext);
     const keyboardHeight = useKeyboardState((state) => state.height);
+    // Opening the overlay dismisses the keyboard, so size it for the keyboard-down screen from the start
+    // instead of opening short and growing once the keyboard has gone.
     const settingsOverlayMaxHeight = Math.min(
         SETTINGS_OVERLAY_MAX_HEIGHT,
-        Math.max(SETTINGS_OVERLAY_MIN_HEIGHT, screenHeight - keyboardHeight - SETTINGS_OVERLAY_RESERVED_HEIGHT),
+        Math.max(SETTINGS_OVERLAY_MIN_HEIGHT, screenHeight - SETTINGS_OVERLAY_RESERVED_HEIGHT),
     );
     // measureInWindow reads layout, which the keyboard lift of the composer never touches — see
     // ComposerKeyboardOffsetContext. Read at press time so the keyboard is already settled.
