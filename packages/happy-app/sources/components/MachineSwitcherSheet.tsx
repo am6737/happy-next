@@ -17,6 +17,8 @@ import { MACHINE_AVATAR_COLORS, MACHINE_AVATAR_ICONS, resolveMachineAvatar } fro
 import { useMachine, useSetting } from '@/sync/storage';
 import { getMachineCliUpdate } from '@/utils/cliUpdate';
 import { CliUpdateIcon } from './CliUpdateIndicator';
+import { liquidGlassAvailable } from './GlassSurface';
+import { sheetFill } from './glassSheet';
 import { filterMachineGroups, type SessionListSelection, type SessionScopeDot as Dot } from './sessionListScope';
 
 
@@ -153,6 +155,7 @@ export const MachineSwitcherSheet = React.memo(React.forwardRef<BottomSheetModal
             snapPoints={[searchable || hasShares ? '70%' : '42%']}
             enableDynamicSizing={false}
             onDismiss={handleDismiss}
+            glass
         >
             <View style={styles.container}>
                 <View style={styles.heading}>
@@ -260,7 +263,7 @@ export const MachineSwitcherSheet = React.memo(React.forwardRef<BottomSheetModal
                     )}
                 </BottomSheetScrollView>
 
-                <View style={[styles.footer, { paddingBottom: Math.max(safeArea.bottom, 12) }]}>
+                <View style={[styles.footer, { paddingBottom: liquidGlassAvailable ? 12 : Math.max(safeArea.bottom, 12) }]}>
                     <Pressable
                         onPress={addMachine}
                         accessibilityRole="button"
@@ -297,11 +300,12 @@ const stylesheet = StyleSheet.create((theme) => ({
         borderRadius: 14,
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: theme.colors.surface,
+        backgroundColor: sheetFill(theme.colors.surface),
     },
     search: {
         marginHorizontal: 16,
         marginBottom: 8,
+        backgroundColor: sheetFill(theme.colors.surface),
     },
     summary: {
         paddingHorizontal: 18,
@@ -330,7 +334,7 @@ const stylesheet = StyleSheet.create((theme) => ({
         paddingVertical: 10,
     },
     itemSelected: {
-        backgroundColor: theme.colors.surface,
+        backgroundColor: sheetFill(theme.colors.surface),
     },
     itemIcon: {
         width: 32,
@@ -338,7 +342,7 @@ const stylesheet = StyleSheet.create((theme) => ({
         borderRadius: 9,
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: theme.colors.surfaceHighest,
+        backgroundColor: sheetFill(theme.colors.surfaceHighest),
     },
     onlineDot: {
         position: 'absolute',
@@ -347,7 +351,8 @@ const stylesheet = StyleSheet.create((theme) => ({
         width: 10,
         height: 10,
         borderRadius: 5,
-        borderWidth: 2,
+        // The ring is the sheet's color, cut out of the tile; glass has no color to cut it in.
+        borderWidth: liquidGlassAvailable ? 0 : 2,
         borderColor: theme.colors.groupped.background,
     },
     itemCopy: {
@@ -410,7 +415,7 @@ const stylesheet = StyleSheet.create((theme) => ({
         gap: 6,
         height: 44,
         borderRadius: 12,
-        backgroundColor: theme.colors.surface,
+        backgroundColor: sheetFill(theme.colors.surface),
     },
     addText: {
         fontSize: 15,

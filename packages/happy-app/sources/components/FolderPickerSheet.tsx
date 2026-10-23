@@ -11,6 +11,7 @@ import { machineBash } from '@/sync/ops';
 import * as Clipboard from 'expo-clipboard';
 import { hapticsLight } from '@/components/haptics';
 import { showCopiedToast } from '@/components/Toast';
+import { sheetFill } from '@/components/glassSheet';
 
 interface FolderPickerSheetProps {
     machineId: string;
@@ -303,7 +304,7 @@ export const FolderPickerSheet = React.memo(React.forwardRef<BottomSheetModal, F
             <Pressable
                 style={({ pressed }) => [
                     itemStyles.row,
-                    pressed && { backgroundColor: theme.colors.surface },
+                    pressed && { backgroundColor: sheetFill(theme.colors.surface) },
                 ]}
                 onPress={() => handleEntryPress(item)}
             >
@@ -331,7 +332,7 @@ export const FolderPickerSheet = React.memo(React.forwardRef<BottomSheetModal, F
             <Pressable
                 style={({ pressed }) => [
                     itemStyles.row,
-                    pressed && { backgroundColor: theme.colors.surface },
+                    pressed && { backgroundColor: sheetFill(theme.colors.surface) },
                 ]}
                 onPress={goUp}
             >
@@ -358,6 +359,7 @@ export const FolderPickerSheet = React.memo(React.forwardRef<BottomSheetModal, F
             enableDynamicSizing={false}
             onAnimate={handleAnimate}
             onDismiss={handleDismiss}
+            glass
         >
             <View style={{ flex: 1 }}>
                 {/* Title */}
@@ -466,6 +468,7 @@ const headerStyles = StyleSheet.create((theme) => ({
     searchField: {
         marginHorizontal: theme.margins.lg,
         marginVertical: theme.margins.md,
+        backgroundColor: sheetFill(theme.colors.surface),
     },
 }));
 

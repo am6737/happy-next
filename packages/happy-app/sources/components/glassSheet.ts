@@ -17,6 +17,11 @@ export const SHEET_BACKDROP_OPACITY = liquidGlassAvailable ? 0.2 : 0.5;
 /** A fill for controls on the glass: a solid one would cover it, this only tints it. */
 export const GLASS_SHEET_FILL = 'rgba(120, 120, 128, 0.16)';
 
+/** A control's fill on a sheet: `color` on a solid one, `GLASS_SHEET_FILL` on the glass. */
+export function sheetFill(color: string) {
+    return liquidGlassAvailable ? GLASS_SHEET_FILL : color;
+}
+
 /** Padding of the frame around the card, which sits into the home-indicator area by the margin. */
 export function glassSheetFramePadding(safeAreaBottom: number) {
     return {
