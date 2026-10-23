@@ -54,11 +54,15 @@ interface AvatarProps {
 const colors = ['#0a0310', '#49007e', '#ff005b', '#ff7d10', '#ffb238'];
 const grayscaleColors = ['#070707', '#242424', '#575757', '#979797', '#bbbbbb'];
 
+/** The colours of an avatar's 8×8 cells with this id, row by row. */
+export function pixelAvatarColors(id: string, monochrome?: boolean): string[] {
+    return generateColors(id, monochrome ? grayscaleColors : colors, monochrome);
+}
+
 export const AvatarSkia = React.memo((props: AvatarProps) => {
     const { id, square, size = 48, monochrome } = props;
     
-    const defaultColors = monochrome ? grayscaleColors : colors;
-    const pixelColors = generateColors(id, defaultColors, monochrome);
+    const pixelColors = pixelAvatarColors(id, monochrome);
     
     // Calculate cell size based on the avatar size
     const cellSize = size / GRID_SIZE;

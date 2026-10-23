@@ -124,12 +124,16 @@ interface AvatarGradientProps {
     monochrome?: boolean;
 }
 
+/** The gradient (and its index, a name for it) an avatar with this id gets. */
+export function gradientAvatar(id: string) {
+    const imageIndex = hashCode(id) % 100;
+    return { imageIndex, imageSource: gradientImages[imageIndex] };
+}
+
 export const AvatarGradient = React.memo((props: AvatarGradientProps) => {
     const { id, square, size = 48, monochrome } = props;
     
-    // Use hashCode to get consistent gradient index
-    const imageIndex = hashCode(id) % 100;
-    const gradientImage = gradientImages[imageIndex];
+    const { imageSource: gradientImage } = gradientAvatar(id);
     
     return (
         <Image

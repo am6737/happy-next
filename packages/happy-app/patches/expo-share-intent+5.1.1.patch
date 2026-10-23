@@ -1,5 +1,5 @@
 diff --git a/node_modules/expo-share-intent/plugin/build/ios/ShareExtensionViewController.swift b/node_modules/expo-share-intent/plugin/build/ios/ShareExtensionViewController.swift
-index 0911a9e..5a643e3 100644
+index 0911a9e..a07c409 100644
 --- a/node_modules/expo-share-intent/plugin/build/ios/ShareExtensionViewController.swift
 +++ b/node_modules/expo-share-intent/plugin/build/ios/ShareExtensionViewController.swift
 @@ -7,6 +7,7 @@
@@ -44,7 +44,7 @@ index 0911a9e..5a643e3 100644
      Task {
        guard let extensionContext = self.extensionContext,
          let content = extensionContext.inputItems.first as? NSExtensionItem,
-@@ -781,3 +803,410 @@ extension Array {
+@@ -781,3 +803,477 @@ extension Array {
      return Int(index) < count ? self[Int(index)] : nil
    }
  }
@@ -58,8 +58,21 @@ index 0911a9e..5a643e3 100644
 +    let id: String
 +    let name: String
 +    let subtitle: String
-+    let letter: String
-+    let color: String
++    let avatar: Avatar?
++  }
++  struct Themed: Decodable {
++    let light: String
++    let dark: String
++  }
++  /// The session's avatar in the app's avatar style, without its badges: an image (a file the app
++  /// copied into the App Group's share-avatars) on its background, tinted, at its scale; or the
++  /// pixel style's 8×8 cells, row by row.
++  struct Avatar: Decodable {
++    let image: String?
++    let imageScale: Double?
++    let tint: Themed?
++    let background: Themed?
++    let pixels: [String]?
 +  }
 +  struct Palette: Decodable {
 +    let background: String
@@ -106,6 +119,9 @@ index 0911a9e..5a643e3 100644
 +    let model = SharePickerModel()
 +    let picker = SharePickerView(
 +      snapshot: snapshot, model: model,
++      avatars: FileManager.default
++        .containerURL(forSecurityApplicationGroupIdentifier: hostAppGroupIdentifier)?
++        .appendingPathComponent("share-avatars"),
 +      onCancel: { [weak self] in
 +        self?.extensionContext?.cancelRequest(
 +          withError: NSError(domain: NSCocoaErrorDomain, code: NSUserCancelledError))
@@ -240,6 +256,59 @@ index 0911a9e..5a643e3 100644
 +  }
 +}
 +
++/// A session's avatar as the app draws it (Avatar, without the badges), 40pt; a plain circle when
++/// its image can't be read.
++struct ShareAvatarView: View {
++  let avatar: ShareSnapshot.Avatar?
++  let directory: URL?
++  let placeholder: Color
++  private let size: CGFloat = 40
++
++  var body: some View {
++    content
++      .frame(width: size, height: size)
++      .clipShape(Circle())
++  }
++
++  @ViewBuilder private var content: some View {
++    if let pixels = avatar?.pixels, pixels.count == 64 {
++      VStack(spacing: 0) {
++        ForEach(0..<8, id: \.self) { row in
++          HStack(spacing: 0) {
++            ForEach(0..<8, id: \.self) { column in
++              Color(UIColor(hex: pixels[row * 8 + column]))
++            }
++          }
++        }
++      }
++    } else if let avatar, let name = avatar.image,
++      let image = directory.flatMap({ UIImage(contentsOfFile: $0.appendingPathComponent(name).path) })
++    {
++      let side = size * CGFloat(avatar.imageScale ?? 1)
++      ZStack {
++        if let background = avatar.background {
++          Color(light: background.light, dark: background.dark)
++        }
++        if let tint = avatar.tint {
++          Image(uiImage: image)
++            .renderingMode(.template)
++            .resizable()
++            .foregroundColor(Color(light: tint.light, dark: tint.dark))
++            .frame(width: side, height: side)
++            .clipShape(Circle())
++        } else {
++          Image(uiImage: image)
++            .resizable()
++            .scaledToFill()
++            .frame(width: side, height: side)
++        }
++      }
++    } else {
++      placeholder
++    }
++  }
++}
++
 +/// A row lit while pressed, as the app's session list does.
 +struct ShareRowStyle: ButtonStyle {
 +  let pressed: Color
@@ -258,14 +327,16 @@ index 0911a9e..5a643e3 100644
 +  @ObservedObject var model: SharePickerModel
 +  let onCancel: () -> Void
 +  let onPick: (String) -> Void
++  let avatars: URL?
 +  let palette: SharePalette
 +
 +  init(
-+    snapshot: ShareSnapshot, model: SharePickerModel, onCancel: @escaping () -> Void,
-+    onPick: @escaping (String) -> Void
++    snapshot: ShareSnapshot, model: SharePickerModel, avatars: URL?,
++    onCancel: @escaping () -> Void, onPick: @escaping (String) -> Void
 +  ) {
 +    self.snapshot = snapshot
 +    self.model = model
++    self.avatars = avatars
 +    self.onCancel = onCancel
 +    self.onPick = onPick
 +    self.palette = SharePalette(snapshot.light, snapshot.dark)
@@ -420,11 +491,7 @@ index 0911a9e..5a643e3 100644
 +      onPick("session:\(session.id)")
 +    } label: {
 +      HStack(spacing: 12) {
-+        Text(session.letter)
-+          .font(.system(size: 15, weight: .semibold))
-+          .foregroundColor(.white)
-+          .frame(width: 40, height: 40)
-+          .background(Circle().fill(Color(UIColor(hex: session.color))))
++        ShareAvatarView(avatar: session.avatar, directory: avatars, placeholder: palette.field)
 +        VStack(alignment: .leading, spacing: 2) {
 +          Text(session.name)
 +            .font(.system(size: 16, weight: .medium))

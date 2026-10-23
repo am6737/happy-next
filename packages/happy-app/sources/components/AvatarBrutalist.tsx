@@ -472,16 +472,22 @@ function hashCode(str: string): number {
     return Math.abs(hash);
 }
 
+/** The image (and its index, a name for it) and the colours an avatar with this id gets. */
+export function brutalistAvatar(id: string, dark: boolean) {
+    const colorPairs = dark ? colorPairsDark : colorPairsLight;
+    const imageIndex = hashCode(id) % allImages.length;
+    return {
+        imageIndex,
+        imageSource: allImages[imageIndex],
+        colorPair: colorPairs[hashCode(id + 'color') % colorPairs.length],
+    };
+}
+
 export const AvatarBrutalist = React.memo((props: AvatarBrutalistProps) => {
     const { id, size = 32, square = false, monochrome = false } = props;
     const { theme } = useUnistyles();
 
-    const colorPairs = theme.dark ? colorPairsDark : colorPairsLight;
-    const imageIndex = hashCode(id) % allImages.length;
-    const colorIndex = hashCode(id + 'color') % colorPairs.length;
-
-    const imageSource = allImages[imageIndex];
-    const colorPair = colorPairs[colorIndex];
+    const { imageSource, colorPair } = brutalistAvatar(id, theme.dark);
     const tintColor = monochrome ? '#999999' : colorPair.tint;
     const backgroundColor = monochrome ? '#F0F0F0' : colorPair.background;
 
