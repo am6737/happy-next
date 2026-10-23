@@ -293,7 +293,7 @@ export default function EditScreen() {
             e.preventDefault();
             Modal.confirm(
                 t('common.discard'),
-                t('artifacts.discardChangesDescription'),
+                t('common.discardChangesDescription'),
             ).then((confirmed) => {
                 if (confirmed) {
                     allowExitRef.current = true;

@@ -10,11 +10,11 @@ This document describes the Happy Next wire protocol as implemented in `packages
 ## Protocol design motivations
 The protocol is designed to stay minimal, explicit, and resilient under intermittent connectivity. A few guiding principles shape naming, payloads, and versioning:
 
-- **Small surface area over completeness.** Routes and events exist only when they provide a clear sync primitive (e.g., sessions, artifacts, KV). If a capability can be expressed as data within an existing primitive, it should be.
+- **Small surface area over completeness.** Routes and events exist only when they provide a clear sync primitive (e.g., sessions, KV). If a capability can be expressed as data within an existing primitive, it should be.
 - **Explicit event types and short keys.** Update payloads use `t` for the event type and concise field names (`sid`, `id`, `seq`) to keep message size down without hiding meaning. These names are stable because they are used across clients.
 - **Separation of persistent vs. ephemeral.** Anything that must be recoverable after reconnect is an `update` event with a sequence number. Presence and usage are `ephemeral` to avoid state confusion and minimize storage.
 - **Monotonic ordering at the user level.** `UpdatePayload.seq` is a single per-user counter. This makes client reconciliation simple: apply updates in order and you are consistent for that user.
-- **Optimistic concurrency by default.** Versioned fields (metadata, agent state, artifact parts, access keys, KV) require `expectedVersion`. This prevents silent overwrites and keeps conflict resolution client-driven.
+- **Optimistic concurrency by default.** Versioned fields (metadata, agent state, access keys, KV) require `expectedVersion`. This prevents silent overwrites and keeps conflict resolution client-driven.
 - **Client-side encryption boundaries.** The server never needs to understand plaintext. The protocol therefore treats most payloads as opaque strings or base64 blobs, which keeps server logic simple and privacy guarantees strong.
 - **Backward compatibility over breaking changes.** New routes/events are added rather than mutating existing shapes in incompatible ways. When dual behavior is needed (e.g., machines), the server emits both old and new updates.
 - **Avoid full REST verbs.** Reads are primarily `GET`, while writes/actions are primarily `POST`, with `DELETE` used when the intent is unambiguous. We avoid the full REST palette because many mutations are not cleanly tied to a single entity or involve more than CRUD logic. Keeping to `GET` + `POST` (plus occasional `DELETE`) makes the client simpler and the protocol clearer.
@@ -97,15 +97,6 @@ Field names below match on-wire payloads.
 - `update-machine`
   - `body`: `{ t: "update-machine", machineId, metadata?, daemonState?, activeAt? }`
 
-- `new-artifact`
-  - `body`: `{ t: "new-artifact", artifactId, seq, header, headerVersion, body, bodyVersion, dataEncryptionKey, createdAt, updatedAt }`
-
-- `update-artifact`
-  - `body`: `{ t: "update-artifact", artifactId, header?, body? }`
-
-- `delete-artifact`
-  - `body`: `{ t: "delete-artifact", artifactId }`
-
 - `relationship-updated`
   - `body`: `{ t: "relationship-updated", uid, status, timestamp }`
 
@@ -160,22 +151,6 @@ Field names below match on-wire payloads.
   - `{ machineId, daemonState, expectedVersion }`
   - Response: `{ result: "success", version, daemonState }` or `{ result: "version-mismatch", version, daemonState }`
 
-- `artifact-read`
-  - `{ artifactId }`
-  - Response: `{ result: "success", artifact }` or `{ result: "error", message }`
-
-- `artifact-create`
-  - `{ id, header, body, dataEncryptionKey }`
-  - Response: `{ result: "success", artifact }` or `{ result: "error", message }`
-
-- `artifact-update`
-  - `{ artifactId, header?, body? }` where `header` and `body` include `data` + `expectedVersion`
-  - Response: `{ result: "success", header?, body? }` or `{ result: "version-mismatch", header?, body? }`
-
-- `artifact-delete`
-  - `{ artifactId }`
-  - Response: `{ result: "success" }` or `{ result: "error", message }`
-
 - `access-key-get`
   - `{ sessionId, machineId }`
   - Response: `{ ok: true, accessKey? }` or `{ ok: false, error }`
@@ -195,8 +170,8 @@ See `api.md` for the full HTTP endpoint catalog and auth flows.
 
 ## Sequencing and concurrency
 - `UpdatePayload.seq` is the per-user update sequence (monotonic) used for sync ordering.
-- Sessions, machines, and artifacts have their own `seq` fields used by clients for ordering.
-- Versioned fields (metadata, agentState, daemonState, artifact header/body, access keys, KV) use optimistic concurrency with `expectedVersion` and return a version-mismatch response containing the current version/data.
+- Sessions and machines have their own `seq` fields used by clients for ordering.
+- Versioned fields (metadata, agentState, daemonState, access keys, KV) use optimistic concurrency with `expectedVersion` and return a version-mismatch response containing the current version/data.
 
 ## Implementation references
 - API routes: `packages/happy-server/sources/app/api/routes`

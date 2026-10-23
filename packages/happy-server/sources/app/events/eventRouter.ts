@@ -114,31 +114,6 @@ export type UpdateEvent = {
     };
     activeAt?: number;
 } | {
-    type: 'new-artifact';
-    artifactId: string;
-    seq: number;
-    header: string;
-    headerVersion: number;
-    body: string;
-    bodyVersion: number;
-    dataEncryptionKey: string | null;
-    createdAt: number;
-    updatedAt: number;
-} | {
-    type: 'update-artifact';
-    artifactId: string;
-    header?: {
-        value: string;
-        version: number;
-    };
-    body?: {
-        value: string;
-        version: number;
-    };
-} | {
-    type: 'delete-artifact';
-    artifactId: string;
-} | {
     type: 'delete-session';
     sessionId: string;
 } | {
@@ -817,62 +792,6 @@ export function buildOrchestratorRunTerminalEphemeral(
         runId,
         status,
         title,
-    };
-}
-
-export function buildNewArtifactUpdate(artifact: {
-    id: string;
-    seq: number;
-    header: Uint8Array;
-    headerVersion: number;
-    body: Uint8Array;
-    bodyVersion: number;
-    dataEncryptionKey: Uint8Array;
-    createdAt: Date;
-    updatedAt: Date;
-}, updateSeq: number, updateId: string): UpdatePayload {
-    return {
-        id: updateId,
-        seq: updateSeq,
-        body: {
-            t: 'new-artifact',
-            artifactId: artifact.id,
-            seq: artifact.seq,
-            header: Buffer.from(artifact.header).toString('base64'),
-            headerVersion: artifact.headerVersion,
-            body: Buffer.from(artifact.body).toString('base64'),
-            bodyVersion: artifact.bodyVersion,
-            dataEncryptionKey: Buffer.from(artifact.dataEncryptionKey).toString('base64'),
-            createdAt: artifact.createdAt.getTime(),
-            updatedAt: artifact.updatedAt.getTime()
-        },
-        createdAt: Date.now()
-    };
-}
-
-export function buildUpdateArtifactUpdate(artifactId: string, updateSeq: number, updateId: string, header?: { value: string; version: number }, body?: { value: string; version: number }): UpdatePayload {
-    return {
-        id: updateId,
-        seq: updateSeq,
-        body: {
-            t: 'update-artifact',
-            artifactId,
-            header,
-            body
-        },
-        createdAt: Date.now()
-    };
-}
-
-export function buildDeleteArtifactUpdate(artifactId: string, updateSeq: number, updateId: string): UpdatePayload {
-    return {
-        id: updateId,
-        seq: updateSeq,
-        body: {
-            t: 'delete-artifact',
-            artifactId
-        },
-        createdAt: Date.now()
     };
 }
 

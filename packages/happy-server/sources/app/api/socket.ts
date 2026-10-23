@@ -10,7 +10,6 @@ import { rpcHandler } from "./socket/rpcHandler";
 import { pingHandler } from "./socket/pingHandler";
 import { sessionUpdateHandler } from "./socket/sessionUpdateHandler";
 import { machineUpdateHandler } from "./socket/machineUpdateHandler";
-import { artifactUpdateHandler } from "./socket/artifactUpdateHandler";
 import { accessKeyHandler } from "./socket/accessKeyHandler";
 import { terminalStreamHandler } from "./socket/terminalStreamHandler";
 import { cleanupUserRpcSocket, getOrCreateUserRpcListeners } from "./socket/rpcRegistry";
@@ -144,7 +143,6 @@ export function startSocket(app: Fastify) {
         sessionUpdateHandler(userId, socket, connection);
         pingHandler(socket);
         machineUpdateHandler(userId, socket);
-        artifactUpdateHandler(userId, socket);
         accessKeyHandler(userId, socket);
         terminalStreamHandler(userId, socket, connection);
 

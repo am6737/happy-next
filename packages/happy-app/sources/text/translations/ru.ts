@@ -135,6 +135,7 @@ export const ru: TranslationStructure = {
         yes: 'Да',
         no: 'Нет',
         discard: 'Отменить',
+        discardChangesDescription: 'У вас есть несохраненные изменения. Вы уверены, что хотите их отменить?',
         version: 'Версия',
         copied: 'Скопировано',
         copy: 'Копировать',
@@ -2256,46 +2257,6 @@ export const ru: TranslationStructure = {
         copyFailed: 'Ошибка копирования',
         mermaidRenderFailed: 'Не удалось отобразить диаграмму mermaid',
         mermaidSyntaxError: 'Синтаксическая ошибка диаграммы mermaid',
-    },
-
-    artifacts: {
-        // Artifacts feature
-        title: 'Артефакты',
-        countSingular: '1 артефакт',
-        countPlural: ({ count }: { count: number }) => {
-            const n = Math.abs(count);
-            const n10 = n % 10;
-            const n100 = n % 100;
-            
-            if (n10 === 1 && n100 !== 11) {
-                return `${count} артефакт`;
-            }
-            if (n10 >= 2 && n10 <= 4 && (n100 < 10 || n100 >= 20)) {
-                return `${count} артефакта`;
-            }
-            return `${count} артефактов`;
-        },
-        empty: 'Артефактов пока нет',
-        emptyDescription: 'Создайте первый артефакт, чтобы начать',
-        new: 'Новый артефакт',
-        edit: 'Редактировать артефакт',
-        delete: 'Удалить',
-        updateError: 'Не удалось обновить артефакт. Пожалуйста, попробуйте еще раз.',
-        notFound: 'Артефакт не найден',
-        discardChanges: 'Отменить изменения?',
-        discardChangesDescription: 'У вас есть несохраненные изменения. Вы уверены, что хотите их отменить?',
-        deleteConfirm: 'Удалить артефакт?',
-        deleteConfirmDescription: 'Это действие нельзя отменить',
-        titleLabel: 'ЗАГОЛОВОК',
-        titlePlaceholder: 'Введите заголовок для вашего артефакта',
-        bodyLabel: 'СОДЕРЖИМОЕ',
-        bodyPlaceholder: 'Напишите ваш контент здесь...',
-        emptyFieldsError: 'Пожалуйста, введите заголовок или содержимое',
-        createError: 'Не удалось создать артефакт. Пожалуйста, попробуйте снова.',
-        save: 'Сохранить',
-        saving: 'Сохранение...',
-        loading: 'Загрузка артефактов...',
-        error: 'Не удалось загрузить артефакт',
     },
 
     friends: {

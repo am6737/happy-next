@@ -110,7 +110,6 @@ graph LR
             R1[authRoutes]
             R2[sessionRoutes / v3SessionRoutes]
             R3[machinesRoutes]
-            R4[artifactsRoutes]
             R5[accessKeysRoutes]
             R6[kvRoutes]
             R7[accountRoutes]
@@ -132,7 +131,6 @@ HTTP routes are organized by domain:
 - Sessions + messages (`sessionRoutes`, `v3SessionRoutes`)
 - Machines (`machinesRoutes`)
 - Chat uploads (`chatRoutes`)
-- Artifacts (`artifactsRoutes`)
 - Access keys (`accessKeysRoutes`)
 - Key-value store (`kvRoutes`)
 - Account + usage (`accountRoutes`)
@@ -220,7 +218,7 @@ The router implements recipient filters so updates go only to interested connect
 
 ### Update sequence numbers
 - `Account.seq` is the per-user update counter. It is incremented by `allocateUserSeq` and used as `UpdatePayload.seq`.
-- Sessions and artifacts maintain their own `seq` for per-object ordering.
+- Sessions maintain their own `seq` for per-object ordering.
 
 ## Presence and activity
 
@@ -349,7 +347,6 @@ graph TB
         C2[Agent state]
         C3[Daemon state]
         C4[Message content]
-        C5[Artifacts]
         C6[KV values]
     end
 
@@ -360,14 +357,13 @@ graph TB
         S4[Gemini tokens]
     end
 
-    C1 & C2 & C3 & C4 & C5 & C6 --> |opaque blobs| DB[(Postgres)]
+    C1 & C2 & C3 & C4 & C6 --> |opaque blobs| DB[(Postgres)]
     S1 & S2 & S3 & S4 --> |KeyTree from HANDY_MASTER_SECRET| DB
 
     style C1 fill:#e1f5fe
     style C2 fill:#e1f5fe
     style C3 fill:#e1f5fe
     style C4 fill:#e1f5fe
-    style C5 fill:#e1f5fe
     style C6 fill:#e1f5fe
     style S1 fill:#fff3e0
     style S2 fill:#fff3e0
@@ -376,7 +372,7 @@ graph TB
 ```
 
 - Session metadata, agent state, daemon state, and message content are stored as opaque encrypted strings or blobs.
-- Artifacts and KV values are stored encrypted and encoded as base64 on the wire.
+- KV values are stored encrypted and encoded as base64 on the wire.
 - The server only encrypts/decrypts **service tokens** (GitHub OAuth tokens, vendor tokens) using the KeyTree derived from `HANDY_MASTER_SECRET`.
 
 ## Integrations

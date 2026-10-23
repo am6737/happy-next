@@ -86,8 +86,6 @@ describe('command palette command registry', () => {
 
     it('adds integration and feature commands only when available', () => {
         const minimalIds = build().map((item) => item.id);
-        expect(minimalIds).not.toContain('new-artifact');
-        expect(minimalIds).not.toContain('artifacts');
         expect(minimalIds).not.toContain('dootask');
         expect(minimalIds).not.toContain('settings-usage');
         expect(minimalIds).not.toContain('dev-menu');

@@ -5,7 +5,7 @@ This document covers the HTTP API surface and authentication flows. For WebSocke
 ## Method conventions
 - **GET** is used for reads.
 - **POST** is used for mutations or actions, even when the operation doesn't map cleanly to a single entity.
-- **DELETE** is used when intent is unambiguous (e.g., removing a token or deleting a session/artifact).
+- **DELETE** is used when intent is unambiguous (e.g., removing a token or deleting a session).
 
 We intentionally avoid the full REST verb palette because many operations span multiple entities or have non-CRUD semantics.
 
@@ -50,13 +50,6 @@ Auth flows:
 - `POST /v1/machines` (create or load by id)
 - `GET /v1/machines`
 - `GET /v1/machines/:id`
-
-### Artifacts
-- `GET /v1/artifacts`
-- `GET /v1/artifacts/:id`
-- `POST /v1/artifacts`
-- `POST /v1/artifacts/:id` (versioned update)
-- `DELETE /v1/artifacts/:id`
 
 ### Access keys
 - `GET /v1/access-keys/:sessionId/:machineId`

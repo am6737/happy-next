@@ -318,37 +318,6 @@ export default function RootLayout() {
                 }}
             />
             <Stack.Screen
-                name="artifacts/index"
-                options={{
-                    ...softHeaderOptions,
-                    headerShown: true,
-                    headerTitle: t('artifacts.title'),
-                }}
-            />
-            <Stack.Screen
-                name="artifacts/[id]"
-                options={{
-                    ...softHeaderOptions,
-                    headerShown: false, // We'll set header dynamically
-                }}
-            />
-            <Stack.Screen
-                name="artifacts/new"
-                options={{
-                    ...softHeaderOptions,
-                    headerShown: true,
-                    headerTitle: t('artifacts.new'),
-                }}
-            />
-            <Stack.Screen
-                name="artifacts/edit/[id]"
-                options={{
-                    ...softHeaderOptions,
-                    headerShown: true,
-                    headerTitle: t('artifacts.edit'),
-                }}
-            />
-            <Stack.Screen
                 name="search"
                 // iOS keeps the system header, which moves along with the other headers as pages open and
                 // close: the page puts its field in the title, where the back button gives way to it, and

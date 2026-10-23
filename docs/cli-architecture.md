@@ -187,7 +187,7 @@ flowchart LR
 ```
 
 The CLI encrypts client content before it leaves the machine using `src/api/encryption.ts`.
-- Session metadata, agent state, messages, machine state, artifacts, and KV values are encrypted client-side.
+- Session metadata, agent state, messages, machine state, and KV values are encrypted client-side.
 - On-wire encoding is base64; see `encryption.md`.
 
 ## Daemon architecture

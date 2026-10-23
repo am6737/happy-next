@@ -158,7 +158,7 @@ This blob is then wrapped with a version byte before being sent/stored:
 [ version (1 = 0) | boxBundle (...) ]
 ```
 
-The resulting bytes are base64-encoded and placed in fields such as `dataEncryptionKey` for sessions/machines/artifacts.
+The resulting bytes are base64-encoded and placed in fields such as `dataEncryptionKey` for sessions/machines.
 
 ## Where encryption is applied
 
@@ -171,8 +171,6 @@ graph TB
         S3[Session messages]
         M1[Machine metadata]
         M2[Daemon state]
-        A1[Artifact header]
-        A2[Artifact body]
         K1[KV store values]
         AK[Access keys]
     end
@@ -183,7 +181,6 @@ graph TB
 
     S1 & S2 & S3 --> |opaque strings| DB
     M1 & M2 --> |opaque strings| DB
-    A1 & A2 --> |opaque bytes| DB
     K1 --> |opaque bytes| DB
     AK --> |opaque string| DB
 
@@ -192,8 +189,6 @@ graph TB
     style S3 fill:#e1f5fe
     style M1 fill:#e1f5fe
     style M2 fill:#e1f5fe
-    style A1 fill:#e1f5fe
-    style A2 fill:#e1f5fe
     style K1 fill:#e1f5fe
     style AK fill:#e1f5fe
 ```
@@ -236,11 +231,6 @@ sequenceDiagram
   - `POST /v1/machines`
   - WebSocket `machine-update-metadata` / `machine-update-state`
   - `update-machine` events
-
-### Artifacts
-- `header` and `body` are encrypted bytes encoded as base64 on the wire.
-- Stored as `Bytes` in the DB.
-- Emitted in `new-artifact` / `update-artifact` events as base64 strings.
 
 ### Access keys
 - `AccessKey.data` is treated as an **opaque encrypted string**.
@@ -322,19 +312,6 @@ Socket emit: "machine-update-state"
   "machineId": "<machine id>",
   "daemonState": "<base64 encrypted>",
   "expectedVersion": 2
-}
-```
-
-### Artifact create/update (HTTP)
-```http
-POST /v1/artifacts
-```
-```json
-{
-  "id": "<uuid>",
-  "header": "<base64 encrypted>",
-  "body": "<base64 encrypted>",
-  "dataEncryptionKey": "<base64 data key bundle>"
 }
 ```
 
@@ -552,4 +529,4 @@ graph TB
 - Client crypto: `packages/happy-cli/src/api/encryption.ts`
 - Session message format: `packages/happy-cli/src/api/types.ts`
 - Server message ingestion: `packages/happy-server/sources/app/api/socket/sessionUpdateHandler.ts`
-- Artifact/KV routes: `packages/happy-server/sources/app/api/routes/artifactsRoutes.ts`, `packages/happy-server/sources/app/kv/kvMutate.ts`
+- KV routes: `packages/happy-server/sources/app/kv/kvMutate.ts`

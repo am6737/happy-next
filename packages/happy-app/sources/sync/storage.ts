@@ -22,7 +22,6 @@ import { sync } from "./sync";
 import { getCurrentRealtimeSessionId, getVoiceSession } from '@/realtime/RealtimeSession';
 import { isMutableTool } from "@/components/tools/knownTools";
 import { projectManager } from "./projectManager";
-import { DecryptedArtifact } from "./artifactTypes";
 import { FeedItem } from "./feedTypes";
 import type { RegisteredRepo } from "@/utils/workspaceRepos";
 import {
@@ -184,7 +183,6 @@ interface StorageState {
     // Registered repositories per machine (loaded from UserKVStore)
     registeredRepos: Record<string, RegisteredRepo[]>;
     registeredReposVersions: Record<string, number>;  // KV versions for optimistic concurrency
-    artifacts: Record<string, DecryptedArtifact>;  // New artifacts storage
     friends: Record<string, UserProfile>;  // All relationships (friends, pending, requested, etc.)
     users: Record<string, UserProfile | null>;  // Global user cache, null = 404/failed fetch
     feedItems: FeedItem[];  // Simple list of feed items
@@ -271,11 +269,6 @@ interface StorageState {
     setSessionFastMode: (sessionId: string, fastMode: boolean) => void;
     updateSessionPermissionMode: (sessionId: string, mode: 'default' | 'acceptEdits' | 'auto' | 'bypassPermissions' | 'plan' | 'read-only' | 'on-failure' | 'full-auto' | 'auto_edit' | 'yolo') => void;
     updateSessionModelMode: (sessionId: string, mode: string) => void;
-    // Artifact methods
-    applyArtifacts: (artifacts: DecryptedArtifact[]) => void;
-    addArtifact: (artifact: DecryptedArtifact) => void;
-    updateArtifact: (artifact: DecryptedArtifact) => void;
-    deleteArtifact: (artifactId: string) => void;
     deleteSession: (sessionId: string) => void;
     deleteSessions: (sessionIds: string[]) => void;
     // Project management methods
@@ -525,7 +518,6 @@ export const storage = create<StorageState>()((set, get) => {
         machines: {},
         registeredRepos: cachedRepos.repos as Record<string, RegisteredRepo[]>,
         registeredReposVersions: cachedRepos.versions,
-        artifacts: {},  // Initialize artifacts
         friends: {},  // Initialize relationships cache
         users: {},  // Initialize global user cache
         feedItems: [],  // Initialize feed items list
@@ -1804,50 +1796,6 @@ export const storage = create<StorageState>()((set, get) => {
                 sessionListViewData
             };
         }),
-        // Artifact methods
-        applyArtifacts: (artifacts: DecryptedArtifact[]) => set((state) => {
-            console.log(`🗂️ Storage.applyArtifacts: Applying ${artifacts.length} artifacts`);
-            const mergedArtifacts = { ...state.artifacts };
-            artifacts.forEach(artifact => {
-                mergedArtifacts[artifact.id] = artifact;
-            });
-            console.log(`🗂️ Storage.applyArtifacts: Total artifacts after merge: ${Object.keys(mergedArtifacts).length}`);
-            
-            return {
-                ...state,
-                artifacts: mergedArtifacts
-            };
-        }),
-        addArtifact: (artifact: DecryptedArtifact) => set((state) => {
-            const updatedArtifacts = {
-                ...state.artifacts,
-                [artifact.id]: artifact
-            };
-            
-            return {
-                ...state,
-                artifacts: updatedArtifacts
-            };
-        }),
-        updateArtifact: (artifact: DecryptedArtifact) => set((state) => {
-            const updatedArtifacts = {
-                ...state.artifacts,
-                [artifact.id]: artifact
-            };
-            
-            return {
-                ...state,
-                artifacts: updatedArtifacts
-            };
-        }),
-        deleteArtifact: (artifactId: string) => set((state) => {
-            const { [artifactId]: _, ...remainingArtifacts } = state.artifacts;
-            
-            return {
-                ...state,
-                artifacts: remainingArtifacts
-            };
-        }),
         deleteSession: (sessionId: string) => get().deleteSessions([sessionId]),
         deleteSessions: (sessionIds: string[]) => set((state) => {
             if (sessionIds.length === 0) return state;
@@ -2666,46 +2614,6 @@ export function useSessionProjectGitStatus(sessionId: string | null) {
 
 export function useLocalSetting<K extends keyof LocalSettings>(name: K): LocalSettings[K] {
     return storage(useShallow((state) => state.localSettings[name]));
-}
-
-// Artifact hooks
-export function useArtifacts(): DecryptedArtifact[] {
-    return storage(useShallow((state) => {
-        if (!state.isDataReady) return [];
-        // Filter out draft artifacts from the main list
-        return Object.values(state.artifacts)
-            .filter(artifact => !artifact.draft)
-            .sort((a, b) => b.updatedAt - a.updatedAt);
-    }));
-}
-
-export function useAllArtifacts(): DecryptedArtifact[] {
-    return storage(useShallow((state) => {
-        if (!state.isDataReady) return [];
-        // Return all artifacts including drafts
-        return Object.values(state.artifacts).sort((a, b) => b.updatedAt - a.updatedAt);
-    }));
-}
-
-export function useDraftArtifacts(): DecryptedArtifact[] {
-    return storage(useShallow((state) => {
-        if (!state.isDataReady) return [];
-        // Return only draft artifacts
-        return Object.values(state.artifacts)
-            .filter(artifact => artifact.draft === true)
-            .sort((a, b) => b.updatedAt - a.updatedAt);
-    }));
-}
-
-export function useArtifact(artifactId: string): DecryptedArtifact | null {
-    return storage(useShallow((state) => state.artifacts[artifactId] ?? null));
-}
-
-export function useArtifactsCount(): number {
-    return storage(useShallow((state) => {
-        // Count only non-draft artifacts
-        return Object.values(state.artifacts).filter(a => !a.draft).length;
-    }));
 }
 
 export function useRealtimeStatus(): 'disconnected' | 'connecting' | 'connected' | 'error' {
