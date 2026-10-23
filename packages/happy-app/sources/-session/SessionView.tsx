@@ -464,8 +464,8 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
         if (isListRefreshing) {
             return {
                 text: t('status.refreshing'),
-                color: theme.colors.status.connecting,
-                dotColor: theme.colors.status.connecting,
+                color: theme.colors.status.refreshing,
+                dotColor: theme.colors.status.refreshing,
                 isPulsing: true
             };
         }
@@ -481,16 +481,16 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
         if (isRefreshingStatus) {
             return {
                 text: t('status.refreshing'),
-                color: theme.colors.status.connecting,
-                dotColor: theme.colors.status.connecting,
+                color: theme.colors.status.refreshing,
+                dotColor: theme.colors.status.refreshing,
                 isPulsing: true
             };
         }
         if (historyLoading && statusState === 'waiting') {
             return {
                 text: t('status.loading'),
-                color: theme.colors.status.connecting,
-                dotColor: theme.colors.status.connecting,
+                color: theme.colors.status.refreshing,
+                dotColor: theme.colors.status.refreshing,
                 isPulsing: true
             };
         }
@@ -501,7 +501,7 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
             isPulsing: statusPulsing,
             ...(statusState === 'permission_required' && { action: 'openPermission' as const }),
         };
-    }, [isListRefreshing, silentRefreshPhase, isRefreshingStatus, historyLoading, statusText, statusColor, statusDotColor, statusPulsing, statusState, theme.colors.status.connecting, theme.colors.status.error, handleRetryStatusRefresh]);
+    }, [isListRefreshing, silentRefreshPhase, isRefreshingStatus, historyLoading, statusText, statusColor, statusDotColor, statusPulsing, statusState, theme.colors.status.refreshing, theme.colors.status.error, handleRetryStatusRefresh]);
 
     // Ref for the input component (used for web auto-focus)
     const inputRef = React.useRef<MultiTextInputHandle>(null);

@@ -159,6 +159,8 @@ export const lightTheme = {
         status: {
             connected: '#34C759',
             connecting: '#007AFF',
+            // The composer's "refreshing…" and "loading…": blue in both themes, apart from online's green
+            refreshing: '#007AFF',
             disconnected: '#999999',
             error: '#FF3B30',
             default: '#8E8E93',
@@ -451,6 +453,7 @@ export const darkTheme = {
         status: { // App Connection Status
             connected: '#34C759',
             connecting: '#FFFFFF',
+            refreshing: '#0A84FF',
             disconnected: '#8E8E93',
             error: '#FF453A',
             default: '#8E8E93',
