@@ -94,7 +94,7 @@ done
 
 # --- 5. download the existing Ad Hoc cert + profiles (the app's and the share extension's) ------
 log "download Ad Hoc credentials from EAS"
-ARROWS=$ARROWS expect "$SCRIPTS/eas-creds.exp" > "$WORK/eas-creds.log" 2>&1 || {
+ARROWS=$ARROWS PROFILE=$TMP_PROFILE expect "$SCRIPTS/eas-creds.exp" > "$WORK/eas-creds.log" 2>&1 || {
     tail -30 "$WORK/eas-creds.log"
     grep -q EAS_TARGET_ERROR "$WORK/eas-creds.log" \
         && die "a build target has no Ad Hoc credentials on EAS (the share extension $EXT_ID needs its own)"

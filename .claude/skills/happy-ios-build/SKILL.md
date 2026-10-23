@@ -85,7 +85,7 @@ waitMs=0
 ## 坑（脚本已处理，排错时对照）
 
 1. **Watch target 没有 Ad Hoc 凭证。** EAS 会报 `Some of the build targets don't have credentials ... HappyWatch`。必须在 `eas credentials` 之前把 `targets/watch*` 移出去，因此正式版不含 Watch App。开发版 prebuild 后 `.app` 里会带 `Watch/HappyWatch.app`，其中的 Widget 扩展（`com.hitosea.happy.dev.watchkitapp.widget`）没有描述文件，所以脚本签名前会删掉 `Watch/`，开发版也不含 Watch App。
-2. **`eas credentials` 没有非交互的下载方式**（eas-cli 18.x）。只能用 `eas-creds.exp` 模拟按键选菜单：先按 `ARROWS` 次下箭头选中临时 profile（这个 profile 追加在 `eas.json` 的最后），再按 3 次下箭头选「credentials.json」，然后选「Download」。脚本会检查文件是否真的写到了磁盘上。EAS 菜单变了就调整这个 exp。
+2. **`eas credentials` 没有非交互的下载方式**（eas-cli 18.x）。只能用 `eas-creds.exp` 模拟按键选菜单：先按 `ARROWS` 次下箭头选中临时 profile（这个 profile 追加在 `eas.json` 的最后），再按 3 次下箭头选「credentials.json」，然后选「Download」。脚本会检查文件是否真的写到了磁盘上。每次回车前 exp 都会核对高亮的是不是要选的那一项，一出现「Delete one from / Add a new one」这类会改凭证的菜单就直接退出：「登录 Apple 账号」的 Y/n 提示按 n 就确认了，曾经多发的回车落到下一个菜单，把后面的按键带进了删除发布证书的菜单。EAS 菜单变了就调整这个 exp。
 3. **Expo 生成的 `Info.plist` 把 `CFBundleVersion` 写死成 1**，`CURRENT_PROJECT_VERSION` 改不动它，必须在 archive 之前用 `plutil` 改。构建号取三者最大值再加 1：EAS 远端值、builds 目录里最大的本地包号、`~/.happy-ios-build/prod-build-number`。
 4. **Mac mini 只有已经过期的 WWDR G1**，分发证书是 G3 签发的，所以要把 G3 导入临时钥匙串，否则会出现「0 valid identities」。
 5. **钥匙串搜索列表要写死路径**（login、临时钥匙串、System），不要解析 `security list-keychains` 的输出。还原时要先恢复搜索列表，再删除钥匙串。
