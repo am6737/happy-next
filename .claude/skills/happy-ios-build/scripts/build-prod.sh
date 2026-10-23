@@ -1,9 +1,10 @@
 #!/bin/bash
 # Production (APP_ENV=production, com.hitosea.happy) Ad Hoc IPA with production push and the
 # Apple Watch app → appdown. Uses the EXISTING Ad Hoc cert/profiles: the app's and the share
-# extension's from EAS, the watch targets' from $STATE/profiles (made on the Apple Developer portal,
-# as EAS can't put an Apple Watch in a profile); never creates or revokes credentials, never builds
-# in the EAS cloud, never submits. Restores the dev native project afterwards.
+# extension's from EAS, the watch targets' from $WATCH_PROFILES in iCloud Drive (made on the Apple
+# Developer portal, as EAS can't put an Apple Watch in a profile); never creates or revokes
+# credentials, never builds in the EAS cloud, never submits. Restores the dev native project
+# afterwards.
 # Usage: build-prod.sh [label]
 source "$(dirname "$0")/common.sh"
 
@@ -14,7 +15,7 @@ APP_GROUP=group.$BUNDLE_ID
 WATCH_ID=$BUNDLE_ID.watchkitapp     # @bacons/apple-targets' HappyWatch (targets/watch)
 WIDGET_ID=$WATCH_ID.widget          # its complication, HappyWatchWidget (targets/watch-widget)
 WATCH_GROUP=group.$BUNDLE_ID.watch
-WATCH_PROFILES="$STATE/profiles"
+WATCH_PROFILES="$HOME/Library/Mobile Documents/com~apple~CloudDocs/HappyNext/ios"
 TMP_PROFILE=production-adhoc
 KEYCHAIN=/tmp/happy-build.keychain-db
 LOGIN_KC="$HOME/Library/Keychains/login.keychain-db"

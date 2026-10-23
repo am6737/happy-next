@@ -9,7 +9,7 @@ description: Builds a happy-app iOS IPA on the Mac mini and drops it into appdow
 
 | 模式 | 用户说法 | 产物 | 签名 / 推送 |
 |---|---|---|---|
-| `prod` | 正式版、生产版、能收推送的 | `HappyNext-<版本>-<构建号>-<sha>-<标签>-<时间>.ipa`，`com.hitosea.happy`，带 Watch App | EAS 上现有的 Ad Hoc 证书；主 App 和分享扩展用 EAS 上的描述文件，Watch App 和表盘组件用 `~/.happy-ios-build/profiles/` 里的描述文件；`aps-environment=production`，只能装在 Ad Hoc 描述文件里的设备上 |
+| `prod` | 正式版、生产版、能收推送的 | `HappyNext-<版本>-<构建号>-<sha>-<标签>-<时间>.ipa`，`com.hitosea.happy`，带 Watch App | EAS 上现有的 Ad Hoc 证书；主 App 和分享扩展用 EAS 上的描述文件，Watch App 和表盘组件用 iCloud 云盘 `HappyNext/ios/` 里的描述文件；`aps-environment=production`，只能装在 Ad Hoc 描述文件里的设备上 |
 | `dev` | 开发版、调试版、dev client | `HappyNextdev-<版本>-<sha>-<标签>-<时间>.ipa`，`com.hitosea.happy.dev`，Debug 开发客户端，打开后要连 Metro，不含 Watch App | Apple Development 证书 + 团队描述文件 `com.hitosea.happy.dev` 和 `com.hitosea.happy.dev.share-extension`，`aps-environment=development` |
 
 真正的构建由仓库里的脚本完成，它们在 Mac mini 上运行：
@@ -86,7 +86,7 @@ waitMs=0
 
 1. **Watch App 的描述文件不能从 EAS 拿。** EAS 的设备列表只收 iPhone、iPad 和 Mac，从 Apple 后台导入时会跳过 Apple Watch，所以它生成的描述文件永远不含手表，Watch App 装不到手表上。正式版的做法：
     - EAS 上仍然要有 `com.hitosea.happy.watchkitapp` 和 `.watchkitapp.widget` 的 Ad Hoc 凭证（缺了 EAS 会报 `Some of the build targets don't have credentials ... HappyWatch`，下载不了），但不用它们的描述文件。
-    - 用户在 Apple 开发者后台为这两个 bundle id 各建一个 Ad Hoc 描述文件（证书选 EAS 的那张分发证书，设备勾上手表和 iPhone），放进 Mac mini 的 `~/.happy-ios-build/profiles/`。`local-profile.py` 按 bundle id 和证书从里面挑出最新的、未过期的那份。
+    - 用户在 Apple 开发者后台为这两个 bundle id 各建一个 Ad Hoc 描述文件（证书选 EAS 的那张分发证书，设备勾上手表和 iPhone），放进 iCloud 云盘的 `HappyNext/ios/`（Mac mini 上是 `~/Library/Mobile Documents/com~apple~CloudDocs/HappyNext/ios/`）。Mac mini 开着「优化 Mac 储存空间」，文件可能只在云端：macOS 26 上它保留原名，读取时自动下载（已用 `brctl evict` 验证）；旧版 macOS 会留下 `.<名字>.icloud` 占位文件，`local-profile.py` 用 `brctl download` 拉下来（最多等 2 分钟）。之后按 bundle id 和证书挑出最新的、未过期的那份。
     - 脚本校验：两份都带 App Group `group.com.hitosea.happy.watch`，设备列表一致，并且包含主 App 描述文件之外的设备（手表）；IPA 里 `Watch/HappyWatch.app` 和表盘组件的 bundle id、版本号、构建号都和主 App 对得上。
     - 加新手表或新 iPhone 时，这两份要在 Apple 后台重新编辑并下载替换。
 
@@ -113,4 +113,4 @@ waitMs=0
 
 ## 状态文件（Mac mini）
 
-`~/.happy-ios-build/` 下保存这些文件：`lock`（构建锁）、`prod-build-number`、`dev-commit`、`yarn.lock.sha`、`patches-commit`（node_modules 里套的是哪个提交的 patch）、`profiles/`（用户建的 Watch Ad Hoc 描述文件，脚本只读不删）。每次构建的日志放在 `RESULT_LOGS` 指向的目录里。
+`~/.happy-ios-build/` 下保存这些文件：`lock`（构建锁）、`prod-build-number`、`dev-commit`、`yarn.lock.sha`、`patches-commit`（node_modules 里套的是哪个提交的 patch）。每次构建的日志放在 `RESULT_LOGS` 指向的目录里。
