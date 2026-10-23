@@ -35,7 +35,7 @@ describe('GitHub reconnect state wiring', () => {
     });
 
     test('keeps the title row and switch geometry stable across tabs and count loading', () => {
-        expect(source).toMatch(/headlineRow: \{[^}]*height: 64,/);
+        expect(source).toMatch(/headlineRow: \{[^}]*paddingTop: Platform\.select\(\{ ios: 14, default: 16 \}\),\s*paddingBottom: 16,/);
         expect(source).toMatch(/swapPill: \{[^}]*width: 112,[^}]*height: 32,/);
         expect(source).toMatch(/swapPillBadge: \{[^}]*width: 32,[^}]*height: 18,/);
         expect(source).not.toContain("opacity: typeof otherTabCount === 'number'");
