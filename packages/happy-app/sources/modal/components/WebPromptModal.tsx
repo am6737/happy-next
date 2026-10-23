@@ -100,6 +100,8 @@ export function WebPromptModal({ config, onClose, onConfirm }: WebPromptModalPro
             borderColor: theme.colors.divider,
             borderRadius: 8,
             paddingHorizontal: 10,
+            // Android's EditText pads ~10 top and bottom, which leaves less than a line inside 36
+            paddingVertical: 0,
             marginTop: 16,
             fontSize: 14,
             color: theme.colors.text,
