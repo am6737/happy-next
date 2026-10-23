@@ -749,6 +749,21 @@ export const zhHant: TranslationStructure = {
         noCameraDevice: '沒有可用的攝影機',
     },
 
+    shareTarget: {
+        // The page another app's share sheet opens: where what was shared goes
+        title: '分享到',
+        newSession: '新增工作階段',
+        activeSessions: '活躍工作階段',
+        noActiveSessions: '沒有在線的工作階段',
+        searchPlaceholder: '搜尋工作階段',
+        noResults: '沒有符合的工作階段',
+        text: '文字',
+        images: ({ count }: { count: number }) => `圖片 ${count} 張`,
+        videos: ({ count }: { count: number }) => `影片 ${count} 個`,
+        files: ({ count }: { count: number }) => `檔案 ${count} 個`,
+        loginRequired: '請先登入 Happy，再重新分享。',
+    },
+
     newSession: {
         // Used by new-session screen and launch flows
         title: '啟動新工作階段',

@@ -7,6 +7,7 @@ import { randomUUID } from 'expo-crypto';
 import { FILE_UPLOAD_LIMIT, type MessageAttachment } from 'happy-wire';
 import { Modal } from '@/modal';
 import { t } from '@/text';
+import { discardSharedFiles, type SharedFile } from '@/share/sharedContent';
 import {
     FileUploadError,
     sessionFileUploadRpc,
@@ -202,6 +203,22 @@ export function useFileAttachments(sessionId: string | null) {
         addPicked(files.map((file) => ({ name: file.name, size: file.size, mimeType: file.type || undefined, uri: '', file })));
     }, [addPicked]);
 
+    /** Adds files another app shared, already copied into the app's storage. */
+    const addSharedFiles = React.useCallback((shared: SharedFile[]) => {
+        const assets: Picked[] = [];
+        for (const file of shared) {
+            const size = file.size ?? (() => {
+                try { return new FsFile(file.uri).size; } catch { return null; }
+            })();
+            if (size === null || size === undefined) {
+                discardSharedFiles([file]);
+                continue;
+            }
+            assets.push({ name: file.name, size, mimeType: file.mimeType, uri: file.uri });
+        }
+        addPicked(assets);
+    }, [addPicked]);
+
     const retryFile = React.useCallback((id: string) => {
         if (!picked.current.has(id)) return;
         if (!sessionId) return;
@@ -253,6 +270,7 @@ export function useFileAttachments(sessionId: string | null) {
         pickFiles,
         addVideos,
         addFiles,
+        addSharedFiles,
         uploadStaged,
         retryFile,
         removeFile,

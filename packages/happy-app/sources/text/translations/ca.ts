@@ -748,6 +748,21 @@ export const ca: TranslationStructure = {
         noCameraDevice: 'No hi ha cap càmera disponible',
     },
 
+    shareTarget: {
+        // The page another app's share sheet opens: where what was shared goes
+        title: 'Comparteix a',
+        newSession: 'Sessió nova',
+        activeSessions: 'Sessions actives',
+        noActiveSessions: 'No hi ha cap sessió en línia',
+        searchPlaceholder: 'Cerca sessions',
+        noResults: 'Cap sessió coincident',
+        text: 'Text',
+        images: ({ count }: { count: number }) => `Imatges: ${count}`,
+        videos: ({ count }: { count: number }) => `Vídeos: ${count}`,
+        files: ({ count }: { count: number }) => `Fitxers: ${count}`,
+        loginRequired: 'Inicia sessió a Happy i torna a compartir.',
+    },
+
     newSession: {
         // Used by new-session screen and launch flows
         title: 'Inicia una nova sessió',

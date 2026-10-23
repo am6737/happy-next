@@ -750,6 +750,21 @@ export const ja: TranslationStructure = {
         noCameraDevice: 'カメラデバイスがありません',
     },
 
+    shareTarget: {
+        // The page another app's share sheet opens: where what was shared goes
+        title: '共有先',
+        newSession: '新しいセッション',
+        activeSessions: 'アクティブなセッション',
+        noActiveSessions: 'オンラインのセッションはありません',
+        searchPlaceholder: 'セッションを検索',
+        noResults: '一致するセッションはありません',
+        text: 'テキスト',
+        images: ({ count }: { count: number }) => `画像 ${count} 枚`,
+        videos: ({ count }: { count: number }) => `動画 ${count} 本`,
+        files: ({ count }: { count: number }) => `ファイル ${count} 個`,
+        loginRequired: 'Happy にログインしてから、もう一度共有してください。',
+    },
+
     newSession: {
         // Used by new-session screen and launch flows
         title: '新しいセッションを開始',

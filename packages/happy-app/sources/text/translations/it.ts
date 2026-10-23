@@ -747,6 +747,21 @@ export const it: TranslationStructure = {
         noCameraDevice: 'Nessuna fotocamera disponibile',
     },
 
+    shareTarget: {
+        // The page another app's share sheet opens: where what was shared goes
+        title: 'Condividi in',
+        newSession: 'Nuova sessione',
+        activeSessions: 'Sessioni attive',
+        noActiveSessions: 'Nessuna sessione online',
+        searchPlaceholder: 'Cerca sessioni',
+        noResults: 'Nessuna sessione corrispondente',
+        text: 'Testo',
+        images: ({ count }: { count: number }) => `Immagini: ${count}`,
+        videos: ({ count }: { count: number }) => `Video: ${count}`,
+        files: ({ count }: { count: number }) => `File: ${count}`,
+        loginRequired: 'Accedi a Happy, poi condividi di nuovo.',
+    },
+
     newSession: {
         // Used by new-session screen and launch flows
         title: 'Avvia nuova sessione',

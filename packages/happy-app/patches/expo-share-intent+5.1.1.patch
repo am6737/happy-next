@@ -1,0 +1,13 @@
+diff --git a/node_modules/expo-share-intent/plugin/build/ios/writeIosShareExtensionFiles.js b/node_modules/expo-share-intent/plugin/build/ios/writeIosShareExtensionFiles.js
+index c40060d..750cf73 100644
+--- a/node_modules/expo-share-intent/plugin/build/ios/writeIosShareExtensionFiles.js
++++ b/node_modules/expo-share-intent/plugin/build/ios/writeIosShareExtensionFiles.js
+@@ -69,7 +69,7 @@ function getShareExtensionInfoFilePath(platformProjectRoot, parameters) {
+ function getShareExtensionInfoContent(appName, appIdentifier, parameters) {
+     return plist_1.default.build({
+         CFBundleName: "$(PRODUCT_NAME)",
+-        CFBundleDisplayName: parameters.iosShareExtensionName || `${appName} - Share Extension`,
++        CFBundleDisplayName: parameters.iosShareExtensionDisplayName || parameters.iosShareExtensionName || `${appName} - Share Extension`,
+         CFBundleIdentifier: "$(PRODUCT_BUNDLE_IDENTIFIER)",
+         CFBundleDevelopmentRegion: "$(DEVELOPMENT_LANGUAGE)",
+         CFBundleExecutable: "$(EXECUTABLE_NAME)",

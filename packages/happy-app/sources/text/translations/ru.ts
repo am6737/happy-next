@@ -708,6 +708,21 @@ export const ru: TranslationStructure = {
         noCameraDevice: 'Камера недоступна',
     },
 
+    shareTarget: {
+        // The page another app's share sheet opens: where what was shared goes
+        title: 'Поделиться в',
+        newSession: 'Новая сессия',
+        activeSessions: 'Активные сессии',
+        noActiveSessions: 'Нет сессий в сети',
+        searchPlaceholder: 'Поиск сессий',
+        noResults: 'Нет подходящих сессий',
+        text: 'Текст',
+        images: ({ count }: { count: number }) => `Изображения: ${count}`,
+        videos: ({ count }: { count: number }) => `Видео: ${count}`,
+        files: ({ count }: { count: number }) => `Файлы: ${count}`,
+        loginRequired: 'Сначала войдите в Happy, затем поделитесь снова.',
+    },
+
     newSession: {
         // Used by new-session screen and launch flows
         title: 'Начать новую сессию',

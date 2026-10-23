@@ -671,6 +671,14 @@ export default function RootLayout() {
                 }}
             />
             <Stack.Screen
+                name="share-target"
+                options={{
+                    ...softHeaderOptions,
+                    headerShown: true,
+                    headerTitle: t('shareTarget.title'),
+                }}
+            />
+            <Stack.Screen
                 name="session/recent"
                 options={{
                     ...softHeaderOptions,

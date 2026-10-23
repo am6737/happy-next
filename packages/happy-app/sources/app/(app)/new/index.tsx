@@ -36,6 +36,8 @@ import { formatPathRelativeToHome } from '@/utils/sessionUtils';
 import { isMachineOnline } from '@/utils/machineUtils';
 import { clearNewSessionDraft, loadNewSessionDraft, saveNewSessionDraft } from '@/sync/persistence';
 import { DEFAULT_ALLOWED_TYPES, useImagePicker } from '@/hooks/useImagePicker';
+import { useSharedContentIntake } from '@/hooks/useSharedContentIntake';
+import type { ShareTarget } from '@/share/sharedContent';
 import { useFileAttachments } from '@/hooks/useFileAttachments';
 import { ScheduleMessageSheet } from '@/components/ScheduleMessageSheet';
 import { useInputHistory } from '@/hooks/useInputHistory';
@@ -58,6 +60,9 @@ export const callbacks = {
         onMachineSelected(machineId);
     }
 }
+
+// Constant, so the intake's target doesn't change between renders
+const SHARE_TARGET_NEW: ShareTarget = { type: 'new' };
 
 const isConcreteSessionMachineTab = (tab: string | null): tab is string => {
     return !!tab && tab !== 'all' && tab !== 'shared' && tab !== 'sharedByMe';
@@ -368,6 +373,7 @@ function NewSessionWizard() {
         removeImage,
         clearImages,
         initImages,
+        addSharedImages,
     } = useImagePicker({ maxImages: 4 });
 
     // Files are only staged here; they upload to the new session's machine once it exists
@@ -387,6 +393,15 @@ function NewSessionWizard() {
 
     const supportsImages = agentType === 'claude' || agentType === 'gemini' || agentType === 'codex' || agentType === 'qoder';
     const isFocused = useIsFocused();
+
+    // What another app shared, when the share-target page sent it to a new session
+    useSharedContentIntake({
+        target: SHARE_TARGET_NEW,
+        enabled: isFocused,
+        setText: setSessionPrompt,
+        addImages: addSharedImages,
+        addFiles: fileAttachments.addSharedFiles,
+    });
 
     const handleImageButtonPress = React.useCallback(() => {
         setImagePickerSheetVisible(true);

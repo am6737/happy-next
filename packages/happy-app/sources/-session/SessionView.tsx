@@ -22,6 +22,8 @@ import { VoiceAssistantStatusBar } from '@/components/VoiceAssistantStatusBar';
 import { useDraft } from '@/hooks/useDraft';
 import { DEFAULT_ALLOWED_TYPES, useImagePicker } from '@/hooks/useImagePicker';
 import { useFileAttachments } from '@/hooks/useFileAttachments';
+import { useSharedContentIntake } from '@/hooks/useSharedContentIntake';
+import type { ShareTarget } from '@/share/sharedContent';
 import { useWebFileDrop } from '@/hooks/useWebFileDrop';
 import { Modal } from '@/modal';
 import { voiceHooks } from '@/realtime/hooks/voiceHooks';
@@ -537,6 +539,7 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
         removeImage,
         clearImages,
         initImages,
+        addSharedImages,
     } = useImagePicker({ maxImages: 4 });
 
     // Use draft hook for auto-saving message drafts
@@ -544,6 +547,16 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
 
     // Files upload to the session's machine as soon as they are picked; messages carry their paths
     const fileAttachments = useFileAttachments(sessionId);
+
+    // What another app shared, when the share-target page sent it to this session
+    const shareTarget = React.useMemo<ShareTarget>(() => ({ type: 'session', sessionId }), [sessionId]);
+    useSharedContentIntake({
+        target: shareTarget,
+        enabled: isFocused,
+        setText: setMessage,
+        addImages: addSharedImages,
+        addFiles: fileAttachments.addSharedFiles,
+    });
     const { attachments, clearFiles } = fileAttachments;
     // Paths only exist once every attached file has landed on the machine
     const filesBlockSend = React.useCallback(() => {

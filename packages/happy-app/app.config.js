@@ -15,16 +15,24 @@ const bundleId = {
     preview: "com.hitosea.happy.preview",
     production: "com.hitosea.happy"
 }[variant];
+// The share extension hands what was shared to the app through its first scheme, so each variant
+// leads with one of its own: with the dev and production apps on one phone, `happy://` could open
+// either. `happy` stays registered for the links the app already uses.
+const scheme = {
+    development: ["happy-dev", "happy"],
+    preview: ["happy-pre", "happy"],
+    production: "happy"
+}[variant];
 
 export default {
     expo: {
         name,
         slug: "happy",
         version: (process.env.APP_VERSION || "2.0.0").replace(/^v/, ''),
-        runtimeVersion: "18",
+        runtimeVersion: "19",
         orientation: "default",
         icon: "./sources/assets/images/icon.png",
-        scheme: "happy",
+        scheme,
         userInterfaceStyle: "automatic",
         newArchEnabled: true,
         notification: {
@@ -154,6 +162,23 @@ export default {
                 }
             ],
             "@more-tech/react-native-libsodium",
+            [
+                // Receive text, links, images, videos and files from the system share sheet
+                "expo-share-intent",
+                {
+                    iosActivationRules: {
+                        NSExtensionActivationSupportsText: true,
+                        NSExtensionActivationSupportsWebURLWithMaxCount: 1,
+                        NSExtensionActivationSupportsImageWithMaxCount: 10,
+                        NSExtensionActivationSupportsMovieWithMaxCount: 10,
+                        NSExtensionActivationSupportsFileWithMaxCount: 10,
+                    },
+                    // Its name in the share sheet (patches/expo-share-intent+5.1.1.patch)
+                    iosShareExtensionDisplayName: name,
+                    androidIntentFilters: ["*/*"],
+                    androidMultiIntentFilters: ["*/*"],
+                },
+            ],
             "react-native-audio-api",
             "@livekit/react-native-expo-plugin",
             "@config-plugins/react-native-webrtc",

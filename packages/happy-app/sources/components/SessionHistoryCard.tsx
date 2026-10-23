@@ -22,10 +22,11 @@ export const SessionHistoryCard = React.memo(({ session, isFirst, isLast, isSing
     isFirst?: boolean;
     isLast?: boolean;
     isSingle?: boolean;
-    isResuming: boolean;
+    isResuming?: boolean;
     // Given the session, so a list can pass one callback for every row and keep the memo.
     onPress: (session: Session) => void;
-    onFork: (session: Session, mode: SessionForkMode) => void;
+    // Without it, a list only to pick from (the share-target page), no resume or copy is offered.
+    onFork?: (session: Session, mode: SessionForkMode) => void;
     style?: StyleProp<ViewStyle>;
 }) => {
     const { theme } = useUnistyles();
@@ -68,7 +69,7 @@ export const SessionHistoryCard = React.memo(({ session, isFirst, isLast, isSing
                 </View>
             </View>
             <View style={styles.rightSection}>
-                {canFork && !isResuming && (
+                {onFork && canFork && !isResuming && (
                     <Pressable
                         style={styles.playButton}
                         onPress={(event) => {

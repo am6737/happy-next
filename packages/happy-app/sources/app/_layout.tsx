@@ -8,6 +8,7 @@ import * as Notifications from 'expo-notifications';
 import { FontAwesome, FontAwesome6, Ionicons, Octicons, MaterialCommunityIcons, AntDesign, SimpleLineIcons } from '@expo/vector-icons';
 import { AuthCredentials, TokenStorage } from '@/auth/tokenStorage';
 import { AuthProvider } from '@/auth/AuthContext';
+import { ShareIntentReceiver } from '@/share/ShareIntentReceiver';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { initialWindowMetrics, SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -347,6 +348,7 @@ export default function RootLayout() {
                         <AuthProvider initialCredentials={initState.credentials}>
                             <ThemePreferenceSync />
                             <DesktopAuthWindowSync />
+                            <ShareIntentReceiver />
                             <ThemeProvider value={navigationTheme}>
                                 <StatusBarProvider>
                                     <ModalProvider>

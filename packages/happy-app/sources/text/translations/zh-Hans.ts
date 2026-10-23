@@ -750,6 +750,21 @@ export const zhHans: TranslationStructure = {
         noCameraDevice: '没有可用的摄像头',
     },
 
+    shareTarget: {
+        // The page another app's share sheet opens: where what was shared goes
+        title: '分享到',
+        newSession: '新建会话',
+        activeSessions: '活跃会话',
+        noActiveSessions: '没有在线的会话',
+        searchPlaceholder: '搜索会话',
+        noResults: '没有匹配的会话',
+        text: '文字',
+        images: ({ count }: { count: number }) => `图片 ${count} 张`,
+        videos: ({ count }: { count: number }) => `视频 ${count} 个`,
+        files: ({ count }: { count: number }) => `文件 ${count} 个`,
+        loginRequired: '请先登录 Happy，再重新分享。',
+    },
+
     newSession: {
         // Used by new-session screen and launch flows
         title: '启动新会话',

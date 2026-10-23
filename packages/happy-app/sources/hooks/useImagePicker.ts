@@ -1,10 +1,11 @@
 import * as React from 'react';
-import { Platform } from 'react-native';
+import { Platform, Image as NativeImage } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { Modal } from '@/modal';
 import { LocalImage } from '@/components/ImagePreview';
 import { appendWithinLimit } from '@/utils/imageSelection';
+import { discardSharedFiles, type SharedFile } from '@/share/sharedContent';
 
 const MAX_DIMENSION = 1568;
 const MAX_SIZE_BYTES = 1.5 * 1024 * 1024;
@@ -32,6 +33,8 @@ interface UseImagePickerReturn {
     pickFromCamera: () => Promise<void>;
     addImageFromUri: (uri: string, mimeType: string) => Promise<void>;
     addImagesFromFiles: (files: File[]) => Promise<void>;
+    /** Adds images another app shared, as many as there is room for; returns the rest, to attach as files. */
+    addSharedImages: (files: SharedFile[]) => Promise<SharedFile[]>;
     removeImage: (index: number) => void;
     clearImages: () => void;
     initImages: (images: LocalImage[]) => void;
@@ -127,6 +130,8 @@ export function useImagePicker(options: UseImagePickerOptions = {}): UseImagePic
     } = options;
 
     const [images, setImages] = React.useState<LocalImage[]>([]);
+    const imagesRef = React.useRef(images);
+    imagesRef.current = images;
 
     const canAddMore = images.length < maxImages;
 
@@ -271,6 +276,33 @@ export function useImagePicker(options: UseImagePickerOptions = {}): UseImagePic
         setImages((previous) => appendWithinLimit(previous, prepared, maxImages));
     }, [allowedTypes, images.length, maxImages]);
 
+    const addSharedImages = React.useCallback(async (files: SharedFile[]) => {
+        const room = Math.max(0, maxImages - imagesRef.current.length);
+        const rest = files.slice(room);
+        const processed: LocalImage[] = [];
+        for (const file of files.slice(0, room)) {
+            try {
+                let { width, height } = file;
+                if (!width || !height) {
+                    ({ width, height } = await NativeImage.getSize(file.uri));
+                }
+                if (allowedTypes.includes(file.mimeType) && shouldPassthrough(file.mimeType, width, height, file.size ?? undefined)) {
+                    processed.push({ uri: file.uri, width, height, mimeType: file.mimeType });
+                    continue;
+                }
+                // Too large, or a type the agents don't read (HEIC from the photo library): a JPEG
+                const compressed = await compressImage(file.uri, width, height);
+                processed.push({ ...compressed, mimeType: 'image/jpeg' });
+                discardSharedFiles([file]);
+            } catch (error) {
+                console.warn('[ImagePicker] Shared image could not be read, attaching it as a file:', error);
+                rest.push(file);
+            }
+        }
+        setImages((previous) => appendWithinLimit(previous, processed, maxImages));
+        return rest;
+    }, [maxImages, allowedTypes]);
+
     const removeImage = React.useCallback((index: number) => {
         setImages(prev => prev.filter((_, i) => i !== index));
     }, []);
@@ -289,6 +321,7 @@ export function useImagePicker(options: UseImagePickerOptions = {}): UseImagePic
         pickFromCamera,
         addImageFromUri,
         addImagesFromFiles,
+        addSharedImages,
         removeImage,
         clearImages,
         initImages,
