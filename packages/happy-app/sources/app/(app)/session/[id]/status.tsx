@@ -448,6 +448,7 @@ export default function StatusScreen() {
                                         key={`staged-${file.fullPath}-${index}`}
                                         title={file.fileName}
                                         subtitle={renderFileSubtitle(file)}
+                                        subtitleEllipsizeMode="middle"
                                         icon={<FileIcon fileName={file.fileName} size={32} />}
                                         rightElement={renderRightElement(file, true)}
                                         onPress={() => handleFilePress(file, true)}
@@ -506,6 +507,7 @@ export default function StatusScreen() {
                                         key={`unstaged-${file.fullPath}-${index}`}
                                         title={file.fileName}
                                         subtitle={renderFileSubtitle(file)}
+                                        subtitleEllipsizeMode="middle"
                                         icon={<FileIcon fileName={file.fileName} size={32} />}
                                         rightElement={renderRightElement(file, false)}
                                         onPress={() => handleFilePress(file)}

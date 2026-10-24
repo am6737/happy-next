@@ -650,6 +650,7 @@ export default function FilesScreen() {
                                         key={`staged-${file.fullPath}-${index}`}
                                         title={file.fileName}
                                         subtitle={renderFileSubtitle(file)}
+                                        subtitleEllipsizeMode="middle"
                                         icon={renderFileIcon(file)}
                                         rightElement={renderRightElement(file, true)}
                                         onPress={() => handleFilePress(file, true)}
@@ -708,6 +709,7 @@ export default function FilesScreen() {
                                         key={`unstaged-${file.fullPath}-${index}`}
                                         title={file.fileName}
                                         subtitle={renderFileSubtitle(file)}
+                                        subtitleEllipsizeMode="middle"
                                         icon={renderFileIcon(file)}
                                         rightElement={renderRightElement(file, false)}
                                         onPress={() => handleFilePress(file)}

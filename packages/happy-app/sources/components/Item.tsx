@@ -20,6 +20,7 @@ export interface ItemProps {
     title: string;
     subtitle?: React.ReactNode;
     subtitleLines?: number; // set 0 or undefined for auto/multiline
+    subtitleEllipsizeMode?: 'head' | 'middle' | 'tail' | 'clip'; // where a cut-off subtitle is elided
     detail?: string;
     icon?: React.ReactNode;
     leftElement?: React.ReactNode;
@@ -131,6 +132,7 @@ export const Item = React.memo<ItemProps>((props) => {
         title,
         subtitle,
         subtitleLines,
+        subtitleEllipsizeMode,
         detail,
         icon,
         leftElement,
@@ -241,6 +243,7 @@ export const Item = React.memo<ItemProps>((props) => {
                             <Text
                                 style={[styles.subtitle, subtitleStyle]}
                                 numberOfLines={effectiveLines}
+                                ellipsizeMode={subtitleEllipsizeMode}
                             >
                                 {subtitle}
                             </Text>
