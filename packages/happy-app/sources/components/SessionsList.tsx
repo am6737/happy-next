@@ -1156,7 +1156,9 @@ export function SessionsList() {
                         ]}
                         ListHeaderComponent={showsSearchRow ? <SessionsSearchField /> : undefined}
                         ListEmptyComponent={EmptyComponent}
-                        removeClippedSubviews={true}
+                        // Not on iOS: a row the system's context menu lifts and flies back is taken
+                        // out as clipped, and stays blank for a second or two after the menu closes.
+                        removeClippedSubviews={Platform.OS !== 'ios'}
                         onLayout={event => {
                             viewportHeightRef.current = event.nativeEvent.layout.height;
                         }}

@@ -642,7 +642,12 @@ export function SessionContextMenu({ session, children, highlightShape }: {
                     previewShape={highlightShape}
                     style={styles.highlightHost}
                 >
-                    {child}
+                    {/* Opaque for the lifted preview, in the page's colour: an active session's row
+                        has no background of its own, and the preview's plate (black in the dark
+                        theme, white in the light) showed through it as the row flew back. */}
+                    <View style={{ backgroundColor: theme.colors.groupped.background }}>
+                        {child}
+                    </View>
                 </ContextMenuView>
                 {archiveMenu}
             </>
