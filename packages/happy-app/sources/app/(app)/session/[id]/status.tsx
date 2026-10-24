@@ -5,7 +5,8 @@ import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons, Octicons } from '@expo/vector-icons';
 import { Text } from '@/components/StyledText';
-import { Item } from '@/components/Item';
+import { Item, type ItemProps } from '@/components/Item';
+import { FLAT_ROW_RADIUS } from '@/components/flatRow';
 import { ItemList } from '@/components/ItemList';
 import { Typography } from '@/constants/Typography';
 import { getGitStatusFiles, GitFileStatus, GitStatusFiles } from '@/sync/gitStatusFiles';
@@ -20,6 +21,10 @@ import { ActionMenuItem } from '@/components/ActionMenu';
 import { t } from '@/text';
 import { shellEscape } from '@/utils/shellEscape';
 import { actionMenuSection, ContextMenuView, nativeContextMenuAvailable } from '@/components/ContextMenuView';
+
+// On iOS a file row is inset like the inbox's flat rows (see withFileMenu); Item's iOS divider inset is 15.
+const FILE_ROW_INSET = 8;
+const FILE_ROW_DIVIDER_INSET = 15 - FILE_ROW_INSET;
 
 export default function StatusScreen() {
     const route = useRoute();
@@ -256,10 +261,24 @@ export default function StatusScreen() {
     }, [fileMenuItems]);
 
     // On iOS a file row's actions are its native context menu; elsewhere a long press opens the sheet.
-    const withFileMenu = (file: GitFileStatus, staged: boolean, row: React.ReactElement) => (
+    // The system's menu does not cancel React Native's touch handling, so the row is given a long
+    // press to report, shorter than the system takes to lift it: a finger lifted as the menu appears
+    // then no longer opens the file (as `RowContextMenu` does). The row is inset and rounded like the
+    // inbox's flat rows, padded in by as much, so the menu lifts it in the shape the press tints
+    // rather than as a strip across the screen, and it sits on the page's colour, since the row
+    // draws no background and the preview's plate would show through it.
+    const withFileMenu = (file: GitFileStatus, staged: boolean, row: React.ReactElement<ItemProps>) => (
         nativeContextMenuAvailable ? (
-            <ContextMenuView key={row.key} sections={[actionMenuSection(fileMenuItems(file, staged))]}>
-                {row}
+            <ContextMenuView key={row.key} sections={[actionMenuSection(fileMenuItems(file, staged))]} previewShape={styles.fileRowShape} style={styles.fileRowFrame}>
+                <View style={[styles.fileRowShape, styles.fileRowClip, { backgroundColor: theme.colors.groupped.background }]}>
+                    {React.cloneElement(row, {
+                        onLongPress: () => {},
+                        delayLongPress: 350,
+                        style: styles.fileRowItem,
+                        // The divider starts where it did before the row was inset.
+                        dividerInset: FILE_ROW_DIVIDER_INSET,
+                    })}
+                </View>
             </ContextMenuView>
         ) : row
     );
@@ -511,5 +530,17 @@ const styles = StyleSheet.create((_theme) => ({
         maxWidth: layout.maxWidth,
         alignSelf: 'center' as const,
         width: '100%',
+    },
+    fileRowFrame: {
+        marginHorizontal: FILE_ROW_INSET,
+    },
+    fileRowShape: {
+        borderRadius: FLAT_ROW_RADIUS,
+    },
+    fileRowClip: {
+        overflow: 'hidden',
+    },
+    fileRowItem: {
+        paddingHorizontal: 16 - FILE_ROW_INSET,
     },
 }));
