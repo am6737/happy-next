@@ -29,6 +29,7 @@ import { appConfigRoutes } from "./routes/appConfigRoutes";
 import { modelCatalogRoutes } from "./routes/modelCatalogRoutes";
 import { githubRoutes } from "./routes/githubRoutes";
 import { rpcRoutes } from "./routes/rpcRoutes";
+import { otaRoutes } from "./routes/otaRoutes";
 
 export async function startApi() {
 
@@ -87,6 +88,7 @@ export async function startApi() {
     orchestratorRoutes(typed);
     githubRoutes(typed);
     rpcRoutes(typed);
+    otaRoutes(typed);
 
     // Start HTTP
     const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 3005;

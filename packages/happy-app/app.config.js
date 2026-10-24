@@ -29,7 +29,9 @@ export default {
         name,
         slug: "happy",
         version: (process.env.APP_VERSION || "2.0.0").replace(/^v/, ''),
-        runtimeVersion: "19",
+        // The native fingerprint (see fingerprint.config.js), so an OTA update only reaches builds
+        // whose native side it was made against
+        runtimeVersion: { policy: "fingerprint" },
         orientation: "default",
         icon: "./sources/assets/images/icon.png",
         scheme,
@@ -252,10 +254,12 @@ export default {
                 }
             ]
         ],
+        // OTA updates come from our own server (happy-server otaRoutes, published with
+        // `yarn ota publish`), each variant on the channel of its name
         updates: {
-            url: "https://u.expo.dev/c25469ee-cbd3-483f-b673-d3538c469d9e",
+            url: "https://api.happy-next.com/v1/ota/manifest",
             requestHeaders: {
-                "expo-channel-name": "production"
+                "expo-channel-name": variant
             }
         },
         experiments: {

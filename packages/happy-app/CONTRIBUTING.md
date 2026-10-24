@@ -12,7 +12,7 @@ The Happy Next app supports three build variants across **iOS, Android, and macO
 
 **Why Preview?**
 - **Development**: Fast iteration, dev server, instant reload
-- **Preview**: Beta testers get OTA updates (`eas update --branch preview`) without app store submission
+- **Preview**: Beta testers get OTA updates (`yarn ota publish --channel preview`) without app store submission
 - **Production**: Stable App Store builds
 
 This allows you to test production-like builds with real users before releasing to the App Store.
@@ -118,7 +118,7 @@ This makes it easy to distinguish which version you're testing!
 
 2. **Test OTA updates:**
    ```bash
-   npm run ota  # Publishes to preview branch
+   OTA_ADMIN_TOKEN=... yarn ota publish --channel preview
    ```
 
 3. **Verify** the preview build works as expected
@@ -137,8 +137,11 @@ This makes it easy to distinguish which version you're testing!
 
 3. **Deploy OTA updates:**
    ```bash
-   npm run ota:production
+   OTA_ADMIN_TOKEN=... yarn ota publish --message "..."
    ```
+   Updates go to our own server (happy-server `/v1/ota/*`) and reach only builds with the same
+   native fingerprint. `yarn ota list`, `yarn ota republish <id>` and `yarn ota rollback-to-embedded`
+   roll back; see `sources/scripts/ota.ts`.
 
 ## All Variants Simultaneously
 

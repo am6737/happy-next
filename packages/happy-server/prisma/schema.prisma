@@ -663,3 +663,35 @@ model PublicShareBlockedUser {
 
   @@unique([publicShareId, userId])
 }
+
+//
+// OTA updates (expo-updates protocol, served by otaRoutes)
+//
+
+/// A file of an OTA update, stored in S3 at ota/assets/<hash>. Shared by every update that has it.
+model OtaAsset {
+  /// Base64url SHA-256 of the file, as the manifest gives it
+  hash        String   @id
+  contentType String
+  size        Int
+  createdAt   DateTime @default(now())
+}
+
+model OtaUpdate {
+  /// UUID, the manifest's id
+  id              String   @id
+  channel         String
+  platform        String
+  runtimeVersion  String
+  /// "update", or "rollBackToEmbedded" to send the app back to the JS in its binary
+  kind            String
+  /// [OtaUpdateContent] launch asset, assets and expoClient config; null for rollBackToEmbedded
+  content         Json?
+  message         String?
+  gitCommit       String?
+  /// The update this one republishes (a rollback to it)
+  republishedFrom String?
+  createdAt       DateTime @default(now())
+
+  @@index([channel, platform, runtimeVersion, createdAt])
+}

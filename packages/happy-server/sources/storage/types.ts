@@ -98,6 +98,22 @@ declare global {
         type GitHubProfile = GitHubProfileType;
         type GitHubOrg = GitHubOrgType;
         type ImageRef = ImageRefType;
+
+        // An OTA update's files and config; the manifest's urls are made from the hashes when served
+        type OtaUpdateContent = {
+            launchAsset: OtaUpdateAsset;
+            assets: OtaUpdateAsset[];
+            /// The app's public Expo config, the manifest's extra.expoClient
+            expoClient: Record<string, unknown>;
+        };
+        type OtaUpdateAsset = {
+            /// Base64url SHA-256, also the S3 key's last part
+            hash: string;
+            /// MD5 hex, the name the app stores the file under
+            key: string;
+            fileExtension: string;
+            contentType: string;
+        };
     }
 }
 
