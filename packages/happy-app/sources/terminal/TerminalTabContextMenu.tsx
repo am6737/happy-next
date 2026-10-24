@@ -29,6 +29,10 @@ export interface TerminalTabContextMenuProps {
     items: ActionMenuItem[];
     /** Native only — the floating menu has no room for one. */
     title: string;
+    /** iOS only — makes the tab draggable around a `ContextMenuDropZone` (see `ContextMenuView`). */
+    dragId?: string;
+    onDragBegin?: () => void;
+    onDragEnd?: () => void;
     children: React.ReactNode;
 }
 
@@ -41,10 +45,12 @@ const EDGE_GAP = 8;
 const LONG_PRESS_MS = 450;
 /** The tab's rounding (`TerminalTabBar`), which the lifted tab is clipped to. */
 const TAB_SHAPE = { borderRadius: 6 };
+/** Under the half second the system takes to lift the tab for its menu. */
+const NATIVE_LONG_PRESS_MS = 350;
 /** A press this soon after a long press is the back half of that gesture. */
 const PRESS_AFTER_LONG_PRESS_MS = 1_000;
 
-export function TerminalTabContextMenu({ items, title, children }: TerminalTabContextMenuProps) {
+export function TerminalTabContextMenu({ items, title, dragId, onDragBegin, onDragEnd, children }: TerminalTabContextMenuProps) {
     const { theme } = useUnistyles();
     const { width, height } = useWindowDimensions();
     const [position, setPosition] = React.useState<MenuPosition | null>(null);
@@ -106,9 +112,31 @@ export function TerminalTabContextMenu({ items, title, children }: TerminalTabCo
     if (nativeContextMenuAvailable) {
         // iOS: the system context menu, lifting the tab with its actions beside it. Its actions
         // run once the menu has closed, so a rename prompt is not raised over it.
+        //
+        // The system's menu does not cancel React Native's touch handling, so a finger lifted just
+        // as the menu lifts the tab still reaches it as a tap and selects it. Pressability drops
+        // the `onPress` of a press it has already reported as a long press, so the tab is given
+        // one to report, as `SessionContextMenu` does for a session row.
+        const tab = React.isValidElement(children)
+            ? React.cloneElement(children as React.ReactElement<Record<string, unknown>>, {
+                onLongPress: (event: unknown) => {
+                    (children.props as { onLongPress?: (event: unknown) => void }).onLongPress?.(event);
+                },
+                delayLongPress: NATIVE_LONG_PRESS_MS,
+            })
+            : children;
+        // Dragged, the tab is drawn as the active one is, as it is on the web.
         return (
-            <ContextMenuView sections={[actionMenuSection(items)]} title={title} previewShape={TAB_SHAPE}>
-                {children}
+            <ContextMenuView
+                sections={[actionMenuSection(items)]}
+                title={title}
+                previewShape={TAB_SHAPE}
+                dragId={dragId}
+                dragPreviewColor={theme.colors.surfaceHighest}
+                onDragBegin={onDragBegin}
+                onDragEnd={onDragEnd}
+            >
+                {tab}
             </ContextMenuView>
         );
     }

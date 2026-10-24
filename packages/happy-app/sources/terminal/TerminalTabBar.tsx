@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useUnistyles } from 'react-native-unistyles';
 import { t } from '@/text';
 import type { ActionMenuItem } from '@/components/ActionMenu';
+import { ContextMenuDropZone, nativeContextMenuDragAvailable } from '@/components/ContextMenuView';
 import { useTerminalTabReorder } from '@/hooks/useTerminalTabReorder';
 import { TerminalTabContextMenu } from './TerminalTabContextMenu';
 import { terminalTabKey, type TerminalTab } from './terminalTabs';
@@ -22,9 +23,10 @@ import { useTerminalRouteLabel } from './useTerminalRouteLabel';
  * The strip draws no background of its own: it is placed either on the window's
  * title row or under a header, and both of those already have one.
  *
- * On the web the tabs can be dragged into a different order. Everywhere else
- * they cannot: a finger on a tab opens the context menu, so there would be no
- * gesture left to drag with.
+ * The tabs can be dragged into a different order on the web, with the mouse,
+ * and on iOS, by moving the finger once a tab's context menu is up — the
+ * system's own drag, which the strip follows. Android has no such drag, and a
+ * finger on a tab there is already its menu.
  *
  * The strip is sized to fit the title row it stands in for in the desktop
  * terminal window (see `TerminalWindowTitleRow`), which is why the padding
@@ -74,6 +76,7 @@ export const TerminalTabBar = memo(({
     const reorder = useTerminalTabReorder({
         tabs,
         enabled: Platform.OS === 'web',
+        native: nativeContextMenuDragAvailable,
         onReorder,
         leading: STRIP_LEADING,
         gap: STRIP_GAP,
@@ -98,93 +101,106 @@ export const TerminalTabBar = memo(({
             horizontal
             ref={scrollRef}
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.content}
             style={styles.bar}
             keyboardShouldPersistTaps="always"
             onScroll={reorder.onBarScroll}
             scrollEventThrottle={16}
         >
-            {reorder.renderTabs.map((tab) => {
-                const key = terminalTabKey(tab);
-                const label = labels.get(key) ?? tab.terminal.id;
-                const active = key === activeKey;
-                const dragging = key === reorder.draggingKey;
-                // Built per tab rather than hoisted: only the one whose menu is
-                // actually open reads its items.
-                const items: ActionMenuItem[] = [
-                    { label: t('common.rename'), onPress: () => onRename(tab) },
-                    { label: t('terminalSession.duplicateTerminal'), onPress: () => onDuplicate(tab) },
-                    { label: t('terminalSession.closeTerminal'), destructive: true, onPress: () => onClose(tab) },
-                ];
-                return (
-                    <TerminalTabContextMenu items={items} key={key} title={label}>
-                        <Pressable
-                            {...reorder.tabProps(key)}
-                            ref={setTooltip(routeLabel(tab, label))}
-                            accessibilityRole="tab"
-                            accessibilityState={{ selected: active }}
-                            onPress={() => onSelect(tab)}
-                            style={[
-                                styles.tab,
-                                { backgroundColor: active ? theme.colors.surfaceHighest : 'transparent' },
-                                // While dragged the tab is carried under the
-                                // pointer and lifted off the strip, so it reads
-                                // as the thing being moved rather than as one
-                                // that has already landed.
-                                dragging && {
-                                    backgroundColor: theme.colors.surfaceHighest,
-                                    elevation: 8,
-                                    opacity: 0.95,
-                                    shadowColor: theme.colors.shadow.color,
-                                    shadowOffset: { width: 0, height: 4 },
-                                    shadowOpacity: 0.28,
-                                    shadowRadius: 10,
-                                    transform: [{ translateX: reorder.dragOffsetX }],
-                                    zIndex: 20,
-                                },
-                            ]}
+            {/* Around the whole row, inside the scroller, so a drag's `x` is along the
+                row however far it is scrolled. */}
+            <ContextMenuDropZone onDragMove={reorder.nativeDrag.move} style={styles.content}>
+                {reorder.renderTabs.map((tab) => {
+                    const key = terminalTabKey(tab);
+                    const label = labels.get(key) ?? tab.terminal.id;
+                    const active = key === activeKey;
+                    const dragging = key === reorder.draggingKey;
+                    const carried = key === reorder.carriedKey;
+                    // Built per tab rather than hoisted: only the one whose menu is
+                    // actually open reads its items.
+                    const items: ActionMenuItem[] = [
+                        { label: t('common.rename'), onPress: () => onRename(tab) },
+                        { label: t('terminalSession.duplicateTerminal'), onPress: () => onDuplicate(tab) },
+                        { label: t('terminalSession.closeTerminal'), destructive: true, onPress: () => onClose(tab) },
+                    ];
+                    return (
+                        <TerminalTabContextMenu
+                            dragId={tabs.length > 1 ? key : undefined}
+                            items={items}
+                            key={key}
+                            onDragBegin={() => reorder.nativeDrag.begin(key)}
+                            onDragEnd={() => reorder.nativeDrag.end(key)}
+                            title={label}
                         >
-                            {/* A tab's name is a label, not something to copy.
-                                Said with `selectable` rather than a
-                                `userSelect` style: WebKit honours only the
-                                prefixed property, which the style layer does
-                                not emit, so a press that drifts by a pixel
-                                would leave the tab looking selected. */}
-                            <Text
-                                numberOfLines={1}
-                                selectable={false}
-                                style={[styles.tabLabel, { color: theme.colors.text, opacity: active ? 1 : 0.65 }]}
-                            >
-                                {label}
-                            </Text>
                             <Pressable
-                                accessibilityLabel={t('terminalSession.closeTab', { label })}
-                                accessibilityRole="button"
-                                hitSlop={8}
-                                onPress={() => onClose(tab)}
+                                {...reorder.tabProps(key)}
+                                ref={setTooltip(routeLabel(tab, label))}
+                                accessibilityRole="tab"
+                                accessibilityState={{ selected: active }}
+                                onPress={() => onSelect(tab)}
+                                style={[
+                                    styles.tab,
+                                    { backgroundColor: active ? theme.colors.surfaceHighest : 'transparent' },
+                                    // While dragged the tab is carried under the
+                                    // pointer and lifted off the strip, so it reads
+                                    // as the thing being moved rather than as one
+                                    // that has already landed.
+                                    dragging && {
+                                        backgroundColor: theme.colors.surfaceHighest,
+                                        elevation: 8,
+                                        opacity: 0.95,
+                                        shadowColor: theme.colors.shadow.color,
+                                        shadowOffset: { width: 0, height: 4 },
+                                        shadowOpacity: 0.28,
+                                        shadowRadius: 10,
+                                        transform: [{ translateX: reorder.dragOffsetX }],
+                                        zIndex: 20,
+                                    },
+                                    // Its copy is under the finger; this marks where it will land.
+                                    carried && styles.tabCarried,
+                                ]}
                             >
-                                <Ionicons
-                                    color={theme.colors.text}
-                                    name="close"
-                                    size={13}
-                                    style={styles.closeIcon}
-                                />
+                                {/* A tab's name is a label, not something to copy.
+                                    Said with `selectable` rather than a
+                                    `userSelect` style: WebKit honours only the
+                                    prefixed property, which the style layer does
+                                    not emit, so a press that drifts by a pixel
+                                    would leave the tab looking selected. */}
+                                <Text
+                                    numberOfLines={1}
+                                    selectable={false}
+                                    style={[styles.tabLabel, { color: theme.colors.text, opacity: active ? 1 : 0.65 }]}
+                                >
+                                    {label}
+                                </Text>
+                                <Pressable
+                                    accessibilityLabel={t('terminalSession.closeTab', { label })}
+                                    accessibilityRole="button"
+                                    hitSlop={8}
+                                    onPress={() => onClose(tab)}
+                                >
+                                    <Ionicons
+                                        color={theme.colors.text}
+                                        name="close"
+                                        size={13}
+                                        style={styles.closeIcon}
+                                    />
+                                </Pressable>
                             </Pressable>
-                        </Pressable>
-                    </TerminalTabContextMenu>
-                );
-            })}
-            {/* Disabled while a spawn is in flight so a slow round trip does
-                not queue up a terminal per tap. */}
-            <Pressable
-                accessibilityLabel={t('terminalSession.newTerminal')}
-                accessibilityRole="button"
-                disabled={isBusy}
-                onPress={onNew}
-                style={[styles.newButton, isBusy && styles.newButtonBusy]}
-            >
-                <Ionicons color={theme.colors.text} name="add" size={18} />
-            </Pressable>
+                        </TerminalTabContextMenu>
+                    );
+                })}
+                {/* Disabled while a spawn is in flight so a slow round trip does
+                    not queue up a terminal per tap. */}
+                <Pressable
+                    accessibilityLabel={t('terminalSession.newTerminal')}
+                    accessibilityRole="button"
+                    disabled={isBusy}
+                    onPress={onNew}
+                    style={[styles.newButton, isBusy && styles.newButtonBusy]}
+                >
+                    <Ionicons color={theme.colors.text} name="add" size={18} />
+                </Pressable>
+            </ContextMenuDropZone>
         </ScrollView>
     );
 });
@@ -197,6 +213,7 @@ const styles = StyleSheet.create({
     },
     content: {
         alignItems: 'center',
+        flexDirection: 'row',
         gap: STRIP_GAP,
         paddingHorizontal: STRIP_LEADING,
         paddingVertical: STRIP_PADDING_VERTICAL,
@@ -209,6 +226,9 @@ const styles = StyleSheet.create({
         maxWidth: 180,
         paddingHorizontal: 10,
         paddingVertical: 6,
+    },
+    tabCarried: {
+        opacity: 0.35,
     },
     tabLabel: {
         flexShrink: 1,

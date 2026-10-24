@@ -5,13 +5,19 @@ import { applyTerminalTabOrder, moveTerminalTab, terminalTabKey, type TerminalTa
 /**
  * Dragging the tabs into a different order.
  *
- * Web only, and deliberately built on mouse events rather than a gesture
- * library. This is the one platform that can do it — a finger on a tab is
- * already the context menu — so the arbitration a gesture system would buy is
- * arbitration against nothing, and `react-native-gesture-handler` inside a
- * horizontal `ScrollView` is a well-known way to end up fighting the scroller.
- * A document-level `mousemove`/`mouseup` pair, which is also how the session
- * context menu dismisses itself, has no such problem.
+ * On the web it is built on mouse events rather than a gesture library: a
+ * finger on a tab is already the context menu, so the arbitration a gesture
+ * system would buy is arbitration against nothing, and
+ * `react-native-gesture-handler` inside a horizontal `ScrollView` is a
+ * well-known way to end up fighting the scroller. A document-level
+ * `mousemove`/`mouseup` pair, which is also how the session context menu
+ * dismisses itself, has no such problem.
+ *
+ * On iOS the drag is the system's own, out of the tab's context menu (see
+ * `ContextMenuView`): it carries a copy of the tab, and the strip only hears
+ * where the finger is (`nativeDrag`). The tab itself is moved to the place the
+ * finger is over and drawn faintly there, and is left there when the finger
+ * lifts, wherever that is — the copy flies back onto it.
  *
  * Where each tab sits is computed from the widths rather than read from the
  * layout. A tab's position is only ever reported when its *size* changes —
@@ -29,26 +35,39 @@ export interface TerminalTabReorder {
     draggingKey: string | null;
     /** How far the dragged tab is being carried, in pixels. */
     dragOffsetX: number;
+    /** The tab the system's drag is carrying a copy of, which stays behind as its place. */
+    carriedKey: string | null;
     /** Layout and drag handlers for one tab, keyed by `terminalTabKey`. */
     tabProps: (key: string) => Record<string, unknown>;
     onBarScroll: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
+    /** The system's drag: begun and ended by the tab, followed by the strip (`x` along it). */
+    nativeDrag: {
+        begin: (key: string) => void;
+        move: (key: string, x: number) => void;
+        end: (key: string) => void;
+    };
 }
 
 export function useTerminalTabReorder(input: {
     tabs: readonly TerminalTab[];
+    /** Dragging with the mouse (the web). */
     enabled: boolean;
+    /** Dragging with the system's drag (iOS). */
+    native?: boolean;
     /** The whole visible sequence, in its new order. */
     onReorder: (order: readonly string[]) => void;
     /** Space before the first tab and between tabs, from the strip's own styles. */
     leading: number;
     gap: number;
 }): TerminalTabReorder {
-    const { tabs, enabled, onReorder, leading, gap } = input;
+    const { tabs, enabled, native = false, onReorder, leading, gap } = input;
 
     const widthsRef = React.useRef(new Map<string, number>());
     const scrollXRef = React.useRef(0);
     const [preview, setPreview] = React.useState<TerminalTab[] | null>(null);
     const [drag, setDrag] = React.useState<{ key: string; offsetX: number } | null>(null);
+    const [carriedKey, setCarriedKey] = React.useState<string | null>(null);
+    const nativeDragRef = React.useRef<{ key: string; baseTabs: readonly TerminalTab[]; from: number; to: number } | null>(null);
 
     // Read through refs inside the drag, which outlives the render that started
     // it — a list refreshed mid-drag must not have the handlers closed over the
@@ -162,25 +181,87 @@ export function useTerminalTabReorder(input: {
         [enabled, gap, leading],
     );
 
+    const nativeDrag = React.useMemo(() => {
+        // The place for the dragged tab with the finger at `x`: after every other tab whose
+        // middle it has passed, as they sat when the drag began. Null while a tab is unmeasured.
+        const placeAt = (baseTabs: readonly TerminalTab[], key: string, x: number) => {
+            let slotX = leading;
+            let place = 0;
+            for (const tab of baseTabs) {
+                const tabKey = terminalTabKey(tab);
+                const width = widthsRef.current.get(tabKey);
+                if (width === undefined) {
+                    return null;
+                }
+                if (tabKey !== key && x > slotX + width / 2) {
+                    place += 1;
+                }
+                slotX += width + gap;
+            }
+            return place;
+        };
+        return {
+            begin: (key: string) => {
+                const baseTabs = tabsRef.current;
+                const from = baseTabs.findIndex((tab) => terminalTabKey(tab) === key);
+                if (!native || from === -1) {
+                    return;
+                }
+                nativeDragRef.current = { key, baseTabs, from, to: from };
+                setCarriedKey(key);
+            },
+            move: (key: string, x: number) => {
+                const current = nativeDragRef.current;
+                if (current?.key !== key) {
+                    return;
+                }
+                const to = placeAt(current.baseTabs, key, x);
+                if (to === null || to === current.to) {
+                    return;
+                }
+                current.to = to;
+                setPreview(applyTerminalTabOrder(current.baseTabs, moveTerminalTab(current.baseTabs, key, to)));
+            },
+            end: (key: string) => {
+                const current = nativeDragRef.current;
+                if (current?.key !== key) {
+                    return;
+                }
+                nativeDragRef.current = null;
+                setCarriedKey(null);
+                setPreview(null);
+                if (current.to !== current.from) {
+                    onReorderRef.current(moveTerminalTab(current.baseTabs, key, current.to));
+                }
+            },
+        };
+    }, [gap, leading, native]);
+
     const tabProps = React.useCallback(
         (key: string) => {
-            if (!enabled) {
+            if (!enabled && !native) {
                 return {};
             }
+            const onLayout = (event: LayoutChangeEvent) => {
+                widthsRef.current.set(key, event.nativeEvent.layout.width);
+            };
+            if (!enabled) {
+                return { onLayout };
+            }
             return {
-                onLayout: (event: LayoutChangeEvent) => {
-                    widthsRef.current.set(key, event.nativeEvent.layout.width);
-                },
+                onLayout,
                 onMouseDown: (event: { button?: number; clientX?: number; ctrlKey?: boolean; preventDefault?: () => void }) =>
                     handleMouseDown(key, event),
             };
         },
-        [enabled, handleMouseDown],
+        [enabled, handleMouseDown, native],
     );
 
     return {
+        carriedKey,
         dragOffsetX: drag?.offsetX ?? 0,
         draggingKey: drag?.key ?? null,
+        nativeDrag,
         onBarScroll,
         renderTabs: preview ?? tabs,
         tabProps,

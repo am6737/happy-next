@@ -55,6 +55,16 @@ type NativeContextMenuProps = {
     menu: { title?: string; items: NativeMenuElement[] };
     previewCornerRadii: { topLeft: number; topRight: number; bottomLeft: number; bottomRight: number };
     onSelectAction: (event: { nativeEvent: { id: string } }) => void;
+    dragId?: string;
+    dragPreviewColor?: string;
+    onDragBegin?: () => void;
+    onDragEnd?: () => void;
+    style?: StyleProp<ViewStyle>;
+    children?: React.ReactNode;
+};
+
+type NativeDropZoneProps = {
+    onDragMove: (event: { nativeEvent: { id: string; x: number } }) => void;
     style?: StyleProp<ViewStyle>;
     children?: React.ReactNode;
 };
@@ -72,6 +82,15 @@ const NativeContextMenu: React.ComponentType<NativeContextMenuProps> | null =
  */
 export const nativeContextMenuAvailable = NativeContextMenu !== null;
 
+// Shipped with the drag; a binary from before it has the menus but no drag.
+const NativeDropZone: React.ComponentType<NativeDropZoneProps> | null =
+    NativeContextMenu && requireOptionalNativeModule('HappyDropZone')
+        ? requireNativeViewManager('HappyDropZone')
+        : null;
+
+/** Whether a `ContextMenuView` with a `dragId` can be dragged around a `ContextMenuDropZone` here. */
+export const nativeContextMenuDragAvailable = NativeDropZone !== null;
+
 /**
  * Long-pressing the wrapped content lifts it and opens a native iOS context menu next to it, with
  * the system's glass, checkmarks, destructive rows and SF Symbols. A tap still reaches the content.
@@ -79,17 +98,39 @@ export const nativeContextMenuAvailable = NativeContextMenu !== null;
  *
  * `previewShape` is the content's own rounding (its `borderRadius` or per-corner radii), which the
  * lifted preview is clipped to.
+ *
+ * With a `dragId` (where `nativeContextMenuDragAvailable`) the content can also be dragged: moving
+ * the finger once the menu is up closes it and carries a copy of the content, drawn on
+ * `dragPreviewColor`, which a `ContextMenuDropZone` around it follows. `onDragBegin` and
+ * `onDragEnd` bracket the drag; as the finger lifts the copy flies back onto the content, wherever
+ * the content has been moved to by then.
  */
-export function ContextMenuView({ sections, title, previewShape, style, children }: {
+export function ContextMenuView({
+    sections,
+    title,
+    previewShape,
+    dragId,
+    dragPreviewColor,
+    onDragBegin,
+    onDragEnd,
+    style,
+    children,
+}: {
     sections: ContextMenuSection[];
     title?: string;
     previewShape?: StyleProp<ViewStyle>;
+    dragId?: string;
+    dragPreviewColor?: string;
+    onDragBegin?: () => void;
+    onDragEnd?: () => void;
     style?: StyleProp<ViewStyle>;
     children: React.ReactNode;
 }) {
     // Handlers are looked up when the event arrives, so they are always the latest render's.
     const sectionsRef = React.useRef(sections);
     sectionsRef.current = sections;
+    const dragHandlersRef = React.useRef({ onDragBegin, onDragEnd });
+    dragHandlersRef.current = { onDragBegin, onDragEnd };
 
     const menu = React.useMemo(() => ({
         title,
@@ -127,6 +168,8 @@ export function ContextMenuView({ sections, title, previewShape, style, children
         const [sectionIndex, itemIndex] = event.nativeEvent.id.split(':').map(Number);
         sectionsRef.current[sectionIndex]?.items[itemIndex]?.onPress();
     }, []);
+    const handleDragBegin = React.useCallback(() => dragHandlersRef.current.onDragBegin?.(), []);
+    const handleDragEnd = React.useCallback(() => dragHandlersRef.current.onDragEnd?.(), []);
 
     if (!NativeContextMenu) {
         return <View style={style}>{children}</View>;
@@ -136,9 +179,39 @@ export function ContextMenuView({ sections, title, previewShape, style, children
             menu={menu}
             previewCornerRadii={previewCornerRadii}
             onSelectAction={handleSelect}
+            dragId={NativeDropZone ? dragId : undefined}
+            dragPreviewColor={dragPreviewColor}
+            onDragBegin={handleDragBegin}
+            onDragEnd={handleDragEnd}
             style={style}
         >
             {children}
         </NativeContextMenu>
+    );
+}
+
+/**
+ * Follows a drag from a `ContextMenuView` inside it: `onDragMove` gets the dragged content's
+ * `dragId` and the finger's `x` in this view, while the finger is over it. Nothing is dropped on
+ * it; see `ContextMenuView` for where the drag lands. A plain view where there is no drag.
+ */
+export function ContextMenuDropZone({ onDragMove, style, children }: {
+    onDragMove: (id: string, x: number) => void;
+    style?: StyleProp<ViewStyle>;
+    children: React.ReactNode;
+}) {
+    const onDragMoveRef = React.useRef(onDragMove);
+    onDragMoveRef.current = onDragMove;
+    const handleDragMove = React.useCallback((event: { nativeEvent: { id: string; x: number } }) => {
+        onDragMoveRef.current(event.nativeEvent.id, event.nativeEvent.x);
+    }, []);
+
+    if (!NativeDropZone) {
+        return <View style={style}>{children}</View>;
+    }
+    return (
+        <NativeDropZone onDragMove={handleDragMove} style={style}>
+            {children}
+        </NativeDropZone>
     );
 }
