@@ -400,7 +400,7 @@
                 "zh-Hant": "上一代 Flash"
             },
             "efforts": [],
-            "contextWindow": 1000000
+            "contextWindow": 1048576
         },
         {
             "id": "gemini-3.1-pro-preview",
@@ -415,7 +415,7 @@
                 "zh-Hant": "上一代 Pro"
             },
             "efforts": [],
-            "contextWindow": 1000000
+            "contextWindow": 1048576
         },
         {
             "id": "gemini-3.5-flash",
@@ -443,7 +443,7 @@
                 "zh-Hant": "3.5 系列中最快、最具性價比的模型"
             },
             "efforts": [],
-            "contextWindow": 1000000
+            "contextWindow": 1048576
         },
         {
             "id": "gemini-3.1-flash-lite",
