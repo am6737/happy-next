@@ -193,6 +193,7 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Loading feedback for bulk git actions while the operation runs
 - Opening Files from git status focuses the relevant changed files
 - The folder picker holds still when going into or out of a folder, with a back button beside home
+- Long paths in the file list are shortened in the middle, so their start and end stay readable
 
 ### Session Sharing
 - Share sessions with friends via direct invite or public link
@@ -239,6 +240,7 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Session loading reliability: 60s message-fetch timeout, recovery from permanent load failure, refresh indicator across the entire retry loop, and chunked base64 encoding to avoid stack overflow on very large payloads
 - Persistent local message cache shows existing conversation history faster when reopening sessions
 - Session draft rewritten as a single source of truth — fewer cases of drafts vanishing or reappearing
+- The app picks up updates between store releases from Happy's server, checking at launch and each time it returns to the foreground; once one is downloaded, the inbox offers to restart into it from any screen
 
 ### Chat & Session UX
 - Image attachment, clipboard paste (web), and desktop drag-and-drop in new or active sessions, and any other file can be dropped or pasted on web too; image support in drafts and high-quality pass-through up to 1568px preserve text sharpness in code/UI screenshots, while multi-image previews stay on the selected image
@@ -281,6 +283,7 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Installed Codex skills appear in slash-command autocomplete; short-screen empty states and initial web-message layout are more reliable
 - Codex interactive questions support choices, custom Other values, free-form text, and masked sensitive answers
 - Session rename and mark-as-read / mark-as-unread from the session context menu, with the acting row ringed so the menu's target stays unambiguous
+- On iOS, long-press menus on sessions and files no longer leave a blank row or a black block behind, a file's menu no longer opens the file as it appears, and the lifted row has rounded corners
 - Session color markers are drawn as a bar down the row edge, so a column of them can be scanned and unmarked rows reserve no space; the compact list now marks every session state
 - Compact list view is stored per platform, so the denser desktop list and the mobile list keep their own setting
 - A new session is no longer offered from a session shared with you
@@ -323,6 +326,7 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Qoder CLI is a fourth agent (`happy qoder`), with its account's models and reasoning efforts, permission modes and plan mode, session history, resume, forks and `/duplicate`, image input and context usage
 - The command palette searches every machine's message history, groups hits by session, keeps a search history, and shows its commands as tiles when idle
 - A terminal panel docks along the bottom of the app on web and desktop, holding every shell under whatever page is open
+- On iOS, terminal tabs can be dragged along the tab strip into a new order, and long-pressing an inactive tab no longer switches to it
 - The new session screen gathers session type, machine, path and repos into one card, picks the agent from an AI tab, and offers `/` command and `$` skill autocomplete, file attachments and scheduled send before the session starts
 - Recall sent messages with ArrowUp/ArrowDown, and `/` and `$` suggestions rank by match quality and recent use
 - Sessions with scheduled messages are marked in the list with a countdown in the hover card, and the list sorts by last message time

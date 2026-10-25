@@ -1,5 +1,16 @@
 # Changelog
 
+## Version 37 - 2026-10-25
+
+Happy Next v2.22.0 lets the app update itself between store releases, from Happy's own server. Terminal tabs can be dragged into a new order on iOS, and long-press menus on sessions and files no longer leave blank or black rows behind.
+
+- App updates: the app picks up updates between store releases from Happy's server, checking at launch and each time it comes back to the foreground; once one is downloaded, the inbox offers to restart into it from whatever screen you were on
+- Terminal: on iOS, drag a tab along the tab strip to reorder it; long-pressing an inactive tab no longer switches to it
+- Files: a long path in the file list is shortened in the middle, so its start and end stay readable
+- Files: on iOS, a file's long-press menu no longer opens the file as the menu appears, and the lifted row has rounded corners with no black block behind it
+- Session list: on iOS, a session row no longer goes blank or turns into a black block after its long-press menu closes
+- Chat: after a send, the list slides to your prompt in one smooth motion instead of slowing midway or jumping the last stretch
+
 ## Version 36 - 2026-10-23
 
 Happy Next v2.21.0 opens what you share from other apps in Happy — photos, videos, files, text and links go straight into a session's composer, picked right in the iOS share sheet. Long prompts get a page of their own, every bottom sheet turns to Liquid Glass on iOS 26, and DooTask chats gain an image gallery, select-copy and a person card. Happy CLI is updated to v0.16.2.

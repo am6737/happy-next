@@ -198,6 +198,7 @@ The app now includes a full code browsing and git management experience.
 - **Per-file diff statistics** (+N/-N lines) for Claude Code, Codex, and Gemini sessions
 - **Clickable file path links** in markdown with editor reveal position
 - **Staged file diff display** with accurate line count
+- **Readable long paths**: long paths in the file list are shortened in the middle, so their start and end stay readable
 - **Base64 decoding** fixed for UTF-8 (CJK characters)
 - **Image preview** with sharing support in the file viewer
 - **Upstream-tip marker** in the commits list to highlight the commit that matches the upstream branch tip
@@ -284,6 +285,7 @@ Major reliability improvements to the real-time sync layer.
 - **Message receipt tracking**: CLI confirms message receipt with legacy compatibility
 - **happy-wire** shared protocol types package to deduplicate schemas across CLI/app/server
 - **Session loading reliability**: message-fetch timeout raised from 20s to 60s, sessions stuck in permanent load failure now recover, refresh indicator stays visible across the entire retry loop and on user-opened incremental loads, and base64 encoding is chunked so very large message payloads no longer trigger a stack overflow when restoring sessions
+- **Updates between releases**: the app picks up updates between store releases from Happy's server, checking at launch and each time it returns to the foreground; once one is downloaded, the inbox offers to restart into it from any screen
 
 ## Chat & Session UX
 
@@ -353,6 +355,7 @@ Extensive improvements to the chat and session management experience.
 - **Agent event ANSI strip**: agent event messages strip ANSI escape codes from child-CLI stderr so subprocess banner color sequences no longer leak into the chat as raw `[90m…[0m`
 - **iOS modal reliability**: image viewing waits for the keyboard to dismiss, and the duplicate-session sheet no longer leaves a white overlay when opened with the keyboard visible
 - **Session context menu actions**: rename a session, or mark it read or unread, from the session menu (web right-click, native long-press); the acting row carries a ring and a wash so the menu's target stays unambiguous
+- **Clean iOS long-press menus**: menus on sessions and files no longer leave a blank row or a black block behind, a file's menu no longer opens the file as it appears, and the lifted row has rounded corners
 - **Session color marker as an edge bar**: the marker is a 4dp bar down the row's leading edge, shared by the flat compact list, the grouped rows, and the session cards, so a column of markers can be scanned and an unmarked row reserves no space
 - **Every session state marked in the compact list**: the compact row is a single line with no status text, so `syncing` and `awaiting` — the two states that mean the session is working — no longer fall through to a blank spacer, and a disconnected session gets a hollow ring rather than sharing the idle grey fill
 - **Compact list view per platform**: `compactSessionViewDesktop` (default on) and `compactSessionViewMobile` (default off) let the denser desktop list and the mobile list keep their own setting; the legacy flag migrates to the desktop setting as-is, including an explicit "off"
@@ -402,6 +405,7 @@ Extensive improvements to the chat and session management experience.
 - **Qoder agent**: Qoder CLI is a fourth agent (`happy qoder`), with its account's models and reasoning efforts, permission modes and plan mode, session history, resume, forks and `/duplicate`, image input and context usage
 - **Command palette search**: search every machine's message history, with hits grouped by session, a search history, and command tiles when idle
 - **Terminal panel**: a terminal panel docks along the bottom of the app on web and desktop, holding every shell under whatever page is open
+- **Terminal tab order**: on iOS, terminal tabs can be dragged along the tab strip into a new order, and long-pressing an inactive tab no longer switches to it
 - **New session card**: session type, machine, path and repos sit in one animated card, the agent is picked from an AI tab, and `/` command and `$` skill autocomplete, file attachments and scheduled send work before the session starts
 - **Input history**: recall sent messages with ArrowUp/ArrowDown, and `/` and `$` suggestions rank by match quality and recent use
 - **Scheduled message markers**: sessions with scheduled messages are marked in the list with a countdown in the hover card, and the list sorts by last message time
