@@ -24,6 +24,7 @@ import { sync, syncRestore } from '@/sync/sync';
 import { resetBadgeCount } from '@/sync/apiPush';
 import { resolveServerConfig } from '@/sync/serverConfig';
 import { startModelCatalogSync } from '@/sync/modelCatalogSync';
+import { startUpdateChecks } from '@/hooks/useUpdates';
 import { useTrackScreens } from '@/track/useTrackScreens';
 import { RealtimeProvider } from '@/realtime/RealtimeProvider';
 import { FaviconPermissionIndicator } from '@/components/web/FaviconPermissionIndicator';
@@ -254,6 +255,7 @@ export default function RootLayout() {
             subscription.remove();
         };
     }, []);
+    React.useEffect(() => startUpdateChecks(), []);
     React.useEffect(() => {
         const newSessionId = getSessionIdFromPath(pathname);
         if (currentSessionId && !newSessionId) {

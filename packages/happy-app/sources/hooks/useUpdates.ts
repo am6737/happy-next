@@ -1,70 +1,70 @@
-import { useEffect, useState } from 'react';
-import { AppState, AppStateStatus, Platform } from 'react-native';
+import { useSyncExternalStore } from 'react';
+import { AppState, Platform } from 'react-native';
 import * as Updates from 'expo-updates';
 
-export function useUpdates() {
-    const [updateAvailable, setUpdateAvailable] = useState(false);
-    const [isChecking, setIsChecking] = useState(false);
+// OTA updates are checked from the app root (startUpdateChecks in app/_layout.tsx) at launch and
+// whenever the app comes back to the foreground, whatever screen is open; a downloaded update is
+// shared here so the banner (UpdateBanner) shows it and applies it on tap.
+let updateAvailable = false;
+let isChecking = false;
+const listeners = new Set<() => void>();
 
-    useEffect(() => {
-        // Check for updates when app becomes active
-        const subscription = AppState.addEventListener('change', handleAppStateChange);
+function setUpdateAvailable(value: boolean) {
+    updateAvailable = value;
+    listeners.forEach((listener) => listener());
+}
 
-        // Initial check
-        checkForUpdates();
+async function checkForUpdates() {
+    if (__DEV__ || Platform.OS === 'web' || !Updates.isEnabled || isChecking || updateAvailable) {
+        return;
+    }
+    isChecking = true;
+    try {
+        const update = await Updates.checkForUpdateAsync();
+        if (update.isAvailable) {
+            await Updates.fetchUpdateAsync();
+            setUpdateAvailable(true);
+        }
+    } catch (error) {
+        console.error('Error checking for updates:', error);
+    } finally {
+        isChecking = false;
+    }
+}
 
-        return () => {
-            subscription.remove();
-        };
-    }, []);
-
-    const handleAppStateChange = (nextAppState: AppStateStatus) => {
-        if (nextAppState === 'active') {
+/** Checks now and on every return to the foreground; returns the cleanup */
+export function startUpdateChecks() {
+    checkForUpdates();
+    const subscription = AppState.addEventListener('change', (state) => {
+        if (state === 'active') {
             checkForUpdates();
         }
+    });
+    return () => subscription.remove();
+}
+
+function subscribe(listener: () => void) {
+    listeners.add(listener);
+    return () => {
+        listeners.delete(listener);
     };
+}
 
-    const checkForUpdates = async () => {
-        if (__DEV__) {
-            // Don't check for updates in development
-            return;
-        }
-
-        if (isChecking) {
-            return;
-        }
-
-        setIsChecking(true);
-
+async function reloadApp() {
+    if (Platform.OS === 'web') {
+        window.location.reload();
+    } else {
         try {
-            const update = await Updates.checkForUpdateAsync();
-            if (update.isAvailable) {
-                await Updates.fetchUpdateAsync();
-                setUpdateAvailable(true);
-            }
+            await Updates.reloadAsync();
         } catch (error) {
-            console.error('Error checking for updates:', error);
-        } finally {
-            setIsChecking(false);
+            console.error('Error reloading app:', error);
         }
-    };
+    }
+}
 
-    const reloadApp = async () => {
-        if (Platform.OS === 'web') {
-            window.location.reload();
-        } else {
-            try {
-                await Updates.reloadAsync();
-            } catch (error) {
-                console.error('Error reloading app:', error);
-            }
-        }
-    };
-
+export function useUpdates() {
     return {
-        updateAvailable,
-        isChecking,
-        checkForUpdates,
+        updateAvailable: useSyncExternalStore(subscribe, () => updateAvailable),
         reloadApp,
     };
 }
