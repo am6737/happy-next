@@ -1,6 +1,7 @@
 ---
 name: happy-next-release
-description: Cuts a happy-next release — audits changes, recommends which of CLI, GitHub Release, Docker and iOS App Store to publish, confirms one release plan, then runs it end to end. Command-only — invoked via /happy-next-release.
+description: Cuts a happy-next release — audits changes, recommends which of CLI, GitHub Release, Docker, iOS App Store and an app OTA update to publish, confirms one release plan, then runs it end to end. Command-only — invoked via /happy-next-release.
+disable-model-invocation: true
 ---
 
 # Happy Next 发布流程
@@ -11,10 +12,10 @@ description: Cuts a happy-next release — audits changes, recommends which of C
 
 - 根据审计结果推荐发布线组合，写进发布计划。
 - 用户在调用时用自然语言说明了要发什么（如"只发 Docker"、"这次不发 CLI"、"把 v2.15.1 提交到 App Store"），按用户的意思确定发布线，其余流程相同；意思不明确时在发布计划里写出你的理解。
-- **只确认一次**：发布计划。用户确认（或修改后确认）即授权执行计划内的全部操作，包括推送 main、合并 PR、npm 发布、创建 tag、GitHub Release、Docker 和 iOS 提审。确认后直接执行，直到完成或遇到停止条件。
+- **只确认一次**：发布计划。用户确认（或修改后确认）即授权执行计划内的全部操作，包括推送 main、合并 PR、npm 发布、创建 tag、GitHub Release、Docker、iOS 提审和 OTA 发布。确认后直接执行，直到完成或遇到停止条件。
 - 计划外的操作（计划外的改动、覆盖、重建、删除）需单独确认。
 
-四条发布线：
+五条发布线：
 
 | 线 | 产物 | 版本 | workflow |
 |---|---|---|---|
@@ -22,10 +23,12 @@ description: Cuts a happy-next release — audits changes, recommends which of C
 | Release | Android APK/AAB、iOS IPA、macOS Universal、Windows x64/ARM64、`latest.json` | `vX.Y.Z` tag | `release.yml` |
 | Docker | `kuaifan/happy-{server,app,voice,docs,web}` | 同一 `vX.Y.Z` tag | `docker-publish.yml` |
 | iOS | App Store Connect 上传 | 同一 `vX.Y.Z` tag，提交 Release 里那份 IPA | `ios-submit.yml` |
+| OTA | App 的 JS 更新，发给已安装、fingerprint 相同的包 | 无版本号，按 runtime（原生 fingerprint）匹配 | 无，本地 `yarn ota publish`（见 happy-ota 技能（读 `.claude/skills/happy-ota/SKILL.md`）） |
 
 - Release、Docker、iOS 同一次发布共用同一个不可变 tag 和 commit。
 - iOS 只提交 Release 已发布的 IPA，必须在 Release 验证通过之后。
 - 推送 tag 不会发布任何东西；每条线都要显式触发 workflow。
+- OTA 不需要 tag，也不经过商店审核，发布后用户的 App 会自动下载，所以 App 的改动能比 Release / iOS 早几天到达用户手里。
 
 ## 每条线的基准
 
@@ -91,10 +94,16 @@ git log "${BASE_DOCKER}..HEAD" --oneline --no-merges -- \
 | `happy-app` 有用户可感知改动 | Release + iOS + Docker（`happy-app` 镜像是 App 的 Web 版） |
 | 只有 `happy-server` / `happy-voice` / `happy-docs` / `happy-web` / `Dockerfile*` / `docker-compose.yml` / `entrypoint.sh` | 仅 Docker |
 | `happy-wire` 实际改动（不含 `modelCatalog.json`） | 按使用方：CLI 用到则含 CLI，server/app 用到则含 Docker/Release |
+| `happy-app` 有用户可感知改动，且当前 runtime 等于最近一次 Release 包的 fingerprint | 另加 OTA（见下文「OTA 的判断」） |
 | 只有 `modelCatalog.json` | 不发布（合并到 main 即远程生效） |
 | 都没有 | 建议不发布，**停止** |
 
 只改测试、注释、开发脚本、内部文档不算用户可感知改动。
+
+**OTA 的判断**（`happy-app` 有用户可感知改动时）：按 happy-ota 技能「一、检查」的第 2、3 步，算出当前代码在 EAS production 环境下 iOS 和 Android 的 runtime，再和 `BASE_APP` 那个 Release 的 IPA / APK 里嵌入的 fingerprint 对比：
+
+- 对得上的平台推荐 OTA：用户不用等新包，几分钟内就能收到。同时发 Release 也不冲突，新包本身就带着这些 JS。
+- 对不上（原生部分变了），或者 Release 包里没有嵌入 fingerprint（打在自建 OTA 之前）：不推荐 OTA，在计划里写明原因。
 
 ## 3. Codex CLI 版本
 
@@ -197,6 +206,7 @@ gh release view "{tag}" 2>/dev/null || true
 一次性展示，每项附依据：
 
 - 发布线组合及理由，每条线的基准
+- OTA（含 OTA 时）：平台、runtime、能收到的包、更新说明 `--message`
 - 推送本地未推送的提交（如有）
 - 合并哪些 PR
 - 模型目录改动（新增 / 修改 / 下线，附来源）和"待定"项
@@ -357,9 +367,13 @@ gh workflow run ios-submit.yml \
 
 workflow 下载 Release 中的 IPA，用 App Store Connect API Key 通过 `xcrun altool` 上传。成功只代表上传完成；构建处理、送审和审核状态在 App Store Connect 中另行处理。
 
-## 10. 汇总报告
+## 10. OTA（含 OTA 时）
 
-逐条列出 npm、GitHub Release、Docker Hub、App Store Connect 的结果和链接，以及重试情况。没有真机测试的平台标记 **未验证**。
+代码同步完成后（第 1–3 步，main 已推送、工作区干净），按 happy-ota 技能的「三、发布」执行：取凭证、`yarn ota publish`、核对服务器、清理凭证。发布计划已经确认过，这里不再单独确认。输出的 runtime 必须等于计划里的值，不一致就**停止**。OTA 不依赖 Release，可以和第 4–9 步并行，但必须在第 3 步之后，保证 changelog 提交也包含在更新里。
+
+## 11. 汇总报告
+
+逐条列出 npm、GitHub Release、Docker Hub、App Store Connect、OTA（更新 id 和能收到的包）的结果和链接，以及重试情况。没有真机测试的平台标记 **未验证**。
 
 ---
 
@@ -388,7 +402,7 @@ gh run view {id} --log-failed | tail -200
 
 # 停止条件
 
-工作区不干净、分支分叉、基准取不到、无可发布改动、缺 Secret、tag 或 Release 已存在、本地校验失败、workflow 失败且不可重试或重试用尽、Release 或 Docker 验证不通过、缺 IPA。
+工作区不干净、分支分叉、基准取不到、无可发布改动、缺 Secret、tag 或 Release 已存在、本地校验失败、workflow 失败且不可重试或重试用尽、Release 或 Docker 验证不通过、缺 IPA、OTA 的 runtime 和计划不一致。
 
 停止时说明已完成和未完成的步骤，以及恢复时从哪一步继续。修复后改用更高版本号。
 
