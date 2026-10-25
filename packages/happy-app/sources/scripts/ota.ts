@@ -240,8 +240,17 @@ async function main() {
             const platform = flags.platform as Platform;
             if (!PLATFORMS.includes(platform)) die('give --platform ios or --platform android');
             const channel = flags.channel ?? 'production';
-            // The runtime version of the builds to roll back is the current code's
-            const runtime = flags.runtime ?? runtimeVersion(platform, { ...process.env, APP_ENV: channel });
+            // The runtime version of the builds to roll back is the current code's, under the
+            // channel's build env like publish's (EAS env decides e.g. whether DooPush is in)
+            let runtime = flags.runtime;
+            if (!runtime) {
+                const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'happy-ota-'));
+                try {
+                    runtime = runtimeVersion(platform, buildEnv(channel, flags['env-file'], tmp));
+                } finally {
+                    fs.rmSync(tmp, { recursive: true, force: true });
+                }
+            }
             const id = randomUUID();
             await api('POST', '/v1/ota/rollback-to-embedded', { id, channel, platform, runtimeVersion: runtime, message: flags.message ?? null });
             console.log(`✓ ${channel}/${platform} runtime ${runtime} rolled back to the embedded JS`);

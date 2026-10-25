@@ -21,18 +21,25 @@ module.exports = {
         // React Native's gradle plugin strips the `package` attribute from libraries' manifests in
         // place on every Android build
         '**/node_modules/**/android/src/main/AndroidManifest.xml',
+        // The Mac mini's build script appends a temporary profile to it to download credentials
+        'eas.json',
     ],
-    // DooPush's Android vendors come partly from EAS secret files (HMS, Honor), which an EAS
-    // build has and `eas env:pull` can't fetch, and as paths that differ per machine. Left out,
-    // so changing push vendors needs a new build that the fingerprint doesn't ask for.
     fileHookTransform: (source, chunk) => {
         if (source.type !== 'contents' || source.id !== 'expoConfig' || typeof chunk !== 'string') {
             return chunk;
         }
         const config = JSON.parse(chunk);
         for (const plugin of config.plugins ?? []) {
+            // DooPush's Android vendors come partly from EAS secret files (HMS, Honor), which an
+            // EAS build has and `eas env:pull` can't fetch, and as paths that differ per machine.
+            // Left out, so changing push vendors needs a new build that the fingerprint doesn't ask for.
             if (Array.isArray(plugin) && plugin[0] === 'doopush-react-native-sdk' && plugin[1]?.android) {
                 delete plugin[1].android.vendors;
+            }
+            // ABI_FILTERS comes from the eas.json profile, which neither the Mac mini's build nor
+            // `yarn ota publish` reads; which ABIs are built doesn't change what JS they can run
+            if (Array.isArray(plugin) && plugin[0] === 'expo-build-properties' && plugin[1]?.android) {
+                delete plugin[1].android.buildArchs;
             }
         }
         return JSON.stringify(config);
