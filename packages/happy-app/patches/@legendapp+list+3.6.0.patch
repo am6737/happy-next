@@ -1,0 +1,60 @@
+diff --git a/node_modules/@legendapp/list/react-native.js b/node_modules/@legendapp/list/react-native.js
+index 0b730ec..5bf58e5 100644
+--- a/node_modules/@legendapp/list/react-native.js
++++ b/node_modules/@legendapp/list/react-native.js
+@@ -2220,13 +2220,24 @@ function checkFinishedScrollFallback(ctx) {
+   const slowTimeout = (scrollingTo == null ? void 0 : scrollingTo.isInitialScroll) && !shouldFinishInitialZeroTarget && !canFinishInitialWithoutNativeProgress || !state.didContainersLayout;
+   const initialDelay = shouldFinishInitialZeroTarget || canFinishInitialWithoutNativeProgress ? 0 : silentInitialDispatch ? SILENT_INITIAL_SCROLL_RETRY_DELAY_MS : slowTimeout ? 500 : 100;
+   let numChecks = 0;
++  let lastCheckTime = Date.now();
+   const scheduleFallbackCheck = (delay) => {
+     state.scheduledWork.timeout(checkHasScrolled, delay, "checkFinishedScrollFallback");
+   };
+   const checkHasScrolled = () => {
+-    var _a3, _b, _c, _d;
++    var _a3, _b, _c, _d, _e;
+     const isStillScrollingTo = state.scrollingTo;
+     if (isStillScrollingTo) {
++      // happy-next: an animated scroll the native view is still playing has not stalled, and its own
++      // scroll events finish it. A momentum end can arm this check mid-slide (on iOS, the animation
++      // the new scroll replaced reports its end), and landing it here, not animated, cut the slide
++      // short with a jump to the target. Checked again once the native view stops moving.
++      const movedSinceLastCheck = ((_e = state.lastNativeScrollTime) != null ? _e : 0) > lastCheckTime;
++      lastCheckTime = Date.now();
++      if (isStillScrollingTo.animated && !isStillScrollingTo.isInitialScroll && movedSinceLastCheck) {
++        scheduleFallbackCheck(100);
++        return;
++      }
+       numChecks++;
+       const isNativeInitialPending = isNativeInitialNonZeroTarget(state) && !state.hasScrolled;
+       const maxChecks = silentInitialDispatch ? 5 : isNativeInitialPending ? INITIAL_SCROLL_MAX_FALLBACK_CHECKS : 5;
+diff --git a/node_modules/@legendapp/list/react-native.mjs b/node_modules/@legendapp/list/react-native.mjs
+index a3d8d9a..9617e8c 100644
+--- a/node_modules/@legendapp/list/react-native.mjs
++++ b/node_modules/@legendapp/list/react-native.mjs
+@@ -2199,13 +2199,24 @@ function checkFinishedScrollFallback(ctx) {
+   const slowTimeout = (scrollingTo == null ? void 0 : scrollingTo.isInitialScroll) && !shouldFinishInitialZeroTarget && !canFinishInitialWithoutNativeProgress || !state.didContainersLayout;
+   const initialDelay = shouldFinishInitialZeroTarget || canFinishInitialWithoutNativeProgress ? 0 : silentInitialDispatch ? SILENT_INITIAL_SCROLL_RETRY_DELAY_MS : slowTimeout ? 500 : 100;
+   let numChecks = 0;
++  let lastCheckTime = Date.now();
+   const scheduleFallbackCheck = (delay) => {
+     state.scheduledWork.timeout(checkHasScrolled, delay, "checkFinishedScrollFallback");
+   };
+   const checkHasScrolled = () => {
+-    var _a3, _b, _c, _d;
++    var _a3, _b, _c, _d, _e;
+     const isStillScrollingTo = state.scrollingTo;
+     if (isStillScrollingTo) {
++      // happy-next: an animated scroll the native view is still playing has not stalled, and its own
++      // scroll events finish it. A momentum end can arm this check mid-slide (on iOS, the animation
++      // the new scroll replaced reports its end), and landing it here, not animated, cut the slide
++      // short with a jump to the target. Checked again once the native view stops moving.
++      const movedSinceLastCheck = ((_e = state.lastNativeScrollTime) != null ? _e : 0) > lastCheckTime;
++      lastCheckTime = Date.now();
++      if (isStillScrollingTo.animated && !isStillScrollingTo.isInitialScroll && movedSinceLastCheck) {
++        scheduleFallbackCheck(100);
++        return;
++      }
+       numChecks++;
+       const isNativeInitialPending = isNativeInitialNonZeroTarget(state) && !state.hasScrolled;
+       const maxChecks = silentInitialDispatch ? 5 : isNativeInitialPending ? INITIAL_SCROLL_MAX_FALLBACK_CHECKS : 5;
