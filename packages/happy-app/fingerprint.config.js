@@ -9,6 +9,19 @@ module.exports = {
         SourceSkips.ExpoConfigVersions |
         SourceSkips.ExpoConfigExtraSection |
         SourceSkips.PackageJsonAndroidAndIosScriptsIfNotContainRun,
+    // Added to Expo's defaults: files in node_modules that depend on what the machine has done,
+    // not on what is installed
+    ignorePaths: [
+        // macOS metadata that some packages ship (react-native-libsodium has ~1800); tar on macOS
+        // turns them into xattrs, elsewhere they stay files
+        '**/._*',
+        // Prebuilt ffmpeg that react-native-audio-api downloads at pod install / gradle time
+        '**/node_modules/react-native-audio-api/common/cpp/audioapi/external/{android,ffmpeg_ios,iphoneos,iphonesimulator,macosx}/**',
+        '**/node_modules/react-native-audio-api/android/src/main/jniLibs/**',
+        // React Native's gradle plugin strips the `package` attribute from libraries' manifests in
+        // place on every Android build
+        '**/node_modules/**/android/src/main/AndroidManifest.xml',
+    ],
     // DooPush's Android vendors come partly from EAS secret files (HMS, Honor), which an EAS
     // build has and `eas env:pull` can't fetch, and as paths that differ per machine. Left out,
     // so changing push vendors needs a new build that the fingerprint doesn't ask for.
