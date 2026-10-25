@@ -31,6 +31,19 @@ export interface ComposerInputHeight {
      * shrink natively, in which case the field takes its new height at once.
      */
     prepareSendShrink: () => boolean;
+    /**
+     * Called as a send clears the field, with the height it is going to shrink to, or `null` to take
+     * that back when it did not shrink after all. The field is laid out at its new height only a few
+     * frames after it is cleared, when the list is already sliding to the sent prompt, and the list
+     * sent on to the end after the shrink makes a second slide that starts from rest. Told ahead,
+     * the list's one slide aims at the end after the shrink.
+     */
+    expectSendShrink: (inputHeight: number | null) => void;
+    /**
+     * Listens for the composer height `expectSendShrink` announces (`null` when it is taken back);
+     * returns the unsubscribe.
+     */
+    onSendShrinkExpected: (listener: (composerHeight: number | null) => void) => () => void;
 }
 
 export const ComposerInputHeightContext = React.createContext<ComposerInputHeight | null>(null);

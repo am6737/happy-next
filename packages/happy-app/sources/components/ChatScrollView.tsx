@@ -49,13 +49,23 @@ export const ChatScrollView = React.forwardRef<React.ElementRef<typeof KeyboardC
             },
             [offset],
         );
+        const reportedBottom = React.useRef<number | null>(null);
         const reportBottomInset = React.useCallback(
             (bottom: number) => {
+                if (bottom === reportedBottom.current) return;
+                reportedBottom.current = bottom;
                 listRef.current?.reportContentInset({ bottom });
                 onBottomInsetReported?.();
             },
             [listRef, onBottomInsetReported],
         );
+        // A send's shrink is reported as soon as the composer announces it, ahead of the composer's
+        // new height: the list's scroll to the sent prompt then aims at the end after the shrink, and
+        // the same height arriving later is not reported again (followed again, it would restart the
+        // list's slide from rest midway).
+        React.useEffect(() => composerInputHeight?.onSendShrinkExpected((composerHeight) => {
+            reportBottomInset((composerHeight ?? composerInset?.value ?? 0) + keyboardLift.value);
+        }), [composerInputHeight, composerInset, keyboardLift, reportBottomInset]);
         useAnimatedReaction(
             () => (composerInset?.value ?? 0) + keyboardLift.value,
             (bottom, previous) => {

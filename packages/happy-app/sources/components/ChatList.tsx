@@ -753,8 +753,9 @@ const ChatListInternal = React.memo((props: {
     // While a chat opens it is not animated: the distance is a few lines, and a slide reads as the
     // list moving on its own. It is checked at once, so a gap already there is closed before it is
     // drawn, and again a frame later for an inset the list takes in only after this call. Once the
-    // chat is showing it slides: the composer shrinking back after a send changes the inset while
-    // the list is sliding to the sent prompt, and landing at once would cut that slide short.
+    // chat is showing it slides: the composer shrinking back after a send to other than the height it
+    // announced (see `ComposerInputHeight.expectSendShrink`) changes the inset while the list is
+    // sliding to the sent prompt, and landing at once would cut that slide short.
     const settledRef = useRef(false);
     const followEndIfStuck = useCallback(() => {
         if (!listReadyRef.current) return;

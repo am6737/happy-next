@@ -21,7 +21,10 @@ const NATIVE_SHRINK_MS = 300;
  * done, so it does not move the list down for the composer while the list scrolls to the prompt.
  * Where the composer's dock can animate that shrink natively, the field takes its new height at
  * once and the dock animates it: the shrink lands as the prompt renders and the list scrolls,
- * when a height animated here keeps missing frames.
+ * when a height animated here keeps missing frames. The list hears where the field is shrinking to
+ * (its height with one line, the shortest it has been laid out at) as it is cleared, before it is
+ * laid out again: the list's scroll to the prompt, asked for in the same commit, only starts on the
+ * list's next render, after this one's layout effects, so it slides once, to the end after the shrink.
  *
  * Off (`style` empty, handlers unset) when not asked for or outside a floating composer.
  */
@@ -32,11 +35,16 @@ export function useAnimatedInputHeight(enabled: boolean, value: string) {
     const targetHeight = composerInputHeight?.target;
     const freeze = composerInputHeight?.freeze;
     const prepareSendShrink = composerInputHeight?.prepareSendShrink;
+    const expectSendShrink = composerInputHeight?.expectSendShrink;
     const measured = React.useRef(false);
+    // The shortest height the input has been laid out at: one line, which a send clears it back to.
+    const shortest = React.useRef(Infinity);
     // Set from the field being cleared until its shrink starts.
     const sending = React.useRef(false);
     // Whether the dock animates the shrink after this send.
     const nativeShrink = React.useRef(false);
+    // Whether the list has been told this send's shrink is coming (`expectSendShrink`).
+    const shrinkExpected = React.useRef(false);
     const freezeTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
     const previousValue = React.useRef(value);
 
@@ -51,17 +59,23 @@ export function useAnimatedInputHeight(enabled: boolean, value: string) {
     React.useLayoutEffect(() => {
         const cleared = value === '' && previousValue.current !== '';
         previousValue.current = value;
-        if (!active || !freeze || !prepareSendShrink || !cleared) return;
+        if (!active || !height || !freeze || !prepareSendShrink || !expectSendShrink || !cleared) return;
         sending.current = true;
         nativeShrink.current = prepareSendShrink();
         freeze.value = true;
+        shrinkExpected.current = height.value > shortest.current;
+        if (shrinkExpected.current) expectSendShrink(shortest.current);
         clearFreezeTimer();
         freezeTimer.current = setTimeout(() => {
             freezeTimer.current = null;
             sending.current = false;
             freeze.value = false;
+            if (shrinkExpected.current) {
+                shrinkExpected.current = false;
+                expectSendShrink(null);
+            }
         }, SEND_FREEZE_MAX_MS);
-    }, [active, value, freeze, prepareSendShrink, clearFreezeTimer]);
+    }, [active, value, height, freeze, prepareSendShrink, expectSendShrink, clearFreezeTimer]);
 
     const style = useAnimatedStyle(() => (
         // 0 until the input has been measured: the wrapper takes the input's height on its own.
@@ -72,6 +86,7 @@ export function useAnimatedInputHeight(enabled: boolean, value: string) {
         if (!height || !targetHeight) return;
         const target = e.nativeEvent.layout.height;
         targetHeight.value = target;
+        if (target > 0) shortest.current = Math.min(shortest.current, target);
         if (!measured.current) {
             measured.current = true;
             height.value = target;
@@ -79,6 +94,9 @@ export function useAnimatedInputHeight(enabled: boolean, value: string) {
         }
         if (target < height.value && sending.current && freeze) {
             sending.current = false;
+            // The composer's new height reaches the list from here on; where it differs from the
+            // one announced, the list follows it to the end again.
+            shrinkExpected.current = false;
             clearFreezeTimer();
             if (nativeShrink.current) {
                 height.value = target;
@@ -106,7 +124,9 @@ export function useAnimatedInputHeight(enabled: boolean, value: string) {
         if (!active || !height || !targetHeight || !reportLayout) return;
         return () => {
             measured.current = false;
+            shortest.current = Infinity;
             sending.current = false;
+            shrinkExpected.current = false;
             clearFreezeTimer();
             if (freeze) freeze.value = false;
             height.value = 0;

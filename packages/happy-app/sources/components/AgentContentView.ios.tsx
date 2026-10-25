@@ -48,6 +48,7 @@ export const AgentContentView: React.FC<AgentContentViewProps> = React.memo(({ i
     const inputHeight = useSharedValue(0);
     const inputTargetHeight = useSharedValue(0);
     const freeze = useSharedValue(false);
+    const sendShrinkListeners = React.useRef(new Set<(composerHeight: number | null) => void>());
     const dockRef = React.useRef<KeyboardDockRef>(null);
     const composerInputHeight = React.useMemo<ComposerInputHeight>(() => ({
         height: inputHeight,
@@ -63,6 +64,16 @@ export const AgentContentView: React.FC<AgentContentViewProps> = React.memo(({ i
             if (typeof dock?.prepareSendShrink !== 'function') return false;
             dock.prepareSendShrink().catch(() => {});
             return true;
+        },
+        expectSendShrink: (inputHeight) => {
+            const height = inputHeight === null ? null : composerBaseHeight.value + inputHeight;
+            sendShrinkListeners.current.forEach((listener) => listener(height));
+        },
+        onSendShrinkExpected: (listener) => {
+            sendShrinkListeners.current.add(listener);
+            return () => {
+                sendShrinkListeners.current.delete(listener);
+            };
         },
     }), [composerBaseHeight, inputLaidOutHeight, inputHeight, inputTargetHeight, freeze]);
     useAnimatedReaction(
