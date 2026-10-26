@@ -24,6 +24,7 @@ import { SearchField, searchFieldMetrics } from '@/components/SearchField';
 import { useSession } from '@/sync/storage';
 import { getSessionName } from '@/utils/sessionUtils';
 import { hasWebTextSelection } from '@/components/webTextSelection';
+import { useOrchestratorSessionFacets } from '@/hooks/useOrchestratorSessionFacets';
 
 // Mouse users copy what they select here (the desktop app is web too); a drag-select must not count as a tap on the card it is in
 const IS_WEB = Platform.OS === 'web';
@@ -200,6 +201,8 @@ export default function OrchestratorRunsScreen() {
     const [machineFilter, setMachineFilter] = React.useState<string | undefined>(undefined);
     const filterSheetRef = React.useRef<BottomSheetModal>(null);
     const filterMachines = useOrchestratorFilterMachines();
+    // From a conversation the drawer offers only the machines and kinds its runs used
+    const { facets: sessionFacets, merge: mergeSessionFacets } = useOrchestratorSessionFacets(credentials, controllerSessionId);
     const [runs, setRuns] = React.useState<RunListItem[]>([]);
     const [nextCursor, setNextCursor] = React.useState<string | undefined>(undefined);
     const [loading, setLoading] = React.useState(true);
@@ -244,6 +247,7 @@ export default function OrchestratorRunsScreen() {
                 ...(!append ? [fetchCounts()] : []),
             ]);
             setRuns((previous) => append ? [...previous, ...result.items] : result.items);
+            mergeSessionFacets(result.items);
             setNextCursor(result.nextCursor);
         } catch (err) {
             setError(err instanceof Error ? err.message : t('settings.orchestratorLoadError'));
@@ -255,7 +259,7 @@ export default function OrchestratorRunsScreen() {
             }
             setRefreshing(false);
         }
-    }, [credentials, controllerSessionId, statusFilter, kindFilter, machineFilter, fetchCounts]);
+    }, [credentials, controllerSessionId, statusFilter, kindFilter, machineFilter, fetchCounts, mergeSessionFacets]);
 
     const handleRefresh = React.useCallback(() => {
         setRefreshing(true);
@@ -394,6 +398,7 @@ export default function OrchestratorRunsScreen() {
                 machineId={machineFilter}
                 onChangeKind={setKindFilter}
                 onChangeMachine={setMachineFilter}
+                facets={sessionFacets}
             />
         </View>
     );

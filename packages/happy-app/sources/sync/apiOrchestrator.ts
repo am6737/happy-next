@@ -138,11 +138,13 @@ export type ListOrchestratorRunsQuery = OrchestratorRunListFilters & {
     cursor?: string;
 };
 
-export async function listOrchestratorRuns(
+type OrchestratorRunListItem = Pick<OrchestratorRunDetail, 'runId' | 'title' | 'status' | 'createdAt' | 'updatedAt' | 'summary' | 'machines' | 'providers'>;
+
+// One page of runs as the server sends it, titles still sealed
+async function fetchOrchestratorRunsPage(
     credentials: AuthCredentials,
-    encryption: Encryption,
-    query: ListOrchestratorRunsQuery = {},
-): Promise<{ items: Array<Pick<OrchestratorRunDetail, 'runId' | 'title' | 'status' | 'createdAt' | 'updatedAt' | 'summary' | 'machines' | 'providers'>>; nextCursor?: string; }> {
+    query: ListOrchestratorRunsQuery,
+): Promise<{ items: OrchestratorRunListItem[]; nextCursor?: string; }> {
     const API_ENDPOINT = getServerUrl();
     const params = new URLSearchParams();
     if (query.status) params.set('status', query.status);
@@ -163,15 +165,74 @@ export async function listOrchestratorRuns(
         const body = await response.json() as {
             ok: true;
             data: {
-                items: Array<Pick<OrchestratorRunDetail, 'runId' | 'title' | 'status' | 'createdAt' | 'updatedAt' | 'summary' | 'machines' | 'providers'>>;
+                items: OrchestratorRunListItem[];
                 nextCursor?: string;
             };
         };
-        return {
-            ...body.data,
-            items: await Promise.all(body.data.items.map(async (item) => ({ ...item, title: await openOrchestratorTitle(item.title, encryption) }))),
-        };
+        return body.data;
     });
+}
+
+export async function listOrchestratorRuns(
+    credentials: AuthCredentials,
+    encryption: Encryption,
+    query: ListOrchestratorRunsQuery = {},
+): Promise<{ items: OrchestratorRunListItem[]; nextCursor?: string; }> {
+    const page = await fetchOrchestratorRunsPage(credentials, query);
+    return {
+        ...page,
+        items: await Promise.all(page.items.map(async (item) => ({ ...item, title: await openOrchestratorTitle(item.title, encryption) }))),
+    };
+}
+
+/** The kind filter a task's provider falls under: every provider but a shell command or a file transfer is an AI agent */
+export function orchestratorProviderKind(provider: string): OrchestratorRunKindFilter {
+    return provider === 'shell' || provider === 'transfer' ? provider : 'agent';
+}
+
+/** The machines and executor kinds a set of runs used: what the run list's filters can narrow them by */
+export type OrchestratorRunFacets = {
+    machineIds: string[];
+    kinds: OrchestratorRunKindFilter[];
+};
+
+export function collectOrchestratorRunFacets(runs: Array<Pick<OrchestratorRunListItem, 'machines' | 'providers'>>): OrchestratorRunFacets {
+    return {
+        machineIds: [...new Set(runs.flatMap((run) => run.machines ?? []))],
+        kinds: [...new Set(runs.flatMap((run) => (run.providers ?? []).map(orchestratorProviderKind)))],
+    };
+}
+
+/** Both sets of facets together; `a` itself when `b` adds nothing to it */
+export function mergeOrchestratorRunFacets(a: OrchestratorRunFacets, b: OrchestratorRunFacets): OrchestratorRunFacets {
+    const machineIds = [...new Set([...a.machineIds, ...b.machineIds])];
+    const kinds = [...new Set([...a.kinds, ...b.kinds])];
+    return machineIds.length === a.machineIds.length && kinds.length === a.kinds.length ? a : { machineIds, kinds };
+}
+
+const FACETS_PAGE_LIMIT = 50;
+const FACETS_MAX_PAGES = 10;
+
+/**
+ * The machines and kinds one conversation's runs used, read from its run list with no other
+ * filter: page by page, up to the first 500 runs, newest first. Titles stay sealed, the scan
+ * does not show them.
+ */
+export async function listOrchestratorSessionRunFacets(
+    credentials: AuthCredentials,
+    controllerSessionId: string,
+): Promise<OrchestratorRunFacets> {
+    let facets: OrchestratorRunFacets = { machineIds: [], kinds: [] };
+    let cursor: string | undefined;
+    for (let page = 0; page < FACETS_MAX_PAGES; page++) {
+        const result = await fetchOrchestratorRunsPage(credentials, { controllerSessionId, limit: FACETS_PAGE_LIMIT, cursor });
+        facets = mergeOrchestratorRunFacets(facets, collectOrchestratorRunFacets(result.items));
+        if (!result.nextCursor) {
+            break;
+        }
+        cursor = result.nextCursor;
+    }
+    return facets;
 }
 
 export type OrchestratorRunCounts = Record<string, number>;
