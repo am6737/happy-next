@@ -125,6 +125,7 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - `orchestrator_transfer` copies files and directories between machines, streamed end-to-end encrypted
 - Search runs by title and filter them by status, agent and machine, each run showing its agent's icon
 - Text on the orchestrator pages can be selected and copied on web and desktop
+- Opened from a conversation, the run filter lists only the machines and executor kinds its runs used
 
 ### Pending Message Queue
 - Messages sent while the CLI is busy are queued server-side and auto-dispatched
@@ -284,6 +285,7 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Codex interactive questions support choices, custom Other values, free-form text, and masked sensitive answers
 - Session rename and mark-as-read / mark-as-unread from the session context menu, with the acting row ringed so the menu's target stays unambiguous
 - On iOS, long-press menus on sessions and files no longer leave a blank row or a black block behind, a file's menu no longer opens the file as it appears, and the lifted row has rounded corners
+- A long press on either of the chat header's buttons opens a menu — session details, delegations, the session's CLI upgrade, a new session here or elsewhere, a terminal and archiving
 - Session color markers are drawn as a bar down the row edge, so a column of them can be scanned and unmarked rows reserve no space; the compact list now marks every session state
 - Compact list view is stored per platform, so the denser desktop list and the mobile list keep their own setting
 - A new session is no longer offered from a session shared with you
@@ -340,7 +342,7 @@ Happy Next is a major evolution of the original Happy. Here are the highlights:
 - Session list rows tell when a session last moved, a project's header opens its card, and machines fold in the all machines view
 
 - On phones the session list opens a search page over sessions, machines, pages, actions and messages, with recent searches, and every search field shares the iOS system look on every platform
-- The session list's "+" starts a new session on a tap and opens its menu on a long press, and menus show an icon on each row
+- The session list's "+" starts a new session on a tap and opens its menu on a long press — as does the CLI update beside it, whose row is in that menu — and menus show an icon on each row
 - Scheduled messages offer finer relative times, from 10 minutes to 5 hours
 - A copied Claude session's context bar reads right from the start
 

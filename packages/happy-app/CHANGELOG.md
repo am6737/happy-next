@@ -1,9 +1,13 @@
 # Changelog
 
-## Version 37 - 2026-10-25
+## Version 37 - 2026-10-26
 
-Happy Next v2.22.0 lets the app update itself between store releases, from Happy's own server. Terminal tabs can be dragged into a new order on iOS, and long-press menus on sessions and files no longer leave blank or black rows behind.
+Happy Next v2.22.1 opens a menu from a long press on the chat header's buttons and on the session list's "+" capsule, and a conversation's run filter lists only the machines and executor kinds its runs used. It also includes the in-app updates from Happy's server, terminal tab reordering and cleaner long-press menus introduced in v2.22.0.
 
+- Chat: long-press either header button for a menu — session details, delegations, the session's CLI upgrade when one is available, a new session here or elsewhere, a terminal, and archive
+- Session list: long-pressing either half of the "+" capsule, including the CLI update beside it, opens the "+" menu, which now has the update's row
+- iOS: these menus open out of the button you pressed, with a light haptic
+- Orchestrator: opened from a conversation, the run filter offers only the machines and executor kinds that conversation's runs used, and the sheet is only as tall as its contents
 - App updates: the app picks up updates between store releases from Happy's server, checking at launch and each time it comes back to the foreground; once one is downloaded, the inbox offers to restart into it from whatever screen you were on
 - Terminal: on iOS, drag a tab along the tab strip to reorder it; long-pressing an inactive tab no longer switches to it
 - Files: a long path in the file list is shortened in the middle, so its start and end stay readable

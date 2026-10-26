@@ -84,6 +84,7 @@ A multi-agent orchestration system that lets you define task dependency graphs a
 - **`orchestrator_transfer`**: copy files and directories between machines — send from this one, fetch to it, or relay between two others — streamed end-to-end encrypted
 - **Run search and filters**: search runs by title and filter them by status, agent and machine, each run showing its agent's icon
 - **Selectable text**: text on the orchestrator pages can be selected and copied on web and desktop
+- **Conversation run filter**: opened from a conversation, the run filter lists only the machines and executor kinds its runs used
 
 ## Pending Message Queue
 
@@ -356,6 +357,7 @@ Extensive improvements to the chat and session management experience.
 - **iOS modal reliability**: image viewing waits for the keyboard to dismiss, and the duplicate-session sheet no longer leaves a white overlay when opened with the keyboard visible
 - **Session context menu actions**: rename a session, or mark it read or unread, from the session menu (web right-click, native long-press); the acting row carries a ring and a wash so the menu's target stays unambiguous
 - **Clean iOS long-press menus**: menus on sessions and files no longer leave a blank row or a black block behind, a file's menu no longer opens the file as it appears, and the lifted row has rounded corners
+- **Chat header menu**: a long press on either of the chat header's buttons opens a menu — session details, delegations, the session's CLI upgrade, a new session here or elsewhere, a terminal and archiving
 - **Session color marker as an edge bar**: the marker is a 4dp bar down the row's leading edge, shared by the flat compact list, the grouped rows, and the session cards, so a column of markers can be scanned and an unmarked row reserves no space
 - **Every session state marked in the compact list**: the compact row is a single line with no status text, so `syncing` and `awaiting` — the two states that mean the session is working — no longer fall through to a blank spacer, and a disconnected session gets a hollow ring rather than sharing the idle grey fill
 - **Compact list view per platform**: `compactSessionViewDesktop` (default on) and `compactSessionViewMobile` (default off) let the denser desktop list and the mobile list keep their own setting; the legacy flag migrates to the desktop setting as-is, including an explicit "off"
@@ -420,7 +422,7 @@ Extensive improvements to the chat and session management experience.
 - **Schedule from a usage-limit notice**: the reset time in a Claude usage-limit notice opens the schedule sheet
 - **Calmer session list**: rows tell when a session last moved, a project's header opens its card, and machines fold in the all machines view
 - **Search page**: on phones the session list opens a search page over sessions, machines, pages, actions and messages, with recent searches, and every search field shares the iOS system look on every platform
-- **Quicker "+"**: the session list's "+" starts a new session on a tap and opens its menu on a long press, and menus show an icon on each row
+- **Quicker "+"**: the session list's "+" starts a new session on a tap and opens its menu on a long press — as does the CLI update beside it, whose row is in that menu — and menus show an icon on each row
 - **Finer scheduling**: scheduled messages offer relative times from 10 minutes to 5 hours
 - **Copied context**: a copied Claude session's context bar reads right from the start
 - **Image viewer navigation**: arrow keys on web and desktop, previous and next buttons on the web, and a tap on a pagination dot move between images
