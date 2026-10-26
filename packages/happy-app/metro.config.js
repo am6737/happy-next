@@ -35,7 +35,16 @@ const xtermHeadlessPaths = [
 ];
 const xtermHeadlessPath = xtermHeadlessPaths.find(p => fs.existsSync(p));
 
+// One copy each of these, the app's. Packages hoisted to the monorepo root (expo-linking,
+// expo-constants…) get their own react-native beside them there (`nohoist` in the root
+// package.json), and resolved from there the bundle would start a second React Native.
+const appSingletons = ['react', 'react-native', 'expo'];
+const appOrigin = path.join(__dirname, 'package.json');
+
 config.resolver.resolveRequest = (context, moduleName, platform) => {
+  if (appSingletons.some(name => moduleName === name || moduleName.startsWith(name + '/'))) {
+    return context.resolveRequest({ ...context, originModulePath: appOrigin }, moduleName, platform);
+  }
   if (moduleName === 'libsodium-wrappers' && libsodiumPath) {
     return {
       filePath: libsodiumPath,

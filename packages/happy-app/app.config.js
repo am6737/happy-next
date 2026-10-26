@@ -30,8 +30,10 @@ export default {
         slug: "happy",
         version: (process.env.APP_VERSION || "2.0.0").replace(/^v/, ''),
         // The native fingerprint (see fingerprint.config.js), so an OTA update only reaches builds
-        // whose native side it was made against
-        runtimeVersion: { policy: "fingerprint" },
+        // whose native side it was made against. Not for the dev client, which runs Metro's JS and
+        // gets no updates: Metro would work the fingerprint out for each manifest request it
+        // answers (~30 s each), long enough for the dev client to give up connecting.
+        runtimeVersion: variant === "development" ? "development" : { policy: "fingerprint" },
         orientation: "default",
         icon: "./sources/assets/images/icon.png",
         scheme,
